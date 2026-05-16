@@ -566,20 +566,12 @@ export function App() {
 
   return (
     <>
-      <div className="fs-shell" style={{ gridTemplateColumns: `${sidebarWidth}px 6px minmax(0, 1fr)` }}>
-        <aside className="fs-sidebar">
-          <SystemPanel activeProfile={activeProfile} activeSession={activeSession} />
-          <DiskPanel activeSession={activeSession} />
-        </aside>
-        <div
-          aria-label="Resize sidebar"
-          className={`sidebar-resizer ${isResizingSidebar ? 'is-active' : ''}`}
-          onMouseDown={() => setIsResizingSidebar(true)}
-          role="separator"
-        />
-
-        <main className={`fs-main ${error ? 'has-status' : 'no-status'}`}>
-          <header className="fs-tabbar">
+      <div className="fs-shell" style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}>
+        <header className="fs-tabbar">
+          <div className="titlebar-brand">
+            <strong>TermDock</strong>
+          </div>
+          <div className="titlebar-tabarea">
             <button
               aria-label="Open connection manager"
               className="tabbar-folder-button"
@@ -657,8 +649,21 @@ export function App() {
             <div className="window-tools">
               <button title="Grid" type="button"><AppIcon name="grid" /></button>
             </div>
-          </header>
+          </div>
+        </header>
 
+        <aside className="fs-sidebar" style={{ position: 'relative' }}>
+          <SystemPanel activeProfile={activeProfile} activeSession={activeSession} />
+          <DiskPanel activeSession={activeSession} />
+          <div
+            aria-label="Resize sidebar"
+            className={`sidebar-resizer ${isResizingSidebar ? 'is-active' : ''}`}
+            onMouseDown={() => setIsResizingSidebar(true)}
+            role="separator"
+          />
+        </aside>
+
+        <main className={`fs-main ${error ? 'has-status' : 'no-status'}`}>
           {error ? <div className="status-message">{error}</div> : null}
 
           <div className="workspace-stage">
@@ -695,9 +700,8 @@ export function App() {
               />
             )}
           </div>
-
-          <TransferBar transfers={workspace.transfers} isPending={isBusy} />
         </main>
+        <TransferBar transfers={workspace.transfers} isPending={isBusy} />
       </div>
 
       {showConnectionManager ? (
@@ -748,16 +752,17 @@ function SystemPanel({
   const metrics = activeSession?.systemMetrics
   const internalIp = metrics?.ip || '-'
   const accessAddress = activeProfile?.host || activeSession?.accessHost || '-'
+  const isConnected = Boolean(activeSession?.connected)
 
   return (
     <section className="sys-card">
-      <div className="ip-row">
-        <span>{t.privateIp}</span>
-        <strong>{internalIp}</strong>
-      </div>
-      <div className="ip-row">
-        <span>{t.accessAddress}</span>
-        <strong>{accessAddress}</strong>
+      <div className="connection-summary">
+        <div className="sync-row connection-status">
+          <span>{t.syncStatus}</span>
+          <i className={`sync-dot ${isConnected ? 'online' : 'offline'}`} />
+        </div>
+        <AddressLine label={t.privateIp} value={internalIp} />
+        <AddressLine label={t.accessAddress} value={accessAddress} />
       </div>
       <button className="system-title" type="button">{t.systemInfo}</button>
       <div className="metric-line"><span>{t.running}</span><strong>{metrics?.uptime ?? '-'}</strong></div>
@@ -774,6 +779,46 @@ function SystemPanel({
       <NetworkPanel metrics={metrics} />
     </section>
   )
+}
+
+function AddressLine({ label, value }: { label: string; value: string }) {
+  const canCopy = value && value !== '-'
+
+  return (
+    <div className="address-row">
+      <span>{label}</span>
+      <strong title={value}>{value}</strong>
+      <button
+        className="copy-link"
+        disabled={!canCopy}
+        onClick={() => {
+          if (canCopy) {
+            copyText(value)
+          }
+        }}
+        type="button"
+      >
+        复制
+      </button>
+    </div>
+  )
+}
+
+function copyText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
 }
 
 function Meter({ label, value, tone, caption }: { label: string; value: number; tone: string; caption: string }) {
@@ -1002,6 +1047,7 @@ function SessionWorkspace({
   const [filePanelHeight, setFilePanelHeight] = useState(218)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const isResizingFilePanel = useRef(false)
+  const hasAlignedFilePanel = useRef(false)
 
   useEffect(() => {
     if (isFileOnly) {
@@ -1035,6 +1081,35 @@ function SessionWorkspace({
       document.body.style.userSelect = ''
     }
   }, [isFileOnly])
+
+  useEffect(() => {
+    hasAlignedFilePanel.current = false
+  }, [activeTab.id])
+
+  useEffect(() => {
+    if (isFileOnly || hasAlignedFilePanel.current) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      const workspaceRect = workspaceRef.current?.getBoundingClientRect()
+      const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
+
+      if (!workspaceRect || !diskHeadRect) {
+        return
+      }
+
+      const nextHeight = workspaceRect.bottom - diskHeadRect.top
+      const maxHeight = Math.max(140, workspaceRect.height - 160)
+
+      if (nextHeight >= 140 && nextHeight <= maxHeight) {
+        setFilePanelHeight(nextHeight)
+        hasAlignedFilePanel.current = true
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isFileOnly, activeTab.id])
 
   return (
     <section
@@ -1127,10 +1202,7 @@ function FileManager({
         <button className="active" type="button">{t.file}</button>
         <button type="button">{t.command}</button>
         <span className="file-current-path">{activeSession.remotePath}</span>
-      </div>
-      <div className="file-toolbar">
-        <span>{activeSession.remotePath}</span>
-        <div>
+        <div className="file-tab-actions">
           <button title={t.history} type="button"><AppIcon name="history" /></button>
           <button title="刷新" type="button"><AppIcon name="refresh" /></button>
           <button title="上传到上级目录" type="button"><AppIcon name="arrowUp" /></button>
