@@ -1309,7 +1309,7 @@ button:disabled {
   }
 
   .file-split {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: var(--local-pane-width, 200px) 6px minmax(0, 1fr);
   }
 }
 
@@ -2047,7 +2047,7 @@ textarea:focus-visible,
   }
 
   .file-split {
-    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-columns: var(--local-pane-width, 210px) 6px minmax(0, 1fr);
   }
 }
 
