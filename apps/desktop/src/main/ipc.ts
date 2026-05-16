@@ -14,6 +14,9 @@ export function registerIpcHandlers(userDataPath: string) {
   ipcMain.handle('workspace:createProfile', (_, input: CreateProfileInput) =>
     workspaceService.createProfile(input)
   )
+  ipcMain.handle('workspace:updateProfile', (_, profileId: string, input: CreateProfileInput) =>
+    workspaceService.updateProfile(profileId, input)
+  )
   ipcMain.handle('workspace:deleteProfile', (_, profileId: string) =>
     workspaceService.deleteProfile(profileId)
   )

@@ -22,43 +22,17 @@ export class FileProfileRepository implements ProfileRepository {
 
   async create(input: CreateProfileInput): Promise<ConnectionProfile> {
     const profiles = await this.readProfiles()
-    const profile: ConnectionProfile =
-      input.type === 'ssh'
-        ? {
-            id: randomUUID(),
-            type: 'ssh',
-            name: input.name,
-            host: input.host,
-            port: input.port,
-            username: input.username,
-            authType: input.authType ?? 'password',
-            note: input.note,
-            password: input.password,
-            privateKeyPath: input.privateKeyPath,
-            passphrase: input.passphrase,
-            group: input.group,
-            sftpEnabled: true,
-            remotePath: input.remotePath,
-            encoding: input.encoding ?? 'UTF-8',
-            backspaceKey: input.backspaceKey ?? 'ASCII',
-            deleteKey: input.deleteKey ?? 'VT220',
-            enableExecChannel: input.enableExecChannel ?? true
-          }
-        : {
-            id: randomUUID(),
-            type: 'ftp',
-            name: input.name,
-            host: input.host,
-            port: input.port,
-            username: input.username,
-            note: input.note,
-            password: input.password,
-            secure: input.secure ?? false,
-            group: input.group,
-            remotePath: input.remotePath
-          }
+    const profile = toProfile(randomUUID(), input)
 
     const nextProfiles = [profile, ...profiles]
+    await this.writeProfiles(nextProfiles)
+    return profile
+  }
+
+  async update(id: string, input: CreateProfileInput): Promise<ConnectionProfile> {
+    const profiles = await this.readProfiles()
+    const profile = toProfile(id, input)
+    const nextProfiles = profiles.map((item) => (item.id === id ? profile : item))
     await this.writeProfiles(nextProfiles)
     return profile
   }
@@ -93,4 +67,41 @@ export class FileProfileRepository implements ProfileRepository {
     await mkdir(path.dirname(this.filePath), { recursive: true })
     await writeFile(this.filePath, JSON.stringify(profiles, null, 2), 'utf8')
   }
+}
+
+function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
+  return input.type === 'ssh'
+    ? {
+        id,
+        type: 'ssh',
+        name: input.name,
+        host: input.host,
+        port: input.port,
+        username: input.username,
+        authType: input.authType ?? 'password',
+        note: input.note,
+        password: input.password,
+        privateKeyPath: input.privateKeyPath,
+        passphrase: input.passphrase,
+        group: input.group,
+        sftpEnabled: true,
+        remotePath: input.remotePath,
+        encoding: input.encoding ?? 'UTF-8',
+        backspaceKey: input.backspaceKey ?? 'ASCII',
+        deleteKey: input.deleteKey ?? 'VT220',
+        enableExecChannel: input.enableExecChannel ?? true
+      }
+    : {
+        id,
+        type: 'ftp',
+        name: input.name,
+        host: input.host,
+        port: input.port,
+        username: input.username,
+        note: input.note,
+        password: input.password,
+        secure: input.secure ?? false,
+        group: input.group,
+        remotePath: input.remotePath
+      }
 }

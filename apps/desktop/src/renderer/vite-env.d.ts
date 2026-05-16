@@ -9,6 +9,7 @@ declare global {
       isDesktop: boolean
       getSnapshot(): Promise<WorkspaceSnapshot>
       createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
+      updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
       deleteProfile(profileId: string): Promise<WorkspaceSnapshot>
       openProfile(profileId: string): Promise<WorkspaceSnapshot>
       activateTab(tabId: string): Promise<WorkspaceSnapshot>

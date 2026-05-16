@@ -139,14 +139,38 @@ const defaultForm: CreateProfileInput = {
   secure: false
 }
 
+function profileToForm(profile: ConnectionProfile): CreateProfileInput {
+  return {
+    type: profile.type,
+    name: profile.name,
+    host: profile.host,
+    port: profile.port,
+    username: profile.username,
+    group: profile.group,
+    remotePath: profile.remotePath,
+    note: profile.note ?? '',
+    password: profile.password ?? '',
+    authType: profile.type === 'ssh' ? profile.authType : 'password',
+    privateKeyPath: profile.type === 'ssh' ? profile.privateKeyPath ?? '' : '',
+    passphrase: profile.type === 'ssh' ? profile.passphrase ?? '' : '',
+    encoding: profile.type === 'ssh' ? profile.encoding ?? 'UTF-8' : 'UTF-8',
+    backspaceKey: profile.type === 'ssh' ? profile.backspaceKey ?? 'ASCII' : 'ASCII',
+    deleteKey: profile.type === 'ssh' ? profile.deleteKey ?? 'VT220' : 'VT220',
+    enableExecChannel: profile.type === 'ssh' ? profile.enableExecChannel ?? true : true,
+    secure: profile.type === 'ftp' ? profile.secure : false
+  }
+}
+
 export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot>(emptyState)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
+  const [isBusy, setIsBusy] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showConnectionManager, setShowConnectionManager] = useState(false)
   const [form, setForm] = useState<CreateProfileInput>(defaultForm)
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [localPath, setLocalPath] = useState(previewLocalPath)
   const [localItems, setLocalItems] = useState<LocalFileItem[]>(localPreviewFiles)
   const [homeTabs, setHomeTabs] = useState([{ id: 'home-1' }])
@@ -278,10 +302,24 @@ export function App() {
     setFormError(null)
   }
 
-  const handleCreateProfile = async (event: FormEvent<HTMLFormElement>) => {
+  const openCreateModal = () => {
+    setEditingProfileId(null)
+    setForm(defaultForm)
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  const openEditModal = (profile: ConnectionProfile) => {
+    setEditingProfileId(profile.id)
+    setForm(profileToForm(profile))
+    setFormError(null)
+    setShowForm(true)
+  }
+
+  const handleSaveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!form.name || !form.host || !form.username || !form.group || !form.remotePath) {
+    if (!form.name || !form.host || !form.username || !form.group || !form.remotePath || !Number(form.port)) {
       setFormError(t.fillRequired)
       return
     }
@@ -302,15 +340,22 @@ export function App() {
     }
 
     try {
-      const snapshot = await desktopApi.createProfile({
+      setIsBusy(true)
+      const payload = {
         ...form,
         port: Number(form.port)
-      })
+      }
+      const snapshot = editingProfileId
+        ? await desktopApi.updateProfile(editingProfileId, payload)
+        : await desktopApi.createProfile(payload)
       applySnapshot(snapshot)
       setShowForm(false)
+      setEditingProfileId(null)
       setForm(defaultForm)
     } catch (err) {
       setFormError((err as Error).message)
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -324,6 +369,7 @@ export function App() {
     pendingHomeReplacementKeyRef.current = replacementKey
 
     try {
+      setIsBusy(true)
       const snapshot = await desktopApi.openProfile(profileId)
       setWorkspace(snapshot)
       setError(null)
@@ -338,6 +384,8 @@ export function App() {
     } catch (err) {
       pendingHomeReplacementKeyRef.current = null
       setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -352,10 +400,13 @@ export function App() {
     }
 
     try {
+      setIsBusy(true)
       const snapshot = await desktopApi.deleteProfile(profileId)
       applySnapshot(snapshot)
     } catch (err) {
       setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -365,11 +416,14 @@ export function App() {
     }
 
     try {
+      setIsBusy(true)
       const snapshot = await desktopApi.activateTab(tabId)
       applySnapshot(snapshot)
       setActiveHomeTabId(null)
     } catch (err) {
       setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -380,6 +434,7 @@ export function App() {
     }
 
     try {
+      setIsBusy(true)
       const snapshot = await desktopApi.closeTab(tabId)
       applySnapshot(snapshot)
       if (snapshot.activeTabId === null) {
@@ -392,6 +447,8 @@ export function App() {
       }
     } catch (err) {
       setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -478,10 +535,13 @@ export function App() {
     }
 
     try {
+      setIsBusy(true)
       const snapshot = await desktopApi.queueUpload(fileNames)
       applySnapshot(snapshot)
     } catch (err) {
       setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -527,7 +587,7 @@ export function App() {
               title="连接管理器"
               type="button"
             >
-              <AppIcon name="folder" size={16} />
+              <AppIcon name="connections" size={16} />
             </button>
             <div className="fs-tabs">
               {orderedTabs.map((entry, index) => (
@@ -615,10 +675,13 @@ export function App() {
                   }
 
                   try {
+                    setIsBusy(true)
                     const snapshot = await desktopApi.openRemotePath(activeTab.id, item.path)
                     applySnapshot(snapshot)
                   } catch (err) {
                     setError((err as Error).message)
+                  } finally {
+                    setIsBusy(false)
                   }
                 }}
                 onDropUpload={handleDropUpload}
@@ -627,14 +690,13 @@ export function App() {
               <HomeWorkspace
                 profiles={recentProfiles}
                 isDesktopRuntime={isDesktopRuntime}
-                onCreate={() => setShowForm(true)}
+                onCreate={openCreateModal}
                 onOpen={handleOpenProfile}
-                onDelete={handleDeleteProfile}
               />
             )}
           </div>
 
-          <TransferBar transfers={workspace.transfers} isPending={isPending} />
+          <TransferBar transfers={workspace.transfers} isPending={isBusy} />
         </main>
       </div>
 
@@ -644,7 +706,12 @@ export function App() {
           onClose={() => setShowConnectionManager(false)}
           onCreate={() => {
             setShowConnectionManager(false)
-            setShowForm(true)
+            openCreateModal()
+          }}
+          onDelete={handleDeleteProfile}
+          onEdit={(profile) => {
+            setShowConnectionManager(false)
+            openEditModal(profile)
           }}
           onOpen={(profileId) => {
             setShowConnectionManager(false)
@@ -656,11 +723,13 @@ export function App() {
       {showForm ? (
         <ConnectionModal
           errorMessage={formError}
+          mode={editingProfileId ? 'edit' : 'create'}
           form={form}
           setForm={updateForm}
-          onSubmit={handleCreateProfile}
+          onSubmit={handleSaveProfile}
           onClose={() => {
             setShowForm(false)
+            setEditingProfileId(null)
             setFormError(null)
           }}
         />
@@ -677,17 +746,19 @@ function SystemPanel({
   activeSession: SessionSnapshot | null
 }) {
   const metrics = activeSession?.systemMetrics
+  const internalIp = metrics?.ip || '-'
+  const accessAddress = activeProfile?.host || activeSession?.accessHost || '-'
+
   return (
     <section className="sys-card">
-      <div className="sync-row">
-        <span>{t.syncStatus}</span>
-        <span className="sync-dot" />
+      <div className="ip-row">
+        <span>{t.privateIp}</span>
+        <strong>{internalIp}</strong>
       </div>
       <div className="ip-row">
-        <span>{t.ip}</span>
-        <strong>{metrics?.ip || activeProfile?.host || '-'}</strong>
+        <span>{t.accessAddress}</span>
+        <strong>{accessAddress}</strong>
       </div>
-      <button className="copy-link" type="button">复制</button>
       <button className="system-title" type="button">{t.systemInfo}</button>
       <div className="metric-line"><span>{t.running}</span><strong>{metrics?.uptime ?? '-'}</strong></div>
       <div className="metric-line"><span>{t.load}</span><strong>{metrics?.load ?? '-'}</strong></div>
@@ -785,14 +856,12 @@ function HomeWorkspace({
   profiles,
   isDesktopRuntime,
   onCreate,
-  onOpen,
-  onDelete
+  onOpen
 }: {
   profiles: ConnectionProfile[]
   isDesktopRuntime: boolean
   onCreate(): void
   onOpen(profileId: string): void
-  onDelete(event: MouseEvent<HTMLButtonElement>, profileId: string): void
 }) {
   return (
     <section className="home-workspace">
@@ -819,10 +888,9 @@ function HomeWorkspace({
             >
               <span className="host-icon"><AppIcon name="server" /></span>
               <strong>{profile.name}</strong>
-              <span>{profile.remotePath}</span>
+              <span>{profile.note || '/'}</span>
               <span>{profile.username}</span>
               <small>{profile.type.toUpperCase()}</small>
-              <button className="row-delete" type="button" onClick={(event) => onDelete(event, profile.id)}>×</button>
             </div>
           ))}
         </div>
@@ -835,11 +903,15 @@ function ConnectionManagerModal({
   profiles,
   onClose,
   onCreate,
+  onDelete,
+  onEdit,
   onOpen
 }: {
   profiles: ConnectionProfile[]
   onClose(): void
   onCreate(): void
+  onDelete(event: MouseEvent<HTMLButtonElement>, profileId: string): void
+  onEdit(profile: ConnectionProfile): void
   onOpen(profileId: string): void
 }) {
   return (
@@ -859,21 +931,49 @@ function ConnectionManagerModal({
             <span>端口</span>
             <span>用户</span>
             <span>类型</span>
+            <span>备注</span>
+            <span>操作</span>
           </div>
           {profiles.map((profile) => (
-            <button
+            <div
               className="manager-row"
               key={profile.id}
-              type="button"
               onDoubleClick={() => onOpen(profile.id)}
               onClick={() => onOpen(profile.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  onOpen(profile.id)
+                }
+              }}
+              role="button"
+              tabIndex={0}
             >
               <span>{profile.name}</span>
               <span>{profile.host}</span>
               <span>{profile.port}</span>
               <span>{profile.username}</span>
               <span>{profile.type.toUpperCase()}</span>
-            </button>
+              <span>{profile.note || '/'}</span>
+              <span className="manager-actions">
+                <button
+                  className="flat-button compact"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onEdit(profile)
+                  }}
+                >
+                  编辑
+                </button>
+                <button
+                  className="flat-button compact danger"
+                  type="button"
+                  onClick={(event) => onDelete(event, profile.id)}
+                >
+                  删除
+                </button>
+              </span>
+            </div>
           ))}
         </div>
       </div>
@@ -1149,7 +1249,7 @@ function AppIcon({
   name,
   size = 14
 }: {
-  name: 'grid' | 'menu' | 'server' | 'folder' | 'file' | 'history' | 'refresh' | 'upload' | 'arrowUp' | 'arrowDown'
+  name: 'grid' | 'menu' | 'server' | 'connections' | 'folder' | 'file' | 'history' | 'refresh' | 'upload' | 'arrowUp' | 'arrowDown'
   size?: number
 }) {
   const commonProps = {
@@ -1183,6 +1283,16 @@ function AppIcon({
           <rect {...commonProps} x="2.5" y="9.5" width="11" height="4" rx="1.2" />
           <path {...commonProps} d="M4.5 4.5h.01M4.5 11.5h.01" />
           <path {...commonProps} d="M8 6.5v3" />
+        </>
+      ) : null}
+      {name === 'connections' ? (
+        <>
+          <rect {...commonProps} x="2.8" y="3" width="4.2" height="4.2" rx="1" />
+          <rect {...commonProps} x="9" y="3" width="4.2" height="4.2" rx="1" />
+          <rect {...commonProps} x="5.9" y="9" width="4.2" height="4.2" rx="1" />
+          <path {...commonProps} d="M7 5.1h2" />
+          <path {...commonProps} d="M5.2 7.2 6.8 9" />
+          <path {...commonProps} d="M10.8 7.2 9.2 9" />
         </>
       ) : null}
       {name === 'folder' ? (
@@ -1233,12 +1343,14 @@ function AppIcon({
 
 function ConnectionModal({
   errorMessage,
+  mode,
   form,
   setForm,
   onSubmit,
   onClose
 }: {
   errorMessage: string | null
+  mode: 'create' | 'edit'
   form: CreateProfileInput
   setForm(value: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
@@ -1250,7 +1362,7 @@ function ConnectionModal({
     <div className="modal-backdrop">
       <div className="modal-card ssh-modal">
         <div className="modal-header">
-          <span>{t.newConnection}</span>
+          <span>{mode === 'edit' ? '编辑连接' : t.newConnection}</span>
           <button className="icon-button" onClick={onClose} type="button">×</button>
         </div>
         <div className="ssh-modal-body">
@@ -1268,7 +1380,7 @@ function ConnectionModal({
                   <div className="ssh-grid ssh-grid-general">
                     <label className="span-2">名称:<input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} /></label>
                     <label className="span-2">主机:<input value={form.host} onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))} /></label>
-                    <label className="narrow">端口:<input min={1} type="number" value={form.port} onChange={(event) => setForm((prev) => ({ ...prev, port: Number(event.target.value) }))} /></label>
+                    <label className="narrow">端口:<input inputMode="numeric" value={form.port || ''} onChange={(event) => setForm((prev) => ({ ...prev, port: Number(event.target.value.replace(/\D/g, '')) }))} /></label>
                     <label className="full">备注:<textarea value={form.note ?? ''} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} /></label>
                   </div>
                 </fieldset>
@@ -1330,7 +1442,7 @@ function ConnectionModal({
             {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
             <div className="form-actions ssh-actions">
               <button className="flat-button" onClick={onClose} type="button">{t.cancel}</button>
-              <button className="primary-button" type="submit">{t.saveConnection}</button>
+              <button className="primary-button" type="submit">{mode === 'edit' ? '保存修改' : t.saveConnection}</button>
             </div>
           </form>
         </div>

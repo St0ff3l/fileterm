@@ -104,6 +104,7 @@ export interface SystemMetrics {
 
 export interface SessionSnapshot {
   profileId: string
+  accessHost?: string
   summary: string
   terminalTranscript?: string
   remotePath: string

@@ -9,6 +9,8 @@ const api = {
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),
   createProfile: (input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createProfile', input),
+  updateProfile: (profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
+    ipcRenderer.invoke('workspace:updateProfile', profileId, input),
   deleteProfile: (profileId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:deleteProfile', profileId),
   openProfile: (profileId: string): Promise<WorkspaceSnapshot> =>

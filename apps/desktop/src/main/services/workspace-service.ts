@@ -60,11 +60,16 @@ const seedTransfers: TransferTask[] = [
 ]
 
 export class WorkspaceService {
+  private static readonly METRICS_POLL_INTERVAL_MS = 1000
+
   private readonly profileRepository: ProfileRepository
   private tabs: WorkspaceTab[] = []
   private activeTabId: string | null = null
   private readonly sessions = new Map<string, SessionSnapshot>()
   private readonly liveControllers = new Map<string, LiveSshSessionController | MockFtpSessionController>()
+  private readonly metricsPollers = new Map<string, ReturnType<typeof setInterval>>()
+  private readonly metricsRefreshInFlight = new Set<string>()
+  private readonly tabSenders = new Map<string, WebContents>()
   private readonly transfers = [...seedTransfers]
 
   constructor(profileRepository: ProfileRepository) {
@@ -86,21 +91,13 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
+  async updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> {
+    await this.profileRepository.update(profileId, input)
+    return this.getSnapshot()
+  }
+
   async deleteProfile(profileId: string): Promise<WorkspaceSnapshot> {
     await this.profileRepository.delete(profileId)
-    const closingTabIds = this.tabs
-      .filter((tab) => tab.profileId === profileId)
-      .map((tab) => tab.id)
-
-    this.tabs = this.tabs.filter((tab) => tab.profileId !== profileId)
-    for (const tabId of closingTabIds) {
-      this.sessions.delete(tabId)
-    }
-
-    if (this.activeTabId && closingTabIds.includes(this.activeTabId)) {
-      this.activeTabId = this.tabs.at(-1)?.id ?? null
-    }
-
     return this.getSnapshot()
   }
 
@@ -122,6 +119,10 @@ export class WorkspaceService {
 
     this.tabs = [...this.tabs, tab]
     this.activeTabId = tabId
+    this.tabSenders.set(tabId, sender)
+    sender.once('destroyed', () => {
+      this.handleSenderDestroyed(sender)
+    })
 
     const controller =
       profile.type === 'ssh'
@@ -129,7 +130,7 @@ export class WorkspaceService {
             tabId,
             profile,
             (chunk) => {
-              sender.send('terminal:data', { tabId, chunk })
+              this.sendToTab(tabId, 'terminal:data', { tabId, chunk })
             },
             (summary, transcript, connected) => {
               const current = this.sessions.get(tabId)
@@ -144,21 +145,22 @@ export class WorkspaceService {
               })
               this.updateTabStatus(
                 tabId,
-                connected ? 'connected' : summary.includes('失败') || summary.includes('error') ? 'error' : 'connecting'
+                statusFromTerminalState(summary, connected, this.tabs.find((tab) => tab.id === tabId)?.status)
               )
-              sender.send('terminal:state', {
+              this.sendToTab(tabId, 'terminal:state', {
                 tabId,
                 summary,
                 transcript,
                 connected
               })
-              void this.emitSnapshot(sender)
+              void this.emitSnapshotForTab(tabId)
             }
           )
         : new MockFtpSessionController(tabId, profile)
 
     const snapshot: SessionSnapshot = {
       profileId: profile.id,
+      accessHost: profile.host,
       summary: profile.type === 'ssh' ? '连接主机...' : controller.getSummary(),
       terminalTranscript:
         controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
@@ -169,7 +171,7 @@ export class WorkspaceService {
 
     this.sessions.set(tabId, snapshot)
 
-    void this.connectSession(tabId, controller, sender)
+    void this.connectSession(tabId, controller)
 
     return this.getSnapshot()
   }
@@ -185,8 +187,10 @@ export class WorkspaceService {
   }
 
   async closeTab(tabId: string): Promise<WorkspaceSnapshot> {
+    this.stopMetricsPolling(tabId)
     await this.liveControllers.get(tabId)?.disconnect()
     this.liveControllers.delete(tabId)
+    this.tabSenders.delete(tabId)
     this.tabs = this.tabs.filter((tab) => tab.id !== tabId)
     this.sessions.delete(tabId)
 
@@ -245,8 +249,7 @@ export class WorkspaceService {
 
   private async connectSession(
     tabId: string,
-    controller: LiveSshSessionController | MockFtpSessionController,
-    sender: WebContents
+    controller: LiveSshSessionController | MockFtpSessionController
   ) {
     try {
       await controller.connect()
@@ -271,6 +274,9 @@ export class WorkspaceService {
         systemMetrics
       })
       this.updateTabStatus(tabId, 'connected')
+      if (controller.type === 'ssh') {
+        this.startMetricsPolling(tabId, controller)
+      }
     } catch (error) {
       const current = this.sessions.get(tabId)
       if (current) {
@@ -284,9 +290,96 @@ export class WorkspaceService {
         })
       }
       this.updateTabStatus(tabId, 'error')
+      this.stopMetricsPolling(tabId)
     }
 
-    void this.emitSnapshot(sender)
+    void this.emitSnapshotForTab(tabId)
+  }
+
+  private startMetricsPolling(tabId: string, controller: LiveSshSessionController) {
+    this.stopMetricsPolling(tabId)
+    const timer = setInterval(() => {
+      void this.refreshMetricsForTab(tabId, controller)
+    }, WorkspaceService.METRICS_POLL_INTERVAL_MS)
+    this.metricsPollers.set(tabId, timer)
+  }
+
+  private stopMetricsPolling(tabId: string) {
+    const timer = this.metricsPollers.get(tabId)
+    if (timer) {
+      clearInterval(timer)
+      this.metricsPollers.delete(tabId)
+    }
+    this.metricsRefreshInFlight.delete(tabId)
+  }
+
+  private async refreshMetricsForTab(tabId: string, controller: LiveSshSessionController) {
+    if (this.metricsRefreshInFlight.has(tabId)) {
+      return
+    }
+
+    const current = this.sessions.get(tabId)
+    const sender = this.tabSenders.get(tabId)
+    if (!current || !sender || !current.connected) {
+      this.stopMetricsPolling(tabId)
+      return
+    }
+
+    this.metricsRefreshInFlight.add(tabId)
+    try {
+      const systemMetrics = await controller.refreshSystemMetrics()
+      if (!systemMetrics) {
+        return
+      }
+
+      const latest = this.sessions.get(tabId)
+      if (!latest) {
+        return
+      }
+
+      this.sessions.set(tabId, {
+        ...latest,
+        systemMetrics
+      })
+
+      await this.emitSnapshot(sender)
+    } finally {
+      this.metricsRefreshInFlight.delete(tabId)
+    }
+  }
+
+  private sendToTab(tabId: string, channel: string, payload: unknown) {
+    const sender = this.tabSenders.get(tabId)
+    if (!sender || sender.isDestroyed()) {
+      this.handleSenderDestroyed(sender)
+      this.tabSenders.delete(tabId)
+      this.stopMetricsPolling(tabId)
+      return
+    }
+    sender.send(channel, payload)
+  }
+
+  private async emitSnapshotForTab(tabId: string) {
+    const sender = this.tabSenders.get(tabId)
+    if (!sender || sender.isDestroyed()) {
+      this.handleSenderDestroyed(sender)
+      this.tabSenders.delete(tabId)
+      this.stopMetricsPolling(tabId)
+      return
+    }
+    await this.emitSnapshot(sender)
+  }
+
+  private handleSenderDestroyed(sender?: WebContents) {
+    if (!sender) {
+      return
+    }
+    for (const [tabId, candidate] of this.tabSenders.entries()) {
+      if (candidate === sender) {
+        this.tabSenders.delete(tabId)
+        this.stopMetricsPolling(tabId)
+      }
+    }
   }
 
   private updateTabStatus(tabId: string, status: WorkspaceTab['status']) {
@@ -294,8 +387,33 @@ export class WorkspaceService {
   }
 
   private async emitSnapshot(sender: WebContents) {
+    if (sender.isDestroyed()) {
+      this.handleSenderDestroyed(sender)
+      return
+    }
     sender.send('workspace:snapshot', await this.getSnapshot())
   }
 }
 
 export { seedProfiles }
+
+function statusFromTerminalState(
+  summary: string,
+  connected: boolean,
+  currentStatus?: WorkspaceTab['status']
+): WorkspaceTab['status'] {
+  if (connected) {
+    return 'connected'
+  }
+
+  if (currentStatus === 'error') {
+    return 'error'
+  }
+
+  const normalized = summary.toLowerCase()
+  if (summary.includes('失败') || normalized.includes('error')) {
+    return 'error'
+  }
+
+  return 'closed'
+}
