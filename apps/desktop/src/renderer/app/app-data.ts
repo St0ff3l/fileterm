@@ -7,6 +7,7 @@ import type {
 
 export const emptyState: WorkspaceSnapshot = {
   profiles: [],
+  folders: [],
   tabs: [],
   activeTabId: null,
   transfers: [],
@@ -50,6 +51,7 @@ export const previewState: WorkspaceSnapshot = {
       remotePath: '/incoming'
     }
   ],
+  folders: [],
   tabs: [
     {
       id: 'preview-tab-ssh',
@@ -101,10 +103,10 @@ export const previewState: WorkspaceSnapshot = {
           rx: [10, 19, 13, 22, 6, 24, 8, 15, 18, 12, 20, 9, 5, 13, 16, 8, 11, 14][index]
         })),
         topProcesses: [
-          { memory: '3171.4M', cpu: '3.0', command: 'python' },
-          { memory: '1309.4M', cpu: '1.0', command: 'next-server' },
-          { memory: '536.1M', cpu: '0.6', command: 'python3' },
-          { memory: '349.7M', cpu: '0.5', command: 'trim-photos' }
+          { memory: '3171.4M', cpu: '3.0', command: 'python', elapsedSeconds: 18600 },
+          { memory: '1309.4M', cpu: '1.0', command: 'next-server', elapsedSeconds: 9700 },
+          { memory: '536.1M', cpu: '0.6', command: 'python3', elapsedSeconds: 8400 },
+          { memory: '349.7M', cpu: '0.5', command: 'trim-photos', elapsedSeconds: 4100 }
         ]
       }
     }

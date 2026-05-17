@@ -158,6 +158,35 @@ button:disabled {
   line-height: 1.35;
 }
 
+.metric-subline.legend {
+  gap: 6px 10px;
+}
+
+.metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.metric-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.metric-dot.app {
+  background: #f6bf26;
+}
+
+.metric-dot.cache {
+  background: #54c772;
+}
+
+.metric-dot.kernel {
+  background: #5aa7ff;
+}
+
 .meter-row {
   display: grid;
   grid-template-columns: 40px 1fr 84px;
@@ -187,11 +216,31 @@ button:disabled {
   overflow: hidden;
 }
 
+.meter-track-stacked {
+  display: flex;
+  gap: 2px;
+}
+
 .meter-fill {
   display: block;
   height: 100%;
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+
+.meter-fill.stacked {
+  border-radius: 0;
+  flex: 0 0 auto;
+}
+
+.meter-fill.stacked:first-child {
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+}
+
+.meter-fill.stacked:last-child {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
 }
 
 .meter-fill.green {
@@ -204,6 +253,18 @@ button:disabled {
 
 .meter-fill.yellow {
   background: #eab308;
+}
+
+.meter-fill.app {
+  background: #f6bf26;
+}
+
+.meter-fill.cache {
+  background: #54c772;
+}
+
+.meter-fill.kernel {
+  background: #5aa7ff;
 }
 
 .mini-tabs {

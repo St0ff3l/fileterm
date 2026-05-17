@@ -263,7 +263,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     try {
-      const raw = await this.execCommand(buildMetricsCommand())
+      const raw = await this.execCommand(buildMetricsCommand(), { allowNonZeroWithStdout: true })
       this.metrics = parseSystemMetrics(raw)
       return this.metrics
     } catch {
@@ -498,7 +498,7 @@ done
     }
   }
 
-  private async execCommand(command: string): Promise<string> {
+  private async execCommand(command: string, options?: { allowNonZeroWithStdout?: boolean }): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       this.ssh.exec(command, (error, stream) => {
         if (error) {
@@ -516,6 +516,10 @@ done
           stderr += chunk.toString('utf8')
         })
         stream.on('close', (code?: number) => {
+          if (options?.allowNonZeroWithStdout && stdout.trim()) {
+            resolve(stdout)
+            return
+          }
           if (code && code !== 0 && stderr.trim()) {
             reject(new Error(stderr.trim()))
             return

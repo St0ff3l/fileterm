@@ -54,14 +54,7 @@ export function SystemSidebar({
         <div className="metric-line"><span>{t.running}</span><strong>{metrics?.uptime ?? '-'}</strong></div>
         <div className="metric-line"><span>{t.load}</span><strong>{metrics?.load ?? '-'}</strong></div>
         <Meter label={t.cpu} value={metrics?.cpuPercent ?? 0} tone="green" caption={metrics ? `${metrics.cpuPercent}%` : '0%'} />
-        <Meter label={t.memory} value={metrics?.memoryPercent ?? 0} tone="orange" caption={metrics?.memoryUsage ?? '0/0'} />
-        {metrics?.memoryAppUsage || metrics?.memoryCacheUsage || metrics?.memoryKernelUsage ? (
-          <div className="metric-subline">
-            <span>应用 {metrics?.memoryAppUsage ?? '-'}</span>
-            <span>缓存 {metrics?.memoryCacheUsage ?? '-'}</span>
-            <span>内核 {metrics?.memoryKernelUsage ?? '-'}</span>
-          </div>
-        ) : null}
+        <MemoryMeter metrics={metrics} />
         <Meter label={t.swap} value={metrics?.swapPercent ?? 0} tone="yellow" caption={metrics?.swapUsage ?? '0/0'} />
         <div className="mini-tabs">
           <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => setSortMode('memory')}>{t.memory}</span>
@@ -112,6 +105,53 @@ function Meter({ label, value, tone, caption }: { label: string; value: number; 
       <strong>{caption}</strong>
     </div>
   )
+}
+
+function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
+  const total = parseUsageTotal(metrics?.memoryUsage)
+  const app = parseMemory(metrics?.memoryAppUsage ?? '')
+  const cache = parseMemory(metrics?.memoryCacheUsage ?? '')
+  const kernel = parseMemory(metrics?.memoryKernelUsage ?? '')
+  const segments = total > 0
+    ? [
+        { key: 'app', label: '应用', value: metrics?.memoryAppUsage ?? '-', width: Math.max(0, Math.min(100, (app / total) * 100)) },
+        { key: 'cache', label: '缓存', value: metrics?.memoryCacheUsage ?? '-', width: Math.max(0, Math.min(100, (cache / total) * 100)) },
+        { key: 'kernel', label: '内核', value: metrics?.memoryKernelUsage ?? '-', width: Math.max(0, Math.min(100, (kernel / total) * 100)) }
+      ].filter((segment) => parseMemory(segment.value) > 0)
+    : []
+
+  return (
+    <>
+      <div className="meter-row">
+        <span>{t.memory}</span>
+        <div className="meter-track meter-track-stacked">
+          {segments.length ? segments.map((segment) => (
+            <i
+              className={`meter-fill stacked ${segment.key}`}
+              key={segment.key}
+              style={{ width: `${segment.width}%` }}
+            />
+          )) : <i className="meter-fill orange" style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />}
+        </div>
+        <strong>{metrics?.memoryUsage ?? '0/0'}</strong>
+      </div>
+      {segments.length ? (
+        <div className="metric-subline legend">
+          {segments.map((segment) => (
+            <span className="metric-chip" key={segment.key}>
+              <i className={`metric-dot ${segment.key}`} />
+              {segment.label} {segment.value}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
+function parseUsageTotal(usage?: string) {
+  if (!usage || !usage.includes('/')) return 0
+  return parseMemory(usage.split('/')[1] ?? '')
 }
 
 function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
@@ -215,7 +255,13 @@ function formatTrafficLabel(value: number) {
 
 function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
   const [selectedInterface, setSelectedInterface] = useState(metrics?.activeNetworkInterface ?? '')
-  const rawSamples = metrics?.networkSamples.length ? metrics.networkSamples : Array.from({ length: 120 }, () => ({ rx: 0, tx: 0 }))
+  const interfaceOptions = metrics?.networkInterfaces.length ? metrics.networkInterfaces : ['-']
+  const currentRates = metrics?.networkRatesByInterface?.[selectedInterface] ?? metrics?.networkRates
+  const rawSamples = metrics?.networkSamplesByInterface?.[selectedInterface]?.length
+    ? metrics.networkSamplesByInterface[selectedInterface]
+    : metrics?.networkSamples.length
+      ? metrics.networkSamples
+      : Array.from({ length: 120 }, () => ({ rx: 0, tx: 0 }))
   const samples = useMemo(() => resampleSeries(rawSamples, 64), [rawSamples])
   const [displaySamples, setDisplaySamples] = useState(samples)
   const animationFrameRef = useRef<number | null>(null)
@@ -228,8 +274,10 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
   const chartScale = [maxValue, maxValue * 0.66, maxValue * 0.33]
 
   useEffect(() => {
-    setSelectedInterface(metrics?.activeNetworkInterface ?? '')
-  }, [metrics?.activeNetworkInterface])
+    if (!interfaceOptions.includes(selectedInterface)) {
+      setSelectedInterface(metrics?.activeNetworkInterface ?? interfaceOptions[0] ?? '')
+    }
+  }, [interfaceOptions, metrics?.activeNetworkInterface, selectedInterface])
 
   useEffect(() => {
     const interfaceChanged = previousInterfaceRef.current !== selectedInterface
@@ -283,11 +331,11 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
         <div className="network-rates">
           <span className="network-rate up">
             <i>UP</i>
-            <strong>{metrics?.networkRates.tx ?? '0B'}</strong>
+            <strong>{currentRates?.tx ?? '0B'}</strong>
           </span>
           <span className="network-rate down">
             <i>DN</i>
-            <strong>{metrics?.networkRates.rx ?? '0B'}</strong>
+            <strong>{currentRates?.rx ?? '0B'}</strong>
           </span>
         </div>
         <select
@@ -295,8 +343,8 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
           value={selectedInterface}
           onChange={(event) => setSelectedInterface(event.target.value)}
         >
-          {(metrics?.networkInterfaces.length ? metrics.networkInterfaces : ['-']).map((name) => (
-            <option key={name} value={name}>{name}</option>
+          {interfaceOptions.map((name) => (
+            <option key={name} value={name}>{name === 'all' ? '总计' : name}</option>
           ))}
         </select>
       </div>

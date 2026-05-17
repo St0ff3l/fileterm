@@ -106,6 +106,11 @@ export interface NetworkSamplePoint {
   tx: number
 }
 
+export interface NetworkRates {
+  rx: string
+  tx: string
+}
+
 export interface SystemMetrics {
   ip: string
   uptime: string
@@ -121,11 +126,10 @@ export interface SystemMetrics {
   diskRows: Array<{ path: string; usage: string }>
   networkInterfaces: string[]
   activeNetworkInterface: string
-  networkRates: {
-    rx: string
-    tx: string
-  }
+  networkRates: NetworkRates
   networkSamples: NetworkSamplePoint[]
+  networkRatesByInterface?: Record<string, NetworkRates>
+  networkSamplesByInterface?: Record<string, NetworkSamplePoint[]>
   topProcesses: SidebarProcessItem[]
 }
 

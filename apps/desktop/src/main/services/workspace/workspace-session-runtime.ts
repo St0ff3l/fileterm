@@ -297,14 +297,24 @@ export class WorkspaceSessionRuntime {
     nextMetrics: NonNullable<SessionSnapshot['systemMetrics']>
   ) {
     const nextPoint = nextMetrics.networkSamples.at(-1) ?? { rx: 0, tx: 0 }
-    const previousSamples =
-      previousMetrics?.activeNetworkInterface === nextMetrics.activeNetworkInterface
-        ? previousMetrics.networkSamples
-        : []
+    const previousSamples = previousMetrics?.networkSamples ?? []
+    const previousByInterface = previousMetrics?.networkSamplesByInterface ?? {}
+    const nextByInterface = nextMetrics.networkSamplesByInterface ?? {}
+    const mergedByInterface = Object.fromEntries(
+      Object.entries(nextByInterface).map(([name, samples]) => {
+        const nextInterfacePoint = samples.at(-1) ?? { rx: 0, tx: 0 }
+        const previousInterfaceSamples = previousByInterface[name] ?? []
+        return [
+          name,
+          [...previousInterfaceSamples, nextInterfacePoint].slice(-WorkspaceSessionRuntime.NETWORK_HISTORY_LIMIT)
+        ]
+      })
+    )
 
     return {
       ...nextMetrics,
-      networkSamples: [...previousSamples, nextPoint].slice(-WorkspaceSessionRuntime.NETWORK_HISTORY_LIMIT)
+      networkSamples: [...previousSamples, nextPoint].slice(-WorkspaceSessionRuntime.NETWORK_HISTORY_LIMIT),
+      networkSamplesByInterface: mergedByInterface
     }
   }
 }

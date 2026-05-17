@@ -108,7 +108,7 @@ export function SessionWorkspace({
     >
       {!isFileOnly ? (
         <div className="terminal-area">
-          <TerminalView tabId={activeTab.id} initialText={activeSession.terminalTranscript ?? ''} />
+          <TerminalView key={activeTab.id} tabId={activeTab.id} initialText={activeSession.terminalTranscript ?? ''} />
         </div>
       ) : null}
       {!isFileOnly ? (
