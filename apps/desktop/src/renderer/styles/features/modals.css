@@ -198,12 +198,6 @@
   font-size: 13px;
 }
 
-.ssh-checkbox input {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-}
-
 .ssh-placeholder {
   display: grid;
   place-items: center;
@@ -262,6 +256,59 @@
 .checkbox-row input {
   width: auto;
   height: auto;
+}
+
+.ssh-checkbox input,
+.checkbox-row input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  border: 1px solid var(--border-dark);
+  border-radius: 999px;
+  background: var(--bg-main);
+  position: relative;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.checkbox-row input {
+  margin-top: 0;
+}
+
+.ssh-checkbox input::after,
+.checkbox-row input::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--primary);
+  transform: scale(0);
+  transition: transform 0.16s ease;
+}
+
+.ssh-checkbox input:checked,
+.checkbox-row input:checked {
+  border-color: var(--primary);
+}
+
+.ssh-checkbox input:checked::after,
+.checkbox-row input:checked::after {
+  transform: scale(1);
+}
+
+.ssh-checkbox input:disabled,
+.checkbox-row input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ssh-checkbox input:focus-visible,
+.checkbox-row input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
 }
 
 .primary-button {

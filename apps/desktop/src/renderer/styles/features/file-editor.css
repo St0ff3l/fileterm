@@ -1,10 +1,26 @@
 .file-editor-modal {
-  width: min(1180px, calc(100vw - 44px));
-  height: min(820px, calc(100vh - 40px));
+  width: min(1280px, calc(100vw - 36px));
+  height: min(860px, calc(100vh - 28px));
   padding: 0;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   overflow: hidden;
+}
+
+.file-editor-modal.standalone {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 46px 20px 14px;
+  background: transparent;
+  box-sizing: border-box;
+  align-self: stretch;
+  justify-self: stretch;
 }
 
 .file-editor-title {
@@ -39,9 +55,70 @@
   gap: 8px;
 }
 
+.file-editor-window,
+.file-editor-window .file-editor-modal.standalone {
+  -webkit-app-region: drag;
+}
+
+.file-editor-window {
+  min-height: 100vh;
+}
+
+.file-editor-window button,
+.file-editor-window input,
+.file-editor-window select,
+.file-editor-window textarea,
+.file-editor-window .file-editor-menubar,
+.file-editor-window .file-editor-body,
+.file-editor-window .file-editor-statusbar,
+.file-editor-window .modal-error {
+  -webkit-app-region: no-drag;
+}
+
+.file-editor-window .monaco-editor,
+.file-editor-window .monaco-editor *,
+.file-editor-window .find-widget,
+.file-editor-window .find-widget *,
+.file-editor-window .simple-fr-find-part,
+.file-editor-window .simple-fr-find-part *,
+.file-editor-window .monaco-findInput,
+.file-editor-window .monaco-findInput *,
+.file-editor-window .monaco-button,
+.file-editor-window .monaco-button *,
+.file-editor-window .overflowingContentWidgets,
+.file-editor-window .overflowingContentWidgets *,
+.file-editor-window .monaco-hover,
+.file-editor-window .monaco-hover *,
+.file-editor-window .monaco-menu-container,
+.file-editor-window .monaco-menu-container * {
+  -webkit-app-region: no-drag;
+}
+
+.file-editor-window .file-editor-modal.standalone .modal-header {
+  position: absolute;
+  top: 14px;
+  left: 0;
+  width: 100%;
+  height: 32px;
+  justify-content: center;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+
+.file-editor-window .file-editor-modal.standalone .file-editor-title,
+.file-editor-window .file-editor-modal.standalone .file-editor-header-actions {
+  pointer-events: auto;
+}
+
+.file-editor-window .file-editor-modal.standalone .file-editor-header-actions {
+  position: absolute;
+  right: 20px;
+}
+
 .file-editor-menubar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 16px;
   border-top: 1px solid transparent;
@@ -73,33 +150,45 @@
   top: calc(100% + 6px);
   left: 0;
   z-index: 125;
-  min-width: 188px;
+  min-width: 152px;
   max-height: 360px;
   overflow: auto;
-  padding: 6px;
-  border-radius: 12px;
+  padding: 5px;
+  border-radius: 10px;
   backdrop-filter: blur(20px);
 }
 
 .file-editor-menu--wide {
   min-width: 240px;
+  max-width: min(420px, calc(100vw - 48px));
+}
+
+.file-editor-menu--upward {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.file-editor-menu--align-end {
+  left: auto;
+  right: 0;
 }
 
 .file-editor-menu button {
   display: block;
   width: 100%;
-  min-height: 30px;
-  padding: 0 11px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   text-align: left;
   font-size: 12px;
-  line-height: 30px;
+  line-height: 26px;
 }
 
 .file-editor-menu-separator {
   height: 1px;
-  margin: 6px 4px;
+  margin: 5px 4px;
 }
 
 .file-editor-path {
@@ -113,16 +202,25 @@
 }
 
 .file-editor-body {
+  display: flex;
   min-height: 0;
   margin: 0 16px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid transparent;
   border-radius: 14px;
+  flex: 1 1 auto;
+}
+
+.file-editor-surface {
+  flex: 1 1 auto;
+  min-height: 220px;
+  height: 100%;
 }
 
 .file-editor-statusbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 14px;
   min-height: 38px;
   padding: 0 16px;
@@ -137,6 +235,20 @@
   margin-left: auto;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
+.file-editor-window .monaco-editor .find-widget {
+  top: 14px !important;
+  right: 20px !important;
+  transform: none !important;
+  transition: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.file-editor-window .monaco-editor .find-widget.visible {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}

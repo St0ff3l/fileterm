@@ -539,6 +539,49 @@
 .permission-radioline input {
   width: 18px;
   height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-main);
+  position: relative;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.permission-checkline input::after,
+.permission-radioline input::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--primary);
+  transform: scale(0);
+  transition: transform 0.16s ease;
+}
+
+.permission-checkline input:checked,
+.permission-radioline input:checked {
+  border-color: var(--primary);
+}
+
+.permission-checkline input:checked::after,
+.permission-radioline input:checked::after {
+  transform: scale(1);
+}
+
+.permission-checkline input:disabled,
+.permission-radioline input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.permission-checkline input:focus-visible,
+.permission-radioline input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
 }
 
 .context-menu {

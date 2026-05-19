@@ -7,6 +7,7 @@ import type {
   CommandExecutionResult,
   CreateProfileInput,
   DirectorySnapshot,
+  FileEditorWindowInput,
   LocalFileItem,
   PermissionChangeOptions,
   TermdockDesktopApi,
@@ -27,6 +28,8 @@ const api: TermdockDesktopApi = {
     ipcRenderer.invoke('app:openConnectionFormWindow', mode, profileId),
   openCommandFormWindow: (mode: ConnectionFormMode, commandId?: string, folderId?: string): Promise<void> =>
     ipcRenderer.invoke('app:openCommandFormWindow', mode, commandId, folderId),
+  openFileEditorWindow: (input: FileEditorWindowInput): Promise<void> =>
+    ipcRenderer.invoke('app:openFileEditorWindow', input),
   closeCurrentWindow: (): Promise<void> =>
     ipcRenderer.invoke('app:closeCurrentWindow'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),

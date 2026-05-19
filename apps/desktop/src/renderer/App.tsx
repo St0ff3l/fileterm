@@ -56,10 +56,16 @@ export function App() {
   const isCommandManagerWindow = windowMode === 'command-manager'
   const isConnectionFormWindow = windowMode === 'connection-form'
   const isCommandFormWindow = windowMode === 'command-form'
+  const isFileEditorWindow = windowMode === 'file-editor'
   const formWindowMode = (searchParams.get('mode') as ConnectionFormMode | null) ?? 'create'
   const formWindowProfileId = searchParams.get('profileId')
   const formWindowCommandId = searchParams.get('commandId')
   const formWindowFolderId = searchParams.get('folderId')
+  const fileEditorWindowSource = searchParams.get('source') as FileContentSnapshot['source'] | null
+  const fileEditorWindowPath = searchParams.get('path')
+  const fileEditorWindowName = searchParams.get('name')
+  const fileEditorWindowTabId = searchParams.get('tabId')
+  const fileEditorWindowEncoding = searchParams.get('encoding') ?? 'utf-8'
 
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot>(emptyState)
   const [error, setError] = useState<string | null>(null)
@@ -84,7 +90,18 @@ export function App() {
   } | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(214)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
-  const [fileEditor, setFileEditor] = useState<FileContentSnapshot | null>(null)
+  const [fileEditor, setFileEditor] = useState<FileContentSnapshot | null>(
+    isFileEditorWindow && fileEditorWindowSource && fileEditorWindowPath && fileEditorWindowName
+      ? {
+          source: fileEditorWindowSource,
+          path: fileEditorWindowPath,
+          name: fileEditorWindowName,
+          tabId: fileEditorWindowTabId ?? undefined,
+          encoding: fileEditorWindowEncoding,
+          content: ''
+        }
+      : null
+  )
   const [fileEditorError, setFileEditorError] = useState<string | null>(null)
   const [fileActionDialog, setFileActionDialog] = useState<FileActionDialog | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
@@ -124,8 +141,10 @@ export function App() {
       setLocalPath(previewLocalPath)
       setLocalItems(localPreviewFiles)
       setActiveLocalTabId(null)
-      setTabOrder(['session:preview-tab-ssh'])
-      setError(t.browserPreview)
+      if (!isFileEditorWindow) {
+        setTabOrder(['session:preview-tab-ssh'])
+        setError(t.browserPreview)
+      }
       return
     }
 
@@ -133,7 +152,7 @@ export function App() {
       .getSnapshot()
       .then(setWorkspace)
       .catch((err: Error) => setError(err.message))
-  }, [desktopApi])
+  }, [desktopApi, isFileEditorWindow])
 
   useEffect(() => {
     if (!desktopApi) {
@@ -164,7 +183,7 @@ export function App() {
       applySnapshot(snapshot)
     })
 
-    if (!isConnectionManagerWindow && !isConnectionFormWindow && !isCommandManagerWindow && !isCommandFormWindow) {
+    if (!isConnectionManagerWindow && !isConnectionFormWindow && !isCommandManagerWindow && !isCommandFormWindow && !isFileEditorWindow) {
       desktopApi
         .listLocalDirectory()
         .then(({ path, items }) => {
@@ -178,7 +197,38 @@ export function App() {
       offTerminalData()
       offSnapshot()
     }
-  }, [desktopApi, isCommandFormWindow, isCommandManagerWindow, isConnectionFormWindow, isConnectionManagerWindow])
+  }, [desktopApi, isCommandFormWindow, isCommandManagerWindow, isConnectionFormWindow, isConnectionManagerWindow, isFileEditorWindow])
+
+  useEffect(() => {
+    if (!desktopApi || !isFileEditorWindow || !fileEditorWindowSource || !fileEditorWindowPath || !fileEditorWindowName) {
+      return
+    }
+
+    void (async () => {
+      try {
+        setIsBusy(true)
+        const content = fileEditorWindowSource === 'local'
+          ? await desktopApi.readLocalFile(fileEditorWindowPath, fileEditorWindowEncoding)
+          : fileEditorWindowTabId
+            ? await desktopApi.readRemoteFile(fileEditorWindowTabId, fileEditorWindowPath, fileEditorWindowEncoding)
+            : ''
+
+        setFileEditor({
+          source: fileEditorWindowSource,
+          path: fileEditorWindowPath,
+          name: fileEditorWindowName,
+          tabId: fileEditorWindowTabId ?? undefined,
+          encoding: fileEditorWindowEncoding,
+          content
+        })
+        setFileEditorError(null)
+      } catch (err) {
+        setFileEditorError((err as Error).message)
+      } finally {
+        setIsBusy(false)
+      }
+    })()
+  }, [desktopApi, fileEditorWindowEncoding, fileEditorWindowName, fileEditorWindowPath, fileEditorWindowSource, fileEditorWindowTabId, isFileEditorWindow])
 
   useEffect(() => {
     if (!isConnectionFormWindow) {
@@ -863,10 +913,12 @@ export function App() {
         await openLocalDirectory(item.path)
         return
       }
-      const encoding = 'utf-8'
-      const content = await desktopApi.readLocalFile(item.path, encoding)
-      setFileEditor({ path: item.path, name: item.name, source: 'local', content, encoding })
-      setFileEditorError(null)
+      await desktopApi.openFileEditorWindow({
+        source: 'local',
+        path: item.path,
+        name: item.name,
+        encoding: 'utf-8'
+      })
     } catch (err) {
       setError(item.type === 'folder' ? t.localLoadFailed : (err as Error).message)
     }
@@ -885,10 +937,13 @@ export function App() {
     if (!desktopApi) {
       return
     }
-    const encoding = 'utf-8'
-    const content = await desktopApi.readRemoteFile(tabId, item.path, encoding)
-    setFileEditor({ path: item.path, name: item.name, source: 'remote', content, encoding })
-    setFileEditorError(null)
+    await desktopApi.openFileEditorWindow({
+      source: 'remote',
+      path: item.path,
+      name: item.name,
+      tabId,
+      encoding: 'utf-8'
+    })
   }
 
   const handleSaveFileEditor = async (content: string, encoding: string) => {
@@ -900,12 +955,14 @@ export function App() {
       setIsBusy(true)
       if (fileEditor.source === 'local') {
         await desktopApi.writeLocalFile(fileEditor.path, content, encoding)
-        await openLocalDirectory(localPath)
-      } else if (activeTab) {
-        const snapshot = await desktopApi.writeRemoteFile(activeTab.id, fileEditor.path, content, encoding)
+        if (!isFileEditorWindow) {
+          await openLocalDirectory(localPath)
+        }
+      } else if (fileEditor.tabId ?? activeTab?.id) {
+        const snapshot = await desktopApi.writeRemoteFile(fileEditor.tabId ?? activeTab!.id, fileEditor.path, content, encoding)
         applySnapshot(snapshot)
       }
-      setFileEditor(null)
+      setFileEditor((prev) => prev ? { ...prev, content, encoding } : prev)
       setFileEditorError(null)
     } catch (err) {
       setFileEditorError((err as Error).message)
@@ -923,8 +980,8 @@ export function App() {
       setIsBusy(true)
       const content = fileEditor.source === 'local'
         ? await desktopApi.readLocalFile(fileEditor.path, encoding)
-        : activeTab
-          ? await desktopApi.readRemoteFile(activeTab.id, fileEditor.path, encoding)
+        : (fileEditor.tabId ?? activeTab?.id)
+          ? await desktopApi.readRemoteFile(fileEditor.tabId ?? activeTab!.id, fileEditor.path, encoding)
           : fileEditor.content
       setFileEditor({ ...fileEditor, content, encoding })
       setFileEditorError(null)
@@ -1376,6 +1433,39 @@ export function App() {
     )
   }
 
+  if (isFileEditorWindow && fileEditor) {
+    return (
+      <FileEditorModal
+        errorMessage={fileEditorError}
+        file={fileEditor}
+        isBusy={isBusy}
+        onClose={closeCurrentWindow}
+        onReloadWithEncoding={(encoding) => {
+          void handleReloadFileEditorWithEncoding(encoding)
+        }}
+        onSave={handleSaveFileEditor}
+        standalone
+        themeMode={themeMode}
+      />
+    )
+  }
+
+  if (isFileEditorWindow) {
+    return (
+      <div className="standalone-shell file-editor-window">
+        <div className="modal-card file-editor-modal file-editor-modal--dark standalone">
+          <div className="modal-header">
+            <div className="file-editor-title">
+              <span>{fileEditorWindowSource === 'remote' ? t.editRemoteFile : t.editLocalFile}</span>
+              <strong>{fileEditorWindowName ?? ''}</strong>
+            </div>
+          </div>
+          {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : <div className="file-editor-path">{t.updating}</div>}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="fs-shell" style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}>
@@ -1630,23 +1720,6 @@ export function App() {
             void handleSubmitPermissions(options)
           }}
           supportsRecursive={permissionDialog.supportsRecursive}
-        />
-      ) : null}
-
-      {fileEditor ? (
-        <FileEditorModal
-          errorMessage={fileEditorError}
-          file={fileEditor}
-          isBusy={isBusy}
-          onClose={() => {
-            setFileEditor(null)
-            setFileEditorError(null)
-          }}
-          onReloadWithEncoding={(encoding) => {
-            void handleReloadFileEditorWithEncoding(encoding)
-          }}
-          onSave={handleSaveFileEditor}
-          themeMode={themeMode}
         />
       ) : null}
     </>

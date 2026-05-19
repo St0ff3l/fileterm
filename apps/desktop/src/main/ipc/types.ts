@@ -9,6 +9,7 @@ export interface IpcWindowOptions {
   openCommandManagerWindow(parent: BrowserWindow): void
   openConnectionFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', profileId?: string): void
   openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', commandId?: string, folderId?: string): void
+  openFileEditorWindow(parent: BrowserWindow, input: { source: 'local' | 'remote'; path: string; name: string; tabId?: string; encoding?: string }): void
 }
 
 export interface IpcServices {

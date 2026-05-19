@@ -111,6 +111,15 @@ export interface FileContentSnapshot {
   name: string
   content: string
   source: 'local' | 'remote'
+  tabId?: string
+  encoding?: string
+}
+
+export interface FileEditorWindowInput {
+  source: 'local' | 'remote'
+  path: string
+  name: string
+  tabId?: string
   encoding?: string
 }
 
@@ -299,6 +308,7 @@ export interface TermdockDesktopApi {
   openCommandManagerWindow(): Promise<void>
   openConnectionFormWindow(mode: ConnectionFormMode, profileId?: string): Promise<void>
   openCommandFormWindow(mode: ConnectionFormMode, commandId?: string, folderId?: string): Promise<void>
+  openFileEditorWindow(input: FileEditorWindowInput): Promise<void>
   closeCurrentWindow(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>

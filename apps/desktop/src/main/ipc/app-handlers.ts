@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { ConnectionFormMode } from '@termdock/core'
+import type { ConnectionFormMode, FileEditorWindowInput } from '@termdock/core'
 import type { IpcWindowOptions } from './types.js'
 
 export function registerAppHandlers(options: IpcWindowOptions) {
@@ -28,6 +28,13 @@ export function registerAppHandlers(options: IpcWindowOptions) {
     const senderWindow = BrowserWindow.fromWebContents(event.sender) ?? options.getMainWindow()
     if (senderWindow) {
       options.openCommandFormWindow(senderWindow, mode, commandId, folderId)
+    }
+  })
+
+  ipcMain.handle('app:openFileEditorWindow', (event, input: FileEditorWindowInput) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender) ?? options.getMainWindow()
+    if (senderWindow) {
+      options.openFileEditorWindow(senderWindow, input)
     }
   })
 

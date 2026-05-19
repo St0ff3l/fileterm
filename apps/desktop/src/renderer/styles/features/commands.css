@@ -339,15 +339,21 @@
   flex-direction: column;
   gap: 10px;
   height: 100%;
+  min-height: 0;
   padding: 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
   border-left: 1px solid var(--border-light);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .command-runner-head {
+  display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   min-height: 32px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-light);
@@ -357,6 +363,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .command-runner-head button {
@@ -364,6 +372,7 @@
   align-items: center;
   height: 26px;
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .command-detail-block {
@@ -402,8 +411,8 @@
 }
 
 .command-runner-controls {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  display: flex;
+  align-items: center;
   gap: 12px;
   padding-top: 4px;
 }
@@ -417,13 +426,13 @@
   color: var(--text-muted);
 }
 
-.command-toggle input {
-  width: 16px;
-  height: 16px;
-}
-
 .command-target-select {
   justify-content: flex-end;
+}
+
+.command-target-select-inline {
+  justify-content: flex-start;
+  flex-shrink: 0;
 }
 
 .command-target-select select {
@@ -435,6 +444,55 @@
   background: var(--bg-main);
   color: var(--text-main);
   font-size: 11px;
+}
+
+.command-target-select-inline span,
+.command-toggle span,
+.command-editor-checkbox-row span {
+  white-space: nowrap;
+}
+
+.command-toggle input,
+.command-editor-checkbox-row input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-main);
+  position: relative;
+  flex: 0 0 auto;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.command-toggle input::after,
+.command-editor-checkbox-row input::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--primary);
+  transform: scale(0);
+  transition: transform 0.16s ease;
+}
+
+.command-toggle input:checked,
+.command-editor-checkbox-row input:checked {
+  border-color: var(--primary);
+}
+
+.command-toggle input:checked::after,
+.command-editor-checkbox-row input:checked::after {
+  transform: scale(1);
+}
+
+.command-toggle input:focus-visible,
+.command-editor-checkbox-row input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
 }
 
 .command-param-grid {

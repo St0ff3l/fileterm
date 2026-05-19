@@ -134,7 +134,7 @@ export function CommandCenter({
             </div>
           </div>
 
-          <div className="command-template-list">
+          <div className="command-template-list scrollbar-scroll">
             <table className="command-table">
               <thead>
                 <tr>
@@ -174,15 +174,24 @@ export function CommandCenter({
             <span>{selectedTemplate ? t.commandRendered : t.commandNoDescription}</span>
           </div>
 
-          <div className="command-runner">
+          <div className="command-runner scrollbar-scroll">
             {selectedTemplate ? (
               <>
                 <div className="command-runner-head">
                   <strong>{selectedTemplate.name}</strong>
-                  <button type="button" onClick={handleRun} disabled={isBusy || (sendScope === 'current' ? !canRunCurrent : !canRunAny)}>
-                    <AppIcon name="flash" />
-                    {t.send}
-                  </button>
+                  <div className="command-runner-actions">
+                    <label className="command-target-select command-target-select-inline">
+                      <span>{t.commandSendScope}</span>
+                      <select value={sendScope} onChange={(event) => setSendScope(event.currentTarget.value as SendScope)}>
+                        <option value="current">{t.commandSendCurrent}</option>
+                        <option value="all-ssh">{t.commandSendAll}</option>
+                      </select>
+                    </label>
+                    <button type="button" onClick={handleRun} disabled={isBusy || (sendScope === 'current' ? !canRunCurrent : !canRunAny)}>
+                      <AppIcon name="flash" />
+                      {t.send}
+                    </button>
+                  </div>
                 </div>
                 <div className="command-detail-block">
                   <span>{t.name}</span>
@@ -225,13 +234,6 @@ export function CommandCenter({
                       onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
                     />
                     <span>{t.commandAppendCr}</span>
-                  </label>
-                  <label className="command-target-select">
-                    <span>{t.commandSendScope}</span>
-                    <select value={sendScope} onChange={(event) => setSendScope(event.currentTarget.value as SendScope)}>
-                      <option value="current">{t.commandSendCurrent}</option>
-                      <option value="all-ssh">{t.commandSendAll}</option>
-                    </select>
                   </label>
                 </div>
               </>

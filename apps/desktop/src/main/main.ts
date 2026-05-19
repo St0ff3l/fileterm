@@ -10,6 +10,7 @@ let connectionManagerWindow: BrowserWindow | null = null
 let connectionFormWindow: BrowserWindow | null = null
 let commandManagerWindow: BrowserWindow | null = null
 let commandFormWindow: BrowserWindow | null = null
+let fileEditorWindow: BrowserWindow | null = null
 
 const isMac = process.platform === 'darwin'
 
@@ -221,13 +222,56 @@ function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', c
   })
 }
 
+function openFileEditorWindow(parent: BrowserWindow, input: {
+  source: 'local' | 'remote'
+  path: string
+  name: string
+  tabId?: string
+  encoding?: string
+}) {
+  void parent
+  if (fileEditorWindow && !fileEditorWindow.isDestroyed()) {
+    fileEditorWindow.close()
+  }
+
+  const win = createNativeChildWindow({
+    title: `编辑文件 - ${input.name}`,
+    width: 1120,
+    height: 460,
+    minWidth: 920,
+    minHeight: 400,
+    backgroundColor: '#171b20'
+  })
+
+  fileEditorWindow = win
+  win.once('ready-to-show', () => {
+    win.center()
+    win.show()
+  })
+  win.on('closed', () => {
+    if (fileEditorWindow === win) {
+      fileEditorWindow = null
+    }
+  })
+
+  loadAppWindow(win, {
+    window: 'file-editor',
+    source: input.source,
+    path: input.path,
+    name: input.name,
+    ...(input.tabId ? { tabId: input.tabId } : {}),
+    ...(input.encoding ? { encoding: input.encoding } : {})
+  })
+}
+
 app.whenReady().then(() => {
   registerIpcHandlers(app.getPath('userData'), {
     getMainWindow: () => mainWindow,
     openConnectionManagerWindow,
     openCommandManagerWindow,
     openConnectionFormWindow,
-    openCommandFormWindow
+    openCommandFormWindow,
+    openFileEditorWindow
   })
   createMainWindow()
 

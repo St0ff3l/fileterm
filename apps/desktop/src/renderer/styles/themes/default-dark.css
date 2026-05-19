@@ -745,6 +745,10 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
 }
 
+.file-editor-window {
+  background: #171b20;
+}
+
 .file-editor-modal--dark .modal-header {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -774,6 +778,8 @@
 
 .file-editor-menubar-button:hover,
 .file-editor-status-button:hover,
+.file-editor-menubar-button.is-open,
+.file-editor-status-button.is-open,
 .file-editor-menu button:hover,
 .file-editor-menu button.is-active {
   background: rgba(103, 187, 255, 0.14);
@@ -798,6 +804,7 @@
 
 .file-editor-menu button {
   color: #d4dde8;
+  background: transparent;
 }
 
 .file-editor-menu-separator {
