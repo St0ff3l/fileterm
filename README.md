@@ -14,8 +14,8 @@
   </p>
 
   <p>
-    <a href="#中文"><img alt="中文" src="https://img.shields.io/badge/中文-当前语言-111827?style=for-the-badge"></a>
-    <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-Switch-0F172A?style=for-the-badge"></a>
+    <kbd><a href="#中文">中文</a></kbd>
+    <kbd><a href="#english">English</a></kbd>
   </p>
 
   <p>
@@ -165,11 +165,32 @@ termdock/
 
 感谢每一位让 TermDock 变得更好的贡献者。
 
-<p align="center">
-  <a href="https://github.com/St0ff3l/termdock/graphs/contributors">
-    <img alt="Contributors" src="https://contrib.rocks/image?repo=St0ff3l/termdock" />
-  </a>
-</p>
+<table>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://github.com/St0ff3l">
+        <img src="https://avatars.githubusercontent.com/St0ff3l?s=120" width="72" height="72" alt="StOff31" />
+        <br />
+        <sub><b>StOff31</b></sub>
+      </a>
+    </td>
+    <td>
+      构建了完整的后端逻辑，打通 Electron main process、IPC、会话控制、文件能力与工作区状态等核心链路。
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://github.com/Flashhhhhhzj">
+        <img src="https://avatars.githubusercontent.com/Flashhhhhhzj?s=120" width="72" height="72" alt="Flashhhhhhzj" />
+        <br />
+        <sub><b>Flashhhhhhzj</b></sub>
+      </a>
+    </td>
+    <td>
+      重构并设计了前端样式，统一设计语言，推动主题 token、组件皮肤和整体视觉体验成形。
+    </td>
+  </tr>
+</table>
 
 <a id="english"></a>
 
@@ -178,8 +199,8 @@ termdock/
 ## English
 
 <p>
-  <a href="#中文"><img alt="中文" src="https://img.shields.io/badge/中文-Switch-111827?style=for-the-badge"></a>
-  <a href="#english"><img alt="English" src="https://img.shields.io/badge/English-Current-0F172A?style=for-the-badge"></a>
+  <kbd><a href="#中文">中文</a></kbd>
+  <kbd><a href="#english">English</a></kbd>
 </p>
 
 TermDock is a modern desktop remote workspace for developers and operations teams. It brings SSH terminals, SFTP files, FTP files, workspace tabs, and transfer tasks into one focused desktop client.
@@ -192,6 +213,11 @@ TermDock is a modern desktop remote workspace for developers and operations team
 - Unified transfer center for uploads, downloads, progress, and errors.
 - A layered Electron architecture: `main -> preload -> renderer`.
 - MIT licensed and open for collaboration.
+
+### Contributors
+
+- **StOff31** built the complete backend logic, including Electron main process services, IPC, session control, file capabilities, and workspace state.
+- **Flashhhhhhzj** refactored and designed the frontend styling, unified the design language, and shaped the theme tokens, component skins, and visual experience.
 
 ### Quick Start
 
