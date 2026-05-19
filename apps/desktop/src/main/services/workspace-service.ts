@@ -3,6 +3,7 @@ import { readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { WebContents } from 'electron'
 import {
+  type CommandExecutionOptions,
   type CommandTemplateInput,
   type ConnectionProfile,
   type CommandExecutionResult,
@@ -97,6 +98,11 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
+  async updateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<WorkspaceSnapshot> {
+    await this.profileRepository.updateCommandOrder?.(id, newParentId, newOrder)
+    return this.getSnapshot()
+  }
+
   async createCommandTemplate(input: CommandTemplateInput): Promise<WorkspaceSnapshot> {
     await this.profileRepository.createCommandTemplate?.(input)
     return this.getSnapshot()
@@ -112,7 +118,12 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
-  async executeCommandTemplate(tabId: string, commandId: string, args: string[] = []): Promise<CommandExecutionResult> {
+  async executeCommandTemplate(
+    tabId: string,
+    commandId: string,
+    args: string[] = [],
+    options?: CommandExecutionOptions
+  ): Promise<CommandExecutionResult> {
     const controller = this.sessionRuntime.requireController(tabId)
     if (controller.type !== 'ssh') {
       throw new Error('只有 SSH 会话支持快捷命令')
@@ -128,7 +139,8 @@ export class WorkspaceService {
       return nextArg ?? ''
     })
 
-    await controller.write(command.appendCarriageReturn ? `${renderedCommand}\r` : renderedCommand)
+    const appendCarriageReturn = options?.appendCarriageReturn ?? command.appendCarriageReturn
+    await controller.write(appendCarriageReturn ? `${renderedCommand}\r` : renderedCommand)
 
     return { renderedCommand }
   }

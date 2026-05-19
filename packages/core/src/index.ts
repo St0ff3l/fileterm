@@ -37,7 +37,7 @@ export interface BaseProfile extends BaseEntity {
 export interface SshProfile extends BaseProfile {
   type: 'ssh'
   username: string
-  authType: 'password' | 'privateKey'
+  authType: 'password' | 'privateKey' | 'system'
   note?: string
   password?: string
   privateKeyPath?: string
@@ -236,7 +236,7 @@ export interface CreateProfileInput {
   password?: string
   privateKeyPath?: string
   passphrase?: string
-  authType?: 'password' | 'privateKey'
+  authType?: 'password' | 'privateKey' | 'system'
   secure?: boolean
   encoding?: string
   backspaceKey?: string
@@ -259,6 +259,10 @@ export type AppWindowMode = 'main' | 'connection-manager' | 'connection-form' | 
 
 export interface CommandExecutionResult {
   renderedCommand: string
+}
+
+export interface CommandExecutionOptions {
+  appendCarriageReturn?: boolean
 }
 
 export interface TerminalDataPayload {
@@ -289,10 +293,11 @@ export interface TermdockDesktopApi {
   createCommandFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>
   updateCommandFolder(folderId: string, updates: Partial<CommandFolder>): Promise<WorkspaceSnapshot>
   deleteCommandFolder(folderId: string): Promise<WorkspaceSnapshot>
+  updateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<WorkspaceSnapshot>
   createCommandTemplate(input: CommandTemplateInput): Promise<WorkspaceSnapshot>
   updateCommandTemplate(commandId: string, input: CommandTemplateInput): Promise<WorkspaceSnapshot>
   deleteCommandTemplate(commandId: string): Promise<WorkspaceSnapshot>
-  executeCommandTemplate(tabId: string, commandId: string, args?: string[]): Promise<CommandExecutionResult>
+  executeCommandTemplate(tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions): Promise<CommandExecutionResult>
   createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
   updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>

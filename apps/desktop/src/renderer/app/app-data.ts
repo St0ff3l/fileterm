@@ -211,7 +211,9 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     remotePath: profile.remotePath,
     note: profile.note ?? '',
     password: profile.password ?? '',
-    authType: profile.type === 'ssh' ? profile.authType : 'password',
+    authType: profile.type === 'ssh'
+      ? (profile.authType === 'system' ? 'password' : profile.authType)
+      : 'password',
     privateKeyPath: profile.type === 'ssh' ? profile.privateKeyPath ?? '' : '',
     passphrase: profile.type === 'ssh' ? profile.passphrase ?? '' : '',
     encoding: profile.type === 'ssh' ? profile.encoding ?? 'UTF-8' : 'UTF-8',

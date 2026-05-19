@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
 import type {
+  CommandExecutionOptions,
   CommandFolder,
   CommandTemplate,
   LocalFileItem,
@@ -26,6 +27,7 @@ import { FileTable, LocalFileTable, PanePathBar } from './FileTables'
 export function FileManager({
   activeSession,
   activeTab,
+  tabs,
   commandFolders,
   commandTemplates,
   isBusy,
@@ -45,12 +47,13 @@ export function FileManager({
 }: {
   activeSession: SessionSnapshot
   activeTab: WorkspaceTab | null
+  tabs: WorkspaceTab[]
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
   isBusy: boolean
   localItems: LocalFileItem[]
   localPath: string
-  onExecuteCommand(commandId: string, args: string[]): void
+  onExecuteCommand(commandId: string, args: string[], options: CommandExecutionOptions, scope: 'current' | 'all-ssh'): void
   onOpenCommandManager(): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
@@ -261,7 +264,9 @@ export function FileManager({
       <div className="file-tabs">
         <button className={activeView === 'file' ? 'active' : ''} type="button" onClick={() => setActiveView('file')}>{t.file}</button>
         <button className={activeView === 'command' ? 'active' : ''} type="button" onClick={() => setActiveView('command')}>{t.command}</button>
-        <span className="file-current-path">{activeView === 'file' ? activeSession.remotePath : t.commandQuickLaunch}</span>
+        <span className="file-current-path">
+          {activeView === 'file' ? activeSession.remotePath : `${t.commandQuickLaunch} (${activeTab?.sessionType === 'ssh' ? t.send : t.commandSshOnly})`}
+        </span>
         {activeView === 'file' ? (
           <div className="file-tab-actions">
             <button title={t.refresh} type="button" onClick={onRefresh}><AppIcon name="refresh" /></button>
@@ -272,7 +277,7 @@ export function FileManager({
           </div>
         ) : (
           <div className="file-tab-actions">
-            <button title={t.commandManager} type="button" onClick={onOpenCommandManager}><AppIcon name="menu" /></button>
+            <button className="flat-button compact command-manager-launch" type="button" onClick={onOpenCommandManager}>{t.commandManager}</button>
           </div>
         )}
       </div>
@@ -282,8 +287,8 @@ export function FileManager({
           commandFolders={commandFolders}
           commandTemplates={commandTemplates}
           isBusy={isBusy}
+          tabs={tabs}
           onExecute={onExecuteCommand}
-          onOpenManager={onOpenCommandManager}
         />
       ) : (
       <div className="file-split" ref={splitRef} style={{ '--local-pane-width': `${localPaneWidth}px` } as CSSProperties}>

@@ -15,6 +15,7 @@ export function TerminalView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const initialTextRef = useRef(initialText)
   const bootedTabs = useRef(new Set<string>())
+  const wasConnectedRef = useRef(false)
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -71,9 +72,10 @@ export function TerminalView({
     const offState = window.termdock?.onTerminalState(({ tabId: nextTabId, summary, connected }) => {
       if (nextTabId === tabId) {
         onStatus?.(summary)
-        if (!connected) {
+        if (wasConnectedRef.current && !connected) {
           terminal.writeln('\r\n[connection closed]')
         }
+        wasConnectedRef.current = connected
       }
     })
 

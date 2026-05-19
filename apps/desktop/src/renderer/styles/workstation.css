@@ -2,5 +2,6 @@
 @import './features/home.css';
 @import './features/session.css';
 @import './features/modals.css';
+@import './features/commands.css';
 @import './features/legacy-responsive.css';
 @import './features/workstation-skin.css';

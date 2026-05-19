@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron'
-import type { CommandTemplateInput, CreateProfileInput } from '@termdock/core'
+import type { CommandExecutionOptions, CommandTemplateInput, CreateProfileInput } from '@termdock/core'
 import type { IpcServices, IpcWindowOptions } from './types.js'
 
 export function registerWorkspaceHandlers(services: IpcServices, options: IpcWindowOptions) {
@@ -67,6 +67,12 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
+  ipcMain.handle('workspace:updateCommandOrder', async (_, id: string, newParentId: string | undefined, newOrder: number) => {
+    const snapshot = await workspaceService.updateCommandOrder(id, newParentId, newOrder)
+    broadcastSnapshot(snapshot)
+    return snapshot
+  })
+
   ipcMain.handle('workspace:createCommandTemplate', async (_, input: CommandTemplateInput) => {
     const snapshot = await workspaceService.createCommandTemplate(input)
     broadcastSnapshot(snapshot)
@@ -85,8 +91,8 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
-  ipcMain.handle('workspace:executeCommandTemplate', async (_, tabId: string, commandId: string, args?: string[]) => {
-    return workspaceService.executeCommandTemplate(tabId, commandId, args)
+  ipcMain.handle('workspace:executeCommandTemplate', async (_, tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions) => {
+    return workspaceService.executeCommandTemplate(tabId, commandId, args, options)
   })
 
   ipcMain.handle('workspace:openProfile', async (event, profileId: string) => {

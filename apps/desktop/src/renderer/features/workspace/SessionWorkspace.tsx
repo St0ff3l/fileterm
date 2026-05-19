@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import type {
+  CommandExecutionOptions,
   CommandFolder,
   CommandTemplate,
   LocalFileItem,
@@ -13,6 +14,7 @@ import { FileManager } from '../files/FileManager'
 export function SessionWorkspace({
   activeTab,
   activeSession,
+  tabs,
   localItems,
   localPath,
   commandFolders,
@@ -32,12 +34,13 @@ export function SessionWorkspace({
 }: {
   activeTab: WorkspaceTab
   activeSession: SessionSnapshot
+  tabs: WorkspaceTab[]
   localItems: LocalFileItem[]
   localPath: string
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
   isBusy: boolean
-  onExecuteCommand(commandId: string, args: string[]): void
+  onExecuteCommand(commandId: string, args: string[], options: CommandExecutionOptions, scope: 'current' | 'all-ssh'): void
   onOpenCommandManager(): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
@@ -142,6 +145,7 @@ export function SessionWorkspace({
       <FileManager
         activeSession={activeSession}
         activeTab={activeTab}
+        tabs={tabs}
         commandFolders={commandFolders}
         commandTemplates={commandTemplates}
         isBusy={isBusy}

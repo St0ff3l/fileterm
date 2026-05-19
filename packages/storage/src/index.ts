@@ -156,6 +156,13 @@ export class MemoryProfileRepository implements ProfileRepository {
   }
 
   async updateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
+    const folder = this.commandFolders.find((item) => item.id === id)
+    if (folder) {
+      folder.parentId = newParentId
+      folder.order = newOrder
+      return
+    }
+
     const command = this.commandTemplates.find((item) => item.id === id)
     if (command) {
       command.parentId = newParentId
@@ -173,7 +180,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         host: input.host,
         port: input.port,
         username: input.username,
-        authType: input.authType ?? 'password',
+        authType: input.authType ?? 'system',
         note: input.note,
         password: input.password,
         privateKeyPath: input.privateKeyPath,

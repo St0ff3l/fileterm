@@ -1,4 +1,5 @@
 import type {
+  CommandExecutionOptions,
   CommandFolder,
   CommandTemplate,
   ConnectionFolder,
@@ -23,6 +24,7 @@ export function WorkspaceStage({
   activeProfile,
   activeSession,
   activeTab,
+  tabs,
   commandFolders,
   commandTemplates,
   folders,
@@ -47,13 +49,14 @@ export function WorkspaceStage({
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   activeTab: WorkspaceTab | null
+  tabs: WorkspaceTab[]
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
   folders: ConnectionFolder[]
   isBusy: boolean
   localItems: LocalFileItem[]
   localPath: string
-  onExecuteCommand(commandId: string, args: string[]): void
+  onExecuteCommand(commandId: string, args: string[], options: CommandExecutionOptions, scope: 'current' | 'all-ssh'): void
   onOpenCommandManager(): void
   profiles: ConnectionProfile[]
   onChooseUploadFiles(): void
@@ -76,6 +79,7 @@ export function WorkspaceStage({
       <SessionWorkspace
         activeSession={activeSession}
         activeTab={activeTab}
+        tabs={tabs}
         commandFolders={commandFolders}
         commandTemplates={commandTemplates}
         isBusy={isBusy}

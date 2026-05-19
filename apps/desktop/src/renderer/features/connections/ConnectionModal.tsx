@@ -49,7 +49,7 @@ export function ConnectionModal({
                           ...prev,
                           type: nextType,
                           port: nextType === 'ftp' && prev.port === 22 ? 21 : nextType === 'ssh' && prev.port === 21 ? 22 : prev.port,
-                          authType: nextType === 'ssh' ? prev.authType ?? 'password' : 'password'
+                          authType: nextType === 'ssh' ? prev.authType ?? 'system' : 'password'
                         }))
                       }}
                     >
@@ -70,21 +70,26 @@ export function ConnectionModal({
                 <div className="ssh-grid ssh-grid-auth">
                   {form.type === 'ssh' ? (
                     <label>{t.method}:
-                      <select value={form.authType} onChange={(event) => setForm((prev) => ({ ...prev, authType: event.target.value as 'password' | 'privateKey' }))}>
+                      <select value={form.authType === 'system' ? 'password' : form.authType} onChange={(event) => setForm((prev) => ({ ...prev, authType: event.target.value as 'password' | 'privateKey' }))}>
                         <option value="password">{t.password}</option>
                         <option value="privateKey">{t.privateKey}</option>
                       </select>
                     </label>
                   ) : null}
                   <label>{t.username}:<input value={form.username} onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))} /></label>
-                  <label className="span-2">{t.password}:<input type="password" value={form.password ?? ''} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} /></label>
-                  {form.type === 'ssh' ? (
+                  {form.type === 'ssh' && form.authType === 'password' ? (
+                    <label className="span-2">{t.password}:<input type="password" value={form.password ?? ''} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} /></label>
+                  ) : null}
+                  {form.type === 'ssh' && form.authType === 'privateKey' ? (
                     <label className="full">{t.privateKey}:<input value={form.privateKeyPath ?? ''} onChange={(event) => setForm((prev) => ({ ...prev, privateKeyPath: event.target.value }))} /></label>
+                  ) : null}
+                  {form.type === 'ssh' && form.authType === 'password' ? (
+                    <div className="span-2 ssh-auth-hint">{t.passwordAuthHint}</div>
                   ) : (
-                    <label className="ssh-checkbox span-2">
+                    form.type === 'ftp' ? <label className="ssh-checkbox span-2">
                       <input checked={Boolean(form.secure)} type="checkbox" onChange={(event) => setForm((prev) => ({ ...prev, secure: event.target.checked }))} />
                       <span>{t.useFtps}</span>
-                    </label>
+                    </label> : null
                   )}
                 </div>
               </fieldset>

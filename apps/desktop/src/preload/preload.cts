@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron') as typeof import('electron')
 
 import type {
+  CommandExecutionOptions,
   CommandTemplateInput,
   ConnectionFormMode,
   CommandExecutionResult,
@@ -46,14 +47,16 @@ const api: TermdockDesktopApi = {
     ipcRenderer.invoke('workspace:updateCommandFolder', folderId, updates),
   deleteCommandFolder: (folderId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:deleteCommandFolder', folderId),
+  updateCommandOrder: (id: string, newParentId: string | undefined, newOrder: number): Promise<WorkspaceSnapshot> =>
+    ipcRenderer.invoke('workspace:updateCommandOrder', id, newParentId, newOrder),
   createCommandTemplate: (input: CommandTemplateInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createCommandTemplate', input),
   updateCommandTemplate: (commandId: string, input: CommandTemplateInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:updateCommandTemplate', commandId, input),
   deleteCommandTemplate: (commandId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:deleteCommandTemplate', commandId),
-  executeCommandTemplate: (tabId: string, commandId: string, args?: string[]): Promise<CommandExecutionResult> =>
-    ipcRenderer.invoke('workspace:executeCommandTemplate', tabId, commandId, args),
+  executeCommandTemplate: (tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions): Promise<CommandExecutionResult> =>
+    ipcRenderer.invoke('workspace:executeCommandTemplate', tabId, commandId, args, options),
   openProfile: (profileId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:openProfile', profileId),
   openProfileFromManager: (profileId: string): Promise<WorkspaceSnapshot> =>

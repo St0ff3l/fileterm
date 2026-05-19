@@ -1,3 +1,4 @@
+import os from 'node:os'
 import path from 'node:path'
 import { readFile, stat, writeFile } from 'node:fs/promises'
 import type { ClientChannel, ConnectConfig, FileEntry, SFTPWrapper } from 'ssh2'
@@ -5,12 +6,16 @@ import { Client } from 'ssh2'
 import type { FileSessionController, RemoteFileItem, SystemMetrics, SshProfile, SshSessionController } from '@termdock/core'
 import { BaseFileSessionController } from './base-file-session-controller.js'
 import { buildMetricsCommand, parentRemotePath, parseSystemMetrics, toRemoteFileItem } from './session-file-utils.js'
+import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug-logger.js'
 
 export class LiveSshSessionController extends BaseFileSessionController implements SshSessionController {
   readonly type = 'ssh'
 
   private readonly ssh = new Client()
   private readonly sftpSsh = new Client()
+  private readonly sshDebug = createSshDebugLogger(isSshDebugEnabled(), (message) => {
+    this.appendSystemMessage(message)
+  })
   private sftp?: SFTPWrapper
   private sftpUnavailableReason: string | null = null
   private sshConfig?: ConnectConfig
@@ -36,28 +41,46 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
   override async connect(): Promise<void> {
     const profile = this.profile as SshProfile
-    const privateKey = profile.authType === 'privateKey' && profile.privateKeyPath
-      ? await readFile(profile.privateKeyPath, 'utf8')
-      : undefined
+    const authConfig = await resolveSshAuthConfig(profile)
+    const shouldTryKeyboard = profile.authType === 'password' && Boolean(profile.password)
+    const username = profile.username || os.userInfo().username
     const sshConfig: ConnectConfig = {
       host: profile.host,
       port: profile.port,
-      username: profile.username,
-      password: profile.authType === 'password' ? profile.password : undefined,
-      privateKey,
-      passphrase: profile.passphrase,
+      username,
+      ...authConfig,
       readyTimeout: 15000,
-      tryKeyboard: profile.authType === 'password'
+      tryKeyboard: shouldTryKeyboard,
+      ...(this.sshDebug.enabled
+        ? { debug: (message: string) => this.sshDebug.handle('main', message) }
+        : {})
     }
     this.sshConfig = sshConfig
+    this.sshDebug.logConnectionStart(
+      'main',
+      profile,
+      username,
+      authConfig,
+      shouldTryKeyboard
+    )
 
     await new Promise<void>((resolve, reject) => {
       let settled = false
+
+      this.ssh.removeAllListeners('banner')
+      this.ssh.removeAllListeners('keyboard-interactive')
+      this.ssh.on('banner', (message) => {
+        this.sshDebug.log('main', `服务端横幅: ${singleLine(message)}`)
+      })
+      registerKeyboardInteractiveHandler(this.ssh, profile, (message) => {
+        this.sshDebug.logKeyboardInteractive('main', message)
+      })
 
       this.ssh
         .on('ready', () => {
           this.connected = true
           this.appendSystemMessage('连接主机成功\r\n')
+          this.sshDebug.log('main', '认证完成，准备打开终端')
           this.onStateChange(this.getSummary(), this.transcript, true)
           this.ssh.shell(
             {
@@ -96,6 +119,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         .on('error', (error: Error) => {
           this.connected = false
           this.appendSystemMessage(`连接失败: ${error.message}\r\n`)
+          this.sshDebug.log('main', `连接错误: ${error.message}`)
           if (!settled) {
             settled = true
             reject(error)
@@ -105,6 +129,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         .on('close', () => {
           this.connected = false
           this.appendSystemMessage('连接已断开\r\n')
+          this.sshDebug.log('main', '连接已关闭')
           this.onStateChange('Disconnected', this.transcript, false)
         })
         .connect(sshConfig)
@@ -340,9 +365,19 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     const sshConfig = this.sshConfig
     await new Promise<void>((resolve, reject) => {
       let settled = false
+      this.sshDebug.logSftpStart(sshConfig.username)
+      this.sftpSsh.removeAllListeners('keyboard-interactive')
+      this.sftpSsh.removeAllListeners('banner')
+      this.sftpSsh.on('banner', (message) => {
+        this.sshDebug.log('sftp', `服务端横幅: ${singleLine(message)}`)
+      })
+      registerKeyboardInteractiveHandler(this.sftpSsh, this.profile as SshProfile, (message) => {
+        this.sshDebug.logKeyboardInteractive('sftp', message)
+      })
       const onReady = () => {
         cleanup()
         settled = true
+        this.sshDebug.log('sftp', 'SFTP 认证完成')
         resolve()
       }
       const onError = (error: Error) => {
@@ -350,6 +385,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         if (!settled) {
           settled = true
           this.sftpUnavailableReason = error.message
+          this.sshDebug.log('sftp', `连接错误: ${error.message}`)
           reject(error)
         }
       }
@@ -358,6 +394,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         if (!settled) {
           settled = true
           this.sftpUnavailableReason = 'SFTP SSH connection closed'
+          this.sshDebug.log('sftp', '连接在握手阶段被关闭')
           reject(new Error('SFTP SSH connection closed'))
         }
       }
@@ -371,7 +408,12 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         .once('ready', onReady)
         .once('error', onError)
         .once('close', onClose)
-        .connect(sshConfig)
+        .connect({
+          ...sshConfig,
+          ...(this.sshDebug.enabled
+            ? { debug: (message: string) => this.sshDebug.handle('sftp', message) }
+            : {})
+        })
     })
 
     return new Promise<SFTPWrapper>((resolve, reject) => {
@@ -591,7 +633,105 @@ done
   private appendSystemMessage(message: string) {
     this.transcript += message
     this.onData(message)
+    this.onStateChange(this.getSummary(), this.transcript, this.connected)
   }
+
+}
+
+const DEFAULT_SSH_KEY_FILES = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
+
+async function resolveSshAuthConfig(profile: SshProfile): Promise<Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>> {
+  if (profile.authType === 'password') {
+    if (profile.password) {
+      return {
+        password: profile.password
+      }
+    }
+
+    return resolveSystemSshAuthConfig(profile)
+  }
+
+  if (profile.authType === 'privateKey') {
+    const privateKeyPath = expandHomePath(profile.privateKeyPath)
+    if (!privateKeyPath) {
+      throw new Error('Missing private key path')
+    }
+
+    return {
+      privateKey: await readFile(privateKeyPath, 'utf8'),
+      passphrase: profile.passphrase
+    }
+  }
+
+  return resolveSystemSshAuthConfig(profile)
+}
+
+async function resolveSystemSshAuthConfig(profile: SshProfile): Promise<Pick<ConnectConfig, 'privateKey' | 'passphrase' | 'agent'>> {
+  const agent = process.env.SSH_AUTH_SOCK
+  const privateKey = await readDefaultPrivateKey()
+
+  if (!agent && !privateKey) {
+    throw new Error('No SSH agent or default private key found on this computer')
+  }
+
+  return {
+    agent,
+    privateKey,
+    passphrase: privateKey ? profile.passphrase : undefined
+  }
+}
+
+function registerKeyboardInteractiveHandler(client: Client, profile: SshProfile, onEvent: (message: string) => void) {
+  if (!profile.password) {
+    return
+  }
+
+  client.on('keyboard-interactive', (_name, _instructions, _instructionsLang, prompts, finish) => {
+    onEvent(`收到 keyboard-interactive 认证请求，提示数 ${prompts.length}`)
+    if (!prompts.length) {
+      finish([])
+      return
+    }
+
+    onEvent(`自动回复 keyboard-interactive 提示: ${prompts.map((prompt) => singleLine(prompt.prompt)).join(' | ')}`)
+    finish(prompts.map(() => profile.password ?? ''))
+  })
+}
+
+
+function expandHomePath(targetPath?: string): string | undefined {
+  if (!targetPath) {
+    return undefined
+  }
+
+  if (targetPath === '~') {
+    return os.homedir()
+  }
+
+  if (targetPath.startsWith('~/')) {
+    return path.join(os.homedir(), targetPath.slice(2))
+  }
+
+  return targetPath
+}
+
+async function readDefaultPrivateKey(): Promise<string | undefined> {
+  const homeDirectory = os.homedir()
+
+  for (const fileName of DEFAULT_SSH_KEY_FILES) {
+    const candidate = path.join(homeDirectory, '.ssh', fileName)
+    try {
+      const candidateStats = await stat(candidate)
+      if (!candidateStats.isFile()) {
+        continue
+      }
+      return await readFile(candidate, 'utf8')
+    } catch {
+      continue
+    }
+  }
+
+  return undefined
 }
 
 function shellQuote(value: string) {

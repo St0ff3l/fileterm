@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
 import type {
+  CommandExecutionOptions,
   CommandTemplateInput,
   ConnectionFormMode,
   ConnectionProfile,
@@ -271,13 +272,8 @@ export function App() {
   const handleSaveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!form.name || !form.host || !form.username || !form.group || !form.remotePath || !Number(form.port)) {
+    if (!form.name || !form.host || !form.group || !form.remotePath || !Number(form.port)) {
       setFormError(t.fillRequired)
-      return
-    }
-
-    if (form.type === 'ssh' && form.authType === 'password' && !form.password) {
-      setFormError(t.missingSshPassword)
       return
     }
 
@@ -354,6 +350,38 @@ export function App() {
     }
   }
 
+  const updateCommandFolder = async (folderId: string, updates: { name?: string; parentId?: string; order?: number }) => {
+    if (!desktopApi) {
+      return
+    }
+
+    try {
+      setIsBusy(true)
+      const snapshot = await desktopApi.updateCommandFolder(folderId, updates)
+      applySnapshot(snapshot)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  const updateCommandOrder = async (id: string, parentId: string | undefined, order: number) => {
+    if (!desktopApi) {
+      return
+    }
+
+    try {
+      setIsBusy(true)
+      const snapshot = await desktopApi.updateCommandOrder(id, parentId, order)
+      applySnapshot(snapshot)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   const deleteCommandFolder = async (folderId: string) => {
     if (!desktopApi) {
       return
@@ -386,14 +414,27 @@ export function App() {
     }
   }
 
-  const executeCommandTemplate = async (commandId: string, args: string[]) => {
-    if (!desktopApi || !activeTab) {
+  const executeCommandTemplate = async (
+    commandId: string,
+    args: string[],
+    options: CommandExecutionOptions,
+    scope: 'current' | 'all-ssh'
+  ) => {
+    if (!desktopApi) {
       return
     }
 
     try {
       setIsBusy(true)
-      await desktopApi.executeCommandTemplate(activeTab.id, commandId, args)
+      const targetTabs = scope === 'all-ssh'
+        ? workspace.tabs.filter((tab) => tab.sessionType === 'ssh' && tab.status !== 'closed')
+        : activeTab && activeTab.sessionType === 'ssh'
+          ? [activeTab]
+          : []
+
+      for (const tab of targetTabs) {
+        await desktopApi.executeCommandTemplate(tab.id, commandId, args, options)
+      }
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -1035,6 +1076,12 @@ export function App() {
         onDeleteFolder={(folderId) => {
           void deleteCommandFolder(folderId)
         }}
+        onUpdateFolder={(folderId, updates) => {
+          void updateCommandFolder(folderId, updates)
+        }}
+        onUpdateOrder={(id, parentId, order) => {
+          void updateCommandOrder(id, parentId, order)
+        }}
         onCreateCommand={(input) => {
           void saveCommandTemplate(null, input)
         }}
@@ -1121,14 +1168,15 @@ export function App() {
               activeProfile={activeProfile}
               activeSession={activeSession}
               activeTab={activeTab}
+              tabs={workspace.tabs}
               commandFolders={workspace.commandFolders || []}
               commandTemplates={workspace.commandTemplates || []}
               folders={workspace.folders || []}
               isBusy={isBusy}
               localItems={localItems}
               localPath={localPath}
-              onExecuteCommand={(commandId, args) => {
-                void executeCommandTemplate(commandId, args)
+              onExecuteCommand={(commandId, args, options, scope) => {
+                void executeCommandTemplate(commandId, args, options, scope)
               }}
               onOpenCommandManager={openCommandManager}
               profiles={workspace.profiles}
@@ -1223,6 +1271,12 @@ export function App() {
           }}
           onDeleteFolder={(folderId) => {
             void deleteCommandFolder(folderId)
+          }}
+          onUpdateFolder={(folderId, updates) => {
+            void updateCommandFolder(folderId, updates)
+          }}
+          onUpdateOrder={(id, parentId, order) => {
+            void updateCommandOrder(id, parentId, order)
           }}
           onCreateCommand={(input) => {
             void saveCommandTemplate(null, input)

@@ -210,14 +210,21 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async updateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
-    const commands = await this.readCommandTemplates()
-    const nextCommands = commands.map((item) => {
-      if (item.id === id) {
-        return { ...item, parentId: newParentId, order: newOrder }
-      }
-      return item
-    })
-    await this.writeCommandTemplates(nextCommands)
+    const [folders, commands] = await Promise.all([
+      this.readCommandFolders(),
+      this.readCommandTemplates()
+    ])
+    const folderFound = folders.some((item) => item.id === id)
+    if (folderFound) {
+      await this.writeCommandFolders(folders.map((item) => (
+        item.id === id ? { ...item, parentId: newParentId, order: newOrder } : item
+      )))
+      return
+    }
+
+    await this.writeCommandTemplates(commands.map((item) => (
+      item.id === id ? { ...item, parentId: newParentId, order: newOrder } : item
+    )))
   }
 
   private async ensureFile() {
@@ -298,7 +305,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         host: input.host,
         port: input.port,
         username: input.username,
-        authType: input.authType ?? 'password',
+        authType: input.authType ?? 'system',
         note: input.note,
         password: input.password,
         privateKeyPath: input.privateKeyPath,
