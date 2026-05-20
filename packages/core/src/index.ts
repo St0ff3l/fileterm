@@ -211,6 +211,7 @@ export interface FileSystemRow {
 export interface SystemMetrics {
   ip: string
   uptime: string
+  uptimeSeconds?: number
   load: string
   identity: SystemIdentity
   cpuPercent: number

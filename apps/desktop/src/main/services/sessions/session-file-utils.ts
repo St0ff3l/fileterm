@@ -134,6 +134,7 @@ fi
 if [ -z "$ip" ]; then
   ip=$(ifconfig 2>/dev/null | awk '/inet addr:/ && $2 !~ /127\\.0\\.0\\.1/ {sub("addr:", "", $2); print $2; exit}')
 fi
+uptime_seconds=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
 uptime_days=$(awk '{print int($1/86400) " 天"}' /proc/uptime 2>/dev/null)
 if [ -z "$uptime_days" ]; then
   uptime_days=$(uptime 2>/dev/null | awk -F'(up |, *[0-9]+ user)' 'NF>1 {gsub(/^ +| +$/, "", $2); print $2; exit}')
@@ -237,6 +238,16 @@ cpu_info=$(awk -F: '
   }
 ' /proc/cpuinfo 2>/dev/null)
 if [ -z "$cpu_info" ]; then
+  cpu_model=$(sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n 1)
+  cpu_cores=$(sed -n 's/^cpu cores[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n 1)
+  cpu_mhz=$(sed -n 's/^cpu MHz[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n 1)
+  cpu_cache=$(sed -n 's/^cache size[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n 1)
+  cpu_bogomips=$(sed -n 's/^bogomips[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo 2>/dev/null | head -n 1)
+  if [ -n "$cpu_model" ]; then
+    cpu_info="$cpu_model|\${cpu_cores:-0}|\${cpu_mhz:--}|\${cpu_cache:--}|\${cpu_bogomips:--}"
+  fi
+fi
+if [ -z "$cpu_info" ]; then
   cpu_info=$(LC_ALL=C lscpu 2>/dev/null | awk -F: '
     function trim(value) {
       sub(/^[[:space:]]+/, "", value)
@@ -276,7 +287,7 @@ if [ -z "$gpu_info" ]; then
     BEGIN { IGNORECASE=1 }
     /VGA compatible controller|3D controller|Display controller/ {
       line=$0
-      sub(/^[^:]+: /, "", line)
+      sub(/^[[:xdigit:]:.]+[[:space:]]+[^:]+: /, "", line)
       vendor=line
       sub(/[[:space:]].*$/, "", vendor)
       printf "%s|%s|-|-\\n", line, (vendor == "" ? "-" : vendor)
@@ -344,6 +355,7 @@ echo "__ARCH__$architecture"
 echo "__HOSTNAME__$hostname_value"
 echo "__IP__$ip"
 echo "__UPTIME__$uptime_days"
+echo "__UPTIME_SECONDS__$uptime_seconds"
 echo "__LOAD__$load"
 echo "__CPU__$cpu_pct"
 echo "__CPU_USAGE__$cpu_user_pct|$cpu_system_pct|$cpu_nice_pct|$cpu_idle_pct|$cpu_iowait_pct|$cpu_irq_pct|$cpu_softirq_pct|$cpu_steal_pct"
@@ -503,6 +515,7 @@ export function parseSystemMetrics(raw: string): SystemMetrics {
   return {
     ip: readLine('__IP__'),
     uptime: readLine('__UPTIME__') || '-',
+    uptimeSeconds: Number(readLine('__UPTIME_SECONDS__')) || undefined,
     load: readLine('__LOAD__') || '-',
     identity: {
       osName: readLine('__OS__') || '-',

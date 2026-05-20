@@ -30,7 +30,7 @@ export function SystemInfoWorkspace({
     { label: t.hostname, value: metrics.identity.hostname },
     { label: t.accessAddress, value: activeProfile?.host || activeSession.accessHost || '-' },
     { label: t.privateIp, value: metrics.ip || '-' },
-    { label: t.running, value: metrics.uptime || '-' },
+    { label: t.running, value: formatUptime(metrics.uptimeSeconds, metrics.uptime) },
     { label: t.load, value: metrics.load || '-' }
   ]
 
@@ -201,4 +201,74 @@ function Table({
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`
+}
+
+function formatUptime(uptimeSeconds?: number, fallback?: string) {
+  if (!uptimeSeconds || uptimeSeconds < 0) {
+    return formatLegacyUptime(fallback)
+  }
+
+  const days = Math.floor(uptimeSeconds / 86400)
+  const hours = Math.floor((uptimeSeconds % 86400) / 3600)
+  const minutes = Math.floor((uptimeSeconds % 3600) / 60)
+  const parts: string[] = []
+
+  if (days > 0) {
+    parts.push(`${days}${t.uptimeDayUnit}`)
+  }
+  if (hours > 0) {
+    parts.push(`${hours}${t.uptimeHourUnit}`)
+  }
+  if (!days && !hours && minutes > 0) {
+    parts.push(`${minutes}${t.uptimeMinuteUnit}`)
+  }
+
+  return parts.length ? parts.join(' ') : t.uptimeJustNow
+}
+
+function formatLegacyUptime(fallback?: string) {
+  if (!fallback) {
+    return '-'
+  }
+
+  const value = fallback.trim()
+  if (!value) {
+    return '-'
+  }
+
+  const zhDayMatch = value.match(/^(\d+)\s*天$/)
+  if (zhDayMatch) {
+    return `${zhDayMatch[1]}${t.uptimeDayUnit}`
+  }
+
+  const enDayHourMatch = value.match(/^(\d+)\s+days?,\s+(\d+):(\d+)$/i)
+  if (enDayHourMatch) {
+    const [, days, hours, minutes] = enDayHourMatch
+    return compactUptimeParts([
+      `${days}${t.uptimeDayUnit}`,
+      Number(hours) > 0 ? `${Number(hours)}${t.uptimeHourUnit}` : '',
+      Number(minutes) > 0 ? `${Number(minutes)}${t.uptimeMinuteUnit}` : ''
+    ])
+  }
+
+  const enDayMatch = value.match(/^(\d+)\s+days?$/i)
+  if (enDayMatch) {
+    return `${enDayMatch[1]}${t.uptimeDayUnit}`
+  }
+
+  const enHourMinuteMatch = value.match(/^(\d+):(\d+)$/)
+  if (enHourMinuteMatch) {
+    const [, hours, minutes] = enHourMinuteMatch
+    return compactUptimeParts([
+      Number(hours) > 0 ? `${Number(hours)}${t.uptimeHourUnit}` : '',
+      Number(minutes) > 0 ? `${Number(minutes)}${t.uptimeMinuteUnit}` : ''
+    ])
+  }
+
+  return value
+}
+
+function compactUptimeParts(parts: string[]) {
+  const filtered = parts.filter(Boolean)
+  return filtered.length ? filtered.join(' ') : t.uptimeJustNow
 }

@@ -13,7 +13,7 @@ import type {
   WorkspaceTab
 } from '@termdock/core'
 import { defaultForm, emptyState, localPreviewFiles, previewLocalPath, previewState, profileToForm } from './app/app-data'
-import { homeTabKey, isActiveTransfer, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
+import { homeTabKey, insertTabKeyAfter, isActiveTransfer, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
 import { CommandManagerModal } from './features/commands/CommandManagerModal'
 import { ConnectionManagerModal } from './features/connections/ConnectionManagerModal'
@@ -759,6 +759,7 @@ export function App() {
     }
 
     const nextId = `system-${activeTab.id}`
+    const activeOrderKey = activeLocalTabId ? homeTabKey(activeLocalTabId) : sessionTabKey(activeTab.id)
     setLocalTabs((prev) => [
       ...prev,
       {
@@ -769,7 +770,7 @@ export function App() {
         sourceTabTitle: activeTab.title
       }
     ])
-    setTabOrder((prev) => [...prev, homeTabKey(nextId)])
+    setTabOrder((prev) => insertTabKeyAfter(prev, homeTabKey(nextId), activeOrderKey))
     setActiveLocalTabId(nextId)
     setError(null)
   }

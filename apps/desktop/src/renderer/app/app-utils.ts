@@ -59,6 +59,22 @@ export function reorderTabKeys(keys: string[], draggingKey: string | null, targe
   return next
 }
 
+export function insertTabKeyAfter(keys: string[], newKey: string, afterKey: string | null) {
+  const withoutNewKey = keys.filter((key) => key !== newKey)
+  if (!afterKey) {
+    return [...withoutNewKey, newKey]
+  }
+
+  const targetIndex = withoutNewKey.indexOf(afterKey)
+  if (targetIndex === -1) {
+    return [...withoutNewKey, newKey]
+  }
+
+  const next = [...withoutNewKey]
+  next.splice(targetIndex + 1, 0, newKey)
+  return next
+}
+
 export function tabStatusClass(status: WorkspaceTab['status']) {
   if (status === 'connected') {
     return 'connected'

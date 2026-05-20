@@ -111,6 +111,7 @@ export const previewState: WorkspaceSnapshot = {
       systemMetrics: {
         ip: '192.168.3.197',
         uptime: '4 天',
+        uptimeSeconds: 4 * 24 * 60 * 60,
         load: '0.44, 0.66, 0.62',
         identity: {
           osName: 'fnOS 26.04',
