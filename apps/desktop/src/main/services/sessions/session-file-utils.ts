@@ -126,14 +126,58 @@ kernel_name=$(uname -s 2>/dev/null)
 kernel_version=$(uname -r 2>/dev/null)
 architecture=$(uname -m 2>/dev/null)
 hostname_value=$(hostname 2>/dev/null)
-ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-[ -z "$ip" ] && ip=$(ip route get 1 2>/dev/null | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
-if [ -z "$ip" ]; then
-  ip=$(ifconfig 2>/dev/null | awk '/inet / && $2 !~ /^127\\./ {print $2; exit}')
-fi
-if [ -z "$ip" ]; then
-  ip=$(ifconfig 2>/dev/null | awk '/inet addr:/ && $2 !~ /127\\.0\\.0\\.1/ {sub("addr:", "", $2); print $2; exit}')
-fi
+best_ip=""
+best_ip_rank=99
+rank_ip() {
+  case "$1" in
+    10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*)
+      echo 1
+      ;;
+    fc*:*|fd*:*)
+      echo 2
+      ;;
+    100.6[4-9].*|100.[7-9][0-9].*|100.1[0-1][0-9].*|100.12[0-7].*)
+      echo 3
+      ;;
+    *:*)
+      echo 5
+      ;;
+    *)
+      echo 4
+      ;;
+  esac
+}
+consider_ip() {
+  candidate="$1"
+  [ -z "$candidate" ] && return
+  candidate=\${candidate%%/*}
+  case "$candidate" in
+    127.*|169.254.*|::1|fe80:*)
+      return
+      ;;
+  esac
+  rank=$(rank_ip "$candidate")
+  if [ "$rank" -lt "$best_ip_rank" ]; then
+    best_ip="$candidate"
+    best_ip_rank="$rank"
+  fi
+}
+for candidate in $(ip route get 1 2>/dev/null | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1)}}'); do
+  consider_ip "$candidate"
+done
+for candidate in $(hostname -I 2>/dev/null); do
+  consider_ip "$candidate"
+done
+for candidate in $(ip -o addr show up scope global 2>/dev/null | awk '{print $4}'); do
+  consider_ip "$candidate"
+done
+for candidate in $(ifconfig 2>/dev/null | awk '/inet / && $2 !~ /^127\\./ {print $2}'); do
+  consider_ip "$candidate"
+done
+for candidate in $(ifconfig 2>/dev/null | awk '/inet addr:/ && $2 !~ /127\\.0\\.0\\.1/ {sub("addr:", "", $2); print $2}'); do
+  consider_ip "$candidate"
+done
+ip="$best_ip"
 uptime_seconds=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
 uptime_days=$(awk '{print int($1/86400) " 天"}' /proc/uptime 2>/dev/null)
 if [ -z "$uptime_days" ]; then
@@ -161,11 +205,17 @@ mem=$(awk 'BEGIN { total=available=memfree=buffers=cached=shmem=sreclaimable=sla
       used=total-available
       if (used < 0) used=0
       percent=int(used*100/total)
-      cache=buffers+cached+sreclaimable-shmem
+      cache_total=buffers+cached+sreclaimable-shmem
+      if (cache_total < 0) cache_total=0
+      kernel_total=slab-sreclaimable+kernelstack+pagetables
+      if (kernel_total < 0) kernel_total=0
+      kernel=kernel_total
+      if (kernel > used) kernel=used
+      remaining=used-kernel
+      cache=cache_total
+      if (cache > remaining) cache=remaining
       if (cache < 0) cache=0
-      kernel=slab-sreclaimable+kernelstack+pagetables
-      if (kernel < 0) kernel=0
-      app=used-cache-kernel
+      app=remaining-cache
       if (app < 0) app=0
       printf "%d|%d|%d|%d|%d|%d", used, total, percent, app, cache, kernel
     }
