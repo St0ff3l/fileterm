@@ -79,8 +79,7 @@ export function formatBytes(size = 0) {
 }
 
 export function buildMetricsCommand() {
-  return `sh <<'__TERMDOCK_METRICS__'
-cd / >/dev/null 2>&1 || true
+  return `cd / >/dev/null 2>&1 || true
 sleep_interval="0.15"
 sleep "$sleep_interval" >/dev/null 2>&1 || sleep_interval="1"
 read_cpu_stat() {
@@ -444,7 +443,7 @@ echo "__FILESYSTEMS_END__"
 echo "__PROCS_START__"
 echo "$procs"
 echo "__PROCS_END__"
-__TERMDOCK_METRICS__`
+`
 }
 
 export function parseSystemMetrics(raw: string): SystemMetrics {

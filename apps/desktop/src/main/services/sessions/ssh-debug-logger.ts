@@ -1,7 +1,7 @@
 import type { ConnectConfig } from 'ssh2'
 import type { SshProfile } from '@termdock/core'
 
-type SshDebugScope = 'main' | 'sftp'
+type SshDebugScope = 'main' | 'sftp' | 'exec'
 type SshAuthConfig = Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>
 
 export interface SshDebugLogger {

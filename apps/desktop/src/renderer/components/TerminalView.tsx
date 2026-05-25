@@ -485,6 +485,7 @@ export function TerminalView({
       lineHeight: 1.45,
       cursorBlink: true,
       allowTransparency: true,
+      scrollback: 6000,
       theme: buildTerminalTheme(false)
     })
     const fitAddon = new FitAddon()

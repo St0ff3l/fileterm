@@ -26,6 +26,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private static readonly TRANSCRIPT_LIMIT = 200_000
 
   private readonly ssh = new Client()
+  private readonly execSsh = new Client()
   private readonly sftpSsh = new Client()
   private readonly sshDebug = createSshDebugLogger(isSshDebugEnabled(), (message) => {
     this.appendSystemMessage(message)
@@ -33,6 +34,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private sftp?: SFTPWrapper
   private sftpUnavailableReason: string | null = null
   private sshConfig?: ConnectConfig
+  private execReady = false
+  private execConnectPromise?: Promise<Client>
+  private hasRegisteredExecLifecycle = false
   private shellStream?: {
     write(data: string): void
     setWindow(rows: number, cols: number, height: number, width: number): void
@@ -275,6 +279,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
   override async disconnect(): Promise<void> {
     this.shellStream?.end()
+    this.closeExecSession()
     this.closeSftpSession()
     this.ssh.end()
     this.sftpSsh.end()
@@ -655,10 +660,11 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     try {
-      const raw = await this.execCommand(buildMetricsCommand(), { allowNonZeroWithStdout: true })
+      const raw = await this.execCommand('sh', { allowNonZeroWithStdout: true }, false, `${buildMetricsCommand()}\n`)
       this.metrics = parseSystemMetrics(raw)
       return this.metrics
-    } catch {
+    } catch (error) {
+      this.sshDebug.log('exec', `系统信息采集失败: ${error instanceof Error ? error.message : String(error)}`)
       return this.metrics
     }
   }
@@ -749,6 +755,105 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.sftp?.end?.()
     this.sftp = undefined
     this.sftpSsh.end()
+  }
+
+  private async ensureExecConnection(): Promise<Client> {
+    if (this.execReady) {
+      return this.execSsh
+    }
+
+    if (this.execConnectPromise) {
+      return this.execConnectPromise
+    }
+
+    if (!this.sshConfig) {
+      throw new Error('Exec connection not initialized')
+    }
+
+    const sshConfig = this.sshConfig
+    this.registerExecLifecycle()
+    this.execConnectPromise = new Promise<Client>((resolve, reject) => {
+      let settled = false
+      this.sshDebug.log('exec', `准备建立 Exec 连接: ${sshConfig.username}@${sshConfig.host}:${sshConfig.port}`)
+      this.execSsh.removeAllListeners('keyboard-interactive')
+      this.execSsh.removeAllListeners('banner')
+      this.execSsh.on('banner', (message) => {
+        this.sshDebug.log('exec', `服务端横幅: ${singleLine(message)}`)
+      })
+      registerKeyboardInteractiveHandler(this.execSsh, this.profile as SshProfile, (message) => {
+        this.sshDebug.logKeyboardInteractive('exec', message)
+      })
+      const onReady = () => {
+        cleanup()
+        settled = true
+        this.execReady = true
+        this.execConnectPromise = undefined
+        this.sshDebug.log('exec', 'Exec 认证完成')
+        resolve(this.execSsh)
+      }
+      const onError = (error: Error) => {
+        cleanup()
+        this.execReady = false
+        this.execConnectPromise = undefined
+        if (!settled) {
+          settled = true
+          this.sshDebug.log('exec', `连接错误: ${error.message}`)
+          reject(error)
+        }
+      }
+      const onClose = () => {
+        cleanup()
+        this.execReady = false
+        this.execConnectPromise = undefined
+        if (!settled) {
+          settled = true
+          this.sshDebug.log('exec', '连接在握手阶段被关闭')
+          reject(new Error('Exec SSH connection closed'))
+        }
+      }
+      const cleanup = () => {
+        this.execSsh.off('ready', onReady)
+        this.execSsh.off('error', onError)
+        this.execSsh.off('close', onClose)
+      }
+
+      this.execSsh
+        .once('ready', onReady)
+        .once('error', onError)
+        .once('close', onClose)
+        .connect({
+          ...sshConfig,
+          ...(this.sshDebug.enabled
+            ? { debug: (message: string) => this.sshDebug.handle('exec', message) }
+            : {})
+        })
+    })
+
+    return this.execConnectPromise
+  }
+
+  private registerExecLifecycle() {
+    if (this.hasRegisteredExecLifecycle) {
+      return
+    }
+
+    this.hasRegisteredExecLifecycle = true
+    const markClosed = () => {
+      this.execReady = false
+      this.execConnectPromise = undefined
+    }
+    this.execSsh.on('error', (error) => {
+      this.sshDebug.log('exec', `连接异常断开: ${error.message}`)
+      markClosed()
+    })
+    this.execSsh.on('close', markClosed)
+    this.execSsh.on('end', markClosed)
+  }
+
+  private closeExecSession() {
+    this.execReady = false
+    this.execConnectPromise = undefined
+    this.execSsh.end()
   }
 
   private async readRemoteDirectory(targetPath: string): Promise<RemoteFileItem[]> {
@@ -1048,6 +1153,7 @@ done
     privileged = false,
     stdinPayload?: string
   ): Promise<string> {
+    const execClient = await this.ensureExecConnection()
     return new Promise<string>((resolve, reject) => {
       const handleExec = (error: Error | undefined, stream: ClientChannel) => {
         if (error) {
@@ -1090,11 +1196,11 @@ done
       }
 
       if (privileged && stdinPayload !== undefined) {
-        this.ssh.exec(command, { pty: true }, handleExec)
+        execClient.exec(command, { pty: true }, handleExec)
         return
       }
 
-      this.ssh.exec(command, handleExec)
+      execClient.exec(command, handleExec)
     })
   }
 
