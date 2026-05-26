@@ -83,6 +83,7 @@ export function TerminalView({
   const inlineRedrawContentRef = useRef('')
   const inlineRedrawRowsRef = useRef(1)
   const suppressHydratedChunksUntilRef = useRef(0)
+  const preserveVisibleBufferRef = useRef(false)
   const bootedTabs = useRef(new Set<string>())
   const wasConnectedRef = useRef(false)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
@@ -315,6 +316,9 @@ export function TerminalView({
     inlineRedrawRowsRef.current = 1
   }
 
+  const buildExitAlternateScreenSequence = () =>
+    '\x1b[?1049l\x1b[?1047l\x1b[?47l\x1b[?25h'
+
   const appendRenderedTranscript = (chunk: string) => {
     if (!chunk) {
       return
@@ -344,13 +348,14 @@ export function TerminalView({
       return false
     }
 
+    if (preserveVisibleBufferRef.current && currentTranscript) {
+      return false
+    }
+
     if (!currentTranscript) {
       return true
     }
 
-    // Replaying a live terminal transcript breaks full-screen TUIs like nano/vim.
-    // Once the PTY is connected and we've already rendered content, trust the
-    // streaming terminal:data channel instead of resetting and rehydrating.
     if (connected) {
       return false
     }
@@ -570,7 +575,8 @@ export function TerminalView({
           replaceTerminalWithTranscript(terminal, transcript)
         }
         if (wasConnectedRef.current && !connected) {
-          scheduleTerminalWrite(`\r\n${t.terminalConnectionClosed}\r\n`)
+          preserveVisibleBufferRef.current = true
+          scheduleTerminalWrite(`${buildExitAlternateScreenSequence()}\r\n${t.terminalConnectionClosed}\r\n`)
         }
         wasConnectedRef.current = connected
       }
@@ -646,6 +652,7 @@ export function TerminalView({
       pendingWriteRef.current = ''
       renderedTranscriptRef.current = ''
       suppressHydratedChunksUntilRef.current = 0
+      preserveVisibleBufferRef.current = false
       lastSyncedSizeRef.current = null
       clearInlineRedrawState()
       resizeObserver.disconnect()

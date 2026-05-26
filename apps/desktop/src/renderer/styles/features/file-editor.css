@@ -2,16 +2,16 @@
   width: min(1280px, calc(100vw - 36px));
   height: min(860px, calc(100vh - 28px));
   padding: 0;
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
 .file-editor-modal.standalone {
   width: 100%;
   max-width: none;
-  height: 100%;
-  min-height: 0;
+  min-height: 100vh;
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -21,6 +21,7 @@
   box-sizing: border-box;
   align-self: stretch;
   justify-self: stretch;
+  flex: 1 1 auto;
 }
 
 .file-editor-title {
@@ -203,16 +204,17 @@
 
 .file-editor-body {
   display: flex;
+  flex: 1 1 auto;
   min-height: 0;
   margin: 0 16px;
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: 14px;
-  flex: 1 1 auto;
 }
 
 .file-editor-surface {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 220px;
   height: 100%;
 }
@@ -237,11 +239,14 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  max-width: 100%;
 }
 
 .file-editor-window .monaco-editor .find-widget {
-  top: 14px !important;
-  right: 20px !important;
+  top: 20px !important;
+  right: 50px !important;
+  width: min(620px, calc(100% - 100px)) !important;
+  max-width: calc(100% - 100px) !important;
   transform: none !important;
   transition: none !important;
   opacity: 0 !important;
@@ -251,4 +256,121 @@
 .file-editor-window .monaco-editor .find-widget.visible {
   opacity: 1 !important;
   pointer-events: auto !important;
+}
+
+@media (max-width: 960px) {
+  .file-editor-modal.standalone {
+    padding: 46px 14px 12px;
+  }
+
+  .file-editor-window .file-editor-modal.standalone .modal-header {
+    padding: 0 14px;
+    box-sizing: border-box;
+  }
+
+  .file-editor-menubar,
+  .file-editor-path,
+  .file-editor-statusbar {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .file-editor-body {
+    margin: 0 14px;
+  }
+
+  .file-editor-status-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .file-editor-window .monaco-editor .find-widget {
+    top: 20px !important;
+    right: 50px !important;
+    width: min(560px, calc(100% - 100px)) !important;
+    max-width: calc(100% - 100px) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .file-editor-modal {
+    width: min(100vw, calc(100vw - 12px));
+    height: min(100vh, calc(100vh - 12px));
+  }
+
+  .file-editor-modal.standalone {
+    padding: 52px 10px 10px;
+  }
+
+  .file-editor-window .file-editor-modal.standalone .modal-header {
+    top: 10px;
+    height: auto;
+    min-height: 36px;
+    padding: 0 10px;
+    justify-content: flex-start;
+  }
+
+  .file-editor-window .file-editor-modal.standalone .file-editor-title {
+    max-width: calc(100% - 108px);
+    gap: 6px;
+  }
+
+  .file-editor-title {
+    flex-wrap: wrap;
+  }
+
+  .file-editor-title strong,
+  .file-editor-title span {
+    max-width: 100%;
+  }
+
+  .file-editor-window .file-editor-modal.standalone .file-editor-header-actions {
+    right: 10px;
+    top: 0;
+  }
+
+  .file-editor-menubar {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: thin;
+  }
+
+  .file-editor-menubar::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .file-editor-menubar-button,
+  .file-editor-status-button {
+    flex: 0 0 auto;
+  }
+
+  .file-editor-menubar,
+  .file-editor-path,
+  .file-editor-statusbar {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .file-editor-body {
+    margin: 0 10px;
+    border-radius: 10px;
+  }
+
+  .file-editor-statusbar {
+    gap: 8px;
+  }
+
+  .file-editor-status-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .file-editor-window .monaco-editor .find-widget {
+    top: 20px !important;
+    right: 50px !important;
+    width: calc(100% - 100px) !important;
+    max-width: calc(100% - 100px) !important;
+  }
 }

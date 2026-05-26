@@ -216,13 +216,16 @@ export class WorkspaceService {
     }
 
     const current = this.sessionRuntime.get(tabId)
+    const disconnectedTranscript = appendDisconnectedTranscript(current?.terminalTranscript)
     const controller = this.createController(tabId, profile)
     this.sessionRuntime.set(tabId, {
       profileId: profile.id,
       accessHost: profile.host,
       summary: profile.type === 'ssh' ? '连接主机...' : `连接主机 ${profile.host}:${profile.port}...`,
       terminalTranscript:
-        controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
+        controller.type === 'ssh'
+          ? `${disconnectedTranscript}${controller.getTerminalTranscript()}`
+          : undefined,
       remotePath: current?.remotePath ?? profile.remotePath,
       remoteFiles: current?.remoteFiles ?? [],
       fileAccessMode: current?.fileAccessMode ?? controller.getFileAccessMode(),
@@ -265,9 +268,11 @@ export class WorkspaceService {
     }
 
     await this.sessionRuntime.disconnect(tabId)
+    const disconnectedTranscript = appendDisconnectedTranscript(current.terminalTranscript)
     this.sessionRuntime.set(tabId, {
       ...current,
       summary: current.accessHost ? `Disconnected from ${current.accessHost}` : 'Disconnected',
+      terminalTranscript: disconnectedTranscript,
       connected: false
     })
     this.tabs.updateStatus(tabId, 'closed')
@@ -669,6 +674,16 @@ export class WorkspaceService {
     this.transfers.update(transferId, patch)
     await this.sessionRuntime.emitSnapshot(sender)
   }
+}
+
+function appendDisconnectedTranscript(transcript?: string) {
+  const base = transcript ?? ''
+  if (base.endsWith('连接已断开\r\n')) {
+    return base
+  }
+
+  const separator = base && !base.endsWith('\n') ? '\r\n' : ''
+  return `${base}${separator}连接已断开\r\n`
 }
 
 function isSkippableLocalReadError(error: unknown) {

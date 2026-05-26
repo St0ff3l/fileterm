@@ -267,7 +267,7 @@ export function FileEditorModal({
             options={{
               automaticLayout: true,
               find: {
-                addExtraSpaceOnTop: false,
+                addExtraSpaceOnTop: true,
                 seedSearchStringFromSelection: 'always'
               },
               fixedOverflowWidgets: true,

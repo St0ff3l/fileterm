@@ -361,10 +361,10 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
 
   const win = createNativeChildWindow({
     title: `编辑文件 - ${input.name}`,
-    width: 1120,
-    height: 460,
-    minWidth: 920,
-    minHeight: 400,
+    width: 1600,
+    height: 1040,
+    minWidth: 1040,
+    minHeight: 640,
     backgroundColor: uiPreferences.theme === 'default-light' ? '#f8fafc' : '#171b20'
   })
 
