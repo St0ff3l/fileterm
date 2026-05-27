@@ -165,6 +165,7 @@ export class WorkspaceSessionRuntime {
               ...current,
               summary,
               terminalTranscript: transcript,
+              fileAccessMode: sshController?.getFileAccessMode() ?? current.fileAccessMode,
               hasReusableSudoAuth: sshController?.hasReusableSudoAuth() ?? false,
               connected
             })
@@ -232,7 +233,26 @@ export class WorkspaceSessionRuntime {
           await this.emitSnapshotForTab(tabId)
         }
       } catch (error) {
-        remoteFilesError = error instanceof Error ? error.message : '远程目录读取失败'
+        if (controller.type === 'ssh' && controller.getFileAccessMode() === 'root' && shouldFallbackRootFileAccess(error)) {
+          await controller.setFileAccessMode('user', {
+            sudoUser: this.sessions.get(tabId)?.sudoUser ?? 'root',
+            sudoPassword: ''
+          })
+          const files = await controller.listRemoteFiles()
+          const latest = this.sessions.get(tabId)
+          if (latest) {
+            this.sessions.set(tabId, {
+              ...latest,
+              remotePath: controller.getRemotePath(),
+              fileAccessMode: controller.getFileAccessMode(),
+              hasReusableSudoAuth: controller.hasReusableSudoAuth(),
+              remoteFiles: files
+            })
+            await this.emitSnapshotForTab(tabId)
+          }
+        } else {
+          remoteFilesError = error instanceof Error ? error.message : '远程目录读取失败'
+        }
       }
 
       if (controller.type === 'ssh') {
@@ -654,6 +674,11 @@ export class WorkspaceSessionRuntime {
 
     return next.slice(next.length - WorkspaceSessionRuntime.TERMINAL_TRANSCRIPT_LIMIT)
   }
+}
+
+function shouldFallbackRootFileAccess(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /root 切换没有拿到可复用的 sudo 授权|sudo 密码无效|sudo credentials|incorrect password|authentication failure/i.test(message)
 }
 
 function isIgnorableWebContentsSendError(error: unknown) {

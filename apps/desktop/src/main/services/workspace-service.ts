@@ -268,11 +268,14 @@ export class WorkspaceService {
     }
 
     await this.sessionRuntime.disconnect(tabId)
+    this.privilegedAccess.delete(tabId)
     const disconnectedTranscript = appendDisconnectedTranscript(current.terminalTranscript)
     this.sessionRuntime.set(tabId, {
       ...current,
       summary: current.accessHost ? `Disconnected from ${current.accessHost}` : 'Disconnected',
       terminalTranscript: disconnectedTranscript,
+      fileAccessMode: 'user',
+      hasReusableSudoAuth: false,
       connected: false
     })
     this.tabs.updateStatus(tabId, 'closed')

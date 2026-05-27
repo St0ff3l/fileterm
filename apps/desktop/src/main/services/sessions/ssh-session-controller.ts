@@ -150,6 +150,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
                 this.onData(text)
               })
               stream.on('close', () => {
+                this.resetPrivilegedFileAccess()
                 this.connected = false
                 this.onStateChange('Shell closed', this.transcript, false)
               })
@@ -162,6 +163,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           )
         })
         .on('error', (error: Error) => {
+          this.resetPrivilegedFileAccess()
           this.connected = false
           if (connectionFailed) {
             this.sshDebug.log('main', `忽略重复连接错误: ${error.message}`)
@@ -177,6 +179,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           this.onStateChange(`Connection error: ${error.message}`, this.transcript, false)
         })
         .on('close', () => {
+          this.resetPrivilegedFileAccess()
           this.connected = false
           if (connectionFailed) {
             this.sshDebug.log('main', '连接失败后收到关闭事件')
@@ -290,6 +293,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.closeSftpSession()
     this.ssh.end()
     this.sftpSsh.end()
+    this.resetPrivilegedFileAccess()
     this.connected = false
   }
 
@@ -1235,6 +1239,13 @@ done
     this.transcript = trimTranscript(`${this.transcript}${message}`, LiveSshSessionController.TRANSCRIPT_LIMIT)
     this.onData(message)
     this.onStateChange(this.getSummary(), this.transcript, this.connected)
+  }
+
+  private resetPrivilegedFileAccess() {
+    this.fileAccessMode = 'user'
+    this.sudoPassword = undefined
+    this.awaitingSudoPasswordInput = false
+    this.pendingSudoPasswordInput = ''
   }
 
 }
