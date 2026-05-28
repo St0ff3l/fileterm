@@ -214,6 +214,7 @@ function createNativeChildWindow(options: {
   visualEffectState?: 'followWindow' | 'active' | 'inactive'
   titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'
 }) {
+  const enableVibrancy = isMac && options.useVibrancy === true
   return new BrowserWindow({
     width: options.width,
     height: options.height,
@@ -226,8 +227,8 @@ function createNativeChildWindow(options: {
     titleBarStyle: isMac ? options.titleBarStyle ?? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
     minimizable: false,
-    vibrancy: isMac && options.useVibrancy !== false ? 'sidebar' : undefined,
-    visualEffectState: isMac ? options.visualEffectState ?? 'active' : undefined,
+    vibrancy: enableVibrancy ? 'sidebar' : undefined,
+    visualEffectState: enableVibrancy ? options.visualEffectState ?? 'active' : undefined,
     ...getWindowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.cjs'),
