@@ -14,6 +14,44 @@ let commandFormWindow: BrowserWindow | null = null
 let fileEditorWindow: BrowserWindow | null = null
 
 const isMac = process.platform === 'darwin'
+const DEFAULT_WINDOW_BOUNDS = {
+  main: {
+    width: 1280,
+    height: 820,
+    minWidth: 1040,
+    minHeight: 680
+  },
+  connectionManager: {
+    width: 860,
+    height: 680,
+    minWidth: 760,
+    minHeight: 520
+  },
+  commandManager: {
+    width: 860,
+    height: 680,
+    minWidth: 760,
+    minHeight: 620
+  },
+  connectionForm: {
+    width: 860,
+    height: 680,
+    minWidth: 760,
+    minHeight: 620
+  },
+  commandForm: {
+    width: 860,
+    height: 680,
+    minWidth: 760,
+    minHeight: 620
+  },
+  fileEditor: {
+    width: 1220,
+    height: 780,
+    minWidth: 1040,
+    minHeight: 640
+  }
+} as const
 const DEFAULT_UI_PREFERENCES = {
   theme: 'default-dark',
   locale: 'zhCN'
@@ -161,10 +199,11 @@ function loadAppWindow(win: BrowserWindow, searchParams?: Record<string, string>
 
 function createMainWindow() {
   const win = new BrowserWindow({
-    width: 1360,
-    height: 900,
-    minWidth: 1040,
-    minHeight: 680,
+    width: DEFAULT_WINDOW_BOUNDS.main.width,
+    height: DEFAULT_WINDOW_BOUNDS.main.height,
+    minWidth: DEFAULT_WINDOW_BOUNDS.main.minWidth,
+    minHeight: DEFAULT_WINDOW_BOUNDS.main.minHeight,
+    center: true,
     title: 'TermDock',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 20, y: 18 } : undefined,
@@ -220,6 +259,7 @@ function createNativeChildWindow(options: {
     height: options.height,
     minWidth: options.minWidth,
     minHeight: options.minHeight,
+    center: true,
     show: false,
     title: options.title,
     backgroundColor: options.backgroundColor ?? getWindowBackgroundColor(uiPreferences.theme),
@@ -253,7 +293,6 @@ function centerChildWindowToParent(parent: BrowserWindow | null, child: BrowserW
 }
 
 function openConnectionManagerWindow(parent: BrowserWindow) {
-  void parent
   if (connectionManagerWindow && !connectionManagerWindow.isDestroyed()) {
     connectionManagerWindow.focus()
     return
@@ -261,15 +300,16 @@ function openConnectionManagerWindow(parent: BrowserWindow) {
 
   const win = createNativeChildWindow({
     title: '连接管理器',
-    width: 980,
-    height: 680,
-    minWidth: 760,
-    minHeight: 520
+    width: DEFAULT_WINDOW_BOUNDS.connectionManager.width,
+    height: DEFAULT_WINDOW_BOUNDS.connectionManager.height,
+    minWidth: DEFAULT_WINDOW_BOUNDS.connectionManager.minWidth,
+    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight
   })
 
   connectionManagerWindow = win
   attachWindowDiagnostics(win, 'connection-manager')
   win.once('ready-to-show', () => {
+    centerChildWindowToParent(parent, win)
     win.show()
   })
   win.on('closed', () => {
@@ -282,7 +322,6 @@ function openConnectionManagerWindow(parent: BrowserWindow) {
 }
 
 function openCommandManagerWindow(parent: BrowserWindow) {
-  void parent
   if (commandManagerWindow && !commandManagerWindow.isDestroyed()) {
     commandManagerWindow.focus()
     return
@@ -290,10 +329,10 @@ function openCommandManagerWindow(parent: BrowserWindow) {
 
   const win = createNativeChildWindow({
     title: '命令管理器',
-    width: 1180,
-    height: 760,
-    minWidth: 980,
-    minHeight: 640,
+    width: DEFAULT_WINDOW_BOUNDS.commandManager.width,
+    height: DEFAULT_WINDOW_BOUNDS.commandManager.height,
+    minWidth: DEFAULT_WINDOW_BOUNDS.commandManager.minWidth,
+    minHeight: DEFAULT_WINDOW_BOUNDS.commandManager.minHeight,
     useVibrancy: false,
     visualEffectState: undefined,
     titleBarStyle: 'hiddenInset'
@@ -302,6 +341,7 @@ function openCommandManagerWindow(parent: BrowserWindow) {
   commandManagerWindow = win
   attachWindowDiagnostics(win, 'command-manager')
   win.once('ready-to-show', () => {
+    centerChildWindowToParent(parent, win)
     win.show()
   })
   win.on('closed', () => {
@@ -320,10 +360,10 @@ function openConnectionFormWindow(parent: BrowserWindow, mode: 'create' | 'edit'
 
   const win = createNativeChildWindow({
     title: mode === 'edit' ? '编辑连接' : '新建连接',
-    width: 920,
-    height: 720,
-    minWidth: 760,
-    minHeight: 620
+    width: DEFAULT_WINDOW_BOUNDS.connectionForm.width,
+    height: DEFAULT_WINDOW_BOUNDS.connectionForm.height,
+    minWidth: DEFAULT_WINDOW_BOUNDS.connectionForm.minWidth,
+    minHeight: DEFAULT_WINDOW_BOUNDS.connectionForm.minHeight
   })
 
   connectionFormWindow = win
@@ -346,17 +386,16 @@ function openConnectionFormWindow(parent: BrowserWindow, mode: 'create' | 'edit'
 }
 
 function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', commandId?: string, folderId?: string) {
-  void parent
   if (commandFormWindow && !commandFormWindow.isDestroyed()) {
     commandFormWindow.close()
   }
 
   const win = createNativeChildWindow({
     title: mode === 'edit' ? '编辑命令' : '新建命令',
-    width: 960,
-    height: 760,
-    minWidth: 760,
-    minHeight: 620,
+    width: DEFAULT_WINDOW_BOUNDS.commandForm.width,
+    height: DEFAULT_WINDOW_BOUNDS.commandForm.height,
+    minWidth: DEFAULT_WINDOW_BOUNDS.commandForm.minWidth,
+    minHeight: DEFAULT_WINDOW_BOUNDS.commandForm.minHeight,
     useVibrancy: false,
     visualEffectState: undefined,
     titleBarStyle: 'hiddenInset'
@@ -389,24 +428,23 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
   tabId?: string
   encoding?: string
 }) {
-  void parent
   if (fileEditorWindow && !fileEditorWindow.isDestroyed()) {
     fileEditorWindow.close()
   }
 
   const win = createNativeChildWindow({
     title: `编辑文件 - ${input.name}`,
-    width: 1600,
-    height: 1040,
-    minWidth: 1040,
-    minHeight: 640,
+    width: DEFAULT_WINDOW_BOUNDS.fileEditor.width,
+    height: DEFAULT_WINDOW_BOUNDS.fileEditor.height,
+    minWidth: DEFAULT_WINDOW_BOUNDS.fileEditor.minWidth,
+    minHeight: DEFAULT_WINDOW_BOUNDS.fileEditor.minHeight,
     backgroundColor: uiPreferences.theme === 'default-light' ? '#f8fafc' : '#171b20'
   })
 
   fileEditorWindow = win
   attachWindowDiagnostics(win, 'file-editor')
   win.once('ready-to-show', () => {
-    win.center()
+    centerChildWindowToParent(parent, win)
     win.show()
   })
   win.on('closed', () => {
