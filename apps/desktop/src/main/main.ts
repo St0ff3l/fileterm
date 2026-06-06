@@ -1,8 +1,9 @@
-import { app, BrowserWindow, nativeTheme, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, nativeTheme, Tray, Menu, nativeImage, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerIpcHandlers } from './ipc/index.js'
+import { appError, appLog, getAppLogDirectory, initAppLogger } from './services/app-logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -76,7 +77,7 @@ function isBrokenPipeError(error: unknown): boolean {
 
 function safeConsoleError(...args: unknown[]) {
   try {
-    console.error(...args)
+    appError(...args)
   } catch (error) {
     if (!isBrokenPipeError(error)) {
       throw error
@@ -126,6 +127,13 @@ process.on('uncaughtException', (error) => {
 
 function getUiPreferencesPath() {
   return path.join(app.getPath('userData'), 'ui-preferences.json')
+}
+
+async function openLogsDirectory() {
+  const result = await shell.openPath(getAppLogDirectory())
+  if (result) {
+    throw new Error(result)
+  }
 }
 
 function normalizeUiPreferences(input?: Partial<UiPreferences> | null): UiPreferences {
@@ -343,7 +351,7 @@ function createMainWindow() {
     win.webContents.on('did-finish-load', async () => {
       try {
         const hasDesktopApi = await win.webContents.executeJavaScript('Boolean(window.termdock?.isDesktop)')
-        console.log(`[TermDock] preload ready: ${hasDesktopApi}`)
+        appLog(`[TermDock] preload ready: ${hasDesktopApi}`)
       } catch (error) {
         safeConsoleError('[TermDock] preload probe failed', error)
       }
@@ -579,6 +587,7 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
 }
 
 app.whenReady().then(() => {
+  initAppLogger(app.getPath('userData'))
   readUiPreferences()
   createTray()
   const appIconPath = getAppIconPath()
@@ -603,6 +612,7 @@ app.whenReady().then(() => {
     openConnectionFormWindow,
     openCommandFormWindow,
     openFileEditorWindow,
+    openLogsDirectory,
     confirmCloseWindow: (action) => {
       if (action === 'quit') {
         isQuitting = true

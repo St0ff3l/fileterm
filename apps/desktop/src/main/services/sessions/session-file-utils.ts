@@ -18,15 +18,19 @@ export function toRemoteFileItem(basePath: string, entry: FileEntry): RemoteFile
 }
 
 export function toFtpRemoteFileItem(basePath: string, entry: FileInfo): RemoteFileItem {
+  return toResolvedFtpRemoteFileItem(basePath, entry, entry.type === FileType.Directory || entry.isDirectory)
+}
+
+export function toResolvedFtpRemoteFileItem(basePath: string, entry: FileInfo, isDirectory: boolean): RemoteFileItem {
   const fullPath = path.posix.join(basePath, entry.name)
-  const isDirectory = entry.type === FileType.Directory || entry.isDirectory
+  const resolvedType = isDirectory ? FileType.Directory : entry.type
   return {
     path: fullPath,
     name: entry.name,
     type: isDirectory ? 'folder' : 'file',
     modified: entry.modifiedAt ? formatDate(entry.modifiedAt) : entry.rawModifiedAt,
     size: isDirectory ? '-' : formatBytes(entry.size),
-    permission: formatFtpPermissions(entry.type, entry.permissions),
+    permission: formatFtpPermissions(resolvedType, entry.permissions),
     ownerGroup: [entry.user, entry.group].filter(Boolean).join('/') || ''
   }
 }

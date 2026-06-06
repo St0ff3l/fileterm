@@ -44,6 +44,8 @@ export function registerAppHandlers(options: IpcWindowOptions) {
     }
   })
 
+  ipcMain.handle('app:openLogsDirectory', () => options.openLogsDirectory())
+
   ipcMain.handle('app:minimizeCurrentWindow', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()
   })

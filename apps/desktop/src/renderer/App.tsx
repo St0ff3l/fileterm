@@ -2405,6 +2405,15 @@ export function App() {
             }
             setShowConnectionManager(true)
           }}
+          onOpenLogsDirectory={() => {
+            if (!desktopApi) {
+              setError(t.desktopOnlyOpenLogs)
+              return
+            }
+            void desktopApi.openLogsDirectory().catch((err) => {
+              reportError(setError, t.openLogsDirectory, err)
+            })
+          }}
           onOpenTabContext={(event, target) => {
             setTabContextMenu({ x: event.clientX, y: event.clientY, target })
           }}

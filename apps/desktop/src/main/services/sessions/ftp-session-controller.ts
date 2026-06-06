@@ -2,16 +2,18 @@ import { randomUUID } from 'node:crypto'
 import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { Client as BasicFtpClient } from 'basic-ftp'
+import { Client as BasicFtpClient, FileInfo, FileType } from 'basic-ftp'
 import type { FtpProfile, FtpSessionController, PermissionChangeOptions, RemoteFileItem, TransferProgress } from '@termdock/core'
 import { BaseFileSessionController } from './base-file-session-controller.js'
-import { parentRemotePath, toFtpRemoteFileItem } from './session-file-utils.js'
+import { parentRemotePath, toResolvedFtpRemoteFileItem } from './session-file-utils.js'
 import { decodeBuffer, encodeText } from '../text-encoding.js'
+import { appLog, appWarn } from '../app-logger.js'
 
 export class LiveFtpSessionController extends BaseFileSessionController implements FtpSessionController {
   readonly type = 'ftp'
 
   private readonly ftp = new BasicFtpClient(20000)
+  private readonly entryDebugInfo = new Map<string, string>()
   private currentRemotePath: string
   private operationQueue: Promise<unknown> = Promise.resolve()
 
@@ -52,7 +54,14 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
 
   async openRemotePath(nextPath: string): Promise<RemoteFileItem[]> {
     return this.runWithConnectedClient(async () => {
-      await this.ftp.cd(nextPath)
+      try {
+        await this.ftp.cd(nextPath)
+      } catch (error) {
+        const detail = this.entryDebugInfo.get(nextPath)
+        const enriched = `${error instanceof Error ? error.message : String(error)}${detail ? ` [ftp-entry: ${detail}]` : ''}`
+        appWarn(`[TermDock][FTP] Failed to open remote path ${nextPath}: ${enriched}`)
+        throw new Error(enriched)
+      }
       this.currentRemotePath = await this.ftp.pwd()
       return this.readRemoteDirectory(this.currentRemotePath)
     })
@@ -188,9 +197,24 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
 
   private async readRemoteDirectory(targetPath: string): Promise<RemoteFileItem[]> {
     const entries = await this.ftp.list(targetPath)
+    const previousPath = await this.ftp.pwd()
     const rows = entries
       .filter((entry) => entry.name !== '.' && entry.name !== '..')
-      .map((entry) => toFtpRemoteFileItem(targetPath, entry))
+    appLog(`[TermDock][FTP] Listing remote directory ${targetPath} (${rows.length} entries)`)
+    const items: RemoteFileItem[] = []
+
+    for (const entry of rows) {
+      const isDirectory = await this.isFtpDirectoryEntry(targetPath, entry, previousPath)
+      const item = toResolvedFtpRemoteFileItem(targetPath, entry, isDirectory)
+      const debugInfo = describeFtpEntry(targetPath, entry, isDirectory)
+      this.entryDebugInfo.set(item.path, debugInfo)
+      if (entry.type === FileType.Unknown || isDirectory !== (entry.type === FileType.Directory || entry.isDirectory)) {
+        appLog(`[TermDock][FTP] Resolved remote entry: ${debugInfo}`)
+      }
+      items.push(item)
+    }
+
+    items
       .sort((left, right) => {
         if (left.type !== right.type) {
           return left.type === 'folder' ? -1 : 1
@@ -199,7 +223,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       })
 
     if (targetPath !== '/') {
-      rows.unshift({
+      items.unshift({
         path: parentRemotePath(targetPath),
         name: '..',
         type: 'folder',
@@ -210,7 +234,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       })
     }
 
-    return rows
+    return items
   }
 
   private tempFilePath(remotePath: string) {
@@ -248,10 +272,55 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     this.operationQueue = nextOperation.then(() => undefined, () => undefined)
     return nextOperation
   }
+
+  private async isFtpDirectoryEntry(targetPath: string, entry: FileInfo, previousPath: string) {
+    if (entry.type === FileType.Directory || entry.isDirectory) {
+      return true
+    }
+    if (entry.type !== FileType.Unknown) {
+      return false
+    }
+
+    const candidatePath = path.posix.join(targetPath, entry.name)
+    try {
+      await this.ftp.cd(candidatePath)
+      appLog(`[TermDock][FTP] Directory probe succeeded for ${candidatePath}`)
+      return true
+    } catch {
+      return false
+    } finally {
+      await this.ftp.cd(previousPath).catch(() => undefined)
+    }
+  }
 }
 
 function validateMode(mode: string) {
   if (!/^[0-7]{3,4}$/.test(mode.trim())) {
     throw new Error('权限值必须是 3 到 4 位八进制数字，例如 755')
   }
+}
+
+function describeFtpEntry(basePath: string, entry: FileInfo, isDirectory: boolean) {
+  const targetPath = path.posix.join(basePath, entry.name)
+  const rawType = FileType[entry.type] ?? `Unknown(${entry.type})`
+  return [
+    `path=${targetPath}`,
+    `name=${entry.name}`,
+    `rawType=${rawType}`,
+    `resolvedType=${isDirectory ? 'Directory' : 'File'}`,
+    `isDirectoryFlag=${entry.isDirectory ? 'true' : 'false'}`,
+    `size=${entry.size}`,
+    `permissions=${formatPermissionsForDebug(entry)}`,
+    `owner=${entry.user || '-'}`,
+    `group=${entry.group || '-'}`,
+    `modified=${entry.modifiedAt?.toISOString?.() ?? (entry.rawModifiedAt || '-')}`
+  ].join(', ')
+}
+
+function formatPermissionsForDebug(entry: FileInfo) {
+  if (!entry.permissions) {
+    return '-'
+  }
+
+  return `u:${entry.permissions.user ?? 0},g:${entry.permissions.group ?? 0},w:${entry.permissions.world ?? 0}`
 }

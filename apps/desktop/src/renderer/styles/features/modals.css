@@ -6,6 +6,7 @@
   padding: 24px;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
   z-index: 100;
 }
 
@@ -14,6 +15,16 @@
   padding: 16px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
+  -webkit-app-region: no-drag;
+}
+
+.modal-card button,
+.modal-card input,
+.modal-card select,
+.modal-card textarea,
+.modal-card .modal-header,
+.modal-card .form-actions {
+  -webkit-app-region: no-drag;
 }
 
 .modal-card.ssh-modal {

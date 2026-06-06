@@ -1,5 +1,6 @@
 .confirm-action-dialog {
   width: min(460px, 100%);
+  -webkit-app-region: no-drag;
 }
 
 .confirm-action-dialog__description {

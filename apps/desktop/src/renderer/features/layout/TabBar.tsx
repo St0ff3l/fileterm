@@ -30,6 +30,7 @@ export function TabBar({
   onDragStart,
   onOpenCommandManager,
   onOpenConnectionManager,
+  onOpenLogsDirectory,
   onOpenTabContext,
   onSetLocale,
   onSetTheme,
@@ -49,6 +50,7 @@ export function TabBar({
   onDragStart(tabKey: string): void
   onOpenCommandManager(): void
   onOpenConnectionManager(): void
+  onOpenLogsDirectory(): void
   onOpenTabContext(event: React.MouseEvent<HTMLDivElement>, target: TabContextTarget): void
   onSetLocale(locale: AppLocale): void
   onSetTheme(theme: ThemeMode): void
@@ -172,6 +174,7 @@ export function TabBar({
               { separator: true },
               { label: t.commandManager, action: onOpenCommandManager },
               { label: t.connectionManager, action: onOpenConnectionManager },
+              { label: t.openLogsDirectory, action: onOpenLogsDirectory },
               { label: t.settings, action: () => window.alert(t.notReady) }
             ]}
             onClose={() => setToolsMenu(null)}

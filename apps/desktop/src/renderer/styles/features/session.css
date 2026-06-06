@@ -898,7 +898,6 @@
 .manager-window {
   min-height: 100vh;
   padding: 0;
-  -webkit-app-region: drag;
 }
 
 .modal-card.manager-modal.standalone {

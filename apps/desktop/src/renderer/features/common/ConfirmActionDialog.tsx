@@ -1,4 +1,5 @@
 import { t } from '../../i18n'
+import { createPortal } from 'react-dom'
 
 export function ConfirmActionDialog({
   cancelLabel = t.cancel,
@@ -17,9 +18,9 @@ export function ConfirmActionDialog({
   onConfirm(): void
   title: string
 }) {
-  return (
+  const dialog = (
     <div className="modal-backdrop">
-      <div className="modal-card confirm-action-dialog">
+      <div className="modal-card confirm-action-dialog" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <span>{title}</span>
           <button className="icon-button" disabled={isSubmitting} onClick={onClose} type="button">×</button>
@@ -35,4 +36,10 @@ export function ConfirmActionDialog({
       </div>
     </div>
   )
+
+  if (typeof document === 'undefined') {
+    return dialog
+  }
+
+  return createPortal(dialog, document.body)
 }
