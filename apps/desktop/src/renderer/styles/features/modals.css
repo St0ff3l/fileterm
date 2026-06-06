@@ -332,10 +332,15 @@
   -webkit-appearance: none;
   width: 18px;
   height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
   margin: 2px 0 0;
   border: 1px solid var(--border-dark);
   border-radius: 999px;
   background: var(--bg-main);
+  box-sizing: border-box;
+  display: block;
   position: relative;
   flex: 0 0 auto;
   cursor: pointer;

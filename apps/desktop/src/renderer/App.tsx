@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
 import type {
   CommandExecutionOptions,
   CommandTemplateInput,
@@ -259,6 +259,36 @@ function readStoredMainTabUiState(enabled: boolean): StoredMainTabUiState | null
   }
 }
 
+function collectConnectionGroups(
+  folderNames: string[],
+  profileGroups: string[],
+  currentGroup?: string
+) {
+  const next = new Set<string>()
+
+  next.add('默认')
+
+  for (const name of folderNames) {
+    const value = name.trim()
+    if (value) {
+      next.add(value)
+    }
+  }
+
+  for (const group of profileGroups) {
+    const value = group.trim()
+    if (value) {
+      next.add(value)
+    }
+  }
+
+  if (currentGroup?.trim()) {
+    next.add(currentGroup.trim())
+  }
+
+  return [...next]
+}
+
 function writeStoredMainTabUiState(enabled: boolean, state: StoredMainTabUiState) {
   if (!enabled || typeof window === 'undefined') {
     return
@@ -398,6 +428,14 @@ export function App() {
     sshUser?: string
     sudoUser: string
   } | null>(null)
+  const connectionGroupOptions = useMemo(
+    () => collectConnectionGroups(
+      (workspace.folders ?? []).map((folder) => folder.name),
+      workspace.profiles.map((profile) => profile.group),
+      form.group
+    ),
+    [workspace.folders, workspace.profiles, form.group]
+  )
   const [rootAccessDialogError, setRootAccessDialogError] = useState<string | null>(null)
   const [isRootAccessSubmitting, setIsRootAccessSubmitting] = useState(false)
   const [sshInteraction, setSshInteraction] = useState<SshInteractionRequest | null>(null)
@@ -2165,6 +2203,7 @@ export function App() {
         {showForm ? (
           <ConnectionModal
             errorMessage={formError}
+            groupOptions={connectionGroupOptions}
             mode={editingProfileId ? 'edit' : 'create'}
             form={form}
             setForm={updateForm}
@@ -2257,6 +2296,7 @@ export function App() {
         <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection} />
         <ConnectionModal
           errorMessage={formError}
+          groupOptions={connectionGroupOptions}
           mode={editingProfileId ? 'edit' : formWindowMode}
           form={form}
           setForm={updateForm}
@@ -2605,6 +2645,7 @@ export function App() {
       {showForm ? (
         <ConnectionModal
           errorMessage={formError}
+          groupOptions={connectionGroupOptions}
           mode={editingProfileId ? 'edit' : 'create'}
           form={form}
           setForm={updateForm}

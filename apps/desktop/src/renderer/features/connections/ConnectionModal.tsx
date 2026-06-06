@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 
 export function ConnectionModal({
   errorMessage,
+  groupOptions,
   mode,
   form,
   setForm,
@@ -13,6 +14,7 @@ export function ConnectionModal({
   standalone = false
 }: {
   errorMessage: string | null
+  groupOptions: string[]
   mode: ConnectionFormMode
   form: CreateProfileInput
   setForm(value: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)): void
@@ -59,7 +61,13 @@ export function ConnectionModal({
                       <option value="ftp">FTP / FTPS</option>
                     </select>
                   </label>
-                  <label>{t.group}:<input value={form.group} onChange={(event) => setForm((prev) => ({ ...prev, group: event.target.value }))} /></label>
+                  <label>{t.group}:
+                    <select value={form.group} onChange={(event) => setForm((prev) => ({ ...prev, group: event.target.value }))}>
+                      {groupOptions.map((group) => (
+                        <option key={group} value={group}>{group}</option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="span-2">{t.name}:<input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} /></label>
                   <label className="span-2">{t.host}:<input value={form.host} onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))} /></label>
                   <label className="narrow">{t.port}:<input inputMode="numeric" value={form.port || ''} onChange={(event) => setForm((prev) => ({ ...prev, port: Number(event.target.value.replace(/\D/g, '')) }))} /></label>
@@ -79,7 +87,7 @@ export function ConnectionModal({
                     </label>
                   ) : null}
                   <label>{t.username}:<input value={form.username} onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))} /></label>
-                  {form.type === 'ssh' && form.authType === 'password' ? (
+                  {(form.type === 'ftp' || form.authType === 'password') ? (
                     <label className="span-2">{t.password}:<input type="password" value={form.password ?? ''} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} /></label>
                   ) : null}
                   {form.type === 'ssh' && form.authType === 'privateKey' ? (
@@ -88,10 +96,15 @@ export function ConnectionModal({
                   {form.type === 'ssh' && form.authType === 'password' ? (
                     <div className="span-2 ssh-auth-hint">{t.passwordAuthHint}</div>
                   ) : (
-                    form.type === 'ftp' ? <label className="ssh-checkbox span-2">
-                      <input checked={Boolean(form.secure)} type="checkbox" onChange={(event) => setForm((prev) => ({ ...prev, secure: event.target.checked }))} />
-                      <span>{t.useFtps}</span>
-                    </label> : null
+                    form.type === 'ftp' ? (
+                      <>
+                        <label className="ssh-checkbox span-2">
+                          <input checked={Boolean(form.secure)} type="checkbox" onChange={(event) => setForm((prev) => ({ ...prev, secure: event.target.checked }))} />
+                          <span>{t.useFtps}</span>
+                        </label>
+                        <div className="span-2 ssh-auth-hint">{t.ftpAuthHint}</div>
+                      </>
+                    ) : null
                   )}
                   {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (
                     <div className="span-2 ssh-inline-action">
