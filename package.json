@@ -12,7 +12,8 @@
     "dev": "npm run dev -w @termdock/desktop",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "release:mac": "npm run release:mac -w @termdock/desktop"
+    "release:mac": "npm run release:mac -w @termdock/desktop",
+    "release:win": "npm run release:win -w @termdock/desktop"
   },
   "engines": {
     "node": ">=20.0.0"
