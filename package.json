@@ -1,6 +1,6 @@
 {
   "name": "termdock",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.5",
   "private": true,
   "license": "MIT",
   "description": "Modern remote workspace for SSH, SFTP, and FTP.",
