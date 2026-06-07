@@ -248,7 +248,12 @@ export function SessionWorkspace({
     >
       {!isFileOnly ? (
         <div className="terminal-area">
-          <TerminalView key={activeTab.id} tabId={activeTab.id} bootText={activeSession.terminalTranscript ?? ''} />
+          <TerminalView
+            key={activeTab.id}
+            tabId={activeTab.id}
+            bootText={activeSession.terminalTranscript ?? ''}
+            connected={activeSession.connected === true}
+          />
         </div>
       ) : null}
       {!isFileOnly ? (

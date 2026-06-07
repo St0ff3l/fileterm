@@ -84,13 +84,39 @@ function trimTranscript(transcript: string) {
   return transcript.slice(transcript.length - TERMINAL_TRANSCRIPT_LIMIT)
 }
 
+function getLastVisibleTerminalLine(terminal: Terminal) {
+  const buffer = terminal.buffer.active
+  for (let row = buffer.length - 1; row >= 0; row -= 1) {
+    const line = buffer.getLine(row)?.translateToString(false) ?? ''
+    const normalized = line.trimEnd()
+    if (normalized) {
+      return normalized
+    }
+  }
+  return ''
+}
+
+function looksLikeShellPrompt(line: string) {
+  if (!line) {
+    return false
+  }
+
+  return [
+    /(?:^|\s)[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+(?::[^\n]*)?[#$%>]$/,
+    /^\[[^\]]+@[^\]]+\][#$]$/,
+    /^[#$%>]$/
+  ].some((pattern) => pattern.test(line))
+}
+
 export function TerminalView({
   tabId,
   bootText,
+  connected = false,
   onStatus
 }: {
   tabId: string
   bootText: string
+  connected?: boolean
   onStatus?(message: string | null): void
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -114,6 +140,8 @@ export function TerminalView({
   const lastObservedHostRectRef = useRef<{ width: number; height: number } | null>(null)
   const isHorizontalResizeActiveRef = useRef(false)
   const lastTerminalOutputAtRef = useRef(0)
+  const awaitingCommandCompletionRef = useRef(false)
+  const pendingPromptResizeRef = useRef(false)
   const [hasSelection, setHasSelection] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [findOpen, setFindOpen] = useState(false)
@@ -401,9 +429,10 @@ export function TerminalView({
     options: {
       force?: boolean
       freezeCols?: boolean
+      preserveVisibleBuffer?: boolean
     } = {}
   ) => {
-    const { force = false, freezeCols = false } = options
+    const { force = false, freezeCols = false, preserveVisibleBuffer = false } = options
     const host = hostRef.current
     if (!host) {
       return
@@ -430,8 +459,19 @@ export function TerminalView({
     const cols = freezeCols && previousSize
       ? previousSize.cols
       : liveCols
+    const shouldPreserveVisibleBuffer = preserveVisibleBuffer && previousSize && previousSize.cols !== cols
+    const visibleBufferSnapshot = shouldPreserveVisibleBuffer
+      ? snapshotTerminalBuffer(terminal)
+      : ''
     if (terminal.cols !== cols || terminal.rows !== rows) {
       terminal.resize(cols, rows)
+      if (shouldPreserveVisibleBuffer && visibleBufferSnapshot) {
+        renderedTranscriptRef.current = trimTranscript(visibleBufferSnapshot)
+        pendingWriteRef.current = ''
+        terminal.reset()
+        terminal.write(visibleBufferSnapshot)
+        suppressHydratedChunksUntilRef.current = Date.now() + 300
+      }
       terminal.refresh(0, Math.max(terminal.rows - 1, 0))
     }
 
@@ -533,11 +573,11 @@ export function TerminalView({
       replaceTerminalWithTranscript(terminal, bootTextRef.current)
     }
 
-    const resize = (force = false, freezeCols = false) => {
-      syncTerminalSize(fitAddon, terminal, { force, freezeCols })
+    const resize = (force = false, freezeCols = false, preserveVisibleBuffer = false) => {
+      syncTerminalSize(fitAddon, terminal, { force, freezeCols, preserveVisibleBuffer })
     }
 
-    const scheduleResize = (force = false, freezeCols = false) => {
+    const scheduleResize = (force = false, freezeCols = false, preserveVisibleBuffer = false) => {
       pendingResizeForceRef.current = pendingResizeForceRef.current || force
       pendingResizeFreezeColsRef.current = pendingResizeFreezeColsRef.current || freezeCols
 
@@ -551,7 +591,7 @@ export function TerminalView({
         const shouldFreezeCols = pendingResizeFreezeColsRef.current
         pendingResizeForceRef.current = false
         pendingResizeFreezeColsRef.current = false
-        resize(shouldForce, shouldFreezeCols)
+        resize(shouldForce, shouldFreezeCols, preserveVisibleBuffer)
       })
     }
 
@@ -567,13 +607,28 @@ export function TerminalView({
           return
         }
 
+        if (awaitingCommandCompletionRef.current) {
+          const promptLine = getLastVisibleTerminalLine(terminal)
+          if (!looksLikeShellPrompt(promptLine)) {
+            resizeSettleTimerRef.current = null
+            isHorizontalResizeActiveRef.current = false
+            pendingPromptResizeRef.current = true
+            return
+          }
+          awaitingCommandCompletionRef.current = false
+        }
+
         resizeSettleTimerRef.current = null
         isHorizontalResizeActiveRef.current = false
-        window.requestAnimationFrame(() => scheduleResize(true))
+        pendingPromptResizeRef.current = false
+        window.requestAnimationFrame(() => scheduleResize(true, false, true))
       }, TERMINAL_RESIZE_SETTLE_MS)
     }
 
     const onDataDispose = terminal.onData((data) => {
+      if (data.includes('\r') || data.includes('\n')) {
+        awaitingCommandCompletionRef.current = true
+      }
       clearEphemeralHighlight()
       setContextMenu(null)
       void window.termdock?.writeTerminal(tabId, data)
@@ -592,6 +647,9 @@ export function TerminalView({
         appendRenderedTranscript(chunk)
         clearEphemeralHighlight()
         scheduleTerminalWrite(formatTerminalChunk(terminal, chunk))
+        if (pendingPromptResizeRef.current) {
+          scheduleSettledHorizontalResize()
+        }
       }
     })
 
@@ -607,6 +665,8 @@ export function TerminalView({
         }
         if (!wasConnectedRef.current && connected) {
           preserveVisibleBufferRef.current = false
+          awaitingCommandCompletionRef.current = false
+          pendingPromptResizeRef.current = false
           window.requestAnimationFrame(() => scheduleResize(true))
         }
         if (isDisconnecting) {
@@ -748,6 +808,8 @@ export function TerminalView({
       lastObservedHostRectRef.current = null
       isHorizontalResizeActiveRef.current = false
       lastTerminalOutputAtRef.current = 0
+      awaitingCommandCompletionRef.current = false
+      pendingPromptResizeRef.current = false
       searchResultsDisposable.dispose()
       osc52Disposable.dispose()
       resizeObserver.disconnect()
@@ -764,12 +826,16 @@ export function TerminalView({
   useEffect(() => {
     bootTextRef.current = bootText
     const terminal = terminalRef.current
-    if (!terminal || !shouldHydrateTranscript(renderedTranscriptRef.current, bootText, wasConnectedRef.current)) {
+    if (
+      !terminal
+      || connected
+      || !shouldHydrateTranscript(renderedTranscriptRef.current, bootText, wasConnectedRef.current)
+    ) {
       return
     }
 
     replaceTerminalWithTranscript(terminal, bootText)
-  }, [bootText])
+  }, [bootText, connected])
 
   useEffect(() => {
     if (!terminalRef.current) {

@@ -219,6 +219,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     const previousPath = await this.ftp.pwd()
     const rows = entries
       .filter((entry) => entry.name !== '.' && entry.name !== '..')
+    logFtpListingAlignment(targetPath, rows)
     appLog(`[TermDock][FTP] Listing remote directory ${targetPath} (${rows.length} entries)`)
     const items: RemoteFileItem[] = []
 
@@ -498,6 +499,8 @@ function formatPermissionsForDebug(entry: FileInfo) {
 
 type FileInfoWithRaw = FileInfo & {
   rawLine?: string
+  rawName?: string
+  rawIndex?: number
 }
 
 function enrichFtpListing(files: FileInfo[], rawList: string) {
@@ -507,33 +510,69 @@ function enrichFtpListing(files: FileInfo[], rawList: string) {
     .filter((line) => line.trim() !== '')
     .filter((line) => !line.startsWith('total'))
     .filter((line) => !/type=(cdir|pdir)/i.test(line))
-    .filter((line) => {
-      const rawName = extractRawEntryName(line)
-      return rawName !== '.' && rawName !== '..'
+    .map((line, index) => ({
+      rawLine: line,
+      rawName: extractRawEntryName(line),
+      rawIndex: index
+    }))
+    .filter((entry) => {
+      return entry.rawName !== '.' && entry.rawName !== '..'
     })
 
   return files.map((file, index) => {
     const enriched = file as FileInfoWithRaw
-    const rawLine = findMatchingRawLine(lines, file.name, index)
-    if (!rawLine) {
+    const rawEntry = findMatchingRawLine(lines, file.name, index)
+    if (!rawEntry) {
       return enriched
     }
 
-    enriched.rawLine = rawLine
-    enrichFromRawLine(enriched, rawLine)
+    enriched.rawLine = rawEntry.rawLine
+    enriched.rawName = rawEntry.rawName
+    enriched.rawIndex = rawEntry.rawIndex
+    enrichFromRawLine(enriched, rawEntry.rawLine)
     return enriched
   })
 }
 
-function findMatchingRawLine(lines: string[], fileName: string, fallbackIndex: number) {
+function findMatchingRawLine(
+  lines: Array<{ rawLine: string; rawName: string; rawIndex: number }>,
+  fileName: string,
+  fallbackIndex: number
+) {
   for (let index = fallbackIndex; index < lines.length; index += 1) {
     const line = lines[index]
-    if (extractRawEntryName(line) === fileName) {
+    if (line.rawName === fileName) {
       return line
     }
   }
 
   return lines[fallbackIndex]
+}
+
+function logFtpListingAlignment(targetPath: string, entries: FileInfo[]) {
+  const parsedNames = entries.map((entry) => entry.name)
+  const rawNames = entries.map((entry) => (entry as FileInfoWithRaw).rawName ?? '?')
+  const mismatches = entries
+    .map((entry, index) => ({
+      index,
+      parsedName: entry.name,
+      rawName: (entry as FileInfoWithRaw).rawName ?? '?',
+      rawIndex: (entry as FileInfoWithRaw).rawIndex ?? -1
+    }))
+    .filter((item) => item.parsedName !== item.rawName)
+
+  if (!mismatches.length) {
+    return
+  }
+
+  const mismatchSummary = mismatches
+    .slice(0, 8)
+    .map((item) => `#${item.index}:${item.parsedName}<-${item.rawName}@${item.rawIndex}`)
+    .join(' | ')
+
+  appWarn(`[TermDock][FTP] Listing alignment mismatch detected for ${targetPath}: ${mismatchSummary}`)
+  appWarn(`[TermDock][FTP] Parsed listing sequence for ${targetPath}: ${parsedNames.join(' | ')}`)
+  appWarn(`[TermDock][FTP] Raw listing sequence for ${targetPath}: ${rawNames.join(' | ')}`)
 }
 
 function extractRawEntryName(rawLine: string) {
