@@ -1,5 +1,11 @@
 import { BrowserWindow, ipcMain, type WebContents } from 'electron'
-import type { CommandExecutionOptions, CommandTemplateInput, CreateProfileInput } from '@termdock/core'
+import type {
+  CommandExecutionOptions,
+  CommandFolder,
+  CommandTemplateInput,
+  ConnectionFolder,
+  CreateProfileInput
+} from '@termdock/core'
 import type { IpcServices, IpcWindowOptions } from './types.js'
 
 export function registerWorkspaceHandlers(services: IpcServices, options: IpcWindowOptions) {
@@ -36,7 +42,7 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
-  ipcMain.handle('workspace:updateFolder', async (_, folderId: string, updates: any) => {
+  ipcMain.handle('workspace:updateFolder', async (_, folderId: string, updates: Partial<ConnectionFolder>) => {
     const snapshot = await workspaceService.updateFolder(folderId, updates)
     broadcastSnapshot(snapshot)
     return snapshot
@@ -60,7 +66,7 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
-  ipcMain.handle('workspace:updateCommandFolder', async (_, folderId: string, updates: any) => {
+  ipcMain.handle('workspace:updateCommandFolder', async (_, folderId: string, updates: Partial<CommandFolder>) => {
     const snapshot = await workspaceService.updateCommandFolder(folderId, updates)
     broadcastSnapshot(snapshot)
     return snapshot

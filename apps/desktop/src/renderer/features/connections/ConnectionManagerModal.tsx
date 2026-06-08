@@ -3,6 +3,10 @@ import { useState, useMemo, useRef, type DragEvent } from 'react'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'
 
+type ConnectionTreeNode =
+  | (ConnectionFolder & { children: ConnectionTreeNode[] })
+  | (ConnectionProfile & { children?: never })
+
 export function ConnectionManagerModal({
   profiles,
   folders,
@@ -57,39 +61,39 @@ export function ConnectionManagerModal({
     })
   }
 
-  // Build tree
   const tree = useMemo(() => {
-    type Node = (ConnectionProfile | ConnectionFolder) & { children?: Node[] }
-    const items: Node[] = [...profiles, ...folders]
-    // Ensure all have order
-    items.forEach((item, index) => {
-      if (typeof item.order !== 'number') item.order = index * 1000
-    })
+    const items: ConnectionTreeNode[] = [
+      ...profiles.map((profile, index) => ({
+        ...profile,
+        order: typeof profile.order === 'number' ? profile.order : index * 1000
+      })),
+      ...folders.map((folder, index) => ({
+        ...folder,
+        order: typeof folder.order === 'number' ? folder.order : (profiles.length + index) * 1000,
+        children: []
+      }))
+    ]
 
-    const roots: Node[] = []
-    const map = new Map<string, Node>()
-
-    items.forEach(item => {
-      if (item.type === 'folder') {
-        ;(item as Node).children = []
-      }
-      map.set(item.id, item as Node)
-    })
+    const roots: ConnectionTreeNode[] = []
+    const map = new Map<string, ConnectionTreeNode>()
 
     items.forEach(item => {
-      if (item.parentId && map.has(item.parentId)) {
-        const parent = map.get(item.parentId)!
-        if (!parent.children) parent.children = []
-        parent.children.push(item as Node)
+      map.set(item.id, item)
+    })
+
+    items.forEach(item => {
+      const parent = item.parentId ? map.get(item.parentId) : undefined
+      if (parent?.type === 'folder') {
+        parent.children.push(item)
       } else {
-        roots.push(item as Node)
+        roots.push(item)
       }
     })
 
-    const sortNodes = (nodes: Node[]) => {
+    const sortNodes = (nodes: ConnectionTreeNode[]) => {
       nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       nodes.forEach(n => {
-        if (n.children) sortNodes(n.children)
+        if (n.type === 'folder') sortNodes(n.children)
       })
     }
     sortNodes(roots)
@@ -149,14 +153,14 @@ export function ConnectionManagerModal({
     if (!draggedNode || !targetNode) return
 
     // Prevent dropping a folder into its own descendant
-    let current = targetNode
+    let current: ConnectionTreeNode | undefined = targetNode
     let invalid = false
-    while (current.parentId) {
+    while (current?.parentId) {
       if (current.parentId === draggingId) {
         invalid = true
         break
       }
-      current = tree.map.get(current.parentId)!
+      current = tree.map.get(current.parentId)
     }
     if (invalid) {
       setDraggingId(null)
@@ -164,8 +168,9 @@ export function ConnectionManagerModal({
       return
     }
 
-    let newParentId = targetNode.parentId
-    let siblings = newParentId ? tree.map.get(newParentId)!.children! : tree.roots
+    const targetParent = targetNode.parentId ? tree.map.get(targetNode.parentId) : undefined
+    let newParentId = targetParent?.type === 'folder' ? targetParent.id : undefined
+    let siblings = targetParent?.type === 'folder' ? targetParent.children : tree.roots
 
     let newOrder = targetNode.order ?? 0
 
@@ -201,7 +206,7 @@ export function ConnectionManagerModal({
     }, 0)
   }
 
-  const renderNode = (node: any, depth: number) => {
+  const renderNode = (node: ConnectionTreeNode, depth: number) => {
     const isFolder = node.type === 'folder'
     const isExpanded = expandedFolders.has(node.id)
     const isDragOver = dragOverId === node.id
@@ -303,7 +308,7 @@ export function ConnectionManagerModal({
         </div>
         {isFolder && isExpanded && node.children && (
           <div className="folder-children">
-            {node.children.map((child: any) => renderNode(child, depth + 1))}
+            {node.children.map((child) => renderNode(child, depth + 1))}
             {node.children.length === 0 && (
               <div className="manager-row empty-folder" style={{ paddingLeft: `${(depth + 1) * 20 + 14}px`, color: '#666' }}>
                 <span style={{ gridColumn: '1 / -1' }}>{t.emptyFolder}</span>

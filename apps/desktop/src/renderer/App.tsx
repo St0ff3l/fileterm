@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import type {
   CommandExecutionOptions,
   CommandTemplateInput,
@@ -466,7 +466,7 @@ export function App() {
   const pendingHomeReplacementKeyRef = useRef<string | null>(null)
   const hasSanitizedStoredPlaceholderRef = useRef(false)
   const desktopApi = window.termdock
-  const isWindowsDesktop = false
+  const isWindowsDesktop = desktopApi?.platform === 'win32'
 
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow) {
@@ -2304,8 +2304,7 @@ export function App() {
 
   if (isConnectionManagerWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={t.connectionManager} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={t.connectionManager}>
         <ConnectionManagerModal
           profiles={workspace.profiles}
           folders={workspace.folders || []}
@@ -2354,14 +2353,13 @@ export function App() {
             }}
           />
         ) : null}
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isCommandManagerWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={t.commandManager} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={t.commandManager}>
         <CommandManagerModal
           commandFolders={workspace.commandFolders || []}
           commandTemplates={workspace.commandTemplates || []}
@@ -2389,7 +2387,7 @@ export function App() {
             void deleteCommandTemplate(commandId)
           }}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
@@ -2399,8 +2397,7 @@ export function App() {
       : null
 
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate}>
         <CommandEditorModal
           folders={workspace.commandFolders || []}
           initialValue={editingCommand
@@ -2416,14 +2413,13 @@ export function App() {
             void saveCommandTemplate(editingCommand?.id ?? null, input)
           }}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isConnectionFormWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection}>
         <ConnectionModal
           errorMessage={formError}
           groupOptions={connectionGroupOptions}
@@ -2443,14 +2439,13 @@ export function App() {
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isFileEditorWindow && fileEditor) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={fileEditor.name} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditor.name}>
         <FileEditorModal
           errorMessage={fileEditorError}
           file={fileEditor}
@@ -2463,14 +2458,13 @@ export function App() {
           standalone
           themeMode={themeMode}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isFileEditorWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle}>
         <div className="standalone-shell file-editor-window">
           <div className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}>
             <div className="modal-header">
@@ -2482,7 +2476,7 @@ export function App() {
             {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : <div className="file-editor-path">{t.updating}</div>}
           </div>
         </div>
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
@@ -2971,6 +2965,23 @@ export function App() {
         </div>
       ) : null}
     </>
+  )
+}
+
+function StandaloneWindowFrame({
+  children,
+  isWindows,
+  title
+}: {
+  children: ReactNode
+  isWindows: boolean
+  title: string
+}) {
+  return (
+    <div className={`standalone-window-frame ${isWindows ? 'has-standalone-titlebar' : ''}`}>
+      <StandaloneWindowTitlebar isWindows={isWindows} title={title} />
+      {children}
+    </div>
   )
 }
 

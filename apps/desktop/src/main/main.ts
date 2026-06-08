@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, Tray, Menu, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, Tray, Menu, nativeImage, shell, session } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +18,7 @@ let tray: Tray | null = null
 
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:'])
 const DEFAULT_WINDOW_BOUNDS = {
   main: {
     width: 1280,
@@ -86,6 +87,8 @@ function safeConsoleError(...args: unknown[]) {
 }
 
 function attachWindowDiagnostics(win: BrowserWindow, label: string) {
+  attachWindowSecurity(win, label)
+
   win.webContents.on('render-process-gone', (_event, details) => {
     safeConsoleError(`[TermDock] ${label} render-process-gone`, details)
   })
@@ -102,6 +105,15 @@ function attachWindowDiagnostics(win: BrowserWindow, label: string) {
       validatedURL,
       isMainFrame
     })
+  })
+}
+
+function attachWindowSecurity(win: BrowserWindow, label: string) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void openExternalUrl(url).catch((error) => {
+      safeConsoleError(`[TermDock] blocked external URL from ${label}`, error)
+    })
+    return { action: 'deny' }
   })
 }
 
@@ -134,6 +146,46 @@ async function openLogsDirectory() {
   if (result) {
     throw new Error(result)
   }
+}
+
+async function openExternalUrl(rawUrl: string) {
+  const url = new URL(rawUrl)
+  if (!ALLOWED_EXTERNAL_PROTOCOLS.has(url.protocol)) {
+    throw new Error(`Unsupported external URL protocol: ${url.protocol}`)
+  }
+  await shell.openExternal(url.toString())
+}
+
+function installContentSecurityPolicy() {
+  const connectSrc = app.isPackaged
+    ? ["'self'"]
+    : ["'self'", 'http://localhost:5188', 'ws://localhost:5188']
+  const scriptSrc = app.isPackaged
+    ? ["'self'"]
+    : ["'self'", "'unsafe-eval'"]
+  const directives = [
+    "default-src 'self'",
+    `script-src ${scriptSrc.join(' ')}`,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "img-src 'self' data: blob: file:",
+    "worker-src 'self' blob:",
+    `connect-src ${connectSrc.join(' ')}`,
+    "media-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ].join('; ')
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [directives]
+      }
+    })
+  })
 }
 
 function normalizeUiPreferences(input?: Partial<UiPreferences> | null): UiPreferences {
@@ -359,7 +411,7 @@ function createMainWindow() {
     center: true,
     title: 'TermDock',
     autoHideMenuBar: true,
-    frame: isMac ? undefined : true,
+    frame: isWindows ? false : isMac ? undefined : true,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 20, y: 18 } : undefined,
     backgroundColor: getWindowBackgroundColor(uiPreferences.theme),
@@ -368,11 +420,12 @@ function createMainWindow() {
       preload: path.join(__dirname, '../preload/preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
   mainWindow = win
+  attachWindowDiagnostics(win, 'main')
   if (isWindows) {
     win.setMenuBarVisibility(false)
   }
@@ -433,7 +486,7 @@ function createMainWindow() {
   return win
 }
 
-function createNativeChildWindow(options: {
+function createNativeChildWindow(parent: BrowserWindow, options: {
   title: string
   width: number
   height: number
@@ -445,20 +498,22 @@ function createNativeChildWindow(options: {
   titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'
 }) {
   const enableVibrancy = isMac && options.useVibrancy === true
-  return new BrowserWindow({
+  const win = new BrowserWindow({
     width: options.width,
     height: options.height,
     minWidth: options.minWidth,
     minHeight: options.minHeight,
     center: true,
     show: false,
+    parent,
+    modal: false,
     title: options.title,
     backgroundColor: options.backgroundColor ?? getWindowBackgroundColor(uiPreferences.theme),
     autoHideMenuBar: true,
-    frame: isMac ? undefined : true,
+    frame: isWindows ? false : isMac ? undefined : true,
     titleBarStyle: isMac ? options.titleBarStyle ?? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 16, y: 14 } : undefined,
-    minimizable: false,
+    minimizable: isWindows,
     vibrancy: enableVibrancy ? 'sidebar' : undefined,
     visualEffectState: enableVibrancy ? options.visualEffectState ?? 'active' : undefined,
     ...getWindowIconOptions(),
@@ -466,9 +521,10 @@ function createNativeChildWindow(options: {
       preload: path.join(__dirname, '../preload/preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
+  return win
 }
 
 function centerChildWindowToParent(parent: BrowserWindow | null, child: BrowserWindow) {
@@ -490,7 +546,7 @@ function openConnectionManagerWindow(parent: BrowserWindow) {
     return
   }
 
-  const win = createNativeChildWindow({
+  const win = createNativeChildWindow(parent, {
     title: '连接管理器',
     width: DEFAULT_WINDOW_BOUNDS.connectionManager.width,
     height: DEFAULT_WINDOW_BOUNDS.connectionManager.height,
@@ -519,7 +575,7 @@ function openCommandManagerWindow(parent: BrowserWindow) {
     return
   }
 
-  const win = createNativeChildWindow({
+  const win = createNativeChildWindow(parent, {
     title: '命令管理器',
     width: DEFAULT_WINDOW_BOUNDS.commandManager.width,
     height: DEFAULT_WINDOW_BOUNDS.commandManager.height,
@@ -550,7 +606,7 @@ function openConnectionFormWindow(parent: BrowserWindow, mode: 'create' | 'edit'
     connectionFormWindow.close()
   }
 
-  const win = createNativeChildWindow({
+  const win = createNativeChildWindow(parent, {
     title: mode === 'edit' ? '编辑连接' : '新建连接',
     width: DEFAULT_WINDOW_BOUNDS.connectionForm.width,
     height: DEFAULT_WINDOW_BOUNDS.connectionForm.height,
@@ -582,7 +638,7 @@ function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', c
     commandFormWindow.close()
   }
 
-  const win = createNativeChildWindow({
+  const win = createNativeChildWindow(parent, {
     title: mode === 'edit' ? '编辑命令' : '新建命令',
     width: DEFAULT_WINDOW_BOUNDS.commandForm.width,
     height: DEFAULT_WINDOW_BOUNDS.commandForm.height,
@@ -624,7 +680,7 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
     fileEditorWindow.close()
   }
 
-  const win = createNativeChildWindow({
+  const win = createNativeChildWindow(parent, {
     title: `编辑文件 - ${input.name}`,
     width: DEFAULT_WINDOW_BOUNDS.fileEditor.width,
     height: DEFAULT_WINDOW_BOUNDS.fileEditor.height,
@@ -658,6 +714,7 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
 app.whenReady().then(() => {
   initAppLogger(app.getPath('userData'))
   readUiPreferences()
+  installContentSecurityPolicy()
   installApplicationMenu()
   createTray()
   const appIconPath = getAppIconPath()

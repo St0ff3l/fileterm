@@ -3,6 +3,10 @@ import { useState, useMemo } from 'react'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 
+type ConnectionTreeNode =
+  | (ConnectionFolder & { children: ConnectionTreeNode[] })
+  | (ConnectionProfile & { children?: never })
+
 export function HomeWorkspace({
   profiles,
   folders = [],
@@ -25,44 +29,45 @@ export function HomeWorkspace({
   }
 
   const tree = useMemo(() => {
-    type Node = (ConnectionProfile | ConnectionFolder) & { children?: Node[] }
-    const items: Node[] = [...profiles, ...folders]
-    
-    items.forEach((item, index) => {
-      if (typeof item.order !== 'number') item.order = index * 1000
-    })
+    const items: ConnectionTreeNode[] = [
+      ...profiles.map((profile, index) => ({
+        ...profile,
+        order: typeof profile.order === 'number' ? profile.order : index * 1000
+      })),
+      ...folders.map((folder, index) => ({
+        ...folder,
+        order: typeof folder.order === 'number' ? folder.order : (profiles.length + index) * 1000,
+        children: []
+      }))
+    ]
 
-    const roots: Node[] = []
-    const map = new Map<string, Node>()
-
-    items.forEach(item => {
-      if (item.type === 'folder') {
-        ;(item as Node).children = []
-      }
-      map.set(item.id, item as Node)
-    })
+    const roots: ConnectionTreeNode[] = []
+    const map = new Map<string, ConnectionTreeNode>()
 
     items.forEach(item => {
-      if (item.parentId && map.has(item.parentId)) {
-        const parent = map.get(item.parentId)!
-        if (!parent.children) parent.children = []
-        parent.children.push(item as Node)
+      map.set(item.id, item)
+    })
+
+    items.forEach(item => {
+      const parent = item.parentId ? map.get(item.parentId) : undefined
+      if (parent?.type === 'folder') {
+        parent.children.push(item)
       } else {
-        roots.push(item as Node)
+        roots.push(item)
       }
     })
 
-    const sortNodes = (nodes: Node[]) => {
+    const sortNodes = (nodes: ConnectionTreeNode[]) => {
       nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       nodes.forEach(n => {
-        if (n.children) sortNodes(n.children)
+        if (n.type === 'folder') sortNodes(n.children)
       })
     }
     sortNodes(roots)
     return roots
   }, [profiles, folders])
 
-  const renderNode = (node: any, depth: number) => {
+  const renderNode = (node: ConnectionTreeNode, depth: number) => {
     const isFolder = node.type === 'folder'
     const isExpanded = expandedFolders.has(node.id)
 
@@ -93,7 +98,7 @@ export function HomeWorkspace({
         </div>
         {isFolder && isExpanded && node.children && (
           <div className="folder-children">
-            {node.children.map((child: any) => renderNode(child, depth + 1))}
+            {node.children.map((child) => renderNode(child, depth + 1))}
             {node.children.length === 0 && (
               <div className="quick-row empty-folder" style={{ color: '#666' }}>
                 <span style={{ marginLeft: `${(depth + 1) * 20 + 20}px`, gridColumn: '1 / -1' }}>{t.emptyFolder}</span>

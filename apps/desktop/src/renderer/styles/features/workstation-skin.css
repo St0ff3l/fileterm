@@ -956,3 +956,71 @@ textarea:focus-visible,
     padding: 9px 10px;
   }
 }
+
+.standalone-window-frame {
+  width: 100vw;
+  min-height: 100vh;
+}
+
+.standalone-window-frame.has-standalone-titlebar {
+  display: grid;
+  grid-template-rows: 32px minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-main);
+}
+
+.has-standalone-titlebar .standalone-window-titlebar {
+  position: relative;
+  z-index: 10;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.has-standalone-titlebar .standalone-window-titlebar .window-brandmark {
+  max-width: calc(100vw - 138px);
+}
+
+.has-standalone-titlebar > .standalone-shell,
+.has-standalone-titlebar > .connection-form-window {
+  grid-row: 2;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.has-standalone-titlebar .standalone-shell {
+  min-height: 0;
+}
+
+.has-standalone-titlebar .modal-card.manager-modal.standalone,
+.has-standalone-titlebar .modal-card.ssh-modal.standalone,
+.has-standalone-titlebar .command-form-standalone,
+.has-standalone-titlebar .command-editor-page.standalone,
+.has-standalone-titlebar .command-manager-modal.standalone,
+.has-standalone-titlebar .file-editor-modal.standalone {
+  height: 100%;
+  min-height: 0;
+}
+
+.has-standalone-titlebar .modal-card.manager-modal.standalone,
+.has-standalone-titlebar .modal-card.ssh-modal.standalone,
+.has-standalone-titlebar .command-form-standalone,
+.has-standalone-titlebar .command-editor-page.standalone,
+.has-standalone-titlebar .command-manager-modal.standalone {
+  padding-top: 20px !important;
+}
+
+.has-standalone-titlebar .modal-card.ssh-modal.standalone,
+.has-standalone-titlebar .command-form-standalone {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.has-standalone-titlebar .modal-card.manager-modal.standalone > .modal-header,
+.has-standalone-titlebar .modal-card.ssh-modal.standalone > .modal-header,
+.has-standalone-titlebar .command-form-standalone > .modal-header,
+.has-standalone-titlebar .command-editor-page.standalone > .modal-header,
+.has-standalone-titlebar .command-manager-modal.standalone > .modal-header {
+  display: none;
+}

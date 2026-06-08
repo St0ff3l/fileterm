@@ -384,6 +384,7 @@ export interface TermdockDesktopApi {
   openConnectionFormWindow(mode: ConnectionFormMode, profileId?: string): Promise<void>
   openCommandFormWindow(mode: ConnectionFormMode, commandId?: string, folderId?: string): Promise<void>
   openFileEditorWindow(input: FileEditorWindowInput): Promise<void>
+  openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>
   minimizeCurrentWindow(): Promise<void>
   toggleMaximizeCurrentWindow(): Promise<void>

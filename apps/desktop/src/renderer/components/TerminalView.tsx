@@ -522,7 +522,7 @@ export function TerminalView({
     const searchAddon = new SearchAddon({ highlightLimit: 2000 })
     const unicode11Addon = new Unicode11Addon()
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      window.open(uri, '_blank', 'noopener,noreferrer')
+      void window.termdock?.openExternalUrl(uri)
     })
     terminal.loadAddon(fitAddon)
     terminal.loadAddon(searchAddon)

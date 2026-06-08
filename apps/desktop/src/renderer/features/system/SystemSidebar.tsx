@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetrics } from '@termdock/core'
 import { copyText } from '../../app/app-utils'
-import { getLocale, t } from '../../i18n'
+import { t } from '../../i18n'
 
 function parseMemory(memStr: string): number {
   if (!memStr) return 0
@@ -82,7 +82,7 @@ export function SystemSidebar({
               <AddressLine label={t.accessAddress} value={accessAddress} />
             </div>
             <button className="system-title" onClick={onOpenSystemInfo} type="button">{t.systemInfo}</button>
-            <div className="metric-line"><span>{t.running}</span><strong className="value">{formatUptime(metrics?.uptime)}</strong></div>
+            <div className="metric-line"><span>{t.running}</span><strong className="value">{formatUptime(metrics?.uptimeSeconds, metrics?.uptime)}</strong></div>
             <div className="metric-line"><span>{t.load}</span><strong className="value">{metrics?.load ?? '-'}</strong></div>
             <Meter
               label={t.cpu}
@@ -216,15 +216,74 @@ function parseUsageTotal(usage?: string) {
   return parseMemory(usage.split('/')[1] ?? '')
 }
 
-function formatUptime(value?: string) {
-  if (!value) return '-'
-  if (getLocale() !== 'enUS') return value
+function formatUptime(uptimeSeconds?: number, fallback?: string) {
+  if (!uptimeSeconds || uptimeSeconds < 0) {
+    return formatLegacyUptime(fallback)
+  }
+
+  const days = Math.floor(uptimeSeconds / 86400)
+  const hours = Math.floor((uptimeSeconds % 86400) / 3600)
+  const minutes = Math.floor((uptimeSeconds % 3600) / 60)
+  const parts: string[] = []
+
+  if (days > 0) {
+    parts.push(`${days}${t.uptimeDayUnit}`)
+  }
+  if (hours > 0) {
+    parts.push(`${hours}${t.uptimeHourUnit}`)
+  }
+  if (!days && !hours && minutes > 0) {
+    parts.push(`${minutes}${t.uptimeMinuteUnit}`)
+  }
+
+  return parts.length ? parts.join(' ') : t.uptimeJustNow
+}
+
+function formatLegacyUptime(fallback?: string) {
+  if (!fallback) {
+    return '-'
+  }
+
+  const value = fallback.trim()
+  if (!value) {
+    return '-'
+  }
+
+  const zhDayMatch = value.match(/^(\d+)\s*天$/)
+  if (zhDayMatch) {
+    return `${zhDayMatch[1]}${t.uptimeDayUnit}`
+  }
+
+  const enDayHourMatch = value.match(/^(\d+)\s+days?,\s+(\d+):(\d+)$/i)
+  if (enDayHourMatch) {
+    const [, days, hours, minutes] = enDayHourMatch
+    return compactUptimeParts([
+      `${days}${t.uptimeDayUnit}`,
+      Number(hours) > 0 ? `${Number(hours)}${t.uptimeHourUnit}` : '',
+      Number(minutes) > 0 ? `${Number(minutes)}${t.uptimeMinuteUnit}` : ''
+    ])
+  }
+
+  const enDayMatch = value.match(/^(\d+)\s+days?$/i)
+  if (enDayMatch) {
+    return `${enDayMatch[1]}${t.uptimeDayUnit}`
+  }
+
+  const enHourMinuteMatch = value.match(/^(\d+):(\d+)$/)
+  if (enHourMinuteMatch) {
+    const [, hours, minutes] = enHourMinuteMatch
+    return compactUptimeParts([
+      Number(hours) > 0 ? `${Number(hours)}${t.uptimeHourUnit}` : '',
+      Number(minutes) > 0 ? `${Number(minutes)}${t.uptimeMinuteUnit}` : ''
+    ])
+  }
 
   return value
-    .replace(/(\d+)\s*天/g, '$1d')
-    .replace(/(\d+)\s*小时/g, '$1h')
-    .replace(/(\d+)\s*分钟/g, '$1m')
-    .replace(/(\d+)\s*秒/g, '$1s')
+}
+
+function compactUptimeParts(parts: string[]) {
+  const filtered = parts.filter(Boolean)
+  return filtered.length ? filtered.join(' ') : t.uptimeJustNow
 }
 
 function getMetricTone(percent: number) {
