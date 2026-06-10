@@ -1021,6 +1021,34 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+:root:not([data-theme]) .context-menu.tools-menu,
+:root[data-theme='default-dark'] .context-menu.tools-menu,
+:root[data-theme='default'] .context-menu.tools-menu {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #202020;
+  box-shadow: none;
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu button:hover:not(:disabled),
+:root[data-theme='default-dark'] .context-menu.tools-menu button:hover:not(:disabled),
+:root[data-theme='default'] .context-menu.tools-menu button:hover:not(:disabled) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu button:disabled,
+:root[data-theme='default-dark'] .context-menu.tools-menu button:disabled,
+:root[data-theme='default'] .context-menu.tools-menu button:disabled {
+  color: rgba(164, 164, 164, 0.5);
+}
+
+:root:not([data-theme]) .context-menu.tools-menu .context-menu-separator,
+:root[data-theme='default-dark'] .context-menu.tools-menu .context-menu-separator,
+:root[data-theme='default'] .context-menu.tools-menu .context-menu-separator {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 :root:not([data-theme]) .file-editor-modal--dark,
 :root[data-theme='default-dark'] .file-editor-modal--dark,
 :root[data-theme='default'] .file-editor-modal--dark {

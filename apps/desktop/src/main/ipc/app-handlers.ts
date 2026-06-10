@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, shell } from 'electron'
 import type { ConnectionFormMode, FileEditorWindowInput } from '@termdock/core'
 import type { IpcWindowOptions } from './types.js'
 
@@ -44,6 +44,10 @@ export function registerAppHandlers(options: IpcWindowOptions) {
     }
   })
 
+  ipcMain.handle('app:openExternalUrl', async (_event, rawUrl: string) => {
+    await openExternalUrl(rawUrl)
+  })
+
   ipcMain.handle('app:openLogsDirectory', () => options.openLogsDirectory())
 
   ipcMain.handle('app:minimizeCurrentWindow', (event) => {
@@ -73,4 +77,12 @@ export function registerAppHandlers(options: IpcWindowOptions) {
   ipcMain.handle('app:confirmCloseWindow', (_event, action: 'quit' | 'hide' | 'cancel') => {
     options.confirmCloseWindow(action)
   })
+}
+
+async function openExternalUrl(rawUrl: string) {
+  const url = new URL(rawUrl)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`Unsupported external URL protocol: ${url.protocol}`)
+  }
+  await shell.openExternal(url.toString())
 }

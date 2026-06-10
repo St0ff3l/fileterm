@@ -3,7 +3,10 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron') as typeof i
 import type {
   CommandExecutionOptions,
   CommandTemplateInput,
+  CommandFolder,
   ConnectionFormMode,
+  ConnectionFolder,
+  ConnectionLibrarySnapshot,
   CommandExecutionResult,
   CreateProfileInput,
   DirectorySnapshot,
@@ -38,6 +41,8 @@ const api: TermdockDesktopApi = {
     ipcRenderer.invoke('app:openCommandFormWindow', mode, commandId, folderId),
   openFileEditorWindow: (input: FileEditorWindowInput): Promise<void> =>
     ipcRenderer.invoke('app:openFileEditorWindow', input),
+  openExternalUrl: (url: string): Promise<void> =>
+    ipcRenderer.invoke('app:openExternalUrl', url),
   openLogsDirectory: (): Promise<void> =>
     ipcRenderer.invoke('app:openLogsDirectory'),
   minimizeCurrentWindow: (): Promise<void> =>
@@ -49,6 +54,8 @@ const api: TermdockDesktopApi = {
   requestQuitApp: (): Promise<void> =>
     ipcRenderer.invoke('app:requestQuitApp'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),
+  getConnectionLibrary: (): Promise<ConnectionLibrarySnapshot> =>
+    ipcRenderer.invoke('workspace:getConnectionLibrary'),
   createProfile: (input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createProfile', input),
   updateProfile: (profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
@@ -57,7 +64,7 @@ const api: TermdockDesktopApi = {
     ipcRenderer.invoke('workspace:deleteProfile', profileId),
   createFolder: (name: string, parentId?: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createFolder', name, parentId),
-  updateFolder: (folderId: string, updates: any): Promise<WorkspaceSnapshot> =>
+  updateFolder: (folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:updateFolder', folderId, updates),
   deleteFolder: (folderId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:deleteFolder', folderId),
@@ -65,7 +72,7 @@ const api: TermdockDesktopApi = {
     ipcRenderer.invoke('workspace:updateEntityOrder', id, newParentId, newOrder),
   createCommandFolder: (name: string, parentId?: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createCommandFolder', name, parentId),
-  updateCommandFolder: (folderId: string, updates: any): Promise<WorkspaceSnapshot> =>
+  updateCommandFolder: (folderId: string, updates: Partial<CommandFolder>): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:updateCommandFolder', folderId, updates),
   deleteCommandFolder: (folderId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:deleteCommandFolder', folderId),

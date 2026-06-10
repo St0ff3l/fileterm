@@ -1,6 +1,7 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { safeStorage } from 'electron'
 import type {
   CommandFolder,
   CommandTemplate,
@@ -28,8 +29,21 @@ const legacyDemoCommandTemplateIds = new Set([
   'cmd-restart-service'
 ])
 
+type ProfileSecretField = 'password' | 'privateKeyPath' | 'passphrase'
+
+type StoredProfileSecret = {
+  storage: 'safeStorage' | 'plain-text-fallback'
+  value: string
+}
+
+type StoredProfileSecrets = {
+  version: 1
+  profiles: Record<string, Partial<Record<ProfileSecretField, StoredProfileSecret>>>
+}
+
 export class FileProfileRepository implements ProfileRepository {
   private readonly filePath: string
+  private readonly secretsPath: string
   private readonly foldersPath: string
   private readonly commandFoldersPath: string
   private readonly commandsPath: string
@@ -45,6 +59,7 @@ export class FileProfileRepository implements ProfileRepository {
     seedCommandFolders: CommandFolder[] = []
   ) {
     this.filePath = path.join(baseDir, 'profiles.json')
+    this.secretsPath = path.join(baseDir, 'profile-secrets.json')
     this.foldersPath = path.join(baseDir, 'folders.json')
     this.commandFoldersPath = path.join(baseDir, 'command-folders.json')
     this.commandsPath = path.join(baseDir, 'commands.json')
@@ -70,7 +85,11 @@ export class FileProfileRepository implements ProfileRepository {
 
   async update(id: string, input: CreateProfileInput): Promise<ConnectionProfile> {
     const profiles = await this.readProfiles()
-    const profile = toProfile(id, input)
+    const previous = profiles.find((item) => item.id === id)
+    if (!previous) {
+      throw new Error('Profile not found')
+    }
+    const profile = preserveProfileMetadata(toProfile(id, input), previous)
     const nextProfiles = profiles.map((item) => (item.id === id ? profile : item))
     await this.writeProfiles(nextProfiles)
     return profile
@@ -144,8 +163,25 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async deleteFolder(id: string): Promise<void> {
-    const folders = await this.readFolders()
-    await this.writeFolders(folders.filter((f) => f.id !== id))
+    const [profiles, folders] = await Promise.all([
+      this.readProfiles(),
+      this.readFolders()
+    ])
+    const folder = folders.find((item) => item.id === id)
+    if (!folder) {
+      return
+    }
+    const nextParentId = folder.parentId
+    await Promise.all([
+      this.writeProfiles(profiles.map((profile) => (
+        profile.parentId === id ? { ...profile, parentId: nextParentId } : profile
+      ))),
+      this.writeFolders(folders
+        .filter((item) => item.id !== id)
+        .map((item) => (
+          item.parentId === id ? { ...item, parentId: nextParentId } : item
+        )))
+    ])
   }
 
   async updateOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
@@ -211,10 +247,19 @@ export class FileProfileRepository implements ProfileRepository {
       this.readCommandFolders(),
       this.readCommandTemplates()
     ])
+    const folder = folders.find((item) => item.id === id)
+    if (!folder) {
+      return
+    }
+    const nextParentId = folder.parentId
     await Promise.all([
-      this.writeCommandFolders(folders.filter((item) => item.id !== id)),
+      this.writeCommandFolders(folders
+        .filter((item) => item.id !== id)
+        .map((item) => (
+          item.parentId === id ? { ...item, parentId: nextParentId } : item
+        ))),
       this.writeCommandTemplates(commands.map((item) => (
-        item.parentId === id ? { ...item, parentId: undefined } : item
+        item.parentId === id ? { ...item, parentId: nextParentId } : item
       )))
     ])
   }
@@ -291,6 +336,7 @@ export class FileProfileRepository implements ProfileRepository {
     }
 
     await this.removeLegacyDemoData()
+    await this.migrateProfileSecrets()
   }
 
   private async removeLegacyDemoData() {
@@ -323,12 +369,31 @@ export class FileProfileRepository implements ProfileRepository {
   private async readProfiles(): Promise<ConnectionProfile[]> {
     await this.ready
     const content = await readFile(this.filePath, 'utf8')
-    return JSON.parse(content) as ConnectionProfile[]
+    const profiles = JSON.parse(content) as ConnectionProfile[]
+    const secrets = await this.readProfileSecrets()
+    return profiles.map((profile) => mergeProfileSecrets(profile, secrets.profiles[profile.id]))
   }
 
   private async writeProfiles(profiles: ConnectionProfile[]) {
     await mkdir(path.dirname(this.filePath), { recursive: true })
-    await writeFile(this.filePath, JSON.stringify(profiles, null, 2), 'utf8')
+    const { publicProfiles, secrets } = splitProfileSecrets(profiles)
+    await Promise.all([
+      writeFile(this.filePath, JSON.stringify(publicProfiles, null, 2), 'utf8'),
+      writeFile(this.secretsPath, JSON.stringify(secrets, null, 2), 'utf8')
+    ])
+    await lockDownFile(this.secretsPath)
+  }
+
+  private async migrateProfileSecrets() {
+    const profiles = await readJsonFile<ConnectionProfile[]>(this.filePath, [])
+    if (!profiles.some(hasInlineProfileSecret)) {
+      return
+    }
+    await this.writeProfiles(profiles)
+  }
+
+  private async readProfileSecrets(): Promise<StoredProfileSecrets> {
+    return readJsonFile<StoredProfileSecrets>(this.secretsPath, createEmptyProfileSecrets())
   }
 
   private async readFolders(): Promise<ConnectionFolder[]> {
@@ -370,6 +435,150 @@ async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
     return JSON.parse(await readFile(filePath, 'utf8')) as T
   } catch {
     return fallback
+  }
+}
+
+function createEmptyProfileSecrets(): StoredProfileSecrets {
+  return {
+    version: 1,
+    profiles: {}
+  }
+}
+
+function preserveProfileMetadata(profile: ConnectionProfile, previous: ConnectionProfile): ConnectionProfile {
+  return {
+    ...profile,
+    parentId: previous.parentId,
+    order: previous.order
+  }
+}
+
+function hasInlineProfileSecret(profile: ConnectionProfile) {
+  return Boolean(
+    profile.password
+      || (profile.type === 'ssh' && (profile.privateKeyPath || profile.passphrase))
+  )
+}
+
+function splitProfileSecrets(profiles: ConnectionProfile[]) {
+  const secrets = createEmptyProfileSecrets()
+  const publicProfiles = profiles.map((profile) => {
+    const profileSecrets = extractProfileSecrets(profile)
+    if (Object.keys(profileSecrets).length > 0) {
+      secrets.profiles[profile.id] = profileSecrets
+    }
+    return stripProfileSecrets(profile)
+  })
+
+  return { publicProfiles, secrets }
+}
+
+function extractProfileSecrets(profile: ConnectionProfile): Partial<Record<ProfileSecretField, StoredProfileSecret>> {
+  const secrets: Partial<Record<ProfileSecretField, StoredProfileSecret>> = {}
+  for (const field of getProfileSecretFields(profile)) {
+    const value = getProfileSecretValue(profile, field)
+    if (value) {
+      secrets[field] = encodeProfileSecret(value)
+    }
+  }
+  return secrets
+}
+
+function getProfileSecretFields(profile: ConnectionProfile): ProfileSecretField[] {
+  return profile.type === 'ssh'
+    ? ['password', 'privateKeyPath', 'passphrase']
+    : ['password']
+}
+
+function getProfileSecretValue(profile: ConnectionProfile, field: ProfileSecretField) {
+  if (field === 'password') {
+    return profile.password
+  }
+  if (profile.type !== 'ssh') {
+    return undefined
+  }
+  return profile[field]
+}
+
+function encodeProfileSecret(value: string): StoredProfileSecret {
+  if (safeStorage.isEncryptionAvailable()) {
+    return {
+      storage: 'safeStorage',
+      value: safeStorage.encryptString(value).toString('base64')
+    }
+  }
+
+  return {
+    storage: 'plain-text-fallback',
+    value
+  }
+}
+
+function decodeProfileSecret(secret: StoredProfileSecret | undefined) {
+  if (!secret) {
+    return undefined
+  }
+  if (secret.storage === 'plain-text-fallback') {
+    return secret.value
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    return undefined
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(secret.value, 'base64'))
+  } catch {
+    return undefined
+  }
+}
+
+function stripProfileSecrets(profile: ConnectionProfile): ConnectionProfile {
+  if (profile.type === 'ssh') {
+    const { password, privateKeyPath, passphrase, ...publicProfile } = profile
+    return publicProfile
+  }
+
+  const { password, ...publicProfile } = profile
+  return publicProfile
+}
+
+function mergeProfileSecrets(
+  profile: ConnectionProfile,
+  storedSecrets: Partial<Record<ProfileSecretField, StoredProfileSecret>> | undefined
+): ConnectionProfile {
+  if (!storedSecrets) {
+    return profile
+  }
+
+  let next = profile
+  for (const field of getProfileSecretFields(profile)) {
+    const value = decodeProfileSecret(storedSecrets[field])
+    if (!value) {
+      continue
+    }
+    next = withProfileSecretValue(next, field, value)
+  }
+  return next
+}
+
+function withProfileSecretValue(
+  profile: ConnectionProfile,
+  field: ProfileSecretField,
+  value: string
+): ConnectionProfile {
+  if (field === 'password') {
+    return { ...profile, password: value }
+  }
+  if (profile.type !== 'ssh') {
+    return profile
+  }
+  return { ...profile, [field]: value }
+}
+
+async function lockDownFile(filePath: string) {
+  try {
+    await chmod(filePath, 0o600)
+  } catch {
+    // Best effort only: chmod is not equally meaningful on every target platform.
   }
 }
 

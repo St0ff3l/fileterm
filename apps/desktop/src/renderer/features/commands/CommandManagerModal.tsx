@@ -55,13 +55,16 @@ export function CommandManagerModal({
 
   const tree = useMemo(() => {
     const items: CommandTreeNode[] = [
-      ...commandTemplates,
-      ...commandFolders.map((folder) => ({ ...folder, children: [] }))
+      ...commandTemplates.map((command, index) => ({
+        ...command,
+        order: typeof command.order === 'number' ? command.order : index * 1000
+      })),
+      ...commandFolders.map((folder, index) => ({
+        ...folder,
+        order: typeof folder.order === 'number' ? folder.order : (commandTemplates.length + index) * 1000,
+        children: []
+      }))
     ]
-
-    items.forEach((item, index) => {
-      if (typeof item.order !== 'number') item.order = index * 1000
-    })
 
     const roots: CommandTreeNode[] = []
     const map = new Map<string, CommandTreeNode>()
@@ -155,14 +158,14 @@ export function CommandManagerModal({
     if (!draggedNode || !targetNode) return
 
     // Prevent dropping a folder into its own descendant
-    let current = targetNode
+    let current: CommandTreeNode | undefined = targetNode
     let invalid = false
-    while (current.parentId) {
+    while (current?.parentId) {
       if (current.parentId === draggingId) {
         invalid = true
         break
       }
-      current = tree.map.get(current.parentId)!
+      current = tree.map.get(current.parentId)
     }
     if (invalid) {
       setDraggingId(null)
@@ -170,8 +173,9 @@ export function CommandManagerModal({
       return
     }
 
-    let newParentId = targetNode.parentId
-    let siblings = newParentId ? tree.map.get(newParentId)!.children! : tree.roots
+    const targetParent = targetNode.parentId ? tree.map.get(targetNode.parentId) : undefined
+    let newParentId = targetParent?.type === 'command-folder' ? targetParent.id : undefined
+    let siblings = targetParent?.type === 'command-folder' ? targetParent.children : tree.roots
 
     let newOrder = targetNode.order ?? 0
 

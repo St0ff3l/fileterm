@@ -2,6 +2,11 @@ import type { ConnectionProfile, ConnectionFolder } from '@termdock/core'
 import { useState, useMemo, useRef, type DragEvent } from 'react'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
+
+type ConnectionTreeNode =
+  | (ConnectionFolder & { children: ConnectionTreeNode[] })
+  | (ConnectionProfile & { children?: never })
 
 export function ConnectionManagerModal({
   profiles,
@@ -31,10 +36,13 @@ export function ConnectionManagerModal({
   standalone?: boolean
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [activeFolderId, setActiveFolderId] = useState<'all' | string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [dragPosition, setDragPosition] = useState<'top' | 'bottom' | 'inside' | null>(null)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [isActionsExpanded, setIsActionsExpanded] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: 'folder'; id: string; name: string }
@@ -57,44 +65,114 @@ export function ConnectionManagerModal({
     })
   }
 
-  // Build tree
   const tree = useMemo(() => {
-    type Node = (ConnectionProfile | ConnectionFolder) & { children?: Node[] }
-    const items: Node[] = [...profiles, ...folders]
-    // Ensure all have order
-    items.forEach((item, index) => {
-      if (typeof item.order !== 'number') item.order = index * 1000
-    })
+    const items: ConnectionTreeNode[] = [
+      ...profiles.map((profile, index) => ({
+        ...profile,
+        order: typeof profile.order === 'number' ? profile.order : index * 1000
+      })),
+      ...folders.map((folder, index) => ({
+        ...folder,
+        order: typeof folder.order === 'number' ? folder.order : (profiles.length + index) * 1000,
+        children: []
+      }))
+    ]
 
-    const roots: Node[] = []
-    const map = new Map<string, Node>()
-
-    items.forEach(item => {
-      if (item.type === 'folder') {
-        ;(item as Node).children = []
-      }
-      map.set(item.id, item as Node)
-    })
+    const roots: ConnectionTreeNode[] = []
+    const map = new Map<string, ConnectionTreeNode>()
 
     items.forEach(item => {
-      if (item.parentId && map.has(item.parentId)) {
-        const parent = map.get(item.parentId)!
-        if (!parent.children) parent.children = []
-        parent.children.push(item as Node)
+      map.set(item.id, item)
+    })
+
+    items.forEach(item => {
+      const parent = item.parentId ? map.get(item.parentId) : undefined
+      if (parent?.type === 'folder') {
+        parent.children.push(item)
       } else {
-        roots.push(item as Node)
+        roots.push(item)
       }
     })
 
-    const sortNodes = (nodes: Node[]) => {
+    const sortNodes = (nodes: ConnectionTreeNode[]) => {
       nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       nodes.forEach(n => {
-        if (n.children) sortNodes(n.children)
+        if (n.type === 'folder') sortNodes(n.children)
       })
     }
     sortNodes(roots)
     return { roots, map }
   }, [profiles, folders])
+
+  const countProfilesInNodes = (nodes: ConnectionTreeNode[]): number => {
+    return nodes.reduce((total, node) => {
+      if (node.type !== 'folder') {
+        return total + 1
+      }
+      return total + countProfilesInNodes(node.children)
+    }, 0)
+  }
+
+  const folderNavItems = useMemo(() => {
+    const items: Array<{ id: 'all' | string; name: string; count: number; depth: number }> = [
+      { id: 'all', name: t.allConnections, count: profiles.length, depth: 0 }
+    ]
+
+    const walkFolders = (nodes: ConnectionTreeNode[], depth: number) => {
+      nodes.forEach((node) => {
+        if (node.type !== 'folder') {
+          return
+        }
+        items.push({
+          id: node.id,
+          name: node.name,
+          count: countProfilesInNodes(node.children),
+          depth
+        })
+        walkFolders(node.children, depth + 1)
+      })
+    }
+
+    walkFolders(tree.roots, 0)
+    return items
+  }, [profiles.length, tree.roots, t.allConnections])
+
+  const activeFolderNode = activeFolderId === 'all' ? null : tree.map.get(activeFolderId)
+  const resolvedActiveFolderId = activeFolderNode?.type === 'folder' ? activeFolderId : 'all'
+  const activeBaseNodes = activeFolderNode?.type === 'folder' ? activeFolderNode.children : tree.roots
+
+  const visibleNodes = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase()
+    if (!query) {
+      return activeBaseNodes
+    }
+
+    const matches: ConnectionTreeNode[] = []
+    const walkNodes = (nodes: ConnectionTreeNode[]) => {
+      nodes.forEach((node) => {
+        const searchableText = node.type === 'folder'
+          ? node.name
+          : [
+              node.name,
+              node.host,
+              String(node.port),
+              node.username,
+              node.type,
+              node.note ?? ''
+            ].join(' ')
+
+        if (searchableText.toLocaleLowerCase().includes(query)) {
+          matches.push(node)
+        }
+        if (node.type === 'folder') {
+          walkNodes(node.children)
+        }
+      })
+    }
+
+    walkNodes(activeBaseNodes)
+    return matches
+  }, [activeBaseNodes, searchQuery])
 
   const handleDragStart = (e: DragEvent, id: string) => {
     e.stopPropagation()
@@ -149,14 +227,14 @@ export function ConnectionManagerModal({
     if (!draggedNode || !targetNode) return
 
     // Prevent dropping a folder into its own descendant
-    let current = targetNode
+    let current: ConnectionTreeNode | undefined = targetNode
     let invalid = false
-    while (current.parentId) {
+    while (current?.parentId) {
       if (current.parentId === draggingId) {
         invalid = true
         break
       }
-      current = tree.map.get(current.parentId)!
+      current = tree.map.get(current.parentId)
     }
     if (invalid) {
       setDraggingId(null)
@@ -164,8 +242,9 @@ export function ConnectionManagerModal({
       return
     }
 
-    let newParentId = targetNode.parentId
-    let siblings = newParentId ? tree.map.get(newParentId)!.children! : tree.roots
+    const targetParent = targetNode.parentId ? tree.map.get(targetNode.parentId) : undefined
+    let newParentId = targetParent?.type === 'folder' ? targetParent.id : undefined
+    let siblings = targetParent?.type === 'folder' ? targetParent.children : tree.roots
 
     let newOrder = targetNode.order ?? 0
 
@@ -201,7 +280,12 @@ export function ConnectionManagerModal({
     }, 0)
   }
 
-  const renderNode = (node: any, depth: number) => {
+  const renderNode = (
+    node: ConnectionTreeNode,
+    depth: number,
+    options: { includeChildren?: boolean } = {}
+  ) => {
+    const includeChildren = options.includeChildren ?? true
     const isFolder = node.type === 'folder'
     const isExpanded = expandedFolders.has(node.id)
     const isDragOver = dragOverId === node.id
@@ -254,24 +338,26 @@ export function ConnectionManagerModal({
           role="button"
           tabIndex={0}
         >
-          <span style={{ paddingLeft: `${depth * 20}px`, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span className="manager-name-cell" style={{ paddingLeft: `${depth * 18}px` }}>
             {isFolder && (
-              <span className="folder-icon" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s', display: 'inline-block', fontSize: '10px' }}>
+              <span className="folder-icon manager-folder-toggle" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
                 ▶
               </span>
             )}
-            {!isFolder && <span style={{ width: '12px', display: 'inline-block' }}></span>}
-            {node.name}
+            {!isFolder && <span className="manager-node-icon"><AppIcon name="server" size={14} /></span>}
+            <span className="manager-node-name">{node.name}</span>
           </span>
           <span>{isFolder ? '--' : node.host}</span>
           <span>{isFolder ? '--' : node.port}</span>
           <span>{isFolder ? '--' : node.username}</span>
-          <span>{isFolder ? t.homeFolderType : node.type.toUpperCase()}</span>
+          <span className={`manager-type-badge ${isFolder ? 'is-folder' : ''}`}>{isFolder ? t.homeFolderType : node.type.toUpperCase()}</span>
           <span>{isFolder ? '--' : (node.note || '/')}</span>
           <span className="manager-actions">
             {!isFolder && (
               <button
-                className="flat-button compact"
+                aria-label={t.edit}
+                className="manager-icon-action"
+                title={t.edit}
                 type="button"
                 onMouseDown={stopInteractiveEvent}
                 onPointerDown={stopInteractiveEvent}
@@ -280,11 +366,13 @@ export function ConnectionManagerModal({
                   onEditProfile(node)
                 }}
               >
-                {t.edit}
+                <AppIcon name="edit" size={14} />
               </button>
             )}
             <button
-              className="flat-button compact danger"
+              aria-label={t.delete}
+              className="manager-icon-action danger"
+              title={t.delete}
               type="button"
               onMouseDown={stopInteractiveEvent}
               onPointerDown={stopInteractiveEvent}
@@ -297,16 +385,16 @@ export function ConnectionManagerModal({
                 })
               }}
             >
-              {t.delete}
+              <AppIcon name="trash" size={14} />
             </button>
           </span>
         </div>
-        {isFolder && isExpanded && node.children && (
+        {includeChildren && isFolder && isExpanded && node.children && (
           <div className="folder-children">
-            {node.children.map((child: any) => renderNode(child, depth + 1))}
+            {node.children.map((child) => renderNode(child, depth + 1, options))}
             {node.children.length === 0 && (
-              <div className="manager-row empty-folder" style={{ paddingLeft: `${(depth + 1) * 20 + 14}px`, color: '#666' }}>
-                <span style={{ gridColumn: '1 / -1' }}>{t.emptyFolder}</span>
+              <div className="manager-row empty-folder" style={{ paddingLeft: `${(depth + 1) * 18 + 18}px` }}>
+                <span>{t.emptyFolder}</span>
               </div>
             )}
           </div>
@@ -315,76 +403,144 @@ export function ConnectionManagerModal({
     )
   }
 
+  const isSearching = searchQuery.trim().length > 0
+  const emptyMessage = isSearching ? t.noMatchingConnections : t.noConnections
+
   const content = (
-    <div className={`modal-card manager-modal ${standalone ? 'standalone' : ''}`}>
-      <div className="modal-header">
-        <span>{t.connectionManager}</span>
-        {!standalone ? <button className="icon-button" onClick={onClose} type="button">×</button> : null}
-      </div>
-      <div className="manager-toolbar manager-toolbar-spacious">
-        <button 
-          className="flat-button" 
-          type="button" 
-          onClick={() => {
-            setIsCreatingFolder(true)
-            setNewFolderName('')
-          }}
-        >
-          {t.newFolder}
-        </button>
-        <button className="primary-button" type="button" onClick={onCreate}>{t.newConnection}</button>
-      </div>
-      <div className="manager-table">
-        <div className="manager-head">
-          <span>{t.name}</span>
-          <span>{t.host}</span>
-          <span>{t.port}</span>
-          <span>{t.userColumn}</span>
-          <span>{t.type}</span>
-          <span>{t.note}</span>
-          <span>{t.actions}</span>
+    <div className={`modal-card manager-modal connection-manager-modal ${standalone ? 'standalone' : ''}`}>
+      <div className="connection-manager-header">
+        <span className="connection-manager-title">
+          <AppIcon name="connections" size={16} />
+          <span>{t.connectionManager}</span>
+        </span>
+        <label className="connection-manager-search">
+          <AppIcon name="search" size={14} />
+          <input
+            aria-label={t.filterConnections}
+            placeholder={t.filterConnections}
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </label>
+        <div className="connection-manager-header-actions">
+          <button aria-label={t.closeTab} className="icon-button manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
         </div>
-        <div className="manager-body" style={{ flex: 1, overflowY: 'auto' }}>
-          {isCreatingFolder && (
-            <div className="manager-row folder-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="folder-icon" style={{ display: 'inline-block', fontSize: '10px' }}>▶</span>
-                <input
-                  type="text"
-                  autoFocus
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newFolderName.trim()) {
-                      onCreateFolder(newFolderName.trim())
-                      setIsCreatingFolder(false)
-                    } else if (e.key === 'Escape') {
-                      setIsCreatingFolder(false)
-                    }
-                  }}
-                  onBlur={() => {
-                    if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
-                    setIsCreatingFolder(false)
-                  }}
-                  style={{ background: 'var(--bg-active)', border: 'none', color: 'inherit', padding: '2px 4px', outline: 'none' }}
-                  placeholder={t.folderName}
-                />
+      </div>
+      <div className="connection-manager-layout">
+        <aside className="connection-manager-sidebar" aria-label={t.folder}>
+          {folderNavItems.map((item) => (
+            <button
+              key={item.id}
+              className={`connection-manager-sidebar-item ${item.id === resolvedActiveFolderId ? 'active' : ''}`}
+              type="button"
+              onClick={() => setActiveFolderId(item.id)}
+            >
+              <span className="connection-manager-sidebar-icon" style={{ paddingLeft: `${item.depth * 12}px` }}>
+                <AppIcon name={item.id === 'all' ? 'connections' : 'folder'} size={14} />
               </span>
-              <span>--</span>
-              <span>--</span>
-              <span>--</span>
-              <span>{t.homeFolderType}</span>
-              <span>--</span>
-              <span></span>
+              <span className="connection-manager-sidebar-label">{item.name}</span>
+              <span className="connection-manager-sidebar-count">{item.count}</span>
+            </button>
+          ))}
+        </aside>
+        <section className="connection-manager-main">
+          <div className="manager-table connection-manager-table">
+            <div className="manager-head">
+              <span>{t.name}</span>
+              <span>{t.host}</span>
+              <span>{t.port}</span>
+              <span>{t.userColumn}</span>
+              <span>{t.type}</span>
+              <span>{t.note}</span>
+              <span>{t.actions}</span>
             </div>
-          )}
-          {tree.roots.map((node) => renderNode(node, 0))}
-          {tree.roots.length === 0 && !isCreatingFolder && (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-              {t.noConnections}
+            <div className="manager-body connection-manager-body">
+              {isCreatingFolder && resolvedActiveFolderId === 'all' && (
+                <div className="manager-row folder-row">
+                  <span className="manager-name-cell">
+                    <span className="folder-icon manager-folder-toggle">▶</span>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newFolderName.trim()) {
+                          onCreateFolder(newFolderName.trim())
+                          setIsCreatingFolder(false)
+                        } else if (e.key === 'Escape') {
+                          setIsCreatingFolder(false)
+                        }
+                      }}
+                      onBlur={() => {
+                        if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
+                        setIsCreatingFolder(false)
+                      }}
+                      className="manager-inline-input"
+                      placeholder={t.folderName}
+                    />
+                  </span>
+                  <span>--</span>
+                  <span>--</span>
+                  <span>--</span>
+                  <span className="manager-type-badge is-folder">{t.homeFolderType}</span>
+                  <span>--</span>
+                  <span></span>
+                </div>
+              )}
+              {visibleNodes.map((node) => renderNode(node, 0, { includeChildren: !isSearching }))}
+              {visibleNodes.length === 0 && !(isCreatingFolder && resolvedActiveFolderId === 'all') && (
+                <div className="connection-manager-empty">
+                  {emptyMessage}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+          <div className={`connection-manager-floating-drawer ${isActionsExpanded ? 'expanded' : ''}`}>
+            <div className="drawer-options-wrapper">
+              <button
+                className="drawer-option-btn secondary-btn"
+                type="button"
+                onClick={() => {
+                  setActiveFolderId('all')
+                  setIsCreatingFolder(true)
+                  setNewFolderName('')
+                  setIsActionsExpanded(false)
+                }}
+              >
+                <AppIcon name="folder" size={13} />
+                <span>{t.newFolder}</span>
+              </button>
+              <button
+                className="drawer-option-btn primary-btn"
+                type="button"
+                onClick={() => {
+                  onCreate()
+                  setIsActionsExpanded(false)
+                }}
+              >
+                <AppIcon name="plus" size={13} />
+                <span>{t.newConnection}</span>
+              </button>
+            </div>
+            <button
+              className="drawer-trigger-btn"
+              type="button"
+              onClick={() => setIsActionsExpanded(!isActionsExpanded)}
+              aria-label="Expand actions"
+            >
+              <AppIcon name="plus" size={16} />
+            </button>
+          </div>
+        </section>
+      </div>
+      <div className="connection-manager-footer">
+        <span>{profiles.length} {t.connectionCountLabel}</span>
+        <span className="connection-manager-footer-separator"></span>
+        <span>{folders.length} {t.folderCountLabel}</span>
+        <span className="connection-manager-footer-spacer"></span>
+        <span>{resolvedActiveFolderId === 'all' ? t.allConnections : activeFolderNode?.name}</span>
       </div>
     </div>
   )

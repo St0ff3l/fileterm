@@ -16,6 +16,10 @@ export type AppIconName =
   | 'disk'
   | 'history'
   | 'refresh'
+  | 'search'
+  | 'plus'
+  | 'edit'
+  | 'trash'
   | 'upload'
   | 'download'
   | 'flash'
@@ -157,6 +161,32 @@ export function AppIcon({
           <path {...commonProps} d="M4.2 2.9v2.8H7" />
           <path {...commonProps} d="M3.2 10A4.9 4.9 0 0 0 11.6 11.8" />
           <path {...commonProps} d="M11.8 13.1v-2.8H9" />
+        </>
+      ) : null}
+      {name === 'search' ? (
+        <>
+          <circle {...commonProps} cx="7" cy="7" r="4" />
+          <path {...commonProps} d="m10 10 3.2 3.2" />
+        </>
+      ) : null}
+      {name === 'plus' ? (
+        <>
+          <path {...commonProps} d="M8 3.5v9" />
+          <path {...commonProps} d="M3.5 8h9" />
+        </>
+      ) : null}
+      {name === 'edit' ? (
+        <>
+          <path {...commonProps} d="M3.1 11.9 3.8 9l5.9-5.9a1.6 1.6 0 0 1 2.2 2.2L6 11.2l-2.9.7Z" />
+          <path {...commonProps} d="m8.8 4 2.2 2.2" />
+        </>
+      ) : null}
+      {name === 'trash' ? (
+        <>
+          <path {...commonProps} d="M3.2 4.6h9.6" />
+          <path {...commonProps} d="M6.2 4.6V3.3h3.6v1.3" />
+          <path {...commonProps} d="M4.7 6.4 5.2 13h5.6l.5-6.6" />
+          <path {...commonProps} d="M7 7.6v3.6M9 7.6v3.6" />
         </>
       ) : null}
       {name === 'download' ? (

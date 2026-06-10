@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import type {
   CommandExecutionOptions,
   CommandTemplateInput,
@@ -453,6 +453,7 @@ export function App() {
     title: string
     variant: 'connecting' | 'active-last-session'
   } | null>(null)
+  const [closingSessionTabIds, setClosingSessionTabIds] = useState<string[]>([])
 
   useThemeMode(themeMode)
 
@@ -466,7 +467,7 @@ export function App() {
   const pendingHomeReplacementKeyRef = useRef<string | null>(null)
   const hasSanitizedStoredPlaceholderRef = useRef(false)
   const desktopApi = window.termdock
-  const isWindowsDesktop = false
+  const isWindowsDesktop = desktopApi?.platform === 'win32'
 
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow) {
@@ -516,6 +517,12 @@ export function App() {
     localTabsRef.current = localTabs
   }, [localTabs])
 
+  const closingSessionTabIdSet = useMemo(() => new Set(closingSessionTabIds), [closingSessionTabIds])
+  const visibleWorkspaceTabs = useMemo(
+    () => workspace.tabs.filter((tab) => !closingSessionTabIdSet.has(tab.id)),
+    [closingSessionTabIdSet, workspace.tabs]
+  )
+
   useEffect(() => {
     window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
     void desktopApi?.setUiPreferences({ theme: themeMode })
@@ -535,7 +542,7 @@ export function App() {
           changed = true
           return { ...tab, title: t.untitledTab }
         }
-        const sourceTabTitle = workspace.tabs.find((entry) => entry.id === tab.sessionTabId)?.title ?? tab.sourceTabTitle
+        const sourceTabTitle = visibleWorkspaceTabs.find((entry) => entry.id === tab.sessionTabId)?.title ?? tab.sourceTabTitle
         const title = formatSystemInfoTabTitle(sourceTabTitle)
         if (tab.sourceTabTitle === sourceTabTitle && tab.title === title) {
           return tab
@@ -549,7 +556,7 @@ export function App() {
       })
       return changed ? next : prev
     })
-  }, [locale, workspace.tabs])
+  }, [locale, visibleWorkspaceTabs])
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -586,6 +593,22 @@ export function App() {
       return
     }
 
+    if (isConnectionManagerWindow) {
+      desktopApi
+        .getConnectionLibrary()
+        .then((snapshot) => {
+          setWorkspace((current) => ({
+            ...current,
+            profiles: snapshot.profiles,
+            folders: snapshot.folders
+          }))
+          setHasLoadedInitialSnapshot(true)
+        })
+        .catch((err: Error) => reportError(setError, '获取连接列表', err))
+        .finally(() => setHasLoadedInitialSnapshot(true))
+      return
+    }
+
     desktopApi
       .getSnapshot()
       .then((snapshot) => {
@@ -600,7 +623,7 @@ export function App() {
       })
       .catch((err: Error) => reportError(setError, '获取工作区快照', err))
       .finally(() => setHasLoadedInitialSnapshot(true))
-  }, [desktopApi, isFileEditorWindow])
+  }, [desktopApi, isConnectionManagerWindow, isFileEditorWindow])
 
   useEffect(() => {
     if (!desktopApi) {
@@ -701,7 +724,7 @@ export function App() {
   useEffect(() => {
     const allKeys = [
       ...localTabs.map((tab) => homeTabKey(tab.id)),
-      ...workspace.tabs.map((tab) => sessionTabKey(tab.id))
+      ...visibleWorkspaceTabs.map((tab) => sessionTabKey(tab.id))
     ]
 
     setTabOrder((prev) => {
@@ -723,10 +746,10 @@ export function App() {
       const nextOrder = [...kept, ...missing]
       return areStringArraysEqual(prev, nextOrder) ? prev : nextOrder
     })
-  }, [localTabs, workspace.tabs])
+  }, [localTabs, visibleWorkspaceTabs])
 
   useEffect(() => {
-    if (!hasLoadedInitialSnapshot || localTabs.length > 0 || workspace.tabs.length > 0) {
+    if (!hasLoadedInitialSnapshot || localTabs.length > 0 || visibleWorkspaceTabs.length > 0) {
       return
     }
 
@@ -734,7 +757,7 @@ export function App() {
     setActiveLocalTabId((current) => current ?? 'home-1')
     setTabOrder((prev) => prev.includes('home:home-1') ? prev : ['home:home-1', ...prev])
     setNextHomeTabNumber((prev) => Math.max(prev, 2))
-  }, [hasLoadedInitialSnapshot, localTabs.length, workspace.tabs.length])
+  }, [hasLoadedInitialSnapshot, localTabs.length, visibleWorkspaceTabs.length])
 
   useEffect(() => {
     if (!hasLoadedInitialSnapshot) {
@@ -744,7 +767,7 @@ export function App() {
     if (!hasSanitizedStoredPlaceholderRef.current) {
       hasSanitizedStoredPlaceholderRef.current = true
       const onlyPlaceholderHomeTab = localTabs.length === 1 && isDefaultPlaceholderHomeTab(localTabs[0]!)
-      const hasRemoteSessions = workspace.tabs.length > 0
+      const hasRemoteSessions = visibleWorkspaceTabs.length > 0
       const isPlaceholderInactive = activeLocalTabId === null
 
       if (onlyPlaceholderHomeTab && hasRemoteSessions && isPlaceholderInactive) {
@@ -755,7 +778,7 @@ export function App() {
       }
     }
 
-    const validSessionTabIds = new Set(workspace.tabs.map((tab) => tab.id))
+    const validSessionTabIds = new Set(visibleWorkspaceTabs.map((tab) => tab.id))
     const nextLocalTabs = localTabs.filter((tab) => tab.kind === 'home' || validSessionTabIds.has(tab.sessionTabId))
     if (nextLocalTabs.length !== localTabs.length) {
       setLocalTabs(nextLocalTabs)
@@ -768,7 +791,7 @@ export function App() {
         ? prev
         : null
     })
-  }, [activeLocalTabId, hasLoadedInitialSnapshot, localTabs, workspace.tabs])
+  }, [activeLocalTabId, hasLoadedInitialSnapshot, localTabs, visibleWorkspaceTabs])
 
   useEffect(() => {
     if (!hasLoadedInitialSnapshot) {
@@ -841,10 +864,19 @@ export function App() {
   }, [fileClipboard])
 
   const activeLocalTab = activeLocalTabId ? localTabs.find((tab) => tab.id === activeLocalTabId) ?? null : null
+  const visibleSessionTabOrder = tabOrder
+    .filter((key) => key.startsWith('session:'))
+    .map((key) => key.slice('session:'.length))
+    .filter((id) => visibleWorkspaceTabs.some((tab) => tab.id === id))
+  const visibleActiveSessionTabId = activeLocalTab
+    ? null
+    : visibleWorkspaceTabs.some((tab) => tab.id === workspace.activeTabId)
+      ? workspace.activeTabId
+      : visibleSessionTabOrder.at(-1) ?? visibleWorkspaceTabs.at(-1)?.id ?? null
   const displayedSessionTabId = activeLocalTab
     ? activeLocalTab.kind === 'system' ? activeLocalTab.sessionTabId : null
-    : workspace.activeTabId
-  const activeTab = displayedSessionTabId ? workspace.tabs.find((tab) => tab.id === displayedSessionTabId) ?? null : null
+    : visibleActiveSessionTabId
+  const activeTab = displayedSessionTabId ? visibleWorkspaceTabs.find((tab) => tab.id === displayedSessionTabId) ?? null : null
   const activeSession = activeTab ? workspace.sessions[activeTab.id] : null
   const activeProfile = activeTab
     ? workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null
@@ -900,6 +932,7 @@ export function App() {
 
   const applySnapshot = (snapshot: WorkspaceSnapshot) => {
     setWorkspace(snapshot)
+    setClosingSessionTabIds((prev) => prev.filter((tabId) => snapshot.tabs.some((tab) => tab.id === tabId)))
     setFormError(null)
   }
 
@@ -1109,7 +1142,7 @@ export function App() {
     try {
       setIsBusy(true)
       const targetTabs = scope === 'all-ssh'
-        ? workspace.tabs.filter((tab) => tab.sessionType === 'ssh' && tab.status !== 'closed')
+        ? visibleWorkspaceTabs.filter((tab) => tab.sessionType === 'ssh' && tab.status !== 'closed')
         : activeTab && activeTab.sessionType === 'ssh'
           ? [activeTab]
           : []
@@ -1246,12 +1279,25 @@ export function App() {
       return null
     }
 
+    const nextVisibleSessionTabs = visibleWorkspaceTabs.filter((tab) => tab.id !== tabId)
+    const relatedLocalTabs = localTabsRef.current
+      .filter((tab) => tab.kind === 'system' && tab.sessionTabId === tabId)
+      .map((tab) => tab.id)
+
+    setClosingSessionTabIds((prev) => prev.includes(tabId) ? prev : [...prev, tabId])
+    setTabOrder((prev) => prev.filter((key) => key !== sessionTabKey(tabId)))
+    if (relatedLocalTabs.length) {
+      closeHomeTabs(
+        relatedLocalTabs,
+        activeLocalTabId && relatedLocalTabs.includes(activeLocalTabId) ? null : activeLocalTabId,
+        nextVisibleSessionTabs
+      )
+    } else if (!activeLocalTabId && workspace.activeTabId === tabId && nextVisibleSessionTabs.length === 0) {
+      closeHomeTabs([], 'home-1', nextVisibleSessionTabs)
+    }
+
     const snapshot = await desktopApi.closeTab(tabId)
     applySnapshot(snapshot)
-    const relatedLocalTabs = localTabsRef.current.filter((tab) => tab.kind === 'system' && tab.sessionTabId === tabId).map((tab) => tab.id)
-    if (relatedLocalTabs.length) {
-      closeHomeTabs(relatedLocalTabs, activeLocalTabId && relatedLocalTabs.includes(activeLocalTabId) ? null : activeLocalTabId, snapshot.tabs)
-    }
     if (snapshot.activeTabId === null) {
       setLocalTabs((prev) => prev.length ? prev : [{ id: 'home-1', kind: 'home', title: t.untitledTab }])
       setTabOrder((prev) => {
@@ -1267,7 +1313,7 @@ export function App() {
     setLocalTabs((prev) => {
       const remaining = prev.filter((tab) => tab.id !== homeTabId)
 
-      if (remaining.length === 0 && workspace.tabs.length === 0) {
+      if (remaining.length === 0 && visibleWorkspaceTabs.length === 0) {
         setActiveLocalTabId('home-1')
         setNextHomeTabNumber(2)
         setTabOrder((prevOrder) => {
@@ -1293,12 +1339,10 @@ export function App() {
     }
 
     try {
-      setIsBusy(true)
       await closeSessionTabById(tabId)
     } catch (err) {
+      setClosingSessionTabIds((prev) => prev.filter((id) => id !== tabId))
       reportError(setError, '关闭标签页', err)
-    } finally {
-      setIsBusy(false)
     }
   }
 
@@ -1402,10 +1446,10 @@ export function App() {
     const activeLocalTab = activeLocalTabId
       ? localTabs.find((tab) => tab.id === activeLocalTabId) ?? null
       : null
-    const activeSessionTab = !activeLocalTab && workspace.activeTabId
-      ? workspace.tabs.find((tab) => tab.id === workspace.activeTabId) ?? null
+    const activeSessionTab = !activeLocalTab && visibleActiveSessionTabId
+      ? visibleWorkspaceTabs.find((tab) => tab.id === visibleActiveSessionTabId) ?? null
       : null
-    const totalClosableItems = localTabs.length + workspace.tabs.length
+    const totalClosableItems = localTabs.length + visibleWorkspaceTabs.length
 
     if (activeLocalTab) {
       if (totalClosableItems <= 1) {
@@ -1418,7 +1462,7 @@ export function App() {
     }
 
     if (activeSessionTab) {
-      const isLastSessionTab = workspace.tabs.length === 1
+      const isLastSessionTab = visibleWorkspaceTabs.length === 1
       const needsDisconnectConfirm = isLastSessionTab
         && (activeSessionTab.status === 'connecting' || activeSessionTab.status === 'connected')
 
@@ -1432,12 +1476,10 @@ export function App() {
       }
 
       try {
-        setIsBusy(true)
         await closeSessionTabById(activeSessionTab.id)
       } catch (err) {
+        setClosingSessionTabIds((prev) => prev.filter((id) => id !== activeSessionTab.id))
         reportError(setError, '关闭当前标签页', err)
-      } finally {
-        setIsBusy(false)
       }
       return
     }
@@ -1454,12 +1496,10 @@ export function App() {
     setShortcutCloseConfirm(null)
 
     try {
-      setIsBusy(true)
       await closeSessionTabById(tabId)
     } catch (err) {
+      setClosingSessionTabIds((prev) => prev.filter((id) => id !== tabId))
       reportError(setError, '关闭正在连接的标签页', err)
-    } finally {
-      setIsBusy(false)
     }
   }
 
@@ -1483,7 +1523,7 @@ export function App() {
         return
       }
 
-      const sourceTab = workspace.tabs.find((tab) => tab.id === target.id)
+      const sourceTab = visibleWorkspaceTabs.find((tab) => tab.id === target.id)
       if (!sourceTab) {
         return
       }
@@ -1522,7 +1562,7 @@ export function App() {
       if (!desktopApi) {
         return
       }
-      const reconnectableTabs = workspace.tabs.filter((tab) => tab.status !== 'connected' && tab.status !== 'connecting')
+      const reconnectableTabs = visibleWorkspaceTabs.filter((tab) => tab.status !== 'connected' && tab.status !== 'connecting')
       if (!reconnectableTabs.length) {
         return
       }
@@ -1561,12 +1601,12 @@ export function App() {
     }
 
     const sessionTabsToClose = action === 'closeAll'
-      ? workspace.tabs.map((tab) => tab.id)
+      ? visibleWorkspaceTabs.map((tab) => tab.id)
       : action === 'close'
         ? target.kind === 'session' ? [target.id] : []
         : target.kind === 'session'
-          ? workspace.tabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
-          : workspace.tabs.map((tab) => tab.id)
+          ? visibleWorkspaceTabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
+          : visibleWorkspaceTabs.map((tab) => tab.id)
 
     const homeTabsToClose = action === 'closeAll'
       ? localTabs.map((tab) => tab.id)
@@ -1576,7 +1616,7 @@ export function App() {
           ? localTabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
           : localTabs.map((tab) => tab.id)
 
-    const remainingSessionTabs = workspace.tabs.filter((tab) => !sessionTabsToClose.includes(tab.id))
+    const remainingSessionTabs = visibleWorkspaceTabs.filter((tab) => !sessionTabsToClose.includes(tab.id))
     const preferredActiveHomeId = target.kind === 'local' && action !== 'close' ? target.id : null
     closeHomeTabs(homeTabsToClose, preferredActiveHomeId, remainingSessionTabs)
 
@@ -2092,7 +2132,7 @@ export function App() {
       }
 
       const id = key.slice(8)
-      const sessionTab = workspace.tabs.find((tab) => tab.id === id)
+      const sessionTab = visibleWorkspaceTabs.find((tab) => tab.id === id)
       return sessionTab ? { key, kind: 'session' as const, tab: sessionTab } : null
     })
     .filter((item): item is OrderedTabEntry => item !== null)
@@ -2304,8 +2344,7 @@ export function App() {
 
   if (isConnectionManagerWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={t.connectionManager} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={t.connectionManager}>
         <ConnectionManagerModal
           profiles={workspace.profiles}
           folders={workspace.folders || []}
@@ -2354,14 +2393,13 @@ export function App() {
             }}
           />
         ) : null}
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isCommandManagerWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={t.commandManager} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={t.commandManager}>
         <CommandManagerModal
           commandFolders={workspace.commandFolders || []}
           commandTemplates={workspace.commandTemplates || []}
@@ -2389,7 +2427,7 @@ export function App() {
             void deleteCommandTemplate(commandId)
           }}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
@@ -2399,8 +2437,7 @@ export function App() {
       : null
 
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate}>
         <CommandEditorModal
           folders={workspace.commandFolders || []}
           initialValue={editingCommand
@@ -2416,14 +2453,13 @@ export function App() {
             void saveCommandTemplate(editingCommand?.id ?? null, input)
           }}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isConnectionFormWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection}>
         <ConnectionModal
           errorMessage={formError}
           groupOptions={connectionGroupOptions}
@@ -2443,14 +2479,13 @@ export function App() {
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isFileEditorWindow && fileEditor) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={fileEditor.name} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditor.name}>
         <FileEditorModal
           errorMessage={fileEditorError}
           file={fileEditor}
@@ -2463,14 +2498,13 @@ export function App() {
           standalone
           themeMode={themeMode}
         />
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   if (isFileEditorWindow) {
     return (
-      <>
-        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle} />
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle}>
         <div className="standalone-shell file-editor-window">
           <div className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}>
             <div className="modal-header">
@@ -2482,14 +2516,14 @@ export function App() {
             {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : <div className="file-editor-path">{t.updating}</div>}
           </div>
         </div>
-      </>
+      </StandaloneWindowFrame>
     )
   }
 
   return (
     <>
       <div
-        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''}`}
+        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''} ${activeLocalTab?.kind === 'home' ? 'is-home-active' : ''}`}
         style={{
           '--sidebar-width': `${resolvedSidebarWidth}px`,
           '--brand-width': `${brandWidth}px`
@@ -2508,52 +2542,54 @@ export function App() {
             </div>
           </div>
         ) : null}
-        <TabBar
-          activeHomeTabId={activeLocalTabId}
-          activeSessionTabId={workspace.activeTabId}
-          locale={locale}
-          onAddHomeTab={handleAddHomeTab}
-          onActivateHome={handleActivateHome}
-          onActivateSession={(tabId) => {
-            void handleActivateTab(tabId)
-          }}
-          onCloseHomeTab={handleCloseHomeTab}
-          onCloseSessionTab={(event, tabId) => {
-            void handleCloseTab(event, tabId)
-          }}
-          onDragEnd={() => setDraggingTabKey(null)}
-          onDragEnter={(targetKey) => {
-            setTabOrder((prev) => reorderTabKeys(prev, draggingTabKey, targetKey))
-          }}
-          onDragStart={setDraggingTabKey}
-          onOpenCommandManager={openCommandManager}
-          onOpenConnectionManager={() => {
-            if (desktopApi) {
-              void desktopApi.openConnectionManagerWindow()
-              return
-            }
-            setShowConnectionManager(true)
-          }}
-          onOpenLogsDirectory={() => {
-            if (!desktopApi) {
-              setError(t.desktopOnlyOpenLogs)
-              return
-            }
-            void desktopApi.openLogsDirectory().catch((err) => {
-              reportError(setError, t.openLogsDirectory, err)
-            })
-          }}
-          onOpenTabContext={(event, target) => {
-            setTabContextMenu({ x: event.clientX, y: event.clientY, target })
-          }}
-          onSetLocale={(nextLocale) => {
-            setLocale(nextLocale)
-            setLocaleState(nextLocale)
-          }}
-          onSetTheme={setThemeMode}
-          orderedTabs={orderedTabs}
-          theme={themeMode}
-        />
+        {activeLocalTab?.kind !== 'home' && (
+          <TabBar
+            activeHomeTabId={activeLocalTabId}
+            activeSessionTabId={visibleActiveSessionTabId}
+            locale={locale}
+            onAddHomeTab={handleAddHomeTab}
+            onActivateHome={handleActivateHome}
+            onActivateSession={(tabId) => {
+              void handleActivateTab(tabId)
+            }}
+            onCloseHomeTab={handleCloseHomeTab}
+            onCloseSessionTab={(event, tabId) => {
+              void handleCloseTab(event, tabId)
+            }}
+            onDragEnd={() => setDraggingTabKey(null)}
+            onDragEnter={(targetKey) => {
+              setTabOrder((prev) => reorderTabKeys(prev, draggingTabKey, targetKey))
+            }}
+            onDragStart={setDraggingTabKey}
+            onOpenCommandManager={openCommandManager}
+            onOpenConnectionManager={() => {
+              if (desktopApi) {
+                void desktopApi.openConnectionManagerWindow()
+                return
+              }
+              setShowConnectionManager(true)
+            }}
+            onOpenLogsDirectory={() => {
+              if (!desktopApi) {
+                setError(t.desktopOnlyOpenLogs)
+                return
+              }
+              void desktopApi.openLogsDirectory().catch((err) => {
+                reportError(setError, t.openLogsDirectory, err)
+              })
+            }}
+            onOpenTabContext={(event, target) => {
+              setTabContextMenu({ x: event.clientX, y: event.clientY, target })
+            }}
+            onSetLocale={(nextLocale) => {
+              setLocale(nextLocale)
+              setLocaleState(nextLocale)
+            }}
+            onSetTheme={setThemeMode}
+            orderedTabs={orderedTabs}
+            theme={themeMode}
+          />
+        )}
 
         {showSidebar ? (
           <aside className={`fs-sidebar ${isSystemSidebarCollapsed ? 'is-collapsed' : ''}`} style={{ position: 'relative' }}>
@@ -2603,7 +2639,7 @@ export function App() {
               activeProfile={activeProfile}
               activeSession={activeSession}
               activeTab={activeTab}
-              tabs={workspace.tabs}
+              tabs={visibleWorkspaceTabs}
               commandFolders={workspace.commandFolders || []}
               commandTemplates={workspace.commandTemplates || []}
               folders={workspace.folders || []}
@@ -2648,13 +2684,15 @@ export function App() {
           </div>
         </main>
 
-        <TransferBar
-          activeCount={activeTransferCount}
-          fullWidth={!showSidebar}
-          isPending={isBusy}
-          onOpen={() => setShowTransfers((prev) => !prev)}
-          transfers={workspace.transfers}
-        />
+        {activeLocalTab?.kind !== 'home' ? (
+          <TransferBar
+            activeCount={activeTransferCount}
+            fullWidth={!showSidebar}
+            isPending={isBusy}
+            onOpen={() => setShowTransfers((prev) => !prev)}
+            transfers={workspace.transfers}
+          />
+        ) : null}
 
         {showTransfers ? (
             <TransferPopover
@@ -2734,10 +2772,10 @@ export function App() {
 
       {tabContextMenu ? (
         <TabContextMenu
-          canConnectAll={workspace.tabs.some((tab) => tab.status !== 'connected' && tab.status !== 'connecting')}
-          canCloseAll={localTabs.length + workspace.tabs.length > 0}
-          canCloseCurrent={tabContextMenu.target.kind === 'session' ? true : localTabs.length + workspace.tabs.length > 1}
-          canCloseOthers={localTabs.length + workspace.tabs.length > 1}
+          canConnectAll={visibleWorkspaceTabs.some((tab) => tab.status !== 'connected' && tab.status !== 'connecting')}
+          canCloseAll={localTabs.length + visibleWorkspaceTabs.length > 0}
+          canCloseCurrent={tabContextMenu.target.kind === 'session' ? true : localTabs.length + visibleWorkspaceTabs.length > 1}
+          canCloseOthers={localTabs.length + visibleWorkspaceTabs.length > 1}
           isSessionTab={tabContextMenu.target.kind === 'session'}
           onAction={(action) => {
             void handleTabContextAction(action)
@@ -2971,6 +3009,26 @@ export function App() {
         </div>
       ) : null}
     </>
+  )
+}
+
+function StandaloneWindowFrame({
+  children,
+  isWindows,
+  showPlatformTitlebar = true,
+  title
+}: {
+  children: ReactNode
+  isWindows: boolean
+  showPlatformTitlebar?: boolean
+  title: string
+}) {
+  const shouldShowPlatformTitlebar = isWindows && showPlatformTitlebar
+  return (
+    <div className={`standalone-window-frame ${shouldShowPlatformTitlebar ? 'has-standalone-titlebar' : ''}`}>
+      <StandaloneWindowTitlebar isWindows={shouldShowPlatformTitlebar} title={title} />
+      {children}
+    </div>
   )
 }
 

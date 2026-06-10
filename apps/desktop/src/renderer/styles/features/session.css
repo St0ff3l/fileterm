@@ -878,6 +878,15 @@
   min-width: 116px;
 }
 
+.tools-menu {
+  width: min(184px, calc(100vw - 24px));
+  min-width: 0;
+  padding: 6px;
+  border-radius: 8px;
+  backdrop-filter: none;
+  font-size: 12px;
+}
+
 .context-menu button {
   display: flex;
   align-items: center;
@@ -891,6 +900,25 @@
   text-align: left;
   font-size: 12px;
   line-height: 26px;
+}
+
+.tools-menu button {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.tools-menu button>span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tools-menu .context-menu-separator {
+  margin: 4px;
 }
 
 .context-menu-shortcut {
@@ -975,12 +1003,282 @@
   margin-bottom: 12px;
 }
 
+.modal-card.manager-modal.connection-manager-modal {
+  width: min(1040px, calc(100vw - 56px));
+  min-height: min(640px, calc(100vh - 56px));
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow-x: hidden;
+  overflow-x: clip;
+  background-color: var(--bg-main) !important;
+  font-family: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+}
+
+/* Thinned stroke for SVG icons in connection manager */
+.connection-manager-modal .app-icon * {
+  stroke-width: 1.35 !important;
+}
+
+.modal-card.manager-modal.connection-manager-modal.standalone {
+  width: 100%;
+  min-height: 100vh;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: var(--bg-main) !important;
+}
+
+.connection-manager-modal .connection-manager-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-light);
+  column-gap: 12px;
+  background-color: var(--bg-sidebar);
+  -webkit-app-region: drag;
+}
+
+.connection-manager-modal.standalone .connection-manager-header {
+  padding-left: 18px;
+}
+
+.connection-manager-modal .connection-manager-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.connection-manager-title .app-icon {
+  color: var(--text-muted);
+}
+
+.connection-manager-search {
+  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+  margin-left: 24px;
+  margin-right: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.connection-manager-search:focus-within {
+  border-color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.connection-manager-search input {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 11.5px;
+  font-family: inherit;
+}
+
+.connection-manager-search input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.76;
+}
+
+.connection-manager-modal .connection-manager-header-actions {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.connection-manager-action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 400;
+  box-shadow: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.connection-manager-header-actions .connection-manager-action-button {
+  background: transparent;
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+
+.connection-manager-header-actions .connection-manager-action-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}
+
+.connection-manager-header-actions .connection-manager-action-button.primary-button {
+  background: var(--bg-card);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
+.connection-manager-header-actions .connection-manager-action-button.primary-button:hover:not(:disabled) {
+  background: var(--text-main) !important;
+  color: var(--bg-main) !important;
+  border-color: var(--text-main);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
+}
+
+.manager-close-button {
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 300;
+  transition: all 0.15s ease;
+  margin-left: 2px;
+}
+
+.manager-close-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.connection-manager-layout {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  min-height: 0;
+  background: var(--bg-main);
+}
+
+.connection-manager-sidebar {
+  min-width: 0;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border-light);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: var(--bg-sidebar);
+}
+
+.connection-manager-sidebar-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.connection-manager-sidebar-item:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  padding-left: 14px;
+}
+
+.connection-manager-sidebar-item.active {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  font-weight: 500;
+}
+
+.connection-manager-sidebar-icon {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+}
+
+.connection-manager-sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-manager-sidebar-count {
+  margin-left: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.connection-manager-main {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
 .manager-table {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
+  background: var(--bg-card) !important;
+}
+
+.connection-manager-table {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow-y: hidden;
+  overflow-x: hidden;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+
+:root .connection-manager-modal .connection-manager-table {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .manager-head,
@@ -992,6 +1290,22 @@
   padding: 0 14px;
 }
 
+.connection-manager-table .manager-head,
+.connection-manager-table .manager-row {
+  grid-template-columns:
+    minmax(0, 1.25fr)
+    minmax(0, 1.1fr)
+    52px
+    minmax(0, 0.75fr)
+    64px
+    minmax(0, 0.75fr)
+    74px;
+  column-gap: 10px;
+  padding: 0 14px;
+  min-width: 0;
+  width: 100%;
+}
+
 .manager-head span:last-child {
   text-align: right;
 }
@@ -1001,8 +1315,22 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.connection-manager-table .manager-head {
+  height: 34px;
+  border-bottom: 1px solid var(--border-light);
+  background: rgba(0, 0, 0, 0.15) !important;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+:root .connection-manager-modal .connection-manager-table .manager-head {
+  background: rgba(0, 0, 0, 0.15) !important;
 }
 
 .manager-row {
@@ -1013,6 +1341,48 @@
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+  font-weight: 400;
+}
+
+.connection-manager-table .manager-row {
+  height: 36px;
+  border-top: 0;
+  border-bottom: 1px solid var(--border-light);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.connection-manager-table .manager-row:hover {
+  background: var(--bg-hover);
+}
+
+.connection-manager-table .folder-row {
+  background: transparent;
+}
+
+:root .connection-manager-modal .connection-manager-table .folder-row {
+  background: transparent;
+}
+
+.connection-manager-table .empty-folder {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.connection-manager-table .empty-folder span {
+  grid-column: 1 / -1;
+}
+
+.connection-manager-body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
 }
 
 .manager-row.dragging {
@@ -1042,6 +1412,54 @@
   white-space: nowrap;
 }
 
+.manager-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.manager-node-icon,
+.manager-folder-toggle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.manager-folder-toggle {
+  font-size: 8px;
+  transition: transform 0.12s ease;
+}
+
+.manager-node-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-type-badge {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.manager-type-badge.is-folder {
+  color: var(--text-muted);
+}
+
 .manager-actions {
   display: flex;
   gap: 6px;
@@ -1049,15 +1467,256 @@
   overflow: visible !important;
 }
 
+.connection-manager-modal .manager-actions {
+  gap: 4px;
+}
+
+.manager-icon-action {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.62;
+}
+
+.manager-icon-action:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  opacity: 1;
+}
+
+.manager-icon-action.danger {
+  color: var(--text-muted);
+}
+
+.manager-icon-action.danger:hover {
+  color: var(--danger);
+}
+
+.manager-inline-input {
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  outline: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.connection-manager-empty {
+  display: grid;
+  place-items: center;
+  height: 96px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.connection-manager-footer {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 16px;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  gap: 9px;
+  background-color: var(--bg-sidebar);
+}
+
+.connection-manager-footer-separator {
+  width: 1px;
+  height: 14px;
+  background: var(--border-light);
+}
+
+.connection-manager-footer-spacer {
+  flex: 1;
+}
+
 .flat-button.compact {
   min-width: 0;
   height: 24px;
   padding: 0 9px;
   font-size: 12px;
+  font-weight: 400;
+  font-family: inherit;
+}
+
+.connection-manager-modal .flat-button.compact {
+  height: 24px;
+  padding: 0 8px;
+  border-color: transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.connection-manager-modal .flat-button.compact:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: transparent;
+  color: var(--text-main);
+}
+
+.connection-manager-modal .flat-button.compact.danger {
+  color: var(--danger);
 }
 
 @media (max-width: 1080px) {
   .session-transfer-bar {
     display: none;
   }
+}
+
+/* Floating Drawer in Connection Manager */
+.connection-manager-floating-drawer {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  background: var(--text-main) !important; /* In closed state, matches button background (white in dark mode) */
+  border: none;
+  border-radius: 8px; /* Rounded square plus button */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  height: 42px;
+  width: 42px; /* Compact width when closed */
+  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-sizing: border-box;
+}
+
+.connection-manager-floating-drawer.expanded {
+  width: 290px; /* Expanded width to fit options */
+  background: rgba(28, 28, 30, 0.75) !important; /* Dark glass background */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Frosted border */
+  border-radius: 21px; /* Capsule shape when expanded */
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.45));
+}
+
+/* Options Wrapper (slides left and fades in) */
+.drawer-options-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding-left: 0; /* No padding when collapsed to avoid shifting the trigger button */
+  flex: 1;
+  opacity: 0;
+  transform: translateX(12px);
+  pointer-events: none;
+  visibility: hidden;
+  max-width: 0;
+  overflow: hidden;
+  transition: max-width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.2s ease, transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), visibility 0.2s ease, padding-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.connection-manager-floating-drawer.expanded .drawer-options-wrapper {
+  max-width: 240px;
+  padding-left: 12px; /* Add padding only when expanded */
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* Option Buttons */
+.drawer-option-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px; /* Pill shaped option buttons */
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.drawer-option-btn.secondary-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.drawer-option-btn.secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-main);
+}
+
+.drawer-option-btn.primary-btn {
+  background: var(--text-main) !important;
+  border: 1px solid var(--text-main) !important;
+  color: var(--bg-main) !important;
+}
+
+.drawer-option-btn.primary-btn * {
+  color: var(--bg-main) !important;
+}
+
+.drawer-option-btn.primary-btn:hover {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Trigger Button (Rounded Square Plus when closed, circle X when open) */
+.drawer-trigger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: none;
+  background: transparent !important; /* Let parent background show (white square closed, glass capsule open) */
+  color: var(--bg-main) !important;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  flex-shrink: 0;
+  border-radius: 8px;
+  margin: 0 !important;
+  padding: 0 !important;
+  margin-left: auto !important;
+}
+
+.drawer-trigger-btn * {
+  color: var(--bg-main) !important;
+}
+
+/* Rotate plus to X and turn to circular button when expanded */
+.connection-manager-floating-drawer.expanded .drawer-trigger-btn {
+  transform: rotate(45deg);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-muted) !important;
+  margin-right: 4px !important; /* Centered padding gap on the right edge */
+  margin-left: auto !important;
+}
+
+.connection-manager-floating-drawer.expanded .drawer-trigger-btn * {
+  color: var(--text-muted) !important;
+}
+
+.connection-manager-floating-drawer.expanded .drawer-trigger-btn:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-main) !important;
+}
+
+.connection-manager-floating-drawer.expanded .drawer-trigger-btn:hover * {
+  color: var(--text-main) !important;
 }

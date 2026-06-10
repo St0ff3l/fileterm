@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import Editor, { type Monaco, type OnMount } from '@monaco-editor/react'
+import Editor, { loader, type Monaco, type OnMount } from '@monaco-editor/react'
 import OpenCC from 'opencc-js'
+import * as monacoEditor from 'monaco-editor'
 import type { FileContentSnapshot } from '@termdock/core'
 import { t } from '../../i18n'
 import { EDITOR_ENCODINGS, findEncodingOption, sortEditorLanguages, type EditorLanguageOption } from './file-editor-config'
 
 const toTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' })
 const toSimplified = OpenCC.Converter({ from: 'tw', to: 'cn' })
+
+// Monaco loader defaults to a CDN, which gets blocked by Electron CSP and leaves the editor
+// stuck on its built-in loading state. Use the bundled npm package instead.
+loader.config({ monaco: monacoEditor })
 
 type EditorInstance = Parameters<OnMount>[0]
 type EditorMenu = 'file' | 'edit' | 'search' | 'preferences' | 'encoding' | 'language'

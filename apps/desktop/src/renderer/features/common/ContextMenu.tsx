@@ -11,15 +11,19 @@ export type ContextMenuEntry = {
 }
 
 export function ContextMenu({
+  align = 'start',
   className,
   items,
   onClose,
-  position
+  position,
+  viewportMargin = 8
 }: {
+  align?: 'start' | 'end'
   className?: string
   items: ContextMenuEntry[]
   onClose(): void
   position: { x: number; y: number }
+  viewportMargin?: number
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [resolvedPosition, setResolvedPosition] = useState(position)
@@ -61,16 +65,16 @@ export function ContextMenu({
       return
     }
 
-    const margin = 8
     const rect = menu.getBoundingClientRect()
-    const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin)
-    const maxTop = Math.max(margin, window.innerHeight - rect.height - margin)
+    const left = align === 'end' ? position.x - rect.width : position.x
+    const maxLeft = Math.max(viewportMargin, window.innerWidth - rect.width - viewportMargin)
+    const maxTop = Math.max(viewportMargin, window.innerHeight - rect.height - viewportMargin)
 
     setResolvedPosition({
-      x: Math.min(maxLeft, Math.max(margin, position.x)),
-      y: Math.min(maxTop, Math.max(margin, position.y))
+      x: Math.min(maxLeft, Math.max(viewportMargin, left)),
+      y: Math.min(maxTop, Math.max(viewportMargin, position.y))
     })
-  }, [items, position])
+  }, [align, items, position, viewportMargin])
 
   return (
     <div

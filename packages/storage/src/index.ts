@@ -57,7 +57,11 @@ export class MemoryProfileRepository implements ProfileRepository {
   }
 
   async update(id: string, input: CreateProfileInput): Promise<ConnectionProfile> {
-    const profile = toProfile(id, input)
+    const previous = this.profiles.find((item) => item.id === id)
+    if (!previous) {
+      throw new Error('Profile not found')
+    }
+    const profile = preserveProfileMetadata(toProfile(id, input), previous)
     this.profiles = this.profiles.map((item) => (item.id === id ? profile : item))
     return profile
   }
@@ -106,7 +110,19 @@ export class MemoryProfileRepository implements ProfileRepository {
   }
 
   async deleteFolder(id: string): Promise<void> {
-    this.folders = this.folders.filter((f) => f.id !== id)
+    const folder = this.folders.find((item) => item.id === id)
+    if (!folder) {
+      return
+    }
+    const nextParentId = folder.parentId
+    this.profiles = this.profiles.map((profile) => (
+      profile.parentId === id ? { ...profile, parentId: nextParentId } : profile
+    ))
+    this.folders = this.folders
+      .filter((item) => item.id !== id)
+      .map((item) => (
+        item.parentId === id ? { ...item, parentId: nextParentId } : item
+      ))
   }
 
   async updateOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
@@ -142,9 +158,18 @@ export class MemoryProfileRepository implements ProfileRepository {
   }
 
   async deleteCommandFolder(id: string): Promise<void> {
-    this.commandFolders = this.commandFolders.filter((item) => item.id !== id)
+    const folder = this.commandFolders.find((item) => item.id === id)
+    if (!folder) {
+      return
+    }
+    const nextParentId = folder.parentId
+    this.commandFolders = this.commandFolders
+      .filter((item) => item.id !== id)
+      .map((item) => (
+        item.parentId === id ? { ...item, parentId: nextParentId } : item
+      ))
     this.commandTemplates = this.commandTemplates.map((item) => (
-      item.parentId === id ? { ...item, parentId: undefined } : item
+      item.parentId === id ? { ...item, parentId: nextParentId } : item
     ))
   }
 
@@ -186,6 +211,14 @@ export class MemoryProfileRepository implements ProfileRepository {
       command.parentId = newParentId
       command.order = newOrder
     }
+  }
+}
+
+function preserveProfileMetadata(profile: ConnectionProfile, previous: ConnectionProfile): ConnectionProfile {
+  return {
+    ...profile,
+    parentId: previous.parentId,
+    order: previous.order
   }
 }
 

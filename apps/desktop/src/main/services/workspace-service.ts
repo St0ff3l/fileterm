@@ -5,6 +5,9 @@ import type { WebContents } from 'electron'
 import {
   type CommandExecutionOptions,
   type CommandTemplateInput,
+  type CommandFolder,
+  type ConnectionFolder,
+  type ConnectionLibrarySnapshot,
   type ConnectionProfile,
   type CommandExecutionResult,
   type CreateProfileInput,
@@ -71,6 +74,13 @@ export class WorkspaceService {
     }
   }
 
+  async getConnectionLibrary(): Promise<ConnectionLibrarySnapshot> {
+    return {
+      profiles: await this.profileRepository.list(),
+      folders: await this.profileRepository.listFolders()
+    }
+  }
+
   bindWorkspaceSender(sender: WebContents) {
     for (const tab of this.tabs.list()) {
       this.sessionRuntime.setSender(tab.id, sender)
@@ -98,7 +108,7 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
-  async updateFolder(folderId: string, updates: any): Promise<WorkspaceSnapshot> {
+  async updateFolder(folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot> {
     await this.profileRepository.updateFolder?.(folderId, updates)
     return this.getSnapshot()
   }
@@ -118,7 +128,7 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
-  async updateCommandFolder(folderId: string, updates: any): Promise<WorkspaceSnapshot> {
+  async updateCommandFolder(folderId: string, updates: Partial<CommandFolder>): Promise<WorkspaceSnapshot> {
     await this.profileRepository.updateCommandFolder?.(folderId, updates)
     return this.getSnapshot()
   }
@@ -721,7 +731,7 @@ export class WorkspaceService {
     }
 
     const { directories, files } = await this.collectLocalUploadEntries(localPath)
-    const remoteRoot = path.posix.join(remoteDirectory, path.basename(localPath))
+    const remoteRoot = path.posix.join(remoteDirectory, targetName ?? path.basename(localPath))
     const totalBytes = Math.max(files.reduce((sum, file) => sum + Math.max(file.size, 1), 0), 1)
     onProgress({ percent: 1, transferredBytes: 0, totalBytes })
     this.ensureTransferActive(transferState)

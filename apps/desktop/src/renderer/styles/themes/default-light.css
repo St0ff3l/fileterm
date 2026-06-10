@@ -96,6 +96,20 @@
   background: var(--bg-hover);
 }
 
+:root[data-theme='default-light'] .window-tools {
+  color: var(--text-muted);
+}
+
+:root[data-theme='default-light'] .window-tools button {
+  background: transparent;
+  color: inherit;
+}
+
+:root[data-theme='default-light'] .window-tools button:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
 :root[data-theme='default-light'] .window-control-buttons .window-close-button:hover {
   background: #c42b1c;
   color: #ffffff;
@@ -160,9 +174,36 @@
 
 :root[data-theme='default-light'] .context-menu {
   background: rgba(255, 255, 255, 0.96);
-  border-color: var(--border-light);
+  border: 1px solid var(--border-light);
   color: var(--text-main);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+
+:root[data-theme='default-light'] .context-menu button {
+  background: transparent;
+  color: inherit;
+}
+
+:root[data-theme='default-light'] .context-menu.tools-menu {
+  background: var(--bg-card);
+  border-color: rgba(15, 23, 42, 0.14);
+  box-shadow: none;
+  color: var(--text-main);
+}
+
+:root[data-theme='default-light'] .context-menu.tools-menu button:hover:not(:disabled) {
+  background: var(--selection-bg);
+  color: var(--text-main);
+}
+
+:root[data-theme='default-light'] .context-menu.tools-menu button:disabled {
+  background: transparent;
+  color: rgba(102, 113, 127, 0.5);
+  opacity: 1;
+}
+
+:root[data-theme='default-light'] .context-menu.tools-menu .context-menu-separator {
+  background: var(--border-light);
 }
 
 :root[data-theme='default-light'] .modal-backdrop {

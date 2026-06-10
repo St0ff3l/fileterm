@@ -15,5 +15,6 @@
 
 - `../integration-inventory.md`：记录当前已接入第三方项目、采用理由、实现位置和维护边界。
 - `.github/workflows/ci.yml`：常规分支 / PR 检查，当前覆盖安装依赖、TypeScript 检查与构建。
+- `git-branch-release-convention.md`：记录 `main / release/* / feat|feature|fix / hotfix/*` 的分支职责、合并流转和 tag 约定。
 - `terminal-layout-notes.md`：记录 xterm 终端留白、挂载容器与 fit 尺寸之间的排查和修复方法。
 - `release-beta-mac.md`：记录 `v0.1.0-beta.1` 的 mac-only unsigned release 约定与发布流程。

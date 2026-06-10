@@ -156,7 +156,7 @@ export function TabBar({
             type="button"
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              setToolsMenu({ x: rect.right - 180, y: rect.bottom + 6 })
+              setToolsMenu({ x: rect.right, y: rect.bottom + 8 })
             }}
           >
             <AppIcon name="menu" />
@@ -164,6 +164,7 @@ export function TabBar({
         </div>
         {toolsMenu ? (
           <ContextMenu
+            align="end"
             className="tools-menu"
             items={[
               { label: `${t.theme}: ${t.defaultDark}`, disabled: theme === 'default-dark', action: () => onSetTheme('default-dark') },
@@ -179,6 +180,7 @@ export function TabBar({
             ]}
             onClose={() => setToolsMenu(null)}
             position={toolsMenu}
+            viewportMargin={12}
           />
         ) : null}
       </div>

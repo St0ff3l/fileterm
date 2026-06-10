@@ -16,6 +16,6 @@
     "release:win": "npm run release:win -w @termdock/desktop"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.12.0"
   }
 }
