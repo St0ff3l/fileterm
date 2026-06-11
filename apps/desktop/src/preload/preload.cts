@@ -14,6 +14,7 @@ import type {
   LocalFileItem,
   PermissionChangeOptions,
   RemoteFileAccessOptions,
+  SessionMetricsUpdate,
   SshInteractionRequest,
   SshInteractionResponse,
   TransferTargetOptions,
@@ -178,6 +179,11 @@ const api: TermdockDesktopApi = {
     const wrapped = (_event: unknown, snapshot: WorkspaceSnapshot) => listener(snapshot)
     ipcRenderer.on('workspace:snapshot', wrapped)
     return () => ipcRenderer.off('workspace:snapshot', wrapped)
+  },
+  onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) => {
+    const wrapped = (_event: unknown, payload: SessionMetricsUpdate) => listener(payload)
+    ipcRenderer.on('workspace:sessionMetrics', wrapped)
+    return () => ipcRenderer.off('workspace:sessionMetrics', wrapped)
   },
   onSshInteraction: (listener: (request: SshInteractionRequest) => void) => {
     const wrapped = (_event: unknown, request: SshInteractionRequest) => listener(request)
