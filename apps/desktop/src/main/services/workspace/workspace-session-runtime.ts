@@ -4,6 +4,8 @@ import type {
   ConnectionProfile,
   RemoteFileAccessOptions,
   SessionSnapshot,
+  SystemMetrics,
+  SessionMetricsUpdate,
   SshInteractionDraft,
   SshInteractionRequest,
   SshInteractionResponse,
@@ -23,7 +25,7 @@ export class WorkspaceSessionRuntime {
   private readonly metricsRefreshInFlight = new Set<string>()
   private readonly tabSenders = new Map<string, WebContents>()
   private readonly invalidSenders = new WeakSet<WebContents>()
-  private readonly senderDestroyListeners = new WeakSet<WebContents>()
+  private readonly senderLifecycleListeners = new WeakSet<WebContents>()
   private readonly pendingSshInteractions = new Map<string, {
     tabId: string
     resolve(response: SshInteractionResponse): void
@@ -55,12 +57,7 @@ export class WorkspaceSessionRuntime {
   setSender(tabId: string, sender: WebContents) {
     this.invalidSenders.delete(sender)
     this.tabSenders.set(tabId, sender)
-    if (!this.senderDestroyListeners.has(sender)) {
-      this.senderDestroyListeners.add(sender)
-      sender.once('destroyed', () => {
-        this.handleSenderDestroyed(sender)
-      })
-    }
+    this.attachSenderLifecycleListeners(sender)
 
     const controller = this.liveControllers.get(tabId)
     const session = this.sessions.get(tabId)
@@ -238,7 +235,7 @@ export class WorkspaceSessionRuntime {
             hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
             remoteFiles: files
           })
-          await this.emitSnapshotForTab(tabId)
+          this.emitMetricsForTab(tabId)
         }
       } catch (error) {
         if (controller.type === 'ssh' && controller.getFileAccessMode() === 'root' && shouldFallbackRootFileAccess(error)) {
@@ -462,7 +459,11 @@ export class WorkspaceSessionRuntime {
 
     if (changed) {
       this.sessions.set(tabId, nextSnapshot)
-      await this.emitSnapshotForTab(tabId)
+      if (nextSnapshot.remoteFiles !== current.remoteFiles) {
+        await this.emitSnapshotForTab(tabId)
+        return
+      }
+      this.emitMetricsForTab(tabId)
     }
   }
 
@@ -526,7 +527,7 @@ export class WorkspaceSessionRuntime {
         return
       }
 
-      await this.emitSnapshot(sender)
+      this.emitMetrics(sender, tabId, this.sessions.get(tabId)?.systemMetrics)
     } finally {
       this.metricsRefreshInFlight.delete(tabId)
     }
@@ -540,6 +541,27 @@ export class WorkspaceSessionRuntime {
     }
 
     const didSend = this.trySend(sender, channel, payload)
+    if (!didSend) {
+      this.handleSenderDestroyed(sender)
+    }
+  }
+
+  private emitMetricsForTab(tabId: string) {
+    const sender = this.tabSenders.get(tabId)
+    if (!sender || !this.canSendToSender(sender)) {
+      this.handleSenderDestroyed(sender)
+      return
+    }
+
+    this.emitMetrics(sender, tabId, this.sessions.get(tabId)?.systemMetrics)
+  }
+
+  private emitMetrics(sender: WebContents, tabId: string, systemMetrics: SystemMetrics | undefined) {
+    const payload: SessionMetricsUpdate = {
+      tabId,
+      systemMetrics
+    }
+    const didSend = this.trySend(sender, 'workspace:sessionMetrics', payload)
     if (!didSend) {
       this.handleSenderDestroyed(sender)
     }
@@ -559,11 +581,39 @@ export class WorkspaceSessionRuntime {
       if (!frame) {
         return false
       }
+      if (typeof frame.isDestroyed === 'function' && frame.isDestroyed()) {
+        return false
+      }
+      if ('detached' in frame && frame.detached) {
+        return false
+      }
     } catch {
       return false
     }
 
     return true
+  }
+
+  private attachSenderLifecycleListeners(sender: WebContents) {
+    if (this.senderLifecycleListeners.has(sender)) {
+      return
+    }
+
+    this.senderLifecycleListeners.add(sender)
+
+    sender.once('destroyed', () => {
+      this.handleSenderDestroyed(sender)
+    })
+
+    sender.on('render-process-gone', () => {
+      this.handleSenderDestroyed(sender)
+    })
+
+    sender.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) {
+        this.handleSenderDestroyed(sender)
+      }
+    })
   }
 
   private trySend(sender: WebContents, channel: string, payload: unknown) {

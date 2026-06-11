@@ -265,6 +265,11 @@ export interface WorkspaceSnapshot {
   sessions: Record<string, SessionSnapshot>
 }
 
+export interface SessionMetricsUpdate {
+  tabId: string
+  systemMetrics?: SystemMetrics
+}
+
 export interface ConnectionLibrarySnapshot {
   profiles: ConnectionProfile[]
   folders: ConnectionFolder[]
@@ -454,6 +459,7 @@ export interface TermdockDesktopApi {
   onTerminalData(listener: (payload: TerminalDataPayload) => void): () => void
   onTerminalState(listener: (payload: TerminalStatePayload) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
+  onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void

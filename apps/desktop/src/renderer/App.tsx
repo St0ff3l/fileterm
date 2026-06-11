@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import type {
   CommandExecutionOptions,
   CommandTemplateInput,
@@ -9,6 +9,7 @@ import type {
   LocalFileItem,
   PermissionChangeOptions,
   RemoteFileItem,
+  SessionMetricsUpdate,
   SshCredentialsPromptRequest,
   SshHostVerificationRequest,
   SshInteractionRequest,
@@ -262,6 +263,30 @@ function readStoredMainTabUiState(enabled: boolean): StoredMainTabUiState | null
   }
 }
 
+function createInitialMainTabUiState(enabled: boolean, stored: StoredMainTabUiState | null): StoredMainTabUiState {
+  if (!enabled) {
+    return {
+      localTabs: [],
+      activeLocalTabId: null,
+      nextHomeTabNumber: 1,
+      tabOrder: [],
+      isSystemSidebarCollapsed: false
+    }
+  }
+
+  if (stored) {
+    return stored
+  }
+
+  return {
+    localTabs: [{ id: 'home-1', kind: 'home', title: t.untitledTab }],
+    activeLocalTabId: 'home-1',
+    nextHomeTabNumber: 2,
+    tabOrder: ['home:home-1'],
+    isSystemSidebarCollapsed: false
+  }
+}
+
 function collectConnectionGroups(
   folderNames: string[],
   profileGroups: string[],
@@ -392,10 +417,11 @@ export function App() {
     storedMainTabUiStateRef.current = readStoredMainTabUiState(isMainWorkspaceWindow)
   }
   const storedMainTabUiState = storedMainTabUiStateRef.current
-  const [localTabs, setLocalTabs] = useState<LocalTab[]>(() => storedMainTabUiState?.localTabs ?? [])
-  const [activeLocalTabId, setActiveLocalTabId] = useState<string | null>(() => storedMainTabUiState?.activeLocalTabId ?? null)
-  const [nextHomeTabNumber, setNextHomeTabNumber] = useState(() => storedMainTabUiState?.nextHomeTabNumber ?? 1)
-  const [tabOrder, setTabOrder] = useState<string[]>(() => storedMainTabUiState?.tabOrder ?? [])
+  const initialMainTabUiState = createInitialMainTabUiState(isMainWorkspaceWindow, storedMainTabUiState)
+  const [localTabs, setLocalTabs] = useState<LocalTab[]>(() => initialMainTabUiState.localTabs)
+  const [activeLocalTabId, setActiveLocalTabId] = useState<string | null>(() => initialMainTabUiState.activeLocalTabId)
+  const [nextHomeTabNumber, setNextHomeTabNumber] = useState(() => initialMainTabUiState.nextHomeTabNumber)
+  const [tabOrder, setTabOrder] = useState<string[]>(() => initialMainTabUiState.tabOrder)
   const [draggingTabKey, setDraggingTabKey] = useState<string | null>(null)
   const [tabContextMenu, setTabContextMenu] = useState<{
     x: number
@@ -403,7 +429,7 @@ export function App() {
     target: TabContextTarget
   } | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(214)
-  const [isSystemSidebarCollapsed, setIsSystemSidebarCollapsed] = useState(() => storedMainTabUiState?.isSystemSidebarCollapsed === true)
+  const [isSystemSidebarCollapsed, setIsSystemSidebarCollapsed] = useState(() => initialMainTabUiState.isSystemSidebarCollapsed)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [fileEditor, setFileEditor] = useState<FileContentSnapshot | null>(
     isFileEditorWindow && fileEditorWindowSource && fileEditorWindowPath && fileEditorWindowName
@@ -633,6 +659,9 @@ export function App() {
     const offSnapshot = desktopApi.onWorkspaceSnapshot((snapshot) => {
       applySnapshot(snapshot)
     })
+    const offSessionMetrics = desktopApi.onSessionMetrics((payload) => {
+      applySessionMetrics(payload)
+    })
 
     if (!isConnectionManagerWindow && !isConnectionFormWindow && !isCommandManagerWindow && !isCommandFormWindow && !isFileEditorWindow) {
       desktopApi
@@ -646,6 +675,7 @@ export function App() {
 
     return () => {
       offSnapshot()
+      offSessionMetrics()
     }
   }, [desktopApi, isCommandFormWindow, isCommandManagerWindow, isConnectionFormWindow, isConnectionManagerWindow, isFileEditorWindow])
 
@@ -934,6 +964,32 @@ export function App() {
     setWorkspace(snapshot)
     setClosingSessionTabIds((prev) => prev.filter((tabId) => snapshot.tabs.some((tab) => tab.id === tabId)))
     setFormError(null)
+  }
+
+  const applySessionMetrics = ({ tabId, systemMetrics }: SessionMetricsUpdate) => {
+    startTransition(() => {
+      setWorkspace((current) => {
+        const currentSession = current.sessions[tabId]
+        if (!currentSession) {
+          return current
+        }
+
+        if (currentSession.systemMetrics === systemMetrics) {
+          return current
+        }
+
+        return {
+          ...current,
+          sessions: {
+            ...current.sessions,
+            [tabId]: {
+              ...currentSession,
+              systemMetrics
+            }
+          }
+        }
+      })
+    })
   }
 
   const updateForm = (
