@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetrics } from '@termdock/core'
-import { copyText } from '../../app/app-utils'
+import { copyText, hasSelectedText } from '../../app/app-utils'
 import { t } from '../../i18n'
 
 function parseMemory(memStr: string): number {
@@ -133,7 +133,7 @@ function AddressLine({ label, value }: { label: string; value: string }) {
         className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''}`}
         title={canCopy ? (copied ? '已复制' : `${t.copy}: ${value}`) : value}
         onClick={() => {
-          if (canCopy) {
+          if (canCopy && !hasSelectedText()) {
             copyText(value)
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)

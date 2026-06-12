@@ -272,6 +272,13 @@
   white-space: nowrap;
 }
 
+.pane-path-bar strong,
+.pane-path-bar span,
+.file-current-path {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .pane-title span {
   max-width: 64%;
   overflow: hidden;

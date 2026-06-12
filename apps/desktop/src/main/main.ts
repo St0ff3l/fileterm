@@ -293,6 +293,12 @@ function installApplicationMenu() {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
         {
           label: `Quit ${app.name}`,
           accelerator: 'CmdOrCtrl+Q',
@@ -300,6 +306,20 @@ function installApplicationMenu() {
             requestQuitConfirmation()
           }
         }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' }
       ]
     },
     {
