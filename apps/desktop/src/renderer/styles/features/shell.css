@@ -590,6 +590,18 @@
   align-items: center;
 }
 
+.address-row span,
+.address-row strong,
+.metric-line span,
+.metric-line strong,
+.meter-header span,
+.metric-chip-summary,
+.disk-head span,
+.disk-row span {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .fs-main {
   grid-column: 2;
   grid-row: 2;

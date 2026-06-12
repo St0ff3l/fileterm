@@ -30,6 +30,15 @@ export function copyText(value: string) {
   document.body.removeChild(textarea)
 }
 
+export function hasSelectedText() {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) {
+    return false
+  }
+
+  return selection.toString().trim().length > 0
+}
+
 export function runningTransfers(transfers: TransferTask[]) {
   return transfers.filter(isActiveTransfer).length
 }

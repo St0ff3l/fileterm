@@ -10,6 +10,7 @@ import type {
 } from '@termdock/core'
 import {
   copyText,
+  hasSelectedText,
   localFileDragType,
   mergeUnique,
   nextSelection,
@@ -454,6 +455,10 @@ export function FileManager({
 
     const target = event.target
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)) {
+      return
+    }
+
+    if (hasSelectedText()) {
       return
     }
 
