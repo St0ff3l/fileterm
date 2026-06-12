@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent } from 'react'
 import type {
   CommandExecutionOptions,
   CommandTemplateInput,
@@ -493,7 +493,7 @@ export function App() {
   const pendingHomeReplacementKeyRef = useRef<string | null>(null)
   const hasSanitizedStoredPlaceholderRef = useRef(false)
   const desktopApi = window.termdock
-  const isWindowsDesktop = desktopApi?.platform === 'win32'
+  const isWindowsDesktop = false
 
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow) {
@@ -619,22 +619,6 @@ export function App() {
       return
     }
 
-    if (isConnectionManagerWindow) {
-      desktopApi
-        .getConnectionLibrary()
-        .then((snapshot) => {
-          setWorkspace((current) => ({
-            ...current,
-            profiles: snapshot.profiles,
-            folders: snapshot.folders
-          }))
-          setHasLoadedInitialSnapshot(true)
-        })
-        .catch((err: Error) => reportError(setError, '获取连接列表', err))
-        .finally(() => setHasLoadedInitialSnapshot(true))
-      return
-    }
-
     desktopApi
       .getSnapshot()
       .then((snapshot) => {
@@ -649,7 +633,7 @@ export function App() {
       })
       .catch((err: Error) => reportError(setError, '获取工作区快照', err))
       .finally(() => setHasLoadedInitialSnapshot(true))
-  }, [desktopApi, isConnectionManagerWindow, isFileEditorWindow])
+  }, [desktopApi, isFileEditorWindow])
 
   useEffect(() => {
     if (!desktopApi) {
@@ -2400,7 +2384,8 @@ export function App() {
 
   if (isConnectionManagerWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={t.connectionManager}>
+      <>
+        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={t.connectionManager} />
         <ConnectionManagerModal
           profiles={workspace.profiles}
           folders={workspace.folders || []}
@@ -2449,13 +2434,14 @@ export function App() {
             }}
           />
         ) : null}
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
   if (isCommandManagerWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={t.commandManager}>
+      <>
+        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={t.commandManager} />
         <CommandManagerModal
           commandFolders={workspace.commandFolders || []}
           commandTemplates={workspace.commandTemplates || []}
@@ -2483,7 +2469,7 @@ export function App() {
             void deleteCommandTemplate(commandId)
           }}
         />
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
@@ -2493,7 +2479,8 @@ export function App() {
       : null
 
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate}>
+      <>
+        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate} />
         <CommandEditorModal
           folders={workspace.commandFolders || []}
           initialValue={editingCommand
@@ -2509,13 +2496,14 @@ export function App() {
             void saveCommandTemplate(editingCommand?.id ?? null, input)
           }}
         />
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
   if (isConnectionFormWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection}>
+      <>
+        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection} />
         <ConnectionModal
           errorMessage={formError}
           groupOptions={connectionGroupOptions}
@@ -2535,13 +2523,14 @@ export function App() {
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
   if (isFileEditorWindow && fileEditor) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditor.name}>
+      <>
+        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={fileEditor.name} />
         <FileEditorModal
           errorMessage={fileEditorError}
           file={fileEditor}
@@ -2554,13 +2543,14 @@ export function App() {
           standalone
           themeMode={themeMode}
         />
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
   if (isFileEditorWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle}>
+      <>
+        <StandaloneWindowTitlebar isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle} />
         <div className="standalone-shell file-editor-window">
           <div className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}>
             <div className="modal-header">
@@ -2572,14 +2562,14 @@ export function App() {
             {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : <div className="file-editor-path">{t.updating}</div>}
           </div>
         </div>
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
   return (
     <>
       <div
-        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''} ${activeLocalTab?.kind === 'home' ? 'is-home-active' : ''}`}
+        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''}`}
         style={{
           '--sidebar-width': `${resolvedSidebarWidth}px`,
           '--brand-width': `${brandWidth}px`
@@ -2598,54 +2588,52 @@ export function App() {
             </div>
           </div>
         ) : null}
-        {activeLocalTab?.kind !== 'home' && (
-          <TabBar
-            activeHomeTabId={activeLocalTabId}
-            activeSessionTabId={visibleActiveSessionTabId}
-            locale={locale}
-            onAddHomeTab={handleAddHomeTab}
-            onActivateHome={handleActivateHome}
-            onActivateSession={(tabId) => {
-              void handleActivateTab(tabId)
-            }}
-            onCloseHomeTab={handleCloseHomeTab}
-            onCloseSessionTab={(event, tabId) => {
-              void handleCloseTab(event, tabId)
-            }}
-            onDragEnd={() => setDraggingTabKey(null)}
-            onDragEnter={(targetKey) => {
-              setTabOrder((prev) => reorderTabKeys(prev, draggingTabKey, targetKey))
-            }}
-            onDragStart={setDraggingTabKey}
-            onOpenCommandManager={openCommandManager}
-            onOpenConnectionManager={() => {
-              if (desktopApi) {
-                void desktopApi.openConnectionManagerWindow()
-                return
-              }
-              setShowConnectionManager(true)
-            }}
-            onOpenLogsDirectory={() => {
-              if (!desktopApi) {
-                setError(t.desktopOnlyOpenLogs)
-                return
-              }
-              void desktopApi.openLogsDirectory().catch((err) => {
-                reportError(setError, t.openLogsDirectory, err)
-              })
-            }}
-            onOpenTabContext={(event, target) => {
-              setTabContextMenu({ x: event.clientX, y: event.clientY, target })
-            }}
-            onSetLocale={(nextLocale) => {
-              setLocale(nextLocale)
-              setLocaleState(nextLocale)
-            }}
-            onSetTheme={setThemeMode}
-            orderedTabs={orderedTabs}
-            theme={themeMode}
-          />
-        )}
+        <TabBar
+          activeHomeTabId={activeLocalTabId}
+          activeSessionTabId={visibleActiveSessionTabId}
+          locale={locale}
+          onAddHomeTab={handleAddHomeTab}
+          onActivateHome={handleActivateHome}
+          onActivateSession={(tabId) => {
+            void handleActivateTab(tabId)
+          }}
+          onCloseHomeTab={handleCloseHomeTab}
+          onCloseSessionTab={(event, tabId) => {
+            void handleCloseTab(event, tabId)
+          }}
+          onDragEnd={() => setDraggingTabKey(null)}
+          onDragEnter={(targetKey) => {
+            setTabOrder((prev) => reorderTabKeys(prev, draggingTabKey, targetKey))
+          }}
+          onDragStart={setDraggingTabKey}
+          onOpenCommandManager={openCommandManager}
+          onOpenConnectionManager={() => {
+            if (desktopApi) {
+              void desktopApi.openConnectionManagerWindow()
+              return
+            }
+            setShowConnectionManager(true)
+          }}
+          onOpenLogsDirectory={() => {
+            if (!desktopApi) {
+              setError(t.desktopOnlyOpenLogs)
+              return
+            }
+            void desktopApi.openLogsDirectory().catch((err) => {
+              reportError(setError, t.openLogsDirectory, err)
+            })
+          }}
+          onOpenTabContext={(event, target) => {
+            setTabContextMenu({ x: event.clientX, y: event.clientY, target })
+          }}
+          onSetLocale={(nextLocale) => {
+            setLocale(nextLocale)
+            setLocaleState(nextLocale)
+          }}
+          onSetTheme={setThemeMode}
+          orderedTabs={orderedTabs}
+          theme={themeMode}
+        />
 
         {showSidebar ? (
           <aside className={`fs-sidebar ${isSystemSidebarCollapsed ? 'is-collapsed' : ''}`} style={{ position: 'relative' }}>
@@ -2740,15 +2728,13 @@ export function App() {
           </div>
         </main>
 
-        {activeLocalTab?.kind !== 'home' ? (
-          <TransferBar
-            activeCount={activeTransferCount}
-            fullWidth={!showSidebar}
-            isPending={isBusy}
-            onOpen={() => setShowTransfers((prev) => !prev)}
-            transfers={workspace.transfers}
-          />
-        ) : null}
+        <TransferBar
+          activeCount={activeTransferCount}
+          fullWidth={!showSidebar}
+          isPending={isBusy}
+          onOpen={() => setShowTransfers((prev) => !prev)}
+          transfers={workspace.transfers}
+        />
 
         {showTransfers ? (
             <TransferPopover
@@ -3065,26 +3051,6 @@ export function App() {
         </div>
       ) : null}
     </>
-  )
-}
-
-function StandaloneWindowFrame({
-  children,
-  isWindows,
-  showPlatformTitlebar = true,
-  title
-}: {
-  children: ReactNode
-  isWindows: boolean
-  showPlatformTitlebar?: boolean
-  title: string
-}) {
-  const shouldShowPlatformTitlebar = isWindows && showPlatformTitlebar
-  return (
-    <div className={`standalone-window-frame ${shouldShowPlatformTitlebar ? 'has-standalone-titlebar' : ''}`}>
-      <StandaloneWindowTitlebar isWindows={shouldShowPlatformTitlebar} title={title} />
-      {children}
-    </div>
   )
 }
 

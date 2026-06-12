@@ -577,8 +577,7 @@ function openConnectionManagerWindow(parent: BrowserWindow) {
     width: DEFAULT_WINDOW_BOUNDS.connectionManager.width,
     height: DEFAULT_WINDOW_BOUNDS.connectionManager.height,
     minWidth: DEFAULT_WINDOW_BOUNDS.connectionManager.minWidth,
-    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight,
-    frame: false
+    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight
   })
 
   connectionManagerWindow = win

@@ -697,7 +697,7 @@
 
 .titlebar-tabarea {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 52px;
+  grid-template-columns: 48px minmax(0, 1fr) 44px;
 }
 
 .tabbar-folder-button,
@@ -796,10 +796,8 @@
 .window-tools {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 8px;
-  min-width: 0;
-  padding: 0 10px 0 4px;
   font-size: 18px;
 }
 
