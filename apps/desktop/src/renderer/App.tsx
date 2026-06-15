@@ -911,6 +911,7 @@ export function App() {
   const activeProfile = activeTab
     ? workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null
     : null
+  const isActiveRemoteSessionConnected = Boolean(activeTab && activeSession?.connected)
   const activeTransferCount = workspace.transfers.filter(isActiveTransfer).length
   const showSidebar = activeTab !== null && activeSession !== null && activeLocalTab?.kind !== 'home'
   const resolvedSidebarWidth = showSidebar ? (isSystemSidebarCollapsed ? 44 : sidebarWidth) : 0
@@ -923,12 +924,17 @@ export function App() {
 
   const formatAppError = (scope: string, err: unknown, details?: ErrorDetails) => {
     const message = normalizeErrorMessage(err)
+    const likelyDisconnectedSession = /会话已断开|session disconnected|session not found|remote connection closed|connection closed/i.test(message)
     const likelyConcurrentRequestIssue = /another one is still running|forgot to use 'await'|client is closed because user launched a task/i.test(message)
     const likelyPathIssue = /can't cd to|__NOT_DIR__|no such file|not a directory|permission denied|\b550\b/i.test(message)
     const metadata = details?.item
       ? ` (${t.permission}: ${details.item.permission || '-'}, ${t.ownerGroup}: ${details.item.ownerGroup || '-'})`
       : ''
     const pathText = details?.targetPath ? ` ${details.targetPath}` : ''
+
+    if (likelyDisconnectedSession) {
+      return t.remoteSessionDisconnectedAction
+    }
 
     if (locale === 'zhCN') {
       if (details?.targetPath && likelyConcurrentRequestIssue) {
@@ -953,6 +959,18 @@ export function App() {
   const reportError = (setter: (message: string) => void, scope: string, err: unknown, details?: ErrorDetails) => {
     console.error(`[TermDock] ${scope}`, err)
     setter(formatAppError(scope, err, details))
+  }
+
+  const reportRemoteSessionDisconnected = (setter: (message: string) => void = setError) => {
+    setter(t.remoteSessionDisconnectedAction)
+  }
+
+  const ensureActiveRemoteSessionConnected = (setter: (message: string) => void = setError) => {
+    if (!isActiveRemoteSessionConnected) {
+      reportRemoteSessionDisconnected(setter)
+      return false
+    }
+    return true
   }
 
   const shouldPromptForRootAccess = (err: unknown) => {
@@ -1702,6 +1720,10 @@ export function App() {
       return
     }
 
+    if (!ensureActiveRemoteSessionConnected()) {
+      return
+    }
+
     try {
       setIsBusy(true)
       await uploadLocalPaths(localPaths)
@@ -1748,6 +1770,10 @@ export function App() {
   const openRemoteDirectory = async (tabId: string, targetPath: string, item?: RemoteFileItem) => {
     if (!desktopApi) {
       return
+    }
+
+    if (!workspace.sessions[tabId]?.connected) {
+      throw new Error(t.remoteSessionDisconnectedAction)
     }
 
     try {
@@ -1824,6 +1850,9 @@ export function App() {
     }
 
     if (activeTab && activeSession) {
+      if (!activeSession.connected) {
+        throw new Error(t.remoteSessionDisconnectedAction)
+      }
       await openRemoteDirectory(activeTab.id, activeSession.remotePath)
     }
   }
@@ -1864,11 +1893,18 @@ export function App() {
     })
   }
 
-  const canPasteIntoLocal = Boolean(fileClipboard)
+  const canPasteIntoLocal = Boolean(
+    fileClipboard
+    && (
+      fileClipboard.pane !== 'remote'
+      || workspace.sessions[fileClipboard.tabId ?? '']?.connected
+    )
+  )
 
   const canPasteIntoRemote = Boolean(
     fileClipboard
     && activeTab
+    && activeSession?.connected
     && (
       fileClipboard.pane !== 'remote'
       || fileClipboard.tabId === activeTab.id
@@ -1911,6 +1947,14 @@ export function App() {
 
         if (pane === 'remote' && !activeTab) {
           return
+        }
+
+        if (pane === 'remote' && !ensureActiveRemoteSessionConnected()) {
+          return
+        }
+
+        if (fileClipboard.pane === 'remote' && !workspace.sessions[fileClipboard.tabId ?? '']?.connected) {
+          throw new Error(t.remoteSessionDisconnectedAction)
         }
 
         if (fileClipboard.pane === 'remote' && pane === 'remote' && fileClipboard.tabId !== activeTab?.id) {
@@ -1998,6 +2042,18 @@ export function App() {
 
   const handleSubmitFileAction = async (rawValue: string) => {
     if (!desktopApi || !fileActionDialog) {
+      return
+    }
+
+    let requiresRemoteSession = false
+    if (fileActionDialog.kind === 'rename') {
+      requiresRemoteSession = fileActionDialog.target.pane === 'remote'
+    } else if (fileActionDialog.kind === 'delete') {
+      requiresRemoteSession = fileActionDialog.targets.some((target) => target.pane === 'remote')
+    } else {
+      requiresRemoteSession = fileActionDialog.pane === 'remote'
+    }
+    if (requiresRemoteSession && !ensureActiveRemoteSessionConnected(setFileActionError)) {
       return
     }
 
@@ -2113,6 +2169,10 @@ export function App() {
       return
     }
 
+    if (permissionDialog.target.pane === 'remote' && !ensureActiveRemoteSessionConnected(setPermissionDialogError)) {
+      return
+    }
+
     try {
       setIsBusy(true)
       const { target } = permissionDialog
@@ -2137,6 +2197,10 @@ export function App() {
       return
     }
 
+    if (!ensureActiveRemoteSessionConnected()) {
+      return
+    }
+
     void (async () => {
       try {
         setIsBusy(true)
@@ -2156,6 +2220,10 @@ export function App() {
 
   const uploadLocalPaths = async (paths: string[]) => {
     if (!desktopApi || !activeTab || !activeSession) {
+      return
+    }
+
+    if (!ensureActiveRemoteSessionConnected()) {
       return
     }
 
@@ -2198,6 +2266,10 @@ export function App() {
       return
     }
 
+    if (!ensureActiveRemoteSessionConnected()) {
+      return
+    }
+
     void (async () => {
       try {
         setIsBusy(true)
@@ -2219,6 +2291,10 @@ export function App() {
       return
     }
 
+    if (!ensureActiveRemoteSessionConnected()) {
+      return
+    }
+
     void (async () => {
       try {
         setIsBusy(true)
@@ -2233,6 +2309,10 @@ export function App() {
 
   const handleRefreshWorkspace = () => {
     if (!activeTab || !activeSession) {
+      return
+    }
+
+    if (!ensureActiveRemoteSessionConnected()) {
       return
     }
 
@@ -2252,6 +2332,10 @@ export function App() {
 
   const handleToggleRemoteFileAccessMode = () => {
     if (!desktopApi || !activeTab || activeTab.sessionType !== 'ssh' || !activeSession) {
+      return
+    }
+
+    if (!ensureActiveRemoteSessionConnected()) {
       return
     }
 
@@ -2306,6 +2390,11 @@ export function App() {
 
   const handleConfirmRootAccess = ({ sudoUser, sudoPassword }: { sudoUser: string; sudoPassword: string }) => {
     if (!desktopApi || !rootAccessDialog) {
+      return
+    }
+
+    if (!workspace.sessions[rootAccessDialog.tabId]?.connected) {
+      reportRemoteSessionDisconnected(setRootAccessDialogError)
       return
     }
 
@@ -2369,6 +2458,10 @@ export function App() {
 
   const handleDownloadFiles = (items: RemoteFileItem[], targetDirectory?: string) => {
     if (!desktopApi || !activeTab) {
+      return
+    }
+
+    if (!ensureActiveRemoteSessionConnected()) {
       return
     }
 

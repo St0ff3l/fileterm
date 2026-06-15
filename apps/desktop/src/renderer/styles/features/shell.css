@@ -821,10 +821,33 @@
 }
 
 .status-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-light);
   font-size: 13px;
   font-weight: 500;
+}
+
+.status-message-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.status-message-close {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  place-items: center;
+  line-height: 1;
 }
 
 .workspace-stage {

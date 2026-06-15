@@ -290,17 +290,29 @@ export function FileManager({
   const singleContextItem = contextMenu?.pane === 'local'
     ? (contextLocalSelection.length === 1 ? contextLocalSelection[0] : contextLocalItem)
     : (contextRemoteSelection.length === 1 ? contextRemoteSelection[0] : contextRemoteItem)
-  const canOpenContextItem = Boolean(singleContextItem)
+  const canOpenContextItem = Boolean(singleContextItem && (contextMenu?.pane !== 'remote' || isRemoteConnected))
   const canCopyContextItems = contextSelectionCount > 0
   const canCopyContextPath = Boolean(singleContextItem && !isMultiContextSelection)
   const canCutContextItems = contextSelectionCount > 0
-  const canDownloadContextItems = contextRemoteSelection.some((item) => item.type === 'file')
-  const canPasteIntoContextPane = contextMenu?.pane === 'local' ? canPasteToLocal : canPasteToRemote
-  const canUploadContextItems = Boolean(!isMultiContextSelection && contextLocalSelection.length)
+  const canDownloadContextItems = isRemoteConnected && contextRemoteSelection.some((item) => item.type === 'file')
+  const canPasteIntoContextPane = contextMenu?.pane === 'local' ? canPasteToLocal : isRemoteConnected && canPasteToRemote
+  const canUploadContextItems = isRemoteConnected && (
+    Boolean(!isMultiContextSelection && contextLocalSelection.length)
     || Boolean(!isMultiContextSelection && contextMenu?.pane === 'remote')
-  const canCreateFromContext = !isMultiContextSelection
-  const canRenameContextItem = Boolean(singleContextItem && !isMultiContextSelection && singleContextItem.name !== '..')
-  const canChangeContextPermissions = Boolean(singleContextItem && !isMultiContextSelection && singleContextItem.name !== '..')
+  )
+  const canCreateFromContext = !isMultiContextSelection && (contextMenu?.pane !== 'remote' || isRemoteConnected)
+  const canRenameContextItem = Boolean(
+    singleContextItem
+    && !isMultiContextSelection
+    && singleContextItem.name !== '..'
+    && (contextMenu?.pane !== 'remote' || isRemoteConnected)
+  )
+  const canChangeContextPermissions = Boolean(
+    singleContextItem
+    && !isMultiContextSelection
+    && singleContextItem.name !== '..'
+    && (contextMenu?.pane !== 'remote' || isRemoteConnected)
+  )
 
   const keyboardSelection = keyboardPane === 'local'
     ? localItems.filter((item) => selectedLocalPaths.includes(item.path) && item.name !== '..')
@@ -347,6 +359,10 @@ export function FileManager({
 
     const draggedRemotePayload = event.dataTransfer.getData(remoteFileDragType)
     if (!draggedRemotePayload) {
+      return
+    }
+
+    if (!isRemoteConnected) {
       return
     }
 
@@ -841,7 +857,7 @@ export function FileManager({
           canDownload={canDownloadContextItems}
           canOpen={canOpenContextItem}
           canPaste={canPasteIntoContextPane}
-          canQuickDelete={contextMenu.pane === 'remote' && activeTab?.sessionType === 'ssh'}
+          canQuickDelete={isRemoteConnected && contextMenu.pane === 'remote' && activeTab?.sessionType === 'ssh'}
           canRename={canRenameContextItem}
           canUpload={canUploadContextItems}
           item={singleContextItem ?? contextLocalItem ?? contextRemoteItem}
