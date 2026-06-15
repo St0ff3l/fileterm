@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { readFile, stat, writeFile } from 'node:fs/promises'
+import { pipeline } from 'node:stream/promises'
 import type { ClientChannel, ConnectConfig, FileEntry, SFTPWrapper } from 'ssh2'
 import { Client } from 'ssh2'
 import type {
@@ -21,6 +22,7 @@ import { BaseFileSessionController } from './base-file-session-controller.js'
 import { buildMetricsCommand, parentRemotePath, parseSystemMetrics, toRemoteFileItem } from './session-file-utils.js'
 import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug-logger.js'
 import { decodeBuffer, encodeText } from '../text-encoding.js'
+import { appLog, appWarn } from '../app-logger.js'
 
 export class LiveSshSessionController extends BaseFileSessionController implements SshSessionController {
   readonly type = 'ssh'
@@ -29,16 +31,19 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private readonly ssh = new Client()
   private readonly execSsh = new Client()
   private readonly sftpSsh = new Client()
+  private readonly transferSsh = new Client()
   private readonly sshDebug = createSshDebugLogger(isSshDebugEnabled(), (message) => {
     this.appendSystemMessage(message)
   })
   private sftp?: SFTPWrapper
+  private transferSftp?: SFTPWrapper
   private sftpUnavailableReason: string | null = null
   private sshConfig?: ConnectConfig
   private execReady = false
   private execConnectPromise?: Promise<Client>
   private hasRegisteredExecLifecycle = false
   private hasRegisteredSftpLifecycle = false
+  private hasRegisteredTransferLifecycle = false
   private shellStream?: {
     write(data: string): void
     setWindow(rows: number, cols: number, height: number, width: number): void
@@ -294,8 +299,10 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.shellStream?.end()
     this.closeExecSession()
     this.closeSftpSession()
+    this.closeTransferSftpSession()
     this.ssh.end()
     this.sftpSsh.end()
+    this.transferSsh.end()
     this.resetPrivilegedFileAccess()
     this.connected = false
   }
@@ -340,6 +347,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     if (this.sftp && mode === 'root') {
       this.closeSftpSession()
     }
+    if (this.transferSftp && mode === 'root') {
+      this.closeTransferSftpSession()
+    }
   }
 
   getSystemMetrics(): SystemMetrics | undefined {
@@ -347,7 +357,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   }
 
   async abortTransfer(): Promise<void> {
-    this.closeSftpSession()
+    this.closeTransferSftpSession()
   }
 
   async write(data: string): Promise<void> {
@@ -560,7 +570,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
   }
 
-  async ensureRemoteDirectory(targetPath: string): Promise<void> {
+  async ensureRemoteDirectory(targetPath: string, sftpOverride?: SFTPWrapper): Promise<void> {
     const normalized = path.posix.normalize(targetPath || '.')
     if (!normalized || normalized === '.' || normalized === '/') {
       return
@@ -572,7 +582,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     try {
-      const sftp = await this.ensureSftp()
+      const sftp = sftpOverride ?? await this.ensureSftp()
       const parts = normalized.split('/').filter(Boolean)
       let currentPath = normalized.startsWith('/') ? '/' : ''
 
@@ -621,28 +631,36 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   }
 
   private async uploadFileAsUser(localPath: string, remotePath: string, onProgress: (progress: TransferProgress) => void): Promise<void> {
+    let transferredBytes = 0
     try {
-      const sftp = await this.ensureSftp()
+      const sftp = await this.ensureTransferSftp()
       const info = await stat(localPath)
       const total = Math.max(info.size, 1)
-      await this.ensureRemoteDirectory(path.posix.dirname(remotePath))
-      await new Promise<void>((resolve, reject) => {
-        sftp.fastPut(localPath, remotePath, {
-          step: (transferred, _chunk, fileSize) => onProgress({
-            percent: Math.min(99, Math.round((transferred / total) * 100)),
-            transferredBytes: transferred,
-            totalBytes: Math.max(fileSize || total, 1)
-          })
-        }, (error) => {
-          if (error) {
-            reject(error)
-            return
-          }
-          onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
-          resolve()
+      appLog(`[TermDock][SFTP] Upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)})`)
+      await this.ensureRemoteDirectory(path.posix.dirname(remotePath), sftp)
+      const localStream = createReadStream(localPath)
+      const remoteStream = sftp.createWriteStream(remotePath, {
+        flags: 'w',
+        mode: 0o644
+      })
+      localStream.on('data', (chunk) => {
+        transferredBytes = Math.min(total, transferredBytes + chunk.length)
+        onProgress({
+          percent: Math.min(99, Math.round((transferredBytes / total) * 100)),
+          transferredBytes,
+          totalBytes: total
         })
       })
+      await pipeline(localStream, remoteStream)
+      await this.verifySftpRemoteUploadSize(sftp, remotePath, total)
+      appLog(`[TermDock][SFTP] Upload verified ${remotePath} (${formatShellBytes(total)})`)
+      onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
     } catch (error) {
+      if (transferredBytes > 0) {
+        appWarn(`[TermDock][SFTP] Upload interrupted after ${formatShellBytes(transferredBytes)}: ${localPath} -> ${remotePath}`, error)
+        throw new Error(`SFTP 上传已中断，已停止以避免提交不完整文件：${errorMessage(error)}`)
+      }
+      appWarn(`[TermDock][SFTP] Upload could not start, falling back to shell stream: ${localPath} -> ${remotePath}`, error)
       await this.uploadFileViaShell(localPath, remotePath, onProgress, error, false)
     }
   }
@@ -653,8 +671,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       return
     }
 
+    let transferredBytes = 0
     try {
-      const sftp = await this.ensureSftp()
+      const sftp = await this.ensureTransferSftp()
       const attrs = await new Promise<{ size?: number }>((resolve, reject) => {
         sftp.stat(remotePath, (error, stats) => {
           if (error || !stats) {
@@ -665,23 +684,35 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         })
       })
       const total = Math.max(attrs.size ?? 1, 1)
+      appLog(`[TermDock][SFTP] Download start ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
       await new Promise<void>((resolve, reject) => {
         sftp.fastGet(remotePath, localPath, {
-          step: (transferred, _chunk, fileSize) => onProgress({
-            percent: Math.min(99, Math.round((transferred / total) * 100)),
-            transferredBytes: transferred,
-            totalBytes: Math.max(fileSize || total, 1)
-          })
+          step: (transferred, _chunk, fileSize) => {
+            transferredBytes = Math.max(transferredBytes, transferred)
+            onProgress({
+              percent: Math.min(99, Math.round((transferred / total) * 100)),
+              transferredBytes: transferred,
+              totalBytes: Math.max(fileSize || total, 1)
+            })
+          }
         }, (error) => {
           if (error) {
             reject(error)
             return
           }
-          onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
           resolve()
         })
       })
+      const localInfo = await stat(localPath)
+      this.assertRemoteUploadSize(localPath, Math.max(localInfo.size, 1), total)
+      appLog(`[TermDock][SFTP] Download verified ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
+      onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
     } catch (error) {
+      if (transferredBytes > 0) {
+        appWarn(`[TermDock][SFTP] Download interrupted after ${formatShellBytes(transferredBytes)}: ${remotePath} -> ${localPath}`, error)
+        throw new Error(`SFTP 下载已中断，已停止以避免提交不完整文件：${errorMessage(error)}`)
+      }
+      appWarn(`[TermDock][SFTP] Download could not start, falling back to shell stream: ${remotePath} -> ${localPath}`, error)
       await this.downloadFileViaShell(remotePath, localPath, onProgress, error)
     }
   }
@@ -765,6 +796,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         .once('close', onClose)
         .connect({
           ...sshConfig,
+          keepaliveInterval: 3000,
+          keepaliveCountMax: 4,
+          readyTimeout: Math.max(sshConfig.readyTimeout ?? 15000, 20000),
           ...(this.sshDebug.enabled
             ? { debug: (message: string) => this.sshDebug.handle('sftp', message) }
             : {})
@@ -779,7 +813,86 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           return
         }
         this.sftpUnavailableReason = null
+        this.attachSftpWrapperLifecycle(sftp, 'sftp')
         this.sftp = sftp
+        resolve(sftp)
+      })
+    })
+  }
+
+  private async ensureTransferSftp(): Promise<SFTPWrapper> {
+    if (this.transferSftp) {
+      return this.transferSftp
+    }
+
+    if (!this.sshConfig) {
+      throw new Error('Transfer SFTP connection not initialized')
+    }
+
+    const sshConfig = this.sshConfig
+    this.registerTransferLifecycle()
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      this.sshDebug.log('transfer-sftp', `准备建立传输 SFTP 连接: ${sshConfig.username}@${sshConfig.host}:${sshConfig.port}`)
+      this.transferSsh.removeAllListeners('keyboard-interactive')
+      this.transferSsh.removeAllListeners('banner')
+      this.transferSsh.on('banner', (message) => {
+        this.sshDebug.log('transfer-sftp', `服务端横幅: ${singleLine(message)}`)
+      })
+      registerKeyboardInteractiveHandler(this.transferSsh, this.profile as SshProfile, (message) => {
+        this.sshDebug.logKeyboardInteractive('transfer-sftp', message)
+      })
+      const onReady = () => {
+        cleanup()
+        settled = true
+        this.sshDebug.log('transfer-sftp', '传输 SFTP 认证完成')
+        resolve()
+      }
+      const onError = (error: Error) => {
+        cleanup()
+        if (!settled) {
+          settled = true
+          this.sshDebug.log('transfer-sftp', `连接错误: ${error.message}`)
+          reject(error)
+        }
+      }
+      const onClose = () => {
+        cleanup()
+        if (!settled) {
+          settled = true
+          this.sshDebug.log('transfer-sftp', '连接在握手阶段被关闭')
+          reject(new Error('Transfer SFTP SSH connection closed'))
+        }
+      }
+      const cleanup = () => {
+        this.transferSsh.off('ready', onReady)
+        this.transferSsh.off('error', onError)
+        this.transferSsh.off('close', onClose)
+      }
+
+      this.transferSsh
+        .once('ready', onReady)
+        .once('error', onError)
+        .once('close', onClose)
+        .connect({
+          ...sshConfig,
+          keepaliveInterval: 3000,
+          keepaliveCountMax: 4,
+          readyTimeout: Math.max(sshConfig.readyTimeout ?? 15000, 20000),
+          ...(this.sshDebug.enabled
+            ? { debug: (message: string) => this.sshDebug.handle('transfer-sftp', message) }
+            : {})
+        })
+    })
+
+    return new Promise<SFTPWrapper>((resolve, reject) => {
+      this.transferSsh.sftp((error, sftp) => {
+        if (error || !sftp) {
+          reject(error ?? new Error('Failed to open transfer SFTP session'))
+          return
+        }
+        this.attachSftpWrapperLifecycle(sftp, 'transfer-sftp')
+        this.transferSftp = sftp
         resolve(sftp)
       })
     })
@@ -790,6 +903,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.connected = false
     this.closeExecSession()
     this.closeSftpSession()
+    this.closeTransferSftpSession()
   }
 
   private registerSftpLifecycle() {
@@ -812,11 +926,53 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.sftpSsh.on('end', markClosed)
   }
 
+  private registerTransferLifecycle() {
+    if (this.hasRegisteredTransferLifecycle) {
+      return
+    }
+
+    this.hasRegisteredTransferLifecycle = true
+    const markClosed = () => {
+      this.transferSftp?.end?.()
+      this.transferSftp = undefined
+    }
+
+    this.transferSsh.on('error', (error) => {
+      this.sshDebug.log('transfer-sftp', `连接异常断开: ${error.message}`)
+      markClosed()
+    })
+    this.transferSsh.on('close', markClosed)
+    this.transferSsh.on('end', markClosed)
+  }
+
   private closeSftpSession() {
     this.sftp?.end?.()
     this.sftp = undefined
     this.sftpUnavailableReason = 'SFTP session closed'
     this.sftpSsh.end()
+  }
+
+  private closeTransferSftpSession() {
+    this.transferSftp?.end?.()
+    this.transferSftp = undefined
+    this.transferSsh.end()
+  }
+
+  private attachSftpWrapperLifecycle(sftp: SFTPWrapper, scope: 'sftp' | 'transfer-sftp') {
+    const emitter = sftp as SFTPWrapper & {
+      on?(event: string, listener: (...args: unknown[]) => void): unknown
+      once?(event: string, listener: (...args: unknown[]) => void): unknown
+    }
+
+    emitter.on?.('error', (error: unknown) => {
+      this.sshDebug.log(scope, `SFTP wrapper error: ${errorMessage(error)}`)
+    })
+    emitter.on?.('end', () => {
+      this.sshDebug.log(scope, 'SFTP wrapper end')
+    })
+    emitter.on?.('close', () => {
+      this.sshDebug.log(scope, 'SFTP wrapper close')
+    })
   }
 
   private async ensureExecConnection(): Promise<Client> {
@@ -1018,11 +1174,13 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.ensureShellFileFallback(cause)
     const fileInfo = await stat(localPath)
     const total = Math.max(fileInfo.size, 1)
+    appLog(`[TermDock][SSH] Shell upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
     onProgress({ percent: 1, transferredBytes: 0, totalBytes: total })
     await this.streamLocalFileToShellCommand(
       localPath,
       `cat > ${shellQuote(remotePath)}`,
       privileged,
+      total,
       (transferredBytes) => {
         onProgress({
           percent: Math.min(99, Math.max(1, Math.round((transferredBytes / total) * 100))),
@@ -1031,6 +1189,8 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         })
       }
     )
+    await this.verifyShellRemoteUploadSize(remotePath, total, privileged)
+    appLog(`[TermDock][SSH] Shell upload verified ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
     onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
   }
 
@@ -1042,6 +1202,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   ): Promise<void> {
     this.ensureShellFileFallback(cause)
     const tempRemotePath = await this.createTemporaryRemoteUploadPath(path.posix.basename(remotePath))
+    appLog(`[TermDock][SFTP] Root upload staging ${localPath} -> ${tempRemotePath} -> ${remotePath}`)
 
     try {
       await this.uploadFileAsUser(localPath, tempRemotePath, (progress) => {
@@ -1064,6 +1225,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         { allowNonZeroWithStdout: true },
         true
       )
+      const fileInfo = await stat(localPath)
+      await this.verifyShellRemoteUploadSize(remotePath, Math.max(fileInfo.size, 1), true)
+      appLog(`[TermDock][SFTP] Root upload verified ${remotePath} (${formatShellBytes(Math.max(fileInfo.size, 1))})`)
       onProgress({
         percent: 100,
         transferredBytes: undefined,
@@ -1080,6 +1244,46 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
   }
 
+  private async verifySftpRemoteUploadSize(sftp: SFTPWrapper, remotePath: string, expectedSize: number): Promise<void> {
+    const attrs = await new Promise<{ size?: number }>((resolve, reject) => {
+      sftp.stat(remotePath, (error, stats) => {
+        if (error || !stats) {
+          reject(error ?? new Error(`Failed to stat remote file: ${remotePath}`))
+          return
+        }
+        resolve(stats)
+      })
+    })
+    this.assertRemoteUploadSize(remotePath, attrs.size, expectedSize)
+  }
+
+  private async verifyShellRemoteUploadSize(remotePath: string, expectedSize: number, privileged: boolean): Promise<void> {
+    const output = await this.execShellFileCommand(`stat -c %s -- ${shellQuote(remotePath)} || wc -c < ${shellQuote(remotePath)}`, undefined, privileged)
+    const remoteSize = parseRemoteByteSize(output)
+    if (remoteSize !== undefined) {
+      this.assertRemoteUploadSize(remotePath, remoteSize, expectedSize)
+      return
+    }
+
+    appWarn(`[TermDock][SSH] Shell upload size check returned no parseable size for ${remotePath}: ${singleLine(output) || '(empty)'}`)
+    try {
+      const sftp = await this.ensureTransferSftp()
+      await this.verifySftpRemoteUploadSize(sftp, remotePath, expectedSize)
+    } catch (error) {
+      appWarn(`[TermDock][SFTP] Fallback upload size check failed for ${remotePath}`, error)
+      this.assertRemoteUploadSize(remotePath, undefined, expectedSize)
+    }
+  }
+
+  private assertRemoteUploadSize(remotePath: string, remoteSize: number | undefined, expectedSize: number): void {
+    if (remoteSize === expectedSize) {
+      return
+    }
+
+    const actual = typeof remoteSize === 'number' ? formatShellBytes(remoteSize) : '未知大小'
+    throw new Error(`传输校验失败：${path.posix.basename(remotePath)} 实际为 ${actual}，期望 ${formatShellBytes(expectedSize)}`)
+  }
+
   private async downloadFileViaShell(
     remotePath: string,
     localPath: string,
@@ -1087,11 +1291,13 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     cause: unknown
   ): Promise<void> {
     this.ensureShellFileFallback(cause)
+    appLog(`[TermDock][SSH] Shell download start ${remotePath} -> ${localPath}`)
     const output = await this.execShellFileCommand(`base64 ${shellQuote(remotePath)}`, undefined, this.fileAccessMode === 'root')
     const payload = Buffer.from(output.replace(/\s+/g, ''), 'base64')
     const total = Math.max(payload.byteLength, 1)
     onProgress({ percent: 80, transferredBytes: Math.round(total * 0.8), totalBytes: total })
     await writeFile(localPath, payload)
+    appLog(`[TermDock][SSH] Shell download verified ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
     onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
   }
 
@@ -1204,6 +1410,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
     localPath: string,
     command: string,
     privileged: boolean,
+    expectedBytes: number,
     onProgress?: (transferredBytes: number) => void
   ): Promise<void> {
     const execClient = await this.ensureExecConnection()
@@ -1212,6 +1419,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
       let transferredBytes = 0
       let stdout = ''
       let stderr = ''
+      let readEnded = false
       let readStream = createReadStream(localPath)
       let channel: ClientChannel | undefined
 
@@ -1280,8 +1488,12 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
         readStream.on('data', (chunk: Buffer) => {
           transferredBytes += chunk.byteLength
           onProgress?.(transferredBytes)
-          if (!stream.write(chunk)) {
-            readStream.pause()
+          try {
+            if (!stream.write(chunk)) {
+              readStream.pause()
+            }
+          } catch (writeError) {
+            safeReject(writeError instanceof Error ? writeError : new Error(String(writeError)))
           }
         })
         stream.on('drain', () => {
@@ -1291,7 +1503,11 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
           safeReject(readError instanceof Error ? readError : new Error(String(readError)))
         })
         readStream.on('end', () => {
+          readEnded = true
           stream.end()
+        })
+        stream.on('error', (streamError: Error) => {
+          safeReject(streamError instanceof Error ? streamError : new Error(String(streamError)))
         })
         stream.on('close', (code?: number) => {
           if (code && code !== 0) {
@@ -1300,6 +1516,10 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
               return
             }
             safeReject(new Error(errMessage || `Command exited with code ${code}`))
+            return
+          }
+          if (!readEnded || transferredBytes < expectedBytes) {
+            safeReject(new Error(`远程写入通道提前关闭，仅发送 ${formatShellBytes(transferredBytes)} / ${formatShellBytes(expectedBytes)}`))
             return
           }
           safeResolve()
@@ -1636,6 +1856,20 @@ async function readDefaultPrivateKey(): Promise<string | undefined> {
 function computeHostFingerprint(key: Buffer | string) {
   const payload = Buffer.isBuffer(key) ? key : Buffer.from(key)
   return `SHA256:${createHash('sha256').update(payload).digest('base64').replace(/=+$/g, '')}`
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function parseRemoteByteSize(output: string): number | undefined {
+  const match = output.match(/\b\d+\b/)
+  if (!match) {
+    return undefined
+  }
+
+  const value = Number.parseInt(match[0], 10)
+  return Number.isFinite(value) ? value : undefined
 }
 
 function shellQuote(value: string) {

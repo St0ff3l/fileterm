@@ -153,42 +153,59 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
   async uploadFile(localPath: string, remotePath: string, onProgress: (progress: TransferProgress) => void): Promise<void> {
     const info = await stat(localPath)
     const total = Math.max(info.size, 1)
-    await this.runWithConnectedClient(async () => {
-      this.ftp.trackProgress((progress) => {
-        onProgress({
-          percent: Math.min(99, Math.round((progress.bytes / total) * 100)),
-          transferredBytes: progress.bytes,
-          totalBytes: total
+    appLog(`[TermDock][FTP] Upload start ${localPath} -> ${remotePath} (${formatTransferBytes(total)})`)
+    try {
+      await this.runWithConnectedClient(async () => {
+        this.ftp.trackProgress((progress) => {
+          onProgress({
+            percent: Math.min(99, Math.round((progress.bytes / total) * 100)),
+            transferredBytes: progress.bytes,
+            totalBytes: total
+          })
         })
+        try {
+          await this.ensureRemoteDirectoryInternal(path.posix.dirname(remotePath))
+          await this.ftp.uploadFrom(localPath, remotePath)
+          await this.verifyRemoteFileSize(remotePath, total)
+          this.resolvedEntryTypes.set(remotePath, 'file')
+          appLog(`[TermDock][FTP] Upload verified ${remotePath} (${formatTransferBytes(total)})`)
+          onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
+        } finally {
+          this.ftp.trackProgress()
+        }
       })
-      try {
-        await this.ensureRemoteDirectoryInternal(path.posix.dirname(remotePath))
-        await this.ftp.uploadFrom(localPath, remotePath)
-        this.resolvedEntryTypes.set(remotePath, 'file')
-        onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
-      } finally {
-        this.ftp.trackProgress()
-      }
-    })
+    } catch (error) {
+      appWarn(`[TermDock][FTP] Upload failed ${localPath} -> ${remotePath}`, error)
+      throw error
+    }
   }
 
   async downloadFile(remotePath: string, localPath: string, onProgress: (progress: TransferProgress) => void): Promise<void> {
-    await this.runWithConnectedClient(async () => {
-      const total = Math.max(await this.ftp.size(remotePath), 1)
-      this.ftp.trackProgress((progress) => {
-        onProgress({
-          percent: Math.min(99, Math.round((progress.bytes / total) * 100)),
-          transferredBytes: progress.bytes,
-          totalBytes: total
+    try {
+      await this.runWithConnectedClient(async () => {
+        const total = Math.max(await this.ftp.size(remotePath), 1)
+        appLog(`[TermDock][FTP] Download start ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
+        this.ftp.trackProgress((progress) => {
+          onProgress({
+            percent: Math.min(99, Math.round((progress.bytes / total) * 100)),
+            transferredBytes: progress.bytes,
+            totalBytes: total
+          })
         })
+        try {
+          await this.ftp.downloadTo(localPath, remotePath)
+          const localInfo = await stat(localPath)
+          assertTransferSize(localPath, Math.max(localInfo.size, 1), total)
+          appLog(`[TermDock][FTP] Download verified ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
+          onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
+        } finally {
+          this.ftp.trackProgress()
+        }
       })
-      try {
-        await this.ftp.downloadTo(localPath, remotePath)
-        onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
-      } finally {
-        this.ftp.trackProgress()
-      }
-    })
+    } catch (error) {
+      appWarn(`[TermDock][FTP] Download failed ${remotePath} -> ${localPath}`, error)
+      throw error
+    }
   }
 
   private async connectInternal(): Promise<void> {
@@ -439,6 +456,34 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       ? ftpWithWhitespaceGuard.protectWhitespace(targetPath)
       : targetPath
   }
+
+  private async verifyRemoteFileSize(remotePath: string, expectedSize: number): Promise<void> {
+    const remoteSize = await this.readRemoteFileSize(remotePath)
+    if (remoteSize === undefined) {
+      appWarn(`[TermDock][FTP] Upload size verification skipped for ${remotePath}; remote SIZE/listing did not expose a file size`)
+      return
+    }
+    assertTransferSize(remotePath, remoteSize, expectedSize)
+  }
+
+  private async readRemoteFileSize(remotePath: string): Promise<number | undefined> {
+    try {
+      return Math.max(await this.ftp.size(remotePath), 0)
+    } catch (error) {
+      appWarn(`[TermDock][FTP] SIZE failed for ${remotePath}, trying directory listing`, error)
+    }
+
+    try {
+      const entries = await this.listRemoteDirectoryEntries(path.posix.dirname(remotePath))
+      const match = entries.find((entry) => entry.name === path.posix.basename(remotePath))
+      return typeof match?.size === 'number' && Number.isFinite(match.size)
+        ? Math.max(match.size, 0)
+        : undefined
+    } catch (error) {
+      appWarn(`[TermDock][FTP] Directory listing size probe failed for ${remotePath}`, error)
+      return undefined
+    }
+  }
 }
 
 function shouldRetryWithClassicList(entries: FileInfo[]) {
@@ -495,6 +540,32 @@ function formatPermissionsForDebug(entry: FileInfo) {
   }
 
   return `u:${entry.permissions.user ?? 0},g:${entry.permissions.group ?? 0},w:${entry.permissions.world ?? 0}`
+}
+
+function assertTransferSize(targetPath: string, actualSize: number | undefined, expectedSize: number): void {
+  if (actualSize === expectedSize) {
+    return
+  }
+
+  const actual = typeof actualSize === 'number' ? formatTransferBytes(actualSize) : '未知大小'
+  throw new Error(`传输校验失败：${path.posix.basename(targetPath)} 实际为 ${actual}，期望 ${formatTransferBytes(expectedSize)}`)
+}
+
+function formatTransferBytes(size: number) {
+  if (!size) {
+    return '0 B'
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = size
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+
+  const digits = value >= 10 || unitIndex === 0 ? 0 : 1
+  return `${value.toFixed(digits)} ${units[unitIndex]}`
 }
 
 type FileInfoWithRaw = FileInfo & {

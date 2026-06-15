@@ -1,7 +1,7 @@
 import type { ConnectConfig } from 'ssh2'
 import type { SshProfile } from '@termdock/core'
 
-type SshDebugScope = 'main' | 'sftp' | 'exec'
+type SshDebugScope = 'main' | 'sftp' | 'transfer-sftp' | 'exec'
 type SshAuthConfig = Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>
 
 export interface SshDebugLogger {
@@ -9,7 +9,7 @@ export interface SshDebugLogger {
   handle(scope: SshDebugScope, message: string): void
   log(scope: SshDebugScope, message: string): void
   logConnectionStart(scope: SshDebugScope, profile: SshProfile, username: string, authConfig: SshAuthConfig, shouldTryKeyboard: boolean): void
-  logSftpStart(username?: string): void
+  logSftpStart(username?: string, scope?: Extract<SshDebugScope, 'sftp' | 'transfer-sftp'>): void
   logKeyboardInteractive(scope: SshDebugScope, message: string): void
 }
 
@@ -53,8 +53,8 @@ export function createSshDebugLogger(
         `开始连接 ${profile.host}:${profile.port}，profile=${profile.id}，用户 ${username || '(空)'}，密码${profile.password ? '已提供' : '未提供'}，认证 ${describeAuthAttempt(profile, authConfig, shouldTryKeyboard)}`
       )
     },
-    logSftpStart(username) {
-      log('sftp', `开始建立 SFTP 复用连接，用户 ${username || '(空)'}`)
+    logSftpStart(username, scope = 'sftp') {
+      log(scope, `开始建立 SFTP 复用连接，用户 ${username || '(空)'}`)
     },
     logKeyboardInteractive(scope, message) {
       log(scope, message)
