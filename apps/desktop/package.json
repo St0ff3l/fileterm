@@ -90,6 +90,10 @@
       ],
       "artifactName": "TermDock-${version}-windows-${arch}-setup.${ext}"
     },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "portable": {
       "artifactName": "TermDock-${version}-windows-${arch}-portable.${ext}"
     }
