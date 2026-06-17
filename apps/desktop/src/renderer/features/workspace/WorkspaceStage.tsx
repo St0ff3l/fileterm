@@ -60,7 +60,8 @@ export function WorkspaceStage({
   onToggleRemoteFileAccessMode,
   remoteFileAccessMode,
   onRefresh,
-  onUploadFiles
+  onUploadFiles,
+  tabBarProps
 }: {
   activeLocalTab: ActiveLocalTab
   activeProfile: ConnectionProfile | null
@@ -103,6 +104,7 @@ export function WorkspaceStage({
   remoteFileAccessMode: 'user' | 'root'
   onRefresh(): void
   onUploadFiles(items: LocalFileItem[]): void
+  tabBarProps: any
 }) {
   if (activeLocalTab?.kind === 'system') {
     return <SystemInfoWorkspace activeProfile={activeProfile} activeSession={activeSession} />
@@ -156,6 +158,7 @@ export function WorkspaceStage({
       folders={folders}
       onOpen={onOpenProfile}
       profiles={profiles}
+      tabBarProps={tabBarProps}
     />
   )
 }

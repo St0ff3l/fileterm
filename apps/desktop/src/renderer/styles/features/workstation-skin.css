@@ -84,7 +84,7 @@ textarea:focus-visible,
 }
 
 .titlebar-tabarea {
-  grid-template-columns: 48px minmax(0, 1fr) 52px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .tabbar-folder-button {

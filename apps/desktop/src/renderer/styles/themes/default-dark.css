@@ -1420,7 +1420,7 @@
 :root[data-theme='default-dark'] .titlebar-brand,
 :root[data-theme='default'] .titlebar-brand {
   background: #242424;
-  border-right: 1px solid #363636;
+  border-right: none;
 }
 
 :root:not([data-theme]) .titlebar-brand strong,

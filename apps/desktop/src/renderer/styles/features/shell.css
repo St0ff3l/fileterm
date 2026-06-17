@@ -676,7 +676,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 14px;
-  border-right: 1px solid var(--border-light);
+  border-right: none;
 }
 
 :root[data-platform='darwin'] .titlebar-brand {
@@ -697,7 +697,7 @@
 
 .titlebar-tabarea {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 52px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .tabbar-folder-button,
@@ -799,7 +799,7 @@
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
-  padding: 0 10px 0 4px;
+  padding: 0 12px 0 4px;
   font-size: 18px;
 }
 

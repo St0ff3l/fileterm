@@ -914,7 +914,7 @@ export function App() {
   const isActiveRemoteSessionConnected = Boolean(activeTab && activeSession?.connected)
   const activeTransferCount = workspace.transfers.filter(isActiveTransfer).length
   const showSidebar = activeTab !== null && activeSession !== null && activeLocalTab?.kind !== 'home'
-  const resolvedSidebarWidth = showSidebar ? (isSystemSidebarCollapsed ? 44 : sidebarWidth) : 0
+  const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
   const brandWidth = showSidebar && !isSystemSidebarCollapsed ? sidebarWidth : 214
 
   const normalizeErrorMessage = (err: unknown) => {
@@ -2669,6 +2669,53 @@ export function App() {
     )
   }
 
+  const tabBarProps = {
+    activeHomeTabId: activeLocalTabId,
+    activeSessionTabId: visibleActiveSessionTabId,
+    locale,
+    onAddHomeTab: handleAddHomeTab,
+    onActivateHome: handleActivateHome,
+    onActivateSession: (tabId: string) => {
+      void handleActivateTab(tabId)
+    },
+    onCloseHomeTab: handleCloseHomeTab,
+    onCloseSessionTab: (event: React.MouseEvent<HTMLButtonElement>, tabId: string) => {
+      void handleCloseTab(event, tabId)
+    },
+    onDragEnd: () => setDraggingTabKey(null),
+    onDragEnter: (targetKey: string) => {
+      setTabOrder((prev) => reorderTabKeys(prev, draggingTabKey, targetKey))
+    },
+    onDragStart: setDraggingTabKey,
+    onOpenCommandManager: openCommandManager,
+    onOpenConnectionManager: () => {
+      if (desktopApi) {
+        void desktopApi.openConnectionManagerWindow()
+        return
+      }
+      setShowConnectionManager(true)
+    },
+    onOpenLogsDirectory: () => {
+      if (!desktopApi) {
+        setError(t.desktopOnlyOpenLogs)
+        return
+      }
+      void desktopApi.openLogsDirectory().catch((err) => {
+        reportError(setError, t.openLogsDirectory, err)
+      })
+    },
+    onOpenTabContext: (event: React.MouseEvent<HTMLDivElement>, target: TabContextTarget) => {
+      setTabContextMenu({ x: event.clientX, y: event.clientY, target })
+    },
+    onSetLocale: (nextLocale: AppLocale) => {
+      setLocale(nextLocale)
+      setLocaleState(nextLocale)
+    },
+    onSetTheme: setThemeMode,
+    orderedTabs,
+    theme: themeMode
+  }
+
   return (
     <>
       <div
@@ -2692,52 +2739,7 @@ export function App() {
           </div>
         ) : null}
         {activeLocalTab?.kind !== 'home' && (
-          <TabBar
-            activeHomeTabId={activeLocalTabId}
-            activeSessionTabId={visibleActiveSessionTabId}
-            locale={locale}
-            onAddHomeTab={handleAddHomeTab}
-            onActivateHome={handleActivateHome}
-            onActivateSession={(tabId) => {
-              void handleActivateTab(tabId)
-            }}
-            onCloseHomeTab={handleCloseHomeTab}
-            onCloseSessionTab={(event, tabId) => {
-              void handleCloseTab(event, tabId)
-            }}
-            onDragEnd={() => setDraggingTabKey(null)}
-            onDragEnter={(targetKey) => {
-              setTabOrder((prev) => reorderTabKeys(prev, draggingTabKey, targetKey))
-            }}
-            onDragStart={setDraggingTabKey}
-            onOpenCommandManager={openCommandManager}
-            onOpenConnectionManager={() => {
-              if (desktopApi) {
-                void desktopApi.openConnectionManagerWindow()
-                return
-              }
-              setShowConnectionManager(true)
-            }}
-            onOpenLogsDirectory={() => {
-              if (!desktopApi) {
-                setError(t.desktopOnlyOpenLogs)
-                return
-              }
-              void desktopApi.openLogsDirectory().catch((err) => {
-                reportError(setError, t.openLogsDirectory, err)
-              })
-            }}
-            onOpenTabContext={(event, target) => {
-              setTabContextMenu({ x: event.clientX, y: event.clientY, target })
-            }}
-            onSetLocale={(nextLocale) => {
-              setLocale(nextLocale)
-              setLocaleState(nextLocale)
-            }}
-            onSetTheme={setThemeMode}
-            orderedTabs={orderedTabs}
-            theme={themeMode}
-          />
+          <TabBar {...tabBarProps} />
         )}
 
         {showSidebar ? (
@@ -2829,6 +2831,7 @@ export function App() {
               remoteFileAccessMode={activeSession?.fileAccessMode ?? 'user'}
               onRefresh={handleRefreshWorkspace}
               onUploadFiles={handleUploadFiles}
+              tabBarProps={tabBarProps}
             />
           </div>
         </main>
