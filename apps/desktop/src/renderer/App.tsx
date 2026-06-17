@@ -17,6 +17,7 @@ import type {
   WorkspaceSnapshot,
   WorkspaceTab
 } from '@termdock/core'
+import { normalizeConnectionHost, validateConnectionHost } from '@termdock/shared'
 import { defaultForm, emptyState, localPreviewFiles, previewLocalPath, previewState, profileToForm } from './app/app-data'
 import { homeTabKey, insertTabKeyAfter, isActiveTransfer, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
@@ -1058,8 +1059,15 @@ export function App() {
   const handleSaveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!form.name || !form.host || !form.group || !form.remotePath || !Number(form.port)) {
+    const normalizedHost = normalizeConnectionHost(form.host)
+
+    if (!form.name || !normalizedHost || !form.group || !form.remotePath || !Number(form.port)) {
       setFormError(t.fillRequired)
+      return
+    }
+
+    if (!validateConnectionHost(normalizedHost).valid) {
+      setFormError(t.invalidHost)
       return
     }
 
@@ -1075,7 +1083,7 @@ export function App() {
 
     try {
       setIsBusy(true)
-      const payload = { ...form, port: Number(form.port) }
+      const payload = { ...form, host: normalizedHost, port: Number(form.port) }
       const snapshot = editingProfileId
         ? await desktopApi.updateProfile(editingProfileId, payload)
         : await desktopApi.createProfile(payload)
