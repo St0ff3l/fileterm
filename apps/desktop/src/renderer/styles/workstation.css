@@ -1,9 +1,12 @@
 @import './features/shell.css';
 @import './features/home.css';
+@import './features/overview.css';
+@import './features/quick-links.css';
 @import './features/session.css';
 @import './features/file-editor.css';
 @import './features/confirm-dialog.css';
 @import './features/modals.css';
+@import './features/modal-components.css';
 @import './features/commands.css';
 @import './features/legacy-responsive.css';
 @import './features/workstation-skin.css';

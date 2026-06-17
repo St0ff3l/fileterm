@@ -1,14 +1,21 @@
+/* Confirm Action Dialog - Modern Style */
 .confirm-action-dialog {
-  width: min(460px, 100%);
+  width: min(480px, 100%);
   -webkit-app-region: no-drag;
 }
 
 .confirm-action-dialog__description {
-  color: var(--confirm-dialog-text);
+  color: var(--text-secondary);
   line-height: 1.7;
   white-space: pre-wrap;
+  font-size: 14px;
+  margin-bottom: 4px;
+  padding: 14px 16px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
 }
 
 .confirm-action-dialog__actions {
-  margin-top: 18px;
+  margin-top: 20px;
 }

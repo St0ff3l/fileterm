@@ -155,73 +155,16 @@
   flex: 1;
   height: 100%;
   background-color: var(--bg-main);
-  padding: 32px 32px 6px 32px;
+  padding: 32px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* Header Area */
+/* Remove the separate header - now part of pages */
 .home-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 28px;
-  flex-shrink: 0;
-}
-
-.header-meta {
-  display: flex;
-  flex-direction: column;
-}
-
-.header-title {
-  font-size: 26px;
-  font-weight: 400;
-  color: var(--text-main, #ffffff);
-  margin: 0;
-  letter-spacing: -0.015em;
-}
-
-.header-subtitle {
-  font-size: 13.5px;
-  color: var(--text-muted, #a4a4a4);
-  margin: 6px 0 0 0;
-  font-family: 'Inter', sans-serif;
-}
-
-/* New Connection Button - Refined with Glassmorphism and glow */
-.btn-new-connection {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: var(--bg-card);
-  color: var(--text-main);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 400;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: var(--shadow-sm);
-}
-
-.btn-new-connection span.material-symbols-outlined {
-  font-size: 18px;
-}
-
-.btn-new-connection:hover {
-  background: var(--text-main);
-  color: var(--bg-main);
-  border-color: var(--text-main);
-  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
-  transform: translateY(-1.5px);
-}
-
-.btn-new-connection:active {
-  transform: translateY(0);
+  display: none;
 }
 
 /* Scrollable Container Body */

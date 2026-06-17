@@ -1,0 +1,75 @@
+/* Quick Links Page Styles */
+.quick-links-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.header-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.header-title {
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--text-main);
+  margin: 0;
+  letter-spacing: -0.015em;
+}
+
+.header-subtitle {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin: 6px 0 0 0;
+  font-family: 'Inter', sans-serif;
+}
+
+.btn-new-connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-new-connection span.material-symbols-outlined {
+  font-size: 18px;
+}
+
+.btn-new-connection:hover {
+  background: var(--text-main);
+  color: var(--bg-main);
+  border-color: var(--text-main);
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
+  transform: translateY(-1.5px);
+}
+
+.btn-new-connection:active {
+  transform: translateY(0);
+}
+
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Reuse existing flat-grid styles from home.css */
+/* The grid is already styled in home.css */
