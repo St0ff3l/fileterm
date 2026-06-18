@@ -480,7 +480,7 @@ export function App() {
   const [shortcutCloseConfirm, setShortcutCloseConfirm] = useState<{
     tabId: string
     title: string
-    variant: 'connecting' | 'active-last-session'
+    variant: 'connecting' | 'active-session' | 'active-last-session'
   } | null>(null)
   const [closingSessionTabIds, setClosingSessionTabIds] = useState<string[]>([])
 
@@ -513,13 +513,13 @@ export function App() {
     }
 
     const unsubscribe = desktopApi.onWindowCloseRequest((event) => {
-      const hasActive = workspaceRef.current.tabs.some(
-        (tab) => workspaceRef.current.sessions[tab.id]?.connected
-      )
+      const hasActive = workspaceRef.current.tabs.some((tab) => isTabActivelyConnected(tab))
 
       if (desktopApi.platform === 'darwin') {
         if (event.isQuit) {
           setCloseConfirmDialog({ isQuit: true, hasActiveConnections: hasActive })
+        } else if (hasActive) {
+          setCloseConfirmDialog({ isQuit: false, hasActiveConnections: true })
         } else {
           void desktopApi.confirmCloseWindow('hide')
         }
@@ -1029,6 +1029,9 @@ export function App() {
     setFormError(null)
   }
 
+  const isTabActivelyConnected = (tab: WorkspaceTab | null | undefined) =>
+    Boolean(tab && (tab.status === 'connecting' || tab.status === 'connected'))
+
   const closeCurrentWindow = () => {
     void desktopApi?.closeCurrentWindow()
   }
@@ -1442,6 +1445,16 @@ export function App() {
       return
     }
 
+    const targetTab = visibleWorkspaceTabs.find((tab) => tab.id === tabId) ?? null
+    if (isTabActivelyConnected(targetTab)) {
+      setShortcutCloseConfirm({
+        tabId,
+        title: targetTab?.title ?? '',
+        variant: targetTab?.status === 'connecting' ? 'connecting' : 'active-session'
+      })
+      return
+    }
+
     try {
       await closeSessionTabById(tabId)
     } catch (err) {
@@ -1567,14 +1580,17 @@ export function App() {
 
     if (activeSessionTab) {
       const isLastSessionTab = visibleWorkspaceTabs.length === 1
-      const needsDisconnectConfirm = isLastSessionTab
-        && (activeSessionTab.status === 'connecting' || activeSessionTab.status === 'connected')
+      const needsDisconnectConfirm = isTabActivelyConnected(activeSessionTab)
 
       if (needsDisconnectConfirm) {
         setShortcutCloseConfirm({
           tabId: activeSessionTab.id,
           title: activeSessionTab.title,
-          variant: activeSessionTab.status === 'connecting' ? 'connecting' : 'active-last-session'
+          variant: activeSessionTab.status === 'connecting'
+            ? 'connecting'
+            : isLastSessionTab
+              ? 'active-last-session'
+              : 'active-session'
         })
         return
       }
@@ -3148,6 +3164,8 @@ export function App() {
           description={
             (shortcutCloseConfirm.variant === 'connecting'
               ? t.closeShortcutConnectingDescription
+              : shortcutCloseConfirm.variant === 'active-session'
+                ? t.closeShortcutActiveDescription
               : t.closeShortcutLastActiveDescription)
               .replace('{name}', shortcutCloseConfirm.title)
           }
@@ -3156,29 +3174,24 @@ export function App() {
           onConfirm={() => {
             void confirmShortcutCloseConnectingTab()
           }}
-          title={shortcutCloseConfirm.variant === 'connecting' ? t.closeShortcutConnectingTitle : t.closeShortcutLastActiveTitle}
+          title={
+            shortcutCloseConfirm.variant === 'connecting'
+              ? t.closeShortcutConnectingTitle
+              : shortcutCloseConfirm.variant === 'active-session'
+                ? t.closeShortcutActiveTitle
+                : t.closeShortcutLastActiveTitle
+          }
         />
       ) : null}
 
       {closeConfirmDialog ? (
-        <div className="modal-backdrop">
-          <div className="modal-card confirm-action-dialog">
-            <div className="modal-header">
-              <span>{t.closeConfirmTitle}</span>
-              <button
-                className="icon-button"
-                onClick={() => {
-                  setCloseConfirmDialog(null)
-                  void desktopApi?.confirmCloseWindow('cancel')
-                }}
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-            <div className="confirm-action-dialog__description">
+        <ConfirmActionDialog
+          confirmLabel={t.closeConfirmQuit}
+          confirmVariant="danger"
+          description={
+            <>
               {closeConfirmDialog.hasActiveConnections ? (
-                <div style={{ color: 'var(--danger, #ef4444)', marginBottom: '12px', fontWeight: 'bold' }}>
+                <div className="confirm-action-dialog__warning">
                   {t.closeConfirmActiveWarn}
                 </div>
               ) : closeConfirmDialog.isQuit ? (
@@ -3187,43 +3200,30 @@ export function App() {
               {!closeConfirmDialog.isQuit ? (
                 <div>{t.closeConfirmWindowsMsg}</div>
               ) : null}
-            </div>
-            <div className="form-actions confirm-action-dialog__actions" style={{ justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                className="flat-button"
-                onClick={() => {
-                  setCloseConfirmDialog(null)
-                  void desktopApi?.confirmCloseWindow('cancel')
-                }}
-                type="button"
-              >
-                {t.cancel}
-              </button>
-              {!closeConfirmDialog.isQuit ? (
-                <button
-                  className="primary-button"
-                  onClick={() => {
-                    setCloseConfirmDialog(null)
-                    void desktopApi?.confirmCloseWindow('hide')
-                  }}
-                  type="button"
-                >
-                  {t.closeConfirmHide}
-                </button>
-              ) : null}
-              <button
-                className="flat-button danger"
-                onClick={() => {
-                  setCloseConfirmDialog(null)
-                  void desktopApi?.confirmCloseWindow('quit')
-                }}
-                type="button"
-              >
-                {t.closeConfirmQuit}
-              </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+          extraActions={!closeConfirmDialog.isQuit ? (
+            <button
+              className="confirm-action-dialog__button confirm-action-dialog__button--primary"
+              onClick={() => {
+                setCloseConfirmDialog(null)
+                void desktopApi?.confirmCloseWindow('hide')
+              }}
+              type="button"
+            >
+              {t.closeConfirmHide}
+            </button>
+          ) : null}
+          onClose={() => {
+            setCloseConfirmDialog(null)
+            void desktopApi?.confirmCloseWindow('cancel')
+          }}
+          onConfirm={() => {
+            setCloseConfirmDialog(null)
+            void desktopApi?.confirmCloseWindow('quit')
+          }}
+          title={t.closeConfirmTitle}
+        />
       ) : null}
     </>
   )

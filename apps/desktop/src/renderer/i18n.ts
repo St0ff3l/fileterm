@@ -374,6 +374,8 @@ const zhCN = {
   closeShortcutConnectingDescription: '“{name}” 仍在连接中。现在关闭会中断这次连接，确定继续吗？',
   closeShortcutLastActiveTitle: '关闭当前连接',
   closeShortcutLastActiveDescription: '“{name}” 是当前最后一个活跃连接。关闭后会先退回首页新标签页，确定继续吗？',
+  closeShortcutActiveTitle: '关闭活跃连接',
+  closeShortcutActiveDescription: '“{name}” 当前仍处于活跃状态。现在关闭会中断这次连接，确定继续吗？',
   closeShortcutCloseTab: '关闭标签页',
   closeShortcutQuitConfirm: '退出应用'
 }
@@ -743,6 +745,8 @@ const enUS: typeof zhCN = {
   closeShortcutConnectingDescription: '"{name}" is still connecting. Closing it now will interrupt that connection. Continue?',
   closeShortcutLastActiveTitle: 'Close Current Connection',
   closeShortcutLastActiveDescription: '"{name}" is the last active connection. Closing it will return you to a new home tab first. Continue?',
+  closeShortcutActiveTitle: 'Close Active Connection',
+  closeShortcutActiveDescription: '"{name}" is still active. Closing it now will interrupt that connection. Continue?',
   closeShortcutCloseTab: 'Close Tab',
   closeShortcutQuitConfirm: 'Exit App'
 }
