@@ -26,6 +26,8 @@ import type {
 
 const api: TermdockDesktopApi = {
   platform: typeof process !== 'undefined' ? process.platform : 'unknown',
+  arch: typeof process !== 'undefined' ? process.arch : 'unknown',
+  appVersion: process.env['TERMDOCK_APP_VERSION'] ?? '0.0.0',
   appName: 'TermDock',
   isDesktop: true,
   readClipboardText: (): Promise<string> => ipcRenderer.invoke('app:readClipboardText'),

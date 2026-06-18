@@ -213,6 +213,7 @@ export class WorkspaceService {
 
     this.sessionRuntime.set(tabId, snapshot)
     void this.sessionRuntime.connect(tabId, controller)
+    void this.profileRepository.touchProfile(profileId)
 
     return this.getSnapshot()
   }

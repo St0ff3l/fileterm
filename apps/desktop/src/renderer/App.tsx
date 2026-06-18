@@ -22,6 +22,7 @@ import { homeTabKey, insertTabKeyAfter, isActiveTransfer, reorderTabKeys, sessio
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
 import { CommandManagerModal } from './features/commands/CommandManagerModal'
 import { ConnectionManagerModal } from './features/connections/ConnectionManagerModal'
+import { SettingsModal } from './features/settings/SettingsModal'
 import { ConnectionModal } from './features/connections/ConnectionModal'
 import { SshCredentialsModal } from './features/connections/SshCredentialsModal'
 import { SshHostVerificationModal } from './features/connections/SshHostVerificationModal'
@@ -408,6 +409,7 @@ export function App() {
   const [showForm, setShowForm] = useState(false)
   const [showConnectionManager, setShowConnectionManager] = useState(false)
   const [showCommandManager, setShowCommandManager] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [form, setForm] = useState<CreateProfileInput>(defaultForm)
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
@@ -1110,6 +1112,24 @@ export function App() {
       return
     }
     setShowCommandManager(true)
+  }
+
+  const openConnectionManager = () => {
+    if (desktopApi) {
+      void desktopApi.openConnectionManagerWindow()
+      return
+    }
+    setShowConnectionManager(true)
+  }
+
+  const openLogsDirectory = () => {
+    if (!desktopApi) {
+      setError(t.desktopOnlyOpenLogs)
+      return
+    }
+    void desktopApi.openLogsDirectory().catch((err) => {
+      reportError(setError, t.openLogsDirectory, err)
+    })
   }
 
   const saveCommandTemplate = async (commandId: string | null, input: CommandTemplateInput) => {
@@ -2558,7 +2578,7 @@ export function App() {
 
   if (isCommandManagerWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={t.commandManager}>
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={t.commandManager}>
         <CommandManagerModal
           commandFolders={workspace.commandFolders || []}
           commandTemplates={workspace.commandTemplates || []}
@@ -2596,7 +2616,7 @@ export function App() {
       : null
 
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingCommand ? t.commandEdit : t.commandCreate}>
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={editingCommand ? t.commandEdit : t.commandCreate}>
         <CommandEditorModal
           folders={workspace.commandFolders || []}
           initialValue={editingCommand
@@ -2618,7 +2638,7 @@ export function App() {
 
   if (isConnectionFormWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={editingProfileId ? t.editConnection : t.newConnection}>
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={editingProfileId ? t.editConnection : t.newConnection}>
         <ConnectionModal
           errorMessage={formError}
           groupOptions={connectionGroupOptions}
@@ -2698,22 +2718,9 @@ export function App() {
     },
     onDragStart: setDraggingTabKey,
     onOpenCommandManager: openCommandManager,
-    onOpenConnectionManager: () => {
-      if (desktopApi) {
-        void desktopApi.openConnectionManagerWindow()
-        return
-      }
-      setShowConnectionManager(true)
-    },
-    onOpenLogsDirectory: () => {
-      if (!desktopApi) {
-        setError(t.desktopOnlyOpenLogs)
-        return
-      }
-      void desktopApi.openLogsDirectory().catch((err) => {
-        reportError(setError, t.openLogsDirectory, err)
-      })
-    },
+    onOpenConnectionManager: openConnectionManager,
+    onOpenLogsDirectory: openLogsDirectory,
+    onOpenSettings: () => setShowSettings(true),
     onOpenTabContext: (event: React.MouseEvent<HTMLDivElement>, target: TabContextTarget) => {
       setTabContextMenu({ x: event.clientX, y: event.clientY, target })
     },
@@ -3024,6 +3031,30 @@ export function App() {
           onDeleteCommand={(commandId) => {
             void deleteCommandTemplate(commandId)
           }}
+        />
+      ) : null}
+
+      {showSettings ? (
+        <SettingsModal
+          theme={themeMode}
+          onSetTheme={setThemeMode}
+          locale={locale}
+          onSetLocale={(nextLocale: AppLocale) => {
+            setLocale(nextLocale)
+            setLocaleState(nextLocale)
+          }}
+          onOpenCommandManager={() => {
+            setShowSettings(false)
+            openCommandManager()
+          }}
+          onOpenConnectionManager={() => {
+            setShowSettings(false)
+            openConnectionManager()
+          }}
+          onOpenLogsDirectory={() => {
+            openLogsDirectory()
+          }}
+          onClose={() => setShowSettings(false)}
         />
       ) : null}
 

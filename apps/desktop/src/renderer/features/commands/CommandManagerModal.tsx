@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useState, useMemo, useRef, type DragEvent } from 'react'
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@termdock/core'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './CommandEditorModal'
+import { AppIcon } from '../common/AppIcon'
 
 type CommandTreeNode =
   | (CommandFolder & { children: CommandTreeNode[] })
@@ -34,10 +35,13 @@ export function CommandManagerModal({
   standalone?: boolean
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [activeFolderId, setActiveFolderId] = useState<'all' | string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [dragPosition, setDragPosition] = useState<'top' | 'bottom' | 'inside' | null>(null)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [isActionsExpanded, setIsActionsExpanded] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [editorState, setEditorState] = useState<{ mode: 'create' | 'edit'; commandId?: string } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<
@@ -51,6 +55,16 @@ export function CommandManagerModal({
 
   const stopInteractiveEvent = (event: React.SyntheticEvent) => {
     event.stopPropagation()
+  }
+
+  const toggleFolder = (folderId: string, event?: React.MouseEvent) => {
+    event?.stopPropagation()
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
+      return next
+    })
   }
 
   const tree = useMemo(() => {
@@ -74,13 +88,9 @@ export function CommandManagerModal({
     })
 
     items.forEach(item => {
-      if (item.parentId && map.has(item.parentId)) {
-        const parent = map.get(item.parentId)!
-        if (parent.type === 'command-folder') {
-          parent.children.push(item)
-        } else {
-          roots.push(item)
-        }
+      const parent = item.parentId ? map.get(item.parentId) : undefined
+      if (parent?.type === 'command-folder') {
+        parent.children.push(item)
       } else {
         roots.push(item)
       }
@@ -96,15 +106,72 @@ export function CommandManagerModal({
     return { roots, map }
   }, [commandTemplates, commandFolders])
 
-  const toggleFolder = (folderId: string, event?: React.MouseEvent) => {
-    event?.stopPropagation()
-    setExpandedFolders(prev => {
-      const next = new Set(prev)
-      if (next.has(folderId)) next.delete(folderId)
-      else next.add(folderId)
-      return next
-    })
+  const countCommandsInNodes = (nodes: CommandTreeNode[]): number => {
+    return nodes.reduce((total, node) => {
+      if (node.type !== 'command-folder') {
+        return total + 1
+      }
+      return total + countCommandsInNodes(node.children)
+    }, 0)
   }
+
+  const folderNavItems = useMemo(() => {
+    const items: Array<{ id: 'all' | string; name: string; count: number; depth: number }> = [
+      { id: 'all', name: t.allCommands, count: commandTemplates.length, depth: 0 }
+    ]
+
+    const walkFolders = (nodes: CommandTreeNode[], depth: number) => {
+      nodes.forEach((node) => {
+        if (node.type !== 'command-folder') {
+          return
+        }
+        items.push({
+          id: node.id,
+          name: node.name,
+          count: countCommandsInNodes(node.children),
+          depth
+        })
+        walkFolders(node.children, depth + 1)
+      })
+    }
+
+    walkFolders(tree.roots, 0)
+    return items
+  }, [commandTemplates.length, tree.roots, t.allCommands])
+
+  const activeFolderNode = activeFolderId === 'all' ? null : tree.map.get(activeFolderId)
+  const resolvedActiveFolderId = activeFolderNode?.type === 'command-folder' ? activeFolderId : 'all'
+  const activeBaseNodes = activeFolderNode?.type === 'command-folder' ? activeFolderNode.children : tree.roots
+
+  const visibleNodes = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase()
+    if (!query) {
+      return activeBaseNodes
+    }
+
+    const matches: CommandTreeNode[] = []
+    const walkNodes = (nodes: CommandTreeNode[]) => {
+      nodes.forEach((node) => {
+        const searchableText = node.type === 'command-folder'
+          ? node.name
+          : [
+              node.name,
+              node.command,
+              node.description ?? ''
+            ].join(' ')
+
+        if (searchableText.toLocaleLowerCase().includes(query)) {
+          matches.push(node)
+        }
+        if (node.type === 'command-folder') {
+          walkNodes(node.children)
+        }
+      })
+    }
+
+    walkNodes(activeBaseNodes)
+    return matches
+  }, [activeBaseNodes, searchQuery])
 
   const handleDragStart = (e: DragEvent, id: string) => {
     e.stopPropagation()
@@ -181,7 +248,7 @@ export function CommandManagerModal({
 
     if (dragPosition === 'inside' && targetNode.type === 'command-folder') {
       newParentId = targetNode.id
-      const children = targetNode.children
+      const children = targetNode.children || []
       newOrder = children.length > 0 ? (children[children.length - 1].order ?? 0) + 1000 : 1000
       setExpandedFolders(prev => new Set(prev).add(targetNode.id))
     } else {
@@ -215,8 +282,6 @@ export function CommandManagerModal({
       setEditorState({ mode, commandId })
       return
     }
-    // We don't have a reliable way to get parentId here easily without more state, 
-    // but we can pass undefined or the user can select it in the modal.
     void desktopApi.openCommandFormWindow(mode, commandId)
   }
 
@@ -227,7 +292,12 @@ export function CommandManagerModal({
       })()
     : emptyCommandForm
 
-  const renderNode = (node: CommandTreeNode, depth: number) => {
+  const renderNode = (
+    node: CommandTreeNode,
+    depth: number,
+    options: { includeChildren?: boolean } = {}
+  ) => {
+    const includeChildren = options.includeChildren ?? true
     const isFolder = node.type === 'command-folder'
     const isExpanded = expandedFolders.has(node.id)
     const isDragOver = dragOverId === node.id
@@ -280,22 +350,25 @@ export function CommandManagerModal({
           role="button"
           tabIndex={0}
         >
-          <span style={{ paddingLeft: `${depth * 20}px`, display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+          <span className="manager-name-cell" style={{ paddingLeft: `${depth * 18}px` }}>
             {isFolder && (
-              <span className="folder-icon" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.1s', display: 'inline-block', fontSize: '10px' }}>
+              <span className="folder-icon manager-folder-toggle" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
                 ▶
               </span>
             )}
-            {!isFolder && <span style={{ width: '12px', display: 'inline-block' }}></span>}
-            <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</strong>
+            {!isFolder && <span className="manager-node-icon"><AppIcon name="brand" size={14} /></span>}
+            <span className="manager-node-name">{node.name}</span>
           </span>
           <span>
             {isFolder ? '--' : <code style={{ fontSize: '11px', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{node.command}</code>}
           </span>
+          <span>{isFolder ? '--' : (node.description || '/')}</span>
           <span className="manager-actions">
             {!isFolder && (
               <button
-                className="flat-button compact"
+                aria-label={t.edit}
+                className="manager-icon-action"
+                title={t.edit}
                 type="button"
                 onMouseDown={stopInteractiveEvent}
                 onPointerDown={stopInteractiveEvent}
@@ -304,11 +377,13 @@ export function CommandManagerModal({
                   openEditorWindow('edit', node.id)
                 }}
               >
-                {t.edit}
+                <AppIcon name="edit" size={14} />
               </button>
             )}
             <button
-              className="flat-button compact danger"
+              aria-label={t.delete}
+              className="manager-icon-action danger"
+              title={t.delete}
               type="button"
               onMouseDown={stopInteractiveEvent}
               onPointerDown={stopInteractiveEvent}
@@ -321,16 +396,16 @@ export function CommandManagerModal({
                 })
               }}
             >
-              {t.delete}
+              <AppIcon name="trash" size={14} />
             </button>
           </span>
         </div>
-        {isFolder && isExpanded && node.children && (
+        {includeChildren && isFolder && isExpanded && node.children && (
           <div className="folder-children">
-            {node.children.map((child) => renderNode(child, depth + 1))}
+            {node.children.map((child) => renderNode(child, depth + 1, options))}
             {node.children.length === 0 && (
-              <div className="manager-row empty-folder" style={{ paddingLeft: `${(depth + 1) * 20 + 14}px`, color: '#666' }}>
-                <span style={{ gridColumn: '1 / -1' }}>{t.commandEmpty}</span>
+              <div className="manager-row empty-folder" style={{ paddingLeft: `${(depth + 1) * 18 + 18}px` }}>
+                <span>{t.commandEmpty}</span>
               </div>
             )}
           </div>
@@ -339,68 +414,138 @@ export function CommandManagerModal({
     )
   }
 
+  const isSearching = searchQuery.trim().length > 0
+  const emptyMessage = isSearching ? t.noMatchingCommands : t.commandEmpty
+
   const content = (
-    <div className={`modal-card manager-modal command-manager-modal ${standalone ? 'standalone' : ''}`}>
-      <div className="modal-header">
-        <span>{t.commandManager}</span>
-        {!standalone ? <button className="icon-button" onClick={onClose} type="button">×</button> : null}
-      </div>
-      <div className="manager-toolbar manager-toolbar-spacious">
-        <button 
-          className="flat-button" 
-          type="button" 
-          onClick={() => {
-            setIsCreatingFolder(true)
-            setNewFolderName('')
-          }}
-        >
-          {t.newFolder}
-        </button>
-        <button className="primary-button" type="button" onClick={() => openEditorWindow('create')}>{t.newCommand}</button>
-      </div>
-      <div className="manager-table command-manager-table">
-        <div className="manager-head">
-          <span>{t.name}</span>
-          <span>{t.commandTemplate}</span>
-          <span>{t.actions}</span>
+    <div className={`modal-card manager-modal connection-manager-modal command-manager-modal ${standalone ? 'standalone' : ''}`}>
+      <div className="connection-manager-header">
+        <span className="connection-manager-title">
+          <span className="material-symbols-outlined">terminal</span>
+          <span>{t.commandManager}</span>
+        </span>
+        <label className="connection-manager-search">
+          <AppIcon name="search" size={14} />
+          <input
+            aria-label={t.filterCommands}
+            placeholder={t.filterCommands}
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </label>
+        <div className="connection-manager-header-actions">
+          <button aria-label={t.closeTab} className="manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
         </div>
-        <div className="manager-body" style={{ flex: 1, overflowY: 'auto' }}>
-          {isCreatingFolder && (
-            <div className="manager-row folder-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="folder-icon" style={{ display: 'inline-block', fontSize: '10px' }}>▶</span>
-                <input
-                  type="text"
-                  autoFocus
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newFolderName.trim()) {
-                      onCreateFolder(newFolderName.trim())
-                      setIsCreatingFolder(false)
-                    } else if (e.key === 'Escape') {
-                      setIsCreatingFolder(false)
-                    }
-                  }}
-                  onBlur={() => {
-                    if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
-                    setIsCreatingFolder(false)
-                  }}
-                  style={{ background: 'var(--bg-active)', border: 'none', color: 'inherit', padding: '2px 4px', outline: 'none' }}
-                  placeholder={t.folderName}
-                />
+      </div>
+      <div className="connection-manager-layout">
+        <aside className="connection-manager-sidebar" aria-label={t.commandCategory}>
+          {folderNavItems.map((item) => (
+            <button
+              key={item.id}
+              className={`connection-manager-sidebar-item ${item.id === resolvedActiveFolderId ? 'active' : ''}`}
+              type="button"
+              onClick={() => setActiveFolderId(item.id)}
+            >
+              <span className="connection-manager-sidebar-icon" style={{ paddingLeft: `${item.depth * 12}px` }}>
+                <AppIcon name={item.id === 'all' ? 'brand' : 'folder'} size={14} />
               </span>
-              <span>--</span>
-              <span></span>
+              <span className="connection-manager-sidebar-label">{item.name}</span>
+              <span className="connection-manager-sidebar-count">{item.count}</span>
+            </button>
+          ))}
+        </aside>
+        <section className="connection-manager-main">
+          <div className="manager-table connection-manager-table command-manager-table">
+            <div className="manager-head">
+              <span>{t.name}</span>
+              <span>{t.commandTemplate}</span>
+              <span>{t.description}</span>
+              <span>{t.actions}</span>
             </div>
-          )}
-          {tree.roots.map((node) => renderNode(node, 0))}
-          {tree.roots.length === 0 && !isCreatingFolder && (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-              {t.commandEmpty}
+            <div className="manager-body connection-manager-body">
+              {isCreatingFolder && resolvedActiveFolderId === 'all' && (
+                <div className="manager-row folder-row">
+                  <span className="manager-name-cell">
+                    <span className="folder-icon manager-folder-toggle">▶</span>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newFolderName.trim()) {
+                          onCreateFolder(newFolderName.trim())
+                          setIsCreatingFolder(false)
+                        } else if (e.key === 'Escape') {
+                          setIsCreatingFolder(false)
+                        }
+                      }}
+                      onBlur={() => {
+                        if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
+                        setIsCreatingFolder(false)
+                      }}
+                      className="manager-inline-input"
+                      placeholder={t.folderName}
+                    />
+                  </span>
+                  <span>--</span>
+                  <span>--</span>
+                  <span></span>
+                </div>
+              )}
+              {visibleNodes.map((node) => renderNode(node, 0, { includeChildren: !isSearching }))}
+              {visibleNodes.length === 0 && !(isCreatingFolder && resolvedActiveFolderId === 'all') && (
+                <div className="connection-manager-empty">
+                  {emptyMessage}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+          <div className={`connection-manager-floating-drawer ${isActionsExpanded ? 'expanded' : ''}`}>
+            <div className="drawer-options-wrapper">
+              <button
+                className="drawer-option-btn secondary-btn"
+                type="button"
+                onClick={() => {
+                  setActiveFolderId('all')
+                  setIsCreatingFolder(true)
+                  setNewFolderName('')
+                  setIsActionsExpanded(false)
+                }}
+              >
+                <AppIcon name="folder" size={13} />
+                <span>{t.newFolder}</span>
+              </button>
+              <button
+                className="drawer-option-btn primary-btn"
+                type="button"
+                onClick={() => {
+                  openEditorWindow('create')
+                  setIsActionsExpanded(false)
+                }}
+              >
+                <AppIcon name="plus" size={13} />
+                <span>{t.newCommand}</span>
+              </button>
+            </div>
+            <button
+              className="drawer-trigger-btn"
+              type="button"
+              onClick={() => setIsActionsExpanded(!isActionsExpanded)}
+              aria-label="Expand actions"
+            >
+              <AppIcon name="plus" size={16} />
+            </button>
+          </div>
+        </section>
+      </div>
+      <div className="connection-manager-footer">
+        <span>{commandTemplates.length} {t.commandCountLabel}</span>
+        <span className="connection-manager-footer-separator"></span>
+        <span>{commandFolders.length} {t.folderCountLabel}</span>
+        <span className="connection-manager-footer-spacer"></span>
+        <span>{resolvedActiveFolderId === 'all' ? t.allCommands : activeFolderNode?.name}</span>
       </div>
     </div>
   )
@@ -408,7 +553,7 @@ export function CommandManagerModal({
   return (
     <>
       {standalone ? (
-        <div className="standalone-shell">{content}</div>
+        <div className="manager-window">{content}</div>
       ) : (
         <div className="modal-backdrop">{content}</div>
       )}

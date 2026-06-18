@@ -410,7 +410,7 @@ export function ConnectionManagerModal({
     <div className={`modal-card manager-modal connection-manager-modal ${standalone ? 'standalone' : ''}`}>
       <div className="connection-manager-header">
         <span className="connection-manager-title">
-          <AppIcon name="connections" size={16} />
+          <span className="material-symbols-outlined">settings_ethernet</span>
           <span>{t.connectionManager}</span>
         </span>
         <label className="connection-manager-search">
@@ -424,7 +424,7 @@ export function ConnectionManagerModal({
           />
         </label>
         <div className="connection-manager-header-actions">
-          <button aria-label={t.closeTab} className="icon-button manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
+          <button aria-label={t.closeTab} className="manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
         </div>
       </div>
       <div className="connection-manager-layout">

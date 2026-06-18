@@ -788,6 +788,15 @@
   -webkit-app-region: no-drag;
 }
 
+.tab-close {
+  font-size: 16px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 2px 0 !important;
+  line-height: 1;
+}
+
 .add-tab {
   width: 36px;
   height: 32px;
@@ -822,6 +831,11 @@
 .window-tools button {
   padding: 0;
   -webkit-app-region: no-drag;
+}
+
+.window-tools button .material-symbols-outlined {
+  font-size: 16px;
+  font-variation-settings: 'wght' 300, 'opsz' 16, 'GRAD' 0, 'FILL' 0;
 }
 
 .status-message {

@@ -1056,11 +1056,11 @@
 .connection-manager-modal .connection-manager-title {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
   color: var(--text-main);
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
@@ -1162,25 +1162,26 @@
 }
 
 .manager-close-button {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  font-weight: 300;
   transition: all 0.15s ease;
   margin-left: 2px;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 0 2px 0;
 }
 
 .manager-close-button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-main);
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: var(--danger) !important;
 }
 
 .connection-manager-layout {
@@ -1593,13 +1594,20 @@
   align-items: center;
   background: var(--text-main) !important; /* In closed state, matches button background (white in dark mode) */
   border: none;
-  border-radius: 8px; /* Rounded square plus button */
+  border-radius: 21px; /* Circular plus button when closed, matches capsule */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   height: 42px;
   width: 42px; /* Compact width when closed */
-  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+              background-color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+              border-radius 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+              box-shadow 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+              border-color 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-sizing: border-box;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: width, background-color, border-radius, box-shadow;
 }
 
 .connection-manager-floating-drawer.expanded {
@@ -1626,7 +1634,12 @@
   visibility: hidden;
   max-width: 0;
   overflow: hidden;
-  transition: max-width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.2s ease, transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), visibility 0.2s ease, padding-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: max-width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+              opacity 0.2s ease,
+              transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1),
+              visibility 0.2s ease,
+              padding-left 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  will-change: max-width, opacity, transform;
 }
 
 .connection-manager-floating-drawer.expanded .drawer-options-wrapper {
@@ -1650,7 +1663,7 @@
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
   white-space: nowrap;
 }
 
@@ -1692,12 +1705,19 @@
   background: transparent !important; /* Let parent background show (white square closed, glass capsule open) */
   color: var(--bg-main) !important;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              background-color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              margin 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+              border-radius 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 21px;
   margin: 0 !important;
   padding: 0 !important;
   margin-left: auto !important;
+  will-change: transform, opacity;
 }
 
 .drawer-trigger-btn * {

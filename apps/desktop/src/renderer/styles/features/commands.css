@@ -254,7 +254,15 @@
 
 .command-manager-table .manager-head,
 .command-manager-table .manager-row {
-  grid-template-columns: minmax(120px, 1.2fr) minmax(200px, 4fr) 120px;
+  grid-template-columns:
+    minmax(0, 1.2fr)
+    minmax(0, 2.5fr)
+    minmax(0, 1.2fr)
+    74px !important;
+  column-gap: 10px;
+  padding: 0 14px;
+  min-width: 0;
+  width: 100%;
 }
 
 .command-manager-table .manager-head span:nth-child(2),
@@ -669,11 +677,14 @@
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
+  padding: 0 !important;
 }
 
 .command-editor-page {
   width: min(920px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
+  padding: 0 !important;
+  overflow: hidden;
 }
 
 .command-form-standalone {
@@ -681,7 +692,7 @@
   width: 100%;
   height: 100vh;
   box-sizing: border-box;
-  padding: 46px 20px 20px;
+  padding: 0 !important;
   border: 0;
   border-radius: 0;
   display: grid;
@@ -720,6 +731,12 @@
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+.command-editor-dialog-form {
+  padding: 20px 24px;
 }
 
 .command-form-standalone-page {
@@ -790,8 +807,7 @@
   isolation: isolate;
 }
 
-.command-editor-page.standalone,
-.command-manager-modal.standalone {
+.command-editor-page.standalone {
   width: 100%;
   max-width: none;
   min-height: 100vh;
@@ -803,6 +819,18 @@
   background: var(--bg-main) !important;
   flex: 1;
   position: relative;
+}
+
+.command-manager-modal.standalone {
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-rows: auto 1fr !important;
+  padding: 0 !important;
 }
 
 .command-editor-page.standalone .modal-header,
@@ -982,9 +1010,10 @@
 }
 
 .command-manager-modal {
-  width: min(980px, calc(100vw - 88px));
-  min-height: 640px;
-  max-width: 980px;
+  width: min(1040px, calc(100vw - 56px)) !important;
+  min-height: min(680px, calc(100vh - 56px)) !important;
+  max-width: 1040px !important;
+  padding: 0 !important;
 }
 
 .command-manager-body {

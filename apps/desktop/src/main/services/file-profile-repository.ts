@@ -129,6 +129,15 @@ export class FileProfileRepository implements ProfileRepository {
     await this.writeProfiles(nextProfiles)
   }
 
+  async touchProfile(id: string): Promise<void> {
+    const profiles = await this.readProfiles()
+    const now = Date.now()
+    const nextProfiles = profiles.map((profile) =>
+      profile.id === id ? { ...profile, lastUsedAt: now } : profile
+    )
+    await this.writeProfiles(nextProfiles)
+  }
+
   async listFolders(): Promise<ConnectionFolder[]> {
     const folders = await this.readFolders()
     return [...folders]
@@ -449,7 +458,8 @@ function preserveProfileMetadata(profile: ConnectionProfile, previous: Connectio
   return {
     ...profile,
     parentId: previous.parentId,
-    order: previous.order
+    order: previous.order,
+    lastUsedAt: previous.lastUsedAt
   }
 }
 

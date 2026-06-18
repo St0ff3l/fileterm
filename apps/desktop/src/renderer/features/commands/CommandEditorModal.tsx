@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ClipboardEvent, type ReactNode } fro
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@termdock/core'
 import { t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from './command-utils'
+import { AppIcon } from '../common/AppIcon'
 
 export const emptyCommandForm: CommandTemplateInput = {
   name: '',
@@ -33,9 +34,14 @@ function CommandDialogShell({
 }) {
   const dialog = (
     <div className="modal-card command-dialog command-editor-page" onClick={(event) => event.stopPropagation()}>
-      <div className="modal-header">
-        <span>{title}</span>
-        <button className="icon-button" onClick={onClose} type="button">×</button>
+      <div className="connection-manager-header">
+        <span className="connection-manager-title">
+          <span className="material-symbols-outlined">terminal</span>
+          <span>{title}</span>
+        </span>
+        <div className="connection-manager-header-actions">
+          <button aria-label={t.closeTab} className="manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
+        </div>
       </div>
       <div className="command-dialog-body scrollbar-scroll">
         {children}
@@ -185,8 +191,14 @@ export function CommandEditorModal({
     return (
       <div className="connection-form-window">
         <div className="modal-card command-form-standalone">
-          <div className="modal-header">
-            <span>{title}</span>
+          <div className="connection-manager-header">
+            <span className="connection-manager-title">
+              <span className="material-symbols-outlined">terminal</span>
+              <span>{title}</span>
+            </span>
+            <div className="connection-manager-header-actions">
+              <button aria-label={t.closeTab} className="manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
+            </div>
           </div>
           <div className="command-form-standalone-body">
             <div className="command-form-standalone-page scrollbar-scroll">

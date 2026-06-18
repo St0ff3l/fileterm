@@ -34,7 +34,8 @@
 .modal-card.ssh-modal {
   width: min(900px, 88vw);
   min-height: 560px;
-  padding: 28px;
+  padding: 0 !important;
+  overflow: hidden;
 }
 
 .connection-form-window {
@@ -55,7 +56,7 @@
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 46px 24px 24px;
+  padding: 0 !important;
   border: 0;
   border-radius: 0;
   display: grid;
@@ -144,34 +145,53 @@
 .ssh-modal-body {
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr);
-  gap: 14px;
+  gap: 0;
   min-height: 0;
+  flex: 1;
 }
 
 .ssh-modal-nav {
-  border: 1px solid var(--border-light);
+  border: none;
+  border-right: 1px solid var(--border-light);
+  background-color: var(--bg-sidebar);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   overflow: hidden;
 }
 
 .ssh-modal-nav button {
   display: block;
   width: 100%;
-  height: 38px;
+  height: 32px;
   border: 0;
-  border-bottom: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
   text-align: left;
-  padding: 0 14px;
+  padding: 0 12px;
   font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ssh-modal-nav button:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
 }
 
 .ssh-modal-nav button.active {
-  font-weight: 600;
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  font-weight: 500;
 }
 
 .ssh-form-shell {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
+  padding: 20px 24px;
 }
 
 .ssh-form-page {

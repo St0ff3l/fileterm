@@ -15,6 +15,7 @@ export interface ProfileRepository {
   updateTrustedHostFingerprint?(id: string, fingerprint: string): Promise<ConnectionProfile | null>
   getById(id: string): Promise<ConnectionProfile | null>
   delete(id: string): Promise<void>
+  touchProfile(id: string): Promise<void>
   
   createFolder(name: string, parentId?: string): Promise<ConnectionFolder>
   updateFolder(id: string, updates: Partial<ConnectionFolder>): Promise<ConnectionFolder>
@@ -89,6 +90,13 @@ export class MemoryProfileRepository implements ProfileRepository {
 
   async delete(id: string): Promise<void> {
     this.profiles = this.profiles.filter((profile) => profile.id !== id)
+  }
+
+  async touchProfile(id: string): Promise<void> {
+    const now = Date.now()
+    this.profiles = this.profiles.map((profile) =>
+      profile.id === id ? { ...profile, lastUsedAt: now } : profile
+    )
   }
 
   async listFolders(): Promise<ConnectionFolder[]> {
@@ -218,7 +226,8 @@ function preserveProfileMetadata(profile: ConnectionProfile, previous: Connectio
   return {
     ...profile,
     parentId: previous.parentId,
-    order: previous.order
+    order: previous.order,
+    lastUsedAt: previous.lastUsedAt
   }
 }
 

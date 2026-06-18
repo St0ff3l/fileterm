@@ -449,8 +449,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 52px;
-  padding: 0 20px;
+  min-height: 48px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-sidebar);
 }
@@ -458,9 +458,9 @@
 .connection-manager-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--text-main);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
 }
 
@@ -531,4 +531,351 @@
 .command-manager-item.active {
   background: var(--bg-card);
   border-color: var(--text-main);
+}
+
+/* Standalone header dragging */
+.standalone .connection-manager-header,
+.command-form-standalone .connection-manager-header,
+.connection-form-window .connection-manager-header {
+  -webkit-app-region: drag;
+  padding-left: 18px;
+}
+
+.standalone .connection-manager-header button,
+.standalone .connection-manager-header input,
+.standalone .connection-manager-header select,
+.standalone .connection-manager-header textarea,
+.standalone .connection-manager-header .connection-manager-search,
+.standalone .connection-manager-header .connection-manager-header-actions,
+.command-form-standalone .connection-manager-header button,
+.command-form-standalone .connection-manager-header input,
+.command-form-standalone .connection-manager-header select,
+.command-form-standalone .connection-manager-header textarea,
+.command-form-standalone .connection-manager-header .connection-manager-search,
+.command-form-standalone .connection-manager-header .connection-manager-header-actions,
+.connection-form-window .connection-manager-header button,
+.connection-form-window .connection-manager-header input,
+.connection-form-window .connection-manager-header select,
+.connection-form-window .connection-manager-header textarea,
+.connection-form-window .connection-manager-header .connection-manager-search,
+.connection-form-window .connection-manager-header .connection-manager-header-actions {
+  -webkit-app-region: no-drag;
+}
+
+.connection-manager-title .material-symbols-outlined {
+  font-size: 16px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variation-settings: 'wght' 300, 'opsz' 16, 'GRAD' 0, 'FILL' 0;
+}
+
+/* Settings Modal Styles */
+.modal-card.manager-modal.connection-manager-modal.settings-modal {
+  width: min(840px, calc(100vw - 56px));
+  min-height: min(580px, calc(100vh - 56px));
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background-color: var(--bg-main) !important;
+}
+
+.settings-modal .connection-manager-main {
+  overflow-y: auto;
+}
+
+/* Fix sidebar item icon column width and icon size for settings modal */
+.settings-modal .connection-manager-sidebar-item {
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+}
+
+.settings-modal .connection-manager-sidebar-item:hover {
+  padding-left: 14px;
+}
+
+.settings-modal .connection-manager-sidebar-icon .material-symbols-outlined {
+  font-size: 16px;
+  font-variation-settings: 'wght' 300, 'opsz' 16, 'GRAD' 0, 'FILL' 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+}
+
+.settings-panel {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 8px;
+  letter-spacing: 0.05em;
+}
+
+.theme-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.theme-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  text-align: center;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+  outline: none;
+  font-family: inherit;
+}
+
+.theme-card:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+.theme-card.active {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.theme-card-preview {
+  width: 100%;
+  height: 80px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+}
+
+.theme-card.dark .theme-card-preview {
+  background: #141414;
+}
+
+.theme-card.light .theme-card-preview {
+  background: #f5f5f5;
+}
+
+.preview-header {
+  height: 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.theme-card.dark .preview-header {
+  background: #1f1f1f;
+  border-bottom-color: #2e2e2e;
+}
+
+.theme-card.light .preview-header {
+  background: #e8e8e8;
+  border-bottom-color: #dcdcdc;
+}
+
+.preview-body {
+  display: flex;
+  flex: 1;
+}
+
+.preview-sidebar {
+  width: 24px;
+  border-right: 1px solid var(--border-light);
+}
+
+.theme-card.dark .preview-sidebar {
+  background: #1a1a1a;
+  border-right-color: #2e2e2e;
+}
+
+.theme-card.light .preview-sidebar {
+  background: #f0f0f0;
+  border-right-color: #dcdcdc;
+}
+
+.preview-content {
+  flex: 1;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.theme-card.dark .preview-content::before {
+  content: "";
+  display: block;
+  width: 60%;
+  height: 6px;
+  background: #2e2e2e;
+  border-radius: 2px;
+}
+
+.theme-card.light .preview-content::before {
+  content: "";
+  display: block;
+  width: 60%;
+  height: 6px;
+  background: #dcdcdc;
+  border-radius: 2px;
+}
+
+.language-selector-row {
+  display: flex;
+  gap: 12px;
+}
+
+.lang-card {
+  padding: 10px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  outline: none;
+}
+
+.lang-card:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+.lang-card.active {
+  border-color: var(--primary);
+  background: var(--bg-hover);
+  font-weight: 500;
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.tools-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.tool-shortcut-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  transition: all 0.2s ease;
+}
+
+.tool-shortcut-card:hover {
+  border-color: var(--text-muted);
+  box-shadow: var(--shadow-sm);
+}
+
+.tool-card-icon {
+  font-size: 20px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.tool-card-details strong {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.tool-card-details p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.tool-card-details button {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.about-info-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.about-info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+}
+
+.about-info-item:last-child {
+  border-bottom: none;
+}
+
+.info-label {
+  color: var(--text-muted);
+}
+
+.info-value {
+  color: var(--text-main);
+  font-family: monospace;
+}
+
+.logs-shortcut-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.logs-shortcut-card p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.logs-shortcut-card button {
+  align-self: flex-start;
 }

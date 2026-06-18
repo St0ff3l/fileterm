@@ -32,6 +32,7 @@ export interface BaseProfile extends BaseEntity {
   host: string
   port: number
   group: string
+  lastUsedAt?: number
 }
 
 export interface SshProfile extends BaseProfile {
@@ -383,6 +384,8 @@ export interface RemoteFileAccessOptions {
 
 export interface TermdockDesktopApi {
   platform: string
+  arch: string
+  appVersion: string
   appName: string
   isDesktop: boolean
   readClipboardText(): Promise<string>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { ConnectionFormMode, CreateProfileInput } from '@termdock/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 
 export function ConnectionModal({
   errorMessage,
@@ -27,9 +28,14 @@ export function ConnectionModal({
 
   const content = (
     <div className={`modal-card ssh-modal ${standalone ? 'standalone' : ''}`}>
-      <div className="modal-header">
-        <span>{mode === 'edit' ? t.editConnection : t.newConnection}</span>
-        {!standalone ? <button className="icon-button" onClick={onClose} type="button">×</button> : null}
+      <div className="connection-manager-header">
+        <span className="connection-manager-title">
+          <span className="material-symbols-outlined">settings_ethernet</span>
+          <span>{mode === 'edit' ? t.editConnection : t.newConnection}</span>
+        </span>
+        <div className="connection-manager-header-actions">
+          <button aria-label={t.closeTab} className="manager-close-button" onClick={onClose} title={t.closeTab} type="button">×</button>
+        </div>
       </div>
       <div className="ssh-modal-body">
         <aside className="ssh-modal-nav">

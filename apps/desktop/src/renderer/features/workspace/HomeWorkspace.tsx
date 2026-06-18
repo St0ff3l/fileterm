@@ -67,7 +67,7 @@ export function HomeWorkspace({
         {!isWindows && (
           <div className="sidebar-brand">
             <h2 className="brand-title">TermDock</h2>
-            <span className="brand-version">v1.2.0-stable</span>
+            <span className="brand-version">v{desktopApi?.appVersion ?? '—'}</span>
           </div>
         )}
 
@@ -106,8 +106,8 @@ export function HomeWorkspace({
             <span>{t.connectionManager}</span>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={handleOpenConnectionManager}
+            className="sidebar-nav-link"
+            onClick={tabBarProps.onOpenSettings}
             type="button"
           >
             <span className="material-symbols-outlined">settings</span>

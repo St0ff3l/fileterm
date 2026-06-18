@@ -18,7 +18,12 @@ export function OverviewPage({
   onOpenCommandManager(): void
   onOpenDocs(): void
 }) {
-  const recentProfiles = profiles.slice(0, 6)
+  const usedProfiles = profiles.filter(p => p.lastUsedAt != null)
+  const recentProfiles = usedProfiles.length > 0
+    ? [...usedProfiles]
+        .sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))
+        .slice(0, 6)
+    : profiles.slice(0, 6)
   const sshCount = profiles.filter(p => p.type === 'ssh').length
   const ftpCount = profiles.filter(p => p.type === 'ftp').length
   const secureFtpCount = profiles.filter(p => p.type === 'ftp' && p.secure).length
