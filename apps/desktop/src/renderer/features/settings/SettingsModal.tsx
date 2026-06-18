@@ -133,14 +133,14 @@ export function SettingsModal({
                     onClick={() => onSetLocale('zhCN')}
                     type="button"
                   >
-                    简体中文
+                    {t.languageZhCN}
                   </button>
                   <button
                     className={`lang-card ${locale === 'enUS' ? 'active' : ''}`}
                     onClick={() => onSetLocale('enUS')}
                     type="button"
                   >
-                    English
+                    {t.languageEnglish}
                   </button>
                 </div>
               </section>
@@ -156,7 +156,7 @@ export function SettingsModal({
                     <span className="material-symbols-outlined tool-card-icon">settings_ethernet</span>
                     <div className="tool-card-details">
                       <strong>{t.connectionManager}</strong>
-                      <p>管理所有远程服务器连接与分组，配置 SSH / SFTP 证书、跳板机及代理隧道。</p>
+                      <p>{t.settingsConnectionManagerDescription}</p>
                       <button className="primary-button compact" onClick={onOpenConnectionManager} type="button">
                         {t.openConnection}
                       </button>
@@ -166,7 +166,7 @@ export function SettingsModal({
                     <span className="material-symbols-outlined tool-card-icon">terminal</span>
                     <div className="tool-card-details">
                       <strong>{t.commandManager}</strong>
-                      <p>管理常用命令与快捷脚本，分类存储命令，并在 SSH 终端中一键快速发送。</p>
+                      <p>{t.settingsCommandManagerDescription}</p>
                       <button className="primary-button compact" onClick={onOpenCommandManager} type="button">
                         {t.commandManager}
                       </button>
@@ -200,7 +200,7 @@ export function SettingsModal({
               <section className="settings-section">
                 <h3>{t.systemLogsInfo}</h3>
                 <div className="logs-shortcut-card">
-                  <p>应用程序在运行期间会产生日志。如果遇到任何连接错误或意外崩溃，你可以打开日志目录并查看具体的日志信息。</p>
+                  <p>{t.settingsLogsDescription}</p>
                   <button className="flat-button compact" onClick={onOpenLogsDirectory} type="button">
                     <span className="material-symbols-outlined" style={{ fontSize: '14px', marginRight: '4px', verticalAlign: 'middle' }}>folder_open</span>
                     {t.openLogsDirectory}

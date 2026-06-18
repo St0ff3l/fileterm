@@ -34,9 +34,9 @@ export function OverviewPage({
       {/* Hero Section */}
       <section className="overview-hero">
         <div className="hero-content">
-          <h1 className="hero-title">欢迎使用 TermDock</h1>
+          <h1 className="hero-title">{t.overviewWelcomeTitle}</h1>
           <p className="hero-subtitle">
-            强大的终端管理工具，让远程连接更简单高效
+            {t.overviewWelcomeSubtitle}
           </p>
           <div className="hero-actions">
             <button
@@ -45,7 +45,7 @@ export function OverviewPage({
               type="button"
             >
               <span className="material-symbols-outlined">add</span>
-              <span>新建连接</span>
+              <span>{t.newConnection}</span>
             </button>
             <button
               className="hero-btn hero-btn-secondary"
@@ -53,7 +53,7 @@ export function OverviewPage({
               type="button"
             >
               <span className="material-symbols-outlined">settings_ethernet</span>
-              <span>连接管理</span>
+              <span>{t.connectionManager}</span>
             </button>
           </div>
         </div>
@@ -67,7 +67,7 @@ export function OverviewPage({
           </div>
           <div className="stat-content">
             <div className="stat-value">{profiles.length}</div>
-            <div className="stat-label">总连接数</div>
+            <div className="stat-label">{t.overviewTotalConnections}</div>
           </div>
         </div>
         <div className="stat-card">
@@ -76,7 +76,7 @@ export function OverviewPage({
           </div>
           <div className="stat-content">
             <div className="stat-value">{sshCount}</div>
-            <div className="stat-label">SSH 连接</div>
+            <div className="stat-label">{t.overviewSshConnections}</div>
           </div>
         </div>
         <div className="stat-card">
@@ -85,7 +85,7 @@ export function OverviewPage({
           </div>
           <div className="stat-content">
             <div className="stat-value">{secureFtpCount}</div>
-            <div className="stat-label">Secure FTP</div>
+            <div className="stat-label">{t.overviewSecureFtpConnections}</div>
           </div>
         </div>
         <div className="stat-card">
@@ -94,7 +94,7 @@ export function OverviewPage({
           </div>
           <div className="stat-content">
             <div className="stat-value">{ftpCount}</div>
-            <div className="stat-label">FTP 连接</div>
+            <div className="stat-label">{t.overviewFtpConnections}</div>
           </div>
         </div>
       </section>
@@ -103,7 +103,7 @@ export function OverviewPage({
       {recentProfiles.length > 0 && (
         <section className="overview-recent">
           <div className="section-header">
-            <h2 className="section-title">最近使用</h2>
+            <h2 className="section-title">{t.overviewRecentConnections}</h2>
           </div>
           <div className="recent-grid">
             {recentProfiles.map((profile) => (
@@ -154,7 +154,7 @@ export function OverviewPage({
       {/* Quick Actions */}
       <section className="overview-actions">
         <div className="section-header">
-          <h2 className="section-title">快速操作</h2>
+          <h2 className="section-title">{t.overviewQuickActions}</h2>
         </div>
         <div className="action-grid">
           <button
@@ -167,7 +167,7 @@ export function OverviewPage({
             </div>
             <div className="action-content">
               <h3 className="action-title">{t.commandManager}</h3>
-              <p className="action-desc">管理你的快捷命令模板</p>
+              <p className="action-desc">{t.overviewCommandManagerDescription}</p>
             </div>
           </button>
           <button
@@ -179,8 +179,8 @@ export function OverviewPage({
               <span className="material-symbols-outlined">tune</span>
             </div>
             <div className="action-content">
-              <h3 className="action-title">连接管理</h3>
-              <p className="action-desc">管理所有连接配置</p>
+              <h3 className="action-title">{t.connectionManager}</h3>
+              <p className="action-desc">{t.overviewConnectionManagerDescription}</p>
             </div>
           </button>
           <button
@@ -192,8 +192,8 @@ export function OverviewPage({
               <span className="material-symbols-outlined">description</span>
             </div>
             <div className="action-content">
-              <h3 className="action-title">查看文档</h3>
-              <p className="action-desc">获取使用帮助和指南</p>
+              <h3 className="action-title">{t.overviewDocsTitle}</h3>
+              <p className="action-desc">{t.overviewDocsDescription}</p>
             </div>
           </button>
           <button
@@ -206,7 +206,7 @@ export function OverviewPage({
             </div>
             <div className="action-content">
               <h3 className="action-title">GitHub</h3>
-              <p className="action-desc">访问项目源代码</p>
+              <p className="action-desc">{t.overviewGithubDescription}</p>
             </div>
           </button>
         </div>

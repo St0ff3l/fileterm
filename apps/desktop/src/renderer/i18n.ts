@@ -337,14 +337,32 @@ const zhCN = {
   settings: '设置',
   generalSettings: '通用设置',
   appearanceTheme: '外观与主题',
-  languageSelection: '语言与国际化',
+  languageSelection: 'Language 语言',
+  languageZhCN: '简体中文',
+  languageEnglish: 'English',
   themeSelection: '主题选择',
   managerToolsShortcut: '管理工具',
+  settingsConnectionManagerDescription: '管理所有远程服务器连接与分组，配置 SSH / SFTP 证书、跳板机及代理隧道。',
+  settingsCommandManagerDescription: '管理常用命令与快捷脚本，分类存储命令，并在 SSH 终端中一键快速发送。',
   systemLogsInfo: '系统与日志',
+  settingsLogsDescription: '应用程序在运行期间会产生日志。如果遇到任何连接错误或意外崩溃，你可以打开日志目录并查看具体的日志信息。',
   logsDirectory: '日志目录',
   aboutAppInfo: '关于 TermDock',
   versionLabel: '应用版本',
   environmentInfo: '运行环境',
+  overviewWelcomeTitle: '欢迎使用 TermDock',
+  overviewWelcomeSubtitle: '强大的终端管理工具，让远程连接更简单高效',
+  overviewTotalConnections: '总连接数',
+  overviewSshConnections: 'SSH 连接',
+  overviewSecureFtpConnections: 'Secure FTP',
+  overviewFtpConnections: 'FTP 连接',
+  overviewRecentConnections: '最近使用',
+  overviewQuickActions: '快速操作',
+  overviewCommandManagerDescription: '管理你的快捷命令模板',
+  overviewConnectionManagerDescription: '管理所有连接配置',
+  overviewDocsTitle: '查看文档',
+  overviewDocsDescription: '获取使用帮助和指南',
+  overviewGithubDescription: '访问项目源代码',
   notReady: '稍后接入',
   closeConfirmTitle: '退出确认',
   closeConfirmActiveWarn: '当前有正在运行的远程连接，退出或关闭窗口可能会中断这些连接。',
@@ -688,14 +706,32 @@ const enUS: typeof zhCN = {
   settings: 'Settings',
   generalSettings: 'General Settings',
   appearanceTheme: 'Appearance & Theme',
-  languageSelection: 'Language & Locale',
+  languageSelection: 'Language 语言',
+  languageZhCN: 'Simplified Chinese',
+  languageEnglish: 'English',
   themeSelection: 'Theme Selection',
   managerToolsShortcut: 'Management Tools',
+  settingsConnectionManagerDescription: 'Manage remote server connections and groups, including SSH / SFTP credentials, jump hosts, and proxy tunnels.',
+  settingsCommandManagerDescription: 'Organize reusable commands and quick scripts, then send them to the current SSH terminal with one click.',
   systemLogsInfo: 'System & Logs',
+  settingsLogsDescription: 'The app writes runtime logs while it is running. If you hit a connection error or unexpected crash, open the logs directory to inspect the details.',
   logsDirectory: 'Logs Directory',
   aboutAppInfo: 'About TermDock',
   versionLabel: 'Version',
   environmentInfo: 'Environment',
+  overviewWelcomeTitle: 'Welcome to TermDock',
+  overviewWelcomeSubtitle: 'A powerful terminal workspace that makes remote connections simpler and more efficient.',
+  overviewTotalConnections: 'Total Connections',
+  overviewSshConnections: 'SSH Connections',
+  overviewSecureFtpConnections: 'Secure FTP',
+  overviewFtpConnections: 'FTP Connections',
+  overviewRecentConnections: 'Recent Connections',
+  overviewQuickActions: 'Quick Actions',
+  overviewCommandManagerDescription: 'Manage your reusable command templates.',
+  overviewConnectionManagerDescription: 'Manage all saved connection profiles.',
+  overviewDocsTitle: 'Documentation',
+  overviewDocsDescription: 'Read usage guides and help docs.',
+  overviewGithubDescription: 'View the project source code.',
   notReady: 'Coming later',
   closeConfirmTitle: 'Confirm Exit',
   closeConfirmActiveWarn: 'There are active remote connections running. Exiting or closing the window may disconnect them.',
@@ -728,7 +764,24 @@ function resolveInitialLocale(): AppLocale {
 
   try {
     const nextLocale = window.localStorage.getItem('termdock.locale')
-    return nextLocale === 'enUS' || nextLocale === 'zhCN' ? nextLocale : defaultLocale
+    if (nextLocale === 'enUS' || nextLocale === 'zhCN') {
+      return nextLocale
+    }
+
+    const preferredLocales = window.navigator.languages?.length
+      ? window.navigator.languages
+      : [window.navigator.language]
+    const matchedLocale = preferredLocales.find(locale => typeof locale === 'string' && locale.length > 0)
+
+    if (matchedLocale?.toLowerCase().startsWith('zh')) {
+      return 'zhCN'
+    }
+
+    if (matchedLocale?.toLowerCase().startsWith('en')) {
+      return 'enUS'
+    }
+
+    return defaultLocale
   } catch {
     return defaultLocale
   }
