@@ -63,6 +63,8 @@ export function HomeWorkspace({
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'settings'>('overview')
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
+  const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
+  const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
 
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
   const tabOrder: Record<string, number> = {
@@ -214,6 +216,7 @@ export function HomeWorkspace({
                 onUpdateFolder={onUpdateConnectionFolder}
                 onUpdateOrder={onUpdateConnectionOrder}
                 inline={true}
+                onActiveFolderChange={setActiveConnectionFolderName}
               />
             </div>
           )}
@@ -231,6 +234,7 @@ export function HomeWorkspace({
                 onUpdateFolder={onUpdateCommandFolder}
                 onUpdateOrder={onUpdateCommandOrder}
                 inline={true}
+                onActiveFolderChange={setActiveCommandFolderName}
               />
             </div>
           )}
@@ -253,7 +257,37 @@ export function HomeWorkspace({
 
         {/* Custom Footer */}
         <footer className="home-footer">
-          <div className="footer-copyright">© 2026 TermDock Team. MIT Licensed. System: 0.1ms latency</div>
+          <div className="footer-copyright">
+            <span>© 2026 TermDock Team. MIT Licensed. System: 0.1ms latency</span>
+            {activeTab === 'connection-manager' && (
+              <>
+                <span className="footer-meta-separator">|</span>
+                <span>{profiles.length} {t.connectionCountLabel}</span>
+                <span className="footer-meta-separator">|</span>
+                <span>{folders.length} {t.folderCountLabel}</span>
+                {activeConnectionFolderName && (
+                  <>
+                    <span className="footer-meta-separator">|</span>
+                    <span>{activeConnectionFolderName}</span>
+                  </>
+                )}
+              </>
+            )}
+            {activeTab === 'command-manager' && (
+              <>
+                <span className="footer-meta-separator">|</span>
+                <span>{commandTemplates.length} {t.commandCountLabel}</span>
+                <span className="footer-meta-separator">|</span>
+                <span>{commandFolders.length} {t.folderCountLabel}</span>
+                {activeCommandFolderName && (
+                  <>
+                    <span className="footer-meta-separator">|</span>
+                    <span>{activeCommandFolderName}</span>
+                  </>
+                )}
+              </>
+            )}
+          </div>
           <nav className="footer-nav">
             <button onClick={handleOpenDocs} type="button">Changelog</button>
             <button onClick={handleOpenDocs} type="button">API Reference</button>

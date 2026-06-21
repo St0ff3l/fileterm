@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SshCredentialsPromptRequest } from '@termdock/core'
+import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 
 export function SshCredentialsModal({
@@ -26,7 +27,9 @@ export function SshCredentialsModal({
       <div className="modal-card ssh-interaction-modal">
         <div className="modal-header">
           <span>{t.sshAuthPromptTitle}</span>
-          <button className="icon-button" onClick={onCancel} type="button">×</button>
+          <button className="icon-button" onClick={onCancel} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
 
         <div className="root-access-description">{t.sshAuthPromptDescription}</div>

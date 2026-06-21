@@ -28,6 +28,8 @@ export type AppIconName =
   | 'chevron-up'
   | 'chevron-down'
   | 'play'
+  | 'close'
+
 
 export function AppIcon({
   name,
@@ -231,6 +233,9 @@ export function AppIcon({
       ) : null}
       {name === 'play' ? (
         <path {...commonProps} d="M5.5 3.5v9l6.5-4.5z" />
+      ) : null}
+      {name === 'close' ? (
+        <path {...commonProps} d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
       ) : null}
     </svg>
   )

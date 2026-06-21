@@ -82,7 +82,7 @@
 }
 
 .confirm-action-dialog__button--danger {
-  border-color: var(--dialog-button-danger-border);
+  border: 1px solid var(--dialog-button-danger-border);
   background: var(--dialog-button-danger-bg);
   color: var(--dialog-button-danger-text);
 }

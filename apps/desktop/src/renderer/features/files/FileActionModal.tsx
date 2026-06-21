@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 
 export function FileActionModal({
@@ -39,7 +40,9 @@ export function FileActionModal({
       <div className="modal-card file-action-modal">
         <div className="modal-header">
           <span>{title}</span>
-          <button className="icon-button" disabled={isSubmitting} onClick={onClose} type="button">×</button>
+          <button className="icon-button" disabled={isSubmitting} onClick={onClose} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
         {description ? <div className="file-action-description">{description}</div> : null}
         {inputLabel ? (

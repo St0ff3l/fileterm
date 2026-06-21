@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PermissionChangeOptions } from '@termdock/core'
+import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 
 type PermissionMatrix = {
@@ -39,7 +40,9 @@ export function FilePermissionModal({
       <div className="modal-card file-permission-modal">
         <div className="modal-header">
           <span>{t.permissionDialogTitle}</span>
-          <button className="icon-button" onClick={onClose} type="button">×</button>
+          <button className="icon-button" onClick={onClose} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
 
         <div className="file-permission-name">{fileName}</div>

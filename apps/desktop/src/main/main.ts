@@ -730,7 +730,8 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
     height: DEFAULT_WINDOW_BOUNDS.fileEditor.height,
     minWidth: DEFAULT_WINDOW_BOUNDS.fileEditor.minWidth,
     minHeight: DEFAULT_WINDOW_BOUNDS.fileEditor.minHeight,
-    backgroundColor: uiPreferences.theme === 'default-light' ? '#f8fafc' : '#171b20'
+    backgroundColor: uiPreferences.theme === 'default-light' ? '#f8fafc' : '#171b20',
+    frame: false
   })
 
   fileEditorWindow = win

@@ -27,6 +27,8 @@ import { appLog, appWarn } from '../app-logger.js'
 export class LiveSshSessionController extends BaseFileSessionController implements SshSessionController {
   readonly type = 'ssh'
   private static readonly TRANSCRIPT_LIMIT = 200_000
+  private static readonly REMOTE_FILE_READ_TIMEOUT_MS = 20_000
+  private static readonly REMOTE_FILE_WRITE_TIMEOUT_MS = 20_000
 
   private readonly ssh = new Client()
   private readonly execSsh = new Client()
@@ -419,7 +421,8 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
     try {
       const sftp = await this.ensureSftp()
-      return await new Promise<string>((resolve, reject) => {
+      return await this.withOperationTimeout(
+        new Promise<string>((resolve, reject) => {
         sftp.readFile(targetPath, (error, data) => {
           if (error) {
             reject(error)
@@ -427,7 +430,11 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           }
           resolve(decodeBuffer(Buffer.isBuffer(data) ? data : Buffer.from(data), encoding))
         })
-      })
+        }),
+        LiveSshSessionController.REMOTE_FILE_READ_TIMEOUT_MS,
+        '读取远程文件超时，已重置文件通道。请重试或先下载后编辑。',
+        () => this.closeSftpSession()
+      )
     } catch (error) {
       return this.readRemoteFileViaShell(targetPath, error, encoding)
     }
@@ -443,15 +450,20 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       const sftp = await this.ensureSftp()
       await this.ensureRemoteDirectory(path.posix.dirname(targetPath))
       const payload = encodeText(content, encoding)
-      await new Promise<void>((resolve, reject) => {
-        sftp.writeFile(targetPath, payload, (error) => {
-          if (error) {
-            reject(error)
-            return
-          }
-          resolve()
-        })
-      })
+      await this.withOperationTimeout(
+        new Promise<void>((resolve, reject) => {
+          sftp.writeFile(targetPath, payload, (error) => {
+            if (error) {
+              reject(error)
+              return
+            }
+            resolve()
+          })
+        }),
+        LiveSshSessionController.REMOTE_FILE_WRITE_TIMEOUT_MS,
+        '保存远程文件超时，已重置文件通道。请重试。',
+        () => this.closeSftpSession()
+      )
     } catch (error) {
       await this.writeRemoteFileViaShell(targetPath, content, error, encoding)
     }
@@ -1552,6 +1564,44 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
 
   private async verifyRootFileAccess(): Promise<void> {
     await this.execShellFileCommand('true', undefined, true)
+  }
+
+  private withOperationTimeout<T>(
+    operation: Promise<T>,
+    timeoutMs: number,
+    message: string,
+    onTimeout?: () => void
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      let settled = false
+
+      const settle = (handler: (value: T) => void | ((error: Error) => void), value: T | Error) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        clearTimeout(timeoutId)
+        if (value instanceof Error) {
+          ;(handler as (error: Error) => void)(value)
+          return
+        }
+        ;(handler as (result: T) => void)(value)
+      }
+
+      const timeoutId = setTimeout(() => {
+        try {
+          onTimeout?.()
+        } catch {
+          // Best-effort reset only.
+        }
+        settle(reject, new Error(message))
+      }, timeoutMs)
+
+      operation.then(
+        (value) => settle(resolve, value),
+        (error) => settle(reject, error instanceof Error ? error : new Error(String(error)))
+      )
+    })
   }
 
   private trackSudoPromptFromTerminal(text: string) {

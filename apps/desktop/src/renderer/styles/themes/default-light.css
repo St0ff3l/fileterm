@@ -106,12 +106,12 @@
   --dialog-button-primary-text: var(--text-main);
   --dialog-button-primary-hover-bg: var(--bg-active);
   --dialog-button-primary-hover-border: var(--border-dark);
-  --dialog-button-danger-bg: rgba(201, 61, 61, 0.08);
-  --dialog-button-danger-border: rgba(201, 61, 61, 0.24);
-  --dialog-button-danger-text: #b93838;
-  --dialog-button-danger-hover-bg: rgba(201, 61, 61, 0.12);
-  --dialog-button-danger-hover-border: rgba(201, 61, 61, 0.36);
-  --dialog-button-danger-hover-text: #a12f2f;
+  --dialog-button-danger-bg: #d32f2f;
+  --dialog-button-danger-border: transparent;
+  --dialog-button-danger-text: #ffffff;
+  --dialog-button-danger-hover-bg: #e53935;
+  --dialog-button-danger-hover-border: transparent;
+  --dialog-button-danger-hover-text: #ffffff;
   --dialog-focus-ring:
     0 0 0 2px color-mix(in srgb, var(--bg-card) 88%, transparent),
     0 0 0 4px color-mix(in srgb, var(--primary) 24%, transparent);

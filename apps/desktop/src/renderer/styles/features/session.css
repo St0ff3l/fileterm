@@ -1701,10 +1701,12 @@
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
   width: 100%;
-  height: 32px;
-  padding: 0 8px;
+  min-height: 40px;
+  height: auto;
+  padding: 8px 12px;
+  margin-bottom: 4px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
@@ -1718,7 +1720,7 @@
 .connection-manager-sidebar-item:hover {
   background: var(--bg-hover) !important;
   color: var(--text-main) !important;
-  padding-left: 14px;
+  padding-left: 16px;
 }
 
 .connection-manager-sidebar-item.active {

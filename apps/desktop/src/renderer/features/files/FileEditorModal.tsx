@@ -4,6 +4,7 @@ import OpenCC from 'opencc-js'
 import * as monacoEditor from 'monaco-editor'
 import type { FileContentSnapshot } from '@termdock/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 import { EDITOR_ENCODINGS, findEncodingOption, sortEditorLanguages, type EditorLanguageOption } from './file-editor-config'
 
 const toTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' })
@@ -20,6 +21,7 @@ export function FileEditorModal({
   errorMessage,
   file,
   isBusy,
+  isSaving,
   onClose,
   onReloadWithEncoding,
   onSave,
@@ -29,6 +31,7 @@ export function FileEditorModal({
   errorMessage: string | null
   file: FileContentSnapshot
   isBusy: boolean
+  isSaving: boolean
   onClose(): void
   onReloadWithEncoding(encoding: string): void
   onSave(content: string, encoding: string): void
@@ -228,17 +231,19 @@ export function FileEditorModal({
           {isDirty ? <b>{t.fileEditorUnsaved}</b> : null}
         </div>
         <div className="file-editor-header-actions">
-          <button className="primary-button compact file-editor-save-button" disabled={!isDirty || isBusy} onClick={() => onSave(content, encoding)} type="button">
-            {isBusy ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{isBusy ? t.saving : t.save}</span>
+          <button className={`file-editor-save-button ${isDirty ? 'is-dirty' : ''}`} disabled={!isDirty || isBusy || isSaving} onClick={() => onSave(content, encoding)} type="button">
+            {isSaving ? <span aria-hidden="true" className="button-spinner" /> : null}
+            <span>{isSaving ? t.saving : t.save}</span>
           </button>
-          {!standalone ? <button className="icon-button" onClick={onClose} type="button">×</button> : null}
+          <button aria-label={t.closeTab} className="icon-button file-editor-close-button" onClick={onClose} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
       </div>
 
       <div className="file-editor-menubar">
         <EditorMenuButton current={openMenu} label={t.fileEditorFile} menu="file" onToggle={setOpenMenu}>
-          <MenuAction disabled={!isDirty || isBusy} label={isBusy ? t.saving : t.save} onClick={() => onSave(content, encoding)} />
+          <MenuAction disabled={!isDirty || isBusy || isSaving} label={isSaving ? t.saving : t.save} onClick={() => onSave(content, encoding)} />
           <MenuAction label={t.fileEditorReloadEncoding} onClick={() => setOpenMenu('encoding')} />
         </EditorMenuButton>
         <EditorMenuButton current={openMenu} label={t.edit} menu="edit" onToggle={setOpenMenu}>

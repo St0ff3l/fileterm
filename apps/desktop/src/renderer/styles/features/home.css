@@ -212,79 +212,104 @@
    内嵌管理器(inline):页面原生形态,去掉弹窗外壳
    ============================================================ */
 .home-content-body .manager-inline {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-  max-width: 100%;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
 }
 
 /* 内嵌版必须完全跟随标签页容器，不能继续使用弹窗的 viewport 宽度 */
 .home-content-body .manager-inline.connection-manager-modal,
 .home-content-body .manager-inline.command-manager-modal,
 .home-content-body .manager-inline.settings-modal {
-  width: 100%;
-  max-width: 100%;
-  min-height: 0;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  height: 100% !important;
 }
 
 /* 命令管理器内嵌时,撤掉它自带的固定宽高 */
 .home-content-body .manager-inline.command-manager-modal {
-  width: 100%;
-  min-height: 0;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: 100% !important;
 }
 
 /* 头部:从「模拟窗口标题栏」变成页面级标题栏 */
 .home-content-body .manager-inline .connection-manager-header {
-  flex: 0 0 auto;
-  min-height: 64px;
-  padding: 12px 0 16px;
-  border-bottom: 1px solid var(--border-light);
-  background: transparent;
-  -webkit-app-region: no-drag;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex: 0 0 auto !important;
+  min-height: 48px !important;
+  padding: 0 0 16px !important;
+  border-bottom: 0 !important;
+  background: transparent !important;
+  -webkit-app-region: no-drag !important;
 }
 
 .home-content-body .manager-inline .connection-manager-title {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  display: flex !important;
+  align-items: center !important;
+  font-size: 24px !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.015em !important;
+  gap: 12px !important;
+  color: var(--text-main) !important;
 }
 
 .home-content-body .manager-inline .connection-manager-title .material-symbols-outlined {
-  font-size: 22px;
-  color: var(--accent-primary);
+  font-size: 26px !important;
+  color: var(--accent-primary) !important;
 }
 
-/* 布局:填充剩余高度,内部各自滚动 */
+.home-content-body .manager-inline .connection-manager-search {
+  height: 36px !important;
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--border-light) !important;
+  background: var(--bg-card) !important;
+  margin-left: 24px !important;
+  margin-right: 0 !important;
+  padding: 0 12px !important;
+  width: 280px !important;
+}
+
+/* 布局:填充剩余高度,内部各自滚动，包装为带圆角的卡片 */
 .home-content-body .manager-inline .connection-manager-layout {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  margin-top: 12px;
-  border: 0;
-  border-radius: 0;
-  overflow: hidden;
-  background: transparent;
+  display: grid !important;
+  grid-template-columns: 224px minmax(0, 1fr) !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  margin-top: 0 !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-lg, 10px) !important;
+  overflow: hidden !important;
+  background: var(--bg-card) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 .home-content-body .manager-inline .connection-manager-main {
-  padding-right: 16px;
-  box-sizing: border-box;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
 }
 
 .home-content-body .manager-inline .connection-manager-footer {
-  flex: 0 0 auto;
-  padding-left: 16px;
-  padding-right: 16px;
-  background: transparent;
+  flex: 0 0 auto !important;
+  padding: 10px 0 0 !important;
+  background: transparent !important;
+  border-top: 0 !important;
+  height: auto !important;
 }
 
 /* fly-in 动画:内嵌管理器整体作为一个卡片飞入 */
@@ -581,6 +606,16 @@
   font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
   font-size: 11.5px;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.footer-meta-separator {
+  margin: 0 12px;
+  color: var(--border-light);
+  font-family: sans-serif;
+  font-weight: 300;
+  opacity: 0.6;
 }
 
 .footer-nav {

@@ -1,3 +1,4 @@
+import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 
 export function ConflictResolutionModal({
@@ -14,7 +15,9 @@ export function ConflictResolutionModal({
       <div className="modal-card conflict-resolution-modal">
         <div className="modal-header">
           <span>{t.conflictDialogTitle}</span>
-          <button className="icon-button" onClick={onClose} type="button">×</button>
+          <button className="icon-button" onClick={onClose} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
         <div className="file-action-description">{t.conflictDialogDescription}</div>
         <div className="conflict-resolution-name">{name}</div>

@@ -218,6 +218,105 @@ function joinLocalPath(directoryPath: string, name: string) {
   return `${normalized}${separator}${name}`
 }
 
+const TEXT_EDITOR_MAX_BYTES = 4 * 1024 * 1024
+const LIKELY_BINARY_FILE_EXTENSIONS = new Set([
+  '.7z',
+  '.a',
+  '.apk',
+  '.bin',
+  '.bz2',
+  '.class',
+  '.db',
+  '.dll',
+  '.dmg',
+  '.exe',
+  '.gif',
+  '.gz',
+  '.ico',
+  '.img',
+  '.iso',
+  '.jar',
+  '.jpeg',
+  '.jpg',
+  '.mp3',
+  '.mp4',
+  '.o',
+  '.otf',
+  '.pdf',
+  '.png',
+  '.pyc',
+  '.rar',
+  '.so',
+  '.tar',
+  '.tgz',
+  '.ttf',
+  '.war',
+  '.webp',
+  '.xz',
+  '.zip'
+])
+
+function parseApproximateFileSize(size: string): number | null {
+  if (!size || size === '-') {
+    return null
+  }
+
+  const match = size.trim().match(/^([\d.]+)\s*([A-Za-z]+)$/)
+  if (!match) {
+    return null
+  }
+
+  const amount = Number.parseFloat(match[1])
+  if (!Number.isFinite(amount)) {
+    return null
+  }
+
+  const unit = match[2].toUpperCase()
+  const units: Record<string, number> = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4
+  }
+
+  return Math.round(amount * (units[unit] ?? 1))
+}
+
+function isLikelyBinaryFile(name: string) {
+  const lowerName = name.toLowerCase()
+  if (lowerName.endsWith('.tar.gz')) {
+    return true
+  }
+  const dotIndex = lowerName.lastIndexOf('.')
+  if (dotIndex < 0) {
+    return false
+  }
+  return LIKELY_BINARY_FILE_EXTENSIONS.has(lowerName.slice(dotIndex))
+}
+
+function getRemoteFileEditorBlockReason(item: RemoteFileItem, locale: AppLocale): string | null {
+  if (item.type !== 'file') {
+    return null
+  }
+
+  if (isLikelyBinaryFile(item.name)) {
+    return locale === 'zhCN'
+      ? '这个文件看起来像二进制/镜像文件，不适合直接在文本编辑器里打开。建议先下载后用专用工具处理。'
+      : 'This file looks like a binary or disk image, so it is not suitable for the text editor. Download it and open it with a dedicated tool instead.'
+  }
+
+  const approxSize = parseApproximateFileSize(item.size)
+  if (approxSize !== null && approxSize > TEXT_EDITOR_MAX_BYTES) {
+    const maxSizeLabel = `${Math.round(TEXT_EDITOR_MAX_BYTES / (1024 * 1024))} MB`
+    return locale === 'zhCN'
+      ? `这个文件约为 ${item.size}，超过内置文本编辑器建议上限 ${maxSizeLabel}。为避免卡住文件面板，请先下载后再编辑。`
+      : `This file is about ${item.size}, which exceeds the built-in editor recommendation of ${maxSizeLabel}. Download it first to avoid freezing the file pane.`
+  }
+
+  return null
+}
+
 function readStoredLocale(): AppLocale {
   if (typeof window === 'undefined') {
     return defaultLocale
@@ -414,6 +513,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [isBusy, setIsBusy] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [hasLoadedInitialSnapshot, setHasLoadedInitialSnapshot] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showConnectionManager, setShowConnectionManager] = useState(false)
@@ -1973,6 +2073,7 @@ export function App() {
 
     try {
       setIsBusy(true)
+      setIsSaving(true)
       if (fileEditor.source === 'local') {
         await desktopApi.writeLocalFile(fileEditor.path, content, encoding)
         if (!isFileEditorWindow) {
@@ -1988,6 +2089,7 @@ export function App() {
       reportError(setFileEditorError, '保存文件', err, { targetPath: fileEditor.path })
     } finally {
       setIsBusy(false)
+      setIsSaving(false)
     }
   }
 
@@ -2502,16 +2604,25 @@ export function App() {
       return
     }
 
+    if (item.type === 'file') {
+      const blockReason = getRemoteFileEditorBlockReason(item, locale)
+      if (blockReason) {
+        setError(blockReason)
+        return
+      }
+
+      void openRemoteFileForEdit(activeTab.id, item).catch((err) => {
+        reportError(setError, '打开远程文件', err, { targetPath: item.path, item })
+      })
+      return
+    }
+
     void (async () => {
       try {
         setIsBusy(true)
-        if (item.type === 'folder') {
-          await openRemoteDirectory(activeTab.id, item.path, item)
-        } else {
-          await openRemoteFileForEdit(activeTab.id, item)
-        }
+        await openRemoteDirectory(activeTab.id, item.path, item)
       } catch (err) {
-        reportError(setError, item.type === 'folder' ? '打开远程文件夹' : '打开远程文件', err, { targetPath: item.path, item })
+        reportError(setError, '打开远程文件夹', err, { targetPath: item.path, item })
       } finally {
         setIsBusy(false)
       }
@@ -2866,11 +2977,12 @@ export function App() {
 
   if (isFileEditorWindow && fileEditor) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditor.name}>
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={fileEditor.name}>
         <FileEditorModal
           errorMessage={fileEditorError}
           file={fileEditor}
           isBusy={isBusy}
+          isSaving={isSaving}
           onClose={closeCurrentWindow}
           onReloadWithEncoding={(encoding) => {
             void handleReloadFileEditorWithEncoding(encoding)
@@ -2885,13 +2997,16 @@ export function App() {
 
   if (isFileEditorWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} title={fileEditorWindowName ?? t.appTitle}>
+      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={fileEditorWindowName ?? t.appTitle}>
         <div className="standalone-shell file-editor-window">
           <div className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}>
             <div className="modal-header">
               <div className="file-editor-title">
                 <span>{fileEditorWindowSource === 'remote' ? t.editRemoteFile : t.editLocalFile}</span>
                 <strong>{fileEditorWindowName ?? ''}</strong>
+              </div>
+              <div className="file-editor-header-actions">
+                <button aria-label={t.closeTab} className="icon-button file-editor-close-button" onClick={closeCurrentWindow} type="button">×</button>
               </div>
             </div>
             {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : <div className="file-editor-path">{t.updating}</div>}

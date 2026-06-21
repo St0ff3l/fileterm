@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 
 export function RootAccessModal({
@@ -29,7 +30,9 @@ export function RootAccessModal({
       <div className="modal-card root-access-modal">
         <div className="modal-header">
           <span>{t.fileRootAccessTitle}</span>
-          <button className="icon-button" onClick={onClose} type="button">×</button>
+          <button className="icon-button" onClick={onClose} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
 
         <div className="root-access-description">{t.fileRootAccessDescription}</div>

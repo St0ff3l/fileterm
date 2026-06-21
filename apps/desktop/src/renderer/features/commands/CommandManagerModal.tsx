@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, type DragEvent } from 'react'
+import { useState, useMemo, useRef, useEffect, type DragEvent } from 'react'
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@termdock/core'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'
@@ -21,7 +21,8 @@ export function CommandManagerModal({
   onUpdateCommand,
   onDeleteCommand,
   standalone = false,
-  inline = false
+  inline = false,
+  onActiveFolderChange
 }: {
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
@@ -35,6 +36,7 @@ export function CommandManagerModal({
   onDeleteCommand(commandId: string): void
   standalone?: boolean
   inline?: boolean
+  onActiveFolderChange?(name: string): void
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [activeFolderId, setActiveFolderId] = useState<'all' | string>('all')
@@ -144,6 +146,11 @@ export function CommandManagerModal({
   const activeFolderNode = activeFolderId === 'all' ? null : tree.map.get(activeFolderId)
   const resolvedActiveFolderId = activeFolderNode?.type === 'command-folder' ? activeFolderId : 'all'
   const activeBaseNodes = activeFolderNode?.type === 'command-folder' ? activeFolderNode.children : tree.roots
+
+  useEffect(() => {
+    const name = resolvedActiveFolderId === 'all' ? t.allCommands : activeFolderNode?.name || ''
+    onActiveFolderChange?.(name)
+  }, [resolvedActiveFolderId, activeFolderNode, onActiveFolderChange, t.allCommands])
 
   const visibleNodes = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase()
@@ -544,13 +551,15 @@ export function CommandManagerModal({
           </div>
         </section>
       </div>
-      <div className="connection-manager-footer">
-        <span>{commandTemplates.length} {t.commandCountLabel}</span>
-        <span className="connection-manager-footer-separator"></span>
-        <span>{commandFolders.length} {t.folderCountLabel}</span>
-        <span className="connection-manager-footer-spacer"></span>
-        <span>{resolvedActiveFolderId === 'all' ? t.allCommands : activeFolderNode?.name}</span>
-      </div>
+      {!inline && (
+        <div className="connection-manager-footer">
+          <span>{commandTemplates.length} {t.commandCountLabel}</span>
+          <span className="connection-manager-footer-separator"></span>
+          <span>{commandFolders.length} {t.folderCountLabel}</span>
+          <span className="connection-manager-footer-spacer"></span>
+          <span>{resolvedActiveFolderId === 'all' ? t.allCommands : activeFolderNode?.name}</span>
+        </div>
+      )}
     </div>
   )
 

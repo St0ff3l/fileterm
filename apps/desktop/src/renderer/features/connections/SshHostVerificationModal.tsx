@@ -1,4 +1,5 @@
 import type { SshHostVerificationRequest } from '@termdock/core'
+import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 
 export function SshHostVerificationModal({
@@ -17,7 +18,9 @@ export function SshHostVerificationModal({
       <div className="modal-card ssh-interaction-modal">
         <div className="modal-header">
           <span>{t.sshHostVerificationTitle}</span>
-          <button className="icon-button" onClick={onReject} type="button">×</button>
+          <button className="icon-button" onClick={onReject} type="button">
+            <AppIcon name="close" size={16} />
+          </button>
         </div>
 
         <div className="root-access-description">{t.sshHostVerificationDescription}</div>
