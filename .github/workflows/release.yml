@@ -67,8 +67,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build packages (core, shared, storage)
-        run: npm run build -w @termdock/core -w @termdock/shared -w @termdock/storage
+      - name: Build packages (core → shared → storage)
+        run: |
+          npm run build -w @termdock/core
+          npm run build -w @termdock/shared
+          npm run build -w @termdock/storage
 
       - name: Typecheck
         run: npm run typecheck
