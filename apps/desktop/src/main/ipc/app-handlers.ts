@@ -9,6 +9,18 @@ export function registerAppHandlers(options: IpcWindowOptions) {
     return options.setUiPreferences(input)
   })
 
+  ipcMain.handle('app:getUiStateItem', async (_event, key: string) => {
+    return options.getUiStateItem(key)
+  })
+
+  ipcMain.handle('app:setUiStateItem', async (_event, key: string, value: string) => {
+    await options.setUiStateItem(key, value)
+  })
+
+  ipcMain.handle('app:removeUiStateItem', async (_event, key: string) => {
+    await options.removeUiStateItem(key)
+  })
+
   ipcMain.handle('app:openConnectionManagerWindow', (event) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender) ?? options.getMainWindow()
     if (senderWindow) {

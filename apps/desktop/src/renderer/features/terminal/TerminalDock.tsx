@@ -19,24 +19,8 @@ const DEFAULT_PREFERENCES: DockPreferences = {
   rememberSendTarget: false
 }
 
-function historyStorageKey(profileId: string) {
-  return `termdock:terminal-dock:history:${profileId}`
-}
-
 function preferencesStorageKey(profileId: string) {
-  return `termdock:terminal-dock:preferences:${profileId}`
-}
-
-function readStoredJson<T>(key: string, fallback: T) {
-  try {
-    const raw = window.localStorage.getItem(key)
-    if (!raw) {
-      return fallback
-    }
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
+  return `terminal-dock.preferences:${profileId}`
 }
 
 function normalizePreferences(value: Partial<DockPreferences> | null | undefined): DockPreferences {
@@ -81,21 +65,16 @@ export function TerminalDock({
   const [command, setCommand] = useState('')
   const [panel, setPanel] = useState<DockPanel>(null)
   const [history, setHistory] = useState<TerminalCommandHistoryEntry[]>([])
-  const [preferences, setPreferences] = useState<DockPreferences>(() =>
-    normalizePreferences(
-      readStoredJson<Partial<DockPreferences> | null>(preferencesStorageKey(activeTab.profileId), DEFAULT_PREFERENCES)
-    )
-  )
+  const [preferences, setPreferences] = useState<DockPreferences>(DEFAULT_PREFERENCES)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const rootRef = useRef<HTMLElement | null>(null)
   const [lastFilePanelHeight, setLastFilePanelHeight] = useState(218)
 
   const persistHistory = async (entries: TerminalCommandHistoryEntry[]) => {
-    if (window.termdock?.setTerminalCommandHistory) {
-      await window.termdock.setTerminalCommandHistory(activeTab.profileId, entries)
+    if (!window.termdock?.setTerminalCommandHistory) {
       return
     }
-    window.localStorage.setItem(historyStorageKey(activeTab.profileId), JSON.stringify(entries))
+    await window.termdock.setTerminalCommandHistory(activeTab.profileId, entries)
   }
 
   useEffect(() => {
@@ -104,26 +83,12 @@ export function TerminalDock({
     async function loadHistory() {
       const desktopApi = window.termdock
       if (!desktopApi?.getTerminalCommandHistory) {
-        if (!canceled) {
-          setHistory(readStoredJson<TerminalCommandHistoryEntry[]>(historyStorageKey(activeTab.profileId), []))
-        }
         return
       }
 
       const storedHistory = await desktopApi.getTerminalCommandHistory(activeTab.profileId)
-      const legacyProfileHistory = readStoredJson<TerminalCommandHistoryEntry[]>(historyStorageKey(activeTab.profileId), [])
-      const legacyGlobalHistory = readStoredJson<TerminalCommandHistoryEntry[]>('termdock:terminal-dock:history:global', [])
-      const legacyHistory = legacyProfileHistory.length ? legacyProfileHistory : legacyGlobalHistory
-      const nextHistory = storedHistory.length ? storedHistory : legacyHistory
-
-      if (legacyHistory.length && !storedHistory.length) {
-        await desktopApi.setTerminalCommandHistory(activeTab.profileId, legacyHistory)
-        window.localStorage.removeItem(historyStorageKey(activeTab.profileId))
-        window.localStorage.removeItem('termdock:terminal-dock:history:global')
-      }
-
       if (!canceled) {
-        setHistory(nextHistory)
+        setHistory(storedHistory)
       }
     }
 
@@ -336,10 +301,41 @@ export function TerminalDock({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [panel, filteredHistory, activeHistoryIndex, activeTokenIndex])
 
+  useEffect(() => {
+    let canceled = false
+
+    async function loadPreferences() {
+      const raw = await window.termdock?.getUiStateItem?.(preferencesStorageKey(activeTab.profileId))
+      if (!raw || canceled) {
+        if (!canceled) {
+          setPreferences(DEFAULT_PREFERENCES)
+        }
+        return
+      }
+
+      try {
+        const parsed = JSON.parse(raw) as Partial<DockPreferences>
+        if (!canceled) {
+          setPreferences(normalizePreferences(parsed))
+        }
+      } catch {
+        if (!canceled) {
+          setPreferences(DEFAULT_PREFERENCES)
+        }
+      }
+    }
+
+    void loadPreferences()
+
+    return () => {
+      canceled = true
+    }
+  }, [activeTab.profileId])
+
   const updatePreferences = (updater: (prev: DockPreferences) => DockPreferences) => {
     setPreferences((prev) => {
       const next = updater(prev)
-      window.localStorage.setItem(preferencesStorageKey(activeTab.profileId), JSON.stringify(next))
+      void window.termdock?.setUiStateItem?.(preferencesStorageKey(activeTab.profileId), JSON.stringify(next))
       return next
     })
   }

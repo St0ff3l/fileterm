@@ -107,51 +107,15 @@ export function CommandCenter({
 
     async function loadPreferences() {
       const desktopApi = window.termdock
-      const legacyRemember = localStorage.getItem('termdock:commands:rememberSelection') === 'true'
-      const legacyScope = (localStorage.getItem('termdock:commands:sendScope') as SendScope | null) ?? 'current'
-      const legacySelectedTabIds = (() => {
-        const saved = localStorage.getItem('termdock:commands:selectedTabIds')
-        if (!saved) return []
-        try {
-          return JSON.parse(saved) as string[]
-        } catch {
-          return []
-        }
-      })()
-
       if (!desktopApi?.getCommandSendPreferences) {
-        if (!canceled) {
-          setRememberSelection(legacyRemember)
-          setSendScope(legacyRemember ? legacyScope : 'current')
-          setSelectedTabIds(legacyRemember ? legacySelectedTabIds : [])
-          setPreferencesLoaded(true)
-        }
         return
       }
 
       const storedPreferences = await desktopApi.getCommandSendPreferences()
-      const hasStoredPreferences = storedPreferences.rememberSelection
-        || storedPreferences.sendScope !== 'current'
-        || storedPreferences.selectedTabIds.length > 0
-      const nextPreferences: CommandSendPreferences = hasStoredPreferences
-        ? storedPreferences
-        : {
-            rememberSelection: legacyRemember,
-            sendScope: legacyRemember ? legacyScope : 'current',
-            selectedTabIds: legacyRemember ? legacySelectedTabIds : []
-          }
-
-      if (!hasStoredPreferences && (legacyRemember || legacySelectedTabIds.length > 0 || legacyScope !== 'current')) {
-        await desktopApi.setCommandSendPreferences(nextPreferences)
-        localStorage.removeItem('termdock:commands:rememberSelection')
-        localStorage.removeItem('termdock:commands:sendScope')
-        localStorage.removeItem('termdock:commands:selectedTabIds')
-      }
-
       if (!canceled) {
-        setRememberSelection(nextPreferences.rememberSelection)
-        setSendScope(nextPreferences.rememberSelection ? nextPreferences.sendScope : 'current')
-        setSelectedTabIds(nextPreferences.rememberSelection ? nextPreferences.selectedTabIds : [])
+        setRememberSelection(storedPreferences.rememberSelection)
+        setSendScope(storedPreferences.rememberSelection ? storedPreferences.sendScope : 'current')
+        setSelectedTabIds(storedPreferences.rememberSelection ? storedPreferences.selectedTabIds : [])
         setPreferencesLoaded(true)
       }
     }

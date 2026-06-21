@@ -9,17 +9,6 @@
     <link rel="icon" type="image/png" href="/icon.png" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <title>TermDock</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-      onload="this.onload=null;this.rel='stylesheet'"
-    >
-    <noscript>
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    </noscript>
     <style>
       html,
       body,
@@ -40,18 +29,12 @@
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')
         const queryLocale = searchParams.get('locale')
-        const storedTheme = window.localStorage.getItem('termdock.theme')
-        const storedLocale = window.localStorage.getItem('termdock.locale')
         const theme = queryTheme === 'default-light' || queryTheme === 'default-dark'
           ? queryTheme
-          : storedTheme === 'default-light' || storedTheme === 'default-dark'
-            ? storedTheme
-            : 'default-dark'
+          : 'default-dark'
         const locale = queryLocale === 'enUS' || queryLocale === 'zhCN'
           ? queryLocale
-          : storedLocale === 'enUS' || storedLocale === 'zhCN'
-            ? storedLocale
-            : 'zhCN'
+          : 'zhCN'
         const background = theme === 'default-light' ? '#f8fafc' : '#151515'
         const colorScheme = theme === 'default-light' ? 'light' : 'dark'
 
