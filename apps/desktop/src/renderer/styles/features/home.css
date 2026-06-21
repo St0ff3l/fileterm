@@ -216,7 +216,7 @@
   height: 100%;
   min-height: 0;
   min-width: 0;
-  max-width: none;
+  max-width: 100%;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -225,6 +225,15 @@
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
+}
+
+/* 内嵌版必须完全跟随标签页容器，不能继续使用弹窗的 viewport 宽度 */
+.home-content-body .manager-inline.connection-manager-modal,
+.home-content-body .manager-inline.command-manager-modal,
+.home-content-body .manager-inline.settings-modal {
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
 }
 
 /* 命令管理器内嵌时,撤掉它自带的固定宽高 */
@@ -266,10 +275,15 @@
   background: transparent;
 }
 
+.home-content-body .manager-inline .connection-manager-main {
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
 .home-content-body .manager-inline .connection-manager-footer {
   flex: 0 0 auto;
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: 16px;
+  padding-right: 16px;
   background: transparent;
 }
 
