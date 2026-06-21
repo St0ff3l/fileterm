@@ -12,6 +12,7 @@ import type {
   ConnectionProfile,
   CreateProfileInput
 } from '@termdock/core'
+import { normalizeConnectionHost, validateConnectionHost } from '@termdock/shared'
 import type { ProfileRepository } from '@termdock/storage'
 
 const legacyDemoProfileIds = new Set([
@@ -669,12 +670,17 @@ async function lockDownFile(filePath: string) {
 }
 
 function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
+  const host = normalizeConnectionHost(input.host)
+  if (!validateConnectionHost(host).valid) {
+    throw new Error('Invalid host')
+  }
+
   return input.type === 'ssh'
     ? {
         id,
         type: 'ssh',
         name: input.name,
-        host: input.host,
+        host,
         port: input.port,
         username: input.username,
         authType: input.authType ?? 'system',
@@ -695,7 +701,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         id,
         type: 'ftp',
         name: input.name,
-        host: input.host,
+        host,
         port: input.port,
         username: input.username,
         note: input.note,

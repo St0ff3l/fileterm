@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { ConnectionFormMode, CreateProfileInput } from '@termdock/core'
+import { normalizeConnectionHost } from '@termdock/shared'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 
@@ -75,7 +76,19 @@ export function ConnectionModal({
                     </select>
                   </label>
                   <label className="span-2">{t.name}:<input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} /></label>
-                  <label className="span-2">{t.host}:<input value={form.host} onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))} /></label>
+                  <label className="span-2">{t.host}:<input
+                    placeholder="example.com / 192.168.1.10 / 2001:db8::10"
+                    spellCheck={false}
+                    value={form.host}
+                    onBlur={(event) => {
+                      const normalizedHost = normalizeConnectionHost(event.target.value)
+                      if (normalizedHost !== event.target.value) {
+                        setForm((prev) => ({ ...prev, host: normalizedHost }))
+                      }
+                    }}
+                    onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))}
+                  /></label>
+                  <div className="span-2 ssh-field-hint">{t.hostInputHint}</div>
                   <label className="narrow">{t.port}:<input inputMode="numeric" value={form.port || ''} onChange={(event) => setForm((prev) => ({ ...prev, port: Number(event.target.value.replace(/\D/g, '')) }))} /></label>
                   <label>{t.remotePath}:<input value={form.remotePath} onChange={(event) => setForm((prev) => ({ ...prev, remotePath: event.target.value }))} /></label>
                   <label className="full">{t.note}:<textarea value={form.note ?? ''} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} /></label>
