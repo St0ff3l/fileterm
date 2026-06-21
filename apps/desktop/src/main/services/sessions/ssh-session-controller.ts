@@ -21,8 +21,9 @@ import type {
 import { BaseFileSessionController } from './base-file-session-controller.js'
 import { buildMetricsCommand, parentRemotePath, parseSystemMetrics, toRemoteFileItem } from './session-file-utils.js'
 import {
-  buildShellCwdIntegrationCommand,
-  detectRemoteShellKind,
+  findSetupEchoEnd,
+  SETUP_NEEDLE,
+  SHELL_CWD_SETUP,
   ShellCwdTracker
 } from './shell-cwd-integration.js'
 import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug-logger.js'
@@ -61,6 +62,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private currentRemotePath: string
   private shellCwd?: string
   private readonly shellCwdTracker = new ShellCwdTracker()
+  private cwdSetupInjected = false
+  private suppressEcho = false
+  private echoBuf = ''
   private fileAccessMode: 'user' | 'root' = 'user'
   private sudoUser = 'root'
   private sudoPassword?: string
@@ -165,7 +169,39 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
               }
 
               stream.on('data', (chunk: Buffer) => {
-                const text = chunk.toString('utf8')
+                let text = chunk.toString('utf8')
+
+                if (!this.cwdSetupInjected && text.trim().length > 0) {
+                  this.cwdSetupInjected = true
+                  this.suppressEcho = true
+                  stream.write(` ${SHELL_CWD_SETUP}\r`)
+                }
+
+                if (this.suppressEcho) {
+                  this.echoBuf += text
+                  const echoEnd = findSetupEchoEnd(this.echoBuf)
+                  if (echoEnd) {
+                    this.suppressEcho = false
+                    if (echoEnd.cwd && echoEnd.cwd !== this.shellCwd) {
+                      this.sshDebug.log('main', `Initial shell cwd detected via injection: ${echoEnd.cwd}`)
+                      this.shellCwd = echoEnd.cwd
+                      this.onShellCwdChange(echoEnd.cwd)
+                    }
+                    
+                    const beforeCmd = this.echoBuf.slice(0, echoEnd.lineStart)
+                    const afterOsc7 = this.echoBuf.slice(echoEnd.osc7End)
+                    text = beforeCmd + afterOsc7
+                    
+                    this.echoBuf = ''
+                  } else if (this.echoBuf.length >= 16384) {
+                    this.suppressEcho = false
+                    text = this.echoBuf
+                    this.echoBuf = ''
+                  } else {
+                    return
+                  }
+                }
+
                 this.transcript = trimTranscript(`${this.transcript}${text}`, LiveSshSessionController.TRANSCRIPT_LIMIT)
                 this.trackSudoPromptFromTerminal(text)
                 for (const cwd of this.shellCwdTracker.feed(text)) {
@@ -180,8 +216,6 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
                 this.handlePrimaryDisconnect()
                 this.onStateChange('Shell closed', this.transcript, false)
               })
-
-              void this.installShellCwdIntegration(stream)
 
               if (!settled) {
                 settled = true
@@ -440,50 +474,6 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
   }
 
-  private async installShellCwdIntegration(stream: ClientChannel): Promise<void> {
-    if ((this.profile as SshProfile).enableExecChannel === false) {
-      this.sshDebug.log('main', 'Shell cwd integration skipped because Exec Channel is disabled')
-      return
-    }
-
-    try {
-      const shellPath = await this.detectRemoteLoginShell()
-      const command = buildShellCwdIntegrationCommand(detectRemoteShellKind(shellPath))
-      stream.write(` ${command}\r`)
-    } catch (error) {
-      this.sshDebug.log(
-        'main',
-        `Shell cwd integration unavailable: ${error instanceof Error ? error.message : String(error)}`
-      )
-    }
-  }
-
-  private async detectRemoteLoginShell(): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      this.ssh.exec('printf %s "$SHELL"', (error, channel) => {
-        if (error) {
-          reject(error)
-          return
-        }
-
-        let stdout = ''
-        let stderr = ''
-        channel.on('data', (chunk: Buffer) => {
-          stdout += chunk.toString('utf8')
-        })
-        channel.stderr.on('data', (chunk: Buffer) => {
-          stderr += chunk.toString('utf8')
-        })
-        channel.on('close', (code?: number) => {
-          if (code && code !== 0) {
-            reject(new Error(stderr.trim() || `Shell detection exited with code ${code}`))
-            return
-          }
-          resolve(stdout.trim())
-        })
-      })
-    })
-  }
 
   async readRemoteFile(targetPath: string, encoding = 'utf-8'): Promise<string> {
     if (this.fileAccessMode === 'root') {

@@ -708,7 +708,9 @@
 .local-pane,
 .remote-pane {
   min-width: 0;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .file-split-resizer {
@@ -812,7 +814,9 @@
 }
 
 .file-table-shell {
-  min-height: calc(100% - 29px);
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -866,6 +870,11 @@
 }
 
 .fs-file-table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--bg-main);
+  box-shadow: 0 1px 0 var(--border-light);
   font-weight: 600;
   font-size: 12px;
   text-transform: uppercase;

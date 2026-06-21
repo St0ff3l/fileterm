@@ -240,6 +240,8 @@ export function FileManager({
   const suppressNextClearClick = useRef(false)
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
+  const localScrollRef = useRef<HTMLDivElement | null>(null)
+  const remoteScrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setLocalPathInput((prev) => prev === localPath ? prev : localPath)
@@ -630,7 +632,8 @@ export function FileManager({
         >
           <PanePathBar label={t.localComputer} value={localPathInput} onChange={setLocalPathInput} onSubmit={submitLocalPath} />
           <div
-            className="file-table-shell"
+            className="file-table-shell local-file-table-shell"
+            ref={localScrollRef}
             onContextMenu={(event) => {
               if (event.target !== event.currentTarget) return
               event.preventDefault()
@@ -659,6 +662,7 @@ export function FileManager({
             }}
           >
             <LocalFileTable
+              scrollRef={localScrollRef}
               cutPaths={localCutPaths}
               rows={localItems}
               selectedPaths={selectedLocalPaths}
@@ -721,7 +725,7 @@ export function FileManager({
           role="separator"
         />
         <div
-          className="remote-pane"
+          className="pane remote-pane"
           onMouseDownCapture={() => {
             setKeyboardPane('remote')
             focusContainer()
@@ -763,6 +767,7 @@ export function FileManager({
             onSubmit={submitRemotePath}
           />
           <div
+            ref={remoteScrollRef}
             aria-busy={showRemoteDirectoryLoading}
             className={`file-table-shell remote-file-table-shell ${showRemoteDirectoryLoading ? 'is-loading' : ''}`}
             onContextMenu={(event) => {
@@ -795,6 +800,7 @@ export function FileManager({
             }}
           >
             <FileTable
+              scrollRef={remoteScrollRef}
               cutPaths={remoteCutPaths}
               emptyText={isRemoteConnected ? t.emptyFiles : t.remoteDisconnectedDescription}
               rows={sortedRemoteRows}

@@ -40,42 +40,29 @@ export class ShellCwdTracker {
   }
 }
 
-export function detectRemoteShellKind(shellPath: string): RemoteShellKind {
-  const shellName = path.posix.basename(shellPath.trim()).toLowerCase()
-  if (shellName === 'zsh') return 'zsh'
-  if (shellName === 'fish') return 'fish'
-  if (shellName === 'bash') return 'bash'
-  return 'posix'
-}
+export const SETUP_NEEDLE = 'test -z "$FISH_VERSION"'
 
-export function buildShellCwdIntegrationCommand(shellKind: RemoteShellKind): string {
-  if (shellKind === 'fish') {
-    return [
-      'if not functions -q __termdock_report_cwd',
-      'function __termdock_report_cwd --on-variable PWD',
-      "printf '\\e]7;file://%s\\a' (pwd -P)",
-      'end',
-      'end',
-      '__termdock_report_cwd'
-    ].join('; ')
+export const SHELL_CWD_SETUP = 'test -z "$FISH_VERSION" && eval \'__tdcwd() { printf "\\033]7;file://%s\\007" "$(pwd -P 2>/dev/null)"; }; if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook -D precmd __tdcwd 2>/dev/null; add-zsh-hook precmd __tdcwd 2>/dev/null; elif [ -n "$BASH_VERSION" ]; then case "$PROMPT_COMMAND" in *"__tdcwd"*) ;; *) PROMPT_COMMAND="__tdcwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;; esac; else case "$PS1" in *"__tdcwd"*) ;; *) PS1="\\$(__tdcwd)$PS1" ;; esac; fi; __tdcwd\''
+
+export function findSetupEchoEnd(text: string): { lineStart: number; osc7End: number; cwd: string | null } | null {
+  const needleIndex = text.indexOf(SETUP_NEEDLE)
+  if (needleIndex < 0) {
+    return null
   }
 
-  const reporter = "__termdock_report_cwd() { printf '\\033]7;file://%s\\007' \"$(pwd -P)\"; }"
-  if (shellKind === 'zsh') {
-    return [
-      reporter,
-      'autoload -Uz add-zsh-hook 2>/dev/null',
-      'add-zsh-hook -D precmd __termdock_report_cwd 2>/dev/null',
-      'add-zsh-hook precmd __termdock_report_cwd 2>/dev/null',
-      '__termdock_report_cwd'
-    ].join('; ')
+  const lineStart = text.lastIndexOf('\n', needleIndex) + 1
+  const searchSlice = text.slice(needleIndex)
+
+  OSC_7_PATTERN.lastIndex = 0
+  const match = OSC_7_PATTERN.exec(searchSlice)
+  if (!match) {
+    return null
   }
 
-  return [
-    reporter,
-    "case \"$PS1\" in *'__termdock_report_cwd'*) ;; *) PS1='$(__termdock_report_cwd)'\"$PS1\" ;; esac",
-    '__termdock_report_cwd'
-  ].join('; ')
+  const osc7End = needleIndex + match.index + match[0].length
+  const cwd = parseOsc7Payload(match[1] ?? '')
+
+  return { lineStart, osc7End, cwd }
 }
 
 function parseOsc7Payload(payload: string): string | null {
