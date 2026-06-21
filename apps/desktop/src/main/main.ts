@@ -4,10 +4,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerIpcHandlers } from './ipc/index.js'
 import { appError, appLog, getAppLogDirectory, initAppLogger } from './services/app-logger.js'
+import { AppUiStateStore } from './services/app-ui-state-store.js'
 
 // 必须在所有 Electron API 调用之前设置，避免 package.json 的 @termdock/desktop
 // 被用作 macOS 钥匙串服务名（"@termdock/desktop Safe Storage"），导致每次启动弹出授权弹窗。
 app.setName('TermDock')
+app.setPath('sessionData', path.join(app.getPath('temp'), 'TermDock-session-data'))
+if (!app.isPackaged && process.platform === 'darwin') {
+  // Avoid macOS Keychain prompts from Chromium/Electron internals during local development.
+  app.commandLine.appendSwitch('use-mock-keychain')
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -25,6 +31,7 @@ const isWindows = process.platform === 'win32'
 // Expose version to preload via process.env (shared between main and preload contexts)
 process.env['TERMDOCK_APP_VERSION'] = app.getVersion()
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:'])
+const APP_SESSION_PARTITION = 'termdock-runtime'
 const DEFAULT_WINDOW_BOUNDS = {
   main: {
     width: 1280,
@@ -75,6 +82,7 @@ type UiPreferences = {
 
 let uiPreferences: UiPreferences = { ...DEFAULT_UI_PREFERENCES }
 let ipcServices: ReturnType<typeof registerIpcHandlers> | null = null
+let uiStateStore: AppUiStateStore | null = null
 
 function isBrokenPipeError(error: unknown): boolean {
   return error instanceof Error
@@ -163,6 +171,7 @@ async function openExternalUrl(rawUrl: string) {
 }
 
 function installContentSecurityPolicy() {
+  const appSession = session.fromPartition(APP_SESSION_PARTITION)
   const connectSrc = app.isPackaged
     ? ["'self'"]
     : ["'self'", 'http://localhost:5188', 'ws://localhost:5188']
@@ -172,8 +181,8 @@ function installContentSecurityPolicy() {
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(' ')}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' data: https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     "img-src 'self' data: blob: file:",
     "worker-src 'self' blob:",
     `connect-src ${connectSrc.join(' ')}`,
@@ -184,7 +193,7 @@ function installContentSecurityPolicy() {
     "frame-ancestors 'none'"
   ].join('; ')
 
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+  appSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -230,7 +239,23 @@ function updateUiPreferences(input: Partial<UiPreferences>) {
     ...input
   })
   writeUiPreferences(next)
+  broadcastUiPreferences(next)
   return next
+}
+
+function broadcastUiPreferences(preferences: UiPreferences) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('app:ui-preferences-changed', preferences)
+    }
+  }
+}
+
+function getUiStateStore() {
+  if (!uiStateStore) {
+    throw new Error('UI state store is not ready')
+  }
+  return uiStateStore
 }
 
 function getWindowBackgroundColor(theme: UiPreferences['theme']) {
@@ -446,7 +471,8 @@ function createMainWindow() {
       preload: path.join(__dirname, '../preload/preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      partition: APP_SESSION_PARTITION
     }
   })
 
@@ -559,7 +585,8 @@ function createNativeChildWindow(parent: BrowserWindow, options: {
       preload: path.join(__dirname, '../preload/preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      partition: APP_SESSION_PARTITION
     }
   })
   registerWindowStateListeners(win)
@@ -762,6 +789,7 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
 
 app.whenReady().then(() => {
   initAppLogger(app.getPath('userData'))
+  uiStateStore = new AppUiStateStore(app.getPath('userData'))
   readUiPreferences()
   installContentSecurityPolicy()
   installApplicationMenu()
@@ -782,6 +810,13 @@ app.whenReady().then(() => {
         }
       }
       return next
+    },
+    getUiStateItem: (key) => getUiStateStore().getItem(key),
+    setUiStateItem: async (key, value) => {
+      await getUiStateStore().setItem(key, value)
+    },
+    removeUiStateItem: async (key) => {
+      await getUiStateStore().removeItem(key)
     },
     openConnectionManagerWindow,
     openCommandManagerWindow,

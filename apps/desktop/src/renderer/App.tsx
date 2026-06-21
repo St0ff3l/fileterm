@@ -47,9 +47,7 @@ import { defaultLocale, setLocale, t, type AppLocale } from './i18n'
 
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
-const THEME_STORAGE_KEY = 'termdock.theme'
-const LOCALE_STORAGE_KEY = 'termdock.locale'
-const MAIN_TAB_UI_STORAGE_KEY = 'termdock.main.tab-ui'
+const MAIN_TAB_UI_STATE_KEY = 'main.tab-ui'
 
 type ErrorDetails = {
   item?: RemoteFileItem
@@ -318,29 +316,12 @@ function getRemoteFileEditorBlockReason(item: RemoteFileItem, locale: AppLocale)
   return null
 }
 
-function readStoredLocale(): AppLocale {
-  if (typeof window === 'undefined') {
-    return defaultLocale
-  }
-
-  try {
-    const nextLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY)
-    return nextLocale === 'enUS' || nextLocale === 'zhCN' ? nextLocale : defaultLocale
-  } catch {
-    return defaultLocale
-  }
-}
-
-function readStoredMainTabUiState(enabled: boolean): StoredMainTabUiState | null {
-  if (!enabled || typeof window === 'undefined') {
+function parseStoredMainTabUiState(raw: string | null | undefined): StoredMainTabUiState | null {
+  if (!raw) {
     return null
   }
 
   try {
-    const raw = window.localStorage.getItem(MAIN_TAB_UI_STORAGE_KEY)
-    if (!raw) {
-      return null
-    }
     const parsed = JSON.parse(raw) as Partial<StoredMainTabUiState>
     const localTabs = Array.isArray(parsed.localTabs)
       ? parsed.localTabs.filter((tab): tab is LocalTab => {
@@ -427,34 +408,12 @@ function collectConnectionGroups(
   return [...next]
 }
 
-function writeStoredMainTabUiState(enabled: boolean, state: StoredMainTabUiState) {
-  if (!enabled || typeof window === 'undefined') {
-    return
-  }
-
-  try {
-    window.localStorage.setItem(MAIN_TAB_UI_STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // Ignore persistence failures; tab UI state should remain in-memory.
-  }
-}
-
 function readInitialTheme(searchParams: URLSearchParams): ThemeMode {
   const queryTheme = searchParams.get('theme')
   if (queryTheme === 'default-light' || queryTheme === 'default-dark') {
     return queryTheme
   }
-
-  if (typeof window === 'undefined') {
-    return 'default-dark'
-  }
-
-  try {
-    const nextTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
-    return nextTheme === 'default-light' || nextTheme === 'default-dark' ? nextTheme : 'default-dark'
-  } catch {
-    return 'default-dark'
-  }
+  return 'default-dark'
 }
 
 function readInitialLocale(searchParams: URLSearchParams): AppLocale {
@@ -463,7 +422,7 @@ function readInitialLocale(searchParams: URLSearchParams): AppLocale {
     return queryLocale
   }
 
-  return readStoredLocale()
+  return defaultLocale
 }
 
 function areStringArraysEqual(left: string[], right: string[]) {
@@ -525,12 +484,7 @@ export function App() {
   const [isMaximized, setIsMaximized] = useState(false)
   const [localPath, setLocalPath] = useState(previewLocalPath)
   const [localItems, setLocalItems] = useState<LocalFileItem[]>(localPreviewFiles)
-  const storedMainTabUiStateRef = useRef<StoredMainTabUiState | null>(null)
-  if (storedMainTabUiStateRef.current === null) {
-    storedMainTabUiStateRef.current = readStoredMainTabUiState(isMainWorkspaceWindow)
-  }
-  const storedMainTabUiState = storedMainTabUiStateRef.current
-  const initialMainTabUiState = createInitialMainTabUiState(isMainWorkspaceWindow, storedMainTabUiState)
+  const initialMainTabUiState = createInitialMainTabUiState(isMainWorkspaceWindow, null)
   const [localTabs, setLocalTabs] = useState<LocalTab[]>(() => initialMainTabUiState.localTabs)
   const [activeLocalTabId, setActiveLocalTabId] = useState<string | null>(() => initialMainTabUiState.activeLocalTabId)
   const [nextHomeTabNumber, setNextHomeTabNumber] = useState(() => initialMainTabUiState.nextHomeTabNumber)
@@ -666,6 +620,35 @@ export function App() {
     localTabsRef.current = localTabs
   }, [localTabs])
 
+  useEffect(() => {
+    if (!desktopApi?.getUiStateItem || !isMainWorkspaceWindow) {
+      return
+    }
+
+    const uiStateApi = desktopApi
+    let canceled = false
+
+    async function hydrateMainTabUiState() {
+      const raw = await uiStateApi.getUiStateItem(MAIN_TAB_UI_STATE_KEY)
+      const storedState = parseStoredMainTabUiState(raw)
+      if (!storedState || canceled) {
+        return
+      }
+
+      setLocalTabs(storedState.localTabs)
+      setActiveLocalTabId(storedState.activeLocalTabId)
+      setNextHomeTabNumber(storedState.nextHomeTabNumber)
+      setTabOrder(storedState.tabOrder)
+      setIsSystemSidebarCollapsed(storedState.isSystemSidebarCollapsed)
+    }
+
+    void hydrateMainTabUiState()
+
+    return () => {
+      canceled = true
+    }
+  }, [desktopApi, isMainWorkspaceWindow])
+
   const closingSessionTabIdSet = useMemo(() => new Set(closingSessionTabIds), [closingSessionTabIds])
   const visibleWorkspaceTabs = useMemo(
     () => workspace.tabs.filter((tab) => !closingSessionTabIdSet.has(tab.id)),
@@ -673,13 +656,11 @@ export function App() {
   )
 
   useEffect(() => {
-    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
     void desktopApi?.setUiPreferences({ theme: themeMode })
-  }, [themeMode])
+  }, [desktopApi, themeMode])
 
   useEffect(() => {
     setLocale(locale)
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale)
     void desktopApi?.setUiPreferences({ locale })
     setLocalTabs((prev) => {
       let changed = false
@@ -705,28 +686,18 @@ export function App() {
       })
       return changed ? next : prev
     })
-  }, [locale, visibleWorkspaceTabs])
+  }, [desktopApi, locale, visibleWorkspaceTabs])
 
   useEffect(() => {
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === THEME_STORAGE_KEY) {
-        const nextTheme = event.newValue
-        if (nextTheme === 'default-dark' || nextTheme === 'default-light') {
-          setThemeMode(nextTheme)
-        }
-      }
-
-      if (event.key === LOCALE_STORAGE_KEY) {
-        const nextLocale = event.newValue
-        if (nextLocale === 'zhCN' || nextLocale === 'enUS') {
-          setLocaleState(nextLocale)
-        }
-      }
+    if (!desktopApi?.onUiPreferencesChanged) {
+      return
     }
 
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
+    return desktopApi.onUiPreferencesChanged((preferences) => {
+      setThemeMode(preferences.theme)
+      setLocaleState(preferences.locale)
+    })
+  }, [desktopApi])
 
   useEffect(() => {
     if (!desktopApi) {
@@ -951,14 +922,19 @@ export function App() {
       return
     }
 
-    writeStoredMainTabUiState(isMainWorkspaceWindow, {
+    if (!isMainWorkspaceWindow || !desktopApi?.setUiStateItem) {
+      return
+    }
+
+    const uiStateApi = desktopApi
+    void uiStateApi.setUiStateItem(MAIN_TAB_UI_STATE_KEY, JSON.stringify({
       localTabs,
       activeLocalTabId,
       nextHomeTabNumber,
       tabOrder,
       isSystemSidebarCollapsed
-    })
-  }, [activeLocalTabId, hasLoadedInitialSnapshot, isMainWorkspaceWindow, isSystemSidebarCollapsed, localTabs, nextHomeTabNumber, tabOrder])
+    } satisfies StoredMainTabUiState))
+  }, [activeLocalTabId, desktopApi, hasLoadedInitialSnapshot, isMainWorkspaceWindow, isSystemSidebarCollapsed, localTabs, nextHomeTabNumber, tabOrder])
 
   useEffect(() => {
     if (!isResizingSidebar) {

@@ -831,9 +831,12 @@ function resolveInitialLocale(): AppLocale {
   }
 
   try {
-    const nextLocale = window.localStorage.getItem('termdock.locale')
-    if (nextLocale === 'enUS' || nextLocale === 'zhCN') {
-      return nextLocale
+    const documentLang = window.document?.documentElement?.lang?.toLowerCase()
+    if (documentLang === 'zh-cn' || documentLang?.startsWith('zh')) {
+      return 'zhCN'
+    }
+    if (documentLang?.startsWith('en')) {
+      return 'enUS'
     }
 
     const preferredLocales = window.navigator.languages?.length

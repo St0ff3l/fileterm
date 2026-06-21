@@ -403,6 +403,9 @@ export interface TermdockDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
   setUiPreferences(input: { theme?: 'default-dark' | 'default-light'; locale?: 'zhCN' | 'enUS' }): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
+  getUiStateItem(key: string): Promise<string | null>
+  setUiStateItem(key: string, value: string): Promise<void>
+  removeUiStateItem(key: string): Promise<void>
   openConnectionManagerWindow(): Promise<void>
   openCommandManagerWindow(): Promise<void>
   openConnectionFormWindow(mode: ConnectionFormMode, profileId?: string): Promise<void>
@@ -416,6 +419,7 @@ export interface TermdockDesktopApi {
   closeCurrentWindow(): Promise<void>
   showWindowMenu(menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
+  onUiPreferencesChanged(listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void): () => void
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   getConnectionLibrary(): Promise<ConnectionLibrarySnapshot>
