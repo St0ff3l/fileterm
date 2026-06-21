@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*-beta*'
+      - 'v*'
   workflow_dispatch:
 
 permissions:
