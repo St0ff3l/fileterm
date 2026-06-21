@@ -91,6 +91,7 @@ jobs:
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
+          if-no-files-found: error
 
   build-win:
     needs: validate-release-tag
@@ -136,6 +137,7 @@ jobs:
           name: TermDock-Windows-${{ matrix.arch }}
           path: |
             apps/desktop/release/*.exe
+          if-no-files-found: error
 
   release:
     needs: [validate-release-tag, build-mac, build-win]

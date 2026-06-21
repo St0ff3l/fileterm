@@ -1,6 +1,6 @@
 {
   "name": "@termdock/desktop",
-  "version": "0.2.0-beta.1",
+  "version": "0.2.0-beta.2",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/main.js",
@@ -28,9 +28,9 @@
   },
   "dependencies": {
     "@monaco-editor/react": "4.7.0",
-    "@termdock/core": "0.2.0-beta.1",
-    "@termdock/shared": "0.2.0-beta.1",
-    "@termdock/storage": "0.2.0-beta.1",
+    "@termdock/core": "0.2.0-beta.2",
+    "@termdock/shared": "0.2.0-beta.2",
+    "@termdock/storage": "0.2.0-beta.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-unicode11": "^0.9.0",
