@@ -70,6 +70,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Build packages (core, shared, storage)
+        run: npm run build -w @termdock/core -w @termdock/shared -w @termdock/storage
+
       - name: Build renderer + main
         run: npm run build -w @termdock/desktop
 
