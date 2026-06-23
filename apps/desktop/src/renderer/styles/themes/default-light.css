@@ -315,15 +315,15 @@
   background: var(--metric-kernel);
 }
 
-:root[data-theme='default-light'] .metric-dot.status-green {
+:root[data-theme='default-light'] .metric-dot.tone-success {
   background: var(--metric-status-green);
 }
 
-:root[data-theme='default-light'] .metric-dot.status-yellow {
+:root[data-theme='default-light'] .metric-dot.tone-warning {
   background: var(--metric-status-yellow);
 }
 
-:root[data-theme='default-light'] .metric-dot.status-red {
+:root[data-theme='default-light'] .metric-dot.tone-danger {
   background: var(--metric-status-red);
 }
 
@@ -339,13 +339,17 @@
   background: var(--metric-kernel);
 }
 
-:root[data-theme='default-light'] .meter-fill.green {
+:root[data-theme='default-light'] .meter-fill.tone-success {
   background: var(--success);
 }
 
 :root[data-theme='default-light'] .meter-fill.yellow,
-:root[data-theme='default-light'] .meter-fill.orange {
+:root[data-theme='default-light'] .meter-fill.tone-warning {
   background: var(--warning);
+}
+
+:root[data-theme='default-light'] .meter-fill.tone-danger {
+  background: var(--metric-status-red);
 }
 
 :root[data-theme='default-light'] .network-select {
