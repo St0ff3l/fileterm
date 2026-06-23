@@ -87,7 +87,7 @@ export function SystemSidebar({
             <Meter
               label={t.cpu}
               value={metrics?.cpuPercent ?? 0}
-              tone={getMetricTone(metrics?.cpuPercent ?? 0).replace('status-', '')}
+              tone={getMetricTone(metrics?.cpuPercent ?? 0)}
               caption=""
               percent={metrics ? `${metrics.cpuPercent}%` : '-'}
             />
@@ -95,7 +95,7 @@ export function SystemSidebar({
             <Meter
               label={t.swap}
               value={metrics?.swapPercent ?? 0}
-              tone={getMetricTone(metrics?.swapPercent ?? 0).replace('status-', '')}
+              tone={getMetricTone(metrics?.swapPercent ?? 0)}
               caption={metrics?.swapUsage ?? '-'}
               percent={metrics ? `${metrics.swapPercent}%` : '-'}
               dotTone={getMetricTone(metrics?.swapPercent ?? 0)}
@@ -168,6 +168,9 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
   const cache = parseMemory(metrics?.memoryCacheUsage ?? '')
   const kernel = parseMemory(metrics?.memoryKernelUsage ?? '')
   const memoryTone = getMetricTone(metrics?.memoryPercent ?? 0)
+  // System meters intentionally use two color protocols:
+  // - tone-* for status/warning severity (cpu/swap and memory fallback)
+  // - app/cache/kernel for memory composition segments
   const segments = total > 0
     ? [
         { key: 'app', label: t.app, value: metrics?.memoryAppUsage ?? '-', width: Math.max(0, Math.min(100, (app / total) * 100)) },
@@ -193,7 +196,7 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
             key={segment.key}
             style={{ width: `${segment.width}%` }}
           />
-        )) : <i className="meter-fill orange" style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />}
+        )) : <i className="meter-fill tone-warning" style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />}
 
         {segments.length ? (
           <div className="memory-hover-popover">
@@ -287,9 +290,10 @@ function compactUptimeParts(parts: string[]) {
 }
 
 function getMetricTone(percent: number) {
-  if (percent >= 85) return 'status-red'
-  if (percent >= 60) return 'status-yellow'
-  return 'status-green'
+  // Status meters use the shared tone-* classes so dot/fill styling stays aligned.
+  if (percent >= 85) return 'tone-danger'
+  if (percent >= 60) return 'tone-warning'
+  return 'tone-success'
 }
 
 function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
