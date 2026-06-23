@@ -217,7 +217,7 @@ function joinLocalPath(directoryPath: string, name: string) {
   return `${normalized}${separator}${name}`
 }
 
-const TEXT_EDITOR_MAX_BYTES = 16 * 1024 * 1024
+const TEXT_EDITOR_MAX_BYTES = 4 * 1024 * 1024
 const LIKELY_BINARY_FILE_EXTENSIONS = new Set([
   '.7z',
   '.a',

@@ -244,21 +244,21 @@
   background: var(--metric-kernel);
 }
 
-:root:not([data-theme]) .metric-dot.tone-success,
-:root[data-theme='default-dark'] .metric-dot.tone-success,
-:root[data-theme='default'] .metric-dot.tone-success {
+:root:not([data-theme]) .metric-dot.status-green,
+:root[data-theme='default-dark'] .metric-dot.status-green,
+:root[data-theme='default'] .metric-dot.status-green {
   background: var(--metric-status-green);
 }
 
-:root:not([data-theme]) .metric-dot.tone-warning,
-:root[data-theme='default-dark'] .metric-dot.tone-warning,
-:root[data-theme='default'] .metric-dot.tone-warning {
+:root:not([data-theme]) .metric-dot.status-yellow,
+:root[data-theme='default-dark'] .metric-dot.status-yellow,
+:root[data-theme='default'] .metric-dot.status-yellow {
   background: var(--metric-status-yellow);
 }
 
-:root:not([data-theme]) .metric-dot.tone-danger,
-:root[data-theme='default-dark'] .metric-dot.tone-danger,
-:root[data-theme='default'] .metric-dot.tone-danger {
+:root:not([data-theme]) .metric-dot.status-red,
+:root[data-theme='default-dark'] .metric-dot.status-red,
+:root[data-theme='default'] .metric-dot.status-red {
   background: var(--metric-status-red);
 }
 
@@ -280,15 +280,15 @@
   background: var(--meter-track);
 }
 
-:root:not([data-theme]) .meter-fill.tone-success,
-:root[data-theme='default-dark'] .meter-fill.tone-success,
-:root[data-theme='default'] .meter-fill.tone-success {
+:root:not([data-theme]) .meter-fill.green,
+:root[data-theme='default-dark'] .meter-fill.green,
+:root[data-theme='default'] .meter-fill.green {
   background: var(--success);
 }
 
-:root:not([data-theme]) .meter-fill.tone-warning,
-:root[data-theme='default-dark'] .meter-fill.tone-warning,
-:root[data-theme='default'] .meter-fill.tone-warning {
+:root:not([data-theme]) .meter-fill.orange,
+:root[data-theme='default-dark'] .meter-fill.orange,
+:root[data-theme='default'] .meter-fill.orange {
   background: var(--memory-warn);
 }
 
@@ -296,12 +296,6 @@
 :root[data-theme='default-dark'] .meter-fill.yellow,
 :root[data-theme='default'] .meter-fill.yellow {
   background: var(--memory-warn);
-}
-
-:root:not([data-theme]) .meter-fill.tone-danger,
-:root[data-theme='default-dark'] .meter-fill.tone-danger,
-:root[data-theme='default'] .meter-fill.tone-danger {
-  background: var(--metric-status-red);
 }
 
 :root:not([data-theme]) .meter-fill.app,
@@ -1699,25 +1693,19 @@
   background: #3a3a3a;
 }
 
-:root:not([data-theme]) .meter-fill.tone-success,
-:root[data-theme='default-dark'] .meter-fill.tone-success,
-:root[data-theme='default'] .meter-fill.tone-success {
+:root:not([data-theme]) .meter-fill.green,
+:root[data-theme='default-dark'] .meter-fill.green,
+:root[data-theme='default'] .meter-fill.green {
   background: #39d98a;
 }
 
-:root:not([data-theme]) .meter-fill.tone-warning,
-:root[data-theme='default-dark'] .meter-fill.tone-warning,
-:root[data-theme='default'] .meter-fill.tone-warning,
+:root:not([data-theme]) .meter-fill.orange,
+:root[data-theme='default-dark'] .meter-fill.orange,
+:root[data-theme='default'] .meter-fill.orange,
 :root:not([data-theme]) .meter-fill.yellow,
 :root[data-theme='default-dark'] .meter-fill.yellow,
 :root[data-theme='default'] .meter-fill.yellow {
   background: var(--memory-warn);
-}
-
-:root:not([data-theme]) .meter-fill.tone-danger,
-:root[data-theme='default-dark'] .meter-fill.tone-danger,
-:root[data-theme='default'] .meter-fill.tone-danger {
-  background: var(--metric-status-red);
 }
 
 :root:not([data-theme]) .mini-tabs span,
