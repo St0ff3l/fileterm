@@ -88,18 +88,10 @@ export function findSetupEchoEnd(text: string): { lineStart: number; payloadEnd:
   const cwd = parseOsc7Payload(match7[1] ?? '')
   const user = matchUser ? matchUser[1] : null
 
-  // Try to find the prompt printed after the command to suppress it as well
-  const afterPayload = searchSlice.slice(payloadEnd - needleIndex)
-  const promptMatch = /^\s*([^\r\n]*[#$%>]\s*)/.exec(afterPayload)
-  
-  if (!promptMatch && text.length < 1024) {
-    // Wait for the prompt to arrive in the buffer
-    return null
-  }
-
-  const finalPayloadEnd = payloadEnd + (promptMatch ? promptMatch[0].length : 0)
-
-  return { lineStart, payloadEnd: finalPayloadEnd, cwd, user }
+  // Keep the real shell prompt visible. We only suppress the injected setup
+  // command echo and its OSC payload, so the prompt printed after execution can
+  // render naturally on first connect and later silent refreshes.
+  return { lineStart, payloadEnd, cwd, user }
 }
 
 function parseOsc7Payload(payload: string): string | null {
