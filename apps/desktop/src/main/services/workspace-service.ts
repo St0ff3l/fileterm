@@ -439,7 +439,9 @@ export class WorkspaceService {
           progress: progress.percent,
           status: 'running',
           speed: transferTracker(progress),
-          message: progress.message ?? targetRemotePath
+          message: progress.message ?? targetRemotePath,
+          transferredBytes: progress.transferredBytes,
+          totalBytes: progress.totalBytes
         }, sender)
       }, options?.targetName)
       if (transferState.canceled) {
@@ -506,7 +508,9 @@ export class WorkspaceService {
           progress: progress.percent,
           status: 'running',
           speed: transferTracker(progress),
-          message: progress.message ?? localPath
+          message: progress.message ?? localPath,
+          transferredBytes: progress.transferredBytes,
+          totalBytes: progress.totalBytes
         }, sender)
       })
       if (transferState.canceled) {
@@ -599,7 +603,9 @@ export class WorkspaceService {
               progress: overallPercent,
               status: 'running',
               speed: undefined,
-              message: localFilePath
+              message: localFilePath,
+              transferredBytes: progress.transferredBytes,
+              totalBytes: progress.totalBytes
             }, sender)
           })
 
@@ -990,7 +996,7 @@ export class WorkspaceService {
 
   private async updateTransfer(
     transferId: string,
-    patch: Partial<Pick<TransferTask, 'progress' | 'status' | 'message' | 'speed'>>,
+    patch: Partial<Pick<TransferTask, 'progress' | 'status' | 'message' | 'speed' | 'transferredBytes' | 'totalBytes'>>,
     sender: WebContents
   ) {
     const changed = this.transfers.update(transferId, patch)

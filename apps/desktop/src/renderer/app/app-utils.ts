@@ -200,6 +200,25 @@ export function transferStatusText(transfer: TransferTask) {
   return transfer.direction === 'upload' ? t.uploading : t.downloading
 }
 
+export function formatTransferBytes(bytes?: number) {
+  if (bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
+    return undefined
+  }
+  if (bytes >= 1024 ** 4) {
+    return `${(bytes / 1024 ** 4).toFixed(bytes >= 10 * 1024 ** 4 ? 0 : 1)} TB`
+  }
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(bytes >= 10 * 1024 ** 2 ? 0 : 1)} MB`
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`
+  }
+  return `${bytes} B`
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')

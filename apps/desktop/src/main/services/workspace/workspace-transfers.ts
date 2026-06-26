@@ -37,7 +37,9 @@ export class WorkspaceTransfersState {
         progress: 0,
         status: 'running',
         message: undefined,
-        speed: undefined
+        speed: undefined,
+        transferredBytes: undefined,
+        totalBytes: undefined
       }
       return queuedTransfer.id
     }
@@ -48,14 +50,16 @@ export class WorkspaceTransfersState {
       direction,
       name,
       progress: 0,
-      status: 'running'
+      status: 'running',
+      transferredBytes: undefined,
+      totalBytes: undefined
     })
     return transferId
   }
 
   update(
     transferId: string,
-    patch: Partial<Pick<TransferTask, 'progress' | 'status' | 'message' | 'speed'>>
+    patch: Partial<Pick<TransferTask, 'progress' | 'status' | 'message' | 'speed' | 'transferredBytes' | 'totalBytes'>>
   ) {
     const index = this.transfers.findIndex((transfer) => transfer.id === transferId)
     if (index === -1) {
@@ -81,6 +85,8 @@ export class WorkspaceTransfersState {
       && next.status === current.status
       && next.message === current.message
       && next.speed === current.speed
+      && next.transferredBytes === current.transferredBytes
+      && next.totalBytes === current.totalBytes
     ) {
       return false
     }

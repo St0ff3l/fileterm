@@ -94,6 +94,8 @@ export interface TransferTask {
   status: 'queued' | 'running' | 'done' | 'failed' | 'canceled'
   message?: string
   speed?: string
+  transferredBytes?: number
+  totalBytes?: number
 }
 
 export interface TransferProgress {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { TransferTask } from '@termdock/core'
 import { AppIcon } from '../common/AppIcon'
-import { isActiveTransfer, isCompletedTransfer, transferStatusText } from '../../app/app-utils'
+import { formatTransferBytes, isActiveTransfer, isCompletedTransfer, transferStatusText } from '../../app/app-utils'
 import { t } from '../../i18n'
 
 export function TransferPopover({
@@ -37,6 +37,15 @@ export function TransferPopover({
   useEffect(() => {
     setPendingCancelIds((prev) => prev.filter((id) => transfers.some((transfer) => transfer.id === id && isActiveTransfer(transfer))))
   }, [transfers])
+
+  const getTransferSizeText = (transfer: TransferTask) => {
+    const transferred = formatTransferBytes(transfer.transferredBytes)
+    const total = formatTransferBytes(transfer.totalBytes)
+    if (transferred && total) {
+      return `${transferred} / ${total}`
+    }
+    return total
+  }
 
   return (
     <section className="transfer-popover">
@@ -77,42 +86,46 @@ export function TransferPopover({
         <small className="transfer-hint">{t.transferUploadHint}</small>
       </div>
       <div className="transfer-popover-list">
-        {visibleTransfers.length ? visibleTransfers.map((transfer) => (
-          <div className={`transfer-row transfer-${transfer.status}`} key={transfer.id}>
-            <div className="transfer-row-head">
-              <strong title={transfer.name}>{transfer.name}</strong>
-              {isActiveTransfer(transfer) ? (
-                <button
-                  className="transfer-cancel"
-                  disabled={pendingCancelIds.includes(transfer.id)}
-                  onClick={() => {
-                    setPendingCancelIds((prev) => prev.includes(transfer.id) ? prev : [...prev, transfer.id])
-                    void Promise.resolve(onCancelTransfer(transfer.id)).catch(() => {
-                      setPendingCancelIds((prev) => prev.filter((id) => id !== transfer.id))
-                    })
-                  }}
-                  type="button"
-                >
-                  {pendingCancelIds.includes(transfer.id) ? t.stopping : t.stop}
-                </button>
-              ) : null}
+        {visibleTransfers.length ? visibleTransfers.map((transfer) => {
+          const transferSizeText = getTransferSizeText(transfer)
+          return (
+            <div className={`transfer-row transfer-${transfer.status}`} key={transfer.id}>
+              <div className="transfer-row-head">
+                <strong title={transfer.name}>{transfer.name}</strong>
+                {isActiveTransfer(transfer) ? (
+                  <button
+                    className="transfer-cancel"
+                    disabled={pendingCancelIds.includes(transfer.id)}
+                    onClick={() => {
+                      setPendingCancelIds((prev) => prev.includes(transfer.id) ? prev : [...prev, transfer.id])
+                      void Promise.resolve(onCancelTransfer(transfer.id)).catch(() => {
+                        setPendingCancelIds((prev) => prev.filter((id) => id !== transfer.id))
+                      })
+                    }}
+                    type="button"
+                  >
+                    {pendingCancelIds.includes(transfer.id) ? t.stopping : t.stop}
+                  </button>
+                ) : null}
+              </div>
+              <div className="transfer-row-main">
+                <span>{transferStatusText(transfer)}</span>
+              </div>
+              <div className="transfer-row-meta">
+                <span>
+                  {[
+                    transfer.direction === 'upload' ? t.upload : t.download,
+                    transferSizeText,
+                    transfer.speed,
+                    `${transfer.progress}%`
+                  ].filter(Boolean).join(' · ')}
+                </span>
+              </div>
+              <i className="transfer-progress"><b style={{ width: `${transfer.progress}%` }} /></i>
+              {transfer.message ? <small title={transfer.message}>{transfer.message}</small> : null}
             </div>
-            <div className="transfer-row-main">
-              <span>{transferStatusText(transfer)}</span>
-            </div>
-            <div className="transfer-row-meta">
-              <span>
-                {[
-                  transfer.direction === 'upload' ? t.upload : t.download,
-                  transfer.speed,
-                  `${transfer.progress}%`
-                ].filter(Boolean).join(' · ')}
-              </span>
-            </div>
-            <i className="transfer-progress"><b style={{ width: `${transfer.progress}%` }} /></i>
-            {transfer.message ? <small title={transfer.message}>{transfer.message}</small> : null}
-          </div>
-        )) : (
+          )
+        }) : (
           <div className="transfer-empty">{t.noTransferTasks}</div>
         )}
       </div>
