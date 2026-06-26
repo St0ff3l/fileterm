@@ -258,3 +258,13 @@ npm run dev
 ## 开源协议
 
 TermDock 使用 [MIT License](./LICENSE) 开源。
+
+## Star History
+
+<a href="https://star-history.com/#St0ff3l/termdock&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=St0ff3l/termdock&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=St0ff3l/termdock&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=St0ff3l/termdock&type=Date" />
+  </picture>
+</a>
