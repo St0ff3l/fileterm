@@ -564,16 +564,22 @@ export function TerminalView({
         : event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f'
 
       if (matchesCopy) {
+        event.preventDefault()
+        event.stopPropagation()
         runCopy()
         return false
       }
 
       if (matchesPaste) {
+        event.preventDefault()
+        event.stopPropagation()
         void runPaste()
         return false
       }
 
       if (matchesFind) {
+        event.preventDefault()
+        event.stopPropagation()
         if (findOpenRef.current) {
           closeFind()
         } else {
