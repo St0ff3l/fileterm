@@ -135,6 +135,23 @@
   cursor: col-resize;
 }
 
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+  pointer-events: none;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer.is-active::after {
+  background: linear-gradient(180deg, var(--border-dark), var(--border-light));
+}
+
 .sys-card {
   padding: 12px 12px 0;
   border-bottom: 1px solid var(--border-light);
@@ -680,7 +697,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 14px;
-  border-right: none;
+  border-right: 1px solid var(--border-light);
 }
 
 :root[data-platform='darwin'] .titlebar-brand {

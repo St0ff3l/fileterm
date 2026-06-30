@@ -156,7 +156,7 @@
 :root:not([data-theme]) .sidebar-resizer.is-active,
 :root[data-theme='default-dark'] .sidebar-resizer.is-active,
 :root[data-theme='default'] .sidebar-resizer.is-active {
-  background: linear-gradient(180deg, var(--border-dark), var(--border-light));
+  background: transparent;
 }
 
 
@@ -1493,7 +1493,7 @@
 :root[data-theme='default-dark'] .titlebar-brand,
 :root[data-theme='default'] .titlebar-brand {
   background: #242424;
-  border-right: none;
+  border-right: 1px solid #363636;
 }
 
 :root:not([data-theme]) .titlebar-brand strong,
