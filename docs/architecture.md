@@ -404,9 +404,14 @@ interface WorkspaceTab {
 完整 `WorkspaceSnapshot` 只用于标签、会话、文件列表等低频结构状态，不承载高频流式更新：
 
 - 传输层逐数据块累计真实字节数，main 最多每 200ms 发送一次轻量 `transfer:update` 任务事件；完成、失败和取消立即发送。
+- Renderer 的传输订阅与列表状态收敛在独立 `TransferCenter`，进度变化不更新顶层 workspace state。
 - 终端输入使用 renderer 到 main 的单向 IPC，避免交互等待请求响应队列。
-- 终端输出在 main 按 16ms 合并，再交给 renderer 逐帧写入 xterm。
+- 终端 resize 同样使用单向 IPC；终端输出在 main 按 16ms 合并，再交给 renderer 逐帧写入 xterm。
+- SSH transcript 由 controller 的有界分块缓冲统一维护，runtime 不重复拼接第二份历史。
+- 系统指标首次绑定时发送完整历史，稳定轮询只发送最新样本，由 renderer 追加到固定长度历史。
 - 同一 Renderer 的并发完整快照采用单飞和尾随合并，确保最终状态可达，同时避免重复磁盘读取与大对象序列化。
+
+文件编辑器的 Monaco 资源通过动态 import 独立分块，只在文件编辑器窗口需要时加载，主工作区不静态携带编辑器与语言服务代码。
 
 ## 10. UI 结构
 

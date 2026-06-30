@@ -1,27 +1,27 @@
-import { startTransition, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
-import type {
-  CommandExecutionOptions,
-  CommandTemplateInput,
-  ConnectionFolder,
-  ConnectionFormMode,
-  ConnectionProfile,
-  CreateProfileInput,
-  FileContentSnapshot,
-  LocalFileItem,
-  PermissionChangeOptions,
-  RemoteFileItem,
-  SessionMetricsUpdate,
-  SshCredentialsPromptRequest,
-  SshHostVerificationRequest,
-  SshInteractionRequest,
-  SshInteractionResponse,
-  TransferTask,
-  WorkspaceSnapshot,
-  WorkspaceTab
+import { lazy, startTransition, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import {
+  mergeSystemMetricsHistory,
+  type CommandExecutionOptions,
+  type CommandTemplateInput,
+  type ConnectionFolder,
+  type ConnectionFormMode,
+  type ConnectionProfile,
+  type CreateProfileInput,
+  type FileContentSnapshot,
+  type LocalFileItem,
+  type PermissionChangeOptions,
+  type RemoteFileItem,
+  type SessionMetricsUpdate,
+  type SshCredentialsPromptRequest,
+  type SshHostVerificationRequest,
+  type SshInteractionRequest,
+  type SshInteractionResponse,
+  type WorkspaceSnapshot,
+  type WorkspaceTab
 } from '@termdock/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@termdock/shared'
 import { defaultForm, emptyState, localPreviewFiles, previewLocalPath, previewState, profileToForm } from './app/app-data'
-import { homeTabKey, insertTabKeyAfter, isActiveTransfer, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
+import { homeTabKey, insertTabKeyAfter, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
 import { CommandManagerModal } from './features/commands/CommandManagerModal'
 import { ConnectionManagerModal } from './features/connections/ConnectionManagerModal'
@@ -30,7 +30,6 @@ import { ConnectionModal } from './features/connections/ConnectionModal'
 import { SshCredentialsModal } from './features/connections/SshCredentialsModal'
 import { SshHostVerificationModal } from './features/connections/SshHostVerificationModal'
 import { FileActionModal } from './features/files/FileActionModal'
-import { FileEditorModal } from './features/files/FileEditorModal'
 import { FilePermissionModal } from './features/files/FilePermissionModal'
 import { RootAccessModal } from './features/files/RootAccessModal'
 import { AppIcon } from './features/common/AppIcon'
@@ -40,8 +39,7 @@ import { resolveSelectedTabIds } from './features/common/session-send-targets'
 import { TabBar, type OrderedTabEntry, type TabContextTarget } from './features/layout/TabBar'
 import { TabContextMenu } from './features/layout/TabContextMenu'
 import { SystemSidebar } from './features/system/SystemSidebar'
-import { TransferBar } from './features/transfers/TransferBar'
-import { TransferPopover } from './features/transfers/TransferPopover'
+import { TransferCenter } from './features/transfers/TransferCenter'
 import { WorkspaceStage } from './features/workspace/WorkspaceStage'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
 import { defaultLocale, setLocale, t, type AppLocale } from './i18n'
@@ -49,6 +47,9 @@ import { defaultLocale, setLocale, t, type AppLocale } from './i18n'
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
 const MAIN_TAB_UI_STATE_KEY = 'main.tab-ui'
+const FileEditorModal = lazy(() => import('./features/files/FileEditorModal').then((module) => ({
+  default: module.FileEditorModal
+})))
 
 type ErrorDetails = {
   item?: RemoteFileItem
@@ -540,7 +541,6 @@ export function App() {
   const [isRootAccessSubmitting, setIsRootAccessSubmitting] = useState(false)
   const [sshInteraction, setSshInteraction] = useState<SshInteractionRequest | null>(null)
   const [sshInteractionError, setSshInteractionError] = useState<string | null>(null)
-  const [showTransfers, setShowTransfers] = useState(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams))
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams))
   const [closeConfirmDialog, setCloseConfirmDialog] = useState<{ isQuit: boolean; hasActiveConnections: boolean } | null>(null)
@@ -559,7 +559,6 @@ export function App() {
   }, [workspace])
 
   const localTabsRef = useRef(localTabs)
-  const previousActiveTransferCountRef = useRef(0)
   const pendingHomeReplacementKeyRef = useRef<string | null>(null)
   const hasSanitizedStoredPlaceholderRef = useRef(false)
   const desktopApi = window.termdock
@@ -755,9 +754,6 @@ export function App() {
     const offSnapshot = desktopApi.onWorkspaceSnapshot((snapshot) => {
       applySnapshot(snapshot)
     })
-    const offTransferUpdate = desktopApi.onTransferUpdate?.((transfer) => {
-      applyTransferUpdate(transfer)
-    }) ?? (() => undefined)
     const offSessionMetrics = desktopApi.onSessionMetrics((payload) => {
       applySessionMetrics(payload)
     })
@@ -774,7 +770,6 @@ export function App() {
 
     return () => {
       offSnapshot()
-      offTransferUpdate()
       offSessionMetrics()
     }
   }, [desktopApi, isCommandFormWindow, isCommandManagerWindow, isConnectionFormWindow, isConnectionManagerWindow, isFileEditorWindow])
@@ -842,14 +837,6 @@ export function App() {
     setForm(defaultForm)
     setFormError(null)
   }, [formWindowMode, formWindowProfileId, isConnectionFormWindow, workspace.profiles])
-
-  useEffect(() => {
-    const activeTransferCount = workspace.transfers.filter(isActiveTransfer).length
-    if (activeTransferCount > previousActiveTransferCountRef.current) {
-      setShowTransfers(true)
-    }
-    previousActiveTransferCountRef.current = activeTransferCount
-  }, [workspace.transfers])
 
   useEffect(() => {
     const allKeys = [
@@ -1017,7 +1004,6 @@ export function App() {
     ? workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null
     : null
   const isActiveRemoteSessionConnected = Boolean(activeTab && activeSession?.connected)
-  const activeTransferCount = workspace.transfers.filter(isActiveTransfer).length
   const showSidebar = activeTab !== null && activeSession !== null && activeLocalTab?.kind !== 'home'
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
   const brandWidth = showSidebar && !isSystemSidebarCollapsed ? sidebarWidth : 214
@@ -1089,28 +1075,7 @@ export function App() {
     setFormError(null)
   }
 
-  const applyTransferUpdate = (transfer: TransferTask) => {
-    startTransition(() => {
-      setWorkspace((current) => {
-        const index = current.transfers.findIndex((item) => item.id === transfer.id)
-        if (index === -1) {
-          return {
-            ...current,
-            transfers: [transfer, ...current.transfers]
-          }
-        }
-
-        const transfers = [...current.transfers]
-        transfers[index] = transfer
-        return {
-          ...current,
-          transfers
-        }
-      })
-    })
-  }
-
-  const applySessionMetrics = ({ tabId, systemMetrics }: SessionMetricsUpdate) => {
+  const applySessionMetrics = ({ tabId, systemMetrics, mode }: SessionMetricsUpdate) => {
     startTransition(() => {
       setWorkspace((current) => {
         const currentSession = current.sessions[tabId]
@@ -1118,7 +1083,11 @@ export function App() {
           return current
         }
 
-        if (currentSession.systemMetrics === systemMetrics) {
+        const nextSystemMetrics = systemMetrics && mode === 'append'
+          ? mergeSystemMetricsHistory(currentSession.systemMetrics, systemMetrics)
+          : systemMetrics
+
+        if (currentSession.systemMetrics === nextSystemMetrics) {
           return current
         }
 
@@ -1128,7 +1097,7 @@ export function App() {
             ...current.sessions,
             [tabId]: {
               ...currentSession,
-              systemMetrics
+              systemMetrics: nextSystemMetrics
             }
           }
         }
@@ -3012,19 +2981,21 @@ export function App() {
   if (isFileEditorWindow && fileEditor) {
     return (
       <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={fileEditor.name}>
-        <FileEditorModal
-          errorMessage={fileEditorError}
-          file={fileEditor}
-          isBusy={isBusy}
-          isSaving={isSaving}
-          onClose={closeCurrentWindow}
-          onReloadWithEncoding={(encoding) => {
-            void handleReloadFileEditorWithEncoding(encoding)
-          }}
-          onSave={handleSaveFileEditor}
-          standalone
-          themeMode={themeMode}
-        />
+        <Suspense fallback={<div className="standalone-shell file-editor-window">{t.updating}</div>}>
+          <FileEditorModal
+            errorMessage={fileEditorError}
+            file={fileEditor}
+            isBusy={isBusy}
+            isSaving={isSaving}
+            onClose={closeCurrentWindow}
+            onReloadWithEncoding={(encoding) => {
+              void handleReloadFileEditorWithEncoding(encoding)
+            }}
+            onSave={handleSaveFileEditor}
+            standalone
+            themeMode={themeMode}
+          />
+        </Suspense>
       </StandaloneWindowFrame>
     )
   }
@@ -3276,38 +3247,14 @@ export function App() {
           </div>
         </main>
 
-        {activeLocalTab?.kind !== 'home' ? (
-          <TransferBar
-            activeCount={activeTransferCount}
-            fullWidth={!showSidebar}
-            isPending={isBusy}
-            onOpen={() => setShowTransfers((prev) => !prev)}
-            transfers={workspace.transfers}
-          />
-        ) : null}
-
-        {showTransfers ? (
-            <TransferPopover
-              transfers={workspace.transfers}
-              onCancelTransfer={(transferId) => {
-                if (!desktopApi) return
-                void desktopApi.cancelTransfer(transferId).then((snapshot) => {
-                  applySnapshot(snapshot)
-                }).catch((err: Error) => {
-                  reportError(setError, '取消传输', err)
-                })
-              }}
-              onClearTransfers={(transferIds) => {
-                if (!desktopApi || !transferIds.length) return
-                void desktopApi.clearTransfers(transferIds).then((snapshot) => {
-                  applySnapshot(snapshot)
-                }).catch((err: Error) => {
-                  reportError(setError, '清理传输记录', err)
-                })
-              }}
-              onClose={() => setShowTransfers(false)}
-            />
-        ) : null}
+        <TransferCenter
+          desktopApi={desktopApi}
+          fullWidth={!showSidebar}
+          initialTransfers={workspace.transfers}
+          isPending={isBusy}
+          onError={(scope, err) => reportError(setError, scope, err)}
+          visible={activeLocalTab?.kind !== 'home'}
+        />
 
         {rootAccessDialog ? (
           <RootAccessModal

@@ -348,10 +348,11 @@ export class WorkspaceService {
     await this.sessionRuntime.disconnect(tabId)
     await this.finalizeTransfersForTab(tabId, this.getDisconnectedTransferMessage())
     this.privilegedAccess.delete(tabId)
-    const disconnectedTranscript = appendDisconnectedTranscript(current.terminalTranscript)
+    const latest = this.sessionRuntime.get(tabId) ?? current
+    const disconnectedTranscript = appendDisconnectedTranscript(latest.terminalTranscript)
     this.sessionRuntime.set(tabId, {
-      ...current,
-      summary: current.accessHost ? `Disconnected from ${current.accessHost}` : 'Disconnected',
+      ...latest,
+      summary: latest.accessHost ? `Disconnected from ${latest.accessHost}` : 'Disconnected',
       terminalTranscript: disconnectedTranscript,
       remoteFiles: [],
       fileAccessMode: 'user',
@@ -826,7 +827,6 @@ export class WorkspaceService {
     for (const file of files) {
       this.ensureTransferActive(transferState)
       const remotePath = path.posix.join(remoteRoot, ...file.relativePath.split(path.sep))
-      await controller.ensureRemoteDirectory(path.posix.dirname(remotePath))
       await controller.uploadFile(file.fullPath, remotePath, (fileProgress) => {
         const fileBytes = Math.max(file.size, 1)
         const completedBytes = uploadedBytes + Math.min(fileBytes, fileProgress.transferredBytes ?? Math.round((fileProgress.percent / 100) * fileBytes))

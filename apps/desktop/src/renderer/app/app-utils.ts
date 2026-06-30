@@ -39,10 +39,6 @@ export function hasSelectedText() {
   return selection.toString().trim().length > 0
 }
 
-export function runningTransfers(transfers: TransferTask[]) {
-  return transfers.filter(isActiveTransfer).length
-}
-
 export function homeTabKey(id: string) {
   return `home:${id}`
 }

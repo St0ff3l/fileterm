@@ -1,16 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type {
-  ConnectionProfile,
-  RemoteFileAccessOptions,
-  SessionSnapshot,
-  SystemMetrics,
-  SessionMetricsUpdate,
-  SshInteractionDraft,
-  SshInteractionRequest,
-  SshInteractionResponse,
-  WorkspaceSnapshot,
-  WorkspaceTab
+import {
+  mergeSystemMetricsHistory,
+  type ConnectionProfile,
+  type RemoteFileAccessOptions,
+  type SessionSnapshot,
+  type SystemMetrics,
+  type SessionMetricsUpdate,
+  type SshInteractionDraft,
+  type SshInteractionRequest,
+  type SshInteractionResponse,
+  type WorkspaceSnapshot,
+  type WorkspaceTab
 } from '@termdock/core'
 import { LiveFtpSessionController, LiveSshSessionController } from '../session-controllers.js'
 
@@ -19,8 +20,6 @@ export type LiveSessionController = LiveSshSessionController | LiveFtpSessionCon
 export const REMOTE_SESSION_DISCONNECTED_MESSAGE = '会话已断开，请先重连。'
 
 export class WorkspaceSessionRuntime {
-  private static readonly NETWORK_HISTORY_LIMIT = 600
-  private static readonly TERMINAL_TRANSCRIPT_LIMIT = 200_000
   private static readonly TERMINAL_OUTPUT_FLUSH_INTERVAL_MS = 16
   private readonly sessions = new Map<string, SessionSnapshot>()
   private readonly liveControllers = new Map<string, LiveSessionController>()
@@ -54,11 +53,17 @@ export class WorkspaceSessionRuntime {
   ) {}
 
   list() {
-    return Object.fromEntries(this.sessions.entries())
+    return Object.fromEntries(
+      [...this.sessions.entries()].map(([tabId, snapshot]) => [
+        tabId,
+        this.withLiveTerminalTranscript(tabId, snapshot)
+      ])
+    )
   }
 
   get(tabId: string) {
-    return this.sessions.get(tabId)
+    const snapshot = this.sessions.get(tabId)
+    return snapshot ? this.withLiveTerminalTranscript(tabId, snapshot) : undefined
   }
 
   set(tabId: string, snapshot: SessionSnapshot) {
@@ -100,8 +105,16 @@ export class WorkspaceSessionRuntime {
   async disconnect(tabId: string) {
     this.stopMetricsPolling(tabId)
     this.flushTerminalOutput(tabId)
-    await this.liveControllers.get(tabId)?.disconnect()
+    const controller = this.liveControllers.get(tabId)
+    await controller?.disconnect()
     this.flushTerminalOutput(tabId)
+    const current = this.sessions.get(tabId)
+    if (current && controller?.type === 'ssh') {
+      this.sessions.set(tabId, {
+        ...current,
+        terminalTranscript: controller.getTerminalTranscript()
+      })
+    }
     this.liveControllers.delete(tabId)
   }
 
@@ -348,7 +361,7 @@ export class WorkspaceSessionRuntime {
         if (latest && systemMetrics) {
           this.sessions.set(tabId, {
             ...latest,
-            systemMetrics: this.mergeNetworkHistory(undefined, systemMetrics)
+            systemMetrics: mergeSystemMetricsHistory(undefined, systemMetrics)
           })
           await this.emitSnapshotForTab(tabId)
         }
@@ -688,7 +701,7 @@ export class WorkspaceSessionRuntime {
         if (systemMetrics) {
           nextSnapshot = {
             ...nextSnapshot,
-            systemMetrics: this.mergeNetworkHistory(undefined, systemMetrics)
+            systemMetrics: mergeSystemMetricsHistory(undefined, systemMetrics)
           }
           changed = true
         }
@@ -759,7 +772,7 @@ export class WorkspaceSessionRuntime {
 
       this.sessions.set(tabId, {
         ...latest,
-        systemMetrics: this.mergeNetworkHistory(latest.systemMetrics, systemMetrics)
+        systemMetrics: mergeSystemMetricsHistory(latest.systemMetrics, systemMetrics)
       })
 
       if (!this.canSendToSender(sender)) {
@@ -767,7 +780,7 @@ export class WorkspaceSessionRuntime {
         return
       }
 
-      this.emitMetrics(sender, tabId, this.sessions.get(tabId)?.systemMetrics)
+      this.emitMetrics(sender, tabId, systemMetrics, 'append')
     } finally {
       this.metricsRefreshInFlight.delete(tabId)
     }
@@ -793,13 +806,19 @@ export class WorkspaceSessionRuntime {
       return
     }
 
-    this.emitMetrics(sender, tabId, this.sessions.get(tabId)?.systemMetrics)
+    this.emitMetrics(sender, tabId, this.sessions.get(tabId)?.systemMetrics, 'replace')
   }
 
-  private emitMetrics(sender: WebContents, tabId: string, systemMetrics: SystemMetrics | undefined) {
+  private emitMetrics(
+    sender: WebContents,
+    tabId: string,
+    systemMetrics: SystemMetrics | undefined,
+    mode: SessionMetricsUpdate['mode']
+  ) {
     const payload: SessionMetricsUpdate = {
       tabId,
-      systemMetrics
+      systemMetrics,
+      mode
     }
     const didSend = this.trySend(sender, 'workspace:sessionMetrics', payload)
     if (!didSend) {
@@ -939,41 +958,6 @@ export class WorkspaceSessionRuntime {
     }
   }
 
-  private mergeNetworkHistory(
-    previousMetrics: SessionSnapshot['systemMetrics'] | undefined,
-    nextMetrics: NonNullable<SessionSnapshot['systemMetrics']>
-  ) {
-    const nextPoint = nextMetrics.networkSamples.at(-1) ?? { rx: 0, tx: 0 }
-    const previousSamples = previousMetrics?.networkSamples ?? []
-    const previousByInterface = previousMetrics?.networkSamplesByInterface ?? {}
-    const nextByInterface = nextMetrics.networkSamplesByInterface ?? {}
-    const mergedByInterface = Object.fromEntries(
-      Object.entries(nextByInterface).map(([name, samples]) => {
-        const nextInterfacePoint = samples.at(-1) ?? { rx: 0, tx: 0 }
-        const previousInterfaceSamples = previousByInterface[name] ?? []
-        return [
-          name,
-          [...previousInterfaceSamples, nextInterfacePoint].slice(-WorkspaceSessionRuntime.NETWORK_HISTORY_LIMIT)
-        ]
-      })
-    )
-
-    return {
-      ...nextMetrics,
-      networkSamples: [...previousSamples, nextPoint].slice(-WorkspaceSessionRuntime.NETWORK_HISTORY_LIMIT),
-      networkSamplesByInterface: mergedByInterface
-    }
-  }
-
-  private appendToTranscript(current: string | undefined, chunk: string) {
-    const next = `${current ?? ''}${chunk}`
-    if (next.length <= WorkspaceSessionRuntime.TERMINAL_TRANSCRIPT_LIMIT) {
-      return next
-    }
-
-    return next.slice(next.length - WorkspaceSessionRuntime.TERMINAL_TRANSCRIPT_LIMIT)
-  }
-
   private queueTerminalOutput(tabId: string, chunk: string) {
     const chunks = this.terminalOutputBuffers.get(tabId)
     if (chunks) {
@@ -1007,14 +991,19 @@ export class WorkspaceSessionRuntime {
     this.terminalOutputBuffers.delete(tabId)
 
     const chunk = chunks.length === 1 ? chunks[0]! : chunks.join('')
-    const current = this.sessions.get(tabId)
-    if (current) {
-      this.sessions.set(tabId, {
-        ...current,
-        terminalTranscript: this.appendToTranscript(current.terminalTranscript, chunk)
-      })
-    }
     this.sendToTab(tabId, 'terminal:data', { tabId, chunk })
+  }
+
+  private withLiveTerminalTranscript(tabId: string, snapshot: SessionSnapshot) {
+    const controller = this.liveControllers.get(tabId)
+    if (controller?.type !== 'ssh') {
+      return snapshot
+    }
+
+    const terminalTranscript = controller.getTerminalTranscript()
+    return terminalTranscript === snapshot.terminalTranscript
+      ? snapshot
+      : { ...snapshot, terminalTranscript }
   }
 
 }

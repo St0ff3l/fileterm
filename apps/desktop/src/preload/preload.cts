@@ -172,8 +172,9 @@ const api: TermdockDesktopApi = {
   writeTerminal: async (tabId: string, data: string): Promise<void> => {
     ipcRenderer.send('terminal:write', tabId, data)
   },
-  resizeTerminal: (tabId: string, cols: number, rows: number, width: number, height: number): Promise<void> =>
-    ipcRenderer.invoke('terminal:resize', tabId, cols, rows, width, height),
+  resizeTerminal: async (tabId: string, cols: number, rows: number, width: number, height: number): Promise<void> => {
+    ipcRenderer.send('terminal:resize', tabId, cols, rows, width, height)
+  },
   openRemotePath: (tabId: string, targetPath: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('remoteFiles:openPath', tabId, targetPath),
   setFollowShellCwd: (tabId: string, enabled: boolean): Promise<WorkspaceSnapshot> =>

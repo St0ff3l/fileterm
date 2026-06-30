@@ -58,7 +58,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     end(): void
   }
   private pendingResize?: { cols: number; rows: number; width: number; height: number }
-  private transcript = ''
+  private readonly transcript: BoundedTextBuffer
   private currentRemotePath: string
   private shellCwd?: string
   private readonly shellCwdTracker = new ShellCwdTracker()
@@ -87,7 +87,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   ) {
     super(id, 'ssh', profile)
     this.currentRemotePath = profile.remotePath || '.'
-    this.transcript = initialTranscript ?? ''
+    this.transcript = new BoundedTextBuffer(LiveSshSessionController.TRANSCRIPT_LIMIT, initialTranscript)
     this.appendSystemMessage('连接主机...\r\n')
   }
 
@@ -144,7 +144,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           this.connected = true
           this.appendSystemMessage('连接主机成功\r\n')
           this.sshDebug.log('main', '认证完成，准备打开终端')
-          this.onStateChange(this.getSummary(), this.transcript, true)
+          this.onStateChange(this.getSummary(), this.transcript.toString(), true)
           this.ssh.shell(
             {
               term: 'xterm-256color',
@@ -155,7 +155,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
               if (error) {
                 connectionFailed = true
                 this.appendSystemMessage(`终端启动失败: ${error.message}\r\n`)
-                this.onStateChange(`Connection error: ${error.message}`, this.transcript, false)
+                this.onStateChange(`Connection error: ${error.message}`, this.transcript.toString(), false)
                 if (!settled) {
                   settled = true
                   reject(error)
@@ -208,7 +208,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
                   }
                 }
 
-                this.transcript = trimTranscript(`${this.transcript}${text}`, LiveSshSessionController.TRANSCRIPT_LIMIT)
+                this.transcript.append(text)
 
                 // 1. Feed updates (CWD and User) first
                 for (const update of this.shellCwdTracker.feed(text)) {
@@ -243,7 +243,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
               })
               stream.on('close', () => {
                 this.handlePrimaryDisconnect()
-                this.onStateChange('Shell closed', this.transcript, false)
+                this.onStateChange('Shell closed', this.transcript.toString(), false)
               })
 
               if (!settled) {
@@ -266,7 +266,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
             settled = true
             reject(error)
           }
-          this.onStateChange(`Connection error: ${error.message}`, this.transcript, false)
+          this.onStateChange(`Connection error: ${error.message}`, this.transcript.toString(), false)
         })
         .on('close', () => {
           this.handlePrimaryDisconnect()
@@ -276,7 +276,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           }
           this.appendSystemMessage('连接已断开\r\n')
           this.sshDebug.log('main', '连接已关闭')
-          this.onStateChange('Disconnected', this.transcript, false)
+          this.onStateChange('Disconnected', this.transcript.toString(), false)
         })
         .connect(sshConfig)
     })
@@ -395,7 +395,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   }
 
   getTerminalTranscript(): string {
-    return this.transcript
+    return this.transcript.toString()
   }
 
   getShellCwd(): string | undefined {
@@ -867,7 +867,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
   pushClientNotice(message: string) {
     this.appendSystemMessage(`[TermDock] ${message}\r\n`)
-    this.onStateChange(this.getSummary(), this.transcript, this.connected)
+    this.onStateChange(this.getSummary(), this.transcript.toString(), this.connected)
   }
 
   private async ensureSftp(): Promise<SFTPWrapper> {
@@ -1754,7 +1754,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
           if (secondToLast && !secondToLast.includes('sudo ')) {
             this.sudoPassword = secondToLast
             this.awaitingSudoPasswordInput = false
-            this.onStateChange(this.getSummary(), this.transcript, this.connected)
+            this.onStateChange(this.getSummary(), this.transcript.toString(), this.connected)
           }
         } else {
           // They are currently typing the password (or finished but haven't hit enter)
@@ -1795,7 +1795,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
       if (char === '\r' || char === '\n') {
         if (this.pendingSudoPasswordInput) {
           this.sudoPassword = this.pendingSudoPasswordInput
-          this.onStateChange(this.getSummary(), this.transcript, this.connected)
+          this.onStateChange(this.getSummary(), this.transcript.toString(), this.connected)
         }
         this.awaitingSudoPasswordInput = false
         this.pendingSudoPasswordInput = ''
@@ -1940,9 +1940,9 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
   }
 
   private appendSystemMessage(message: string) {
-    this.transcript = trimTranscript(`${this.transcript}${message}`, LiveSshSessionController.TRANSCRIPT_LIMIT)
+    this.transcript.append(message)
     this.onData(message)
-    this.onStateChange(this.getSummary(), this.transcript, this.connected)
+    this.onStateChange(this.getSummary(), this.transcript.toString(), this.connected)
   }
 
   private resetPrivilegedFileAccess() {
@@ -1954,12 +1954,68 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
 
 }
 
-function trimTranscript(transcript: string, limit: number) {
-  if (transcript.length <= limit) {
-    return transcript
+class BoundedTextBuffer {
+  private static readonly CHUNK_SIZE = 4096
+  private chunks: string[] = []
+  private head = 0
+  private length = 0
+
+  constructor(
+    private readonly limit: number,
+    initialValue = ''
+  ) {
+    this.append(initialValue)
   }
 
-  return transcript.slice(transcript.length - limit)
+  append(value: string) {
+    if (!value) {
+      return
+    }
+
+    if (value.length >= this.limit) {
+      this.chunks = []
+      this.head = 0
+      this.length = 0
+      value = value.slice(value.length - this.limit)
+    }
+
+    for (let index = 0; index < value.length; index += BoundedTextBuffer.CHUNK_SIZE) {
+      const chunk = value.slice(index, index + BoundedTextBuffer.CHUNK_SIZE)
+      this.chunks.push(chunk)
+      this.length += chunk.length
+    }
+
+    this.trimStart()
+  }
+
+  toString() {
+    if (!this.length) {
+      return ''
+    }
+    return this.chunks.slice(this.head).join('')
+  }
+
+  private trimStart() {
+    let excess = this.length - this.limit
+    while (excess > 0 && this.head < this.chunks.length) {
+      const first = this.chunks[this.head]!
+      if (first.length <= excess) {
+        excess -= first.length
+        this.length -= first.length
+        this.head += 1
+        continue
+      }
+
+      this.chunks[this.head] = first.slice(excess)
+      this.length -= excess
+      excess = 0
+    }
+
+    if (this.head > 256 && this.head * 2 > this.chunks.length) {
+      this.chunks = this.chunks.slice(this.head)
+      this.head = 0
+    }
+  }
 }
 
 const DEFAULT_SSH_KEY_FILES = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']

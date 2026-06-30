@@ -18,18 +18,22 @@ export function TransferPopover({
   const [statusFilter, setStatusFilter] = useState<'running' | 'completed' | 'all'>('running')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'download' | 'upload'>('all')
   const [pendingCancelIds, setPendingCancelIds] = useState<string[]>([])
-  const visibleTransfers = transfers
-    .filter((transfer) => {
-      if (statusFilter === 'running') {
-        return isActiveTransfer(transfer)
-      }
-      if (statusFilter === 'completed') {
-        return isCompletedTransfer(transfer)
-      }
-      return true
-    })
-    .filter((transfer) => directionFilter === 'all' || transfer.direction === directionFilter)
-    .slice(0, 24)
+  const visibleTransfers: TransferTask[] = []
+  for (const transfer of transfers) {
+    if (statusFilter === 'running' && !isActiveTransfer(transfer)) {
+      continue
+    }
+    if (statusFilter === 'completed' && !isCompletedTransfer(transfer)) {
+      continue
+    }
+    if (directionFilter !== 'all' && transfer.direction !== directionFilter) {
+      continue
+    }
+    visibleTransfers.push(transfer)
+    if (visibleTransfers.length === 24) {
+      break
+    }
+  }
   const clearableTransferIds = visibleTransfers
     .filter((transfer) => !isActiveTransfer(transfer))
     .map((transfer) => transfer.id)

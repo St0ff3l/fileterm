@@ -17,7 +17,9 @@ export function registerTerminalHandlers(services: IpcServices) {
     })
   })
 
-  ipcMain.handle('terminal:resize', (_, tabId: string, cols: number, rows: number, width: number, height: number) =>
-    workspaceService.resizeTerminal(tabId, cols, rows, width, height)
-  )
+  ipcMain.on('terminal:resize', (_, tabId: string, cols: number, rows: number, width: number, height: number) => {
+    void workspaceService.resizeTerminal(tabId, cols, rows, width, height).catch((error) => {
+      appError('[TermDock][Terminal] Failed to resize terminal', error)
+    })
+  })
 }
