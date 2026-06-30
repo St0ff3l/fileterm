@@ -821,7 +821,15 @@
   -webkit-user-select: none;
 }
 
+.remote-file-table-region {
+  min-height: 0;
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
 .remote-file-table-shell {
+  height: 100%;
   position: relative;
 }
 
