@@ -459,6 +459,21 @@ function uniqueItemsById<T extends { id: string }>(items: T[]) {
   })
 }
 
+function resolveFallbackHomeTabId(localTabs: LocalTab[], tabOrder: string[]) {
+  for (let index = tabOrder.length - 1; index >= 0; index -= 1) {
+    const key = tabOrder[index]
+    if (!key?.startsWith('home:')) {
+      continue
+    }
+    const id = key.slice('home:'.length)
+    if (localTabs.some((tab) => tab.kind === 'home' && tab.id === id)) {
+      return id
+    }
+  }
+
+  return [...localTabs].reverse().find((tab) => tab.kind === 'home')?.id ?? null
+}
+
 function isDefaultPlaceholderHomeTab(tab: LocalTab) {
   return tab.kind === 'home' && tab.id === 'home-1' && tab.title === t.untitledTab
 }
@@ -493,6 +508,7 @@ export function App() {
   const [remoteDirectoryLoadingTabId, setRemoteDirectoryLoadingTabId] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [hasLoadedInitialSnapshot, setHasLoadedInitialSnapshot] = useState(false)
+  const [hasHydratedMainTabUiState, setHasHydratedMainTabUiState] = useState(!isMainWorkspaceWindow)
   const [showForm, setShowForm] = useState(false)
   const [showConnectionManager, setShowConnectionManager] = useState(false)
   const [showCommandManager, setShowCommandManager] = useState(false)
@@ -638,6 +654,7 @@ export function App() {
 
   useEffect(() => {
     if (!desktopApi?.getUiStateItem || !isMainWorkspaceWindow) {
+      setHasHydratedMainTabUiState(true)
       return
     }
 
@@ -645,17 +662,25 @@ export function App() {
     let canceled = false
 
     async function hydrateMainTabUiState() {
-      const raw = await uiStateApi.getUiStateItem(MAIN_TAB_UI_STATE_KEY)
-      const storedState = parseStoredMainTabUiState(raw)
-      if (!storedState || canceled) {
-        return
-      }
+      try {
+        const raw = await uiStateApi.getUiStateItem(MAIN_TAB_UI_STATE_KEY)
+        const storedState = parseStoredMainTabUiState(raw)
+        if (!storedState || canceled) {
+          return
+        }
 
-      setLocalTabs(storedState.localTabs)
-      setActiveLocalTabId(storedState.activeLocalTabId)
-      setNextHomeTabNumber(storedState.nextHomeTabNumber)
-      setTabOrder(storedState.tabOrder)
-      setIsSystemSidebarCollapsed(storedState.isSystemSidebarCollapsed)
+        setLocalTabs(storedState.localTabs)
+        setActiveLocalTabId(storedState.activeLocalTabId)
+        setNextHomeTabNumber(storedState.nextHomeTabNumber)
+        setTabOrder(storedState.tabOrder)
+        setIsSystemSidebarCollapsed(storedState.isSystemSidebarCollapsed)
+      } catch {
+        // Fall back to the initial local tab state when persisted UI state cannot be read.
+      } finally {
+        if (!canceled) {
+          setHasHydratedMainTabUiState(true)
+        }
+      }
     }
 
     void hydrateMainTabUiState()
@@ -854,6 +879,10 @@ export function App() {
   }, [formWindowMode, formWindowProfileId, isConnectionFormWindow, workspace.profiles])
 
   useEffect(() => {
+    if (!isMainWorkspaceWindow || !hasLoadedInitialSnapshot || !hasHydratedMainTabUiState) {
+      return
+    }
+
     const allKeys = uniqueStrings([
       ...localTabs.map((tab) => homeTabKey(tab.id)),
       ...visibleWorkspaceTabs.map((tab) => sessionTabKey(tab.id))
@@ -880,10 +909,10 @@ export function App() {
       const nextOrder = [...kept, ...missing]
       return areStringArraysEqual(prev, nextOrder) ? prev : nextOrder
     })
-  }, [localTabs, visibleWorkspaceTabs])
+  }, [hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs, visibleWorkspaceTabs])
 
   useEffect(() => {
-    if (!hasLoadedInitialSnapshot || localTabs.length > 0 || visibleWorkspaceTabs.length > 0) {
+    if (!isMainWorkspaceWindow || !hasLoadedInitialSnapshot || !hasHydratedMainTabUiState || localTabs.length > 0 || visibleWorkspaceTabs.length > 0) {
       return
     }
 
@@ -891,10 +920,10 @@ export function App() {
     setActiveLocalTabId((current) => current ?? 'home-1')
     setTabOrder((prev) => prev.includes('home:home-1') ? prev : ['home:home-1', ...prev])
     setNextHomeTabNumber((prev) => Math.max(prev, 2))
-  }, [hasLoadedInitialSnapshot, localTabs.length, visibleWorkspaceTabs.length])
+  }, [hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs.length, visibleWorkspaceTabs.length])
 
   useEffect(() => {
-    if (!hasLoadedInitialSnapshot) {
+    if (!isMainWorkspaceWindow || !hasLoadedInitialSnapshot || !hasHydratedMainTabUiState) {
       return
     }
 
@@ -918,17 +947,18 @@ export function App() {
       setLocalTabs(nextLocalTabs)
     }
     setActiveLocalTabId((prev) => {
-      if (!prev) {
+      if (prev && nextLocalTabs.some((tab) => tab.id === prev)) {
         return prev
       }
-      return nextLocalTabs.some((tab) => tab.id === prev)
-        ? prev
-        : null
+      if (visibleWorkspaceTabs.length > 0) {
+        return null
+      }
+      return resolveFallbackHomeTabId(nextLocalTabs, tabOrder)
     })
-  }, [activeLocalTabId, hasLoadedInitialSnapshot, localTabs, visibleWorkspaceTabs])
+  }, [activeLocalTabId, hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs, tabOrder, visibleWorkspaceTabs])
 
   useEffect(() => {
-    if (!hasLoadedInitialSnapshot) {
+    if (!hasLoadedInitialSnapshot || !hasHydratedMainTabUiState) {
       return
     }
 
@@ -944,7 +974,7 @@ export function App() {
       tabOrder,
       isSystemSidebarCollapsed
     } satisfies StoredMainTabUiState))
-  }, [activeLocalTabId, desktopApi, hasLoadedInitialSnapshot, isMainWorkspaceWindow, isSystemSidebarCollapsed, localTabs, nextHomeTabNumber, tabOrder])
+  }, [activeLocalTabId, desktopApi, hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, isSystemSidebarCollapsed, localTabs, nextHomeTabNumber, tabOrder])
 
   useEffect(() => {
     if (!isResizingSidebar) {
@@ -1017,6 +1047,14 @@ export function App() {
     : visibleActiveSessionTabId
   const activeTab = displayedSessionTabId ? visibleWorkspaceTabs.find((tab) => tab.id === displayedSessionTabId) ?? null : null
   const activeSession = activeTab ? workspace.sessions[activeTab.id] : null
+  const workspaceStageKind = activeLocalTab?.kind === 'system'
+    ? 'system'
+    : activeTab && activeSession && !activeLocalTab
+      ? 'session'
+      : 'home'
+  const isHomeWorkspaceVisible = workspaceStageKind === 'home'
+  const effectiveActiveLocalTabId = activeLocalTab?.id
+    ?? (isHomeWorkspaceVisible ? resolveFallbackHomeTabId(localTabs, tabOrder) : null)
   const activeProfile = activeTab
     ? workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null
     : null
@@ -1490,7 +1528,7 @@ export function App() {
       return
     }
 
-    const activeHomeId = activeLocalTabId
+    const activeHomeId = isHomeWorkspaceVisible ? effectiveActiveLocalTabId : null
     const replacementKey = activeHomeId ? homeTabKey(activeHomeId) : null
     pendingHomeReplacementKeyRef.current = replacementKey
 
@@ -3039,7 +3077,7 @@ export function App() {
   }
 
   const tabBarProps = {
-    activeHomeTabId: activeLocalTabId,
+    activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
     locale,
     onAddHomeTab: handleAddHomeTab,
@@ -3075,7 +3113,7 @@ export function App() {
   return (
     <>
       <div
-        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''} ${activeLocalTab?.kind === 'home' ? 'is-home-active' : ''}`}
+        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''}`}
         style={{
           '--sidebar-width': `${resolvedSidebarWidth}px`,
           '--brand-width': `${brandWidth}px`
@@ -3118,7 +3156,7 @@ export function App() {
             </div>
           </div>
         ) : null}
-        {activeLocalTab?.kind !== 'home' && (
+        {!isHomeWorkspaceVisible && (
           <TabBar {...tabBarProps} />
         )}
 
@@ -3167,7 +3205,7 @@ export function App() {
           <div className="workspace-stage">
             <WorkspaceStage
               activeLocalTab={activeLocalTab}
-              activeHomeTabId={activeLocalTabId}
+              activeHomeTabId={effectiveActiveLocalTabId}
               activeProfile={activeProfile}
               activeSession={activeSession}
               activeTab={activeTab}
@@ -3270,7 +3308,7 @@ export function App() {
           initialTransfers={workspace.transfers}
           isPending={isBusy}
           onError={(scope, err) => reportError(setError, scope, err)}
-          visible={activeLocalTab?.kind !== 'home'}
+          visible={!isHomeWorkspaceVisible}
         />
 
         {rootAccessDialog ? (
