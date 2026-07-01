@@ -1,4 +1,4 @@
-import type { SshHostVerificationRequest } from '@termdock/core'
+import type { SshHostVerificationRequest } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 

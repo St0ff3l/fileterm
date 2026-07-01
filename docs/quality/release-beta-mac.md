@@ -1,4 +1,4 @@
-# TermDock Beta Release Checklist
+# FileTerm Beta Release Checklist
 
 本文记录 `v0.1.0-beta.1` 的 mac-only、unsigned release 约定。这个版本的目标不是正式商用发布，而是先把可分发链路跑通，方便早期用户和内部测试。
 
@@ -13,8 +13,8 @@
 
 预期产物由 `electron-builder` 生成：
 
-- `TermDock-v0.1.0-beta.1-arm64.dmg`
-- `TermDock-v0.1.0-beta.1-arm64.zip`
+- `FileTerm-v0.1.0-beta.1-arm64.dmg`
+- `FileTerm-v0.1.0-beta.1-arm64.zip`
 
 ## 3. 发布前检查
 
@@ -27,13 +27,13 @@
 如需清理本地产物后再重打，可执行：
 
 ```bash
-npm run clean:release -w @termdock/desktop
+npm run clean:release -w @fileterm/desktop
 ```
 
 ## 4. 打 tag
 
 ```bash
-git tag -a v0.1.0-beta.1 -m "TermDock v0.1.0-beta.1"
+git tag -a v0.1.0-beta.1 -m "FileTerm v0.1.0-beta.1"
 git push origin v0.1.0-beta.1
 ```
 

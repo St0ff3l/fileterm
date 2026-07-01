@@ -7,7 +7,7 @@ import type {
   ConnectionProfile,
   CreateProfileInput,
   TerminalCommandHistoryEntry
-} from '@termdock/core'
+} from '@fileterm/core'
 
 export interface ProfileRepository {
   list(): Promise<ConnectionProfile[]>

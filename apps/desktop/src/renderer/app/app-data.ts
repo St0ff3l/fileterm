@@ -3,7 +3,7 @@ import type {
   CreateProfileInput,
   LocalFileItem,
   WorkspaceSnapshot
-} from '@termdock/core'
+} from '@fileterm/core'
 
 export const emptyState: WorkspaceSnapshot = {
   profiles: [],

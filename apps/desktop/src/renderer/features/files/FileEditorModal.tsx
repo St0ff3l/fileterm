@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import Editor, { loader, type Monaco, type OnMount } from '@monaco-editor/react'
 import OpenCC from 'opencc-js'
 import * as monacoEditor from 'monaco-editor'
-import type { FileContentSnapshot } from '@termdock/core'
+import type { FileContentSnapshot } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { EDITOR_ENCODINGS, findEncodingOption, sortEditorLanguages, type EditorLanguageOption } from './file-editor-config'
@@ -16,7 +16,7 @@ loader.config({ monaco: monacoEditor })
 
 type EditorInstance = Parameters<OnMount>[0]
 type EditorMenu = 'file' | 'edit' | 'search' | 'preferences' | 'encoding' | 'language'
-const MONACO_DARK_THEME = 'termdock-default-dark'
+const MONACO_DARK_THEME = 'fileterm-default-dark'
 
 function readCssVariable(name: string, fallbackName?: string) {
   const styles = window.getComputedStyle(document.documentElement)
@@ -27,7 +27,7 @@ function readCssVariable(name: string, fallbackName?: string) {
   return fallbackName ? styles.getPropertyValue(fallbackName).trim() : ''
 }
 
-function defineTermDockMonacoTheme(monaco: Monaco) {
+function defineFileTermMonacoTheme(monaco: Monaco) {
   monaco.editor.defineTheme(MONACO_DARK_THEME, {
     base: 'vs-dark',
     inherit: true,
@@ -130,7 +130,7 @@ export function FileEditorModal({
     monacoRef.current = monaco
     setLanguages(sortEditorLanguages(monaco.languages.getLanguages()))
 
-    defineTermDockMonacoTheme(monaco)
+    defineFileTermMonacoTheme(monaco)
     monaco.editor.setTheme(themeMode === 'default-dark' ? MONACO_DARK_THEME : 'vs')
     setLanguage(editor.getModel()?.getLanguageId() ?? 'plaintext')
 
@@ -162,7 +162,7 @@ export function FileEditorModal({
     if (!monacoRef.current) {
       return
     }
-    defineTermDockMonacoTheme(monacoRef.current)
+    defineFileTermMonacoTheme(monacoRef.current)
     monacoRef.current.editor.setTheme(themeMode === 'default-dark' ? MONACO_DARK_THEME : 'vs')
   }, [themeMode])
 

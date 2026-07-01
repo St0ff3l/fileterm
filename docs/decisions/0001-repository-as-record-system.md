@@ -6,7 +6,7 @@ Accepted
 
 ## 背景
 
-TermDock 的架构涉及 Electron `main / preload / renderer`、协议接入、工作区状态、文件传输、主题系统和多个 packages。如果把所有信息都写进一个巨大的 `AGENTS.md`，会挤占上下文、降低可维护性，并让智能体难以判断哪些规则仍然有效。
+FileTerm 的架构涉及 Electron `main / preload / renderer`、协议接入、工作区状态、文件传输、主题系统和多个 packages。如果把所有信息都写进一个巨大的 `AGENTS.md`，会挤占上下文、降低可维护性，并让智能体难以判断哪些规则仍然有效。
 
 ## 决策
 

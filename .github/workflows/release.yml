@@ -69,15 +69,15 @@ jobs:
 
       - name: Build packages (core → shared → storage)
         run: |
-          npm run build -w @termdock/core
-          npm run build -w @termdock/shared
-          npm run build -w @termdock/storage
+          npm run build -w @fileterm/core
+          npm run build -w @fileterm/shared
+          npm run build -w @fileterm/storage
 
       - name: Typecheck
         run: npm run typecheck
 
       - name: Build renderer + main
-        run: npm run build -w @termdock/desktop
+        run: npm run build -w @fileterm/desktop
 
       - name: Package macOS (${{ matrix.arch }})
         run: |
@@ -87,7 +87,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: TermDock-macOS-${{ matrix.arch }}
+          name: FileTerm-macOS-${{ matrix.arch }}
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
@@ -116,15 +116,15 @@ jobs:
 
       - name: Build packages (core → shared → storage)
         run: |
-          npm run build -w @termdock/core
-          npm run build -w @termdock/shared
-          npm run build -w @termdock/storage
+          npm run build -w @fileterm/core
+          npm run build -w @fileterm/shared
+          npm run build -w @fileterm/storage
 
       - name: Typecheck
         run: npm run typecheck
 
       - name: Build renderer + main
-        run: npm run build -w @termdock/desktop
+        run: npm run build -w @fileterm/desktop
 
       - name: Package Windows (${{ matrix.arch }})
         run: |
@@ -134,7 +134,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: TermDock-Windows-${{ matrix.arch }}
+          name: FileTerm-Windows-${{ matrix.arch }}
           path: |
             apps/desktop/release/*.exe
           if-no-files-found: error

@@ -1,4 +1,4 @@
-import type { ConnectionProfile, ConnectionFolder } from '@termdock/core'
+import type { ConnectionProfile, ConnectionFolder } from '@fileterm/core'
 import { t } from '../../i18n'
 
 export function OverviewPage({

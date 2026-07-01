@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetrics } from '@termdock/core'
+import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetrics } from '@fileterm/core'
 import { copyText, hasSelectedText } from '../../app/app-utils'
 import { t } from '../../i18n'
 

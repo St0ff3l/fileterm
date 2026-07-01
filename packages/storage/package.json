@@ -1,5 +1,5 @@
 {
-  "name": "@termdock/storage",
+  "name": "@fileterm/storage",
   "version": "0.3.0-beta.2",
   "private": true,
   "type": "module",
@@ -13,6 +13,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@termdock/core": "0.3.0-beta.2"
+    "@fileterm/core": "0.3.0-beta.2"
   }
 }

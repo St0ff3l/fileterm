@@ -21,17 +21,17 @@ import type {
   SshInteractionResponse,
   TransferTask,
   TransferTargetOptions,
-  TermdockDesktopApi,
+  FileTermDesktopApi,
   TerminalDataPayload,
   TerminalStatePayload,
   WorkspaceSnapshot
-} from '@termdock/core'
+} from '@fileterm/core'
 
-const api: TermdockDesktopApi = {
+const api: FileTermDesktopApi = {
   platform: typeof process !== 'undefined' ? process.platform : 'unknown',
   arch: typeof process !== 'undefined' ? process.arch : 'unknown',
-  appVersion: process.env['TERMDOCK_APP_VERSION'] ?? '0.0.0',
-  appName: 'TermDock',
+  appVersion: process.env['FILETERM_APP_VERSION'] ?? '0.0.0',
+  appName: 'FileTerm',
   isDesktop: true,
   readClipboardText: (): Promise<string> => ipcRenderer.invoke('app:readClipboardText'),
   writeClipboardText: (text: string): Promise<void> => ipcRenderer.invoke('app:writeClipboardText', text),
@@ -244,7 +244,7 @@ const api: TermdockDesktopApi = {
 }
 
 try {
-  contextBridge.exposeInMainWorld('termdock', api)
+  contextBridge.exposeInMainWorld('fileterm', api)
 } catch (error) {
   console.error('Failed to expose preload API', error)
 }

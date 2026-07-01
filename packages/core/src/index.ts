@@ -423,7 +423,7 @@ export interface RemoteFileAccessOptions {
   sudoPassword?: string
 }
 
-export interface TermdockDesktopApi {
+export interface FileTermDesktopApi {
   platform: string
   arch: string
   appVersion: string

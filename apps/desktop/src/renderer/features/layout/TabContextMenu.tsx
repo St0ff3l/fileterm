@@ -1,4 +1,4 @@
-import type { WorkspaceTab } from '@termdock/core'
+import type { WorkspaceTab } from '@fileterm/core'
 import { t } from '../../i18n'
 import { ContextMenu } from '../common/ContextMenu'
 

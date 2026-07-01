@@ -1,4 +1,4 @@
-import type { CommandFolder, CommandTemplate } from '@termdock/core'
+import type { CommandFolder, CommandTemplate } from '@fileterm/core'
 
 export function sortByOrder<T extends { order?: number; name: string }>(items: T[]) {
   return [...items].sort((left, right) => {

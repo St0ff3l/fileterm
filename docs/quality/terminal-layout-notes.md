@@ -1,6 +1,6 @@
 # Terminal Layout Notes
 
-本文记录 TermDock 终端区域最近一次布局回归的原因和正确修法，避免后续继续通过“加 padding 试试”这类方式误判问题。
+本文记录 FileTerm 终端区域最近一次布局回归的原因和正确修法，避免后续继续通过“加 padding 试试”这类方式误判问题。
 
 ## 1. 现象
 
@@ -48,13 +48,13 @@ terminal spacing issue = xterm mount box and fit box are the same node
 - 不要为了避开 `TerminalDock` 再给 terminal host 加固定 bottom padding；这会重新造成 xterm fit 尺寸和视觉容器尺寸不一致。
 - 如果需要看被输入条覆盖的输出，优先通过终端滚动查看，而不是改变 PTY 行数或额外插入空行。
 
-2026-06 的 nano / 进度条回归又确认了一条边界：终端列数不能出现“前端 xterm 一个 cols、后端 PTY 另一个 cols”的分裂状态。当前做法是按主窗口最小宽度、左侧栏宽度和终端 padding 算出稳定列数，并让本地 `terminal.resize(cols, rows)` 与后端 `pty.resize(cols, rows)` 使用同一个 `cols`。详细排查结论见 [terminal-regression-checklist.md](/Users/stoffel/CodeFile/termdock/docs/quality/terminal-regression-checklist.md)。
+2026-06 的 nano / 进度条回归又确认了一条边界：终端列数不能出现“前端 xterm 一个 cols、后端 PTY 另一个 cols”的分裂状态。当前做法是按主窗口最小宽度、左侧栏宽度和终端 padding 算出稳定列数，并让本地 `terminal.resize(cols, rows)` 与后端 `pty.resize(cols, rows)` 使用同一个 `cols`。详细排查结论见 [terminal-regression-checklist.md](./terminal-regression-checklist.md)。
 
 当前实现位置：
 
-- 结构调整在 [apps/desktop/src/renderer/components/TerminalView.tsx](/Users/stoffel/CodeFile/termdock/apps/desktop/src/renderer/components/TerminalView.tsx:700)
-- 通用尺寸约束在 [apps/desktop/src/renderer/styles/features/session.css](/Users/stoffel/CodeFile/termdock/apps/desktop/src/renderer/styles/features/session.css:43)
-- 视觉留白在 [apps/desktop/src/renderer/styles/features/workstation-skin.css](/Users/stoffel/CodeFile/termdock/apps/desktop/src/renderer/styles/features/workstation-skin.css:499)
+- 结构调整在 [apps/desktop/src/renderer/components/TerminalView.tsx](../../apps/desktop/src/renderer/components/TerminalView.tsx#L700)
+- 通用尺寸约束在 [apps/desktop/src/renderer/styles/features/session.css](../../apps/desktop/src/renderer/styles/features/session.css#L43)
+- 视觉留白在 [apps/desktop/src/renderer/styles/features/workstation-skin.css](../../apps/desktop/src/renderer/styles/features/workstation-skin.css#L499)
 
 ## 4. 历史背景
 

@@ -2,7 +2,7 @@
 
 ## 背景
 
-TermDock 已经具备 SSH / SFTP / FTP MVP 雏形，但核心逻辑正在向少数大文件集中。继续加功能前，需要逐步稳住 `protocol / service / UI / type / theme` 的边界。
+FileTerm 已经具备 SSH / SFTP / FTP MVP 雏形，但核心逻辑正在向少数大文件集中。继续加功能前，需要逐步稳住 `protocol / service / UI / type / theme` 的边界。
 
 ## 目标
 

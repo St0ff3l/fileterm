@@ -5,7 +5,7 @@ import type {
   CommandSendPreferences,
   CommandTemplate,
   WorkspaceTab
-} from '@termdock/core'
+} from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
@@ -106,7 +106,7 @@ export function CommandCenter({
     let canceled = false
 
     async function loadPreferences() {
-      const desktopApi = window.termdock
+      const desktopApi = window.fileterm
       if (!desktopApi?.getCommandSendPreferences) {
         return
       }
@@ -128,11 +128,11 @@ export function CommandCenter({
   }, [])
 
   useEffect(() => {
-    if (!preferencesLoaded || !window.termdock?.setCommandSendPreferences) {
+    if (!preferencesLoaded || !window.fileterm?.setCommandSendPreferences) {
       return
     }
 
-    void window.termdock.setCommandSendPreferences({
+    void window.fileterm.setCommandSendPreferences({
       rememberSelection,
       sendScope: rememberSelection ? sendScope : 'current',
       selectedTabIds: rememberSelection ? selectedTabIds : []

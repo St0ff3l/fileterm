@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import type { OpenDialogOptions } from 'electron'
-import type { PermissionChangeOptions } from '@termdock/core'
+import type { PermissionChangeOptions } from '@fileterm/core'
 import type { IpcServices } from './types.js'
 
 export function registerLocalFilesHandlers(services: IpcServices) {

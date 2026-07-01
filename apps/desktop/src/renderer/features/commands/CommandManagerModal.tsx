@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, type DragEvent } from 'react'
-import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@termdock/core'
+import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@fileterm/core'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './CommandEditorModal'
@@ -55,7 +55,7 @@ export function CommandManagerModal({
   >(null)
   const suppressRowClickRef = useRef(false)
 
-  const desktopApi = window.termdock
+  const desktopApi = window.fileterm
 
   const stopInteractiveEvent = (event: React.SyntheticEvent) => {
     event.stopPropagation()

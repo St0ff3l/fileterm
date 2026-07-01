@@ -1,5 +1,5 @@
 {
-  "name": "@termdock/desktop",
+  "name": "@fileterm/desktop",
   "version": "0.3.0-beta.2",
   "private": true,
   "type": "module",
@@ -18,6 +18,7 @@
     "dev:electron": "wait-on tcp:5188 file:dist-electron/main/main.js && electron .",
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
+    "prebuild:main": "node ./scripts/clean-dist-electron.mjs",
     "build:main": "tsc -p tsconfig.node.json",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "clean:release": "node ./scripts/clean-release.mjs",
@@ -29,9 +30,9 @@
   "dependencies": {
     "@monaco-editor/react": "4.7.0",
     "@tanstack/react-virtual": "^3.14.3",
-    "@termdock/core": "0.3.0-beta.2",
-    "@termdock/shared": "0.3.0-beta.2",
-    "@termdock/storage": "0.3.0-beta.2",
+    "@fileterm/core": "0.3.0-beta.2",
+    "@fileterm/shared": "0.3.0-beta.2",
+    "@fileterm/storage": "0.3.0-beta.2",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-unicode11": "^0.9.0",
@@ -59,8 +60,8 @@
     "wait-on": "^9.0.10"
   },
   "build": {
-    "appId": "com.termdock.desktop",
-    "productName": "TermDock",
+    "appId": "com.fileterm.desktop",
+    "productName": "FileTerm",
     "asar": true,
     "directories": {
       "output": "release"
@@ -78,7 +79,7 @@
         "dmg",
         "zip"
       ],
-      "artifactName": "TermDock-${version}-macos-${arch}.${ext}"
+      "artifactName": "FileTerm-${version}-macos-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.ico",
@@ -96,14 +97,14 @@
           ]
         }
       ],
-      "artifactName": "TermDock-${version}-windows-${arch}-setup.${ext}"
+      "artifactName": "FileTerm-${version}-windows-${arch}-setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },
     "portable": {
-      "artifactName": "TermDock-${version}-windows-${arch}-portable.${ext}"
+      "artifactName": "FileTerm-${version}-windows-${arch}-portable.${ext}"
     }
   }
 }

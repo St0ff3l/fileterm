@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import type { SshInteractionResponse } from '@termdock/core'
+import type { SshInteractionResponse } from '@fileterm/core'
 import type { IpcServices } from './types.js'
 
 export function registerSshInteractionHandlers(services: IpcServices) {

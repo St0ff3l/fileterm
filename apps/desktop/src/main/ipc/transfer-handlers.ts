@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import type { TransferTargetOptions } from '@termdock/core'
+import type { TransferTargetOptions } from '@fileterm/core'
 import type { IpcServices } from './types.js'
 
 export function registerTransferHandlers(services: IpcServices) {

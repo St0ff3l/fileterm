@@ -1,5 +1,5 @@
 import type { ConnectConfig } from 'ssh2'
-import type { SshProfile } from '@termdock/core'
+import type { SshProfile } from '@fileterm/core'
 
 type SshDebugScope = 'main' | 'sftp' | 'transfer-sftp' | 'exec'
 type SshAuthConfig = Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>
@@ -14,7 +14,7 @@ export interface SshDebugLogger {
 }
 
 export function isSshDebugEnabled() {
-  return process.env.TERMDOCK_SSH_DEBUG === '1'
+  return process.env.FILETERM_SSH_DEBUG === '1'
 }
 
 export function createSshDebugLogger(
@@ -27,7 +27,7 @@ export function createSshDebugLogger(
     if (!enabled) {
       return
     }
-    append(`[TermDock][SSH:${scope}] ${message}\r\n`)
+    append(`[FileTerm][SSH:${scope}] ${message}\r\n`)
   }
 
   return {

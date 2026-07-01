@@ -1,4 +1,4 @@
-import type { CommandFolder, CommandTemplate, ConnectionProfile, TransferTask } from '@termdock/core'
+import type { CommandFolder, CommandTemplate, ConnectionProfile, TransferTask } from '@fileterm/core'
 
 export const seedProfiles: ConnectionProfile[] = []
 

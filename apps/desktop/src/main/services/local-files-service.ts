@@ -1,7 +1,7 @@
 import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { LocalFileItem, PermissionChangeOptions } from '@termdock/core'
+import type { LocalFileItem, PermissionChangeOptions } from '@fileterm/core'
 import { decodeBuffer, encodeText } from './text-encoding.js'
 
 function formatSize(bytes: number) {

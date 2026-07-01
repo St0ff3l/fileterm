@@ -13,10 +13,10 @@ try {
     await fs.rm(targetPath, { recursive: true, force: true })
   }))
 
-  console.log(`[TermDock] cleaned release directory: ${releaseDir}`)
+  console.log(`[FileTerm] cleaned release directory: ${releaseDir}`)
 } catch (error) {
   if ((error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
-    console.log(`[TermDock] release directory does not exist: ${releaseDir}`)
+    console.log(`[FileTerm] release directory does not exist: ${releaseDir}`)
   } else {
     throw error
   }

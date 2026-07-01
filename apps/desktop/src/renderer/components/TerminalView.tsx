@@ -23,7 +23,7 @@ function localizeTerminalText(value: string) {
 }
 
 function toDisplayTerminalText(value: string) {
-  // Localize fixed TermDock notices before preserving terminal control semantics later.
+  // Localize fixed FileTerm notices before preserving terminal control semantics later.
   return localizeTerminalText(value)
 }
 
@@ -155,7 +155,7 @@ export const TerminalView = memo(function TerminalView({
   const [activeFindIndex, setActiveFindIndex] = useState(-1)
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
   const [findRegex, setFindRegex] = useState(false)
-  const isMac = window.termdock?.platform === 'darwin'
+  const isMac = window.fileterm?.platform === 'darwin'
 
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
@@ -240,8 +240,8 @@ export const TerminalView = memo(function TerminalView({
     if (!selection) {
       return
     }
-    if (window.termdock?.writeClipboardText) {
-      void window.termdock.writeClipboardText(selection)
+    if (window.fileterm?.writeClipboardText) {
+      void window.fileterm.writeClipboardText(selection)
     } else {
       copyText(selection)
     }
@@ -253,8 +253,8 @@ export const TerminalView = memo(function TerminalView({
     if (!terminal) {
       return
     }
-    const value = window.termdock?.readClipboardText
-      ? await window.termdock.readClipboardText()
+    const value = window.fileterm?.readClipboardText
+      ? await window.fileterm.readClipboardText()
       : await navigator.clipboard?.readText?.()
     if (value) {
       clearEphemeralHighlight()
@@ -503,7 +503,7 @@ export const TerminalView = memo(function TerminalView({
     }
     lastSyncedSizeRef.current = nextSize
 
-    void window.termdock?.resizeTerminal(
+    void window.fileterm?.resizeTerminal(
       tabId,
       nextSize.cols,
       nextSize.rows,
@@ -532,7 +532,7 @@ export const TerminalView = memo(function TerminalView({
     const searchAddon = new SearchAddon({ highlightLimit: 2000 })
     const unicode11Addon = new Unicode11Addon()
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      void window.termdock?.openExternalUrl(uri)
+      void window.fileterm?.openExternalUrl(uri)
     })
     terminal.loadAddon(fitAddon)
     terminal.loadAddon(searchAddon)
@@ -620,11 +620,11 @@ export const TerminalView = memo(function TerminalView({
       }
 
       if (parsed.data === '?') {
-        const clipboardText = window.termdock?.readClipboardText
-          ? await window.termdock.readClipboardText()
+        const clipboardText = window.fileterm?.readClipboardText
+          ? await window.fileterm.readClipboardText()
           : await navigator.clipboard?.readText?.() ?? ''
         const encoded = encodeBase64Utf8(clipboardText)
-        await window.termdock?.writeTerminal(tabId, `\u001b]52;${parsed.target || 'c'};${encoded}\u0007`)
+        await window.fileterm?.writeTerminal(tabId, `\u001b]52;${parsed.target || 'c'};${encoded}\u0007`)
         return true
       }
 
@@ -633,8 +633,8 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
-      if (window.termdock?.writeClipboardText) {
-        await window.termdock.writeClipboardText(decoded)
+      if (window.fileterm?.writeClipboardText) {
+        await window.fileterm.writeClipboardText(decoded)
       } else {
         copyText(decoded)
       }
@@ -705,14 +705,14 @@ export const TerminalView = memo(function TerminalView({
       }
       clearEphemeralHighlight()
       setContextMenu(null)
-      void window.termdock?.writeTerminal(tabId, data)
+      void window.fileterm?.writeTerminal(tabId, data)
     })
 
     const onSelectionDispose = terminal.onSelectionChange(() => {
       setHasSelection(terminal.hasSelection())
     })
 
-    const offData = window.termdock?.onTerminalData(({ tabId: nextTabId, chunk }) => {
+    const offData = window.fileterm?.onTerminalData(({ tabId: nextTabId, chunk }) => {
       if (nextTabId === tabId) {
         lastTerminalOutputAtRef.current = Date.now()
         if (Date.now() < suppressHydratedChunksUntilRef.current && renderedTranscriptRef.current.endsWith(chunk)) {
@@ -727,7 +727,7 @@ export const TerminalView = memo(function TerminalView({
       }
     })
 
-    const offState = window.termdock?.onTerminalState(({ tabId: nextTabId, summary, transcript, connected }) => {
+    const offState = window.fileterm?.onTerminalState(({ tabId: nextTabId, summary, transcript, connected }) => {
       if (nextTabId === tabId) {
         onStatus?.(localizeTerminalText(summary))
         const isDisconnecting = wasConnectedRef.current && !connected
@@ -882,10 +882,10 @@ export const TerminalView = memo(function TerminalView({
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('selectionchange', onDocumentSelectionChange)
     document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('termdock:focus-terminal', handleFocusTerminal)
-    window.addEventListener('termdock:terminal-copy', handleTerminalCopy)
-    window.addEventListener('termdock:terminal-paste', handleTerminalPaste)
-    window.addEventListener('termdock:terminal-find', handleTerminalFind)
+    window.addEventListener('fileterm:focus-terminal', handleFocusTerminal)
+    window.addEventListener('fileterm:terminal-copy', handleTerminalCopy)
+    window.addEventListener('fileterm:terminal-paste', handleTerminalPaste)
+    window.addEventListener('fileterm:terminal-find', handleTerminalFind)
 
     // Ask the main process for the actual PTY size once the terminal is mounted.
     if (!bootedTabs.current.has(tabId)) {
@@ -894,10 +894,10 @@ export const TerminalView = memo(function TerminalView({
     }
 
     return () => {
-      window.removeEventListener('termdock:focus-terminal', handleFocusTerminal)
-      window.removeEventListener('termdock:terminal-copy', handleTerminalCopy)
-      window.removeEventListener('termdock:terminal-paste', handleTerminalPaste)
-      window.removeEventListener('termdock:terminal-find', handleTerminalFind)
+      window.removeEventListener('fileterm:focus-terminal', handleFocusTerminal)
+      window.removeEventListener('fileterm:terminal-copy', handleTerminalCopy)
+      window.removeEventListener('fileterm:terminal-paste', handleTerminalPaste)
+      window.removeEventListener('fileterm:terminal-find', handleTerminalFind)
       onDataDispose.dispose()
       onSelectionDispose.dispose()
       offData?.()

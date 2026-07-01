@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useRef, useState } from 'react'
-import type { TermdockDesktopApi, TransferTask } from '@termdock/core'
+import type { FileTermDesktopApi, TransferTask } from '@fileterm/core'
 import { isActiveTransfer } from '../../app/app-utils'
 import { TransferBar } from './TransferBar'
 import { TransferPopover } from './TransferPopover'
@@ -12,7 +12,7 @@ export function TransferCenter({
   onError,
   visible
 }: {
-  desktopApi?: TermdockDesktopApi
+  desktopApi?: FileTermDesktopApi
   fullWidth: boolean
   initialTransfers: TransferTask[]
   isPending: boolean

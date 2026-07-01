@@ -13,13 +13,13 @@ export function registerTerminalHandlers(services: IpcServices) {
 
   ipcMain.on('terminal:write', (_, tabId: string, data: string) => {
     void workspaceService.writeToTerminal(tabId, data).catch((error) => {
-      appError('[TermDock][Terminal] Failed to write input', error)
+      appError('[FileTerm][Terminal] Failed to write input', error)
     })
   })
 
   ipcMain.on('terminal:resize', (_, tabId: string, cols: number, rows: number, width: number, height: number) => {
     void workspaceService.resizeTerminal(tabId, cols, rows, width, height).catch((error) => {
-      appError('[TermDock][Terminal] Failed to resize terminal', error)
+      appError('[FileTerm][Terminal] Failed to resize terminal', error)
     })
   })
 }

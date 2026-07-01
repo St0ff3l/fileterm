@@ -7,7 +7,7 @@ import type {
   RemoteFileItem,
   SessionSnapshot,
   WorkspaceTab
-} from '@termdock/core'
+} from '@fileterm/core'
 import {
   copyText,
   hasSelectedText,

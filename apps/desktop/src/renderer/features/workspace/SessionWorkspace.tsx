@@ -7,7 +7,7 @@ import type {
   RemoteFileItem,
   SessionSnapshot,
   WorkspaceTab
-} from '@termdock/core'
+} from '@fileterm/core'
 import { TerminalView } from '../../components/TerminalView'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { AppIcon } from '../common/AppIcon'

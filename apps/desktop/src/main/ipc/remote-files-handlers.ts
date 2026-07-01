@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import type { PermissionChangeOptions, RemoteFileAccessOptions } from '@termdock/core'
+import type { PermissionChangeOptions, RemoteFileAccessOptions } from '@fileterm/core'
 import type { IpcServices } from './types.js'
 
 export function registerRemoteFilesHandlers(services: IpcServices) {

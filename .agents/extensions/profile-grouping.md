@@ -39,7 +39,7 @@ export interface BaseProfile extends BaseEntity {
 **优点**：存储结构最平缓，后续扩展任意嵌套层级很容易，React 渲染时只需在内存里转换为树形结构。
 
 ## 4. 实施步骤
-1. **Model 层**：在 `@termdock/core` 引入 `ConnectionFolder` 模型，并在 `BaseProfile` 中添加 `parentId` 和 `order`。
+1. **Model 层**：在 `@fileterm/core` 引入 `ConnectionFolder` 模型，并在 `BaseProfile` 中添加 `parentId` 和 `order`。
 2. **Storage 层**：让 `file-profile-repository.ts` 能存取含有 folder 节点的数据结构，或者专门维护一份 `folders.json`，但推荐存在一起（`profiles.json` -> `entities.json`，或在现有的 `profiles` 数组里混合存放 `folder`）。
 3. **IPC 层**：
    - `createFolder(name, parentId)`

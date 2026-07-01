@@ -8,7 +8,7 @@ import type {
   RemoteFileItem,
   SessionSnapshot,
   WorkspaceTab
-} from '@termdock/core'
+} from '@fileterm/core'
 import type { DragEvent } from 'react'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { SystemInfoWorkspace } from '../system/SystemInfoWorkspace'

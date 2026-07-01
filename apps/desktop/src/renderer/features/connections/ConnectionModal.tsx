@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import type { ConnectionFormMode, CreateProfileInput } from '@termdock/core'
-import { normalizeConnectionHost } from '@termdock/shared'
+import type { ConnectionFormMode, CreateProfileInput } from '@fileterm/core'
+import { normalizeConnectionHost } from '@fileterm/shared'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 

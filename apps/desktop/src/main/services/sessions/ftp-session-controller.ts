@@ -3,7 +3,7 @@ import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { Client as BasicFtpClient, FileInfo, FileType } from 'basic-ftp'
-import type { FtpProfile, FtpSessionController, PermissionChangeOptions, RemoteFileItem, TransferProgress } from '@termdock/core'
+import type { FtpProfile, FtpSessionController, PermissionChangeOptions, RemoteFileItem, TransferProgress } from '@fileterm/core'
 import { BaseFileSessionController } from './base-file-session-controller.js'
 import { parentRemotePath, toResolvedFtpRemoteFileItem } from './session-file-utils.js'
 import { decodeBuffer, encodeText } from '../text-encoding.js'
@@ -66,7 +66,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       } catch (error) {
         const detail = this.entryDebugInfo.get(nextPath)
         const enriched = `${error instanceof Error ? error.message : String(error)}${detail ? ` [ftp-entry: ${detail}]` : ''}`
-        appWarn(`[TermDock][FTP] Failed to open remote path ${nextPath}: ${enriched}`)
+        appWarn(`[FileTerm][FTP] Failed to open remote path ${nextPath}: ${enriched}`)
         throw new Error(enriched)
       }
       this.resolvedEntryTypes.set(nextPath, 'folder')
@@ -153,7 +153,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
   async uploadFile(localPath: string, remotePath: string, onProgress: (progress: TransferProgress) => void): Promise<void> {
     const info = await stat(localPath)
     const total = Math.max(info.size, 1)
-    appLog(`[TermDock][FTP] Upload start ${localPath} -> ${remotePath} (${formatTransferBytes(total)})`)
+    appLog(`[FileTerm][FTP] Upload start ${localPath} -> ${remotePath} (${formatTransferBytes(total)})`)
     try {
       await this.runWithConnectedClient(async () => {
         this.ftp.trackProgress((progress) => {
@@ -168,14 +168,14 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
           await this.ftp.uploadFrom(localPath, remotePath)
           await this.verifyRemoteFileSize(remotePath, total)
           this.resolvedEntryTypes.set(remotePath, 'file')
-          appLog(`[TermDock][FTP] Upload verified ${remotePath} (${formatTransferBytes(total)})`)
+          appLog(`[FileTerm][FTP] Upload verified ${remotePath} (${formatTransferBytes(total)})`)
           onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
         } finally {
           this.ftp.trackProgress()
         }
       })
     } catch (error) {
-      appWarn(`[TermDock][FTP] Upload failed ${localPath} -> ${remotePath}`, error)
+      appWarn(`[FileTerm][FTP] Upload failed ${localPath} -> ${remotePath}`, error)
       throw error
     }
   }
@@ -184,7 +184,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     try {
       await this.runWithConnectedClient(async () => {
         const total = Math.max(await this.ftp.size(remotePath), 1)
-        appLog(`[TermDock][FTP] Download start ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
+        appLog(`[FileTerm][FTP] Download start ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
         this.ftp.trackProgress((progress) => {
           onProgress({
             percent: Math.min(99, Math.round((progress.bytes / total) * 100)),
@@ -196,14 +196,14 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
           await this.ftp.downloadTo(localPath, remotePath)
           const localInfo = await stat(localPath)
           assertTransferSize(localPath, Math.max(localInfo.size, 1), total)
-          appLog(`[TermDock][FTP] Download verified ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
+          appLog(`[FileTerm][FTP] Download verified ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
           onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
         } finally {
           this.ftp.trackProgress()
         }
       })
     } catch (error) {
-      appWarn(`[TermDock][FTP] Download failed ${remotePath} -> ${localPath}`, error)
+      appWarn(`[FileTerm][FTP] Download failed ${remotePath} -> ${localPath}`, error)
       throw error
     }
   }
@@ -237,7 +237,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     const rows = entries
       .filter((entry) => entry.name !== '.' && entry.name !== '..')
     logFtpListingAlignment(targetPath, rows)
-    appLog(`[TermDock][FTP] Listing remote directory ${targetPath} (${rows.length} entries)`)
+    appLog(`[FileTerm][FTP] Listing remote directory ${targetPath} (${rows.length} entries)`)
     const items: RemoteFileItem[] = []
 
     for (const entry of rows) {
@@ -246,7 +246,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       const debugInfo = describeFtpEntry(targetPath, entry, isDirectory)
       this.entryDebugInfo.set(item.path, debugInfo)
       if ((entry as FileInfoWithRaw).rawLine || entry.type === FileType.Unknown || isDirectory !== entry.isDirectory) {
-        appLog(`[TermDock][FTP] Resolved remote entry: ${debugInfo}`)
+        appLog(`[FileTerm][FTP] Resolved remote entry: ${debugInfo}`)
       }
       items.push(item)
     }
@@ -275,7 +275,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
   }
 
   private tempFilePath(remotePath: string) {
-    return path.join(os.tmpdir(), `termdock-${randomUUID()}-${path.posix.basename(remotePath) || 'remote-file'}`)
+    return path.join(os.tmpdir(), `fileterm-${randomUUID()}-${path.posix.basename(remotePath) || 'remote-file'}`)
   }
 
   private async ensureConnected() {
@@ -323,7 +323,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
 
     this.listingMode = 'classic-list'
     this.mlstMode = 'disabled'
-    appLog(`[TermDock][FTP] Switching listing mode to classic LIST for current session: ${targetPath}`)
+    appLog(`[FileTerm][FTP] Switching listing mode to classic LIST for current session: ${targetPath}`)
     this.setClassicListCommands()
     const retriedEntries = await this.ftp.list(targetPath)
     return retriedEntries
@@ -380,7 +380,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       await this.ftp.cd(candidatePath)
       entry.type = FileType.Directory
       this.resolvedEntryTypes.set(candidatePath, 'folder')
-      appLog(`[TermDock][FTP] Directory probe succeeded for ${candidatePath}`)
+      appLog(`[FileTerm][FTP] Directory probe succeeded for ${candidatePath}`)
       return true
     } catch {
       entry.type = FileType.File
@@ -411,11 +411,11 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       const parsed = new FileInfo(path.posix.basename(targetPath))
       enrichFromMlsdLine(parsed as FileInfoWithRaw, factLine)
       if (parsed.type === FileType.Directory) {
-        appLog(`[TermDock][FTP] MLST resolved directory for ${targetPath}`)
+        appLog(`[FileTerm][FTP] MLST resolved directory for ${targetPath}`)
         return 'folder'
       }
       if (parsed.type === FileType.File || parsed.type === FileType.SymbolicLink) {
-        appLog(`[TermDock][FTP] MLST resolved file for ${targetPath}`)
+        appLog(`[FileTerm][FTP] MLST resolved file for ${targetPath}`)
         return 'file'
       }
       this.mlstMode = 'disabled'
@@ -434,7 +434,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
         if (Number.isFinite(size)) {
           entry.size = size
         }
-        appLog(`[TermDock][FTP] SIZE resolved file for ${targetPath}`)
+        appLog(`[FileTerm][FTP] SIZE resolved file for ${targetPath}`)
         return true
       }
 
@@ -460,7 +460,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
   private async verifyRemoteFileSize(remotePath: string, expectedSize: number): Promise<void> {
     const remoteSize = await this.readRemoteFileSize(remotePath)
     if (remoteSize === undefined) {
-      appWarn(`[TermDock][FTP] Upload size verification skipped for ${remotePath}; remote SIZE/listing did not expose a file size`)
+      appWarn(`[FileTerm][FTP] Upload size verification skipped for ${remotePath}; remote SIZE/listing did not expose a file size`)
       return
     }
     assertTransferSize(remotePath, remoteSize, expectedSize)
@@ -470,7 +470,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     try {
       return Math.max(await this.ftp.size(remotePath), 0)
     } catch (error) {
-      appWarn(`[TermDock][FTP] SIZE failed for ${remotePath}, trying directory listing`, error)
+      appWarn(`[FileTerm][FTP] SIZE failed for ${remotePath}, trying directory listing`, error)
     }
 
     try {
@@ -480,7 +480,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
         ? Math.max(match.size, 0)
         : undefined
     } catch (error) {
-      appWarn(`[TermDock][FTP] Directory listing size probe failed for ${remotePath}`, error)
+      appWarn(`[FileTerm][FTP] Directory listing size probe failed for ${remotePath}`, error)
       return undefined
     }
   }
@@ -641,9 +641,9 @@ function logFtpListingAlignment(targetPath: string, entries: FileInfo[]) {
     .map((item) => `#${item.index}:${item.parsedName}<-${item.rawName}@${item.rawIndex}`)
     .join(' | ')
 
-  appWarn(`[TermDock][FTP] Listing alignment mismatch detected for ${targetPath}: ${mismatchSummary}`)
-  appWarn(`[TermDock][FTP] Parsed listing sequence for ${targetPath}: ${parsedNames.join(' | ')}`)
-  appWarn(`[TermDock][FTP] Raw listing sequence for ${targetPath}: ${rawNames.join(' | ')}`)
+  appWarn(`[FileTerm][FTP] Listing alignment mismatch detected for ${targetPath}: ${mismatchSummary}`)
+  appWarn(`[FileTerm][FTP] Parsed listing sequence for ${targetPath}: ${parsedNames.join(' | ')}`)
+  appWarn(`[FileTerm][FTP] Raw listing sequence for ${targetPath}: ${rawNames.join(' | ')}`)
 }
 
 function extractRawEntryName(rawLine: string) {

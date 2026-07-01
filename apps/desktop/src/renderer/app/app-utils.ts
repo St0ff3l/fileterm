@@ -1,9 +1,9 @@
 import type { DragEvent, MouseEvent } from 'react'
-import type { LocalFileItem, TransferTask, WorkspaceTab } from '@termdock/core'
+import type { LocalFileItem, TransferTask, WorkspaceTab } from '@fileterm/core'
 import { t } from '../i18n'
 
-export const localFileDragType = 'application/x-termdock-local-file'
-export const remoteFileDragType = 'application/x-termdock-remote-file'
+export const localFileDragType = 'application/x-fileterm-local-file'
+export const remoteFileDragType = 'application/x-fileterm-remote-file'
 
 export function isActiveTransfer(transfer: TransferTask) {
   return transfer.status === 'running' || transfer.status === 'queued'

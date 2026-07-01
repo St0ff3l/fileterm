@@ -6,10 +6,10 @@ import { registerIpcHandlers } from './ipc/index.js'
 import { appError, appLog, getAppLogDirectory, initAppLogger } from './services/app-logger.js'
 import { AppUiStateStore } from './services/app-ui-state-store.js'
 
-// 必须在所有 Electron API 调用之前设置，避免 package.json 的 @termdock/desktop
-// 被用作 macOS 钥匙串服务名（"@termdock/desktop Safe Storage"），导致每次启动弹出授权弹窗。
-app.setName('TermDock')
-app.setPath('sessionData', path.join(app.getPath('temp'), 'TermDock-session-data'))
+// 必须在所有 Electron API 调用之前设置，避免 package.json 的 @fileterm/desktop
+// 被用作 macOS 钥匙串服务名（"@fileterm/desktop Safe Storage"），导致每次启动弹出授权弹窗。
+app.setName('FileTerm')
+app.setPath('sessionData', path.join(app.getPath('temp'), 'FileTerm-session-data'))
 if (process.platform === 'darwin') {
   // Keep Chromium/Electron away from macOS Keychain so both dev and packaged builds
   // avoid triggering Safe Storage authorization prompts.
@@ -30,9 +30,21 @@ let tray: Tray | null = null
 const isMac = process.platform === 'darwin'
 const isWindows = process.platform === 'win32'
 // Expose version to preload via process.env (shared between main and preload contexts)
-process.env['TERMDOCK_APP_VERSION'] = app.getVersion()
+process.env['FILETERM_APP_VERSION'] = app.getVersion()
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:'])
-const APP_SESSION_PARTITION = 'termdock-runtime'
+const APP_SESSION_PARTITION = 'fileterm-runtime'
+const LEGACY_USER_DATA_DIR_NAME = ['Term', 'Dock'].join('')
+const OWNED_USER_DATA_FILES = [
+  'profiles.json',
+  'profile-secrets.json',
+  'folders.json',
+  'command-folders.json',
+  'commands.json',
+  'command-history.json',
+  'command-send-preferences.json',
+  'ui-state.json',
+  'ui-preferences.json'
+] as const
 const DEFAULT_WINDOW_BOUNDS = {
   main: {
     width: 1280,
@@ -91,6 +103,29 @@ function isBrokenPipeError(error: unknown): boolean {
     && (error as NodeJS.ErrnoException).code === 'EPIPE'
 }
 
+function migrateLegacyUserData() {
+  const userDataPath = app.getPath('userData')
+  const legacyUserDataPath = path.join(path.dirname(userDataPath), LEGACY_USER_DATA_DIR_NAME)
+  if (legacyUserDataPath === userDataPath || !fs.existsSync(legacyUserDataPath)) {
+    return
+  }
+
+  fs.mkdirSync(userDataPath, { recursive: true })
+  for (const fileName of OWNED_USER_DATA_FILES) {
+    const sourcePath = path.join(legacyUserDataPath, fileName)
+    const targetPath = path.join(userDataPath, fileName)
+    if (!fs.existsSync(sourcePath) || fs.existsSync(targetPath)) {
+      continue
+    }
+
+    try {
+      fs.copyFileSync(sourcePath, targetPath, fs.constants.COPYFILE_EXCL)
+    } catch (error) {
+      safeConsoleError(`[FileTerm] failed to migrate ${fileName}`, error)
+    }
+  }
+}
+
 function safeConsoleError(...args: unknown[]) {
   try {
     appError(...args)
@@ -105,16 +140,16 @@ function attachWindowDiagnostics(win: BrowserWindow, label: string) {
   attachWindowSecurity(win, label)
 
   win.webContents.on('render-process-gone', (_event, details) => {
-    safeConsoleError(`[TermDock] ${label} render-process-gone`, details)
+    safeConsoleError(`[FileTerm] ${label} render-process-gone`, details)
   })
   win.webContents.on('unresponsive', () => {
-    safeConsoleError(`[TermDock] ${label} became unresponsive`)
+    safeConsoleError(`[FileTerm] ${label} became unresponsive`)
   })
   win.webContents.on('responsive', () => {
-    safeConsoleError(`[TermDock] ${label} responsive again`)
+    safeConsoleError(`[FileTerm] ${label} responsive again`)
   })
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    safeConsoleError(`[TermDock] ${label} did-fail-load`, {
+    safeConsoleError(`[FileTerm] ${label} did-fail-load`, {
       errorCode,
       errorDescription,
       validatedURL,
@@ -126,7 +161,7 @@ function attachWindowDiagnostics(win: BrowserWindow, label: string) {
 function attachWindowSecurity(win: BrowserWindow, label: string) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     void openExternalUrl(url).catch((error) => {
-      safeConsoleError(`[TermDock] blocked external URL from ${label}`, error)
+      safeConsoleError(`[FileTerm] blocked external URL from ${label}`, error)
     })
     return { action: 'deny' }
   })
@@ -149,7 +184,7 @@ process.on('uncaughtException', (error) => {
     return
   }
 
-  safeConsoleError('[TermDock] uncaught exception', error)
+  safeConsoleError('[FileTerm] uncaught exception', error)
 })
 
 function getUiPreferencesPath() {
@@ -230,7 +265,7 @@ function writeUiPreferences(next: UiPreferences) {
   try {
     fs.writeFileSync(getUiPreferencesPath(), JSON.stringify(next, null, 2), 'utf-8')
   } catch (error) {
-    safeConsoleError('[TermDock] failed to persist ui preferences', error)
+    safeConsoleError('[FileTerm] failed to persist ui preferences', error)
   }
 }
 
@@ -433,7 +468,7 @@ function createTray() {
     }
   ])
 
-  tray.setToolTip('TermDock')
+  tray.setToolTip('FileTerm')
   tray.setContextMenu(contextMenu)
 
   tray.on('click', () => {
@@ -461,7 +496,7 @@ function createMainWindow() {
     minWidth: DEFAULT_WINDOW_BOUNDS.main.minWidth,
     minHeight: DEFAULT_WINDOW_BOUNDS.main.minHeight,
     center: true,
-    title: 'TermDock',
+    title: 'FileTerm',
     autoHideMenuBar: true,
     frame: isWindows ? false : isMac ? undefined : true,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
@@ -526,10 +561,10 @@ function createMainWindow() {
     loadAppWindow(win, undefined, uiPreferences)
     win.webContents.on('did-finish-load', async () => {
       try {
-        const hasDesktopApi = await win.webContents.executeJavaScript('Boolean(window.termdock?.isDesktop)')
-        appLog(`[TermDock] preload ready: ${hasDesktopApi}`)
+        const hasDesktopApi = await win.webContents.executeJavaScript('Boolean(window.fileterm?.isDesktop)')
+        appLog(`[FileTerm] preload ready: ${hasDesktopApi}`)
       } catch (error) {
-        safeConsoleError('[TermDock] preload probe failed', error)
+        safeConsoleError('[FileTerm] preload probe failed', error)
       }
     })
     win.webContents.openDevTools({ mode: 'detach' })
@@ -789,6 +824,7 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
 }
 
 app.whenReady().then(() => {
+  migrateLegacyUserData()
   initAppLogger(app.getPath('userData'))
   uiStateStore = new AppUiStateStore(app.getPath('userData'))
   readUiPreferences()

@@ -19,9 +19,9 @@ const packageJsonPaths = [
 ]
 
 const internalPackages = new Set([
-  '@termdock/core',
-  '@termdock/shared',
-  '@termdock/storage'
+  '@fileterm/core',
+  '@fileterm/shared',
+  '@fileterm/storage'
 ])
 
 function updateInternalDependencyVersions(record) {

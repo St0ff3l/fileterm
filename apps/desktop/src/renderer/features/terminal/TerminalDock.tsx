@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@termdock/core'
+import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
@@ -66,17 +66,17 @@ export function TerminalDock({
   const rootRef = useRef<HTMLElement | null>(null)
 
   const persistHistory = async (entries: TerminalCommandHistoryEntry[]) => {
-    if (!window.termdock?.setTerminalCommandHistory) {
+    if (!window.fileterm?.setTerminalCommandHistory) {
       return
     }
-    await window.termdock.setTerminalCommandHistory(activeTab.profileId, entries)
+    await window.fileterm.setTerminalCommandHistory(activeTab.profileId, entries)
   }
 
   useEffect(() => {
     let canceled = false
 
     async function loadHistory() {
-      const desktopApi = window.termdock
+      const desktopApi = window.fileterm
       if (!desktopApi?.getTerminalCommandHistory) {
         return
       }
@@ -114,11 +114,11 @@ export function TerminalDock({
   }, [panel])
 
   const handleToggleConnection = async () => {
-    if (!window.termdock) return
+    if (!window.fileterm) return
     if (connected) {
-      await window.termdock.disconnectTab(activeTab.id)
+      await window.fileterm.disconnectTab(activeTab.id)
     } else {
-      await window.termdock.reconnectTab(activeTab.id)
+      await window.fileterm.reconnectTab(activeTab.id)
     }
   }
 
@@ -185,7 +185,7 @@ export function TerminalDock({
           if (document.activeElement === inputRef.current || document.activeElement === historySearchInputRef.current) {
             inputRef.current?.blur()
             historySearchInputRef.current?.blur()
-            window.dispatchEvent(new CustomEvent('termdock:focus-terminal'))
+            window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
           } else {
             if (panel === 'history') {
               historySearchInputRef.current?.focus()
@@ -203,7 +203,7 @@ export function TerminalDock({
         setPanel((prev) => {
           const next = prev === 'history' ? null : 'history'
           if (next !== 'history') {
-            window.dispatchEvent(new CustomEvent('termdock:focus-terminal'))
+            window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
           }
           return next
         })
@@ -214,7 +214,7 @@ export function TerminalDock({
         if (event.key === 'Escape') {
           event.preventDefault()
           setPanel(null)
-          window.dispatchEvent(new CustomEvent('termdock:focus-terminal'))
+          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
           return
         }
 
@@ -273,7 +273,7 @@ export function TerminalDock({
                 return trimmed ? `${trimmed} ${selectedToken}` : selectedToken
               })
               setPanel(null)
-              window.dispatchEvent(new CustomEvent('termdock:focus-terminal'))
+              window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
             }
           }
           return
@@ -288,7 +288,7 @@ export function TerminalDock({
     let canceled = false
 
     async function loadPreferences() {
-      const raw = await window.termdock?.getUiStateItem?.(preferencesStorageKey(activeTab.profileId))
+      const raw = await window.fileterm?.getUiStateItem?.(preferencesStorageKey(activeTab.profileId))
       if (!raw || canceled) {
         if (!canceled) {
           setPreferences(DEFAULT_PREFERENCES)
@@ -318,7 +318,7 @@ export function TerminalDock({
   const updatePreferences = (updater: (prev: DockPreferences) => DockPreferences) => {
     setPreferences((prev) => {
       const next = updater(prev)
-      void window.termdock?.setUiStateItem?.(preferencesStorageKey(activeTab.profileId), JSON.stringify(next))
+      void window.fileterm?.setUiStateItem?.(preferencesStorageKey(activeTab.profileId), JSON.stringify(next))
       return next
     })
   }
@@ -438,7 +438,7 @@ export function TerminalDock({
                             return trimmed ? `${trimmed} ${token}` : token
                           })
                           setPanel(null)
-                          window.dispatchEvent(new CustomEvent('termdock:focus-terminal'))
+                          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
                         }}
                       >
                         {token}
@@ -542,7 +542,7 @@ export function TerminalDock({
     </div>
   )
 
-  const isMac = window.termdock?.platform === 'darwin'
+  const isMac = window.fileterm?.platform === 'darwin'
   const placeholderText = isMac ? t.terminalDockPlaceholderMac : t.terminalDockPlaceholderWin
 
   return (
@@ -592,7 +592,7 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.copy}
-            onClick={() => window.dispatchEvent(new CustomEvent('termdock:terminal-copy'))}
+            onClick={() => window.dispatchEvent(new CustomEvent('fileterm:terminal-copy'))}
           >
             <AppIcon name="copy" />
           </button>
@@ -600,7 +600,7 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.paste}
-            onClick={() => window.dispatchEvent(new CustomEvent('termdock:terminal-paste'))}
+            onClick={() => window.dispatchEvent(new CustomEvent('fileterm:terminal-paste'))}
           >
             <AppIcon name="paste" />
           </button>
@@ -608,7 +608,7 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.find}
-            onClick={() => window.dispatchEvent(new CustomEvent('termdock:terminal-find'))}
+            onClick={() => window.dispatchEvent(new CustomEvent('fileterm:terminal-find'))}
           >
             <AppIcon name="search" />
           </button>

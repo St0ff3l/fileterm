@@ -1,4 +1,4 @@
-import type { LocalFileItem, RemoteFileItem } from '@termdock/core'
+import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { t } from '../../i18n'
 import type { AppIconName } from '../common/AppIcon'
 

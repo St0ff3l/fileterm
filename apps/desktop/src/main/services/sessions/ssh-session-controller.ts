@@ -17,7 +17,7 @@ import type {
   SshProfile,
   SshSessionController,
   TransferProgress
-} from '@termdock/core'
+} from '@fileterm/core'
 import { BaseFileSessionController } from './base-file-session-controller.js'
 import { buildMetricsCommand, parentRemotePath, parseSystemMetrics, toRemoteFileItem } from './session-file-utils.js'
 import {
@@ -777,7 +777,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       const sftp = await this.ensureTransferSftp()
       const info = await stat(localPath)
       const total = Math.max(info.size, 1)
-      appLog(`[TermDock][SFTP] Upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)})`)
+      appLog(`[FileTerm][SFTP] Upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)})`)
       await this.ensureRemoteDirectory(path.posix.dirname(remotePath), sftp)
       const localStream = createReadStream(localPath)
       const remoteStream = sftp.createWriteStream(remotePath, {
@@ -794,14 +794,14 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       })
       await pipeline(localStream, remoteStream)
       await this.verifySftpRemoteUploadSize(sftp, remotePath, total)
-      appLog(`[TermDock][SFTP] Upload verified ${remotePath} (${formatShellBytes(total)})`)
+      appLog(`[FileTerm][SFTP] Upload verified ${remotePath} (${formatShellBytes(total)})`)
       onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
     } catch (error) {
       if (transferredBytes > 0) {
-        appWarn(`[TermDock][SFTP] Upload interrupted after ${formatShellBytes(transferredBytes)}: ${localPath} -> ${remotePath}`, error)
+        appWarn(`[FileTerm][SFTP] Upload interrupted after ${formatShellBytes(transferredBytes)}: ${localPath} -> ${remotePath}`, error)
         throw new Error(`SFTP 上传已中断，已停止以避免提交不完整文件：${errorMessage(error)}`)
       }
-      appWarn(`[TermDock][SFTP] Upload could not start, falling back to shell stream: ${localPath} -> ${remotePath}`, error)
+      appWarn(`[FileTerm][SFTP] Upload could not start, falling back to shell stream: ${localPath} -> ${remotePath}`, error)
       await this.uploadFileViaShell(localPath, remotePath, onProgress, error, false)
     }
   }
@@ -825,7 +825,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         })
       })
       const total = Math.max(attrs.size ?? 1, 1)
-      appLog(`[TermDock][SFTP] Download start ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
+      appLog(`[FileTerm][SFTP] Download start ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
       await new Promise<void>((resolve, reject) => {
         sftp.fastGet(remotePath, localPath, {
           step: (transferred, _chunk, fileSize) => {
@@ -846,14 +846,14 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       })
       const localInfo = await stat(localPath)
       this.assertRemoteUploadSize(localPath, Math.max(localInfo.size, 1), total)
-      appLog(`[TermDock][SFTP] Download verified ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
+      appLog(`[FileTerm][SFTP] Download verified ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
       onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
     } catch (error) {
       if (transferredBytes > 0) {
-        appWarn(`[TermDock][SFTP] Download interrupted after ${formatShellBytes(transferredBytes)}: ${remotePath} -> ${localPath}`, error)
+        appWarn(`[FileTerm][SFTP] Download interrupted after ${formatShellBytes(transferredBytes)}: ${remotePath} -> ${localPath}`, error)
         throw new Error(`SFTP 下载已中断，已停止以避免提交不完整文件：${errorMessage(error)}`)
       }
-      appWarn(`[TermDock][SFTP] Download could not start, falling back to shell stream: ${remotePath} -> ${localPath}`, error)
+      appWarn(`[FileTerm][SFTP] Download could not start, falling back to shell stream: ${remotePath} -> ${localPath}`, error)
       await this.downloadFileViaShell(remotePath, localPath, onProgress, error)
     }
   }
@@ -875,7 +875,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   }
 
   pushClientNotice(message: string) {
-    this.appendSystemMessage(`[TermDock] ${message}\r\n`)
+    this.appendSystemMessage(`[FileTerm] ${message}\r\n`)
     this.onStateChange(this.getSummary(), this.transcript.toString(), this.connected)
   }
 
@@ -1316,7 +1316,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.ensureShellFileFallback(cause)
     const fileInfo = await stat(localPath)
     const total = Math.max(fileInfo.size, 1)
-    appLog(`[TermDock][SSH] Shell upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
+    appLog(`[FileTerm][SSH] Shell upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
     onProgress({ percent: 1, transferredBytes: 0, totalBytes: total })
     await this.streamLocalFileToShellCommand(
       localPath,
@@ -1332,7 +1332,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       }
     )
     await this.verifyShellRemoteUploadSize(remotePath, total, privileged)
-    appLog(`[TermDock][SSH] Shell upload verified ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
+    appLog(`[FileTerm][SSH] Shell upload verified ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
     onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
   }
 
@@ -1345,7 +1345,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.ensureShellFileFallback(cause)
     const total = Math.max((await stat(localPath)).size, 1)
     const tempRemotePath = await this.createTemporaryRemoteUploadPath(path.posix.basename(remotePath))
-    appLog(`[TermDock][SFTP] Root upload staging ${localPath} -> ${tempRemotePath} -> ${remotePath}`)
+    appLog(`[FileTerm][SFTP] Root upload staging ${localPath} -> ${tempRemotePath} -> ${remotePath}`)
 
     try {
       await this.uploadFileAsUser(localPath, tempRemotePath, (progress) => {
@@ -1369,7 +1369,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         true
       )
       await this.verifyShellRemoteUploadSize(remotePath, total, true)
-      appLog(`[TermDock][SFTP] Root upload verified ${remotePath} (${formatShellBytes(total)})`)
+      appLog(`[FileTerm][SFTP] Root upload verified ${remotePath} (${formatShellBytes(total)})`)
       onProgress({
         percent: 100,
         transferredBytes: total,
@@ -1407,12 +1407,12 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       return
     }
 
-    appWarn(`[TermDock][SSH] Shell upload size check returned no parseable size for ${remotePath}: ${singleLine(output) || '(empty)'}`)
+    appWarn(`[FileTerm][SSH] Shell upload size check returned no parseable size for ${remotePath}: ${singleLine(output) || '(empty)'}`)
     try {
       const sftp = await this.ensureTransferSftp()
       await this.verifySftpRemoteUploadSize(sftp, remotePath, expectedSize)
     } catch (error) {
-      appWarn(`[TermDock][SFTP] Fallback upload size check failed for ${remotePath}`, error)
+      appWarn(`[FileTerm][SFTP] Fallback upload size check failed for ${remotePath}`, error)
       this.assertRemoteUploadSize(remotePath, undefined, expectedSize)
     }
   }
@@ -1433,20 +1433,20 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     cause: unknown
   ): Promise<void> {
     this.ensureShellFileFallback(cause)
-    appLog(`[TermDock][SSH] Shell download start ${remotePath} -> ${localPath}`)
+    appLog(`[FileTerm][SSH] Shell download start ${remotePath} -> ${localPath}`)
     const output = await this.execShellFileCommand(`base64 ${shellQuote(remotePath)}`, undefined, this.fileAccessMode === 'root')
     const payload = Buffer.from(output.replace(/\s+/g, ''), 'base64')
     const total = Math.max(payload.byteLength, 1)
     onProgress({ percent: 80, transferredBytes: Math.round(total * 0.8), totalBytes: total })
     await writeFile(localPath, payload)
-    appLog(`[TermDock][SSH] Shell download verified ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
+    appLog(`[FileTerm][SSH] Shell download verified ${remotePath} -> ${localPath} (${formatShellBytes(total)})`)
     onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
   }
 
   private async readRemoteDirectoryViaShell(targetPath: string, cause: unknown): Promise<RemoteFileItem[]> {
     this.ensureShellFileFallback(cause)
-    const outputStartMarker = '__TERMDOCK_DIR_LIST_START__'
-    const outputEndMarker = '__TERMDOCK_DIR_LIST_END__'
+    const outputStartMarker = '__FILETERM_DIR_LIST_START__'
+    const outputEndMarker = '__FILETERM_DIR_LIST_END__'
     const output = await this.execShellFileCommand(`
 target=${shellQuote(targetPath)}
 if [ ! -d "$target" ]; then
@@ -1514,7 +1514,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
 
   private async createTemporaryRemoteUploadPath(fileName: string): Promise<string> {
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_') || 'upload.bin'
-    const output = await this.execCommand(`sh -lc ${shellQuote(`mktemp /tmp/termdock-upload.XXXXXX-${safeName}`)}`)
+    const output = await this.execCommand(`sh -lc ${shellQuote(`mktemp /tmp/fileterm-upload.XXXXXX-${safeName}`)}`)
     const tempPath = output.trim()
     if (!tempPath) {
       throw new Error('无法创建远程临时上传文件')

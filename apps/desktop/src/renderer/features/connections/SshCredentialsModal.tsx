@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { SshCredentialsPromptRequest } from '@termdock/core'
+import type { SshCredentialsPromptRequest } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { t } from '../../i18n'
 

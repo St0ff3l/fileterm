@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
-import type { TermdockDesktopApi } from '@termdock/core'
+import type { FileTermDesktopApi } from '@fileterm/core'
 
 declare global {
   interface Window {
-    termdock?: TermdockDesktopApi
+    fileterm?: FileTermDesktopApi
   }
 }
 

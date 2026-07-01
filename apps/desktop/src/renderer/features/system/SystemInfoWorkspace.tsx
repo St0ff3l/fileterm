@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { ConnectionProfile, SessionSnapshot, SystemMetrics } from '@termdock/core'
+import type { ConnectionProfile, SessionSnapshot, SystemMetrics } from '@fileterm/core'
 import { t } from '../../i18n'
 
 export function SystemInfoWorkspace({

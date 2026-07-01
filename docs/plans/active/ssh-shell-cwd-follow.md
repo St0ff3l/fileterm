@@ -41,7 +41,7 @@ remote shell integration
 - `pushd/popd`、alias/function 内切目录可被识别。
 - 手动浏览文件区后，同 cwd prompt 不回抢；再次切换 shell cwd 后恢复跟随。
 - 关闭跟随后 shell cwd 仍更新，但文件区不跳转；重新开启时同步到最新 cwd。
-- `npm run typecheck -w @termdock/desktop` 通过。
+- `npm run typecheck -w @fileterm/desktop` 通过。
 
 ## 进度记录
 

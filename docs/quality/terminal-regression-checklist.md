@@ -117,7 +117,7 @@ Last login: ...
 在终端里输出一些可搜索内容、URL、宽字符和 Emoji：
 
 ```bash
-printf 'TermDock search Search\nhttps://example.com\nPowerline 字符 Emoji 😀\n'
+printf 'FileTerm search Search\nhttps://example.com\nPowerline 字符 Emoji 😀\n'
 ```
 
 通过标准：
@@ -176,7 +176,7 @@ hydration 是“启动体验补偿”，不是实时终端同步机制
 
 ```txt
 实时 PTY 数据保持原样 -> xterm 解析
-renderer 只做 TermDock 固定文案本地化，不做控制序列修补
+renderer 只做 FileTerm 固定文案本地化，不做控制序列修补
 ```
 
 ### 4.2 xterm cols 必须和后端 PTY cols 完全一致

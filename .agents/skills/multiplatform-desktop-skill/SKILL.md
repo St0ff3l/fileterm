@@ -1,6 +1,6 @@
 ---
 name: multiplatform-desktop-skill
-description: 为 Electron + React + TypeScript 桌面应用处理多平台兼容性、标题栏/托盘行为、窗口关闭链路、平台字体与资源打包边界的实战技能。只要用户提到 macOS、Windows、Linux、跨平台兼容、系统托盘、Dock、原生标题栏、自定义标题栏、快捷键退出、平台差异、平台专用图标、字体在不同系统是否一致、或要求“检查这段改动会不会影响其他平台”，就应该使用这个 skill。尤其适用于 TermDock 这类 main/preload/renderer 分层的 Electron 项目。
+description: 为 Electron + React + TypeScript 桌面应用处理多平台兼容性、标题栏/托盘行为、窗口关闭链路、平台字体与资源打包边界的实战技能。只要用户提到 macOS、Windows、Linux、跨平台兼容、系统托盘、Dock、原生标题栏、自定义标题栏、快捷键退出、平台差异、平台专用图标、字体在不同系统是否一致、或要求“检查这段改动会不会影响其他平台”，就应该使用这个 skill。尤其适用于 FileTerm 这类 main/preload/renderer 分层的 Electron 项目。
 compatibility:
   tools:
     - shell
@@ -11,9 +11,9 @@ compatibility:
     - packaged-resource-validation
 ---
 
-# TermDock 多平台开发技能
+# FileTerm 多平台开发技能
 
-这个 skill 用来处理 TermDock 这类 Electron 桌面应用里的跨平台细节，不是泛泛的“做适配”，而是把 `main / preload / renderer / assets / build` 这几层一起看，避免某个平台修好了、另一个平台悄悄回归。
+这个 skill 用来处理 FileTerm 这类 Electron 桌面应用里的跨平台细节，不是泛泛的“做适配”，而是把 `main / preload / renderer / assets / build` 这几层一起看，避免某个平台修好了、另一个平台悄悄回归。
 
 ## 先做什么
 
@@ -48,11 +48,11 @@ compatibility:
 - `apps/desktop/src/renderer/styles/features/shell.css`
 - `apps/desktop/src/renderer/styles/features/workstation-skin.css`
 
-## TermDock 当前已经明确的多平台边界
+## FileTerm 当前已经明确的多平台边界
 
 ### 1. 平台判断
 
-- 统一从 `preload` 暴露的 `window.termdock.platform` 读取平台。
+- 统一从 `preload` 暴露的 `window.fileterm.platform` 读取平台。
 - renderer 可以把平台同步到 `document.documentElement.dataset.platform`，再让 CSS 做差异化。
 - 不要在 renderer 里散落 `navigator.platform`、UA 猜测、或手写字符串分支。
 - 不要把平台布尔值硬编码成常量。近期就出现过 `isWindowsDesktop = false` 这种回归，导致一整条 Windows UI 分支失效。
@@ -79,7 +79,7 @@ compatibility:
 
 - macOS 菜单栏托盘图标应使用单独的 template image。
 - 大尺寸彩色 app icon 不能直接缩成菜单栏图标。
-- 当前 TermDock 的正确方向是：
+- 当前 FileTerm 的正确方向是：
   - `Dock icon` 继续用彩色应用图标
   - `Tray icon` 在 macOS 下优先走独立 `trayTemplate.png`
   - `trayImage.setTemplateImage(true)`
@@ -94,7 +94,7 @@ compatibility:
 
 这些入口最终都应该汇聚到同一条退出决策链，而不是一部分直接 `app.quit()`、另一部分先确认。
 
-在 TermDock 里，退出确认应该遵守：
+在 FileTerm 里，退出确认应该遵守：
 
 - `main` 拦截 `before-quit`
 - `main` 通过事件通知 renderer 请求确认
@@ -110,7 +110,7 @@ compatibility:
 
 可以，但要区分“能显示”和“可控可交付”。
 
-当前 TermDock 的 `Outfit` 来自 `apps/desktop/index.html` 里的 Google Fonts：
+当前 FileTerm 的 `Outfit` 来自 `apps/desktop/index.html` 里的 Google Fonts：
 
 - 开发态和联网环境下，Windows 可以正常显示
 - macOS 也可以
@@ -139,10 +139,10 @@ compatibility:
 - 目标用户网络环境不稳定
 - 这是品牌字标，不希望 fallback 后气质跑掉
 
-### 当前 TermDock 对字体的正确理解
+### 当前 FileTerm 对字体的正确理解
 
 - `Outfit` 已经被引入，说明“品牌字标设计”方向是成立的
-- 左上角 `TermDock` 的字标样式曾经被后续兼容性改动覆盖过，说明：
+- 左上角 `FileTerm` 的字标样式曾经被后续兼容性改动覆盖过，说明：
   - 字体资源在，不代表视觉还在
   - 样式回归要同时检查 `font-family`、`font-weight`、`letter-spacing`、`margin-left`
 - 只修 JSX 不够，品牌字标通常是“资源 + CSS + 平台留白”三件事一起成立
@@ -195,13 +195,13 @@ compatibility:
 最少跑：
 
 ```bash
-npm run typecheck -w @termdock/desktop
+npm run typecheck -w @fileterm/desktop
 ```
 
 涉及构建、资源路径、打包资源时再跑：
 
 ```bash
-npm run build -w @termdock/desktop
+npm run build -w @fileterm/desktop
 ```
 
 如果改的是窗口、托盘、标题栏、退出链路，必须手测：
@@ -212,7 +212,7 @@ npm run build -w @termdock/desktop
 4. Windows 标题栏按钮
 5. Windows 自绘 menubar 是否压坏布局
 
-## TermDock 近期兼容性改动摘要
+## FileTerm 近期兼容性改动摘要
 
 这是这个 skill 在处理相关需求时应该优先记住的上下文：
 

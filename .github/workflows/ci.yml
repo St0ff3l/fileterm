@@ -32,9 +32,9 @@ jobs:
 
       - name: Build packages (core → shared → storage)
         run: |
-          npm run build -w @termdock/core
-          npm run build -w @termdock/shared
-          npm run build -w @termdock/storage
+          npm run build -w @fileterm/core
+          npm run build -w @fileterm/shared
+          npm run build -w @fileterm/storage
 
       - name: Typecheck
         run: npm run typecheck

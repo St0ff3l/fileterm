@@ -2,7 +2,7 @@
 
 ## 背景
 
-TermDock 当前已经有 SSH 会话的系统信息页，但实现明显偏向 `Linux over SSH`：
+FileTerm 当前已经有 SSH 会话的系统信息页，但实现明显偏向 `Linux over SSH`：
 
 - 采集脚本主要依赖 `/proc`、`df`、`ps`、`hostname`、`ifconfig`、`lspci`
 - renderer 里已经承担了一部分格式化职责

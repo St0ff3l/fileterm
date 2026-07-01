@@ -1,6 +1,6 @@
 import type { DragEvent, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type { LocalFileItem, RemoteFileItem } from '@termdock/core'
+import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { getDisplayFileIconName, getDisplayFileTypeLabel } from './file-kind'

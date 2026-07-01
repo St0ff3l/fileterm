@@ -22,8 +22,8 @@ import {
   type TransferTargetOptions,
   type TransferTask,
   type WorkspaceSnapshot
-} from '@termdock/core'
-import type { ProfileRepository } from '@termdock/storage'
+} from '@fileterm/core'
+import type { ProfileRepository } from '@fileterm/storage'
 import { seedCommandFolders, seedCommandTemplates, seedProfiles, seedTransfers } from './workspace/seed-data.js'
 import { WorkspaceSessionRuntime, type LiveSessionController } from './workspace/workspace-session-runtime.js'
 import { WorkspaceTabsState } from './workspace/workspace-tabs.js'

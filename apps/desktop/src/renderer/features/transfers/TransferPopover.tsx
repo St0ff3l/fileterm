@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { TransferTask } from '@termdock/core'
+import type { TransferTask } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { formatTransferBytes, isActiveTransfer, isCompletedTransfer, transferStatusText } from '../../app/app-utils'
 import { t } from '../../i18n'

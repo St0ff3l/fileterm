@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { TransferTask } from '@termdock/core'
+import type { TransferTask } from '@fileterm/core'
 
 export class WorkspaceTransfersState {
   private readonly transfers: TransferTask[]

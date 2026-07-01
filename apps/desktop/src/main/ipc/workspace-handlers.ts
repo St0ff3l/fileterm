@@ -7,7 +7,7 @@ import type {
   CommandTemplateInput,
   ConnectionFolder,
   CreateProfileInput
-} from '@termdock/core'
+} from '@fileterm/core'
 import type { IpcServices, IpcWindowOptions } from './types.js'
 
 export function registerWorkspaceHandlers(services: IpcServices, options: IpcWindowOptions) {

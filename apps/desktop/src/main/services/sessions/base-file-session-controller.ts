@@ -1,4 +1,4 @@
-import type { ConnectionProfile, FileSessionController, PermissionChangeOptions, RemoteFileAccessOptions, RemoteFileItem, TransferProgress } from '@termdock/core'
+import type { ConnectionProfile, FileSessionController, PermissionChangeOptions, RemoteFileAccessOptions, RemoteFileItem, TransferProgress } from '@fileterm/core'
 
 export abstract class BaseFileSessionController implements FileSessionController {
   readonly id: string

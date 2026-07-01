@@ -1,10 +1,10 @@
-# TermDock Design Guide
+# FileTerm Design Guide
 
-本文档记录当前 TermDock 工作台页面的设计语言。它不是营销页规范，而是桌面远程工作台的产品界面规范，用来指导后续终端、系统信息、文件管理、命令输入和多标签工作区的 UI 改动。
+本文档记录当前 FileTerm 工作台页面的设计语言。它不是营销页规范，而是桌面远程工作台的产品界面规范，用来指导后续终端、系统信息、文件管理、命令输入和多标签工作区的 UI 改动。
 
 ## 1. Design Direction
 
-TermDock 的视觉目标是：像原生桌面工具一样安静、清晰、密集、可靠。页面应优先服务长期使用和快速扫读，而不是展示感。
+FileTerm 的视觉目标是：像原生桌面工具一样安静、清晰、密集、可靠。页面应优先服务长期使用和快速扫读，而不是展示感。
 
 核心关键词：
 
@@ -84,7 +84,7 @@ tokens -> theme vars -> component skins -> terminal colors
 
 ## 5. Surfaces And Borders
 
-TermDock 的层级主要靠边界，不靠重装饰。
+FileTerm 的层级主要靠边界，不靠重装饰。
 
 - 外层区域：浅灰背景 + 1px 边线。
 - 面板：白色背景 + 1px border，必要时使用非常弱的阴影。

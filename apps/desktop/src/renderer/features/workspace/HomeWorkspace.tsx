@@ -1,4 +1,4 @@
-import type { ConnectionProfile, ConnectionFolder, CommandFolder, CommandTemplate } from '@termdock/core'
+import type { ConnectionProfile, ConnectionFolder, CommandFolder, CommandTemplate } from '@fileterm/core'
 import { useState } from 'react'
 import { t } from '../../i18n'
 import { OverviewPage } from './OverviewPage'
@@ -86,7 +86,7 @@ export function HomeWorkspace({
     setActiveTab(tab)
   }
 
-  const desktopApi = window.termdock
+  const desktopApi = window.fileterm
   const isWindows = desktopApi?.platform === 'win32'
 
   const handleOpenNewConnection = () => {
@@ -97,7 +97,7 @@ export function HomeWorkspace({
 
   const handleOpenDocs = () => {
     if (desktopApi) {
-      void desktopApi.openExternalUrl('https://github.com/St0ff3l/termdock')
+      void desktopApi.openExternalUrl('https://github.com/St0ff3l/fileterm')
     }
   }
 
@@ -111,7 +111,7 @@ export function HomeWorkspace({
       <aside className={`home-sidebar ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
         {!isWindows ? (
           <div className="sidebar-brand">
-            <h2 className="brand-title">TermDock</h2>
+            <h2 className="brand-title">FileTerm</h2>
             <span className="brand-version">v{desktopApi?.appVersion ?? '—'}</span>
           </div>
         ) : null}
@@ -272,7 +272,7 @@ export function HomeWorkspace({
         {/* Custom Footer */}
         <footer className="home-footer">
           <div className="footer-copyright">
-            <span>© 2026 TermDock Team. MIT Licensed. System: 0.1ms latency</span>
+            <span>© 2026 FileTerm Team. MIT Licensed. System: 0.1ms latency</span>
             {activeTab === 'connection-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>

@@ -6,7 +6,7 @@ let logFilePath: string | null = null
 
 export function initAppLogger(userDataPath: string) {
   logDirectoryPath = path.join(userDataPath, 'logs')
-  logFilePath = path.join(logDirectoryPath, 'termdock.log')
+  logFilePath = path.join(logDirectoryPath, 'fileterm.log')
   fs.mkdirSync(logDirectoryPath, { recursive: true })
 }
 

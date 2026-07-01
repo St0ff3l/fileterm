@@ -1,5 +1,5 @@
 {
-  "name": "termdock",
+  "name": "fileterm",
   "version": "0.3.0-beta.2",
   "private": true,
   "license": "MIT",
@@ -9,13 +9,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @termdock/desktop",
+    "dev": "npm run dev -w @fileterm/desktop",
     "sync:version": "node ./scripts/sync-version-from-root.mjs",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "version:bump": "node ./scripts/bump-version.mjs",
-    "release:mac": "npm run release:mac -w @termdock/desktop",
-    "release:win": "npm run release:win -w @termdock/desktop",
+    "release:mac": "npm run release:mac -w @fileterm/desktop",
+    "release:win": "npm run release:win -w @fileterm/desktop",
     "postinstall": "node ./vendor/cpu-features-shim/apply-shim.mjs"
   },
   "engines": {

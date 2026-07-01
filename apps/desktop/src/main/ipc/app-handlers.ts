@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, shell, Menu } from 'electron'
-import type { ConnectionFormMode, FileEditorWindowInput } from '@termdock/core'
+import type { ConnectionFormMode, FileEditorWindowInput } from '@fileterm/core'
 import type { IpcWindowOptions } from './types.js'
 
 export function registerAppHandlers(options: IpcWindowOptions) {

@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { FileInfo, FileType } from 'basic-ftp'
 import type { FileEntry } from 'ssh2'
-import type { RemoteFileItem, SystemMetrics } from '@termdock/core'
+import type { RemoteFileItem, SystemMetrics } from '@fileterm/core'
 
 export function toRemoteFileItem(basePath: string, entry: FileEntry): RemoteFileItem {
   const fullPath = path.posix.join(basePath, entry.filename)
@@ -384,8 +384,8 @@ active_iface=$(awk '$2 == 00000000 {print $1; exit}' /proc/net/route 2>/dev/null
 [ -z "$active_iface" ] && active_iface=$(echo "$ifaces" | awk -F, '{print $1}')
 rx1=$(awk -F: 'NR>2 {name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[2]} END {printf "%.0f", sum+0}' /proc/net/dev 2>/dev/null)
 tx1=$(awk -F: 'NR>2 {name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[10]} END {printf "%.0f", sum+0}' /proc/net/dev 2>/dev/null)
-before_file="/tmp/termdock-if-before-$$"
-after_file="/tmp/termdock-if-after-$$"
+before_file="/tmp/fileterm-if-before-$$"
+after_file="/tmp/fileterm-if-after-$$"
 awk -F: 'NR>2 {name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") printf "%s|%.0f|%.0f\\n", name, values[2], values[10]}' /proc/net/dev 2>/dev/null > "$before_file"
 sleep "$sleep_interval"
 rx2=$(awk -F: 'NR>2 {name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[2]} END {printf "%.0f", sum+0}' /proc/net/dev 2>/dev/null)

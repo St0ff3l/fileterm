@@ -25,7 +25,7 @@ export function SettingsModal({
   inline?: boolean
 }) {
   const [activeTab, setActiveTab] = useState<'general' | 'tools' | 'system'>('general')
-  const desktopApi = window.termdock
+  const desktopApi = window.fileterm
 
   const platformLabel = (() => {
     const platform = desktopApi?.platform ?? 'unknown'

@@ -1,4 +1,4 @@
-import type { ConnectionProfile, ConnectionFolder } from '@termdock/core'
+import type { ConnectionProfile, ConnectionFolder } from '@fileterm/core'
 import { useState, useMemo, useRef, useEffect, type DragEvent } from 'react'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'

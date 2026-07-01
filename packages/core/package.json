@@ -1,5 +1,5 @@
 {
-  "name": "@termdock/core",
+  "name": "@fileterm/core",
   "version": "0.3.0-beta.2",
   "private": true,
   "type": "module",

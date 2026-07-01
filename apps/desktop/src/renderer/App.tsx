@@ -18,8 +18,8 @@ import {
   type SshInteractionResponse,
   type WorkspaceSnapshot,
   type WorkspaceTab
-} from '@termdock/core'
-import { normalizeConnectionHost, validateConnectionHost } from '@termdock/shared'
+} from '@fileterm/core'
+import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import { defaultForm, emptyState, localPreviewFiles, previewLocalPath, previewState, profileToForm } from './app/app-data'
 import { homeTabKey, insertTabKeyAfter, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
@@ -593,7 +593,7 @@ export function App() {
   const localTabsRef = useRef(localTabs)
   const pendingHomeReplacementKeyRef = useRef<string | null>(null)
   const hasSanitizedStoredPlaceholderRef = useRef(false)
-  const desktopApi = window.termdock
+  const desktopApi = window.fileterm
   const isWindowsDesktop = desktopApi?.platform === 'win32'
 
   useEffect(() => {
@@ -1126,7 +1126,7 @@ export function App() {
   }
 
   const reportError = (setter: (message: string) => void, scope: string, err: unknown, details?: ErrorDetails) => {
-    console.error(`[TermDock] ${scope}`, err)
+    console.error(`[FileTerm] ${scope}`, err)
     setter(formatAppError(scope, err, details))
   }
 
@@ -3157,7 +3157,7 @@ export function App() {
               <button type="button" onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect()
                 void desktopApi?.showWindowMenu('app', Math.round(rect.left), Math.round(rect.bottom))
-              }} style={{ fontWeight: 600, color: 'var(--text-main, #ffffff)' }}>TermDock</button>
+              }} style={{ fontWeight: 600, color: 'var(--text-main, #ffffff)' }}>FileTerm</button>
               <button type="button" onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect()
                 void desktopApi?.showWindowMenu('file', Math.round(rect.left), Math.round(rect.bottom))
@@ -3675,7 +3675,7 @@ function StandaloneWindowFrame({
 }
 
 function StandaloneWindowTitlebar({ isWindows, title }: { isWindows: boolean; title: string }) {
-  const desktopApi = window.termdock
+  const desktopApi = window.fileterm
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
@@ -3722,7 +3722,7 @@ function fileNameFromPath(filePath: string) {
 }
 
 function extractDroppedLocalPaths(event: DragEvent<HTMLDivElement>) {
-  const desktopApi = window.termdock
+  const desktopApi = window.fileterm
   const fileList = Array.from(event.dataTransfer.files)
   const filePaths = (
     desktopApi?.getDroppedFilePaths?.(fileList)

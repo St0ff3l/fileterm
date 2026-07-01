@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ClipboardEvent, type ReactNode } from 'react'
-import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@termdock/core'
+import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@fileterm/core'
 import { t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from './command-utils'
 import { AppIcon } from '../common/AppIcon'

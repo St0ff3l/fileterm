@@ -1,4 +1,4 @@
-import type { WorkspaceTab } from '@termdock/core'
+import type { WorkspaceTab } from '@fileterm/core'
 
 export type SendScope = 'current' | 'all-ssh' | 'selected-ssh'
 

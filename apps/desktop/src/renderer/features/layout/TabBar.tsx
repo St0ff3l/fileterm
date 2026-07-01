@@ -1,4 +1,4 @@
-import type { WorkspaceTab } from '@termdock/core'
+import type { WorkspaceTab } from '@fileterm/core'
 import { tabStatusClass } from '../../app/app-utils'
 import { t } from '../../i18n'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'

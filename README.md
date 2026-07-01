@@ -2,7 +2,7 @@
 
 <div align="center">
   <br />
-  <img alt="TermDock" src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=34&duration=2600&pause=900&color=38BDF8&center=true&vCenter=true&width=760&lines=TermDock;SSH+%2B+SFTP+%2B+FTP+Workspace;A+Modern+Remote+Desktop+Workbench" />
+  <img alt="FileTerm" src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=34&duration=2600&pause=900&color=38BDF8&center=true&vCenter=true&width=760&lines=FileTerm;SSH+%2B+SFTP+%2B+FTP+Workspace;A+Modern+Remote+Desktop+Workbench" />
   <br />
   <br />
 
@@ -45,9 +45,9 @@ protocols      ███████████████░░░░░  SSH
 theme system   ████████████████░░░░  tokens -> vars -> skins -> terminal colors
 ```
 
-## 为什么做 TermDock
+## 为什么做 FileTerm
 
-远程工作每天都在发生，但工具常常被割裂成终端、文件管理器、传输窗口和连接配置。TermDock 想做的是一个真正面向日常工作的桌面 remote workspace：
+远程工作每天都在发生，但工具常常被割裂成终端、文件管理器、传输窗口和连接配置。FileTerm 想做的是一个真正面向日常工作的桌面 remote workspace：
 
 - 开 SSH 时，终端和 SFTP 文件面板自然联动。
 - 开 FTP 时，界面直接进入 file-only 工作流。
@@ -77,14 +77,14 @@ theme system   ████████████████░░░░  tok
 
 ## 外部开源项目
 
-TermDock 的核心交互里使用了两个成熟的开源项目：
+FileTerm 的核心交互里使用了两个成熟的开源项目：
 
 - [xterm.js](https://xtermjs.org/)：用于 SSH 终端渲染、输入输出和窗口 resize。
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/)：用于文件编辑器，提供语法高亮、编辑体验和查找替换。
 
 ## 架构原则
 
-TermDock 从第一天就避免把远程协议揉成一个模糊的大对象。
+FileTerm 从第一天就避免把远程协议揉成一个模糊的大对象。
 
 ```txt
 Renderer UI
@@ -129,7 +129,7 @@ npm run build
 ## 仓库结构
 
 ```txt
-termdock/
+fileterm/
   apps/
     desktop/                 # Electron + React desktop app
       src/
@@ -175,7 +175,7 @@ termdock/
 
 ## 贡献者
 
-感谢每一位让 TermDock 变得更好的贡献者。
+感谢每一位让 FileTerm 变得更好的贡献者。
 
 <table>
   <tr>
@@ -215,7 +215,7 @@ termdock/
   <kbd><a href="#english">English</a></kbd>
 </p>
 
-TermDock is a modern desktop remote workspace for developers and operations teams. It brings SSH terminals, SFTP files, FTP files, workspace tabs, and transfer tasks into one focused desktop client.
+FileTerm is a modern desktop remote workspace for developers and operations teams. It brings SSH terminals, SFTP files, FTP files, workspace tabs, and transfer tasks into one focused desktop client.
 
 ### Highlights
 
@@ -232,7 +232,7 @@ TermDock is a modern desktop remote workspace for developers and operations team
 
 ### Open Source Components
 
-TermDock uses two well-known open source projects in its core UI:
+FileTerm uses two well-known open source projects in its core UI:
 
 - [xterm.js](https://xtermjs.org/) for SSH terminal rendering, input/output, and resize handling.
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) for file editing, syntax highlighting, and search/replace.
@@ -261,14 +261,14 @@ npm run dev
 
 ## 开源协议
 
-TermDock 使用 [MIT License](./LICENSE) 开源。
+FileTerm 使用 [MIT License](./LICENSE) 开源。
 
 ## Star History
 
-<a href="https://star-history.com/#St0ff3l/termdock&Date">
+<a href="https://star-history.com/#St0ff3l/fileterm&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=St0ff3l/termdock&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=St0ff3l/termdock&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=St0ff3l/termdock&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=St0ff3l/fileterm&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=St0ff3l/fileterm&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=St0ff3l/fileterm&type=Date" />
   </picture>
 </a>

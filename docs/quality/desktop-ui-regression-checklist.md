@@ -1,6 +1,6 @@
 # Desktop UI Regression Checklist
 
-本文记录 TermDock 桌面壳、工作区布局和视觉状态的最小回归清单。后续只要改顶部标签栏、首页、系统侧栏、终端底部控件、文件面板或文件编辑器，都需要按本清单做人工检查。
+本文记录 FileTerm 桌面壳、工作区布局和视觉状态的最小回归清单。后续只要改顶部标签栏、首页、系统侧栏、终端底部控件、文件面板或文件编辑器，都需要按本清单做人工检查。
 
 ## 1. 顶部标签栏与窗口工具
 
@@ -13,7 +13,7 @@
 
 ## 2. 首页与侧栏
 
-- 首页展开态保留 TermDock 品牌、版本、导航、Docs、GitHub。
+- 首页展开态保留 FileTerm 品牌、版本、导航、Docs、GitHub。
 - 首页收起态只显示可点击图标，不显示挤压或竖排文字。
 - 首页深色/浅色主题下，主内容横线、侧栏边界和底部状态栏都要可见。
 - 收起态下侧栏图标应保持固定尺寸，不因文字或 hover 状态改变宽度。
@@ -41,7 +41,7 @@
 - 左侧当前文件节点可点击并聚焦编辑器。
 - 文件、编辑、搜索、偏好设置、编码、语言等菜单仍可打开。
 - `Cmd/Ctrl+S` 保存，`Cmd/Ctrl+F` 触发 Monaco 搜索，不触发终端搜索。
-- 深色/浅色主题切换后，Monaco 背景、文字、行号、选区和光标颜色与 TermDock 主题一致。
+- 深色/浅色主题切换后，Monaco 背景、文字、行号、选区和光标颜色与 FileTerm 主题一致。
 
 ## 6. 平台资源
 
@@ -52,8 +52,8 @@
 ## 7. 最小验证命令
 
 ```bash
-npm run typecheck -w @termdock/desktop
-npm run build -w @termdock/desktop
+npm run typecheck -w @fileterm/desktop
+npm run build -w @fileterm/desktop
 ```
 
 如果只改文档或纯 CSS，可至少运行：

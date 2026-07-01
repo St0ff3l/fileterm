@@ -12,7 +12,7 @@ import {
   type SshInteractionResponse,
   type WorkspaceSnapshot,
   type WorkspaceTab
-} from '@termdock/core'
+} from '@fileterm/core'
 import { LiveFtpSessionController, LiveSshSessionController } from '../session-controllers.js'
 
 export type LiveSessionController = LiveSshSessionController | LiveFtpSessionController

@@ -10,9 +10,9 @@ import type {
   ConnectionFolder,
   ConnectionProfile,
   CreateProfileInput
-} from '@termdock/core'
-import { normalizeConnectionHost, validateConnectionHost } from '@termdock/shared'
-import type { ProfileRepository } from '@termdock/storage'
+} from '@fileterm/core'
+import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
+import type { ProfileRepository } from '@fileterm/storage'
 
 const legacyDemoProfileIds = new Set([
   'profile-ssh-prod',
