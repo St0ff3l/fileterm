@@ -231,7 +231,7 @@
 .ssh-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 14px;
+  gap: 12px 24px;
 }
 
 .ssh-grid.single {
@@ -250,6 +250,7 @@
   font-size: 13px;
 }
 
+.ssh-grid .span-2,
 .ssh-grid label.span-2,
 .ssh-grid label.full {
   grid-column: 1 / -1;
@@ -271,6 +272,10 @@
   padding: 5px 10px;
   border: 1px solid var(--border-dark);
   border-radius: 4px;
+}
+
+.ssh-grid select {
+  padding-right: 28px;
 }
 
 .ssh-grid textarea {
@@ -298,7 +303,7 @@
 
 .ssh-checkbox {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   font-size: 13px;
 }
@@ -310,9 +315,15 @@
 
 .ssh-field-hint {
   margin-top: 10px;
+  margin-left: 82px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-secondary);
+}
+
+/* Inside a fieldset without a label grid, hints align under the checkbox text */
+.ssh-fieldset > .ssh-field-hint {
+  margin-left: 24px;
 }
 
 .ssh-placeholder {
@@ -431,14 +442,14 @@
 .checkbox-row input {
   appearance: none;
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
   padding: 0;
-  margin: 2px 0 0;
+  margin: 0;
   border: 2px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: 50%;
   background: var(--bg-main);
   box-sizing: border-box;
   display: block;
@@ -456,8 +467,8 @@
 .checkbox-row input::after {
   content: "";
   position: absolute;
-  inset: 3px;
-  border-radius: 3px;
+  inset: 2px;
+  border-radius: 50%;
   background: var(--text-main);
   transform: scale(0);
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);

@@ -2433,25 +2433,22 @@
 :root:not([data-theme]) .command-form-standalone-page select,
 :root[data-theme='default-dark'] .command-form-standalone-page select,
 :root[data-theme='default'] .command-form-standalone-page select,
-:root:not([data-theme]) .command-form-standalone-page textarea,
-:root[data-theme='default-dark'] .command-form-standalone-page textarea,
-:root[data-theme='default'] .command-form-standalone-page textarea {
+:root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
   background: #151515;
   border-color: rgba(255, 255, 255, 0.12);
   color: #e7e7e7;
 }
 
-:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):focus,
-:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):focus,
-:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):focus,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):not(.command-code-area textarea):focus,
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):not(.command-code-area textarea):focus,
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):not(.command-code-area textarea):focus,
 :root:not([data-theme]) .command-form-standalone-page select:focus,
 :root[data-theme='default-dark'] .command-form-standalone-page select:focus,
-:root[data-theme='default'] .command-form-standalone-page select:focus,
-:root:not([data-theme]) .command-form-standalone-page textarea:focus,
-:root[data-theme='default-dark'] .command-form-standalone-page textarea:focus,
-:root[data-theme='default'] .command-form-standalone-page textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(79, 124, 255, 0.18);
+:root[data-theme='default'] .command-form-standalone-page select:focus {
+  border-color: var(--text-muted);
+  box-shadow: none;
   background: var(--bg-hover);
   outline: none;
 }

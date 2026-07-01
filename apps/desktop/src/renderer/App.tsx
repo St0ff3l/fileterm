@@ -552,7 +552,7 @@ export function App() {
   const [isFileActionSubmitting, setIsFileActionSubmitting] = useState(false)
   const [fileClipboard, setFileClipboard] = useState<FileClipboardState | null>(null)
   const [permissionDialog, setPermissionDialog] = useState<{
-    target: FileDialogTarget & { permission?: string }
+    target: FileDialogTarget & { ownerGroup?: string; permission?: string }
     supportsRecursive: boolean
   } | null>(null)
   const [permissionDialogError, setPermissionDialogError] = useState<string | null>(null)
@@ -1236,7 +1236,7 @@ export function App() {
 
     const normalizedHost = normalizeConnectionHost(form.host)
 
-    if (!form.name || !normalizedHost || !form.group || !form.remotePath || !Number(form.port)) {
+    if (!form.name || !normalizedHost || !form.group || !form.remotePath) {
       setFormError(t.fillRequired)
       return
     }
@@ -1258,7 +1258,9 @@ export function App() {
 
     try {
       setIsBusy(true)
-      const payload = { ...form, host: normalizedHost, port: Number(form.port) }
+      const defaultPort = form.type === 'ftp' ? 21 : 22
+      const finalPort = Number(form.port) || defaultPort
+      const payload = { ...form, host: normalizedHost, port: finalPort }
       const snapshot = editingProfileId
         ? await desktopApi.updateProfile(editingProfileId, payload)
         : await desktopApi.createProfile(payload)
@@ -2489,7 +2491,7 @@ export function App() {
   const requestChangePermissions = (pane: 'local' | 'remote', item: LocalFileItem | RemoteFileItem) => {
     setPermissionDialogError(null)
     setPermissionDialog({
-      target: { pane, path: item.path, name: item.name, type: item.type, permission: item.permission },
+      target: { pane, path: item.path, name: item.name, type: item.type, permission: item.permission, ownerGroup: item.ownerGroup },
       supportsRecursive: item.type === 'folder' && (pane === 'local' || activeTab?.sessionType === 'ssh')
     })
   }
@@ -3571,6 +3573,7 @@ export function App() {
         <FilePermissionModal
           errorMessage={permissionDialogError}
           fileName={permissionDialog.target.name}
+          fileType={permissionDialog.target.type}
           initialPermission={permissionDialog.target.permission}
           onClose={() => {
             setPermissionDialog(null)
@@ -3579,7 +3582,9 @@ export function App() {
           onSubmit={(options) => {
             void handleSubmitPermissions(options)
           }}
+          ownerGroup={permissionDialog.target.ownerGroup}
           supportsRecursive={permissionDialog.supportsRecursive}
+          targetPath={permissionDialog.target.path}
         />
       ) : null}
 

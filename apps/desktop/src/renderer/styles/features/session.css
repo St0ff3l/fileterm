@@ -676,11 +676,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
+  height: 30px;
   padding: 0;
   border: 1px solid var(--border-light);
-  border-radius: 9px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--bg-card) 76%, transparent);
   color: var(--text-muted);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
@@ -769,6 +771,15 @@
 .remote-pane {
   min-width: 0;
   display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.remote-pane-content {
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex: 1;
   flex-direction: column;
   overflow: hidden;
 }
@@ -883,7 +894,6 @@
 
 .remote-file-table-region {
   min-height: 0;
-  position: relative;
   flex: 1;
   overflow: hidden;
 }

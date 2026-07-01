@@ -51,7 +51,10 @@ export class WorkspaceService {
     },
     getTabStatus: (tabId) => this.tabs.getById(tabId)?.status,
     rememberTrustedHostFingerprint: (profileId, fingerprint) => this.rememberTrustedHostFingerprint(profileId, fingerprint),
-    onTabDisconnected: (tabId) => this.finalizeTransfersForTab(tabId, this.getDisconnectedTransferMessage())
+    onTabDisconnected: (tabId) => {
+      this.privilegedAccess.delete(tabId)
+      return this.finalizeTransfersForTab(tabId, this.getDisconnectedTransferMessage())
+    }
   })
 
   constructor(
@@ -288,7 +291,7 @@ export class WorkspaceService {
       shellCwd: current?.shellCwd,
       followShellCwd: current?.followShellCwd ?? (profile.type === 'ssh'),
       remoteFiles: [],
-      fileAccessMode: current?.fileAccessMode ?? 'user',
+      fileAccessMode: 'user',
       sudoUser: current?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined),
       hasReusableSudoAuth: false,
       connected: false,
@@ -306,18 +309,15 @@ export class WorkspaceService {
       shellCwd: current?.shellCwd,
       followShellCwd: current?.followShellCwd ?? (profile.type === 'ssh'),
       remoteFiles: [],
-      fileAccessMode: current?.fileAccessMode ?? controller.getFileAccessMode(),
+      fileAccessMode: controller.getFileAccessMode(),
       sudoUser: current?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined),
-      hasReusableSudoAuth: current?.hasReusableSudoAuth ?? (controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false),
+      hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
       connected: false,
       systemMetrics: undefined
     })
     this.tabs.updateStatus(tabId, 'connecting')
     this.tabs.activate(tabId)
 
-    if (current?.fileAccessMode === 'root') {
-      await controller.setFileAccessMode('root', this.resolvePrivilegedAccess(tabId, current))
-    }
     void this.sessionRuntime.connect(tabId, controller)
     await this.sessionRuntime.emitSnapshot(reusableSender)
     return this.getSnapshot()

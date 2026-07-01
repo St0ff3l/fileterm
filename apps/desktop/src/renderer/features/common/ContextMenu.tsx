@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { t } from '../../i18n'
 
 export type ContextMenuEntry = {
@@ -76,7 +77,7 @@ export function ContextMenu({
     })
   }, [align, items, position, viewportMargin])
 
-  return (
+  const menuElement = (
     <div
       ref={menuRef}
       className={`context-menu ${className ?? ''}`.trim()}
@@ -103,4 +104,10 @@ export function ContextMenu({
       <button className="context-close" type="button" onClick={onClose}>{t.closeTab}</button>
     </div>
   )
+
+  if (typeof document === 'undefined') {
+    return menuElement
+  }
+
+  return createPortal(menuElement, document.body)
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ClipboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from 'react'
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@fileterm/core'
 import { t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from './command-utils'
@@ -102,36 +102,47 @@ export function CommandEditorModal({
     })
   }
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const lineNumRef = useRef<HTMLDivElement>(null)
+
+  const handleTextareaScroll = () => {
+    if (lineNumRef.current && textareaRef.current) {
+      lineNumRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }
+
   const editorFields = (
     <div className="command-editor-grid">
+      <div className="command-editor-row full">
+        <label className="command-editor-field">
+          <span>{t.name}</span>
+          <input
+            type="text"
+            value={form.name}
+            className={showValidation && !form.name?.trim() ? 'is-invalid' : ''}
+            onChange={(event) => {
+              const { value } = event.target
+              setForm((prev) => ({ ...prev, name: value }))
+            }}
+          />
+        </label>
+        <label className="command-editor-field">
+          <span>{t.commandCategory}</span>
+          <select
+            value={form.parentId ?? ''}
+            onChange={(event) => {
+              const { value } = event.target
+              setForm((prev) => ({ ...prev, parentId: value || undefined }))
+            }}
+          >
+            <option value="">{t.commandUncategorized}</option>
+            {orderedFolders.map((folder) => (
+              <option key={folder.id} value={folder.id}>{folder.name}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <label className="command-editor-field full">
-        <span>{t.name}</span>
-        <input
-          type="text"
-          value={form.name}
-          className={showValidation && !form.name?.trim() ? 'is-invalid' : ''}
-          onChange={(event) => {
-            const { value } = event.target
-            setForm((prev) => ({ ...prev, name: value }))
-          }}
-        />
-      </label>
-      <label className="command-editor-field">
-        <span>{t.commandCategory}</span>
-        <select
-          value={form.parentId ?? ''}
-          onChange={(event) => {
-            const { value } = event.target
-            setForm((prev) => ({ ...prev, parentId: value || undefined }))
-          }}
-        >
-          <option value="">{t.commandUncategorized}</option>
-          {orderedFolders.map((folder) => (
-            <option key={folder.id} value={folder.id}>{folder.name}</option>
-          ))}
-        </select>
-      </label>
-      <label className="command-editor-field">
         <span>{t.note}</span>
         <input
           type="text"
@@ -142,32 +153,45 @@ export function CommandEditorModal({
           }}
         />
       </label>
-      <label className="command-editor-field full command-editor-dialog-textarea">
+      <div className="command-editor-field full command-editor-dialog-textarea">
         <span>{t.commandTemplate}</span>
-        <textarea
-          rows={12}
-          value={form.command}
-          className={showValidation && !form.command?.trim() ? 'is-invalid' : ''}
-          onChange={(event) => {
-            const { value } = event.target
-            setForm((prev) => ({ ...prev, command: value }))
-          }}
-        />
-      </label>
+        <div className="command-code-area">
+          <div className="command-line-numbers" ref={lineNumRef} aria-hidden="true">
+            {Array.from(
+              { length: Math.max(form.command.split('\n').length, 12) },
+              (_, i) => <div key={i} className="command-line-number">{i + 1}</div>
+            )}
+          </div>
+          <textarea
+            ref={textareaRef}
+            rows={12}
+            value={form.command}
+            spellCheck={false}
+            className={showValidation && !form.command?.trim() ? 'is-invalid' : ''}
+            onChange={(event) => {
+              const { value } = event.target
+              setForm((prev) => ({ ...prev, command: value }))
+            }}
+            onScroll={handleTextareaScroll}
+          />
+        </div>
+      </div>
       <div className="command-editor-field full command-editor-dialog-params">
         <span>{t.commandParamHint}</span>
-        <div className="command-param-hints">
-          {[1, 2, 3, 4, 5].map((index) => (
-            <button
-              key={index}
-              type="button"
-              onClick={() => setForm((prev) => ({ ...prev, command: `${prev.command}[p#${index}]` }))}
-            >
-              {`${t.commandParam}${index}`}
-            </button>
-          ))}
+        <div className="command-param-hints-row">
+          <div className="command-param-hints">
+            {[1, 2, 3, 4, 5].map((index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => setForm((prev) => ({ ...prev, command: `${prev.command}[p#${index}]` }))}
+              >
+                {`${t.commandParam}${index}`}
+              </button>
+            ))}
+          </div>
+          <small>{t.commandParamExplain}</small>
         </div>
-        <small>{t.commandParamExplain}</small>
       </div>
       <label className="command-editor-field full command-editor-checkbox-row">
         <input

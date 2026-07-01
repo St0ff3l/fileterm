@@ -49,8 +49,8 @@ const DEFAULT_WINDOW_BOUNDS = {
   main: {
     width: 1280,
     height: 820,
-    minWidth: 1040,
-    minHeight: 680
+    minWidth: 1150,
+    minHeight: 790
   },
   connectionManager: {
     width: 860,

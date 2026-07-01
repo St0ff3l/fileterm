@@ -1242,12 +1242,13 @@
 
 .command-form-standalone-page input:not([type='checkbox']),
 .command-form-standalone-page select,
-.command-form-standalone-page textarea {
+.command-form-standalone-page textarea:not(.command-code-area textarea) {
   width: 100%;
   border-width: 1px;
   border-style: solid;
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: 13px;
+  font-family: inherit;
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   box-sizing: border-box;
 }
@@ -1258,7 +1259,7 @@
   padding: 0 12px;
 }
 
-.command-form-standalone-page textarea {
+.command-form-standalone-page textarea:not(.command-code-area textarea) {
   min-height: 200px;
   padding: 12px;
   resize: vertical;
@@ -1378,22 +1379,55 @@
   grid-column: 1 / -1;
 }
 
+/* Inline row: name on the left, category on the right — same row */
+.command-editor-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.command-editor-row.full {
+  grid-column: 1 / -1;
+}
+
+.command-editor-row .command-editor-field:first-child {
+  flex: 1;
+}
+
+.command-editor-row .command-editor-field:last-child {
+  flex: 1;
+}
+
 .command-editor-dialog-form label,
 .command-folder-dialog-form label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .command-editor-dialog-form input:not([type='checkbox']),
 .command-editor-dialog-form select,
-.command-editor-dialog-form textarea,
+.command-editor-dialog-form textarea:not(.command-code-area textarea),
 .command-folder-dialog-form input {
   width: 100%;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   background: var(--bg-main);
   color: var(--text-main);
-  font-size: 12px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* Code area textarea overrides: no border, transparent bg */
+.command-editor-dialog-form .command-code-area textarea {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+.command-editor-dialog-form .command-code-area textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .command-editor-dialog-form input:not([type='checkbox']),
@@ -1403,12 +1437,51 @@
   padding: 0 10px;
 }
 
-.command-editor-dialog-textarea textarea {
+.command-editor-dialog-textarea .command-code-area {
+  display: flex;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-main);
+  overflow: hidden;
   min-height: 240px;
-  padding: 10px;
-  resize: vertical;
+}
+
+.command-line-numbers {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  min-width: 40px;
+  text-align: right;
+  overflow: hidden;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-light);
+  background: var(--bg-main);
+  user-select: none;
+}
+
+.command-line-number {
+  padding: 0 10px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.command-editor-dialog-textarea textarea {
+  flex: 1;
+  min-height: 240px;
+  padding: 10px 12px;
+  resize: none;
   font-family: "SF Mono", Menlo, Consolas, monospace;
   line-height: 1.55;
+  font-size: 12px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-main);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .command-editor-dialog-params {
@@ -1422,10 +1495,20 @@
   font-weight: 600;
 }
 
-.command-editor-dialog-params > small {
+/* Row wrapper: param buttons on the left, hint text on the right, same line */
+.command-param-hints-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.command-param-hints-row > small {
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
+  flex: 1;
+  min-width: 120px;
 }
 
 .command-editor-dialog-params .command-param-hints button {

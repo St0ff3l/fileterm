@@ -151,138 +151,448 @@
 }
 
 /* File Permission Modal */
-.file-permission-modal {
-  width: min(540px, 100%);
+.file-permission-dialog {
+  width: min(560px, calc(100vw - 72px));
+  max-height: min(700px, calc(100vh - 72px));
+  padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
-.file-permission-name {
-  margin-bottom: 20px;
-  padding: 12px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
-  font-size: 13px;
+.file-permission-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-light) 76%, transparent);
+}
+
+.file-permission-dialog__eyebrow {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-main);
+}
+
+.file-permission-dialog__close {
+  flex: 0 0 auto;
+}
+
+.file-permission-dialog__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.file-permission-dialog__hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-hover));
+  border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+}
+
+.file-permission-dialog__hero-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.file-permission-dialog__hero-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.file-permission-dialog__file-name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.file-permission-dialog__file-path {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
   word-break: break-all;
 }
 
-.permission-row {
-  margin-bottom: 16px;
-  padding: 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
+.file-permission-dialog__section {
+  display: grid;
+  gap: 8px;
 }
 
-.permission-row-label {
+.file-permission-dialog__section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.file-permission-dialog__matrix-card,
+.file-permission-dialog__info-card,
+.file-permission-dialog__recursive-card,
+.file-permission-dialog__apply-option,
+.file-permission-dialog__mode-hint {
+  border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-hover));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-main) 3%, transparent);
+}
+
+.file-permission-dialog__matrix-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+}
+
+.file-permission-dialog__matrix-head,
+.file-permission-dialog__matrix-row {
+  display: grid;
+  grid-template-columns: minmax(84px, 1fr) repeat(3, 34px);
+  align-items: center;
+  gap: 6px;
+}
+
+.file-permission-dialog__matrix-head {
+  padding: 0 2px 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.file-permission-dialog__matrix-head span:not(:first-child) {
+  text-align: center;
+}
+
+.file-permission-dialog__matrix-row {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-hover) 54%, transparent);
+}
+
+.file-permission-dialog__matrix-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
-  margin-bottom: 12px;
+  padding-left: 0;
 }
 
-.permission-row-box {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.permission-checkline,
-.permission-radioline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-main);
+.file-permission-dialog__matrix-cell {
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  user-select: none;
 }
 
-.permission-checkline input,
-.permission-radioline input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
-  padding: 0;
-  margin: 0;
-  border: 2px solid var(--border-light);
-  background: var(--bg-main);
-  box-sizing: border-box;
-  display: block;
+.file-permission-dialog__matrix-cell input,
+.file-permission-dialog__apply-option input,
+.file-permission-dialog__switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-permission-dialog__matrix-cell span {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-main) 90%, transparent);
   position: relative;
-  flex: 0 0 auto;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
-.permission-checkline input {
-  border-radius: 6px;
-}
-
-.permission-radioline input {
-  border-radius: 50%;
-}
-
-.permission-checkline input::after,
-.permission-radioline input::after {
+.file-permission-dialog__matrix-cell span::after {
   content: "";
   position: absolute;
-  background: var(--text-main);
-  transform: scale(0);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.permission-checkline input::after {
   inset: 3px;
-  border-radius: 3px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  transform: scale(0);
+  transition: transform 0.16s ease;
 }
 
-.permission-radioline input::after {
-  inset: 4px;
-  border-radius: 50%;
+.file-permission-dialog__matrix-cell input:checked + span {
+  border-color: color-mix(in srgb, var(--accent-primary) 75%, var(--border-light));
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-main));
 }
 
-.permission-checkline input:checked,
-.permission-radioline input:checked {
-  border-color: var(--text-main);
-  background: var(--bg-hover);
-}
-
-.permission-checkline input:checked::after,
-.permission-radioline input:checked::after {
+.file-permission-dialog__matrix-cell input:checked + span::after {
   transform: scale(1);
 }
 
-.permission-checkline input:disabled,
-.permission-radioline input:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.permission-checkline input:focus-visible,
-.permission-radioline input:focus-visible {
-  outline: none;
+.file-permission-dialog__matrix-cell input:focus-visible + span,
+.file-permission-dialog__apply-option input:focus-visible + span,
+.file-permission-dialog__switch input:focus-visible + .file-permission-dialog__switch-track {
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
-.permission-checkline input:hover:not(:disabled),
-.permission-radioline input:hover:not(:disabled) {
-  border-color: var(--text-muted);
+.file-permission-dialog__advanced-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
-.permission-recursive-box {
-  margin-top: 4px;
-  padding: 16px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
+.file-permission-dialog__info-card,
+.file-permission-dialog__recursive-card {
+  min-height: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.file-permission-dialog__info-card {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.file-permission-dialog__info-copy,
+.file-permission-dialog__recursive-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.file-permission-dialog__info-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.file-permission-dialog__info-subtitle {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.file-permission-dialog__info-hint {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.file-permission-dialog__info-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.file-permission-dialog__mode-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.file-permission-dialog__mode-inline strong {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-primary);
+}
+
+.file-permission-dialog__mode-input input {
+  width: 76px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 42%, var(--border-light));
+  background: color-mix(in srgb, var(--bg-main) 82%, transparent);
+  color: var(--accent-primary);
+  font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
+  font-size: 16px;
+  text-align: center;
+  letter-spacing: 0.08em;
+}
+
+.file-permission-dialog__mode-input input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+.file-permission-dialog__recursive-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.file-permission-dialog__switch {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.file-permission-dialog__switch-track {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-hover) 74%, transparent);
+  border: 1px solid var(--border-light);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.file-permission-dialog__switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--text-main);
+  transform: translateX(0);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track {
+  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-hover));
+  border-color: color-mix(in srgb, var(--accent-primary) 70%, var(--border-light));
+}
+
+.file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track::after {
+  transform: translateX(22px);
+  background: var(--accent-primary);
+}
+
+.file-permission-dialog__apply-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
+.file-permission-dialog__apply-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--text-main);
+}
+
+.file-permission-dialog__apply-option span {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.file-permission-dialog__apply-option span::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-main) 90%, transparent);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
+.file-permission-dialog__apply-option input:checked + span::before {
+  border-width: 3px;
+  border-color: var(--accent-primary);
+}
+
+.file-permission-dialog__apply-option:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent-primary) 70%, var(--border-light));
+  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-card));
+}
+
+.file-permission-dialog__actions {
+  margin: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--border-light) 76%, transparent);
+  gap: 8px;
+}
+
+.file-permission-dialog__actions .flat-button,
+.file-permission-dialog__actions .primary-button {
+  min-width: 78px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.file-permission-dialog__actions .primary-button {
+  box-shadow: 0 2px 10px var(--accent-tint);
+}
+
+@media (max-width: 900px) {
+  .file-permission-dialog {
+    width: min(100%, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+  }
+
+  .file-permission-dialog__scroll {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .file-permission-dialog__hero {
+    padding: 14px;
+  }
+
+  .file-permission-dialog__file-name {
+    font-size: 18px;
+  }
+
+  .file-permission-dialog__matrix-head,
+  .file-permission-dialog__matrix-row,
+  .file-permission-dialog__advanced-grid,
+  .file-permission-dialog__apply-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .file-permission-dialog__matrix-head {
+    display: none;
+  }
+
+  .file-permission-dialog__matrix-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .file-permission-dialog__matrix-label {
+    grid-column: 1 / -1;
+    padding-left: 0;
+  }
+
+  .file-permission-dialog__recursive-card,
+  .file-permission-dialog__info-card,
+  .file-permission-dialog__mode-hint {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .file-permission-dialog__mode-input input {
+    width: 100%;
+  }
+
+  .file-permission-dialog__actions {
+    padding: 14px 16px 16px;
+  }
 }
 
 /* Icon Button (close button) */

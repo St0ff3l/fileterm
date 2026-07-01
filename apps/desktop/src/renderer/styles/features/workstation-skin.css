@@ -663,7 +663,7 @@ textarea:focus-visible,
 }
 
 .terminal-area.has-terminal-dock .terminal-host {
-  padding-bottom: 0;
+  padding-bottom: var(--terminal-dock-reserved-height, 44px);
 }
 
 .terminal-host .xterm {
