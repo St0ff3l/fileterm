@@ -12,7 +12,7 @@
   border: 0;
   border-bottom: 1px solid var(--border-light);
   border-radius: 0;
-  padding: 0 0 38px;
+  padding: 40px 0 38px;
   text-align: center;
   box-shadow: none;
 }

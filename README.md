@@ -61,7 +61,7 @@ theme system   ████████████████░░░░  tok
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| SSH profile 管理 | 已完成 | 新增、编辑、删除、文件夹分组、JSON 文件持久化 |
+| SSH profile 管理 | 已完成 | 新增、编辑、删除、文件夹分组、JSON 文件持久化、group/parentId 双向同步 |
 | FTP profile 管理 | 已完成 | 独立于 SSH 的连接模型 |
 | SSH shell | 已完成 | xterm.js 渲染、输入输出、自适应 resize、搜索、剪贴板互通、雾透悬浮命令输入条 |
 | 文件编辑器 | 已完成 | Monaco Editor 提供双栏文件树/编辑区、语法高亮、查找替换、编码与语言切换 |
@@ -73,6 +73,7 @@ theme system   ████████████████░░░░  tok
 | 远程连接状态 | 已完成 | 连接状态提示、系统资源监控面板、侧栏收起态资源摘要 |
 | 命令模板 | 已完成 | 快捷命令模板、文件夹分组、参数占位符、一键发送 |
 | 桌面壳与布局 | 已完成 | macOS 标题栏避让、侧栏收起、文件面板抽屉、工作区焦点模式、macOS template 托盘图标 |
+| 工作区侧边栏 | 已完成 | 概览 → 连接管理器 → 命令管理器 → 设置四页导航 |
 | 窗口管理 | 已完成 | 主窗口、连接管理器、命令管理器、文件编辑器独立窗口 |
 
 ## 外部开源项目
@@ -224,6 +225,7 @@ FileTerm is a modern desktop remote workspace for developers and operations team
 - FTP sessions with a clean file-only workflow.
 - Workspace tabs for parallel remote work.
 - A refined desktop shell with collapsible sidebars, a file drawer, workspace focus mode, and animated tab transitions.
+- Workspace sidebar: Overview → Connection Manager → Command Manager → Settings.
 - A floating frosted command bar above the terminal output.
 - A two-pane Monaco editor with a file tree and editor area.
 - Unified transfer center for uploads, downloads, progress, and errors.
@@ -253,6 +255,7 @@ npm run dev
 
 - [Architecture](./docs/architecture.md)
 - [Roadmap](./docs/roadmap.md)
+- [Hidden Features](./docs/hidden-features.md)
 - [Agent Guide](./AGENTS.md)
 
 <p align="right">

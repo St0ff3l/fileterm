@@ -57,7 +57,11 @@ export class MemoryProfileRepository implements ProfileRepository {
 
   async create(input: CreateProfileInput): Promise<ConnectionProfile> {
     const id = globalThis.crypto?.randomUUID?.() ?? `profile-${Date.now()}`
+    const matchingFolder = this.folders.find((f) => f.name === input.group)
+    const parentId = matchingFolder ? matchingFolder.id : undefined
+
     const profile = toProfile(id, input)
+    profile.parentId = parentId
 
     this.profiles = [profile, ...this.profiles]
     return profile
@@ -68,7 +72,11 @@ export class MemoryProfileRepository implements ProfileRepository {
     if (!previous) {
       throw new Error('Profile not found')
     }
+    const matchingFolder = this.folders.find((f) => f.name === input.group)
+    const parentId = matchingFolder ? matchingFolder.id : undefined
+
     const profile = preserveProfileMetadata(toProfile(id, input), previous)
+    profile.parentId = parentId
     this.profiles = this.profiles.map((item) => (item.id === id ? profile : item))
     return profile
   }
@@ -120,6 +128,11 @@ export class MemoryProfileRepository implements ProfileRepository {
     const folder = this.folders.find((f) => f.id === id)
     if (!folder) throw new Error('Folder not found')
     Object.assign(folder, updates)
+
+    if (updates.name !== undefined) {
+      this.profiles = this.profiles.map((p) => (p.parentId === id ? { ...p, group: updates.name! } : p))
+    }
+
     return folder
   }
 
@@ -129,11 +142,14 @@ export class MemoryProfileRepository implements ProfileRepository {
       return
     }
     const nextParentId = folder.parentId
+    const remainingFolders = this.folders.filter((item) => item.id !== id)
+    const nextParentFolder = nextParentId ? remainingFolders.find((f) => f.id === nextParentId) : undefined
+    const groupName = nextParentFolder ? nextParentFolder.name : '默认'
+
     this.profiles = this.profiles.map((profile) => (
-      profile.parentId === id ? { ...profile, parentId: nextParentId } : profile
+      profile.parentId === id ? { ...profile, parentId: nextParentId, group: groupName } : profile
     ))
-    this.folders = this.folders
-      .filter((item) => item.id !== id)
+    this.folders = remainingFolders
       .map((item) => (
         item.parentId === id ? { ...item, parentId: nextParentId } : item
       ))
@@ -142,8 +158,11 @@ export class MemoryProfileRepository implements ProfileRepository {
   async updateOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
     const profile = this.profiles.find((p) => p.id === id)
     if (profile) {
+      const matchingFolder = newParentId ? this.folders.find((f) => f.id === newParentId) : undefined
+      const group = matchingFolder ? matchingFolder.name : '默认'
       profile.parentId = newParentId
       profile.order = newOrder
+      profile.group = group
       return
     }
     const folder = this.folders.find((f) => f.id === id)
