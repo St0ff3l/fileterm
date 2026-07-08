@@ -1986,6 +1986,16 @@
   box-shadow: none;
 }
 
+.connection-manager-modal .manager-table.connection-manager-table,
+.command-manager-modal .manager-table.command-manager-table {
+  border-radius: 0 !important;
+}
+
+.connection-manager-modal .manager-table.connection-manager-table .manager-head,
+.command-manager-modal .manager-table.command-manager-table .manager-head {
+  border-radius: 0 !important;
+}
+
 .manager-head,
 .manager-row {
   display: grid;

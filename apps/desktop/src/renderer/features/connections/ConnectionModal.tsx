@@ -52,28 +52,34 @@ export function ConnectionModal({
                 <legend>{t.general}</legend>
                 <div className="ssh-grid ssh-grid-general">
                   <label>{t.connectionType}:
-                    <select
-                      value={form.type}
-                      onChange={(event) => {
-                        const nextType = event.target.value as 'ssh' | 'ftp'
-                        setForm((prev) => ({
-                          ...prev,
-                          type: nextType,
-                          port: nextType === 'ftp' && prev.port === 22 ? 21 : nextType === 'ssh' && prev.port === 21 ? 22 : prev.port,
-                          authType: nextType === 'ssh' ? prev.authType ?? 'system' : 'password'
-                        }))
-                      }}
-                    >
-                      <option value="ssh">SSH / SFTP</option>
-                      <option value="ftp">FTP / FTPS</option>
-                    </select>
+                    <span className="ft-select-shell">
+                      <select
+                        value={form.type}
+                        onChange={(event) => {
+                          const nextType = event.target.value as 'ssh' | 'ftp'
+                          setForm((prev) => ({
+                            ...prev,
+                            type: nextType,
+                            port: nextType === 'ftp' && prev.port === 22 ? 21 : nextType === 'ssh' && prev.port === 21 ? 22 : prev.port,
+                            authType: nextType === 'ssh' ? prev.authType ?? 'system' : 'password'
+                          }))
+                        }}
+                      >
+                        <option value="ssh">SSH / SFTP</option>
+                        <option value="ftp">FTP / FTPS</option>
+                      </select>
+                      <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                    </span>
                   </label>
                   <label>{t.group}:
-                    <select value={form.group} onChange={(event) => setForm((prev) => ({ ...prev, group: event.target.value }))}>
-                      {groupOptions.map((group) => (
-                        <option key={group} value={group}>{group}</option>
-                      ))}
-                    </select>
+                    <span className="ft-select-shell">
+                      <select value={form.group} onChange={(event) => setForm((prev) => ({ ...prev, group: event.target.value }))}>
+                        {groupOptions.map((group) => (
+                          <option key={group} value={group}>{group}</option>
+                        ))}
+                      </select>
+                      <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                    </span>
                   </label>
                   <label className="span-2">{t.name}:<input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} /></label>
                   <label className="span-2">{t.host}:<input
@@ -99,10 +105,13 @@ export function ConnectionModal({
                 <div className="ssh-grid ssh-grid-auth">
                   {form.type === 'ssh' ? (
                     <label>{t.method}:
-                      <select value={form.authType === 'system' ? 'password' : form.authType} onChange={(event) => setForm((prev) => ({ ...prev, authType: event.target.value as 'password' | 'privateKey' }))}>
-                        <option value="password">{t.password}</option>
-                        <option value="privateKey">{t.privateKey}</option>
-                      </select>
+                      <span className="ft-select-shell">
+                        <select value={form.authType === 'system' ? 'password' : form.authType} onChange={(event) => setForm((prev) => ({ ...prev, authType: event.target.value as 'password' | 'privateKey' }))}>
+                          <option value="password">{t.password}</option>
+                          <option value="privateKey">{t.privateKey}</option>
+                        </select>
+                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                      </span>
                     </label>
                   ) : null}
                   <label>{t.username}:<input value={form.username} onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))} /></label>
@@ -118,26 +127,29 @@ export function ConnectionModal({
                     form.type === 'ftp' ? (
                       <>
                         <label className="span-2">{t.ftpSecurityMode}:
-                          <select
-                            value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
-                            onChange={(event) => {
-                              const securityMode = event.target.value as FtpSecurityMode
-                              setForm((prev) => ({
-                                ...prev,
-                                securityMode,
-                                secure: securityMode !== 'none',
-                                port: securityMode === 'implicit' && prev.port === 21
-                                  ? 990
-                                  : securityMode !== 'implicit' && prev.port === 990
-                                    ? 21
-                                    : prev.port
-                              }))
-                            }}
-                          >
-                            <option value="none">{t.ftpSecurityNone}</option>
-                            <option value="explicit">{t.ftpSecurityExplicit}</option>
-                            <option value="implicit">{t.ftpSecurityImplicit}</option>
-                          </select>
+                          <span className="ft-select-shell">
+                            <select
+                              value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
+                              onChange={(event) => {
+                                const securityMode = event.target.value as FtpSecurityMode
+                                setForm((prev) => ({
+                                  ...prev,
+                                  securityMode,
+                                  secure: securityMode !== 'none',
+                                  port: securityMode === 'implicit' && prev.port === 21
+                                    ? 990
+                                    : securityMode !== 'implicit' && prev.port === 990
+                                      ? 21
+                                      : prev.port
+                                }))
+                              }}
+                            >
+                              <option value="none">{t.ftpSecurityNone}</option>
+                              <option value="explicit">{t.ftpSecurityExplicit}</option>
+                              <option value="implicit">{t.ftpSecurityImplicit}</option>
+                            </select>
+                            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                          </span>
                         </label>
                         <div className="span-2 ssh-auth-hint">{t.ftpAuthHint}</div>
                       </>
@@ -168,24 +180,33 @@ export function ConnectionModal({
                 <legend>{t.terminal}</legend>
                 <div className="ssh-grid single">
                   <label>{t.characterEncoding}:
-                    <select value={form.encoding} onChange={(event) => setForm((prev) => ({ ...prev, encoding: event.target.value }))}>
-                      <option value="UTF-8">UTF-8</option>
-                      <option value="GBK">GBK</option>
-                    </select>
+                    <span className="ft-select-shell">
+                      <select value={form.encoding} onChange={(event) => setForm((prev) => ({ ...prev, encoding: event.target.value }))}>
+                        <option value="UTF-8">UTF-8</option>
+                        <option value="GBK">GBK</option>
+                      </select>
+                      <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                    </span>
                   </label>
                   <div className="terminal-key-box">
                     <strong>{t.keySequence}</strong>
                     <label>{t.backspaceKey}
-                      <select value={form.backspaceKey} onChange={(event) => setForm((prev) => ({ ...prev, backspaceKey: event.target.value }))}>
-                        <option value="ASCII">ASCII - Backspace</option>
-                        <option value="DEL">DEL - Backspace</option>
-                      </select>
+                      <span className="ft-select-shell">
+                        <select value={form.backspaceKey} onChange={(event) => setForm((prev) => ({ ...prev, backspaceKey: event.target.value }))}>
+                          <option value="ASCII">ASCII - Backspace</option>
+                          <option value="DEL">DEL - Backspace</option>
+                        </select>
+                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                      </span>
                     </label>
                     <label>{t.deleteKey}
-                      <select value={form.deleteKey} onChange={(event) => setForm((prev) => ({ ...prev, deleteKey: event.target.value }))}>
-                        <option value="VT220">VT220 - Delete</option>
-                        <option value="ASCII">ASCII - Delete</option>
-                      </select>
+                      <span className="ft-select-shell">
+                        <select value={form.deleteKey} onChange={(event) => setForm((prev) => ({ ...prev, deleteKey: event.target.value }))}>
+                          <option value="VT220">VT220 - Delete</option>
+                          <option value="ASCII">ASCII - Delete</option>
+                        </select>
+                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+                      </span>
                     </label>
                   </div>
                 </div>

@@ -477,6 +477,7 @@
 }
 
 :root[data-theme='default-light'] .ssh-modal-nav,
+:root[data-theme='default-light'] .ssh-form-shell,
 :root[data-theme='default-light'] .ssh-fieldset,
 :root[data-theme='default-light'] .terminal-key-box,
 :root[data-theme='default-light'] .ssh-placeholder,

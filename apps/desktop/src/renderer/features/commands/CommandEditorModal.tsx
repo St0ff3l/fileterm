@@ -12,6 +12,8 @@ export const emptyCommandForm: CommandTemplateInput = {
   appendCarriageReturn: true
 }
 
+const COMMAND_EDITOR_MIN_LINE_COUNT = 16
+
 export function toCommandTemplateInput(command: CommandTemplate): CommandTemplateInput {
   return {
     name: command.name,
@@ -128,18 +130,21 @@ export function CommandEditorModal({
         </label>
         <label className="command-editor-field">
           <span>{t.commandCategory}</span>
-          <select
-            value={form.parentId ?? ''}
-            onChange={(event) => {
-              const { value } = event.target
-              setForm((prev) => ({ ...prev, parentId: value || undefined }))
-            }}
-          >
-            <option value="">{t.commandUncategorized}</option>
-            {orderedFolders.map((folder) => (
-              <option key={folder.id} value={folder.id}>{folder.name}</option>
-            ))}
-          </select>
+          <span className="ft-select-shell command-select-shell">
+            <select
+              value={form.parentId ?? ''}
+              onChange={(event) => {
+                const { value } = event.target
+                setForm((prev) => ({ ...prev, parentId: value || undefined }))
+              }}
+            >
+              <option value="">{t.commandUncategorized}</option>
+              {orderedFolders.map((folder) => (
+                <option key={folder.id} value={folder.id}>{folder.name}</option>
+              ))}
+            </select>
+            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+          </span>
         </label>
       </div>
       <label className="command-editor-field full">
@@ -158,7 +163,7 @@ export function CommandEditorModal({
         <div className="command-code-area">
           <div className="command-line-numbers" ref={lineNumRef} aria-hidden="true">
             {Array.from(
-              { length: Math.max(form.command.split('\n').length, 12) },
+              { length: Math.max(form.command.split('\n').length, COMMAND_EDITOR_MIN_LINE_COUNT) },
               (_, i) => <div key={i} className="command-line-number">{i + 1}</div>
             )}
           </div>

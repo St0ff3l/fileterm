@@ -2421,6 +2421,9 @@
 :root:not([data-theme]) .ssh-modal-nav,
 :root[data-theme='default-dark'] .ssh-modal-nav,
 :root[data-theme='default'] .ssh-modal-nav,
+:root:not([data-theme]) .ssh-form-shell,
+:root[data-theme='default-dark'] .ssh-form-shell,
+:root[data-theme='default'] .ssh-form-shell,
 :root:not([data-theme]) .ssh-fieldset,
 :root[data-theme='default-dark'] .ssh-fieldset,
 :root[data-theme='default'] .ssh-fieldset,
@@ -2517,4 +2520,528 @@
 :root[data-theme='default'] .command-editor-dialog-form textarea.is-invalid:focus {
   border-color: var(--danger) !important;
   box-shadow: 0 0 0 3px rgba(201, 61, 61, 0.22) !important;
+}
+
+/* Custom Redesign for Command Dialog & Standalone Forms in Dark Mode */
+:root:not([data-theme]) .command-dialog,
+:root[data-theme='default-dark'] .command-dialog,
+:root[data-theme='default'] .command-dialog,
+:root:not([data-theme]) .command-form-standalone,
+:root[data-theme='default-dark'] .command-form-standalone,
+:root[data-theme='default'] .command-form-standalone {
+  width: min(900px, 88vw) !important;
+  min-height: 560px !important;
+  background: var(--bg-sidebar) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--modal-card-shadow) !important;
+}
+
+/* Standalone fullscreen modal-card should have 0 border-radius and no border */
+:root:not([data-theme]) .command-form-standalone,
+:root[data-theme='default-dark'] .command-form-standalone,
+:root[data-theme='default'] .command-form-standalone {
+  width: 100% !important;
+  border-radius: 0 !important;
+  border: none !important;
+  height: 100vh !important;
+  box-shadow: none !important;
+}
+
+/* Ensure the background of pages/body matches */
+:root:not([data-theme]) .command-editor-page.standalone,
+:root[data-theme='default-dark'] .command-editor-page.standalone,
+:root[data-theme='default'] .command-editor-page.standalone,
+:root:not([data-theme]) .command-editor-page,
+:root[data-theme='default-dark'] .command-editor-page,
+:root[data-theme='default'] .command-editor-page,
+:root:not([data-theme]) .command-editor-window,
+:root[data-theme='default-dark'] .command-editor-window,
+:root[data-theme='default'] .command-editor-window,
+:root:not([data-theme]) .standalone-shell,
+:root[data-theme='default-dark'] .standalone-shell,
+:root[data-theme='default'] .standalone-shell {
+  background: var(--bg-sidebar) !important;
+}
+
+:root:not([data-theme]) .command-editor-page,
+:root[data-theme='default-dark'] .command-editor-page,
+:root[data-theme='default'] .command-editor-page {
+  width: min(900px, 88vw) !important;
+  min-height: 560px !important;
+  max-height: none !important;
+}
+
+/* Headers */
+:root:not([data-theme]) .command-dialog .connection-manager-header,
+:root[data-theme='default-dark'] .command-dialog .connection-manager-header,
+:root[data-theme='default'] .command-dialog .connection-manager-header,
+:root:not([data-theme]) .command-form-standalone .connection-manager-header,
+:root[data-theme='default-dark'] .command-form-standalone .connection-manager-header,
+:root[data-theme='default'] .command-form-standalone .connection-manager-header {
+  background: var(--bg-sidebar) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  padding: 0 16px !important;
+  min-height: 48px !important;
+}
+
+:root:not([data-theme]) .command-dialog .connection-manager-title,
+:root[data-theme='default-dark'] .command-dialog .connection-manager-title,
+:root[data-theme='default'] .command-dialog .connection-manager-title,
+:root:not([data-theme]) .command-form-standalone .connection-manager-title,
+:root[data-theme='default-dark'] .command-form-standalone .connection-manager-title,
+:root[data-theme='default'] .command-form-standalone .connection-manager-title {
+  color: var(--text-main) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+:root:not([data-theme]) .command-dialog .connection-manager-header-actions,
+:root[data-theme='default-dark'] .command-dialog .connection-manager-header-actions,
+:root[data-theme='default'] .command-dialog .connection-manager-header-actions,
+:root:not([data-theme]) .command-form-standalone .connection-manager-header-actions,
+:root[data-theme='default-dark'] .command-form-standalone .connection-manager-header-actions,
+:root[data-theme='default'] .command-form-standalone .connection-manager-header-actions {
+  display: flex !important;
+  align-items: center !important;
+}
+
+:root:not([data-theme]) .command-dialog-body,
+:root[data-theme='default-dark'] .command-dialog-body,
+:root[data-theme='default'] .command-dialog-body,
+:root:not([data-theme]) .command-editor-dialog-form,
+:root[data-theme='default-dark'] .command-editor-dialog-form,
+:root[data-theme='default'] .command-editor-dialog-form,
+:root:not([data-theme]) .command-form-standalone-body,
+:root[data-theme='default-dark'] .command-form-standalone-body,
+:root[data-theme='default'] .command-form-standalone-body,
+:root:not([data-theme]) .command-form-standalone-page,
+:root[data-theme='default-dark'] .command-form-standalone-page,
+:root[data-theme='default'] .command-form-standalone-page {
+  background: #1b1b1b !important;
+}
+
+:root:not([data-theme]) .command-dialog-body,
+:root[data-theme='default-dark'] .command-dialog-body,
+:root[data-theme='default'] .command-dialog-body {
+  padding: 20px 24px 0 !important;
+}
+
+/* Labels */
+:root:not([data-theme]) .command-editor-dialog-form label,
+:root[data-theme='default-dark'] .command-editor-dialog-form label,
+:root[data-theme='default'] .command-editor-dialog-form label,
+:root:not([data-theme]) .command-form-standalone-page label,
+:root[data-theme='default-dark'] .command-form-standalone-page label,
+:root[data-theme='default'] .command-form-standalone-page label {
+  color: var(--text-main) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  margin-bottom: 4px !important;
+}
+
+/* Form inputs (textbox, select, textarea) */
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']),
+:root:not([data-theme]) .command-editor-dialog-form select,
+:root[data-theme='default-dark'] .command-editor-dialog-form select,
+:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
+:root:not([data-theme]) .command-form-standalone-page select,
+:root[data-theme='default-dark'] .command-form-standalone-page select,
+:root[data-theme='default'] .command-form-standalone-page select,
+:root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
+  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 4px !important;
+  color: var(--text-main) !important;
+  font-size: 14px !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  padding: 0 14px !important;
+  transition: border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']),
+:root:not([data-theme]) .command-editor-dialog-form select,
+:root[data-theme='default-dark'] .command-editor-dialog-form select,
+:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
+:root:not([data-theme]) .command-form-standalone-page select,
+:root[data-theme='default-dark'] .command-form-standalone-page select,
+:root[data-theme='default'] .command-form-standalone-page select {
+  font-size: 13px !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-form select,
+:root[data-theme='default-dark'] .command-editor-dialog-form select,
+:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-form-standalone-page select,
+:root[data-theme='default-dark'] .command-form-standalone-page select,
+:root[data-theme='default'] .command-form-standalone-page select {
+  padding-right: 60px !important;
+}
+
+/* Adjust paddings for textareas */
+:root:not([data-theme]) .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
+  height: auto !important;
+  padding: 12px 14px !important;
+}
+
+/* Hover styles for inputs */
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']):hover,
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']):hover,
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']):hover,
+:root:not([data-theme]) .command-editor-dialog-form select:hover,
+:root[data-theme='default-dark'] .command-editor-dialog-form select:hover,
+:root[data-theme='default'] .command-editor-dialog-form select:hover,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):hover,
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):hover,
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):hover,
+:root:not([data-theme]) .command-form-standalone-page select:hover,
+:root[data-theme='default-dark'] .command-form-standalone-page select:hover,
+:root[data-theme='default'] .command-form-standalone-page select:hover {
+  border-color: var(--border-dark) !important;
+}
+
+/* Focus styles for inputs */
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']):focus,
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']):focus,
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']):focus,
+:root:not([data-theme]) .command-editor-dialog-form select:focus,
+:root[data-theme='default-dark'] .command-editor-dialog-form select:focus,
+:root[data-theme='default'] .command-editor-dialog-form select:focus,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):focus,
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):focus,
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):focus,
+:root:not([data-theme]) .command-form-standalone-page select:focus,
+:root[data-theme='default-dark'] .command-form-standalone-page select:focus,
+:root[data-theme='default'] .command-form-standalone-page select:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  outline: none !important;
+}
+
+/* Code area editor wrapper */
+:root:not([data-theme]) .command-editor-dialog-textarea .command-code-area,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area,
+:root[data-theme='default'] .command-editor-dialog-textarea .command-code-area,
+:root:not([data-theme]) .command-form-standalone-page .command-code-area,
+:root[data-theme='default-dark'] .command-form-standalone-page .command-code-area,
+:root[data-theme='default'] .command-form-standalone-page .command-code-area {
+  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 4px !important;
+  overflow: hidden !important;
+  transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-textarea .command-code-area:hover,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area:hover,
+:root[data-theme='default'] .command-editor-dialog-textarea .command-code-area:hover {
+  border-color: var(--border-dark) !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-textarea .command-code-area:focus-within,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area:focus-within,
+:root[data-theme='default'] .command-editor-dialog-textarea .command-code-area:focus-within {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+}
+
+/* Line numbers column */
+:root:not([data-theme]) .command-line-numbers,
+:root[data-theme='default-dark'] .command-line-numbers,
+:root[data-theme='default'] .command-line-numbers {
+  background: color-mix(in srgb, var(--bg-main) 58%, var(--bg-card)) !important;
+  border-right: 1px solid var(--border-light) !important;
+}
+
+:root:not([data-theme]) .command-line-number,
+:root[data-theme='default-dark'] .command-line-number,
+:root[data-theme='default'] .command-line-number {
+  color: var(--text-muted) !important;
+}
+
+/* Code area textarea */
+:root:not([data-theme]) .command-editor-dialog-textarea textarea,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea textarea,
+:root[data-theme='default'] .command-editor-dialog-textarea textarea {
+  background: transparent !important;
+  color: var(--text-main) !important;
+  font-size: 13px !important;
+}
+
+/* Parameters section */
+:root:not([data-theme]) .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default-dark'] .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default'] .command-editor-dialog-params .command-param-hints button {
+  background: var(--accent-tint-weak) !important;
+  border: 1px solid var(--accent-tint) !important;
+  color: var(--accent-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-params .command-param-hints button:hover,
+:root[data-theme='default-dark'] .command-editor-dialog-params .command-param-hints button:hover,
+:root[data-theme='default'] .command-editor-dialog-params .command-param-hints button:hover {
+  background: var(--accent-tint) !important;
+  border-color: var(--accent-focus-ring) !important;
+}
+
+/* Dialog actions wrapper */
+:root:not([data-theme]) .command-dialog-actions,
+:root[data-theme='default-dark'] .command-dialog-actions,
+:root[data-theme='default'] .command-dialog-actions {
+  background: #1b1b1b !important;
+  margin: 20px -24px -20px -24px !important;
+  padding: 16px 24px !important;
+  border-top: 1px solid var(--border-light) !important;
+}
+
+/* Cancel / Flat Button */
+:root:not([data-theme]) .command-dialog-actions .flat-button,
+:root[data-theme='default-dark'] .command-dialog-actions .flat-button,
+:root[data-theme='default'] .command-dialog-actions .flat-button {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 10px !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background 0.18s, transform 0.18s !important;
+}
+
+:root:not([data-theme]) .command-dialog-actions .flat-button:hover,
+:root[data-theme='default-dark'] .command-dialog-actions .flat-button:hover,
+:root[data-theme='default'] .command-dialog-actions .flat-button:hover {
+  background: var(--bg-active) !important;
+}
+
+/* Save / Primary Button */
+:root:not([data-theme]) .command-dialog-actions .primary-button,
+:root[data-theme='default-dark'] .command-dialog-actions .primary-button,
+:root[data-theme='default'] .command-dialog-actions .primary-button {
+  background: var(--button-primary-bg) !important;
+  color: var(--button-primary-text) !important;
+  border: 1px solid var(--button-primary-border) !important;
+  border-radius: 10px !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background 0.18s, transform 0.18s !important;
+}
+
+:root:not([data-theme]) .command-dialog-actions .primary-button:hover,
+:root[data-theme='default-dark'] .command-dialog-actions .primary-button:hover,
+:root[data-theme='default'] .command-dialog-actions .primary-button:hover {
+  background: var(--button-primary-hover) !important;
+}
+
+:root:not([data-theme]) .command-dialog-actions .primary-button:active,
+:root[data-theme='default-dark'] .command-dialog-actions .primary-button:active,
+:root[data-theme='default'] .command-dialog-actions .primary-button:active {
+  background: var(--button-primary-hover) !important;
+  opacity: 0.9 !important;
+}
+
+/* Option checkbox row alignment & decoration */
+:root:not([data-theme]) .command-editor-checkbox-row,
+:root[data-theme='default-dark'] .command-editor-checkbox-row,
+:root[data-theme='default'] .command-editor-checkbox-row {
+  margin-top: 4px !important;
+  font-size: 13px !important;
+  color: var(--text-main) !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-params > span,
+:root[data-theme='default-dark'] .command-editor-dialog-params > span,
+:root[data-theme='default'] .command-editor-dialog-params > span,
+:root:not([data-theme]) .command-editor-checkbox-row span,
+:root[data-theme='default-dark'] .command-editor-checkbox-row span,
+:root[data-theme='default'] .command-editor-checkbox-row span {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+:root:not([data-theme]) .command-param-hints-row > small,
+:root[data-theme='default-dark'] .command-param-hints-row > small,
+:root[data-theme='default'] .command-param-hints-row > small {
+  font-size: 12px !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default-dark'] .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default'] .command-editor-dialog-params .command-param-hints button,
+:root:not([data-theme]) .command-preview span,
+:root[data-theme='default-dark'] .command-preview span,
+:root[data-theme='default'] .command-preview span,
+:root:not([data-theme]) .command-preview code,
+:root[data-theme='default-dark'] .command-preview code,
+:root[data-theme='default'] .command-preview code {
+  font-size: 13px !important;
+}
+
+/* Detected parameters preview box */
+:root:not([data-theme]) .command-preview,
+:root[data-theme='default-dark'] .command-preview,
+:root[data-theme='default'] .command-preview {
+  background: var(--surface-nested) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  margin-top: 4px !important;
+}
+
+:root:not([data-theme]) .command-preview code,
+:root[data-theme='default-dark'] .command-preview code,
+:root[data-theme='default'] .command-preview code {
+  color: var(--accent-primary) !important;
+  font-family: var(--font-mono) !important;
+}
+
+
+/* Placeholder text color inside command dialog inputs */
+:root:not([data-theme]) .command-editor-dialog-form input::placeholder,
+:root[data-theme='default-dark'] .command-editor-dialog-form input::placeholder,
+:root[data-theme='default'] .command-editor-dialog-form input::placeholder,
+:root:not([data-theme]) .command-editor-dialog-form textarea::placeholder,
+:root[data-theme='default-dark'] .command-editor-dialog-form textarea::placeholder,
+:root[data-theme='default'] .command-editor-dialog-form textarea::placeholder,
+:root:not([data-theme]) .command-form-standalone-page input::placeholder,
+:root[data-theme='default-dark'] .command-form-standalone-page input::placeholder,
+:root[data-theme='default'] .command-form-standalone-page input::placeholder,
+:root:not([data-theme]) .command-form-standalone-page textarea::placeholder,
+:root[data-theme='default-dark'] .command-form-standalone-page textarea::placeholder,
+:root[data-theme='default'] .command-form-standalone-page textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.6 !important;
+}
+
+/* Connection Modal Overrides to match Command Dialog colors & border-radius */
+:root:not([data-theme]) .modal-card.ssh-modal,
+:root[data-theme='default-dark'] .modal-card.ssh-modal,
+:root[data-theme='default'] .modal-card.ssh-modal {
+  width: min(900px, 88vw) !important;
+  min-height: 560px !important;
+  background: var(--bg-sidebar) !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: var(--modal-card-shadow) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal.standalone,
+:root[data-theme='default-dark'] .modal-card.ssh-modal.standalone,
+:root[data-theme='default'] .modal-card.ssh-modal.standalone {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']),
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']),
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']),
+:root:not([data-theme]) .modal-card.ssh-modal select,
+:root[data-theme='default-dark'] .modal-card.ssh-modal select,
+:root[data-theme='default'] .modal-card.ssh-modal select,
+:root:not([data-theme]) .modal-card.ssh-modal textarea,
+:root[data-theme='default-dark'] .modal-card.ssh-modal textarea,
+:root[data-theme='default'] .modal-card.ssh-modal textarea {
+  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 4px !important;
+  color: var(--text-main) !important;
+  transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root:not([data-theme]) .modal-card.ssh-modal select:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal select:hover,
+:root[data-theme='default'] .modal-card.ssh-modal select:hover,
+:root:not([data-theme]) .modal-card.ssh-modal textarea:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal textarea:hover,
+:root[data-theme='default'] .modal-card.ssh-modal textarea:hover {
+  border-color: var(--border-dark) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root:not([data-theme]) .modal-card.ssh-modal select:focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal select:focus,
+:root[data-theme='default'] .modal-card.ssh-modal select:focus,
+:root:not([data-theme]) .modal-card.ssh-modal textarea:focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal textarea:focus,
+:root[data-theme='default'] .modal-card.ssh-modal textarea:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  outline: none !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .flat-button,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .flat-button,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .flat-button {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 10px !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .flat-button:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .flat-button:hover,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .flat-button:hover {
+  background: var(--bg-active) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .primary-button,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .primary-button,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .primary-button {
+  background: var(--button-primary-bg) !important;
+  color: var(--button-primary-text) !important;
+  border: 1px solid var(--button-primary-border) !important;
+  border-radius: 10px !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .primary-button:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .primary-button:hover,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .primary-button:hover {
+  background: var(--button-primary-hover) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions.ssh-actions,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions.ssh-actions,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions.ssh-actions {
+  background: #1b1b1b !important;
+  margin: 20px -24px -20px -24px !important;
+  padding: 16px 24px !important;
+  border-top: 1px solid var(--border-light) !important;
 }
