@@ -5,7 +5,7 @@
 
   --bg-main: #151515;
   --bg-sidebar: #242424;
-  --bg-card: #1f1f1f;
+  --bg-card: #1e1e1e;
   --bg-elevated: #2a2a2a;
   --bg-hover: #303030;
   --bg-active: #3a3d42;
@@ -942,13 +942,13 @@
 :root:not([data-theme]) .fs-file-table tbody tr.is-selected,
 :root[data-theme='default-dark'] .fs-file-table tbody tr.is-selected,
 :root[data-theme='default'] .fs-file-table tbody tr.is-selected {
-  background: var(--selection-bg);
+  background: var(--selection-bg) !important;
 }
 
 :root:not([data-theme]) .fs-file-table tbody tr.is-selected:nth-child(even),
 :root[data-theme='default-dark'] .fs-file-table tbody tr.is-selected:nth-child(even),
 :root[data-theme='default'] .fs-file-table tbody tr.is-selected:nth-child(even) {
-  background: var(--selection-bg);
+  background: var(--selection-bg) !important;
 }
 
 :root:not([data-theme]) .file-drag-preview,
@@ -1866,7 +1866,7 @@
 :root:not([data-theme]) .disk-head,
 :root[data-theme='default-dark'] .disk-head,
 :root[data-theme='default'] .disk-head {
-  background: #252525;
+  background: #242424;
   border-top: 1px solid #363636;
   color: #aaa;
 }
@@ -2078,7 +2078,7 @@
 :root:not([data-theme]) .file-toolbar,
 :root[data-theme='default-dark'] .file-toolbar,
 :root[data-theme='default'] .file-toolbar {
-  background: linear-gradient(180deg, #242424 0%, #1f1f1f 100%);
+  background: linear-gradient(180deg, #242424 0%, #1e1e1e 100%);
   border-bottom: 1px solid #303030;
   color: #8f8f8f;
 }
@@ -2175,13 +2175,32 @@
 :root:not([data-theme]) .process-row:nth-child(even),
 :root[data-theme='default-dark'] .process-row:nth-child(even),
 :root[data-theme='default'] .process-row:nth-child(even),
-:root:not([data-theme]) .disk-row:nth-child(even),
-:root[data-theme='default-dark'] .disk-row:nth-child(even),
-:root[data-theme='default'] .disk-row:nth-child(even),
 :root:not([data-theme]) .fs-file-table tbody tr:nth-child(even),
 :root[data-theme='default-dark'] .fs-file-table tbody tr:nth-child(even),
 :root[data-theme='default'] .fs-file-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.018);
+  background: #242424;
+}
+
+:root:not([data-theme]) .process-row:nth-child(odd),
+:root[data-theme='default-dark'] .process-row:nth-child(odd),
+:root[data-theme='default'] .process-row:nth-child(odd),
+:root:not([data-theme]) .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme='default-dark'] .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme='default'] .fs-file-table tbody tr:nth-child(odd) {
+  background: #1e1e1e;
+}
+
+/* disk-row: odd=light(浅), even=dark(深) */
+:root:not([data-theme]) .disk-row:nth-child(odd),
+:root[data-theme='default-dark'] .disk-row:nth-child(odd),
+:root[data-theme='default'] .disk-row:nth-child(odd) {
+  background: #242424;
+}
+
+:root:not([data-theme]) .disk-row:nth-child(even),
+:root[data-theme='default-dark'] .disk-row:nth-child(even),
+:root[data-theme='default'] .disk-row:nth-child(even) {
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) .quick-row:hover,
@@ -2306,7 +2325,13 @@
 :root:not([data-theme]) .system-table tbody tr:nth-child(even),
 :root[data-theme='default-dark'] .system-table tbody tr:nth-child(even),
 :root[data-theme='default'] .system-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.015);
+  background: #242424;
+}
+
+:root:not([data-theme]) .system-table tbody tr:nth-child(odd),
+:root[data-theme='default-dark'] .system-table tbody tr:nth-child(odd),
+:root[data-theme='default'] .system-table tbody tr:nth-child(odd) {
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) .quick-panel,
@@ -2349,6 +2374,15 @@
 :root[data-theme='default'] *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* File manager pane scrollbar track */
+:root:not([data-theme]) .file-table-shell::-webkit-scrollbar-track,
+:root[data-theme='default-dark'] .file-table-shell::-webkit-scrollbar-track,
+:root[data-theme='default'] .file-table-shell::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+
 
 :root:not([data-theme]) *::-webkit-scrollbar-thumb,
 :root[data-theme='default-dark'] *::-webkit-scrollbar-thumb,
@@ -3071,7 +3105,7 @@
 :root:not([data-theme]) .connection-manager-search,
 :root[data-theme='default-dark'] .connection-manager-search,
 :root[data-theme='default'] .connection-manager-search {
-  background: #1f1f1f !important;
+  background: #1e1e1e !important;
 }
 
 /* Connection & Command managers footer background override */

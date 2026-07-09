@@ -1,4 +1,4 @@
-import type { DragEvent, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
+import { useState, useEffect, type DragEvent, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { t } from '../../i18n'
@@ -59,7 +59,8 @@ export function FileTable({
   onSelectItem,
   onToggleSort,
   onSelectionDragEnter,
-  onSelectionDragStart
+  onSelectionDragStart,
+  resetColumnsTrigger
 }: {
   scrollRef: RefObject<HTMLDivElement | null>
   rows: RemoteFileItem[]
@@ -76,6 +77,7 @@ export function FileTable({
   onToggleSort?(field: RemoteFileSortField): void
   onSelectionDragEnter?(item: RemoteFileItem): void
   onSelectionDragStart?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
+  resetColumnsTrigger?: number
 }) {
   const headerCells: Array<{ field: RemoteFileSortField; label: string }> = [
     { field: 'name', label: t.fileName },
@@ -85,6 +87,55 @@ export function FileTable({
     { field: 'permission', label: t.permission },
     { field: 'ownerGroup', label: t.ownerGroup }
   ]
+
+  const [widths, setWidths] = useState<number[]>([260, 100, 100, 150, 100, 100])
+
+  useEffect(() => {
+    if (resetColumnsTrigger !== undefined && resetColumnsTrigger > 0) {
+      setWidths([260, 100, 100, 150, 100, 100])
+    }
+  }, [resetColumnsTrigger])
+
+  const handleMouseDown = (e: React.MouseEvent, index: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const thElement = e.currentTarget.parentElement
+    if (!thElement) return
+    const trElement = thElement.parentElement
+    if (!trElement) return
+    const ths = Array.from(trElement.querySelectorAll('th'))
+    const currentWidths = ths.map(th => th.offsetWidth)
+    setWidths(currentWidths)
+
+    const startX = e.clientX
+    const startWidth = currentWidths[index]
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.body.style.setProperty('-webkit-user-select', 'none')
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      const newWidth = Math.max(50, startWidth + deltaX)
+      setWidths((prev) => {
+        const next = [...currentWidths]
+        next[index] = newWidth
+        return next
+      })
+    }
+
+    const handleMouseUp = () => {
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.body.style.removeProperty('-webkit-user-select')
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -102,6 +153,7 @@ export function FileTable({
   return (
     <table
       className={`fs-file-table ${compact ? 'compact' : ''}`}
+      style={!compact ? { width: `${widths.reduce((sum, w) => sum + w, 0)}px`, minWidth: '100%' } : undefined}
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClearSelection?.()
@@ -124,13 +176,27 @@ export function FileTable({
               <th
                 key={header.field}
                 className={onToggleSort ? 'is-sortable' : undefined}
-                onClick={() => onToggleSort?.(header.field)}
+                style={!compact ? { width: `${widths[index]}px` } : undefined}
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).classList.contains('col-resizer')) {
+                    e.stopPropagation()
+                    return
+                  }
+                  onToggleSort?.(header.field)
+                }}
                 title={onToggleSort ? `${header.label} - 单击切换排序` : undefined}
               >
                 <span className={`file-table-heading ${isActive ? 'is-active' : ''}`}>
                   <span>{header.label}</span>
                   {!compact ? <span className="file-table-sort-indicator">{directionIcon}</span> : null}
                 </span>
+                {!compact && index < headerCells.length - 1 && (
+                  <div
+                    className="col-resizer"
+                    onMouseDown={(e) => handleMouseDown(e, index)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
               </th>
             )
           })}

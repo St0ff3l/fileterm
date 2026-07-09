@@ -224,6 +224,7 @@ export function FileManager({
   const [localAnchorPath, setLocalAnchorPath] = useState<string | null>(null)
   const [remoteAnchorPath, setRemoteAnchorPath] = useState<string | null>(null)
   const [keyboardPane, setKeyboardPane] = useState<'local' | 'remote'>('remote')
+  const [resetColumnsTrigger, setResetColumnsTrigger] = useState(0)
   const [contextMenu, setContextMenu] = useState<{
     pane: 'local' | 'remote'
     x: number
@@ -575,7 +576,10 @@ export function FileManager({
         </span>
         {activeView === 'file' ? (
           <div className="file-tab-actions">
-            <button title={t.refresh} type="button" disabled={!isRemoteConnected} onClick={onRefresh}><AppIcon name="refresh" /></button>
+            <button title={t.refresh} type="button" disabled={!isRemoteConnected} onClick={() => {
+              onRefresh()
+              setResetColumnsTrigger(prev => prev + 1)
+            }}><AppIcon name="refresh" /></button>
             {activeTab?.sessionType === 'ssh' ? (
               <button
                 aria-pressed={remoteFileAccessMode === 'root'}
@@ -810,6 +814,7 @@ export function FileManager({
                   rows={sortedRemoteRows}
                   sortState={remoteSort}
                   selectedPaths={selectedRemotePaths}
+                  resetColumnsTrigger={resetColumnsTrigger}
                   onToggleSort={(field) => {
                     setRemoteSort((current) => (
                       current.field === field
@@ -966,6 +971,7 @@ export function FileManager({
           }}
           onRefresh={() => {
             onRefresh()
+            setResetColumnsTrigger(prev => prev + 1)
             setContextMenu(null)
           }}
           onRename={() => {

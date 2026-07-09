@@ -826,6 +826,13 @@ textarea:focus-visible,
   padding: 0 10px;
 }
 
+/* compact (local pane) must explicitly override session.css's higher-specificity compact rule */
+.fs-file-table.compact th,
+.fs-file-table.compact td {
+  height: 24px;
+  padding: 0 10px;
+}
+
 .fs-file-table th {
   font-size: 10px;
   font-weight: 500;
@@ -1001,16 +1008,6 @@ textarea:focus-visible,
   border-radius: 8px;
 }
 
-* {
-  scrollbar-color: var(--border, var(--border-light)) transparent;
-  scrollbar-width: thin;
-}
-
-.scrollbar-hover,
-.scrollbar-scroll {
-  scrollbar-color: transparent transparent;
-}
-
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1020,14 +1017,7 @@ textarea:focus-visible,
   border-radius: 999px;
 }
 
-.group:hover .scrollbar-hover,
-.scrollbar-scroll:hover,
-.scrollbar-scroll.is-scrolling {
-  scrollbar-color: var(--border, var(--border-light)) transparent;
-}
-
-.local-pane::-webkit-scrollbar:horizontal,
-.remote-pane::-webkit-scrollbar:horizontal,
+.file-table-shell::-webkit-scrollbar:horizontal,
 .pane-scroll::-webkit-scrollbar:horizontal {
   height: 4px;
 }
@@ -1172,4 +1162,30 @@ textarea:focus-visible,
 .has-standalone-titlebar .command-editor-page.standalone > .modal-header,
 .has-standalone-titlebar .command-manager-modal.standalone > .modal-header {
   display: none;
+}
+
+.fs-file-table th {
+  position: relative;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  background: transparent;
+}
+
+.col-resizer:hover::after,
+.col-resizer:active::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 2px;
+  width: 2px;
+  background-color: var(--accent-primary, #7eaef7);
 }

@@ -454,7 +454,6 @@
   .file-editor-menubar {
     overflow-x: auto;
     flex-wrap: nowrap;
-    scrollbar-width: thin;
   }
 
   .file-editor-menubar::-webkit-scrollbar {

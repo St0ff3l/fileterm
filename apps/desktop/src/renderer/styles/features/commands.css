@@ -133,8 +133,6 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   touch-action: pan-x;
   overscroll-behavior-x: contain;
   cursor: grab;
