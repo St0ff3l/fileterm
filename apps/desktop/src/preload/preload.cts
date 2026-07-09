@@ -74,6 +74,7 @@ const api: FileTermDesktopApi = {
     ipcRenderer.on('app:ui-preferences-changed', wrapped)
     return () => ipcRenderer.off('app:ui-preferences-changed', wrapped)
   },
+
   requestQuitApp: (): Promise<void> =>
     ipcRenderer.invoke('app:requestQuitApp'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),

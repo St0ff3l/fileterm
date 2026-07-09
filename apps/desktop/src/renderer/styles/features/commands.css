@@ -1458,16 +1458,16 @@
   border-radius: var(--radius-sm);
   background: var(--bg-main);
   overflow: hidden;
-  height: 320px;
-  min-height: 320px;
-  max-height: 320px;
+  height: 290px;
+  min-height: 290px;
+  max-height: 290px;
   align-items: stretch;
 }
 
 .command-line-numbers {
   display: flex;
   flex-direction: column;
-  padding: 0;
+  padding: 4px 0;
   min-width: 40px;
   text-align: right;
   overflow: hidden;
@@ -1481,10 +1481,11 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  height: 20px;
   min-height: 20px;
+  line-height: 20px;
   padding: 0 10px;
-  font-size: 11.5px;
-  line-height: 1.55;
+  font-size: 11px;
   font-family: "SF Mono", Menlo, Consolas, monospace;
   color: var(--text-muted);
   white-space: nowrap;
@@ -1494,11 +1495,11 @@
   flex: 1;
   height: 100%;
   min-height: 0;
-  padding: 0 12px;
+  padding: 4px 12px;
   resize: none;
   font-family: "SF Mono", Menlo, Consolas, monospace;
-  line-height: 1.55;
-  font-size: 12px;
+  line-height: 20px;
+  font-size: 13px;
   border: none;
   outline: none;
   background: transparent;

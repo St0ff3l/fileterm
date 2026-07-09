@@ -12,7 +12,7 @@ export const emptyCommandForm: CommandTemplateInput = {
   appendCarriageReturn: true
 }
 
-const COMMAND_EDITOR_MIN_LINE_COUNT = 16
+const COMMAND_EDITOR_MIN_LINE_COUNT = 14
 
 export function toCommandTemplateInput(command: CommandTemplate): CommandTemplateInput {
   return {
@@ -211,7 +211,9 @@ export function CommandEditorModal({
       </label>
       <div className="command-editor-field full command-preview">
         <span>{t.commandDetectedParams}</span>
-        <code>{extractCommandParams(form.command).join(', ') || '-'}</code>
+        <code className={extractCommandParams(form.command).length === 0 ? 'is-empty' : ''}>
+          {extractCommandParams(form.command).join(', ') || '-'}
+        </code>
       </div>
     </div>
   )

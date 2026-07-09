@@ -9,6 +9,8 @@
   --bg-elevated: #2a2a2a;
   --bg-hover: #303030;
   --bg-active: #3a3d42;
+  --manager-head-bg: #242424;
+  --input-bg: #1a1a1a;
 
   --border-light: rgba(255, 255, 255, 0.08);
   --border-dark: rgba(255, 255, 255, 0.16);
@@ -1304,13 +1306,13 @@
 :root:not([data-theme]) .manager-table,
 :root[data-theme='default-dark'] .manager-table,
 :root[data-theme='default'] .manager-table {
-  background: var(--bg-main);
+  background: #1b1b1b !important;
 }
 
 :root:not([data-theme]) .manager-head,
 :root[data-theme='default-dark'] .manager-head,
 :root[data-theme='default'] .manager-head {
-  background: var(--bg-hover);
+  background: var(--manager-head-bg);
   color: var(--text-muted);
 }
 
@@ -1388,7 +1390,7 @@
 :root:not([data-theme]) .ssh-modal-nav,
 :root[data-theme='default-dark'] .ssh-modal-nav,
 :root[data-theme='default'] .ssh-modal-nav {
-  background: var(--bg-main);
+  background: #242424 !important;
 }
 
 :root:not([data-theme]) .ssh-modal-nav button,
@@ -1412,14 +1414,14 @@
 :root:not([data-theme]) .ssh-grid textarea,
 :root[data-theme='default-dark'] .ssh-grid textarea,
 :root[data-theme='default'] .ssh-grid textarea {
-  background: var(--bg-main);
+  background: var(--input-bg);
 }
 
 :root:not([data-theme]) .ssh-placeholder,
 :root[data-theme='default-dark'] .ssh-placeholder,
 :root[data-theme='default'] .ssh-placeholder {
   color: var(--text-muted);
-  background: var(--bg-main);
+  background: var(--input-bg);
 }
 
 :root:not([data-theme]) .modal-error,
@@ -1442,7 +1444,7 @@
 :root:not([data-theme]) .connection-form select,
 :root[data-theme='default-dark'] .connection-form select,
 :root[data-theme='default'] .connection-form select {
-  background: var(--bg-main);
+  background: var(--input-bg);
   color: var(--text-main);
 }
 
@@ -2418,9 +2420,6 @@
   background: var(--modal-backdrop-bg);
 }
 
-:root:not([data-theme]) .ssh-modal-nav,
-:root[data-theme='default-dark'] .ssh-modal-nav,
-:root[data-theme='default'] .ssh-modal-nav,
 :root:not([data-theme]) .ssh-form-shell,
 :root[data-theme='default-dark'] .ssh-form-shell,
 :root[data-theme='default'] .ssh-form-shell,
@@ -2452,7 +2451,7 @@
 :root:not([data-theme]) .connection-form select,
 :root[data-theme='default-dark'] .connection-form select,
 :root[data-theme='default'] .connection-form select {
-  background: #151515;
+  background: var(--input-bg);
   border-color: rgba(255, 255, 255, 0.12);
   color: #e7e7e7;
 }
@@ -2473,7 +2472,7 @@
 :root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
-  background: #151515;
+  background: var(--input-bg);
   border-color: rgba(255, 255, 255, 0.12);
   color: #e7e7e7;
 }
@@ -2659,7 +2658,7 @@
 :root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
-  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 4px !important;
   color: var(--text-main) !important;
@@ -2736,7 +2735,7 @@
 :root[data-theme='default'] .command-form-standalone-page select:focus {
   border-color: var(--accent-primary) !important;
   box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
-  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  background: var(--input-bg) !important;
   outline: none !important;
 }
 
@@ -2747,7 +2746,7 @@
 :root:not([data-theme]) .command-form-standalone-page .command-code-area,
 :root[data-theme='default-dark'] .command-form-standalone-page .command-code-area,
 :root[data-theme='default'] .command-form-standalone-page .command-code-area {
-  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 4px !important;
   overflow: hidden !important;
@@ -2771,7 +2770,7 @@
 :root:not([data-theme]) .command-line-numbers,
 :root[data-theme='default-dark'] .command-line-numbers,
 :root[data-theme='default'] .command-line-numbers {
-  background: color-mix(in srgb, var(--bg-main) 58%, var(--bg-card)) !important;
+  background: var(--bg-main) !important;
   border-right: 1px solid var(--border-light) !important;
 }
 
@@ -2910,7 +2909,7 @@
 :root:not([data-theme]) .command-preview,
 :root[data-theme='default-dark'] .command-preview,
 :root[data-theme='default'] .command-preview {
-  background: var(--surface-nested) !important;
+  background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 8px !important;
   padding: 10px 14px !important;
@@ -2922,6 +2921,17 @@
 :root[data-theme='default'] .command-preview code {
   color: var(--accent-primary) !important;
   font-family: var(--font-mono) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 0 0 0 !important;
+  display: block !important;
+}
+
+:root:not([data-theme]) .command-preview code.is-empty,
+:root[data-theme='default-dark'] .command-preview code.is-empty,
+:root[data-theme='default'] .command-preview code.is-empty {
+  color: var(--text-muted) !important;
+  opacity: 0.7 !important;
 }
 
 
@@ -2973,7 +2983,7 @@
 :root:not([data-theme]) .modal-card.ssh-modal textarea,
 :root[data-theme='default-dark'] .modal-card.ssh-modal textarea,
 :root[data-theme='default'] .modal-card.ssh-modal textarea {
-  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  background: var(--input-bg) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 4px !important;
   color: var(--text-main) !important;
@@ -3003,7 +3013,7 @@
 :root[data-theme='default'] .modal-card.ssh-modal textarea:focus {
   border-color: var(--accent-primary) !important;
   box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
-  background: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card)) !important;
+  background: var(--input-bg) !important;
   outline: none !important;
 }
 
@@ -3044,4 +3054,44 @@
   margin: 20px -24px -20px -24px !important;
   padding: 16px 24px !important;
   border-top: 1px solid var(--border-light) !important;
+}
+
+/* Settings standalone and tab pages backgrounds override */
+:root:not([data-theme]) .settings-modal,
+:root[data-theme='default-dark'] .settings-modal,
+:root[data-theme='default'] .settings-modal,
+:root:not([data-theme]) .settings-modal .connection-manager-layout,
+:root[data-theme='default-dark'] .settings-modal .connection-manager-layout,
+:root[data-theme='default'] .settings-modal .connection-manager-layout {
+  background: #1b1b1b !important;
+  background-color: #1b1b1b !important;
+}
+
+/* Connection & Command managers search box background override */
+:root:not([data-theme]) .connection-manager-search,
+:root[data-theme='default-dark'] .connection-manager-search,
+:root[data-theme='default'] .connection-manager-search {
+  background: #1f1f1f !important;
+}
+
+/* Connection & Command managers footer background override */
+:root:not([data-theme]) .connection-manager-footer,
+:root[data-theme='default-dark'] .connection-manager-footer,
+:root[data-theme='default'] .connection-manager-footer {
+  background-color: #151515 !important;
+}
+
+/* Connection & Command managers search input border and outline reset override */
+:root:not([data-theme]) .connection-manager-search input,
+:root[data-theme='default-dark'] .connection-manager-search input,
+:root[data-theme='default'] .connection-manager-search input,
+:root:not([data-theme]) .connection-manager-search input:focus,
+:root[data-theme='default-dark'] .connection-manager-search input:focus,
+:root[data-theme='default'] .connection-manager-search input:focus {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }

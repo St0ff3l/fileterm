@@ -1723,13 +1723,12 @@
 }
 
 .modal-card.manager-modal.connection-manager-modal {
-  width: min(1040px, calc(100vw - 56px));
+  width: min(900px, calc(100vw - 56px));
   min-height: min(640px, calc(100vh - 56px));
   padding: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow-x: hidden;
-  overflow-x: clip;
+  overflow: hidden !important;
   background-color: var(--bg-main) !important;
   font-family: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
 }
@@ -1792,7 +1791,7 @@
   color: var(--text-muted);
   background: var(--surface-inset);
   transition: all 0.2s ease;
-  margin-left: 24px;
+  margin-left: 12px;
   margin-right: 12px;
   -webkit-app-region: no-drag;
 }
@@ -2037,7 +2036,7 @@
 .connection-manager-table .manager-head {
   height: 34px;
   border-bottom: 1px solid var(--border-light);
-  background: var(--surface-inset) !important;
+  background: var(--manager-head-bg) !important;
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 400;
@@ -2045,7 +2044,7 @@
 }
 
 :root .connection-manager-modal .connection-manager-table .manager-head {
-  background: var(--surface-inset) !important;
+  background: var(--manager-head-bg) !important;
 }
 
 .manager-row {

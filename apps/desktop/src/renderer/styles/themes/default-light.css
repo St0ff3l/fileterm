@@ -7,6 +7,8 @@
   --bg-elevated: #ffffff;
   --bg-hover: #eceff3;
   --bg-active: #dde2e8;
+  --manager-head-bg: #f3f6fa;
+  --input-bg: #f7f8fa;
 
   --border-light: rgba(15, 23, 42, 0.16);
   --border-dark: rgba(15, 23, 42, 0.28);
@@ -378,7 +380,7 @@
 :root[data-theme='default-light'] .ssh-grid textarea,
 :root[data-theme='default-light'] .connection-form input,
 :root[data-theme='default-light'] .connection-form select {
-  background: #f7f8fa;
+  background: var(--input-bg);
   border-color: var(--border-light);
   color: var(--text-main);
 }
@@ -923,7 +925,7 @@
 }
 
 :root[data-theme='default-light'] .manager-head {
-  background: #f3f6fa;
+  background: var(--manager-head-bg);
   color: var(--text-muted);
 }
 
@@ -1003,4 +1005,27 @@
 :root[data-theme='default-light'] .command-editor-dialog-form textarea.is-invalid:focus {
   border-color: var(--danger) !important;
   box-shadow: 0 0 0 3px rgba(201, 61, 61, 0.18) !important;
+}
+
+/* Detected parameters preview box (Light) */
+:root[data-theme='default-light'] .command-preview {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  margin-top: 4px !important;
+}
+
+:root[data-theme='default-light'] .command-preview code {
+  color: var(--primary) !important;
+  font-family: var(--font-mono) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 0 0 0 !important;
+  display: block !important;
+}
+
+:root[data-theme='default-light'] .command-preview code.is-empty {
+  color: var(--text-muted) !important;
+  opacity: 0.7 !important;
 }

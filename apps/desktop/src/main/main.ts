@@ -669,6 +669,9 @@ function createNativeChildWindow(parent: BrowserWindow, options: {
     }
   })
   registerWindowStateListeners(win)
+  if (isMac) {
+    win.setWindowButtonVisibility(false)
+  }
   return win
 }
 
@@ -700,8 +703,7 @@ function openConnectionManagerWindow(parent: BrowserWindow) {
     width: DEFAULT_WINDOW_BOUNDS.connectionManager.width,
     height: DEFAULT_WINDOW_BOUNDS.connectionManager.height,
     minWidth: DEFAULT_WINDOW_BOUNDS.connectionManager.minWidth,
-    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight,
-    frame: false
+    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight
   })
 
   connectionManagerWindow = win
@@ -737,8 +739,7 @@ function openCommandManagerWindow(parent: BrowserWindow) {
     width: DEFAULT_WINDOW_BOUNDS.commandManager.width,
     height: DEFAULT_WINDOW_BOUNDS.commandManager.height,
     minWidth: DEFAULT_WINDOW_BOUNDS.commandManager.minWidth,
-    minHeight: DEFAULT_WINDOW_BOUNDS.commandManager.minHeight,
-    frame: false
+    minHeight: DEFAULT_WINDOW_BOUNDS.commandManager.minHeight
   })
 
   commandManagerWindow = win
