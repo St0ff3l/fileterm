@@ -12,7 +12,7 @@
 * **目标**：将所有文件传输的底层的任务状态机和 IO 操作移出 Workspace 核心管理层。
 * **具体改动**：
   * 新建 `main/services/transfers/transfer-service.ts` 并创建 `TransferService` 类。
-  * 将 `workspace-service.ts` 中的 `createUploadTask`、`createDownloadTask` 以及与之关联 of FTP/SFTP 连接池建立、流订阅（stream pipe）、传输速度监控和进度保存逻辑完整迁移至 `TransferService`。
+  * 将 `workspace-service.ts` 中的 `createUploadTask`、`createDownloadTask` 以及与之关联 FTP/SFTP 连接池建立、流订阅（stream pipe）、传输速度监控和进度保存逻辑完整迁移至 `TransferService`。
   * `WorkspaceService` 在初始化时实例化并保持对 `TransferService` 的引用，仅暴露轻量级的外层封装 API 供 IPC 处理器调用。
 
 ### 1.2 重构会话 Runtime 监听转发器
@@ -64,6 +64,12 @@
 * **具体改动**：
   * 新建 `renderer/features/layout/ModalPortalManager.tsx`，将所有全局模态框（设置、连接管理、命令管理、文件编辑器、交互认证弹窗等）集中至该组件内挂载，主 App 外层只需挂载此单节点。
 
+### 2.7 引入 `useWorkspaceIpcSync` 数据同步 Hook
+* **目标**：将 `App.tsx` 中通过 `useEffect` 侦听主进程 IPC 并同步高频状态（如 `session-updated` 会话变更、`transfer-updated` 传输任务列表更新、日志目录打开事件等）的冗余逻辑从 App.tsx 中解耦。
+* **具体改动**：
+  * 新建 `renderer/hooks/useWorkspaceIpcSync.ts`。
+  * 集中接管 Electron 进程通信，通过单向数据流将最新后端状态写入 React Context / hooks，并自动管理 IPC 侦听器解绑，完全防止内存泄漏。
+
 ---
 
 ## 3. 拟改动文件清单
@@ -75,6 +81,7 @@
 * [useFileOperations.ts](file:///Users/stoffel/CodeFile/fileterm/apps/renderer/hooks/useFileOperations.ts) — 文件操作与剪贴板 Hook
 * [useSshInteractions.ts](file:///Users/stoffel/CodeFile/fileterm/apps/renderer/hooks/useSshInteractions.ts) — SSH 认证交互 Hook
 * [useFileEditor.ts](file:///Users/stoffel/CodeFile/fileterm/apps/renderer/hooks/useFileEditor.ts) — 文件在线编辑生命周期 Hook
+* [useWorkspaceIpcSync.ts](file:///Users/stoffel/CodeFile/fileterm/apps/desktop/src/renderer/hooks/useWorkspaceIpcSync.ts) — 主进程数据单向同步 Hook
 * [ModalPortalManager.tsx](file:///Users/stoffel/CodeFile/fileterm/apps/desktop/src/renderer/features/layout/ModalPortalManager.tsx) — 全局弹窗挂载管理器组件
 
 ### [MODIFY] 修改文件
@@ -96,7 +103,7 @@
 
 ### 第二阶段（前端 Hook 化与弹窗收口）
 1. 引入并切换 `useWorkspaceTabs` 与 `useWorkspaceModals` 逻辑。
-2. 引入 `useFileOperations`、`useSshInteractions` 和 `useFileEditor`，剥离路径和编辑器逻辑。
+2. 引入 `useFileOperations`、`useSshInteractions`、`useFileEditor` 和 `useWorkspaceIpcSync`，剥离路径、编辑器与 IPC 同步侦听。
 3. 引入并挂载 `ModalPortalManager`。
 4. 启动应用开发服务器，手动在界面操作：
    - 快速连接与标签新建/切换动效。
