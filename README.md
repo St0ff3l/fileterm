@@ -14,6 +14,13 @@
   </p>
 
   <p>
+    <strong>A modern remote workspace desktop workbench built for developers and ops teams.</strong>
+  </p>
+  <p>
+    SSH terminal, SFTP files, FTP files, multi-tab workspace, and transfer center all in one focused desktop client.
+  </p>
+
+  <p>
     <kbd><a href="#中文">中文</a></kbd>
     <kbd><a href="#english">English</a></kbd>
   </p>
@@ -31,7 +38,7 @@
 
 ## 中文
 
-## 技术栈
+### 技术栈
 
 | Desktop | Renderer | Language | Terminal | Editor | Protocols | Tooling |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -45,7 +52,7 @@ protocols      ███████████████░░░░░  SSH
 theme system   ████████████████░░░░  tokens -> vars -> skins -> terminal colors
 ```
 
-## 为什么做 FileTerm
+### 为什么做 FileTerm
 
 远程工作每天都在发生，但工具常常被割裂成终端、文件管理器、传输窗口和连接配置。FileTerm 想做的是一个真正面向日常工作的桌面 remote workspace：
 
@@ -57,7 +64,7 @@ theme system   ████████████████░░░░  tok
 
 第一版目标不是“支持所有协议”，而是把 `SSH / SFTP / FTP` 这条最高频链路做稳、做顺、做漂亮。
 
-## 核心能力
+### 核心能力
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
@@ -76,14 +83,14 @@ theme system   ████████████████░░░░  tok
 | 工作区侧边栏 | 已完成 | 概览 → 连接管理器 → 命令管理器 → 设置四页导航 |
 | 窗口管理 | 已完成 | 主窗口、连接管理器、命令管理器、文件编辑器独立窗口 |
 
-## 外部开源项目
+### 外部开源项目
 
 FileTerm 的核心交互里使用了两个成熟的开源项目：
 
 - [xterm.js](https://xtermjs.org/)：用于 SSH 终端渲染、输入输出和窗口 resize。
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/)：用于文件编辑器，提供语法高亮、编辑体验和查找替换。
 
-## 架构原则
+### 架构原则
 
 FileTerm 从第一天就避免把远程协议揉成一个模糊的大对象。
 
@@ -107,7 +114,7 @@ Renderer UI
 
 更完整的说明见 [docs/architecture.md](./docs/architecture.md)。
 
-## 快速开始
+### 快速开始
 
 要求：
 
@@ -127,7 +134,7 @@ npm run typecheck
 npm run build
 ```
 
-## 仓库结构
+### 仓库结构
 
 ```txt
 fileterm/
@@ -150,7 +157,7 @@ fileterm/
   AGENTS.md                  # short map for human/AI collaborators
 ```
 
-## 路线图
+### 路线图
 
 当前重点：
 
@@ -162,7 +169,7 @@ fileterm/
 
 完整计划见 [docs/roadmap.md](./docs/roadmap.md)。
 
-## 协作方式
+### 协作方式
 
 这个仓库把代码库本身当作记录系统：
 
@@ -174,7 +181,7 @@ fileterm/
 
 如果你要贡献一个较大的功能，建议先补一份 active plan，再开始改代码。
 
-## 贡献者
+### 贡献者
 
 感谢每一位让 FileTerm 变得更好的贡献者。
 
@@ -205,66 +212,191 @@ fileterm/
   </tr>
 </table>
 
-<a id="english"></a>
-
 ---
+
+<a id="english"></a>
 
 ## English
 
-<p>
-  <kbd><a href="#中文">中文</a></kbd>
-  <kbd><a href="#english">English</a></kbd>
-</p>
+### Tech Stack
 
-FileTerm is a modern desktop remote workspace for developers and operations teams. It brings SSH terminals, SFTP files, FTP files, workspace tabs, and transfer tasks into one focused desktop client.
+| Desktop | Renderer | Language | Terminal | Editor | Protocols | Tooling |
+| --- | --- | --- | --- | --- | --- | --- |
+| <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /> | <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React" /> <img src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /> | <img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /> | <img src="https://img.shields.io/badge/xterm.js-111827?style=flat-square" alt="xterm.js" /> | <img src="https://img.shields.io/badge/Monaco%20Editor-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="Monaco Editor" /> | <img src="https://img.shields.io/badge/ssh2-0F766E?style=flat-square" alt="ssh2" /> <img src="https://img.shields.io/badge/basic--ftp-2563EB?style=flat-square" alt="basic-ftp" /> | <img src="https://img.shields.io/badge/npm%20workspaces-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm workspaces" /> |
 
-### Highlights
+```txt
+main process   ████████████████████  Electron services, IPC, protocol lifecycle
+preload bridge ████████████████░░░░  Secure API boundary for renderer
+renderer UI    ███████████████████░  React workspace, tabs, files, terminal
+protocols      ███████████████░░░░░  SSH shell, SFTP, FTP adapters
+theme system   ████████████████░░░░  tokens -> vars -> skins -> terminal colors
+```
 
-- SSH sessions with terminal and SFTP file panels.
-- File editing powered by Monaco Editor.
-- FTP sessions with a clean file-only workflow.
-- Workspace tabs for parallel remote work.
-- A refined desktop shell with collapsible sidebars, a file drawer, workspace focus mode, and animated tab transitions.
-- Workspace sidebar: Overview → Connection Manager → Command Manager → Settings.
-- A floating frosted command bar above the terminal output.
-- A two-pane Monaco editor with a file tree and editor area.
-- Unified transfer center for uploads, downloads, progress, and errors.
-- A layered Electron architecture: `main -> preload -> renderer`.
-- MIT licensed and open for collaboration.
+### Why FileTerm
 
-### Open Source Components
+Remote work happens daily, but tools are often fragmented into separate applications for terminal emulators, file managers, transfer dialogs, and connection configuration. FileTerm aims to provide a unified desktop remote workspace for day-to-day operations:
 
-FileTerm uses two well-known open source projects in its core UI:
+- When opening an SSH session, the terminal and the SFTP file explorer panel are naturally linked.
+- When opening an FTP connection, the interface directly initiates a clean, file-only workflow.
+- Multiple active sessions run in parallel via workspace tabs without interrupting each other.
+- Uploads, downloads, progress queues, and error statuses are handled by a unified transfer system.
+- Connection profiles, workspace state management, and the overall visual themes are optimized for long-term usability.
 
-- [xterm.js](https://xtermjs.org/) for SSH terminal rendering, input/output, and resize handling.
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) for file editing, syntax highlighting, and search/replace.
+The goal of the initial version is not to support every possible protocol, but rather to build a highly stable, seamless, and visually appealing experience for the core `SSH / SFTP / FTP` workflows.
 
-### Contributors
+### Core Capabilities
 
-- **StOff31** built the complete backend logic, including Electron main process services, IPC, session control, file capabilities, and workspace state.
-- **Flashhhhhhzj** refactored and designed the frontend styling, unified the design language, and shaped the theme tokens, component skins, and visual experience.
+| Capability | Status | Description |
+| --- | --- | --- |
+| SSH Profile Management | Completed | Create, edit, delete connection profiles, group profiles into folders, persist using JSON files, and synchronize `group` name and `parentId` bidirectionally |
+| FTP Profile Management | Completed | Separate connection model independent of SSH profiles |
+| SSH Shell | Completed | Powered by xterm.js, input/output handling, adaptive resizing, text search, clipboard sync, and floating frosted command bar |
+| File Editor | Completed | Powered by Monaco Editor, dual-pane layout (file tree & edit area), syntax highlighting, search/replace, encoding, and language selection |
+| SFTP File Explorer | Completed | Directory navigation, read/write actions, create/delete files/folders, rename, and permissions modification (chmod) |
+| FTP File Explorer | Completed | Clean file-only session management and remote file actions |
+| Transfer Center | Completed | Upload/download queue, progress updates, speed rates, task cancellation, and recursive directory handling |
+| Workspace Tabs | Completed | Multi-tab parallel connections, disconnect/reconnect, session persistence, and smooth tab transition animations |
+| Theme System | Completed | tokens → CSS variables → components skins, and one-click dark/light mode toggle |
+| Connection Status Panel | Completed | Active connection health indicator, system resource usage graphs, and sidebar collapsed metadata overview |
+| Command Templates | Completed | Quick snippets, folder nesting, parameter placeholders, and single-click terminal dispatching |
+| Desktop Shell & Layout | Completed | macOS native title bar spacing, collapsible sidebars, file drawer panel, focus mode toggle, and macOS template tray icon |
+| Workspace Sidebar | Completed | Overview → Connection Manager → Command Manager → Settings navigation |
+| Window Manager | Completed | Independent windows for main app, connection manager, command manager, and file editor |
+
+### External Open Source Projects
+
+FileTerm's core interactions leverage two mature open-source projects:
+
+- [xterm.js](https://xtermjs.org/): Used for SSH terminal rendering, user input, and terminal dimensions resizing.
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/): Powering the file editor with rich syntax highlighting, code editing, and search/replace features.
+
+### Architecture Principles
+
+From day one, FileTerm has avoided mixing different remote protocols into a single bloated class.
+
+```txt
+Renderer UI
+  -> Application State
+    -> Preload API
+      -> IPC
+        -> Desktop Services
+          -> Session Controllers
+            -> Protocol Clients
+```
+
+Hard Boundaries:
+
+- `packages/core` acts as the single source of truth for all domain models.
+- The React Renderer process never directly accesses SSH / SFTP / FTP protocol clients.
+- All OS-level or backend capabilities must travel through the `main -> preload -> renderer` bridge.
+- SSH/SFTP and FTP controller/protocol layers are strictly separated.
+- File transfers and progress monitoring are handled globally by the unified transfer system.
+
+For a detailed walkthrough, please see [docs/architecture.md](./docs/architecture.md).
 
 ### Quick Start
+
+Prerequisites:
+
+- Node.js >= 20
+- npm
 
 ```bash
 npm install
 npm run dev
 ```
 
-### Docs
+Available npm scripts:
 
-- [Architecture](./docs/architecture.md)
-- [Roadmap](./docs/roadmap.md)
-- [Hidden Features](./docs/hidden-features.md)
-- [Agent Guide](./AGENTS.md)
+```bash
+npm run dev
+npm run typecheck
+npm run build
+```
 
-<p align="right">
-  <a href="#readme-top">Back to top</a>
-</p>
+### Repository Structure
 
-## 开源协议
+```txt
+fileterm/
+  apps/
+    desktop/                 # Electron + React desktop app
+      src/
+        main/                # main process, IPC, services
+        preload/             # secure renderer API
+        renderer/            # React workspace UI
+  packages/
+    core/                    # domain types
+    storage/                 # repository abstractions
+    shared/                  # shared constants and utilities
+  docs/
+    architecture.md          # architecture map
+    roadmap.md               # product roadmap
+    plans/                   # active and completed execution plans
+    decisions/               # architecture decisions
+    quality/                 # quality and release checks
+  AGENTS.md                  # short map for human/AI collaborators
+```
 
-FileTerm 使用 [MIT License](./LICENSE) 开源。
+### Roadmap
+
+Current Priorities:
+
+1. Finalize and stabilize the core `SSH / SFTP / FTP` MVP path.
+2. Refactor and split code: `ipc/`, `workspace-service.ts`, `session-controllers.ts`, and `App.tsx`.
+3. Consolidate and move all shared types into `packages/core`.
+4. Improve the transfer center UI, global error reporting, theme stability, terminal input shortcuts, file drawers, and desktop shell integration.
+5. Package and prepare production-ready distributables for macOS and Windows.
+
+For the full scope, read [docs/roadmap.md](./docs/roadmap.md).
+
+### Collaboration Workflows
+
+This repository treats the codebase itself as the source of documentation:
+
+- `AGENTS.md` is a short entry-level guide, not an exhaustive documentation hub.
+- Stable structural information belongs in `docs/architecture.md`.
+- Active multi-file development plans go to `docs/plans/active/`.
+- Documented engineering decisions are kept in `docs/decisions/`.
+- Feature drafts and draft proposals reside in `.agents/extensions/`.
+
+If you are planning to contribute a significant feature, we recommend writing an active plan before making any code modifications.
+
+### Contributors
+
+We thank everyone who has contributed to making FileTerm a better workspace.
+
+<table>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://github.com/St0ff3l">
+        <img src="https://avatars.githubusercontent.com/St0ff3l?s=120" width="72" height="72" alt="StOff31" />
+        <br />
+        <sub><b>St0ff3l</b></sub>
+      </a>
+    </td>
+    <td>
+      Designed and implemented the core backend logic, connecting Electron main processes, IPC handlers, session controllers, file services, and workspace state synchronization.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://github.com/Flashhhhhhzj">
+        <img src="https://avatars.githubusercontent.com/Flashhhhhhzj?s=120" width="72" height="72" alt="Flashhhhhhzj" />
+        <br />
+        <sub><b>Flashhhhhhzj</b></sub>
+      </a>
+    </td>
+    <td>
+      Redesigned and modernized the frontend styling, aligned theme tokens, created component skins, and polished the overall visual interface and layout.
+    </td>
+  </tr>
+</table>
+
+---
+
+## 开源协议 / License
+
+FileTerm is open-source software licensed under the [MIT License](./LICENSE).
 
 ## Star History
 
