@@ -28,21 +28,23 @@ function formatDate(date: Date) {
 export class LocalFilesService {
   readonly initialPath = os.homedir()
 
-  async listDirectory(dirPath = this.initialPath): Promise<{ path: string, items: LocalFileItem[] }> {
+  async listDirectory(dirPath = this.initialPath): Promise<{ path: string; items: LocalFileItem[] }> {
     const entries = await readdir(dirPath, { withFileTypes: true })
-    const rows = await Promise.all(entries.map(async (entry) => {
-      const fullPath = path.join(dirPath, entry.name)
-      const info = await stat(fullPath)
-      return {
-        path: fullPath,
-        name: entry.name,
-        type: entry.isDirectory() ? 'folder' : 'file',
-        modified: formatDate(info.mtime),
-        size: entry.isDirectory() ? '-' : formatSize(info.size),
-        permission: formatPermissionBits(info.mode, entry.isDirectory()),
-        ownerGroup: typeof info.uid === 'number' && typeof info.gid === 'number' ? `${info.uid}/${info.gid}` : ''
-      } satisfies LocalFileItem
-    }))
+    const rows = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = path.join(dirPath, entry.name)
+        const info = await stat(fullPath)
+        return {
+          path: fullPath,
+          name: entry.name,
+          type: entry.isDirectory() ? 'folder' : 'file',
+          modified: formatDate(info.mtime),
+          size: entry.isDirectory() ? '-' : formatSize(info.size),
+          permission: formatPermissionBits(info.mode, entry.isDirectory()),
+          ownerGroup: typeof info.uid === 'number' && typeof info.gid === 'number' ? `${info.uid}/${info.gid}` : ''
+        } satisfies LocalFileItem
+      })
+    )
 
     rows.sort((a, b) => {
       if (a.type !== b.type) {
@@ -129,14 +131,17 @@ export class LocalFilesService {
     await this.applyPermissionsRecursively(targetPath, parsedMode, options.applyTo ?? 'all')
   }
 
-  private async applyPermissionsRecursively(targetPath: string, mode: number, applyTo: PermissionChangeOptions['applyTo']) {
+  private async applyPermissionsRecursively(
+    targetPath: string,
+    mode: number,
+    applyTo: PermissionChangeOptions['applyTo']
+  ) {
     const entries = await readdir(targetPath, { withFileTypes: true })
     for (const entry of entries) {
       const fullPath = path.join(targetPath, entry.name)
       const isDirectory = entry.isDirectory()
-      const shouldApply = applyTo === 'all'
-        || (applyTo === 'files' && !isDirectory)
-        || (applyTo === 'directories' && isDirectory)
+      const shouldApply =
+        applyTo === 'all' || (applyTo === 'files' && !isDirectory) || (applyTo === 'directories' && isDirectory)
 
       if (shouldApply) {
         await chmod(fullPath, mode)
@@ -168,7 +173,9 @@ function formatPermissionBits(mode: number, isDirectory: boolean) {
     [0o004, 0o002, 0o001]
   ]
 
-  return `${isDirectory ? 'd' : '-'}${segments.map(([read, write, execute]) => {
-    return `${mode & read ? 'r' : '-'}${mode & write ? 'w' : '-'}${mode & execute ? 'x' : '-'}`
-  }).join('')}`
+  return `${isDirectory ? 'd' : '-'}${segments
+    .map(([read, write, execute]) => {
+      return `${mode & read ? 'r' : '-'}${mode & write ? 'w' : '-'}${mode & execute ? 'x' : '-'}`
+    })
+    .join('')}`
 }

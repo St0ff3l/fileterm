@@ -8,7 +8,13 @@ export interface SshDebugLogger {
   readonly enabled: boolean
   handle(scope: SshDebugScope, message: string): void
   log(scope: SshDebugScope, message: string): void
-  logConnectionStart(scope: SshDebugScope, profile: SshProfile, username: string, authConfig: SshAuthConfig, shouldTryKeyboard: boolean): void
+  logConnectionStart(
+    scope: SshDebugScope,
+    profile: SshProfile,
+    username: string,
+    authConfig: SshAuthConfig,
+    shouldTryKeyboard: boolean
+  ): void
   logSftpStart(username?: string, scope?: Extract<SshDebugScope, 'sftp' | 'transfer-sftp'>): void
   logKeyboardInteractive(scope: SshDebugScope, message: string): void
 }
@@ -17,10 +23,7 @@ export function isSshDebugEnabled() {
   return process.env.FILETERM_SSH_DEBUG === '1'
 }
 
-export function createSshDebugLogger(
-  enabled: boolean,
-  append: (message: string) => void
-): SshDebugLogger {
+export function createSshDebugLogger(enabled: boolean, append: (message: string) => void): SshDebugLogger {
   const cache = new Set<string>()
 
   const log = (scope: SshDebugScope, message: string) => {
@@ -66,11 +69,7 @@ export function singleLine(value: string) {
   return value.replace(/\s+/g, ' ').trim()
 }
 
-function describeAuthAttempt(
-  profile: SshProfile,
-  authConfig: SshAuthConfig,
-  shouldTryKeyboard: boolean
-) {
+function describeAuthAttempt(profile: SshProfile, authConfig: SshAuthConfig, shouldTryKeyboard: boolean) {
   if (profile.authType === 'privateKey') {
     return `私钥路径 ${profile.privateKeyPath ?? '(未设置)'}`
   }
@@ -96,9 +95,7 @@ function normalizeSshDebugMessage(message: string): string | null {
 
   if (/Received USERAUTH_FAILURE/i.test(text)) {
     const methodsMatch = text.match(/methods left: ([^)]+)\)?$/i)
-    return methodsMatch
-      ? `认证失败，服务端仍允许: ${methodsMatch[1]}`
-      : '认证失败，服务端拒绝当前方式'
+    return methodsMatch ? `认证失败，服务端仍允许: ${methodsMatch[1]}` : '认证失败，服务端拒绝当前方式'
   }
 
   if (/Client: none auth failed/i.test(text)) {

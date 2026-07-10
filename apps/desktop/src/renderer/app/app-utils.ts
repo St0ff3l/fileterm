@@ -6,10 +6,12 @@ export const localFileDragType = 'application/x-fileterm-local-file'
 export const remoteFileDragType = 'application/x-fileterm-remote-file'
 
 export function isActiveTransfer(transfer: TransferTask) {
-  return transfer.status === 'running'
-    || transfer.status === 'queued'
-    || transfer.status === 'verifying'
-    || transfer.status === 'finalizing'
+  return (
+    transfer.status === 'running' ||
+    transfer.status === 'queued' ||
+    transfer.status === 'verifying' ||
+    transfer.status === 'finalizing'
+  )
 }
 
 export function isCompletedTransfer(transfer: TransferTask) {
@@ -98,16 +100,18 @@ export function tabStatusClass(status: WorkspaceTab['status']) {
 
 export function withParentRow(dirPath: string, items: LocalFileItem[]) {
   const parentPath = dirPath.includes('/') ? dirPath.split('/').slice(0, -1).join('/') || '/' : dirPath
-  return dirPath === '/' ? items : [
-    {
-      path: parentPath,
-      name: '..',
-      type: 'folder' as const,
-      modified: '',
-      size: '-'
-    },
-    ...items
-  ]
+  return dirPath === '/'
+    ? items
+    : [
+        {
+          path: parentPath,
+          name: '..',
+          type: 'folder' as const,
+          modified: '',
+          size: '-'
+        },
+        ...items
+      ]
 }
 
 export function nextSelection<T extends { path: string }>({

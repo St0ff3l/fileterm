@@ -42,9 +42,15 @@ export function SshHostVerificationModal({
         ) : null}
 
         <div className="form-actions ssh-verification-actions">
-          <button className="flat-button" onClick={onReject} type="button">{t.sshHostReject}</button>
-          <button className="flat-button" onClick={onAcceptOnce} type="button">{t.sshHostAcceptOnce}</button>
-          <button className="primary-button" onClick={onAcceptAndSave} type="button">{t.sshHostAcceptAndSave}</button>
+          <button className="flat-button" onClick={onReject} type="button">
+            {t.sshHostReject}
+          </button>
+          <button className="flat-button" onClick={onAcceptOnce} type="button">
+            {t.sshHostAcceptOnce}
+          </button>
+          <button className="primary-button" onClick={onAcceptAndSave} type="button">
+            {t.sshHostAcceptAndSave}
+          </button>
         </div>
       </div>
     </div>

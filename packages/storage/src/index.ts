@@ -18,11 +18,11 @@ export interface ProfileRepository {
   getById(id: string): Promise<ConnectionProfile | null>
   delete(id: string): Promise<void>
   touchProfile(id: string): Promise<void>
-  
+
   createFolder(name: string, parentId?: string): Promise<ConnectionFolder>
   updateFolder(id: string, updates: Partial<ConnectionFolder>): Promise<ConnectionFolder>
   deleteFolder(id: string): Promise<void>
-  
+
   updateOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void>
 
   listCommandFolders(): Promise<CommandFolder[]>
@@ -108,9 +108,7 @@ export class MemoryProfileRepository implements ProfileRepository {
 
   async touchProfile(id: string): Promise<void> {
     const now = Date.now()
-    this.profiles = this.profiles.map((profile) =>
-      profile.id === id ? { ...profile, lastUsedAt: now } : profile
-    )
+    this.profiles = this.profiles.map((profile) => (profile.id === id ? { ...profile, lastUsedAt: now } : profile))
   }
 
   async listFolders(): Promise<ConnectionFolder[]> {
@@ -146,13 +144,10 @@ export class MemoryProfileRepository implements ProfileRepository {
     const nextParentFolder = nextParentId ? remainingFolders.find((f) => f.id === nextParentId) : undefined
     const groupName = nextParentFolder ? nextParentFolder.name : '默认'
 
-    this.profiles = this.profiles.map((profile) => (
+    this.profiles = this.profiles.map((profile) =>
       profile.parentId === id ? { ...profile, parentId: nextParentId, group: groupName } : profile
-    ))
-    this.folders = remainingFolders
-      .map((item) => (
-        item.parentId === id ? { ...item, parentId: nextParentId } : item
-      ))
+    )
+    this.folders = remainingFolders.map((item) => (item.parentId === id ? { ...item, parentId: nextParentId } : item))
   }
 
   async updateOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
@@ -198,12 +193,10 @@ export class MemoryProfileRepository implements ProfileRepository {
     const nextParentId = folder.parentId
     this.commandFolders = this.commandFolders
       .filter((item) => item.id !== id)
-      .map((item) => (
-        item.parentId === id ? { ...item, parentId: nextParentId } : item
-      ))
-    this.commandTemplates = this.commandTemplates.map((item) => (
+      .map((item) => (item.parentId === id ? { ...item, parentId: nextParentId } : item))
+    this.commandTemplates = this.commandTemplates.map((item) =>
       item.parentId === id ? { ...item, parentId: nextParentId } : item
-    ))
+    )
   }
 
   async listCommandTemplates(): Promise<CommandTemplate[]> {

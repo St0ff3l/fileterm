@@ -68,6 +68,16 @@ export abstract class BaseFileSessionController implements FileSessionController
   abstract statRemoteFile(path: string): Promise<RemoteFileStat | null>
   abstract replaceRemoteFile(partialPath: string, destinationPath: string): Promise<void>
   abstract removeRemoteFileIfExists(path: string): Promise<void>
-  abstract uploadFile(localPath: string, remotePath: string, onProgress: (progress: TransferProgress) => void, options?: TransferFileOptions): Promise<void>
-  abstract downloadFile(remotePath: string, localPath: string, onProgress: (progress: TransferProgress) => void, options?: TransferFileOptions): Promise<void>
+  abstract uploadFile(
+    localPath: string,
+    remotePath: string,
+    onProgress: (progress: TransferProgress) => void,
+    options?: TransferFileOptions
+  ): Promise<void>
+  abstract downloadFile(
+    remotePath: string,
+    localPath: string,
+    onProgress: (progress: TransferProgress) => void,
+    options?: TransferFileOptions
+  ): Promise<void>
 }

@@ -18,11 +18,7 @@ const packageJsonPaths = [
   'packages/storage/package.json'
 ]
 
-const internalPackages = new Set([
-  '@fileterm/core',
-  '@fileterm/shared',
-  '@fileterm/storage'
-])
+const internalPackages = new Set(['@fileterm/core', '@fileterm/shared', '@fileterm/storage'])
 
 function updateInternalDependencyVersions(record) {
   if (!record || typeof record !== 'object') {
@@ -70,10 +66,10 @@ await updateJsonFile('package-lock.json', (lockfile) => {
       }
 
       if (
-        packagePath === 'apps/desktop'
-        || packagePath === 'packages/core'
-        || packagePath === 'packages/shared'
-        || packagePath === 'packages/storage'
+        packagePath === 'apps/desktop' ||
+        packagePath === 'packages/core' ||
+        packagePath === 'packages/shared' ||
+        packagePath === 'packages/storage'
       ) {
         pkg.version = nextVersion
       }

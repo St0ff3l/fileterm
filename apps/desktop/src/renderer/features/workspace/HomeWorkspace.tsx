@@ -67,7 +67,9 @@ export function HomeWorkspace({
   isResizingSidebar: boolean
   onResizeStart(): void
 }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'settings'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'settings'
+  >('overview')
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
@@ -170,7 +172,13 @@ export function HomeWorkspace({
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
-          <button className="sidebar-nav-link" onClick={handleOpenDocs} aria-label="GitHub" title="GitHub" type="button">
+          <button
+            className="sidebar-nav-link"
+            onClick={handleOpenDocs}
+            aria-label="GitHub"
+            title="GitHub"
+            type="button"
+          >
             <span className="material-symbols-outlined">star</span>
             <span>GitHub</span>
           </button>
@@ -270,9 +278,13 @@ export function HomeWorkspace({
             {activeTab === 'connection-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
-                <span>{profiles.length} {t.connectionCountLabel}</span>
+                <span>
+                  {profiles.length} {t.connectionCountLabel}
+                </span>
                 <span className="footer-meta-separator">|</span>
-                <span>{folders.length} {t.folderCountLabel}</span>
+                <span>
+                  {folders.length} {t.folderCountLabel}
+                </span>
                 {activeConnectionFolderName && (
                   <>
                     <span className="footer-meta-separator">|</span>
@@ -284,9 +296,13 @@ export function HomeWorkspace({
             {activeTab === 'command-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
-                <span>{commandTemplates.length} {t.commandCountLabel}</span>
+                <span>
+                  {commandTemplates.length} {t.commandCountLabel}
+                </span>
                 <span className="footer-meta-separator">|</span>
-                <span>{commandFolders.length} {t.folderCountLabel}</span>
+                <span>
+                  {commandFolders.length} {t.folderCountLabel}
+                </span>
                 {activeCommandFolderName && (
                   <>
                     <span className="footer-meta-separator">|</span>

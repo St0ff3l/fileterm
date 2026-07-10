@@ -130,9 +130,7 @@
   --confirm-dialog-text: #475569;
   --dialog-surface: var(--bg-card);
   --dialog-border: color-mix(in srgb, var(--border-light) 82%, transparent);
-  --dialog-shadow:
-    0 22px 70px rgba(15, 23, 42, 0.16),
-    0 1px 0 rgba(255, 255, 255, 0.82) inset;
+  --dialog-shadow: 0 22px 70px rgba(15, 23, 42, 0.16), 0 1px 0 rgba(255, 255, 255, 0.82) inset;
   --dialog-title: var(--text-main);
   --dialog-description: var(--text-muted);
   --dialog-footer-border: color-mix(in srgb, var(--border-light) 84%, transparent);
@@ -215,23 +213,23 @@
   --terminal-dock-border: var(--border-light);
 }
 
-:root[data-theme='default-light'] .terminal-find .terminal-find-actions>button {
+:root[data-theme='default-light'] .terminal-find .terminal-find-actions > button {
   background: transparent;
   color: var(--text-muted);
 }
 
-:root[data-theme='default-light'] .terminal-find .terminal-find-actions>button:hover {
+:root[data-theme='default-light'] .terminal-find .terminal-find-actions > button:hover {
   background: var(--bg-hover);
   color: var(--text-main);
 }
 
-:root[data-theme='default-light'] .terminal-find .terminal-find-actions>button.is-active {
+:root[data-theme='default-light'] .terminal-find .terminal-find-actions > button.is-active {
   background: color-mix(in srgb, var(--primary) 13%, var(--bg-card));
   color: var(--primary);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent) inset;
 }
 
-:root[data-theme='default-light'] .terminal-find .terminal-find-actions>.terminal-find-submit {
+:root[data-theme='default-light'] .terminal-find .terminal-find-actions > .terminal-find-submit {
   background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
   color: var(--text-main);
 }
@@ -390,7 +388,9 @@
   background: #f1f3f6 !important;
   border: none !important;
   color: var(--text-soft) !important;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 :root[data-theme='default-light'] .fs-tab:hover:not(.active) {
@@ -403,7 +403,9 @@
   background: transparent !important;
   border: none !important;
   color: var(--text-soft) !important;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 :root[data-theme='default-light'] .add-tab:hover {

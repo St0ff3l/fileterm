@@ -13,11 +13,7 @@ export function CloseButton({
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'type'> & {
   size?: CloseButtonSize
 }) {
-  const resolvedClassName = [
-    'app-close-button',
-    `app-close-button--${size}`,
-    className
-  ].filter(Boolean).join(' ')
+  const resolvedClassName = ['app-close-button', `app-close-button--${size}`, className].filter(Boolean).join(' ')
 
   return (
     <button

@@ -5,9 +5,12 @@ import type { IpcWindowOptions } from './types.js'
 export function registerAppHandlers(options: IpcWindowOptions) {
   ipcMain.handle('app:getUiPreferences', () => options.getUiPreferences())
 
-  ipcMain.handle('app:setUiPreferences', (_event, input: Partial<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>) => {
-    return options.setUiPreferences(input)
-  })
+  ipcMain.handle(
+    'app:setUiPreferences',
+    (_event, input: Partial<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>) => {
+      return options.setUiPreferences(input)
+    }
+  )
 
   ipcMain.handle('app:getUiStateItem', async (_event, key: string) => {
     return options.getUiStateItem(key)
@@ -42,12 +45,15 @@ export function registerAppHandlers(options: IpcWindowOptions) {
     }
   })
 
-  ipcMain.handle('app:openCommandFormWindow', (event, mode: ConnectionFormMode, commandId?: string, folderId?: string) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender) ?? options.getMainWindow()
-    if (senderWindow) {
-      options.openCommandFormWindow(senderWindow, mode, commandId, folderId)
+  ipcMain.handle(
+    'app:openCommandFormWindow',
+    (event, mode: ConnectionFormMode, commandId?: string, folderId?: string) => {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender) ?? options.getMainWindow()
+      if (senderWindow) {
+        options.openCommandFormWindow(senderWindow, mode, commandId, folderId)
+      }
     }
-  })
+  )
 
   ipcMain.handle('app:openFileEditorWindow', (event, input: FileEditorWindowInput) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender) ?? options.getMainWindow()
@@ -101,7 +107,8 @@ export function registerAppHandlers(options: IpcWindowOptions) {
   })
 
   ipcMain.handle('app:confirmCloseWindow', (_event, action: 'quit' | 'hide' | 'cancel') =>
-    options.confirmCloseWindow(action))
+    options.confirmCloseWindow(action)
+  )
 }
 
 function getWindowMenu(
@@ -207,9 +214,7 @@ function getWindowMenu(
         }
       },
       {
-        label: senderWindow.isMaximized()
-          ? (isEn ? 'Restore' : '还原')
-          : (isEn ? 'Maximize' : '最大化'),
+        label: senderWindow.isMaximized() ? (isEn ? 'Restore' : '还原') : isEn ? 'Maximize' : '最大化',
         click: () => {
           if (senderWindow.isMaximized()) {
             senderWindow.unmaximize()

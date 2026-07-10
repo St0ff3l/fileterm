@@ -40,28 +40,20 @@ const api: FileTermDesktopApi = {
   getUiStateItem: (key: string): Promise<string | null> => ipcRenderer.invoke('app:getUiStateItem', key),
   setUiStateItem: (key: string, value: string): Promise<void> => ipcRenderer.invoke('app:setUiStateItem', key, value),
   removeUiStateItem: (key: string): Promise<void> => ipcRenderer.invoke('app:removeUiStateItem', key),
-  openConnectionManagerWindow: (): Promise<void> =>
-    ipcRenderer.invoke('app:openConnectionManagerWindow'),
-  openCommandManagerWindow: (): Promise<void> =>
-    ipcRenderer.invoke('app:openCommandManagerWindow'),
+  openConnectionManagerWindow: (): Promise<void> => ipcRenderer.invoke('app:openConnectionManagerWindow'),
+  openCommandManagerWindow: (): Promise<void> => ipcRenderer.invoke('app:openCommandManagerWindow'),
   openConnectionFormWindow: (mode: ConnectionFormMode, profileId?: string): Promise<void> =>
     ipcRenderer.invoke('app:openConnectionFormWindow', mode, profileId),
   openCommandFormWindow: (mode: ConnectionFormMode, commandId?: string, folderId?: string): Promise<void> =>
     ipcRenderer.invoke('app:openCommandFormWindow', mode, commandId, folderId),
   openFileEditorWindow: (input: FileEditorWindowInput): Promise<void> =>
     ipcRenderer.invoke('app:openFileEditorWindow', input),
-  openExternalUrl: (url: string): Promise<void> =>
-    ipcRenderer.invoke('app:openExternalUrl', url),
-  openLogsDirectory: (): Promise<void> =>
-    ipcRenderer.invoke('app:openLogsDirectory'),
-  minimizeCurrentWindow: (): Promise<void> =>
-    ipcRenderer.invoke('app:minimizeCurrentWindow'),
-  isCurrentWindowMaximized: (): Promise<boolean> =>
-    ipcRenderer.invoke('app:isCurrentWindowMaximized'),
-  toggleMaximizeCurrentWindow: (): Promise<void> =>
-    ipcRenderer.invoke('app:toggleMaximizeCurrentWindow'),
-  closeCurrentWindow: (): Promise<void> =>
-    ipcRenderer.invoke('app:closeCurrentWindow'),
+  openExternalUrl: (url: string): Promise<void> => ipcRenderer.invoke('app:openExternalUrl', url),
+  openLogsDirectory: (): Promise<void> => ipcRenderer.invoke('app:openLogsDirectory'),
+  minimizeCurrentWindow: (): Promise<void> => ipcRenderer.invoke('app:minimizeCurrentWindow'),
+  isCurrentWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('app:isCurrentWindowMaximized'),
+  toggleMaximizeCurrentWindow: (): Promise<void> => ipcRenderer.invoke('app:toggleMaximizeCurrentWindow'),
+  closeCurrentWindow: (): Promise<void> => ipcRenderer.invoke('app:closeCurrentWindow'),
   showWindowMenu: (menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number): Promise<void> =>
     ipcRenderer.invoke('app:showWindowMenu', menuType, x, y),
   onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) => {
@@ -69,17 +61,20 @@ const api: FileTermDesktopApi = {
     ipcRenderer.on('app:window-maximized-change', wrapped)
     return () => ipcRenderer.off('app:window-maximized-change', wrapped)
   },
-  onUiPreferencesChanged: (listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void) => {
-    const wrapped = (_event: unknown, preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => listener(preferences)
+  onUiPreferencesChanged: (
+    listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
+  ) => {
+    const wrapped = (
+      _event: unknown,
+      preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }
+    ) => listener(preferences)
     ipcRenderer.on('app:ui-preferences-changed', wrapped)
     return () => ipcRenderer.off('app:ui-preferences-changed', wrapped)
   },
 
-  requestQuitApp: (): Promise<void> =>
-    ipcRenderer.invoke('app:requestQuitApp'),
+  requestQuitApp: (): Promise<void> => ipcRenderer.invoke('app:requestQuitApp'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),
-  getConnectionLibrary: (): Promise<ConnectionLibrarySnapshot> =>
-    ipcRenderer.invoke('workspace:getConnectionLibrary'),
+  getConnectionLibrary: (): Promise<ConnectionLibrarySnapshot> => ipcRenderer.invoke('workspace:getConnectionLibrary'),
   createProfile: (input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createProfile', input),
   updateProfile: (profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
@@ -108,7 +103,12 @@ const api: FileTermDesktopApi = {
     ipcRenderer.invoke('workspace:updateCommandTemplate', commandId, input),
   deleteCommandTemplate: (commandId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:deleteCommandTemplate', commandId),
-  executeCommandTemplate: (tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions): Promise<CommandExecutionResult> =>
+  executeCommandTemplate: (
+    tabId: string,
+    commandId: string,
+    args?: string[],
+    options?: CommandExecutionOptions
+  ): Promise<CommandExecutionResult> =>
     ipcRenderer.invoke('workspace:executeCommandTemplate', tabId, commandId, args, options),
   getTerminalCommandHistory: (profileId: string): Promise<TerminalCommandHistoryEntry[]> =>
     ipcRenderer.invoke('workspace:getTerminalCommandHistory', profileId),
@@ -122,14 +122,10 @@ const api: FileTermDesktopApi = {
     ipcRenderer.invoke('workspace:openProfile', profileId),
   openProfileFromManager: (profileId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:openProfileFromManager', profileId),
-  activateTab: (tabId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('workspace:activateTab', tabId),
-  reconnectTab: (tabId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('workspace:reconnectTab', tabId),
-  disconnectTab: (tabId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('workspace:disconnectTab', tabId),
-  closeTab: (tabId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('workspace:closeTab', tabId),
+  activateTab: (tabId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:activateTab', tabId),
+  reconnectTab: (tabId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:reconnectTab', tabId),
+  disconnectTab: (tabId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:disconnectTab', tabId),
+  closeTab: (tabId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:closeTab', tabId),
   listLocalDirectory: (dirPath?: string): Promise<DirectorySnapshot<LocalFileItem>> =>
     ipcRenderer.invoke('localFiles:listDirectory', dirPath),
   readLocalFile: (filePath: string, encoding?: string): Promise<string> =>
@@ -146,36 +142,50 @@ const api: FileTermDesktopApi = {
     ipcRenderer.invoke('localFiles:movePath', sourcePath, destinationPath),
   renameLocalPath: (targetPath: string, newName: string): Promise<void> =>
     ipcRenderer.invoke('localFiles:renamePath', targetPath, newName),
-  deleteLocalPath: (targetPath: string): Promise<void> =>
-    ipcRenderer.invoke('localFiles:deletePath', targetPath),
+  deleteLocalPath: (targetPath: string): Promise<void> => ipcRenderer.invoke('localFiles:deletePath', targetPath),
   changeLocalPermissions: (targetPath: string, options: PermissionChangeOptions): Promise<void> =>
     ipcRenderer.invoke('localFiles:changePermissions', targetPath, options),
-  getDroppedFilePaths: (files: File[]): string[] =>
-    files.map((file) => webUtils.getPathForFile(file)).filter(Boolean),
+  getDroppedFilePaths: (files: File[]): string[] => files.map((file) => webUtils.getPathForFile(file)).filter(Boolean),
   selectLocalFiles: (defaultPath?: string): Promise<string[]> =>
     ipcRenderer.invoke('localFiles:selectFiles', defaultPath),
   selectLocalDirectory: (defaultPath?: string): Promise<string | null> =>
     ipcRenderer.invoke('localFiles:selectDirectory', defaultPath),
   queueUpload: (fileNames: string[]): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('transfer:queueUpload', fileNames),
-  cancelTransfer: (transferId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('transfer:cancel', transferId),
-  pauseTransfer: (transferId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('transfer:pause', transferId),
-  resumeTransfer: (transferId: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('transfer:resume', transferId),
+  cancelTransfer: (transferId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('transfer:cancel', transferId),
+  pauseTransfer: (transferId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('transfer:pause', transferId),
+  resumeTransfer: (transferId: string): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('transfer:resume', transferId),
   discardTransfer: (transferId: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('transfer:discard', transferId),
   clearTransfers: (transferIds: string[]): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('transfer:clear', transferIds),
-  uploadFile: (tabId: string, localPath: string, remoteDirectory: string, options?: TransferTargetOptions): Promise<WorkspaceSnapshot> =>
+  uploadFile: (
+    tabId: string,
+    localPath: string,
+    remoteDirectory: string,
+    options?: TransferTargetOptions
+  ): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('transfer:uploadFile', tabId, localPath, remoteDirectory, options),
-  downloadFile: (tabId: string, remotePath: string, localDirectory: string, options?: TransferTargetOptions): Promise<WorkspaceSnapshot> =>
+  downloadFile: (
+    tabId: string,
+    remotePath: string,
+    localDirectory: string,
+    options?: TransferTargetOptions
+  ): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('transfer:downloadFile', tabId, remotePath, localDirectory, options),
-  downloadRemotePath: (tabId: string, remotePath: string, targetType: 'file' | 'folder', localDirectory: string, options?: TransferTargetOptions): Promise<WorkspaceSnapshot> =>
+  downloadRemotePath: (
+    tabId: string,
+    remotePath: string,
+    targetType: 'file' | 'folder',
+    localDirectory: string,
+    options?: TransferTargetOptions
+  ): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('transfer:downloadRemotePath', tabId, remotePath, targetType, localDirectory, options),
-  setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('remoteFiles:setFileAccessMode', tabId, mode, options),
+  setRemoteFileAccessMode: (
+    tabId: string,
+    mode: 'user' | 'root',
+    options?: RemoteFileAccessOptions
+  ): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('remoteFiles:setFileAccessMode', tabId, mode, options),
   writeTerminal: async (tabId: string, data: string): Promise<void> => {
     ipcRenderer.send('terminal:write', tabId, data)
   },
@@ -188,13 +198,22 @@ const api: FileTermDesktopApi = {
     ipcRenderer.invoke('remoteFiles:setFollowShellCwd', tabId, enabled),
   readRemoteFile: (tabId: string, targetPath: string, encoding?: string): Promise<string> =>
     ipcRenderer.invoke('remoteFiles:readFile', tabId, targetPath, encoding),
-  writeRemoteFile: (tabId: string, targetPath: string, content: string, encoding?: string): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('remoteFiles:writeFile', tabId, targetPath, content, encoding),
+  writeRemoteFile: (
+    tabId: string,
+    targetPath: string,
+    content: string,
+    encoding?: string
+  ): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('remoteFiles:writeFile', tabId, targetPath, content, encoding),
   createRemoteDirectory: (tabId: string, parentPath: string, name: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('remoteFiles:createDirectory', tabId, parentPath, name),
   createRemoteFile: (tabId: string, parentPath: string, name: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('remoteFiles:createFile', tabId, parentPath, name),
-  copyRemotePath: (tabId: string, targetPath: string, destinationPath: string, targetType: 'file' | 'folder'): Promise<WorkspaceSnapshot> =>
+  copyRemotePath: (
+    tabId: string,
+    targetPath: string,
+    destinationPath: string,
+    targetType: 'file' | 'folder'
+  ): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('remoteFiles:copyPath', tabId, targetPath, destinationPath, targetType),
   moveRemotePath: (tabId: string, targetPath: string, destinationPath: string): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('remoteFiles:movePath', tabId, targetPath, destinationPath),
@@ -204,8 +223,11 @@ const api: FileTermDesktopApi = {
     ipcRenderer.invoke('remoteFiles:deletePath', tabId, targetPath, targetType),
   resolveSshInteraction: (requestId: string, response: SshInteractionResponse): Promise<void> =>
     ipcRenderer.invoke('ssh:resolveInteraction', requestId, response),
-  changeRemotePermissions: (tabId: string, targetPath: string, options: PermissionChangeOptions): Promise<WorkspaceSnapshot> =>
-    ipcRenderer.invoke('remoteFiles:changePermissions', tabId, targetPath, options),
+  changeRemotePermissions: (
+    tabId: string,
+    targetPath: string,
+    options: PermissionChangeOptions
+  ): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('remoteFiles:changePermissions', tabId, targetPath, options),
   onTerminalData: (listener: (payload: TerminalDataPayload) => void) => {
     const wrapped = (_event: unknown, payload: TerminalDataPayload) => listener(payload)
     ipcRenderer.on('terminal:data', wrapped)

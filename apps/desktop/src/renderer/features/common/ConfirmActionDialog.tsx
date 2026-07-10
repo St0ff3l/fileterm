@@ -25,9 +25,10 @@ export function ConfirmActionDialog({
   onConfirm(): void
   title: string
 }) {
-  const confirmButtonClassName = confirmVariant === 'primary'
-    ? 'confirm-action-dialog__button confirm-action-dialog__button--primary'
-    : 'confirm-action-dialog__button confirm-action-dialog__button--danger'
+  const confirmButtonClassName =
+    confirmVariant === 'primary'
+      ? 'confirm-action-dialog__button confirm-action-dialog__button--primary'
+      : 'confirm-action-dialog__button confirm-action-dialog__button--danger'
   const cancelButtonClassName = 'confirm-action-dialog__button confirm-action-dialog__button--secondary'
 
   const dialog = (
@@ -39,7 +40,9 @@ export function ConfirmActionDialog({
           {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
         </div>
         <div className="form-actions confirm-action-dialog__footer">
-          <button className={cancelButtonClassName} disabled={isSubmitting} onClick={onClose} type="button">{cancelLabel}</button>
+          <button className={cancelButtonClassName} disabled={isSubmitting} onClick={onClose} type="button">
+            {cancelLabel}
+          </button>
           {extraActions}
           <button className={confirmButtonClassName} disabled={isSubmitting} onClick={onConfirm} type="button">
             {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}

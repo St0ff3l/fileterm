@@ -29,7 +29,7 @@ export function ConnectionFormHost({
 }) {
   const clearHostFingerprint = () => {
     const editingProfile = editingProfileId
-      ? profiles.find((profile) => profile.id === editingProfileId) ?? null
+      ? (profiles.find((profile) => profile.id === editingProfileId) ?? null)
       : null
     if (!editingProfile) {
       return

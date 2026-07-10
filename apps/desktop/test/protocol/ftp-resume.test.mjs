@@ -71,18 +71,22 @@ test('FTP controller executes APPE -> REST/STOR fallback without a network serve
   const source = path.join(localDir, 'source.txt')
   await writeFile(source, 'prefix-and-remainder')
   const fake = new FakeBasicFtpClient(new Map([['/target.part', Buffer.from('prefix-')]]))
-  const controller = new LiveFtpSessionController('fake', {
-    id: 'fake-profile',
-    type: 'ftp',
-    name: 'Fake FTP',
-    host: 'fake',
-    port: 21,
-    username: 'test',
-    secure: false,
-    securityMode: 'none',
-    group: 'test',
-    remotePath: '/'
-  }, fake)
+  const controller = new LiveFtpSessionController(
+    'fake',
+    {
+      id: 'fake-profile',
+      type: 'ftp',
+      name: 'Fake FTP',
+      host: 'fake',
+      port: 21,
+      username: 'test',
+      secure: false,
+      securityMode: 'none',
+      group: 'test',
+      remotePath: '/'
+    },
+    fake
+  )
   await controller.connect()
   await controller.uploadFile(source, '/target.part', () => undefined, { resumeOffset: 7 })
   assert.equal(fake.files.get('/target.part').toString(), 'prefix-and-remainder')
@@ -109,19 +113,24 @@ for (const tlsMode of ['explicit', 'implicit']) {
 }
 
 function createController(fixture, securityMode) {
-  return new LiveFtpSessionController(`ftp-${securityMode}`, {
-    id: `profile-${securityMode}`,
-    type: 'ftp',
-    name: `FTP ${securityMode}`,
-    host: '127.0.0.1',
-    port: fixture.server.port,
-    username: 'test',
-    password: 'test',
-    secure: securityMode !== 'none',
-    securityMode,
-    group: 'test',
-    remotePath: '/'
-  }, undefined, securityMode === 'none' ? undefined : { rejectUnauthorized: false })
+  return new LiveFtpSessionController(
+    `ftp-${securityMode}`,
+    {
+      id: `profile-${securityMode}`,
+      type: 'ftp',
+      name: `FTP ${securityMode}`,
+      host: '127.0.0.1',
+      port: fixture.server.port,
+      username: 'test',
+      password: 'test',
+      secure: securityMode !== 'none',
+      securityMode,
+      group: 'test',
+      remotePath: '/'
+    },
+    undefined,
+    securityMode === 'none' ? undefined : { rejectUnauthorized: false }
+  )
 }
 
 async function createFixture(t, options) {
@@ -164,14 +173,27 @@ async function createFixture(t, options) {
 async function createCertificate(directory) {
   const keyPath = path.join(directory, 'key.pem')
   const certPath = path.join(directory, 'cert.pem')
-  execFileSync('openssl', [
-    'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
-    '-keyout', keyPath,
-    '-out', certPath,
-    '-days', '1',
-    '-subj', '/CN=localhost',
-    '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1'
-  ], { stdio: 'ignore' })
+  execFileSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      keyPath,
+      '-out',
+      certPath,
+      '-days',
+      '1',
+      '-subj',
+      '/CN=localhost',
+      '-addext',
+      'subjectAltName=DNS:localhost,IP:127.0.0.1'
+    ],
+    { stdio: 'ignore' }
+  )
   return {
     key: await readFile(keyPath),
     cert: await readFile(certPath)
@@ -194,9 +216,8 @@ class MiniFtpServer {
       this.sessions.add(session)
       session.start()
     }
-    this.server = this.options.tlsMode === 'implicit'
-      ? createTlsServer(this.options.tls, listener)
-      : createNetServer(listener)
+    this.server =
+      this.options.tlsMode === 'implicit' ? createTlsServer(this.options.tls, listener) : createNetServer(listener)
     await new Promise((resolve, reject) => {
       this.server.once('error', reject)
       this.server.listen(0, '127.0.0.1', resolve)
@@ -313,7 +334,8 @@ class MiniFtpSession {
     }
     if (command === 'USER') return this.reply(331, 'Password required')
     if (command === 'PASS') return this.reply(230, 'Logged in')
-    if (command === 'TYPE' || command === 'STRU' || command === 'OPTS' || command === 'PBSZ') return this.reply(200, 'OK')
+    if (command === 'TYPE' || command === 'STRU' || command === 'OPTS' || command === 'PBSZ')
+      return this.reply(200, 'OK')
     if (command === 'PROT') {
       this.dataProtected = argument.toUpperCase() === 'P'
       return this.reply(200, 'Protection set')
@@ -481,17 +503,27 @@ class FakeBasicFtpClient {
     this.closed = false
   }
   async cd() {}
-  async pwd() { return '/' }
-  close() { this.closed = true }
-  trackProgress(handler) { this.progress = handler }
+  async pwd() {
+    return '/'
+  }
+  close() {
+    this.closed = true
+  }
+  trackProgress(handler) {
+    this.progress = handler
+  }
   async ensureDir() {}
   async size(remotePath) {
     const value = this.files.get(remotePath)
     if (!value) throw new Error('550 File not found')
     return value.length
   }
-  async lastMod() { return new Date(0) }
-  async appendFrom() { throw new Error('502 APPE not implemented') }
+  async lastMod() {
+    return new Date(0)
+  }
+  async appendFrom() {
+    throw new Error('502 APPE not implemented')
+  }
   async send(command) {
     this.commands.push(command)
     this.restOffset = Number(command.split(' ')[1]) || 0
@@ -502,13 +534,17 @@ class FakeBasicFtpClient {
     const localStart = options.localStart ?? 0
     const prefix = this.files.get(remotePath) ?? Buffer.alloc(0)
     const restart = this.restOffset ?? 0
-    this.files.set(remotePath, Buffer.concat([
-      prefix.subarray(0, restart),
-      source.subarray(localStart)
-    ]))
-    this.progress?.({ bytes: source.length - localStart, bytesOverall: source.length - localStart, name: remotePath, type: 'upload' })
+    this.files.set(remotePath, Buffer.concat([prefix.subarray(0, restart), source.subarray(localStart)]))
+    this.progress?.({
+      bytes: source.length - localStart,
+      bytesOverall: source.length - localStart,
+      name: remotePath,
+      type: 'upload'
+    })
     this.restOffset = 0
     return { code: 226, message: 'OK' }
   }
-  async remove(remotePath) { this.files.delete(remotePath) }
+  async remove(remotePath) {
+    this.files.delete(remotePath)
+  }
 }

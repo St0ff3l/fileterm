@@ -18,7 +18,9 @@ export function TabContextMenu({
   canCloseCurrent: boolean
   canCloseOthers: boolean
   isSessionTab: boolean
-  onAction(action: 'copy' | 'clone' | 'connect' | 'connectAll' | 'disconnect' | 'close' | 'closeOthers' | 'closeAll'): void
+  onAction(
+    action: 'copy' | 'clone' | 'connect' | 'connectAll' | 'disconnect' | 'close' | 'closeOthers' | 'closeAll'
+  ): void
   onClose(): void
   position: { x: number; y: number }
   tabStatus: WorkspaceTab['status'] | null

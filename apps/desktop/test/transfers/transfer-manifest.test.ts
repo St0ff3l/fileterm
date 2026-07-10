@@ -9,22 +9,25 @@ import {
 } from '../../src/main/services/transfers/transfer-manifest.ts'
 
 test('directory manifest tracks completed and partial files by byte weight', () => {
-  const initial = createTransferManifest(['/remote/root'], [
-    {
-      relativePath: 'one.bin',
-      sourcePath: '/local/one.bin',
-      destinationPath: '/remote/root/one.bin',
-      partialPath: '/remote/root/one.bin.fileterm-part',
-      sourceIdentity: { size: 100, modifiedAt: 1 }
-    },
-    {
-      relativePath: 'empty.txt',
-      sourcePath: '/local/empty.txt',
-      destinationPath: '/remote/root/empty.txt',
-      partialPath: '/remote/root/empty.txt.fileterm-part',
-      sourceIdentity: { size: 0, modifiedAt: 2 }
-    }
-  ])
+  const initial = createTransferManifest(
+    ['/remote/root'],
+    [
+      {
+        relativePath: 'one.bin',
+        sourcePath: '/local/one.bin',
+        destinationPath: '/remote/root/one.bin',
+        partialPath: '/remote/root/one.bin.fileterm-part',
+        sourceIdentity: { size: 100, modifiedAt: 1 }
+      },
+      {
+        relativePath: 'empty.txt',
+        sourcePath: '/local/empty.txt',
+        destinationPath: '/remote/root/empty.txt',
+        partialPath: '/remote/root/empty.txt.fileterm-part',
+        sourceIdentity: { size: 0, modifiedAt: 2 }
+      }
+    ]
+  )
   const partial = updateTransferManifestEntry(initial, 'one.bin', {
     status: 'running',
     transferredBytes: 50

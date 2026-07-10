@@ -309,11 +309,14 @@
   border: 1px solid var(--border-light);
   background: color-mix(in srgb, var(--bg-main) 90%, transparent);
   position: relative;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
 .file-permission-dialog__matrix-cell span::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 3px;
   border-radius: 999px;
@@ -444,11 +447,13 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-hover) 74%, transparent);
   border: 1px solid var(--border-light);
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .file-permission-dialog__switch-track::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 2px;
   left: 2px;
@@ -457,7 +462,9 @@
   border-radius: 999px;
   background: var(--text-main);
   transform: translateX(0);
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track {
@@ -497,7 +504,7 @@
 }
 
 .file-permission-dialog__apply-option span::before {
-  content: "";
+  content: '';
   width: 14px;
   height: 14px;
   border-radius: 999px;
@@ -702,7 +709,7 @@
 }
 
 .manager-row::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 15%;
@@ -884,7 +891,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-variation-settings: 'wght' 300, 'opsz' 16, 'GRAD' 0, 'FILL' 0;
+  font-variation-settings:
+    'wght' 300,
+    'opsz' 16,
+    'GRAD' 0,
+    'FILL' 0;
 }
 
 /* Settings Modal Styles */
@@ -934,7 +945,11 @@
 
 .settings-modal .connection-manager-sidebar-icon .material-symbols-outlined {
   font-size: 18px;
-  font-variation-settings: 'wght' 300, 'opsz' 18, 'GRAD' 0, 'FILL' 0;
+  font-variation-settings:
+    'wght' 300,
+    'opsz' 18,
+    'GRAD' 0,
+    'FILL' 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1073,7 +1088,7 @@
 }
 
 .theme-card.dark .preview-content::before {
-  content: "";
+  content: '';
   display: block;
   width: 60%;
   height: 6px;
@@ -1082,7 +1097,7 @@
 }
 
 .theme-card.light .preview-content::before {
-  content: "";
+  content: '';
   display: block;
   width: 60%;
   height: 6px;

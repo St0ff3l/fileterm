@@ -1,29 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import type {
-  CommandExecutionOptions,
-  CommandFolder,
-  CommandSendPreferences,
-  CommandTemplate,
-  WorkspaceTab
-} from '@fileterm/core'
+import type { CommandExecutionOptions, CommandFolder, CommandTemplate, WorkspaceTab } from '@fileterm/core'
 import { t } from '../../i18n'
-import { AppIcon } from '../common/AppIcon'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { extractCommandParams, groupCommands, sortByOrder } from './command-utils'
-
-function getCommandSnippet(command: string) {
-  return command
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .join(' ')
-}
-
-function getCommandSummary(template: CommandTemplate) {
-  return template.description?.trim() || getCommandSnippet(template.command) || t.commandNoDescription
-}
 
 export function CommandCenter({
   activeTab,
@@ -33,14 +14,20 @@ export function CommandCenter({
   sendTargets,
   onExecute,
   paneWidth,
-  onPaneWidthChange,
+  onPaneWidthChange
 }: {
   activeTab: WorkspaceTab | null
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
   isBusy: boolean
   sendTargets: SessionSendTarget[]
-  onExecute(commandId: string, args: string[], options: CommandExecutionOptions, scope: SendScope, selectedTabIds: string[]): void
+  onExecute(
+    commandId: string,
+    args: string[],
+    options: CommandExecutionOptions,
+    scope: SendScope,
+    selectedTabIds: string[]
+  ): void
   paneWidth: number
   onPaneWidthChange(width: number): void
 }) {
@@ -58,7 +45,7 @@ export function CommandCenter({
   const [rememberSelection, setRememberSelection] = useState(false)
   const [sendScope, setSendScope] = useState<SendScope>('current')
   const [selectedTabIds, setSelectedTabIds] = useState<string[]>([])
-  
+
   const splitRef = useRef<HTMLDivElement | null>(null)
   const isResizingCommandSplit = useRef(false)
 
@@ -73,14 +60,17 @@ export function CommandCenter({
   }, [activeFolderId, commandTemplates, ungrouped])
 
   const selectedTemplate = useMemo(
-    () => visibleTemplates.find((template) => template.id === selectedCommandId)
-      ?? commandTemplates.find((template) => template.id === selectedCommandId)
-      ?? visibleTemplates[0]
-      ?? null,
+    () =>
+      visibleTemplates.find((template) => template.id === selectedCommandId) ??
+      commandTemplates.find((template) => template.id === selectedCommandId) ??
+      visibleTemplates[0] ??
+      null,
     [commandTemplates, selectedCommandId, visibleTemplates]
   )
   const paramIndexes = selectedTemplate ? extractCommandParams(selectedTemplate.command) : []
-  const canRunCurrent = Boolean(activeTab && selectedTemplate && sendTargets.some((target) => target.tabId === activeTab.id))
+  const canRunCurrent = Boolean(
+    activeTab && selectedTemplate && sendTargets.some((target) => target.tabId === activeTab.id)
+  )
   const canRunAny = Boolean(sendTargets.length && selectedTemplate)
   const canRunSelected = Boolean(
     selectedTemplate && selectedTabIds.some((tabId) => sendTargets.some((target) => target.tabId === tabId))
@@ -144,7 +134,10 @@ export function CommandCenter({
       return
     }
     const args = paramIndexes.map((index) => paramValues[index] ?? '')
-    const rendered = selectedTemplate.command.replace(/\[p#(\d+)\]/g, (_, rawIndex: string) => args[Number(rawIndex) - 1] ?? '')
+    const rendered = selectedTemplate.command.replace(
+      /\[p#(\d+)\]/g,
+      (_, rawIndex: string) => args[Number(rawIndex) - 1] ?? ''
+    )
     setLastRenderedCommand(rendered)
     onExecute(selectedTemplate.id, args, { appendCarriageReturn }, sendScope, selectedTabIds)
   }
@@ -160,11 +153,11 @@ export function CommandCenter({
       const minPreviewWidth = 320
       const maxListWidth = Math.max(minListWidth, rect.width - minPreviewWidth - 6)
       const nextWidth = Math.min(maxListWidth, Math.max(minListWidth, event.clientX - rect.left))
-      
+
       if (dragFrame) {
         window.cancelAnimationFrame(dragFrame)
       }
-      
+
       dragFrame = window.requestAnimationFrame(() => {
         onPaneWidthChange(nextWidth)
       })
@@ -192,17 +185,14 @@ export function CommandCenter({
 
   return (
     <section className="command-center">
-      <div 
-        className="command-center-body" 
+      <div
+        className="command-center-body"
         ref={splitRef}
         style={{ '--list-pane-width': `${paneWidth}px` } as React.CSSProperties}
       >
         <section className="command-pane command-pane-list">
           <div className="command-folder-bar">
-            <div
-              className="command-folder-tabs"
-              onWheel={handleHorizontalWheelScroll}
-            >
+            <div className="command-folder-tabs" onWheel={handleHorizontalWheelScroll}>
               <button
                 className={activeFolderId === 'all' ? 'active' : ''}
                 type="button"
@@ -261,9 +251,7 @@ export function CommandCenter({
                 ))}
               </tbody>
             </table>
-            {!visibleTemplates.length ? (
-              <div className="command-empty-state">{t.commandEmpty}</div>
-            ) : null}
+            {!visibleTemplates.length ? <div className="command-empty-state">{t.commandEmpty}</div> : null}
           </div>
         </section>
 
@@ -291,7 +279,14 @@ export function CommandCenter({
                     <strong>{selectedTemplate.name}</strong>
                     <SessionSendTargetPicker
                       allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
-                      currentLabel={activeTab ? t.commandSendCurrentWithIndex.replace('{index}', String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')) : t.commandSendCurrent}
+                      currentLabel={
+                        activeTab
+                          ? t.commandSendCurrentWithIndex.replace(
+                              '{index}',
+                              String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
+                            )
+                          : t.commandSendCurrent
+                      }
                       onScopeChange={setSendScope}
                       onSelectedTabIdsChange={setSelectedTabIds}
                       scope={sendScope}
@@ -316,7 +311,14 @@ export function CommandCenter({
                       type="button"
                       className="primary-button"
                       onClick={handleRun}
-                      disabled={isBusy || (sendScope === 'current' ? !canRunCurrent : sendScope === 'all-ssh' ? !canRunAny : !canRunSelected)}
+                      disabled={
+                        isBusy ||
+                        (sendScope === 'current'
+                          ? !canRunCurrent
+                          : sendScope === 'all-ssh'
+                            ? !canRunAny
+                            : !canRunSelected)
+                      }
                     >
                       {t.send}
                     </button>
@@ -355,7 +357,6 @@ export function CommandCenter({
                   <span>{t.commandRendered}</span>
                   <code>{lastRenderedCommand || selectedTemplate.command}</code>
                 </div>
-
               </>
             ) : (
               <div className="command-empty-state">{t.commandEmpty}</div>

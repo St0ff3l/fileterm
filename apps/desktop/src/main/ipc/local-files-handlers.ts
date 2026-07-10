@@ -6,9 +6,7 @@ import type { IpcServices } from './types.js'
 export function registerLocalFilesHandlers(services: IpcServices) {
   const { localFilesService } = services
 
-  ipcMain.handle('localFiles:listDirectory', (_, dirPath?: string) =>
-    localFilesService.listDirectory(dirPath)
-  )
+  ipcMain.handle('localFiles:listDirectory', (_, dirPath?: string) => localFilesService.listDirectory(dirPath))
 
   ipcMain.handle('localFiles:readFile', (_, filePath: string, encoding?: string) =>
     localFilesService.readFile(filePath, encoding)
@@ -38,9 +36,7 @@ export function registerLocalFilesHandlers(services: IpcServices) {
     localFilesService.renamePath(targetPath, newName)
   )
 
-  ipcMain.handle('localFiles:deletePath', (_, targetPath: string) =>
-    localFilesService.deletePath(targetPath)
-  )
+  ipcMain.handle('localFiles:deletePath', (_, targetPath: string) => localFilesService.deletePath(targetPath))
 
   ipcMain.handle('localFiles:changePermissions', (_, targetPath: string, options: PermissionChangeOptions) =>
     localFilesService.changePermissions(targetPath, options)
@@ -52,9 +48,7 @@ export function registerLocalFilesHandlers(services: IpcServices) {
       defaultPath,
       properties: ['openFile', 'openDirectory', 'multiSelections', 'createDirectory']
     }
-    const result = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options)
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
     return result.canceled ? [] : result.filePaths
   })
 
@@ -64,9 +58,7 @@ export function registerLocalFilesHandlers(services: IpcServices) {
       defaultPath: defaultPath || app.getPath('downloads'),
       properties: ['openDirectory', 'createDirectory']
     }
-    const result = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options)
-    return result.canceled ? null : result.filePaths[0] ?? null
+    const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+    return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 }

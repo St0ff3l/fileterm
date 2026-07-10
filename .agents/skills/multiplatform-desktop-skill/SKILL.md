@@ -125,7 +125,7 @@ compatibility:
    - 离线打包
    - 公司网络限制
    - 中国大陆网络环境
-   这些情况下都可能回退到 fallback 字体
+     这些情况下都可能回退到 fallback 字体
 3. 品牌一致性如果是硬要求，不能只靠 Google Fonts
    - 需要把字体文件随应用打包
    - 或至少准备本地 `@font-face`

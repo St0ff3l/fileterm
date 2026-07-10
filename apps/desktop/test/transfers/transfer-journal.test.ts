@@ -38,16 +38,18 @@ test('TransferJournal restores active resumable tasks as manually paused', async
       manifest: {
         version: 1,
         directories: ['/local/folder'],
-        files: [{
-          relativePath: 'one.txt',
-          sourcePath: '/remote/folder/one.txt',
-          destinationPath: '/local/folder/one.txt',
-          partialPath: '/local/folder/one.txt.fileterm-part',
-          stagingPath: '/tmp/fileterm-root-upload-folder-checkpoint.part',
-          sourceIdentity: { size: 10 },
-          status: 'running',
-          transferredBytes: 4
-        }]
+        files: [
+          {
+            relativePath: 'one.txt',
+            sourcePath: '/remote/folder/one.txt',
+            destinationPath: '/local/folder/one.txt',
+            partialPath: '/local/folder/one.txt.fileterm-part',
+            stagingPath: '/tmp/fileterm-root-upload-folder-checkpoint.part',
+            sourceIdentity: { size: 10 },
+            status: 'running',
+            transferredBytes: 4
+          }
+        ]
       },
       resumable: true
     }
@@ -65,10 +67,7 @@ test('TransferJournal restores active resumable tasks as manually paused', async
     assert.equal(restored[1]?.status, 'paused')
     assert.equal(restored[1]?.resumable, true)
     assert.equal(restored[1]?.manifest?.files[0]?.status, 'pending')
-    assert.equal(
-      restored[1]?.manifest?.files[0]?.stagingPath,
-      '/tmp/fileterm-root-upload-folder-checkpoint.part'
-    )
+    assert.equal(restored[1]?.manifest?.files[0]?.stagingPath, '/tmp/fileterm-root-upload-folder-checkpoint.part')
     assert.equal(restored[2]?.status, 'paused')
   } finally {
     await rm(directory, { recursive: true, force: true })

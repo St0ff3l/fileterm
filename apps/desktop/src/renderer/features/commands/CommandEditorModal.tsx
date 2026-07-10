@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@fileterm/core'
 import { t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from './command-utils'
@@ -25,15 +25,7 @@ export function toCommandTemplateInput(command: CommandTemplate): CommandTemplat
   }
 }
 
-function CommandDialogShell({
-  title,
-  onClose,
-  children
-}: {
-  title: string
-  onClose(): void
-  children: ReactNode
-}) {
+function CommandDialogShell({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
   const dialog = (
     <div className="modal-card command-dialog command-editor-page" onClick={(event) => event.stopPropagation()}>
       <div className="connection-manager-header">
@@ -45,9 +37,7 @@ function CommandDialogShell({
           <CloseButton onClick={onClose} />
         </div>
       </div>
-      <div className="command-dialog-body scrollbar-scroll">
-        {children}
-      </div>
+      <div className="command-dialog-body scrollbar-scroll">{children}</div>
     </div>
   )
 
@@ -140,10 +130,14 @@ export function CommandEditorModal({
             >
               <option value="">{t.commandUncategorized}</option>
               {orderedFolders.map((folder) => (
-                <option key={folder.id} value={folder.id}>{folder.name}</option>
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
               ))}
             </select>
-            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">expand_more</span>
+            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
+              expand_more
+            </span>
           </span>
         </label>
       </div>
@@ -164,7 +158,11 @@ export function CommandEditorModal({
           <div className="command-line-numbers" ref={lineNumRef} aria-hidden="true">
             {Array.from(
               { length: Math.max(form.command.split('\n').length, COMMAND_EDITOR_MIN_LINE_COUNT) },
-              (_, i) => <div key={i} className="command-line-number">{i + 1}</div>
+              (_, i) => (
+                <div key={i} className="command-line-number">
+                  {i + 1}
+                </div>
+              )
             )}
           </div>
           <textarea
@@ -232,12 +230,14 @@ export function CommandEditorModal({
             </div>
           </div>
           <div className="command-form-standalone-body">
-            <div className="command-form-standalone-page scrollbar-scroll">
-              {editorFields}
-            </div>
+            <div className="command-form-standalone-page scrollbar-scroll">{editorFields}</div>
             <div className="form-actions command-dialog-actions">
-              <button className="flat-button" type="button" onClick={onClose}>{t.cancel}</button>
-              <button className="primary-button" type="button" onClick={submitForm}>{t.save}</button>
+              <button className="flat-button" type="button" onClick={onClose}>
+                {t.cancel}
+              </button>
+              <button className="primary-button" type="button" onClick={submitForm}>
+                {t.save}
+              </button>
             </div>
           </div>
         </div>
@@ -250,8 +250,12 @@ export function CommandEditorModal({
       <div className="command-editor-dialog-form">
         {editorFields}
         <div className="form-actions command-dialog-actions">
-          <button className="flat-button" type="button" onClick={onClose}>{t.cancel}</button>
-          <button className="primary-button" type="button" onClick={submitForm}>{t.save}</button>
+          <button className="flat-button" type="button" onClick={onClose}>
+            {t.cancel}
+          </button>
+          <button className="primary-button" type="button" onClick={submitForm}>
+            {t.save}
+          </button>
         </div>
       </div>
     </CommandDialogShell>

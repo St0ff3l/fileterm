@@ -5,63 +5,152 @@ import type { AppIconName } from '../common/AppIcon'
 type FileRow = Pick<LocalFileItem | RemoteFileItem, 'name' | 'type'>
 
 const archiveExtensions = new Set([
-  '7z', 'bz2', 'cab', 'gz', 'iso', 'lz', 'lz4', 'rar', 'tar', 'tgz', 'txz', 'xz', 'zip', 'zst'
+  '7z',
+  'bz2',
+  'cab',
+  'gz',
+  'iso',
+  'lz',
+  'lz4',
+  'rar',
+  'tar',
+  'tgz',
+  'txz',
+  'xz',
+  'zip',
+  'zst'
 ])
 
 const videoExtensions = new Set([
-  'avi', 'flv', 'm4v', 'mkv', 'mov', 'mp4', 'mpeg', 'mpg', 'rm', 'rmvb', 'ts', 'webm', 'wmv'
+  'avi',
+  'flv',
+  'm4v',
+  'mkv',
+  'mov',
+  'mp4',
+  'mpeg',
+  'mpg',
+  'rm',
+  'rmvb',
+  'ts',
+  'webm',
+  'wmv'
 ])
 
 const audioExtensions = new Set([
-  'aac', 'aiff', 'alac', 'amr', 'ape', 'flac', 'm4a', 'mid', 'midi', 'mp3', 'ogg', 'opus', 'wav', 'wma'
+  'aac',
+  'aiff',
+  'alac',
+  'amr',
+  'ape',
+  'flac',
+  'm4a',
+  'mid',
+  'midi',
+  'mp3',
+  'ogg',
+  'opus',
+  'wav',
+  'wma'
 ])
 
 const imageExtensions = new Set([
-  'avif', 'bmp', 'gif', 'heic', 'ico', 'jpeg', 'jpg', 'png', 'psd', 'svg', 'tif', 'tiff', 'webp'
+  'avif',
+  'bmp',
+  'gif',
+  'heic',
+  'ico',
+  'jpeg',
+  'jpg',
+  'png',
+  'psd',
+  'svg',
+  'tif',
+  'tiff',
+  'webp'
 ])
 
 const documentExtensions = new Set([
-  'azw', 'azw3', 'doc', 'docm', 'docx', 'epub', 'md', 'mdx', 'mobi', 'odt', 'pages', 'pdf', 'rtf', 'txt'
+  'azw',
+  'azw3',
+  'doc',
+  'docm',
+  'docx',
+  'epub',
+  'md',
+  'mdx',
+  'mobi',
+  'odt',
+  'pages',
+  'pdf',
+  'rtf',
+  'txt'
 ])
 
-const spreadsheetExtensions = new Set([
-  'csv', 'numbers', 'ods', 'tsv', 'xls', 'xlsb', 'xlsm', 'xlsx'
-])
+const spreadsheetExtensions = new Set(['csv', 'numbers', 'ods', 'tsv', 'xls', 'xlsb', 'xlsm', 'xlsx'])
 
-const presentationExtensions = new Set([
-  'key', 'odp', 'potx', 'pps', 'ppsx', 'ppt', 'pptm', 'pptx'
-])
+const presentationExtensions = new Set(['key', 'odp', 'potx', 'pps', 'ppsx', 'ppt', 'pptm', 'pptx'])
 
 const codeExtensions = new Set([
-  'c', 'cc', 'cpp', 'cs', 'css', 'go', 'h', 'hpp', 'htm', 'html',
-  'java', 'js', 'json', 'jsx', 'kt', 'less', 'log', 'lua', 'mjs', 'php', 'pl', 'py', 'rb', 'rs',
-  'sass', 'scss', 'sql', 'swift', 'ts', 'tsx', 'vue', 'xml'
+  'c',
+  'cc',
+  'cpp',
+  'cs',
+  'css',
+  'go',
+  'h',
+  'hpp',
+  'htm',
+  'html',
+  'java',
+  'js',
+  'json',
+  'jsx',
+  'kt',
+  'less',
+  'log',
+  'lua',
+  'mjs',
+  'php',
+  'pl',
+  'py',
+  'rb',
+  'rs',
+  'sass',
+  'scss',
+  'sql',
+  'swift',
+  'ts',
+  'tsx',
+  'vue',
+  'xml'
 ])
 
 const configExtensions = new Set([
-  'cfg', 'conf', 'editorconfig', 'env', 'gitattributes', 'gitignore', 'ini', 'lock', 'npmrc',
-  'properties', 'toml', 'yaml', 'yml'
+  'cfg',
+  'conf',
+  'editorconfig',
+  'env',
+  'gitattributes',
+  'gitignore',
+  'ini',
+  'lock',
+  'npmrc',
+  'properties',
+  'toml',
+  'yaml',
+  'yml'
 ])
 
-const databaseExtensions = new Set([
-  'accdb', 'db', 'db3', 'mdb', 'sqlite', 'sqlite3'
-])
+const databaseExtensions = new Set(['accdb', 'db', 'db3', 'mdb', 'sqlite', 'sqlite3'])
 
-const fontExtensions = new Set([
-  'eot', 'otf', 'ttc', 'ttf', 'woff', 'woff2'
-])
+const fontExtensions = new Set(['eot', 'otf', 'ttc', 'ttf', 'woff', 'woff2'])
 
-const packageExtensions = new Set([
-  'apk', 'app', 'deb', 'dmg', 'msi', 'pkg'
-])
+const packageExtensions = new Set(['apk', 'app', 'deb', 'dmg', 'msi', 'pkg'])
 
-const scriptExtensions = new Set([
-  'bash', 'bat', 'cmd', 'command', 'fish', 'ps1', 'sh', 'zsh'
-])
+const scriptExtensions = new Set(['bash', 'bat', 'cmd', 'command', 'fish', 'ps1', 'sh', 'zsh'])
 
-const executableExtensions = new Set([
-  'bin', 'com', 'exe', 'run', 'scr', 'wasm'
-])
+const executableExtensions = new Set(['bin', 'com', 'exe', 'run', 'scr', 'wasm'])
 
 const compoundExtensions = ['tar.gz', 'tar.xz', 'tar.bz2', 'tar.zst']
 const codeFileNames = new Set(['cmakelists.txt', 'dockerfile', 'jenkinsfile', 'makefile', 'rakefile'])
@@ -79,7 +168,7 @@ function getNormalizedExtension(fileName: string) {
   }
 
   const segments = lowerName.split('.')
-  return segments.length > 1 ? segments.at(-1) ?? '' : ''
+  return segments.length > 1 ? (segments.at(-1) ?? '') : ''
 }
 
 function getFileKindCategory(fileName: string, extension: string) {

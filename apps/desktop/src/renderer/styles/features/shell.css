@@ -57,7 +57,13 @@
 }
 
 .window-brandmark strong {
-  font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    'Outfit',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.015em;
@@ -137,7 +143,7 @@
 }
 
 .sidebar-resizer::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   bottom: 0;
@@ -191,7 +197,11 @@
   background: color-mix(in srgb, var(--bg-sidebar, transparent) 82%, transparent);
   backdrop-filter: blur(10px);
   box-shadow: var(--system-sidebar-toggle-shadow);
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
 }
 
 .system-sidebar-toggle:hover {
@@ -209,8 +219,6 @@
   width: 14px;
   height: 14px;
 }
-
-
 
 .sync-row,
 .address-row,
@@ -298,7 +306,7 @@
 }
 
 .memory-details strong {
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -329,7 +337,7 @@
 }
 
 .metric-chip strong {
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -365,7 +373,7 @@
   font-size: 13px;
 }
 
-.meter-row>* {
+.meter-row > * {
   min-width: 0;
 }
 
@@ -427,7 +435,10 @@
   text-align: center;
   cursor: pointer;
   opacity: 0.9;
-  transition: background 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
 }
 
 .mini-tabs span:hover {
@@ -621,8 +632,6 @@
   align-items: center;
 }
 
-
-
 .fs-main {
   grid-column: 2;
   grid-row: 2;
@@ -677,7 +686,7 @@
 }
 
 .fs-tabbar::after {
-  content: "";
+  content: '';
   position: absolute;
   right: 0;
   bottom: 0;
@@ -710,7 +719,13 @@
 
 .titlebar-brand strong {
   overflow: hidden;
-  font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    'Outfit',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.015em;
@@ -741,7 +756,13 @@
 }
 
 .titlebar-home-brand strong {
-  font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    'Outfit',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.015em;
@@ -749,7 +770,7 @@
 }
 
 .titlebar-home-brand span {
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 500;
   opacity: 0.68;
@@ -889,7 +910,11 @@
 
 .window-tools button .material-symbols-outlined {
   font-size: 16px;
-  font-variation-settings: 'wght' 300, 'opsz' 16, 'GRAD' 0, 'FILL' 0;
+  font-variation-settings:
+    'wght' 300,
+    'opsz' 16,
+    'GRAD' 0,
+    'FILL' 0;
 }
 
 .status-message {
@@ -929,7 +954,7 @@
   flex: 1;
 }
 
-.workspace-stage>* {
+.workspace-stage > * {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -954,8 +979,12 @@
 }
 
 @keyframes workspace-stage-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

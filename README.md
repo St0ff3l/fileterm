@@ -40,8 +40,8 @@
 
 ### 技术栈
 
-| Desktop | Renderer | Language | Terminal | Editor | Protocols | Tooling |
-| --- | --- | --- | --- | --- | --- | --- |
+| Desktop                                                                                                                      | Renderer                                                                                                                                                                                                                            | Language                                                                                                                          | Terminal                                                                                    | Editor                                                                                                                                        | Protocols                                                                                                                                                                          | Tooling                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /> | <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React" /> <img src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /> | <img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /> | <img src="https://img.shields.io/badge/xterm.js-111827?style=flat-square" alt="xterm.js" /> | <img src="https://img.shields.io/badge/Monaco%20Editor-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="Monaco Editor" /> | <img src="https://img.shields.io/badge/ssh2-0F766E?style=flat-square" alt="ssh2" /> <img src="https://img.shields.io/badge/basic--ftp-2563EB?style=flat-square" alt="basic-ftp" /> | <img src="https://img.shields.io/badge/npm%20workspaces-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm workspaces" /> |
 
 ```txt
@@ -66,26 +66,26 @@ theme system   ████████████████░░░░  tok
 
 ### 核心能力
 
-| 能力 | 状态 | 说明 |
-| --- | --- | --- |
-| SSH profile 管理 | 已完成 | 新增、编辑、删除、文件夹分组、JSON 文件持久化、group/parentId 双向同步 |
-| FTP/FTPS profile 管理 | 已完成 | 独立于 SSH 的 FTP/FTPS 连接模型 |
-| SSH shell | 已完成 | xterm.js 渲染、输入输出、自适应 resize、搜索、剪贴板互通、雾透悬浮命令输入条 |
-| 文件编辑器 | 已完成 | Monaco Editor 提供双栏文件树/编辑区、语法高亮、查找替换、编码与语言切换 |
-| SFTP 文件管理 | 已完成 | 远程目录浏览、读/写/新建/删除/重命名/权限修改 |
-| FTP/FTPS 文件管理 | 已完成 | FTP/FTPS 会话安全传输与远程文件能力 |
-| 终端目录跟随 (CWD) | 已完成 | SSH 终端与文件管理器当前工作目录自动双向同步跟随 |
-| Sudo 与 Root 权限同步 | 已完成 | 终端执行 sudo/su 时自动感知并双向同步更新文件管理器为 Root 对应读写权限 |
-| 虚拟滚动文件列表 | 已完成 | 引入虚拟列表（Virtual List）高效率渲染，万级文件目录浏览极速不卡顿 |
-| Transfer center | 已完成 | 支持断点续传（SFTP/FTP/FTPS）、上传下载任务队列、进度、速度、取消、文件/文件夹递归 |
-| Workspace tabs | 已完成 | 多标签并行连接、断开/重连、session 状态持久化、标签切换动效 |
-| Theme system | 已完成 | tokens → CSS vars → skin，深色/浅色主题一键切换，焦点模式适配 |
-| 远程连接状态 | 已完成 | 连接状态提示、系统资源监控面板、侧栏收起态资源摘要 |
-| 命令模板 | 已完成 | 快捷命令模板（支持命令编辑行号）、文件夹分组、参数占位符、一键发送 |
-| 桌面壳与布局 | 已完成 | 左侧边栏宽度支持鼠标拖拽拉伸、macOS 标题栏避让、侧栏收起、文件面板抽屉、工作区焦点模式、macOS template 托盘图标 |
-| 工作区侧边栏 | 已完成 | 概览 → 连接管理器 → 命令管理器 → 设置四页导航（支持自定义按钮动作） |
-| 离线化适配 | 已完成 | 全局图标与字体资源本地离线化部署，优化 macOS 钥匙串存储策略规避重复系统弹窗，适配内网气泡开发环境 |
-| 窗口管理 | 已完成 | 主窗口、连接管理器、命令管理器、文件编辑器独立窗口 |
+| 能力                  | 状态   | 说明                                                                                                            |
+| --------------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
+| SSH profile 管理      | 已完成 | 新增、编辑、删除、文件夹分组、JSON 文件持久化、group/parentId 双向同步                                          |
+| FTP/FTPS profile 管理 | 已完成 | 独立于 SSH 的 FTP/FTPS 连接模型                                                                                 |
+| SSH shell             | 已完成 | xterm.js 渲染、输入输出、自适应 resize、搜索、剪贴板互通、雾透悬浮命令输入条                                    |
+| 文件编辑器            | 已完成 | Monaco Editor 提供双栏文件树/编辑区、语法高亮、查找替换、编码与语言切换                                         |
+| SFTP 文件管理         | 已完成 | 远程目录浏览、读/写/新建/删除/重命名/权限修改                                                                   |
+| FTP/FTPS 文件管理     | 已完成 | FTP/FTPS 会话安全传输与远程文件能力                                                                             |
+| 终端目录跟随 (CWD)    | 已完成 | SSH 终端与文件管理器当前工作目录自动双向同步跟随                                                                |
+| Sudo 与 Root 权限同步 | 已完成 | 终端执行 sudo/su 时自动感知并双向同步更新文件管理器为 Root 对应读写权限                                         |
+| 虚拟滚动文件列表      | 已完成 | 引入虚拟列表（Virtual List）高效率渲染，万级文件目录浏览极速不卡顿                                              |
+| Transfer center       | 已完成 | 支持断点续传（SFTP/FTP/FTPS）、上传下载任务队列、进度、速度、取消、文件/文件夹递归                              |
+| Workspace tabs        | 已完成 | 多标签并行连接、断开/重连、session 状态持久化、标签切换动效                                                     |
+| Theme system          | 已完成 | tokens → CSS vars → skin，深色/浅色主题一键切换，焦点模式适配                                                   |
+| 远程连接状态          | 已完成 | 连接状态提示、系统资源监控面板、侧栏收起态资源摘要                                                              |
+| 命令模板              | 已完成 | 快捷命令模板（支持命令编辑行号）、文件夹分组、参数占位符、一键发送                                              |
+| 桌面壳与布局          | 已完成 | 左侧边栏宽度支持鼠标拖拽拉伸、macOS 标题栏避让、侧栏收起、文件面板抽屉、工作区焦点模式、macOS template 托盘图标 |
+| 工作区侧边栏          | 已完成 | 概览 → 连接管理器 → 命令管理器 → 设置四页导航（支持自定义按钮动作）                                             |
+| 离线化适配            | 已完成 | 全局图标与字体资源本地离线化部署，优化 macOS 钥匙串存储策略规避重复系统弹窗，适配内网气泡开发环境               |
+| 窗口管理              | 已完成 | 主窗口、连接管理器、命令管理器、文件编辑器独立窗口                                                              |
 
 ### 外部开源项目
 
@@ -224,8 +224,8 @@ fileterm/
 
 ### Tech Stack
 
-| Desktop | Renderer | Language | Terminal | Editor | Protocols | Tooling |
-| --- | --- | --- | --- | --- | --- | --- |
+| Desktop                                                                                                                      | Renderer                                                                                                                                                                                                                            | Language                                                                                                                          | Terminal                                                                                    | Editor                                                                                                                                        | Protocols                                                                                                                                                                          | Tooling                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /> | <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React" /> <img src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /> | <img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /> | <img src="https://img.shields.io/badge/xterm.js-111827?style=flat-square" alt="xterm.js" /> | <img src="https://img.shields.io/badge/Monaco%20Editor-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="Monaco Editor" /> | <img src="https://img.shields.io/badge/ssh2-0F766E?style=flat-square" alt="ssh2" /> <img src="https://img.shields.io/badge/basic--ftp-2563EB?style=flat-square" alt="basic-ftp" /> | <img src="https://img.shields.io/badge/npm%20workspaces-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm workspaces" /> |
 
 ```txt
@@ -250,26 +250,26 @@ The goal of the initial version is not to support every possible protocol, but r
 
 ### Core Capabilities
 
-| Capability | Status | Description |
-| --- | --- | --- |
-| SSH Profile Management | Completed | Create, edit, delete connection profiles, group profiles into folders, persist using JSON files, and synchronize `group` name and `parentId` bidirectionally |
-| FTP/FTPS Profile Management | Completed | Separate FTP/FTPS connection model independent of SSH profiles |
-| SSH Shell | Completed | Powered by xterm.js, input/output handling, adaptive resizing, text search, clipboard sync, and floating frosted command bar |
-| File Editor | Completed | Powered by Monaco Editor, dual-pane layout (file tree & edit area), syntax highlighting, search/replace, encoding, and language selection |
-| SFTP File Explorer | Completed | Directory navigation, read/write actions, create/delete files/folders, rename, and permissions modification (chmod) |
-| FTP/FTPS File Explorer | Completed | Clean FTP/FTPS session management, secure transfers, and remote file actions |
-| Transfer Center | Completed | Resumable transfers (SFTP/FTP/FTPS), upload/download queue, progress updates, speed rates, task cancellation, and recursive directory handling |
-| Terminal CWD Sync | Completed | Active SSH terminal current working directory automatically syncs bidirectionally with the file explorer view |
-| Sudo & Root Sync | Completed | Detects sudo/su actions inside terminal and updates file manager credentials for root file read/write operations |
-| Virtualized File List | Completed | Uses virtualized list (virtual scrolling) for high-performance rendering of directories containing tens of thousands of files |
-| Workspace Tabs | Completed | Multi-tab parallel connections, disconnect/reconnect, session persistence, and smooth tab transition animations |
-| Theme System | Completed | tokens → CSS variables → components skins, one-click dark/light mode toggle, and focus mode adaptation |
-| Connection Status Panel | Completed | Active connection health indicator, system resource usage graphs, and sidebar collapsed metadata overview |
-| Command Templates | Completed | Quick snippets (with editor line numbers), folder nesting, parameter placeholders, and single-click terminal dispatching |
-| Desktop Shell & Layout | Completed | Mouse resizable left sidebar, macOS native title bar spacing, collapsible sidebars, file drawer panel, focus mode toggle, and macOS template tray icon |
-| Workspace Sidebar | Completed | Overview → Connection Manager → Command Manager → Settings navigation (supports custom actions) |
-| Air-Gapped Compliance | Completed | Fully offlined icon/font assets, optimized macOS Keychain credentials storage logic to eliminate security dialogs, ideal for secure intranet developer environments |
-| Window Manager | Completed | Independent windows for main app, connection manager, command manager, and file editor |
+| Capability                  | Status    | Description                                                                                                                                                         |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSH Profile Management      | Completed | Create, edit, delete connection profiles, group profiles into folders, persist using JSON files, and synchronize `group` name and `parentId` bidirectionally        |
+| FTP/FTPS Profile Management | Completed | Separate FTP/FTPS connection model independent of SSH profiles                                                                                                      |
+| SSH Shell                   | Completed | Powered by xterm.js, input/output handling, adaptive resizing, text search, clipboard sync, and floating frosted command bar                                        |
+| File Editor                 | Completed | Powered by Monaco Editor, dual-pane layout (file tree & edit area), syntax highlighting, search/replace, encoding, and language selection                           |
+| SFTP File Explorer          | Completed | Directory navigation, read/write actions, create/delete files/folders, rename, and permissions modification (chmod)                                                 |
+| FTP/FTPS File Explorer      | Completed | Clean FTP/FTPS session management, secure transfers, and remote file actions                                                                                        |
+| Transfer Center             | Completed | Resumable transfers (SFTP/FTP/FTPS), upload/download queue, progress updates, speed rates, task cancellation, and recursive directory handling                      |
+| Terminal CWD Sync           | Completed | Active SSH terminal current working directory automatically syncs bidirectionally with the file explorer view                                                       |
+| Sudo & Root Sync            | Completed | Detects sudo/su actions inside terminal and updates file manager credentials for root file read/write operations                                                    |
+| Virtualized File List       | Completed | Uses virtualized list (virtual scrolling) for high-performance rendering of directories containing tens of thousands of files                                       |
+| Workspace Tabs              | Completed | Multi-tab parallel connections, disconnect/reconnect, session persistence, and smooth tab transition animations                                                     |
+| Theme System                | Completed | tokens → CSS variables → components skins, one-click dark/light mode toggle, and focus mode adaptation                                                              |
+| Connection Status Panel     | Completed | Active connection health indicator, system resource usage graphs, and sidebar collapsed metadata overview                                                           |
+| Command Templates           | Completed | Quick snippets (with editor line numbers), folder nesting, parameter placeholders, and single-click terminal dispatching                                            |
+| Desktop Shell & Layout      | Completed | Mouse resizable left sidebar, macOS native title bar spacing, collapsible sidebars, file drawer panel, focus mode toggle, and macOS template tray icon              |
+| Workspace Sidebar           | Completed | Overview → Connection Manager → Command Manager → Settings navigation (supports custom actions)                                                                     |
+| Air-Gapped Compliance       | Completed | Fully offlined icon/font assets, optimized macOS Keychain credentials storage logic to eliminate security dialogs, ideal for secure intranet developer environments |
+| Window Manager              | Completed | Independent windows for main app, connection manager, command manager, and file editor                                                                              |
 
 ### External Open Source Projects
 

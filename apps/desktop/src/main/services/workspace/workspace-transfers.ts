@@ -34,11 +34,9 @@ export class WorkspaceTransfersState {
     details?: Partial<Omit<TransferTask, 'id' | 'direction' | 'name' | 'progress' | 'status'>>
   ) {
     const now = Date.now()
-    const queuedIndex = this.transfers.findIndex((transfer) => (
-      transfer.direction === direction
-      && transfer.name === name
-      && transfer.status === 'queued'
-    ))
+    const queuedIndex = this.transfers.findIndex(
+      (transfer) => transfer.direction === direction && transfer.name === name && transfer.status === 'queued'
+    )
     if (queuedIndex !== -1) {
       const queuedTransfer = this.transfers[queuedIndex]
       this.transfers[queuedIndex] = {
@@ -71,10 +69,7 @@ export class WorkspaceTransfersState {
     return transferId
   }
 
-  update(
-    transferId: string,
-    patch: Partial<Omit<TransferTask, 'id' | 'direction' | 'name'>>
-  ) {
+  update(transferId: string, patch: Partial<Omit<TransferTask, 'id' | 'direction' | 'name'>>) {
     const index = this.transfers.findIndex((transfer) => transfer.id === transferId)
     if (index === -1) {
       return false
@@ -82,16 +77,14 @@ export class WorkspaceTransfersState {
 
     const current = this.transfers[index]
     if (
-      (current.status === 'done' || current.status === 'canceled')
-      && patch.status
-      && patch.status !== current.status
+      (current.status === 'done' || current.status === 'canceled') &&
+      patch.status &&
+      patch.status !== current.status
     ) {
       return false
     }
 
-    const hasChanges = Object.entries(patch).some(([key, value]) => (
-      current[key as keyof TransferTask] !== value
-    ))
+    const hasChanges = Object.entries(patch).some(([key, value]) => current[key as keyof TransferTask] !== value)
     if (!hasChanges) {
       return false
     }

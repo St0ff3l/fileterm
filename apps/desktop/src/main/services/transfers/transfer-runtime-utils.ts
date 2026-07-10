@@ -6,17 +6,11 @@ export function rootUploadStagingPath() {
 }
 
 export function withRootUploadStagingPaths(transfer: TransferTask): TransferTask {
-  if (
-    transfer.direction !== 'upload'
-    || transfer.fileAccessMode !== 'root'
-    || !transfer.profileId
-  ) {
+  if (transfer.direction !== 'upload' || transfer.fileAccessMode !== 'root' || !transfer.profileId) {
     return transfer
   }
 
-  const stagingPath = transfer.partialPath
-    ? transfer.stagingPath ?? rootUploadStagingPath()
-    : transfer.stagingPath
+  const stagingPath = transfer.partialPath ? (transfer.stagingPath ?? rootUploadStagingPath()) : transfer.stagingPath
   let manifest = transfer.manifest
   if (transfer.manifest) {
     let manifestChanged = false
@@ -69,9 +63,10 @@ export function createTransferSpeedTracker() {
     }
 
     const instantBytesPerSecond = deltaBytes / (deltaMs / 1000)
-    smoothedBytesPerSecond = smoothedBytesPerSecond === undefined
-      ? instantBytesPerSecond
-      : (smoothedBytesPerSecond * (1 - smoothingFactor)) + (instantBytesPerSecond * smoothingFactor)
+    smoothedBytesPerSecond =
+      smoothedBytesPerSecond === undefined
+        ? instantBytesPerSecond
+        : smoothedBytesPerSecond * (1 - smoothingFactor) + instantBytesPerSecond * smoothingFactor
 
     lastSpeed = formatTransferSpeed(smoothedBytesPerSecond)
     sampleStartBytes = progress.transferredBytes
@@ -108,9 +103,12 @@ export function directoryProgressPercent(
       return sum + weight
     }
     if (entry.relativePath === relativePath) {
-      const currentWeight = entry.sourceIdentity.size === 0
-        ? currentTransferredBytes > 0 ? 1 : 0
-        : Math.min(weight, Math.max(0, currentTransferredBytes))
+      const currentWeight =
+        entry.sourceIdentity.size === 0
+          ? currentTransferredBytes > 0
+            ? 1
+            : 0
+          : Math.min(weight, Math.max(0, currentTransferredBytes))
       return sum + currentWeight
     }
     return sum

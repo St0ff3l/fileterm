@@ -1,11 +1,11 @@
-import type {
-  RawNetworkInterfaceMetrics,
-  RemoteSystemPlatform,
-  SystemMetrics
-} from '@fileterm/core'
+import type { RawNetworkInterfaceMetrics, RemoteSystemPlatform, SystemMetrics } from '@fileterm/core'
 
 export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPlatform = 'unknown'): SystemMetrics {
-  const readLine = (key: string) => raw.split('\n').find((line) => line.startsWith(key))?.slice(key.length) ?? ''
+  const readLine = (key: string) =>
+    raw
+      .split('\n')
+      .find((line) => line.startsWith(key))
+      ?.slice(key.length) ?? ''
   const readBlock = (start: string, end: string) => {
     const startIndex = raw.indexOf(start)
     const endIndex = raw.indexOf(end)
@@ -21,62 +21,63 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
 
   const platform = normalizePlatform(readLine('__PLATFORM__'), fallbackPlatform)
   const [memUsed, memTotal, memPercent, memApp, memCache, memKernel] = readLine('__MEM__').split('|')
-  const [
-    memUsedBytes,
-    memTotalBytes,
-    memAvailableBytes,
-    memRawPercent,
-    memAppBytes,
-    memCacheBytes,
-    memKernelBytes
-  ] = readLine('__MEM_BYTES__').split('|')
+  const [memUsedBytes, memTotalBytes, memAvailableBytes, memRawPercent, memAppBytes, memCacheBytes, memKernelBytes] =
+    readLine('__MEM_BYTES__').split('|')
   const [swapUsed, swapTotal, swapPercent] = readLine('__SWAP__').split('|')
   const [swapUsedBytes, swapTotalBytes, swapAvailableBytes, swapRawPercent] = readLine('__SWAP_BYTES__').split('|')
-  const [cpuUser, cpuSystem, cpuNice, cpuIdle, cpuIoWait, cpuIrq, cpuSoftIrq, cpuSteal] = readLine('__CPU_USAGE__').split('|')
+  const [cpuUser, cpuSystem, cpuNice, cpuIdle, cpuIoWait, cpuIrq, cpuSoftIrq, cpuSteal] =
+    readLine('__CPU_USAGE__').split('|')
   const [rxRate, txRate] = readLine('__RATES__').split('|')
   const interfaces = readLine('__IFACES__').split(',').filter(Boolean)
   const networkRawByInterface: Record<string, RawNetworkInterfaceMetrics> = {}
-  const networkInterfaceRows = readBlock('__IFACE_RATES_START__', '__IFACE_RATES_END__').map((line) => {
-    const [name, rxTotal, txTotal, rx, tx] = line.split('|')
-    const rxBytes = Number(rxTotal) || 0
-    const txBytes = Number(txTotal) || 0
-    const rxBytesPerSecond = Number(rx) || 0
-    const txBytesPerSecond = Number(tx) || 0
-    if (name) {
-      networkRawByInterface[name] = {
-        name,
-        rxBytes,
-        txBytes,
-        rxBytesPerSecond,
-        txBytesPerSecond
+  const networkInterfaceRows = readBlock('__IFACE_RATES_START__', '__IFACE_RATES_END__')
+    .map((line) => {
+      const [name, rxTotal, txTotal, rx, tx] = line.split('|')
+      const rxBytes = Number(rxTotal) || 0
+      const txBytes = Number(txTotal) || 0
+      const rxBytesPerSecond = Number(rx) || 0
+      const txBytesPerSecond = Number(tx) || 0
+      if (name) {
+        networkRawByInterface[name] = {
+          name,
+          rxBytes,
+          txBytes,
+          rxBytesPerSecond,
+          txBytesPerSecond
+        }
       }
-    }
-    return {
-      name,
-      txTotal: formatNetworkBytes(txBytes),
-      rxTotal: formatNetworkBytes(rxBytes),
-      txRate: formatRate(txBytesPerSecond),
-      rxRate: formatRate(rxBytesPerSecond)
-    }
-  }).filter((row) => row.name)
-  const networkRatesByInterface = networkInterfaceRows.reduce<Record<string, { rx: string; tx: string }>>((acc, row) => {
-    const { name, rxRate: rowRxRate, txRate: rowTxRate } = row
-    if (!name) {
+      return {
+        name,
+        txTotal: formatNetworkBytes(txBytes),
+        rxTotal: formatNetworkBytes(rxBytes),
+        txRate: formatRate(txBytesPerSecond),
+        rxRate: formatRate(rxBytesPerSecond)
+      }
+    })
+    .filter((row) => row.name)
+  const networkRatesByInterface = networkInterfaceRows.reduce<Record<string, { rx: string; tx: string }>>(
+    (acc, row) => {
+      const { name, rxRate: rowRxRate, txRate: rowTxRate } = row
+      if (!name) {
+        return acc
+      }
+      acc[name] = {
+        rx: rowRxRate,
+        tx: rowTxRate
+      }
       return acc
-    }
-    acc[name] = {
-      rx: rowRxRate,
-      tx: rowTxRate
-    }
-    return acc
-  }, {})
+    },
+    {}
+  )
   const networkSamplesByInterface = Object.fromEntries(
     Object.entries(networkRawByInterface).map(([name, row]) => [
       name,
-      [{
-        rx: row.rxBytesPerSecond,
-        tx: row.txBytesPerSecond
-      }]
+      [
+        {
+          rx: row.rxBytesPerSecond,
+          tx: row.txBytesPerSecond
+        }
+      ]
     ])
   )
   const diskRows = readBlock('__DISK_START__', '__DISK_END__').map((line) => {
@@ -87,31 +88,38 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
     const [name, size, used, usagePercent, available, mountPoint] = line.split('|')
     return { name, size, used, usagePercent, available, mountPoint }
   })
-  const cpuInfoRows = readBlock('__CPUINFO_START__', '__CPUINFO_END__').map((line) => {
-    const [model, cores, frequencyMHz, cache, bogomips] = line.split('|')
-    return {
-      model,
-      cores: Number(cores) || 0,
-      frequencyMHz,
-      cache,
-      bogomips
-    }
-  }).filter((row) => row.model)
-  const gpuInfoRows = readBlock('__GPUINFO_START__', '__GPUINFO_END__').map((line) => {
-    const [model, vendor, driver, memory] = line.split('|')
-    return {
-      model,
-      vendor: vendor || '-',
-      driver: driver || '-',
-      memory: memory || '-'
-    }
-  }).filter((row) => row.model)
+  const cpuInfoRows = readBlock('__CPUINFO_START__', '__CPUINFO_END__')
+    .map((line) => {
+      const [model, cores, frequencyMHz, cache, bogomips] = line.split('|')
+      return {
+        model,
+        cores: Number(cores) || 0,
+        frequencyMHz,
+        cache,
+        bogomips
+      }
+    })
+    .filter((row) => row.model)
+  const gpuInfoRows = readBlock('__GPUINFO_START__', '__GPUINFO_END__')
+    .map((line) => {
+      const [model, vendor, driver, memory] = line.split('|')
+      return {
+        model,
+        vendor: vendor || '-',
+        driver: driver || '-',
+        memory: memory || '-'
+      }
+    })
+    .filter((row) => row.model)
   const transientCollectorCommands = new Set(['ps', 'awk', 'bash', 'sleep', 'sh', 'powershell', 'pwsh'])
-  const groupedProcesses = new Map<string, {
-    memoryMb: number
-    cpu: number
-    elapsedSeconds: number
-  }>()
+  const groupedProcesses = new Map<
+    string,
+    {
+      memoryMb: number
+      cpu: number
+      elapsedSeconds: number
+    }
+  >()
   readBlock('__PROCS_START__', '__PROCS_END__')
     .map((line) => {
       const [memory, cpu, elapsedSeconds, command] = line.split('|')
@@ -146,17 +154,11 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
 
   const memoryUsedBytes = readNumber(memUsedBytes, megabytesToBytes(memUsed))
   const memoryTotalBytes = readNumber(memTotalBytes, megabytesToBytes(memTotal))
-  const memoryAvailableBytes = readNumber(
-    memAvailableBytes,
-    Math.max(memoryTotalBytes - memoryUsedBytes, 0)
-  )
+  const memoryAvailableBytes = readNumber(memAvailableBytes, Math.max(memoryTotalBytes - memoryUsedBytes, 0))
   const memoryPercent = readNumber(memRawPercent, Number(memPercent) || 0)
   const swapUsedRawBytes = readNumber(swapUsedBytes, megabytesToBytes(swapUsed))
   const swapTotalRawBytes = readNumber(swapTotalBytes, megabytesToBytes(swapTotal))
-  const swapAvailableRawBytes = readNumber(
-    swapAvailableBytes,
-    Math.max(swapTotalRawBytes - swapUsedRawBytes, 0)
-  )
+  const swapAvailableRawBytes = readNumber(swapAvailableBytes, Math.max(swapTotalRawBytes - swapUsedRawBytes, 0))
   const swapRawUsagePercent = readNumber(swapRawPercent, Number(swapPercent) || 0)
   const aggregateNetworkRaw: RawNetworkInterfaceMetrics = {
     name: 'all',
@@ -193,10 +195,21 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
     cpuInfoRows,
     gpuInfoRows,
     memoryPercent,
-    memoryUsage: memoryTotalBytes ? `${formatBytesAsMegabytes(memoryUsedBytes)}/${formatBytesAsMegabytes(memoryTotalBytes)}` : '0/0',
-    memoryAppUsage: Number(memApp) > 0 || Number(memAppBytes) > 0 ? formatBytesAsMegabytes(readNumber(memAppBytes, megabytesToBytes(memApp))) : undefined,
-    memoryCacheUsage: Number(memCache) > 0 || Number(memCacheBytes) > 0 ? formatBytesAsMegabytes(readNumber(memCacheBytes, megabytesToBytes(memCache))) : undefined,
-    memoryKernelUsage: Number(memKernel) > 0 || Number(memKernelBytes) > 0 ? formatBytesAsMegabytes(readNumber(memKernelBytes, megabytesToBytes(memKernel))) : undefined,
+    memoryUsage: memoryTotalBytes
+      ? `${formatBytesAsMegabytes(memoryUsedBytes)}/${formatBytesAsMegabytes(memoryTotalBytes)}`
+      : '0/0',
+    memoryAppUsage:
+      Number(memApp) > 0 || Number(memAppBytes) > 0
+        ? formatBytesAsMegabytes(readNumber(memAppBytes, megabytesToBytes(memApp)))
+        : undefined,
+    memoryCacheUsage:
+      Number(memCache) > 0 || Number(memCacheBytes) > 0
+        ? formatBytesAsMegabytes(readNumber(memCacheBytes, megabytesToBytes(memCache)))
+        : undefined,
+    memoryKernelUsage:
+      Number(memKernel) > 0 || Number(memKernelBytes) > 0
+        ? formatBytesAsMegabytes(readNumber(memKernelBytes, megabytesToBytes(memKernel)))
+        : undefined,
     memoryBreakdown: {
       total: formatBytesAsMegabytes(memoryTotalBytes),
       used: formatBytesAsMegabytes(memoryUsedBytes),
@@ -213,7 +226,9 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
       kernelBytes: readNumber(memKernelBytes, megabytesToBytes(memKernel))
     },
     swapPercent: swapRawUsagePercent,
-    swapUsage: swapTotalRawBytes ? `${formatBytesAsMegabytes(swapUsedRawBytes)}/${formatBytesAsMegabytes(swapTotalRawBytes)}` : '0/0',
+    swapUsage: swapTotalRawBytes
+      ? `${formatBytesAsMegabytes(swapUsedRawBytes)}/${formatBytesAsMegabytes(swapTotalRawBytes)}`
+      : '0/0',
     swapBreakdown: {
       total: formatBytesAsMegabytes(swapTotalRawBytes),
       used: formatBytesAsMegabytes(swapUsedRawBytes),
@@ -234,10 +249,12 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
       rx: formatRate(Number(rxRate) || 0),
       tx: formatRate(Number(txRate) || 0)
     },
-    networkSamples: [{
-      rx: Number(rxRate) || 0,
-      tx: Number(txRate) || 0
-    }],
+    networkSamples: [
+      {
+        rx: Number(rxRate) || 0,
+        tx: Number(txRate) || 0
+      }
+    ],
     networkInterfaceRows,
     networkRatesByInterface: {
       all: {
@@ -247,10 +264,12 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
       ...networkRatesByInterface
     },
     networkSamplesByInterface: {
-      all: [{
-        rx: Number(rxRate) || 0,
-        tx: Number(txRate) || 0
-      }],
+      all: [
+        {
+          rx: Number(rxRate) || 0,
+          tx: Number(txRate) || 0
+        }
+      ],
       ...networkSamplesByInterface
     },
     networkRawByInterface: {

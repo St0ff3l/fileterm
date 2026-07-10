@@ -2,13 +2,12 @@ import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { readFile, stat, writeFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { Readable, type Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ClientChannel, ConnectConfig, FileEntry, SFTPWrapper, Stats } from 'ssh2'
 import { Client } from 'ssh2'
 import type {
-  FileSessionController,
   PermissionChangeOptions,
   RemoteFileAccessOptions,
   RemoteFileItem,
@@ -24,12 +23,7 @@ import type {
 import { BaseFileSessionController } from './base-file-session-controller.js'
 import { parentRemotePath, toRemoteFileItem } from './session-file-utils.js'
 import { collectSshSystemMetrics, type RemoteSystemPlatform } from './system-metrics/index.js'
-import {
-  findSetupEchoEnd,
-  SETUP_NEEDLE,
-  SHELL_CWD_SETUP,
-  ShellCwdTracker
-} from './shell-cwd-integration.js'
+import { findSetupEchoEnd, SHELL_CWD_SETUP, ShellCwdTracker } from './shell-cwd-integration.js'
 import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug-logger.js'
 import { decodeBuffer, encodeText } from '../text-encoding.js'
 import { appLog, appWarn } from '../app-logger.js'
@@ -121,18 +115,10 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
             verify(false)
           })
       },
-      ...(this.sshDebug.enabled
-        ? { debug: (message: string) => this.sshDebug.handle('main', message) }
-        : {})
+      ...(this.sshDebug.enabled ? { debug: (message: string) => this.sshDebug.handle('main', message) } : {})
     }
     this.sshConfig = sshConfig
-    this.sshDebug.logConnectionStart(
-      'main',
-      profile,
-      username,
-      authConfig,
-      shouldTryKeyboard
-    )
+    this.sshDebug.logConnectionStart('main', profile, username, authConfig, shouldTryKeyboard)
 
     await new Promise<void>((resolve, reject) => {
       let settled = false
@@ -199,7 +185,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
                       this.sshDebug.log('main', `Initial shell user detected via injection: ${echoEnd.user}`)
                       this.handleShellUserChange(echoEnd.user)
                     }
-                    
+
                     const beforeCmd = this.echoBuf.slice(0, echoEnd.lineStart)
                     const afterOsc7 = this.echoBuf.slice(echoEnd.payloadEnd)
                     text = beforeCmd + afterOsc7
@@ -227,16 +213,16 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
                 // 2. Track sudo prompt
                 this.trackSudoPromptFromTerminal(text)
-                
+
                 // 3. Heuristic detection: if the prompt ends with '# ', it might be a root shell.
                 // We inject the setup script silently to query the actual user.
                 const strippedText = text.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, '').trimEnd()
                 const now = Date.now()
                 const lastInjectTime = (this as any)._lastInjectTime || 0
                 if (strippedText.endsWith('#') && !this.suppressEcho) {
-                  // Only inject if we think we aren't root AND it's been a while since the last injection 
+                  // Only inject if we think we aren't root AND it's been a while since the last injection
                   // to prevent infinite loops (because the injected script itself triggers a new prompt)
-                  if (this.shellUser !== 'root' && (now - lastInjectTime > 2000)) {
+                  if (this.shellUser !== 'root' && now - lastInjectTime > 2000) {
                     ;(this as any)._lastInjectTime = now
                     this.injectShellSetup(stream)
                   }
@@ -465,13 +451,10 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     const previousSudoUser = this.sudoUser
     const previousSudoPassword = this.sudoPassword
     const nextSudoUser = options?.sudoUser?.trim() || previousSudoUser
-    const nextSudoPassword = options && 'sudoPassword' in options
-      ? options.sudoPassword || undefined
-      : previousSudoPassword
-    const privilegedIdentityChanged = mode === 'root' && (
-      nextSudoUser !== previousSudoUser
-      || nextSudoPassword !== previousSudoPassword
-    )
+    const nextSudoPassword =
+      options && 'sudoPassword' in options ? options.sudoPassword || undefined : previousSudoPassword
+    const privilegedIdentityChanged =
+      mode === 'root' && (nextSudoUser !== previousSudoUser || nextSudoPassword !== previousSudoPassword)
 
     if (mode === this.fileAccessMode && !privilegedIdentityChanged) {
       return
@@ -501,9 +484,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
   async abortTransfer(): Promise<void> {
     const pipelines = [...this.activeTransferPipelines]
-    await Promise.allSettled(pipelines.map(({ source, destination }) => (
-      this.stopTransferPipeline(source, destination)
-    )))
+    await Promise.allSettled(pipelines.map(({ source, destination }) => this.stopTransferPipeline(source, destination)))
   }
 
   async write(data: string): Promise<void> {
@@ -550,7 +531,10 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.currentRemotePath = nextPath
     try {
       if (this.fileAccessMode === 'root') {
-        return await this.readRemoteDirectoryViaShell(this.currentRemotePath, new Error('Root file access mode enabled'))
+        return await this.readRemoteDirectoryViaShell(
+          this.currentRemotePath,
+          new Error('Root file access mode enabled')
+        )
       }
 
       try {
@@ -564,7 +548,6 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
   }
 
-
   async readRemoteFile(targetPath: string, encoding = 'utf-8'): Promise<string> {
     if (this.fileAccessMode === 'root') {
       return this.readRemoteFileViaShell(targetPath, new Error('Root file access mode enabled'), encoding)
@@ -574,13 +557,13 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       const sftp = await this.ensureSftp()
       return await this.withOperationTimeout(
         new Promise<string>((resolve, reject) => {
-        sftp.readFile(targetPath, (error, data) => {
-          if (error) {
-            reject(error)
-            return
-          }
-          resolve(decodeBuffer(Buffer.isBuffer(data) ? data : Buffer.from(data), encoding))
-        })
+          sftp.readFile(targetPath, (error, data) => {
+            if (error) {
+              reject(error)
+              return
+            }
+            resolve(decodeBuffer(Buffer.isBuffer(data) ? data : Buffer.from(data), encoding))
+          })
         }),
         LiveSshSessionController.REMOTE_FILE_READ_TIMEOUT_MS,
         '读取远程文件超时，已重置文件通道。请重试或先下载后编辑。',
@@ -659,7 +642,10 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         })
       })
     } catch (error) {
-      await this.execCommand(`sh -lc 'mkdir -p ${shellQuote(path.posix.dirname(nextPath))} && mv ${shellQuote(targetPath)} ${shellQuote(nextPath)}'`, { allowNonZeroWithStdout: true })
+      await this.execCommand(
+        `sh -lc 'mkdir -p ${shellQuote(path.posix.dirname(nextPath))} && mv ${shellQuote(targetPath)} ${shellQuote(nextPath)}'`,
+        { allowNonZeroWithStdout: true }
+      )
       if (error && !this.sftpUnavailableReason) {
         throw error
       }
@@ -668,16 +654,16 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
   async deleteRemotePath(targetPath: string, targetType: RemoteFileItem['type']): Promise<void> {
     if (this.fileAccessMode === 'root') {
-      const command = targetType === 'folder'
-        ? `rm -rf -- ${shellQuote(targetPath)}`
-        : `rm -f -- ${shellQuote(targetPath)}`
+      const command =
+        targetType === 'folder' ? `rm -rf -- ${shellQuote(targetPath)}` : `rm -f -- ${shellQuote(targetPath)}`
       await this.execShellFileCommand(command, { allowNonZeroWithStdout: true }, true)
       return
     }
 
-    const command = targetType === 'folder'
-      ? `sh -lc 'rm -rf -- ${shellQuote(targetPath)}'`
-      : `sh -lc 'rm -f -- ${shellQuote(targetPath)}'`
+    const command =
+      targetType === 'folder'
+        ? `sh -lc 'rm -rf -- ${shellQuote(targetPath)}'`
+        : `sh -lc 'rm -f -- ${shellQuote(targetPath)}'`
     await this.execCommand(command, { allowNonZeroWithStdout: true })
   }
 
@@ -689,26 +675,32 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
 
     if (this.fileAccessMode === 'root') {
       if (recursive) {
-        const baseCommand = applyTo === 'all'
-          ? `chmod -R ${shellQuote(mode)} ${shellQuote(targetPath)}`
-          : applyTo === 'files'
-            ? `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type f -exec chmod ${shellQuote(mode)} {} +`
-            : `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type d -exec chmod ${shellQuote(mode)} {} +`
+        const baseCommand =
+          applyTo === 'all'
+            ? `chmod -R ${shellQuote(mode)} ${shellQuote(targetPath)}`
+            : applyTo === 'files'
+              ? `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type f -exec chmod ${shellQuote(mode)} {} +`
+              : `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type d -exec chmod ${shellQuote(mode)} {} +`
 
         await this.execShellFileCommand(baseCommand, { allowNonZeroWithStdout: true }, true)
         return
       }
 
-      await this.execShellFileCommand(`chmod ${shellQuote(mode)} ${shellQuote(targetPath)}`, { allowNonZeroWithStdout: true }, true)
+      await this.execShellFileCommand(
+        `chmod ${shellQuote(mode)} ${shellQuote(targetPath)}`,
+        { allowNonZeroWithStdout: true },
+        true
+      )
       return
     }
 
     if (recursive) {
-      const baseCommand = applyTo === 'all'
-        ? `chmod -R ${shellQuote(mode)} ${shellQuote(targetPath)}`
-        : applyTo === 'files'
-          ? `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type f -exec chmod ${shellQuote(mode)} {} +`
-          : `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type d -exec chmod ${shellQuote(mode)} {} +`
+      const baseCommand =
+        applyTo === 'all'
+          ? `chmod -R ${shellQuote(mode)} ${shellQuote(targetPath)}`
+          : applyTo === 'files'
+            ? `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type f -exec chmod ${shellQuote(mode)} {} +`
+            : `chmod ${shellQuote(mode)} ${shellQuote(targetPath)} && find ${shellQuote(targetPath)} -type d -exec chmod ${shellQuote(mode)} {} +`
 
       await this.execCommand(`sh -lc ${shellQuote(baseCommand)}`, { allowNonZeroWithStdout: true })
       return
@@ -726,7 +718,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         })
       })
     } catch (error) {
-      await this.execCommand(`sh -lc 'chmod ${shellQuote(mode)} ${shellQuote(targetPath)}'`, { allowNonZeroWithStdout: true })
+      await this.execCommand(`sh -lc 'chmod ${shellQuote(mode)} ${shellQuote(targetPath)}'`, {
+        allowNonZeroWithStdout: true
+      })
       if (error && !this.sftpUnavailableReason) {
         throw error
       }
@@ -745,7 +739,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     try {
-      const sftp = sftpOverride ?? await this.ensureSftp()
+      const sftp = sftpOverride ?? (await this.ensureSftp())
       const parts = normalized.split('/').filter(Boolean)
       let currentPath = normalized.startsWith('/') ? '/' : ''
 
@@ -787,15 +781,9 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   async statRemoteFile(targetPath: string): Promise<RemoteFileStat | null> {
     if (this.fileAccessMode === 'root') {
       try {
-        const output = await this.execShellFileCommand(
-          `stat -c '%s|%Y' -- ${shellQuote(targetPath)}`,
-          undefined,
-          true
-        )
+        const output = await this.execShellFileCommand(`stat -c '%s|%Y' -- ${shellQuote(targetPath)}`, undefined, true)
         const match = output.trim().match(/^(\d+)\|(\d+)/)
-        return match
-          ? { size: Number(match[1]), modifiedAt: Number(match[2]) * 1000 }
-          : null
+        return match ? { size: Number(match[1]), modifiedAt: Number(match[2]) * 1000 } : null
       } catch {
         return null
       }
@@ -846,14 +834,11 @@ fi
     const destinationAttrs = await sftpLstat(sftp, destinationPath)
     const partialAttrs = await sftpLstat(sftp, partialPath)
     if (
-      destinationAttrs
-      && partialAttrs
-      && (destinationAttrs.isSymbolicLink() || destinationAttrs.uid !== partialAttrs.uid)
+      destinationAttrs &&
+      partialAttrs &&
+      (destinationAttrs.isSymbolicLink() || destinationAttrs.uid !== partialAttrs.uid)
     ) {
-      await pipeline(
-        sftp.createReadStream(partialPath),
-        sftp.createWriteStream(destinationPath, { flags: 'w' })
-      )
+      await pipeline(sftp.createReadStream(partialPath), sftp.createWriteStream(destinationPath, { flags: 'w' }))
       await this.verifySftpRemoteUploadSize(sftp, destinationPath, partialAttrs.size)
       await sftpCall((done) => sftp.unlink(partialPath, done))
       return
@@ -958,10 +943,7 @@ fi
         const reportProgress = () => {
           // SFTP write streams acknowledge bytes asynchronously, so progress must follow
           // confirmed remote writes rather than optimistic local reads.
-          const acknowledgedBytes = Math.min(
-            total,
-            resumeOffset + this.getWritableBytesWritten(remoteStream)
-          )
+          const acknowledgedBytes = Math.min(total, resumeOffset + this.getWritableBytesWritten(remoteStream))
           if (acknowledgedBytes <= transferredBytes) {
             return
           }
@@ -986,10 +968,16 @@ fi
         throw this.transferAbortError()
       }
       if (transferredBytes > resumeOffset || resumeOffset > 0) {
-        appWarn(`[FileTerm][SFTP] Upload interrupted after ${formatShellBytes(transferredBytes)}: ${localPath} -> ${remotePath}`, error)
+        appWarn(
+          `[FileTerm][SFTP] Upload interrupted after ${formatShellBytes(transferredBytes)}: ${localPath} -> ${remotePath}`,
+          error
+        )
         throw new Error(`SFTP 上传已中断，已停止以避免提交不完整文件：${errorMessage(error)}`)
       }
-      appWarn(`[FileTerm][SFTP] Upload could not start, falling back to shell stream: ${localPath} -> ${remotePath}`, error)
+      appWarn(
+        `[FileTerm][SFTP] Upload could not start, falling back to shell stream: ${localPath} -> ${remotePath}`,
+        error
+      )
       await this.uploadFileViaShell(localPath, remotePath, onProgress, error, false, signal)
     }
   }
@@ -1041,10 +1029,7 @@ fi
           start: resumeOffset > 0 ? resumeOffset : undefined
         })
         const reportProgress = () => {
-          const acknowledgedBytes = Math.min(
-            total,
-            resumeOffset + this.getWritableBytesWritten(localStream)
-          )
+          const acknowledgedBytes = Math.min(total, resumeOffset + this.getWritableBytesWritten(localStream))
           if (acknowledgedBytes <= transferredBytes) {
             return
           }
@@ -1070,10 +1055,16 @@ fi
         throw this.transferAbortError()
       }
       if (transferredBytes > resumeOffset || resumeOffset > 0) {
-        appWarn(`[FileTerm][SFTP] Download interrupted after ${formatShellBytes(transferredBytes)}: ${remotePath} -> ${localPath}`, error)
+        appWarn(
+          `[FileTerm][SFTP] Download interrupted after ${formatShellBytes(transferredBytes)}: ${remotePath} -> ${localPath}`,
+          error
+        )
         throw new Error(`SFTP 下载已中断，已停止以避免提交不完整文件：${errorMessage(error)}`)
       }
-      appWarn(`[FileTerm][SFTP] Download could not start, falling back to shell stream: ${remotePath} -> ${localPath}`, error)
+      appWarn(
+        `[FileTerm][SFTP] Download could not start, falling back to shell stream: ${remotePath} -> ${localPath}`,
+        error
+      )
       await this.downloadFileViaShell(remotePath, localPath, onProgress, error, resumeOffset, options?.signal)
     }
   }
@@ -1085,9 +1076,12 @@ fi
     }
 
     try {
-      const result = await collectSshSystemMetrics({
-        exec: (command, options, stdinPayload) => this.execCommand(command, options, false, stdinPayload)
-      }, this.metricsPlatform)
+      const result = await collectSshSystemMetrics(
+        {
+          exec: (command, options, stdinPayload) => this.execCommand(command, options, false, stdinPayload)
+        },
+        this.metricsPlatform
+      )
       this.metricsPlatform = result.platform
       this.metrics = result.metrics
       return this.metrics
@@ -1163,9 +1157,7 @@ fi
           keepaliveInterval: 3000,
           keepaliveCountMax: 4,
           readyTimeout: Math.max(sshConfig.readyTimeout ?? 15000, 20000),
-          ...(this.sshDebug.enabled
-            ? { debug: (message: string) => this.sshDebug.handle('sftp', message) }
-            : {})
+          ...(this.sshDebug.enabled ? { debug: (message: string) => this.sshDebug.handle('sftp', message) } : {})
         })
     })
 
@@ -1202,7 +1194,10 @@ fi
     await new Promise<void>((resolve, reject) => {
       let settled = false
       this.transferSshClosed = false
-      this.sshDebug.log('transfer-sftp', `准备建立传输 SFTP 连接: ${sshConfig.username}@${sshConfig.host}:${sshConfig.port}`)
+      this.sshDebug.log(
+        'transfer-sftp',
+        `准备建立传输 SFTP 连接: ${sshConfig.username}@${sshConfig.host}:${sshConfig.port}`
+      )
       this.transferSsh.removeAllListeners('keyboard-interactive')
       this.transferSsh.removeAllListeners('banner')
       this.transferSsh.on('banner', (message) => {
@@ -1426,9 +1421,7 @@ fi
         .once('close', onClose)
         .connect({
           ...sshConfig,
-          ...(this.sshDebug.enabled
-            ? { debug: (message: string) => this.sshDebug.handle('exec', message) }
-            : {})
+          ...(this.sshDebug.enabled ? { debug: (message: string) => this.sshDebug.handle('exec', message) } : {})
         })
     })
 
@@ -1516,17 +1509,36 @@ fi
 
   private async readRemoteFileViaShell(targetPath: string, cause: unknown, encoding = 'utf-8'): Promise<string> {
     this.ensureShellFileFallback(cause)
-    const output = await this.execShellFileCommand(`base64 ${shellQuote(targetPath)}`, undefined, this.fileAccessMode === 'root')
+    const output = await this.execShellFileCommand(
+      `base64 ${shellQuote(targetPath)}`,
+      undefined,
+      this.fileAccessMode === 'root'
+    )
     return decodeBuffer(Buffer.from(output.replace(/\s+/g, ''), 'base64'), encoding)
   }
 
-  private async writeRemoteFileViaShell(targetPath: string, content: string, cause: unknown, encoding = 'utf-8'): Promise<void> {
+  private async writeRemoteFileViaShell(
+    targetPath: string,
+    content: string,
+    cause: unknown,
+    encoding = 'utf-8'
+  ): Promise<void> {
     this.ensureShellFileFallback(cause)
     const payload = encodeText(content, encoding).toString('base64')
-    await this.execShellFileCommand(`base64 -d > ${shellQuote(targetPath)}`, undefined, this.fileAccessMode === 'root', `${payload}\n`)
+    await this.execShellFileCommand(
+      `base64 -d > ${shellQuote(targetPath)}`,
+      undefined,
+      this.fileAccessMode === 'root',
+      `${payload}\n`
+    )
   }
 
-  private async writeRemoteFileAsPrivileged(targetPath: string, content: string, cause: unknown, encoding = 'utf-8'): Promise<void> {
+  private async writeRemoteFileAsPrivileged(
+    targetPath: string,
+    content: string,
+    cause: unknown,
+    encoding = 'utf-8'
+  ): Promise<void> {
     this.ensureShellFileFallback(cause)
     const tempRemotePath = await this.createTemporaryRemoteUploadPath(path.posix.basename(targetPath))
     const payload = encodeText(content, encoding).toString('base64')
@@ -1557,7 +1569,9 @@ fi
     const fileInfo = await stat(localPath)
     const total = fileInfo.size
     const progressTotal = Math.max(total, 1)
-    appLog(`[FileTerm][SSH] Shell upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
+    appLog(
+      `[FileTerm][SSH] Shell upload start ${localPath} -> ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`
+    )
     onProgress({ percent: 1, transferredBytes: 0, totalBytes: total })
     await this.streamLocalFileToShellCommand(
       localPath,
@@ -1574,7 +1588,9 @@ fi
       signal
     )
     await this.verifyShellRemoteUploadSize(remotePath, total, privileged)
-    appLog(`[FileTerm][SSH] Shell upload verified ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`)
+    appLog(
+      `[FileTerm][SSH] Shell upload verified ${remotePath} (${formatShellBytes(total)}, privileged=${privileged ? 'yes' : 'no'})`
+    )
     onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
   }
 
@@ -1592,17 +1608,14 @@ fi
     if (resumeOffset > total) {
       throw new Error('root SFTP 上传断点大于源文件，无法继续')
     }
-    const tempRemotePath = stagingPath
-      ?? await this.createTemporaryRemoteUploadPath(path.posix.basename(remotePath))
+    const tempRemotePath = stagingPath ?? (await this.createTemporaryRemoteUploadPath(path.posix.basename(remotePath)))
     appLog(`[FileTerm][SFTP] Root upload staging ${localPath}@${resumeOffset} -> ${tempRemotePath} -> ${remotePath}`)
 
     try {
       const sftp = await this.ensureTransferSftp()
-      let stagedSize = await this.readSftpFileSize(sftp, tempRemotePath) ?? 0
+      let stagedSize = (await this.readSftpFileSize(sftp, tempRemotePath)) ?? 0
       if (stagedSize > total) {
-        appWarn(
-          `[FileTerm][SFTP] Root staging ${tempRemotePath} is larger than its source; rebuilding it`
-        )
+        appWarn(`[FileTerm][SFTP] Root staging ${tempRemotePath} is larger than its source; rebuilding it`)
         await sftpCall((done) => sftp.unlink(tempRemotePath, done)).catch((error) => {
           if (!isSftpMissingError(error)) {
             throw error
@@ -1635,13 +1648,17 @@ fi
       await this.ensureRemoteDirectory(path.posix.dirname(remotePath))
       this.throwIfTransferAborted(signal)
       if (resumeOffset > 0) {
-        await this.execShellFileCommand(`
+        await this.execShellFileCommand(
+          `
 set -e
 current=$(stat -c %s -- ${shellQuote(remotePath)} 2>/dev/null || wc -c < ${shellQuote(remotePath)} 2>/dev/null || echo -1)
 [ "$current" = ${resumeOffset} ] || { echo "resume offset changed: $current" >&2; exit 74; }
 tail -c +${resumeOffset + 1} -- ${shellQuote(tempRemotePath)} >> ${shellQuote(remotePath)}
 rm -f -- ${shellQuote(tempRemotePath)}
-`, { allowNonZeroWithStdout: true }, true)
+`,
+          { allowNonZeroWithStdout: true },
+          true
+        )
       } else {
         await this.execShellFileCommand(
           `mv -f -- ${shellQuote(tempRemotePath)} ${shellQuote(remotePath)}`,
@@ -1690,10 +1707,7 @@ rm -f -- ${shellQuote(tempRemotePath)}
         mode: 0o600
       })
       const reportProgress = () => {
-        const acknowledgedBytes = Math.min(
-          total,
-          sourceOffset + this.getWritableBytesWritten(remoteStream)
-        )
+        const acknowledgedBytes = Math.min(total, sourceOffset + this.getWritableBytesWritten(remoteStream))
         if (acknowledgedBytes <= transferredBytes) {
           return
         }
@@ -1751,11 +1765,7 @@ rm -f -- ${shellQuote(tempRemotePath)}
     this.assertRemoteUploadSize(remotePath, attrs.size, expectedSize)
   }
 
-  private async runTransferPipeline(
-    source: Readable,
-    destination: Writable,
-    signal?: AbortSignal
-  ): Promise<void> {
+  private async runTransferPipeline(source: Readable, destination: Writable, signal?: AbortSignal): Promise<void> {
     const activePipeline = { source, destination }
     let rejectAbort: ((error: Error) => void) | undefined
     const abortPromise = new Promise<never>((_resolve, reject) => {
@@ -1847,15 +1857,25 @@ rm -f -- ${shellQuote(tempRemotePath)}
       })
   }
 
-  private async verifyShellRemoteUploadSize(remotePath: string, expectedSize: number, privileged: boolean): Promise<void> {
-    const output = await this.execShellFileCommand(`stat -c %s -- ${shellQuote(remotePath)} || wc -c < ${shellQuote(remotePath)}`, undefined, privileged)
+  private async verifyShellRemoteUploadSize(
+    remotePath: string,
+    expectedSize: number,
+    privileged: boolean
+  ): Promise<void> {
+    const output = await this.execShellFileCommand(
+      `stat -c %s -- ${shellQuote(remotePath)} || wc -c < ${shellQuote(remotePath)}`,
+      undefined,
+      privileged
+    )
     const remoteSize = parseRemoteByteSize(output)
     if (remoteSize !== undefined) {
       this.assertRemoteUploadSize(remotePath, remoteSize, expectedSize)
       return
     }
 
-    appWarn(`[FileTerm][SSH] Shell upload size check returned no parseable size for ${remotePath}: ${singleLine(output) || '(empty)'}`)
+    appWarn(
+      `[FileTerm][SSH] Shell upload size check returned no parseable size for ${remotePath}: ${singleLine(output) || '(empty)'}`
+    )
     try {
       const sftp = await this.ensureTransferSftp()
       await this.verifySftpRemoteUploadSize(sftp, remotePath, expectedSize)
@@ -1871,7 +1891,9 @@ rm -f -- ${shellQuote(tempRemotePath)}
     }
 
     const actual = typeof remoteSize === 'number' ? formatShellBytes(remoteSize) : '未知大小'
-    throw new Error(`传输校验失败：${path.posix.basename(remotePath)} 实际为 ${actual}，期望 ${formatShellBytes(expectedSize)}`)
+    throw new Error(
+      `传输校验失败：${path.posix.basename(remotePath)} 实际为 ${actual}，期望 ${formatShellBytes(expectedSize)}`
+    )
   }
 
   private async downloadFileViaShell(
@@ -1898,11 +1920,12 @@ rm -f -- ${shellQuote(tempRemotePath)}
       resumeOffset,
       total,
       this.fileAccessMode === 'root',
-      (transferredBytes) => onProgress({
-        percent: Math.min(99, Math.round((transferredBytes / Math.max(total, 1)) * 100)),
-        transferredBytes,
-        totalBytes: total
-      }),
+      (transferredBytes) =>
+        onProgress({
+          percent: Math.min(99, Math.round((transferredBytes / Math.max(total, 1)) * 100)),
+          transferredBytes,
+          totalBytes: total
+        }),
       signal
     )
     const localInfo = await stat(localPath)
@@ -1921,9 +1944,10 @@ rm -f -- ${shellQuote(tempRemotePath)}
     signal?: AbortSignal
   ): Promise<void> {
     const execClient = await this.ensureExecConnection()
-    const shellCommand = resumeOffset > 0
-      ? `tail -c +${resumeOffset + 1} -- ${shellQuote(remotePath)}`
-      : `cat -- ${shellQuote(remotePath)}`
+    const shellCommand =
+      resumeOffset > 0
+        ? `tail -c +${resumeOffset + 1} -- ${shellQuote(remotePath)}`
+        : `cat -- ${shellQuote(remotePath)}`
     const command = privileged
       ? this.sudoPassword
         ? `sudo -S -p '' -u ${shellQuote(this.sudoUser || 'root')} sh -lc ${shellQuote(shellCommand)}`
@@ -1957,9 +1981,12 @@ rm -f -- ${shellQuote(tempRemotePath)}
         resolve()
       }
       const abortTransfer = () => safeReject(this.transferAbortError())
-      const timeoutId = setTimeout(() => {
-        safeReject(new Error('文件下载超时'))
-      }, 10 * 60 * 1000)
+      const timeoutId = setTimeout(
+        () => {
+          safeReject(new Error('文件下载超时'))
+        },
+        10 * 60 * 1000
+      )
       signal?.addEventListener('abort', abortTransfer, { once: true })
       if (signal?.aborted) {
         abortTransfer()
@@ -2002,9 +2029,11 @@ rm -f -- ${shellQuote(tempRemotePath)}
           }
           localStream.end(() => {
             if (transferredBytes !== expectedBytes) {
-              safeReject(new Error(
-                `传输校验失败：已下载 ${formatShellBytes(transferredBytes)}，期望 ${formatShellBytes(expectedBytes)}`
-              ))
+              safeReject(
+                new Error(
+                  `传输校验失败：已下载 ${formatShellBytes(transferredBytes)}，期望 ${formatShellBytes(expectedBytes)}`
+                )
+              )
               return
             }
             safeResolve()
@@ -2024,7 +2053,8 @@ rm -f -- ${shellQuote(tempRemotePath)}
     this.ensureShellFileFallback(cause)
     const outputStartMarker = '__FILETERM_DIR_LIST_START__'
     const outputEndMarker = '__FILETERM_DIR_LIST_END__'
-    const output = await this.execShellFileCommand(`
+    const output = await this.execShellFileCommand(
+      `
 target=${shellQuote(targetPath)}
 if [ ! -d "$target" ]; then
   printf "%s\\n" ${shellQuote(outputStartMarker)}
@@ -2044,7 +2074,10 @@ for name in .* *; do
   printf "%s\t%s\t%s\n" "$name" "$kind" "$stat_line"
 done
 printf "%s\\n" ${shellQuote(outputEndMarker)}
-`, undefined, this.fileAccessMode === 'root')
+`,
+      undefined,
+      this.fileAccessMode === 'root'
+    )
     const body = extractMarkedOutput(output, outputStartMarker, outputEndMarker).trim()
     if (body === '__NOT_DIR__') {
       throw new Error(`无法打开远程目录: ${targetPath}`)
@@ -2060,7 +2093,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
         return {
           path: fullPath,
           name,
-          type: type === 'folder' ? 'folder' as const : 'file' as const,
+          type: type === 'folder' ? ('folder' as const) : ('file' as const),
           modified: formatShellTimestamp(Number(mtime) || 0),
           size: type === 'folder' ? '-' : formatShellBytes(Number(size) || 0),
           permission: permission || '',
@@ -2119,10 +2152,20 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
     const sudoUser = this.sudoUser || 'root'
     if (this.sudoPassword) {
       const stdin = `${this.sudoPassword}\n${stdinPayload ?? ''}`
-      return this.execCommand(`sudo -S -p '' -u ${shellQuote(sudoUser)} sh -lc ${shellQuote(command)}`, options, true, stdin)
+      return this.execCommand(
+        `sudo -S -p '' -u ${shellQuote(sudoUser)} sh -lc ${shellQuote(command)}`,
+        options,
+        true,
+        stdin
+      )
     }
 
-    return this.execCommand(`sudo -n -u ${shellQuote(sudoUser)} sh -lc ${shellQuote(command)}`, options, true, stdinPayload)
+    return this.execCommand(
+      `sudo -n -u ${shellQuote(sudoUser)} sh -lc ${shellQuote(command)}`,
+      options,
+      true,
+      stdinPayload
+    )
   }
 
   private async streamLocalFileToShellCommand(
@@ -2140,7 +2183,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
       let stdout = ''
       let stderr = ''
       let readEnded = false
-      let readStream = createReadStream(localPath)
+      const readStream = createReadStream(localPath)
       let channel: ClientChannel | undefined
 
       const safeResolve = () => {
@@ -2173,9 +2216,12 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
 
       const abortTransfer = () => safeReject(this.transferAbortError())
 
-      const timeoutId = setTimeout(() => {
-        safeReject(new Error('文件上传超时'))
-      }, 10 * 60 * 1000)
+      const timeoutId = setTimeout(
+        () => {
+          safeReject(new Error('文件上传超时'))
+        },
+        10 * 60 * 1000
+      )
       signal?.addEventListener('abort', abortTransfer, { once: true })
       if (signal?.aborted) {
         abortTransfer()
@@ -2186,12 +2232,20 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
         if (!privileged) {
           return false
         }
-        if (/incorrect password|authentication failure|3 incorrect password attempts|sorry, try again|no password was provided|密码错误|认证失败|对不起，请重试|未提供密码/i.test(message)) {
+        if (
+          /incorrect password|authentication failure|3 incorrect password attempts|sorry, try again|no password was provided|密码错误|认证失败|对不起，请重试|未提供密码/i.test(
+            message
+          )
+        ) {
           this.sudoPassword = undefined
           safeReject(new Error('sudo 密码错误，请重新输入。'))
           return true
         }
-        if (/password is required|a password is required|no tty present|a terminal is required|sorry, you must have a tty|需要密码|必须输入密码/i.test(message)) {
+        if (
+          /password is required|a password is required|no tty present|a terminal is required|sorry, you must have a tty|需要密码|必须输入密码/i.test(
+            message
+          )
+        ) {
           safeReject(new Error('未检测到可复用的 sudo 授权，需要提供 sudo 密码。'))
           return true
         }
@@ -2249,7 +2303,11 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
             return
           }
           if (!readEnded || transferredBytes < expectedBytes) {
-            safeReject(new Error(`远程写入通道提前关闭，仅发送 ${formatShellBytes(transferredBytes)} / ${formatShellBytes(expectedBytes)}`))
+            safeReject(
+              new Error(
+                `远程写入通道提前关闭，仅发送 ${formatShellBytes(transferredBytes)} / ${formatShellBytes(expectedBytes)}`
+              )
+            )
             return
           }
           safeResolve()
@@ -2326,14 +2384,14 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
     const newWindow = (window + text).slice(-200)
     ;(this as any)._sudoWindow = newWindow
     const normalized = newWindow.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
-    
-    // Only test the newly appended part + a little overlap, OR just check if the pattern appears 
+
+    // Only test the newly appended part + a little overlap, OR just check if the pattern appears
     // at the very end of the string to avoid triggering continuously.
     // For password prompt, we want it to match when it appears at the end of the current buffer.
     if (!this.awaitingSudoPasswordInput && /(\[sudo\]|password|密码|passphrase)[^\r\n]*[:：]\s*$/i.test(normalized)) {
       this.awaitingSudoPasswordInput = true
       this.pendingSudoPasswordInput = ''
-      
+
       // Attempt to recover blind-typed password from recent keystrokes
       const recentKeys = (this as any)._recentKeystrokes || ''
       // recentKeys might look like "sudo -i\rmypassword\r" or "sudo -i\rmypassword"
@@ -2345,7 +2403,7 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
         // Let's just prepopulate pendingSudoPasswordInput with the last part.
         const lastPart = parts[parts.length - 1]
         const secondToLast = parts[parts.length - 2]
-        
+
         if (lastPart === '') {
           // They already hit Enter! The password is the second to last part.
           if (secondToLast && !secondToLast.includes('sudo ')) {
@@ -2361,9 +2419,13 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
         }
       }
     }
-    
+
     // For failure messages, check if it's freshly added by ensuring it appears at the very end.
-    if (/(incorrect password|authentication failure|sorry, try again|密码错误|认证失败|对不起，请重试)\s*$/i.test(normalized)) {
+    if (
+      /(incorrect password|authentication failure|sorry, try again|密码错误|认证失败|对不起，请重试)\s*$/i.test(
+        normalized
+      )
+    ) {
       this.sudoPassword = undefined
     }
   }
@@ -2466,7 +2528,11 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
           stdout += chunkStr
 
           if (privileged && stdinPayload !== undefined) {
-            if (/incorrect password|authentication failure|3 incorrect password attempts|sorry, try again|no password was provided|密码错误|认证失败|对不起，请重试|未提供密码/i.test(stdout)) {
+            if (
+              /incorrect password|authentication failure|3 incorrect password attempts|sorry, try again|no password was provided|密码错误|认证失败|对不起，请重试|未提供密码/i.test(
+                stdout
+              )
+            ) {
               this.sudoPassword = undefined
               safeReject(new Error('sudo 密码错误，请重新输入。'))
               try {
@@ -2476,7 +2542,11 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
               }
               return
             }
-            if (/password is required|a password is required|no tty present|a terminal is required|sorry, you must have a tty|需要密码|必须输入密码/i.test(stdout)) {
+            if (
+              /password is required|a password is required|no tty present|a terminal is required|sorry, you must have a tty|需要密码|必须输入密码/i.test(
+                stdout
+              )
+            ) {
               safeReject(new Error('未检测到可复用的 sudo 授权，需要提供 sudo 密码。'))
               try {
                 stream.destroy()
@@ -2499,15 +2569,25 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
             safeResolve(stdout)
             return
           }
-          
+
           const errMessage = stderr.trim() || (privileged && stdinPayload !== undefined ? stdout.trim() : '')
 
           if (code && code !== 0) {
-            if (privileged && /password is required|a password is required|no tty present|a terminal is required|sorry, you must have a tty|需要密码|必须输入密码/i.test(errMessage)) {
+            if (
+              privileged &&
+              /password is required|a password is required|no tty present|a terminal is required|sorry, you must have a tty|需要密码|必须输入密码/i.test(
+                errMessage
+              )
+            ) {
               safeReject(new Error('未检测到可复用的 sudo 授权，需要提供 sudo 密码。'))
               return
             }
-            if (privileged && /incorrect password|authentication failure|3 incorrect password attempts|sorry, try again|no password was provided|密码错误|认证失败|对不起，请重试|未提供密码/i.test(errMessage)) {
+            if (
+              privileged &&
+              /incorrect password|authentication failure|3 incorrect password attempts|sorry, try again|no password was provided|密码错误|认证失败|对不起，请重试|未提供密码/i.test(
+                errMessage
+              )
+            ) {
               this.sudoPassword = undefined
               safeReject(new Error('sudo 密码错误，请重新输入。'))
               return
@@ -2548,7 +2628,6 @@ printf "%s\\n" ${shellQuote(outputEndMarker)}
     this.awaitingSudoPasswordInput = false
     this.pendingSudoPasswordInput = ''
   }
-
 }
 
 class BoundedTextBuffer {
@@ -2617,7 +2696,9 @@ class BoundedTextBuffer {
 
 const DEFAULT_SSH_KEY_FILES = ['id_ed25519', 'id_ecdsa', 'id_rsa', 'id_dsa']
 
-async function resolveSshAuthConfig(profile: SshProfile): Promise<Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>> {
+async function resolveSshAuthConfig(
+  profile: SshProfile
+): Promise<Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>> {
   if (profile.authType === 'password') {
     if (profile.password) {
       return {
@@ -2643,7 +2724,9 @@ async function resolveSshAuthConfig(profile: SshProfile): Promise<Pick<ConnectCo
   return resolveSystemSshAuthConfig(profile)
 }
 
-async function resolveSystemSshAuthConfig(profile: SshProfile): Promise<Pick<ConnectConfig, 'privateKey' | 'passphrase' | 'agent'>> {
+async function resolveSystemSshAuthConfig(
+  profile: SshProfile
+): Promise<Pick<ConnectConfig, 'privateKey' | 'passphrase' | 'agent'>> {
   const agent = process.env.SSH_AUTH_SOCK
   const privateKey = await readDefaultPrivateKey()
 
@@ -2684,7 +2767,6 @@ function registerKeyboardInteractiveHandler(client: Client, profile: SshProfile,
     finish(prompts.map(() => profile.password ?? ''))
   })
 }
-
 
 function expandHomePath(targetPath?: string): string | undefined {
   if (!targetPath) {
@@ -2756,12 +2838,11 @@ function sftpLstat(sftp: SFTPWrapper, targetPath: string): Promise<Stats | null>
 
 function isSftpMissingError(error: unknown) {
   return Boolean(
-    error
-    && typeof error === 'object'
-    && (
-      ('code' in error && ((error as { code?: number | string }).code === 2 || (error as { code?: number | string }).code === 'ENOENT'))
-      || ('message' in error && /no such file|not found/i.test(String((error as { message?: string }).message)))
-    )
+    error &&
+    typeof error === 'object' &&
+    (('code' in error &&
+      ((error as { code?: number | string }).code === 2 || (error as { code?: number | string }).code === 'ENOENT')) ||
+      ('message' in error && /no such file|not found/i.test(String((error as { message?: string }).message))))
   )
 }
 
@@ -2780,7 +2861,7 @@ function parseRemoteByteSize(output: string): number | undefined {
 }
 
 function shellQuote(value: string) {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+  return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
 function extractMarkedOutput(output: string, startMarker: string, endMarker: string) {

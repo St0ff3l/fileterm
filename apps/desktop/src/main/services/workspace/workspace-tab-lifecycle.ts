@@ -1,12 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type {
-  ConnectionProfile,
-  RemoteFileAccessOptions,
-  SessionSnapshot,
-  WorkspaceSnapshot,
-  WorkspaceTab
-} from '@fileterm/core'
+import type { ConnectionProfile, RemoteFileAccessOptions, SessionSnapshot, WorkspaceSnapshot } from '@fileterm/core'
 import type { ProfileRepository } from '@fileterm/storage'
 import { appWarn } from '../app-logger.js'
 import type { LiveSessionController } from './workspace-session-runtime.js'
@@ -84,7 +78,7 @@ export class WorkspaceTabLifecycleService {
       terminalTranscript: disconnectedTranscript,
       remotePath: current?.remotePath ?? profile.remotePath,
       shellCwd: current?.shellCwd,
-      followShellCwd: current?.followShellCwd ?? (profile.type === 'ssh'),
+      followShellCwd: current?.followShellCwd ?? profile.type === 'ssh',
       remoteFiles: [],
       fileAccessMode: 'user',
       sudoUser: current?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined),
@@ -94,12 +88,15 @@ export class WorkspaceTabLifecycleService {
     })
 
     const controller = this.options.createController(tabId, profile, disconnectedTranscript)
-    this.options.sessionRuntime.set(tabId, createInitialSessionSnapshot(profile, controller, {
-      remotePath: current?.remotePath ?? profile.remotePath,
-      shellCwd: current?.shellCwd,
-      followShellCwd: current?.followShellCwd ?? (profile.type === 'ssh'),
-      sudoUser: current?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined)
-    }))
+    this.options.sessionRuntime.set(
+      tabId,
+      createInitialSessionSnapshot(profile, controller, {
+        remotePath: current?.remotePath ?? profile.remotePath,
+        shellCwd: current?.shellCwd,
+        followShellCwd: current?.followShellCwd ?? profile.type === 'ssh',
+        sudoUser: current?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined)
+      })
+    )
     this.options.tabs.updateStatus(tabId, 'connecting')
     this.options.tabs.activate(tabId)
 
@@ -162,11 +159,10 @@ function createInitialSessionSnapshot(
     profileId: profile.id,
     accessHost: profile.host,
     summary: profile.type === 'ssh' ? '连接主机...' : controller.getSummary(),
-    terminalTranscript:
-      controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
+    terminalTranscript: controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
     remotePath: overrides?.remotePath ?? controller.getRemotePath(),
     shellCwd: overrides?.shellCwd ?? (controller.type === 'ssh' ? controller.getShellCwd() : undefined),
-    followShellCwd: overrides?.followShellCwd ?? (profile.type === 'ssh'),
+    followShellCwd: overrides?.followShellCwd ?? profile.type === 'ssh',
     remoteFiles: [],
     fileAccessMode: controller.getFileAccessMode(),
     sudoUser: overrides?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined),

@@ -66,13 +66,14 @@ export class AppUiStateStore {
       const parsed = JSON.parse(raw) as Partial<StoredUiState>
       return {
         version: 1,
-        values: typeof parsed.values === 'object' && parsed.values
-          ? Object.fromEntries(
-              Object.entries(parsed.values).filter(
-                (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string'
+        values:
+          typeof parsed.values === 'object' && parsed.values
+            ? Object.fromEntries(
+                Object.entries(parsed.values).filter(
+                  (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string'
+                )
               )
-            )
-          : {}
+            : {}
       }
     } catch {
       return EMPTY_UI_STATE

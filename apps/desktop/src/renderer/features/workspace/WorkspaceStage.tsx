@@ -120,7 +120,13 @@ export function WorkspaceStage({
   onCopyItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onCutItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onClearCutState(): void
-  onExecuteCommand(commandId: string, args: string[], options: CommandExecutionOptions, scope: SendScope, selectedTabIds: string[]): void
+  onExecuteCommand(
+    commandId: string,
+    args: string[],
+    options: CommandExecutionOptions,
+    scope: SendScope,
+    selectedTabIds: string[]
+  ): void
   onSendTerminalCommand(command: string): Promise<void>
   onTerminalDockSendScopeChange(scope: SendScope, rememberSelection: boolean): void
   onTerminalDockSelectedTabIdsChange(tabIds: string[], rememberSelection: boolean): void

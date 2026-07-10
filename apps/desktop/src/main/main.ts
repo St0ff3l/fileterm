@@ -100,9 +100,7 @@ let ipcServices: ReturnType<typeof registerIpcHandlers> | null = null
 let uiStateStore: AppUiStateStore | null = null
 
 function isBrokenPipeError(error: unknown): boolean {
-  return error instanceof Error
-    && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'EPIPE'
+  return error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'EPIPE'
 }
 
 function migrateLegacyUserData() {
@@ -210,12 +208,8 @@ async function openExternalUrl(rawUrl: string) {
 
 function installContentSecurityPolicy() {
   const appSession = session.fromPartition(APP_SESSION_PARTITION)
-  const connectSrc = app.isPackaged
-    ? ["'self'"]
-    : ["'self'", 'http://localhost:5188', 'ws://localhost:5188']
-  const scriptSrc = app.isPackaged
-    ? ["'self'"]
-    : ["'self'", "'unsafe-inline'"]
+  const connectSrc = app.isPackaged ? ["'self'"] : ["'self'", 'http://localhost:5188', 'ws://localhost:5188']
+  const scriptSrc = app.isPackaged ? ["'self'"] : ["'self'", "'unsafe-inline'"]
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(' ')}`,
@@ -448,7 +442,11 @@ function installApplicationMenu() {
   Menu.setApplicationMenu(menu)
 }
 
-function loadAppWindow(win: BrowserWindow, searchParams?: Record<string, string>, preferences: UiPreferences = uiPreferences) {
+function loadAppWindow(
+  win: BrowserWindow,
+  searchParams?: Record<string, string>,
+  preferences: UiPreferences = uiPreferences
+) {
   const query = {
     ...(searchParams ?? {}),
     theme: preferences.theme,
@@ -470,17 +468,14 @@ function loadAppWindow(win: BrowserWindow, searchParams?: Record<string, string>
 }
 
 function createTray() {
-  const iconPath = isMac
-    ? getTrayTemplateIconPath() ?? getAppIconPath()
-    : getAppIconPath()
+  const iconPath = isMac ? (getTrayTemplateIconPath() ?? getAppIconPath()) : getAppIconPath()
   if (!iconPath) {
     return
   }
 
   const image = nativeImage.createFromPath(iconPath)
-  const trayImage = process.platform === 'darwin'
-    ? image.resize({ width: 18, height: 18 })
-    : image.resize({ width: 16, height: 16 })
+  const trayImage =
+    process.platform === 'darwin' ? image.resize({ width: 18, height: 18 }) : image.resize({ width: 16, height: 16 })
 
   if (process.platform === 'darwin') {
     trayImage.setTemplateImage(true)
@@ -627,18 +622,21 @@ function registerWindowStateListeners(win: BrowserWindow) {
   })
 }
 
-function createNativeChildWindow(parent: BrowserWindow, options: {
-  title: string
-  width: number
-  height: number
-  minWidth: number
-  minHeight: number
-  backgroundColor?: string
-  useVibrancy?: boolean
-  visualEffectState?: 'followWindow' | 'active' | 'inactive'
-  titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'
-  frame?: boolean
-}) {
+function createNativeChildWindow(
+  parent: BrowserWindow,
+  options: {
+    title: string
+    width: number
+    height: number
+    minWidth: number
+    minHeight: number
+    backgroundColor?: string
+    useVibrancy?: boolean
+    visualEffectState?: 'followWindow' | 'active' | 'inactive'
+    titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'
+    frame?: boolean
+  }
+) {
   const enableVibrancy = isMac && options.useVibrancy === true
   const frame = options.frame ?? (isWindows ? false : isMac ? undefined : true)
   const win = new BrowserWindow({
@@ -654,11 +652,11 @@ function createNativeChildWindow(parent: BrowserWindow, options: {
     backgroundColor: options.backgroundColor ?? getWindowBackgroundColor(uiPreferences.theme),
     autoHideMenuBar: true,
     frame,
-    titleBarStyle: isMac && frame !== false ? options.titleBarStyle ?? 'hiddenInset' : 'default',
+    titleBarStyle: isMac && frame !== false ? (options.titleBarStyle ?? 'hiddenInset') : 'default',
     trafficLightPosition: isMac && frame !== false ? { x: 16, y: 14 } : undefined,
     minimizable: isWindows,
     vibrancy: enableVibrancy ? 'sidebar' : undefined,
-    visualEffectState: enableVibrancy ? options.visualEffectState ?? 'active' : undefined,
+    visualEffectState: enableVibrancy ? (options.visualEffectState ?? 'active') : undefined,
     ...getWindowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.cjs'),
@@ -783,11 +781,15 @@ function openConnectionFormWindow(parent: BrowserWindow, mode: 'create' | 'edit'
     }
   })
 
-  loadAppWindow(win, {
-    window: 'connection-form',
-    mode,
-    ...(profileId ? { profileId } : {})
-  }, uiPreferences)
+  loadAppWindow(
+    win,
+    {
+      window: 'connection-form',
+      mode,
+      ...(profileId ? { profileId } : {})
+    },
+    uiPreferences
+  )
 }
 
 function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', commandId?: string, folderId?: string) {
@@ -816,21 +818,28 @@ function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', c
     }
   })
 
-  loadAppWindow(win, {
-    window: 'command-form',
-    mode,
-    ...(commandId ? { commandId } : {}),
-    ...(folderId ? { folderId } : {})
-  }, uiPreferences)
+  loadAppWindow(
+    win,
+    {
+      window: 'command-form',
+      mode,
+      ...(commandId ? { commandId } : {}),
+      ...(folderId ? { folderId } : {})
+    },
+    uiPreferences
+  )
 }
 
-function openFileEditorWindow(parent: BrowserWindow, input: {
-  source: 'local' | 'remote'
-  path: string
-  name: string
-  tabId?: string
-  encoding?: string
-}) {
+function openFileEditorWindow(
+  parent: BrowserWindow,
+  input: {
+    source: 'local' | 'remote'
+    path: string
+    name: string
+    tabId?: string
+    encoding?: string
+  }
+) {
   if (fileEditorWindow && !fileEditorWindow.isDestroyed()) {
     fileEditorWindow.close()
   }
@@ -857,14 +866,18 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
     }
   })
 
-  loadAppWindow(win, {
-    window: 'file-editor',
-    source: input.source,
-    path: input.path,
-    name: input.name,
-    ...(input.tabId ? { tabId: input.tabId } : {}),
-    ...(input.encoding ? { encoding: input.encoding } : {})
-  }, uiPreferences)
+  loadAppWindow(
+    win,
+    {
+      window: 'file-editor',
+      source: input.source,
+      path: input.path,
+      name: input.name,
+      ...(input.tabId ? { tabId: input.tabId } : {}),
+      ...(input.encoding ? { encoding: input.encoding } : {})
+    },
+    uiPreferences
+  )
 }
 
 app.whenReady().then(() => {

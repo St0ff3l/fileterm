@@ -52,27 +52,24 @@ export function TabBar({
   const focusModeLabel = isWorkspaceFocusMode ? t.exitWorkspaceFocusMode : t.enterWorkspaceFocusMode
 
   return (
-      <header className="fs-tabbar">
-        <div className={`titlebar-brand ${homeBrandContent ? 'has-home-brand-content' : ''}`}>
-          <div className="window-controls-decorator" aria-hidden="true">
-            <span className="dot dot-close" />
-            <span className="dot dot-minimize" />
-            <span className="dot dot-maximize" />
-          </div>
-          {homeBrandContent ? (
-            <div className="titlebar-home-brand" aria-hidden="true">
-              {homeBrandContent}
-            </div>
-          ) : (
-            <strong>{t.appTitle}</strong>
-          )}
+    <header className="fs-tabbar">
+      <div className={`titlebar-brand ${homeBrandContent ? 'has-home-brand-content' : ''}`}>
+        <div className="window-controls-decorator" aria-hidden="true">
+          <span className="dot dot-close" />
+          <span className="dot dot-minimize" />
+          <span className="dot dot-maximize" />
         </div>
-        <div className="titlebar-tabarea">
-        <div
-          className="fs-tabs"
-          onWheel={handleHorizontalWheelScroll}
-        >
-          {orderedTabs.map((entry, index) => (
+        {homeBrandContent ? (
+          <div className="titlebar-home-brand" aria-hidden="true">
+            {homeBrandContent}
+          </div>
+        ) : (
+          <strong>{t.appTitle}</strong>
+        )}
+      </div>
+      <div className="titlebar-tabarea">
+        <div className="fs-tabs" onWheel={handleHorizontalWheelScroll}>
+          {orderedTabs.map((entry, index) =>
             entry.kind === 'local' ? (
               <div
                 key={entry.key}
@@ -103,7 +100,11 @@ export function TabBar({
               >
                 <span>{index + 1}</span>
                 <strong>{entry.title}</strong>
-                <CloseButton aria-label={`${t.closeTab} ${entry.title}`} onClick={(event) => onCloseHomeTab(event, entry.id)} size="tab" />
+                <CloseButton
+                  aria-label={`${t.closeTab} ${entry.title}`}
+                  onClick={(event) => onCloseHomeTab(event, entry.id)}
+                  size="tab"
+                />
               </div>
             ) : (
               <div
@@ -137,11 +138,17 @@ export function TabBar({
                 <span>{index + 1}</span>
                 <strong>{entry.tab.title}</strong>
                 <span className={`tab-dot ${tabStatusClass(entry.tab.status)}`} />
-                <CloseButton aria-label={`${t.closeTab} ${entry.tab.title}`} onClick={(event) => onCloseSessionTab(event, entry.tab.id)} size="tab" />
+                <CloseButton
+                  aria-label={`${t.closeTab} ${entry.tab.title}`}
+                  onClick={(event) => onCloseSessionTab(event, entry.tab.id)}
+                  size="tab"
+                />
               </div>
             )
-          ))}
-          <button aria-label={t.newTab} className="add-tab" type="button" onClick={onAddHomeTab}><AppIcon name="plus" size={16} /></button>
+          )}
+          <button aria-label={t.newTab} className="add-tab" type="button" onClick={onAddHomeTab}>
+            <AppIcon name="plus" size={16} />
+          </button>
         </div>
         <div className="window-tools">
           <button
@@ -152,14 +159,11 @@ export function TabBar({
             type="button"
             onClick={onToggleWorkspaceFocus}
           >
-            <span className="material-symbols-outlined">{isWorkspaceFocusMode ? 'close_fullscreen' : 'open_in_full'}</span>
+            <span className="material-symbols-outlined">
+              {isWorkspaceFocusMode ? 'close_fullscreen' : 'open_in_full'}
+            </span>
           </button>
-          <button
-            aria-label={t.settings}
-            title={t.settings}
-            type="button"
-            onClick={onOpenSettings}
-          >
+          <button aria-label={t.settings} title={t.settings} type="button" onClick={onOpenSettings}>
             <span className="material-symbols-outlined">settings</span>
           </button>
         </div>

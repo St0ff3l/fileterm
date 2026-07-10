@@ -3,8 +3,7 @@ import { useState, useMemo } from 'react'
 import { t } from '../../i18n'
 
 type ConnectionTreeNode =
-  | (ConnectionFolder & { children: ConnectionTreeNode[] })
-  | (ConnectionProfile & { children?: never })
+  (ConnectionFolder & { children: ConnectionTreeNode[] }) | (ConnectionProfile & { children?: never })
 
 export function QuickLinksPage({
   profiles,
@@ -21,7 +20,7 @@ export function QuickLinksPage({
 
   const toggleFolder = (folderId: string, event?: React.MouseEvent) => {
     event?.stopPropagation()
-    setExpandedFolders(prev => {
+    setExpandedFolders((prev) => {
       const next = new Set(prev)
       if (next.has(folderId)) next.delete(folderId)
       else next.add(folderId)
@@ -45,11 +44,11 @@ export function QuickLinksPage({
     const roots: ConnectionTreeNode[] = []
     const map = new Map<string, ConnectionTreeNode>()
 
-    items.forEach(item => {
+    items.forEach((item) => {
       map.set(item.id, item)
     })
 
-    items.forEach(item => {
+    items.forEach((item) => {
       const parent = item.parentId ? map.get(item.parentId) : undefined
       if (parent?.type === 'folder') {
         parent.children.push(item)
@@ -60,7 +59,7 @@ export function QuickLinksPage({
 
     const sortNodes = (nodes: ConnectionTreeNode[]) => {
       nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      nodes.forEach(n => {
+      nodes.forEach((n) => {
         if (n.type === 'folder') sortNodes(n.children)
       })
     }
@@ -98,9 +97,7 @@ export function QuickLinksPage({
           tabIndex={0}
         >
           <div className={`col-icon ${isFolder ? 'folder' : 'profile'}`}>
-            <span className="material-symbols-outlined">
-              {isFolder ? 'folder' : 'dns'}
-            </span>
+            <span className="material-symbols-outlined">{isFolder ? 'folder' : 'dns'}</span>
           </div>
           <div className="col-name" style={{ paddingLeft: `${depth * 20}px` }}>
             {isFolder && (
@@ -110,7 +107,7 @@ export function QuickLinksPage({
             )}
             <strong>{node.name}</strong>
           </div>
-          <div className="col-path">{isFolder ? '--' : (node.note || '/')}</div>
+          <div className="col-path">{isFolder ? '--' : node.note || '/'}</div>
           <div className="col-user">{isFolder ? '--' : node.username}</div>
           <div className="col-type">
             <div className={`type-dot ${isFolder ? 'dot-folder' : `dot-${node.type.toLowerCase()}`}`}></div>
@@ -128,9 +125,7 @@ export function QuickLinksPage({
               }}
               type="button"
             >
-              <span className="material-symbols-outlined">
-                {isFolder ? 'arrow_forward' : 'terminal'}
-              </span>
+              <span className="material-symbols-outlined">{isFolder ? 'arrow_forward' : 'terminal'}</span>
             </button>
           </div>
         </div>
@@ -185,12 +180,8 @@ export function QuickLinksPage({
           </div>
 
           <div className="grid-rows">
-            {tree.map(node => renderNode(node, 0))}
-            {tree.length === 0 && (
-              <div className="flat-grid-empty">
-                {t.noConnections}
-              </div>
-            )}
+            {tree.map((node) => renderNode(node, 0))}
+            {tree.length === 0 && <div className="flat-grid-empty">{t.noConnections}</div>}
           </div>
         </div>
       </div>

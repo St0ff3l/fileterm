@@ -19,16 +19,19 @@ FileTerm 当前已经有 SSH 会话的系统信息页，但实现明显偏向 `L
 ## 待完成工作 (TODO)
 
 ### 1. 采集逻辑拆分与归一化
+
 - [x] 从 `session-file-utils.ts` 中剥离系统监控采集脚本。
 - [x] 新建 `system-metrics/` 目录并建立通用接口定义 `SystemMetrics`（存储原始指标数据，如字节数、秒数等）。
 - [x] 移除脚本中直接拼装 `" 天"`、`"小时"` 等本地化字符串的代码，改为直接返回运行时长（秒数）。
 
 ### 2. 跨平台采集器实现
+
 - [x] **Linux 采集器** (`linux-collector.ts`)：覆盖标准 Linux 发行版（Debian, Ubuntu, CentOS, Arch 等）。
 - [x] **BusyBox / OpenWrt 兼容采集器** (`busybox-collector.ts`)：为软路由和 BusyBox 的 `df`、`uptime`、`ps` 等简化版指令提供兼容解析，允许缺项时不崩溃。
 - [x] **Windows 采集器** (`windows-collector.ts`)：基于 PowerShell 脚本实现对 Windows SSH 目标主机的 CPU、内存、磁盘及网卡信息探测。
 
 ### 3. 主进程调度与路由
+
 - [x] 实现平台自动探测器 (`platform-probe.ts`)：在会话建立后首先运行快速探测命令，判定远端主机 OS 类型。
 - [x] 在 SSH 系统指标刷新链路中集成该路由；`workspace-session-runtime.ts` 继续负责轮询节流，SSH controller 根据探测结果调用对应的 Platform Collector。
 

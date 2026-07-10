@@ -447,7 +447,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   background: var(--surface-inset);
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 10px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -757,7 +757,7 @@
 }
 
 .session-send-target-index {
-  font-family: var(--font-mono, "SF Mono", Menlo, monospace);
+  font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
   font-size: 10px;
   color: var(--text-muted);
   font-weight: 600;
@@ -828,14 +828,16 @@
   display: inline-block;
   vertical-align: middle;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
 .command-toggle input::after,
 .command-editor-checkbox-row input::after,
 .command-toggle input[type='checkbox']::after,
 .command-editor-checkbox-row input[type='checkbox']::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 2.5px;
   border-radius: 999px !important;
@@ -886,7 +888,9 @@
   display: inline-block;
   vertical-align: middle;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
   box-shadow: var(--control-shadow);
 }
 
@@ -914,7 +918,7 @@
 .session-send-target-remember-inline input[type='checkbox']::after,
 .session-send-target-header input[type='checkbox']::after,
 .terminal-dock-option-row input[type='checkbox']::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 2.5px;
   border-radius: 999px !important;
@@ -938,7 +942,7 @@
 }
 
 .session-send-target-header input[type='checkbox']:indeterminate::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 3px;
   top: 5px;
@@ -1247,7 +1251,10 @@
   border-radius: var(--radius-md);
   font-size: 13px;
   font-family: inherit;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
   box-sizing: border-box;
 }
 
@@ -1261,7 +1268,7 @@
   min-height: 200px;
   padding: 12px;
   resize: vertical;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   line-height: 1.55;
 }
 
@@ -1449,7 +1456,6 @@
   --ft-select-shell-bg: color-mix(in srgb, var(--bg-main) 45%, var(--bg-card));
 }
 
-
 .command-editor-dialog-textarea .command-code-area {
   display: flex;
   border: 1px solid var(--border-light);
@@ -1484,7 +1490,7 @@
   line-height: 20px;
   padding: 0 10px;
   font-size: 11px;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -1495,7 +1501,7 @@
   min-height: 0;
   padding: 4px 12px;
   resize: none;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   line-height: 20px;
   font-size: 13px;
   border: none;

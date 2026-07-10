@@ -11,7 +11,7 @@ body,
   overflow: hidden;
   background: var(--bg-main);
   color: var(--text-main);
-  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   color-scheme: inherit;
   user-select: none;
@@ -20,7 +20,7 @@ body,
 
 input,
 textarea,
-[contenteditable="true"],
+[contenteditable='true'],
 .xterm,
 .monaco-editor,
 .selectable-text {

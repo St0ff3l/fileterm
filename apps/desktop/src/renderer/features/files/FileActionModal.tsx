@@ -61,7 +61,9 @@ export function FileActionModal({
         {hint ? <div className="file-action-hint">{hint}</div> : null}
         {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
         <div className="form-actions">
-          <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">{t.cancel}</button>
+          <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">
+            {t.cancel}
+          </button>
           <button
             className="primary-button file-action-submit-button"
             disabled={isSubmitting}

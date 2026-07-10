@@ -20,9 +20,15 @@ export function ConflictResolutionModal({
         <div className="file-action-description">{t.conflictDialogDescription}</div>
         <div className="conflict-resolution-name">{name}</div>
         <div className="conflict-resolution-actions">
-          <button className="flat-button" onClick={() => onResolve('skip')} type="button">{t.conflictSkip}</button>
-          <button className="flat-button" onClick={() => onResolve('keep-both')} type="button">{t.conflictKeepBoth}</button>
-          <button className="primary-button" onClick={() => onResolve('replace')} type="button">{t.conflictReplace}</button>
+          <button className="flat-button" onClick={() => onResolve('skip')} type="button">
+            {t.conflictSkip}
+          </button>
+          <button className="flat-button" onClick={() => onResolve('keep-both')} type="button">
+            {t.conflictKeepBoth}
+          </button>
+          <button className="primary-button" onClick={() => onResolve('replace')} type="button">
+            {t.conflictReplace}
+          </button>
         </div>
       </div>
     </div>

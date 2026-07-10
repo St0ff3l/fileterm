@@ -41,14 +41,7 @@ export type AppIconName =
   | 'play'
   | 'close'
 
-
-export function AppIcon({
-  name,
-  size = 14
-}: {
-  name: AppIconName
-  size?: number
-}) {
+export function AppIcon({ name, size = 14 }: { name: AppIconName; size?: number }) {
   const commonProps = {
     fill: 'none',
     stroke: 'currentColor',
@@ -100,7 +93,10 @@ export function AppIcon({
         </>
       ) : null}
       {name === 'folder' ? (
-        <path {...commonProps} d="M2.5 4.5h3l1.4 1.6h6.6v5.8a1.1 1.1 0 0 1-1.1 1.1H3.6a1.1 1.1 0 0 1-1.1-1.1V5.6a1.1 1.1 0 0 1 1.1-1.1Z" />
+        <path
+          {...commonProps}
+          d="M2.5 4.5h3l1.4 1.6h6.6v5.8a1.1 1.1 0 0 1-1.1 1.1H3.6a1.1 1.1 0 0 1-1.1-1.1V5.6a1.1 1.1 0 0 1 1.1-1.1Z"
+        />
       ) : null}
       {name === 'file' ? (
         <>
@@ -166,7 +162,10 @@ export function AppIcon({
       {name === 'database' ? (
         <>
           <ellipse {...commonProps} cx="8" cy="4.2" rx="4.5" ry="2" />
-          <path {...commonProps} d="M3.5 4.2v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4.2M3.5 8v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8" />
+          <path
+            {...commonProps}
+            d="M3.5 4.2v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4.2M3.5 8v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8"
+          />
         </>
       ) : null}
       {name === 'font-file' ? (
@@ -191,7 +190,10 @@ export function AppIcon({
         <>
           <path {...commonProps} d="M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z" />
           <path {...commonProps} d="M9.5 2.5V6H13" />
-          <path {...commonProps} d="M6.2 10.7V7.4h1.2a.9.9 0 1 1 0 1.8H6.2m2.2 1.5V7.4h.7a1.6 1.6 0 0 1 0 3.3h-.7m2-.1V7.4h1.4" />
+          <path
+            {...commonProps}
+            d="M6.2 10.7V7.4h1.2a.9.9 0 1 1 0 1.8H6.2m2.2 1.5V7.4h.7a1.6 1.6 0 0 1 0 3.3h-.7m2-.1V7.4h1.4"
+          />
         </>
       ) : null}
       {name === 'code' ? (
@@ -263,9 +265,7 @@ export function AppIcon({
           <path {...commonProps} d="M3 12.5h10" />
         </>
       ) : null}
-      {name === 'flash' ? (
-        <path {...commonProps} d="M8.9 1.8 3.8 8h3l-.7 6.2L12.2 8h-3.1l-.2-6.2Z" />
-      ) : null}
+      {name === 'flash' ? <path {...commonProps} d="M8.9 1.8 3.8 8h3l-.7 6.2L12.2 8h-3.1l-.2-6.2Z" /> : null}
       {name === 'copy' ? (
         <>
           <rect {...commonProps} x="4.5" y="4.5" width="8" height="8" rx="1.5" />
@@ -274,34 +274,21 @@ export function AppIcon({
       ) : null}
       {name === 'paste' ? (
         <>
-          <path {...commonProps} d="M5.5 3h5A1.5 1.5 0 0 1 12 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 4 12.5v-8A1.5 1.5 0 0 1 5.5 3Z" />
+          <path
+            {...commonProps}
+            d="M5.5 3h5A1.5 1.5 0 0 1 12 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-5A1.5 1.5 0 0 1 4 12.5v-8A1.5 1.5 0 0 1 5.5 3Z"
+          />
           <path {...commonProps} d="M6.5 2h3v1.5h-3z" />
         </>
       ) : null}
-      {name === 'chevron-up' ? (
-        <path {...commonProps} d="m3.5 10 4.5-4.5 4.5 4.5" />
-      ) : null}
-      {name === 'chevron-down' ? (
-        <path {...commonProps} d="m3.5 6 4.5 4.5 4.5-4.5" />
-      ) : null}
-      {name === 'chevron-right' ? (
-        <path {...commonProps} d="m6 3.5 4.5 4.5L6 12.5" />
-      ) : null}
-      {name === 'arrow-up' ? (
-        <path {...commonProps} d="M8 13V3m-4 4 4-4 4 4" />
-      ) : null}
-      {name === 'arrow-down' ? (
-        <path {...commonProps} d="M8 3v10m-4-4 4 4 4-4" />
-      ) : null}
-      {name === 'check' ? (
-        <path {...commonProps} d="m3.2 8.2 3.1 3.1 6.5-6.6" />
-      ) : null}
-      {name === 'play' ? (
-        <path {...commonProps} d="M5.5 3.5v9l6.5-4.5z" />
-      ) : null}
-      {name === 'close' ? (
-        <path {...commonProps} d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
-      ) : null}
+      {name === 'chevron-up' ? <path {...commonProps} d="m3.5 10 4.5-4.5 4.5 4.5" /> : null}
+      {name === 'chevron-down' ? <path {...commonProps} d="m3.5 6 4.5 4.5 4.5-4.5" /> : null}
+      {name === 'chevron-right' ? <path {...commonProps} d="m6 3.5 4.5 4.5L6 12.5" /> : null}
+      {name === 'arrow-up' ? <path {...commonProps} d="M8 13V3m-4 4 4-4 4 4" /> : null}
+      {name === 'arrow-down' ? <path {...commonProps} d="M8 3v10m-4-4 4 4 4-4" /> : null}
+      {name === 'check' ? <path {...commonProps} d="m3.2 8.2 3.1 3.1 6.5-6.6" /> : null}
+      {name === 'play' ? <path {...commonProps} d="M5.5 3.5v9l6.5-4.5z" /> : null}
+      {name === 'close' ? <path {...commonProps} d="M3.5 3.5l9 9M12.5 3.5l-9 9" /> : null}
     </svg>
   )
 }

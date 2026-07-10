@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { ConnectionProfile, SessionSnapshot, SystemMetrics } from '@fileterm/core'
+import type { ConnectionProfile, SessionSnapshot } from '@fileterm/core'
 import { t } from '../../i18n'
 
 export function SystemInfoWorkspace({
@@ -64,28 +64,25 @@ export function SystemInfoWorkspace({
         <DataCard title={t.gpuDetails}>
           <Table
             columns={[t.model, t.vendor, t.driver, t.memory]}
-            rows={metrics.gpuInfoRows.map((row) => [
-              row.model,
-              row.vendor,
-              row.driver,
-              row.memory
-            ])}
+            rows={metrics.gpuInfoRows.map((row) => [row.model, row.vendor, row.driver, row.memory])}
           />
         </DataCard>
 
         <DataCard title={t.cpuUsage}>
           <Table
             columns={[t.user, t.system, t.nice, t.idle, t.ioWait, t.irq, t.softIrq, t.realtime]}
-            rows={[[
-              formatPercent(metrics.cpuUsage.user),
-              formatPercent(metrics.cpuUsage.system),
-              formatPercent(metrics.cpuUsage.nice),
-              formatPercent(metrics.cpuUsage.idle),
-              formatPercent(metrics.cpuUsage.ioWait),
-              formatPercent(metrics.cpuUsage.irq),
-              formatPercent(metrics.cpuUsage.softIrq),
-              formatPercent(metrics.cpuUsage.steal)
-            ]]}
+            rows={[
+              [
+                formatPercent(metrics.cpuUsage.user),
+                formatPercent(metrics.cpuUsage.system),
+                formatPercent(metrics.cpuUsage.nice),
+                formatPercent(metrics.cpuUsage.idle),
+                formatPercent(metrics.cpuUsage.ioWait),
+                formatPercent(metrics.cpuUsage.irq),
+                formatPercent(metrics.cpuUsage.softIrq),
+                formatPercent(metrics.cpuUsage.steal)
+              ]
+            ]}
           />
         </DataCard>
 
@@ -93,23 +90,27 @@ export function SystemInfoWorkspace({
           <DataCard title={t.memoryUsageTitle}>
             <Table
               columns={[t.total, t.used, t.remaining, t.usage]}
-              rows={[[
-                metrics.memoryBreakdown.total,
-                metrics.memoryBreakdown.used,
-                metrics.memoryBreakdown.available,
-                formatPercent(metrics.memoryBreakdown.percent)
-              ]]}
+              rows={[
+                [
+                  metrics.memoryBreakdown.total,
+                  metrics.memoryBreakdown.used,
+                  metrics.memoryBreakdown.available,
+                  formatPercent(metrics.memoryBreakdown.percent)
+                ]
+              ]}
             />
           </DataCard>
           <DataCard title={t.swapUsageTitle}>
             <Table
               columns={[t.total, t.used, t.remaining, t.usage]}
-              rows={[[
-                metrics.swapBreakdown.total,
-                metrics.swapBreakdown.used,
-                metrics.swapBreakdown.available,
-                formatPercent(metrics.swapBreakdown.percent)
-              ]]}
+              rows={[
+                [
+                  metrics.swapBreakdown.total,
+                  metrics.swapBreakdown.used,
+                  metrics.swapBreakdown.available,
+                  formatPercent(metrics.swapBreakdown.percent)
+                ]
+              ]}
             />
           </DataCard>
         </div>
@@ -168,27 +169,27 @@ function DescriptionList({ rows }: { rows: Array<{ label: string; value: string 
   )
 }
 
-function Table({
-  columns,
-  rows
-}: {
-  columns: string[]
-  rows: string[][]
-}) {
+function Table({ columns, rows }: { columns: string[]; rows: string[][] }) {
   return (
     <div className="system-table-shell">
       <table className="system-table">
         <thead>
           <tr>
-            {columns.map((column) => <th key={column}>{column}</th>)}
+            {columns.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {rows.length ? rows.map((row, rowIndex) => (
-            <tr key={`${columns[0]}-${rowIndex}`}>
-              {row.map((cell, cellIndex) => <td key={`${columns[cellIndex]}-${cellIndex}`}>{cell || '-'}</td>)}
-            </tr>
-          )) : (
+          {rows.length ? (
+            rows.map((row, rowIndex) => (
+              <tr key={`${columns[0]}-${rowIndex}`}>
+                {row.map((cell, cellIndex) => (
+                  <td key={`${columns[cellIndex]}-${cellIndex}`}>{cell || '-'}</td>
+                ))}
+              </tr>
+            ))
+          ) : (
             <tr>
               <td colSpan={columns.length}>-</td>
             </tr>

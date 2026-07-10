@@ -60,11 +60,14 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
-  ipcMain.handle('workspace:updateEntityOrder', async (_, id: string, newParentId: string | undefined, newOrder: number) => {
-    const snapshot = await workspaceService.updateEntityOrder(id, newParentId, newOrder)
-    broadcastSnapshot(snapshot)
-    return snapshot
-  })
+  ipcMain.handle(
+    'workspace:updateEntityOrder',
+    async (_, id: string, newParentId: string | undefined, newOrder: number) => {
+      const snapshot = await workspaceService.updateEntityOrder(id, newParentId, newOrder)
+      broadcastSnapshot(snapshot)
+      return snapshot
+    }
+  )
 
   ipcMain.handle('workspace:createCommandFolder', async (_, name: string, parentId?: string) => {
     const snapshot = await workspaceService.createCommandFolder(name, parentId)
@@ -84,11 +87,14 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
-  ipcMain.handle('workspace:updateCommandOrder', async (_, id: string, newParentId: string | undefined, newOrder: number) => {
-    const snapshot = await workspaceService.updateCommandOrder(id, newParentId, newOrder)
-    broadcastSnapshot(snapshot)
-    return snapshot
-  })
+  ipcMain.handle(
+    'workspace:updateCommandOrder',
+    async (_, id: string, newParentId: string | undefined, newOrder: number) => {
+      const snapshot = await workspaceService.updateCommandOrder(id, newParentId, newOrder)
+      broadcastSnapshot(snapshot)
+      return snapshot
+    }
+  )
 
   ipcMain.handle('workspace:createCommandTemplate', async (_, input: CommandTemplateInput) => {
     const snapshot = await workspaceService.createCommandTemplate(input)
@@ -108,17 +114,23 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return snapshot
   })
 
-  ipcMain.handle('workspace:executeCommandTemplate', async (_, tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions) => {
-    return workspaceService.executeCommandTemplate(tabId, commandId, args, options)
-  })
+  ipcMain.handle(
+    'workspace:executeCommandTemplate',
+    async (_, tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions) => {
+      return workspaceService.executeCommandTemplate(tabId, commandId, args, options)
+    }
+  )
 
   ipcMain.handle('workspace:getTerminalCommandHistory', async (_, profileId: string) => {
     return workspaceService.getTerminalCommandHistory(profileId)
   })
 
-  ipcMain.handle('workspace:setTerminalCommandHistory', async (_, profileId: string, entries: TerminalCommandHistoryEntry[]) => {
-    await workspaceService.setTerminalCommandHistory(profileId, entries)
-  })
+  ipcMain.handle(
+    'workspace:setTerminalCommandHistory',
+    async (_, profileId: string, entries: TerminalCommandHistoryEntry[]) => {
+      await workspaceService.setTerminalCommandHistory(profileId, entries)
+    }
+  )
 
   ipcMain.handle('workspace:getCommandSendPreferences', async () => {
     return workspaceService.getCommandSendPreferences()
@@ -136,7 +148,8 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
 
   ipcMain.handle('workspace:openProfileFromManager', async (event, profileId: string) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender)
-    const targetSender = senderWindow?.getParentWindow()?.webContents ?? options.getMainWindow()?.webContents ?? event.sender
+    const targetSender =
+      senderWindow?.getParentWindow()?.webContents ?? options.getMainWindow()?.webContents ?? event.sender
     const snapshot = await workspaceService.openProfile(profileId, targetSender)
     broadcastSnapshot(snapshot)
     return snapshot

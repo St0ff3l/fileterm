@@ -53,7 +53,11 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   border: 1px solid transparent;
 }
 
@@ -124,7 +128,7 @@
 }
 
 .stat-card:not(:last-child)::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 50%;
   right: 0;
@@ -216,7 +220,9 @@
   border-radius: 0;
   padding: 16px 0 18px;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
   box-shadow: none;
   display: flex;
   flex-direction: column;
@@ -343,7 +349,10 @@
   align-items: center;
   justify-content: center;
   border-radius: 0;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .recent-action:hover {
@@ -382,7 +391,9 @@
   padding: 16px 0;
   text-align: left;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
   box-shadow: none;
 }
 

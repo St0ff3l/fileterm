@@ -16,9 +16,7 @@ export function scopeTransfersToSession(
   }
 
   const profileSessionTabIds = new Set(
-    sessionTabs
-      .filter((tab) => tab.profileId === activeProfileId)
-      .map((tab) => tab.id)
+    sessionTabs.filter((tab) => tab.profileId === activeProfileId).map((tab) => tab.id)
   )
 
   return transfers.filter((transfer) => {

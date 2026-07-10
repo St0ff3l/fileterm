@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  resolveShellFileAccess,
-  ShellCwdTracker
-} from '../../src/main/services/sessions/shell-cwd-integration.ts'
+import { resolveShellFileAccess, ShellCwdTracker } from '../../src/main/services/sessions/shell-cwd-integration.ts'
 
 test('shell state tracker parses chunked cwd and user reports', () => {
   const tracker = new ShellCwdTracker()

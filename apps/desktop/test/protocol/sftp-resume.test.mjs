@@ -27,9 +27,10 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
       remotePath: fixture.remoteDir,
       enableExecChannel: true
     },
-    async (request) => request.kind === 'host-verification'
-      ? { kind: 'host-verification', decision: 'accept-once' }
-      : { kind: 'credentials', canceled: true },
+    async (request) =>
+      request.kind === 'host-verification'
+        ? { kind: 'host-verification', decision: 'accept-once' }
+        : { kind: 'credentials', canceled: true },
     async () => undefined,
     () => undefined,
     () => undefined,
@@ -63,12 +64,18 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
   const uploadAbortController = new AbortController()
   let abortRequested = false
   await assert.rejects(
-    () => controller.uploadFile(pausedSource, pausedRemote, (progress) => {
-      if (!abortRequested && (progress.transferredBytes ?? 0) > 0) {
-        abortRequested = true
-        uploadAbortController.abort()
-      }
-    }, { signal: uploadAbortController.signal }),
+    () =>
+      controller.uploadFile(
+        pausedSource,
+        pausedRemote,
+        (progress) => {
+          if (!abortRequested && (progress.transferredBytes ?? 0) > 0) {
+            abortRequested = true
+            uploadAbortController.abort()
+          }
+        },
+        { signal: uploadAbortController.signal }
+      ),
     /\u4e2d\u65ad|\u6682\u505c|closed|destroyed/i
   )
   assert.equal(abortRequested, true)
@@ -82,20 +89,21 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
   let rootStagingAbortRequested = false
   const rootPauseStartedAt = Date.now()
   await assert.rejects(
-    () => controller.uploadFileAsPrivileged(
-      pausedSource,
-      path.join(fixture.remoteDir, 'unused-root-target.bin'),
-      (progress) => {
-        if (!rootStagingAbortRequested && (progress.transferredBytes ?? 0) > 0) {
-          rootStagingAbortRequested = true
-          rootStagingAbortController.abort()
-        }
-      },
-      new Error('Root staging pause test'),
-      0,
-      rootStagingAbortController.signal,
-      rootStagingPath
-    ),
+    () =>
+      controller.uploadFileAsPrivileged(
+        pausedSource,
+        path.join(fixture.remoteDir, 'unused-root-target.bin'),
+        (progress) => {
+          if (!rootStagingAbortRequested && (progress.transferredBytes ?? 0) > 0) {
+            rootStagingAbortRequested = true
+            rootStagingAbortController.abort()
+          }
+        },
+        new Error('Root staging pause test'),
+        0,
+        rootStagingAbortController.signal,
+        rootStagingPath
+      ),
     /\u4e2d\u65ad|\u6682\u505c|closed|destroyed/i
   )
   assert.equal(rootStagingAbortRequested, true)
@@ -107,23 +115,21 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
   const resumedRootStagingAbortController = new AbortController()
   let resumedRootStagingAbortRequested = false
   await assert.rejects(
-    () => controller.uploadFileAsPrivileged(
-      pausedSource,
-      path.join(fixture.remoteDir, 'unused-root-target.bin'),
-      (progress) => {
-        if (
-          !resumedRootStagingAbortRequested
-          && (progress.transferredBytes ?? 0) > firstRootStagingContents.length
-        ) {
-          resumedRootStagingAbortRequested = true
-          resumedRootStagingAbortController.abort()
-        }
-      },
-      new Error('Root staging resume test'),
-      0,
-      resumedRootStagingAbortController.signal,
-      rootStagingPath
-    ),
+    () =>
+      controller.uploadFileAsPrivileged(
+        pausedSource,
+        path.join(fixture.remoteDir, 'unused-root-target.bin'),
+        (progress) => {
+          if (!resumedRootStagingAbortRequested && (progress.transferredBytes ?? 0) > firstRootStagingContents.length) {
+            resumedRootStagingAbortRequested = true
+            resumedRootStagingAbortController.abort()
+          }
+        },
+        new Error('Root staging resume test'),
+        0,
+        resumedRootStagingAbortController.signal,
+        rootStagingPath
+      ),
     /\u4e2d\u65ad|\u6682\u505c|closed|destroyed/i
   )
   assert.equal(resumedRootStagingAbortRequested, true)
@@ -136,20 +142,21 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
   const rootRecoveryOffset = pausedContents.length - 1
   let rootRecoveryAbortRequested = false
   await assert.rejects(
-    () => controller.uploadFileAsPrivileged(
-      pausedSource,
-      path.join(fixture.remoteDir, 'unused-root-target.bin'),
-      (progress) => {
-        if (!rootRecoveryAbortRequested && (progress.transferredBytes ?? 0) > rootRecoveryOffset) {
-          rootRecoveryAbortRequested = true
-          rootRecoveryAbortController.abort()
-        }
-      },
-      new Error('Root staging offset recovery test'),
-      rootRecoveryOffset,
-      rootRecoveryAbortController.signal,
-      rootStagingPath
-    ),
+    () =>
+      controller.uploadFileAsPrivileged(
+        pausedSource,
+        path.join(fixture.remoteDir, 'unused-root-target.bin'),
+        (progress) => {
+          if (!rootRecoveryAbortRequested && (progress.transferredBytes ?? 0) > rootRecoveryOffset) {
+            rootRecoveryAbortRequested = true
+            rootRecoveryAbortController.abort()
+          }
+        },
+        new Error('Root staging offset recovery test'),
+        rootRecoveryOffset,
+        rootRecoveryAbortController.signal,
+        rootStagingPath
+      ),
     /\u4e2d\u65ad|\u6682\u505c|closed|destroyed/i
   )
   assert.equal(rootRecoveryAbortRequested, true)
@@ -159,12 +166,18 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
   const downloadAbortController = new AbortController()
   let downloadAbortRequested = false
   await assert.rejects(
-    () => controller.downloadFile(pausedRemote, pausedDownload, (progress) => {
-      if (!downloadAbortRequested && (progress.transferredBytes ?? 0) > 0) {
-        downloadAbortRequested = true
-        downloadAbortController.abort()
-      }
-    }, { signal: downloadAbortController.signal }),
+    () =>
+      controller.downloadFile(
+        pausedRemote,
+        pausedDownload,
+        (progress) => {
+          if (!downloadAbortRequested && (progress.transferredBytes ?? 0) > 0) {
+            downloadAbortRequested = true
+            downloadAbortController.abort()
+          }
+        },
+        { signal: downloadAbortController.signal }
+      ),
     /\u4e2d\u65ad|\u6682\u505c|closed|destroyed/i
   )
   assert.equal(downloadAbortRequested, true)
@@ -186,15 +199,16 @@ test('SFTP resumes both directions and preserves a destination symlink', async (
   const preAbortedRootController = new AbortController()
   preAbortedRootController.abort()
   await assert.rejects(
-    () => controller.uploadFileAsPrivileged(
-      pausedSource,
-      path.join(fixture.remoteDir, 'unused-pre-aborted-root-target.bin'),
-      () => undefined,
-      new Error('Pre-aborted root staging test'),
-      0,
-      preAbortedRootController.signal,
-      path.join(fixture.remoteDir, 'pre-aborted-root-staging.bin')
-    ),
+    () =>
+      controller.uploadFileAsPrivileged(
+        pausedSource,
+        path.join(fixture.remoteDir, 'unused-pre-aborted-root-target.bin'),
+        () => undefined,
+        new Error('Pre-aborted root staging test'),
+        0,
+        preAbortedRootController.signal,
+        path.join(fixture.remoteDir, 'pre-aborted-root-staging.bin')
+      ),
     /\u4e2d\u65ad|\u6682\u505c/i
   )
   await assert.rejects(
@@ -247,22 +261,25 @@ async function startSshdFixture(t) {
   const port = await reservePort()
   const configPath = path.join(baseDir, 'sshd_config')
   const pidPath = path.join(baseDir, 'sshd.pid')
-  await writeFile(configPath, [
-    `Port ${port}`,
-    'ListenAddress 127.0.0.1',
-    `HostKey ${hostKey}`,
-    `PidFile ${pidPath}`,
-    `AuthorizedKeysFile ${authorizedKeys}`,
-    'StrictModes no',
-    'PasswordAuthentication no',
-    'KbdInteractiveAuthentication no',
-    'ChallengeResponseAuthentication no',
-    'PubkeyAuthentication yes',
-    'UsePAM no',
-    'UseDNS no',
-    'LogLevel ERROR',
-    'Subsystem sftp internal-sftp'
-  ].join('\n'))
+  await writeFile(
+    configPath,
+    [
+      `Port ${port}`,
+      'ListenAddress 127.0.0.1',
+      `HostKey ${hostKey}`,
+      `PidFile ${pidPath}`,
+      `AuthorizedKeysFile ${authorizedKeys}`,
+      'StrictModes no',
+      'PasswordAuthentication no',
+      'KbdInteractiveAuthentication no',
+      'ChallengeResponseAuthentication no',
+      'PubkeyAuthentication yes',
+      'UsePAM no',
+      'UseDNS no',
+      'LogLevel ERROR',
+      'Subsystem sftp internal-sftp'
+    ].join('\n')
+  )
 
   const sshd = spawn(sshdPath, ['-D', '-e', '-f', configPath], {
     stdio: ['ignore', 'ignore', 'pipe']

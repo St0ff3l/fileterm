@@ -114,7 +114,11 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     })
   }
 
-  async copyRemotePath(_targetPath: string, _destinationPath: string, _targetType: RemoteFileItem['type']): Promise<void> {
+  async copyRemotePath(
+    _targetPath: string,
+    _destinationPath: string,
+    _targetType: RemoteFileItem['type']
+  ): Promise<void> {
     throw new Error('FTP 暂不支持服务器内复制，请改用下载后上传')
   }
 
@@ -227,58 +231,60 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     }
     appLog(`[FileTerm][FTP] Upload start ${localPath} -> ${remotePath} (${formatTransferBytes(total)})`)
     try {
-      await this.runWithConnectedClient(() => this.runAbortableTransfer(options?.signal, async () => {
-        let progressBase = resumeOffset
-        this.ftp.trackProgress((progress) => {
-          const transferredBytes = Math.min(total, progressBase + progress.bytes)
-          onProgress({
-            percent: Math.min(99, Math.round((transferredBytes / progressTotal) * 100)),
-            transferredBytes,
-            totalBytes: total
+      await this.runWithConnectedClient(() =>
+        this.runAbortableTransfer(options?.signal, async () => {
+          let progressBase = resumeOffset
+          this.ftp.trackProgress((progress) => {
+            const transferredBytes = Math.min(total, progressBase + progress.bytes)
+            onProgress({
+              percent: Math.min(99, Math.round((transferredBytes / progressTotal) * 100)),
+              transferredBytes,
+              totalBytes: total
+            })
           })
-        })
-        try {
-          await this.ensureRemoteDirectoryInternal(path.posix.dirname(remotePath))
-          if (resumeOffset > 0 && resumeOffset === total) {
-            await this.verifyRemoteFileSize(remotePath, total)
-          } else if (resumeOffset > 0) {
-            try {
-              await this.ftp.appendFrom(localPath, remotePath, { localStart: resumeOffset })
-            } catch (appendError) {
-              if (!isUnsupportedFtpTransferCommand(appendError)) {
-                throw appendError
-              }
-              appWarn(`[FileTerm][FTP] APPE unsupported, trying REST + STOR for ${remotePath}`)
+          try {
+            await this.ensureRemoteDirectoryInternal(path.posix.dirname(remotePath))
+            if (resumeOffset > 0 && resumeOffset === total) {
+              await this.verifyRemoteFileSize(remotePath, total)
+            } else if (resumeOffset > 0) {
               try {
-                await this.ftp.send(`REST ${resumeOffset}`)
-                await this.ftp.uploadFrom(localPath, remotePath, { localStart: resumeOffset })
-                await this.verifyRemoteFileSize(remotePath, total)
-              } catch (restartError) {
-                appWarn(`[FileTerm][FTP] REST + STOR resume failed; restarting ${remotePath} from zero`, restartError)
-                await this.ftp.remove(remotePath, true)
-                progressBase = 0
-                this.ftp.trackProgress((progress) => {
-                  const transferredBytes = Math.min(total, progress.bytes)
-                  onProgress({
-                    percent: Math.min(99, Math.round((transferredBytes / progressTotal) * 100)),
-                    transferredBytes,
-                    totalBytes: total
+                await this.ftp.appendFrom(localPath, remotePath, { localStart: resumeOffset })
+              } catch (appendError) {
+                if (!isUnsupportedFtpTransferCommand(appendError)) {
+                  throw appendError
+                }
+                appWarn(`[FileTerm][FTP] APPE unsupported, trying REST + STOR for ${remotePath}`)
+                try {
+                  await this.ftp.send(`REST ${resumeOffset}`)
+                  await this.ftp.uploadFrom(localPath, remotePath, { localStart: resumeOffset })
+                  await this.verifyRemoteFileSize(remotePath, total)
+                } catch (restartError) {
+                  appWarn(`[FileTerm][FTP] REST + STOR resume failed; restarting ${remotePath} from zero`, restartError)
+                  await this.ftp.remove(remotePath, true)
+                  progressBase = 0
+                  this.ftp.trackProgress((progress) => {
+                    const transferredBytes = Math.min(total, progress.bytes)
+                    onProgress({
+                      percent: Math.min(99, Math.round((transferredBytes / progressTotal) * 100)),
+                      transferredBytes,
+                      totalBytes: total
+                    })
                   })
-                })
-                await this.ftp.uploadFrom(localPath, remotePath)
+                  await this.ftp.uploadFrom(localPath, remotePath)
+                }
               }
+            } else {
+              await this.ftp.uploadFrom(localPath, remotePath)
             }
-          } else {
-            await this.ftp.uploadFrom(localPath, remotePath)
+            await this.verifyRemoteFileSize(remotePath, total)
+            this.resolvedEntryTypes.set(remotePath, 'file')
+            appLog(`[FileTerm][FTP] Upload verified ${remotePath} (${formatTransferBytes(total)})`)
+            onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
+          } finally {
+            this.ftp.trackProgress()
           }
-          await this.verifyRemoteFileSize(remotePath, total)
-          this.resolvedEntryTypes.set(remotePath, 'file')
-          appLog(`[FileTerm][FTP] Upload verified ${remotePath} (${formatTransferBytes(total)})`)
-          onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
-        } finally {
-          this.ftp.trackProgress()
-        }
-      }))
+        })
+      )
     } catch (error) {
       appWarn(`[FileTerm][FTP] Upload failed ${localPath} -> ${remotePath}`, error)
       throw error
@@ -292,34 +298,36 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     options?: TransferFileOptions
   ): Promise<void> {
     try {
-      await this.runWithConnectedClient(() => this.runAbortableTransfer(options?.signal, async () => {
-        const total = Math.max(await this.ftp.size(remotePath), 0)
-        const progressTotal = Math.max(total, 1)
-        const resumeOffset = Math.max(0, options?.resumeOffset ?? 0)
-        if (resumeOffset > total) {
-          throw new Error('FTP 下载断点大于远端文件，无法继续')
-        }
-        appLog(`[FileTerm][FTP] Download start ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
-        this.ftp.trackProgress((progress) => {
-          const transferredBytes = Math.min(total, resumeOffset + progress.bytes)
-          onProgress({
-            percent: Math.min(99, Math.round((transferredBytes / progressTotal) * 100)),
-            transferredBytes,
-            totalBytes: total
-          })
-        })
-        try {
-          if (resumeOffset < total || total === 0) {
-            await this.ftp.downloadTo(localPath, remotePath, resumeOffset)
+      await this.runWithConnectedClient(() =>
+        this.runAbortableTransfer(options?.signal, async () => {
+          const total = Math.max(await this.ftp.size(remotePath), 0)
+          const progressTotal = Math.max(total, 1)
+          const resumeOffset = Math.max(0, options?.resumeOffset ?? 0)
+          if (resumeOffset > total) {
+            throw new Error('FTP 下载断点大于远端文件，无法继续')
           }
-          const localInfo = await stat(localPath)
-          assertTransferSize(localPath, localInfo.size, total)
-          appLog(`[FileTerm][FTP] Download verified ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
-          onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
-        } finally {
-          this.ftp.trackProgress()
-        }
-      }))
+          appLog(`[FileTerm][FTP] Download start ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
+          this.ftp.trackProgress((progress) => {
+            const transferredBytes = Math.min(total, resumeOffset + progress.bytes)
+            onProgress({
+              percent: Math.min(99, Math.round((transferredBytes / progressTotal) * 100)),
+              transferredBytes,
+              totalBytes: total
+            })
+          })
+          try {
+            if (resumeOffset < total || total === 0) {
+              await this.ftp.downloadTo(localPath, remotePath, resumeOffset)
+            }
+            const localInfo = await stat(localPath)
+            assertTransferSize(localPath, localInfo.size, total)
+            appLog(`[FileTerm][FTP] Download verified ${remotePath} -> ${localPath} (${formatTransferBytes(total)})`)
+            onProgress({ percent: 100, transferredBytes: total, totalBytes: total })
+          } finally {
+            this.ftp.trackProgress()
+          }
+        })
+      )
     } catch (error) {
       appWarn(`[FileTerm][FTP] Download failed ${remotePath} -> ${localPath}`, error)
       throw error
@@ -367,8 +375,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
   private async readRemoteDirectory(targetPath: string): Promise<RemoteFileItem[]> {
     const entries = await this.listRemoteDirectoryEntries(targetPath)
     const previousPath = await this.ftp.pwd()
-    const rows = entries
-      .filter((entry) => entry.name !== '.' && entry.name !== '..')
+    const rows = entries.filter((entry) => entry.name !== '.' && entry.name !== '..')
     logFtpListingAlignment(targetPath, rows)
     appLog(`[FileTerm][FTP] Listing remote directory ${targetPath} (${rows.length} entries)`)
     const items: RemoteFileItem[] = []
@@ -384,13 +391,12 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
       items.push(item)
     }
 
-    items
-      .sort((left, right) => {
-        if (left.type !== right.type) {
-          return left.type === 'folder' ? -1 : 1
-        }
-        return left.name.localeCompare(right.name)
-      })
+    items.sort((left, right) => {
+      if (left.type !== right.type) {
+        return left.type === 'folder' ? -1 : 1
+      }
+      return left.name.localeCompare(right.name)
+    })
 
     if (targetPath !== '/') {
       items.unshift({
@@ -440,7 +446,10 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
 
   private async runSerialized<T>(operation: () => Promise<T>): Promise<T> {
     const nextOperation = this.operationQueue.catch(() => undefined).then(operation)
-    this.operationQueue = nextOperation.then(() => undefined, () => undefined)
+    this.operationQueue = nextOperation.then(
+      () => undefined,
+      () => undefined
+    )
     return nextOperation
   }
 
@@ -586,15 +595,15 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     const ftpWithWhitespaceGuard = this.ftp as BasicFtpClient & {
       protectWhitespace?(path: string): Promise<string>
     }
-    return ftpWithWhitespaceGuard.protectWhitespace
-      ? ftpWithWhitespaceGuard.protectWhitespace(targetPath)
-      : targetPath
+    return ftpWithWhitespaceGuard.protectWhitespace ? ftpWithWhitespaceGuard.protectWhitespace(targetPath) : targetPath
   }
 
   private async verifyRemoteFileSize(remotePath: string, expectedSize: number): Promise<void> {
     const remoteSize = await this.readRemoteFileSize(remotePath)
     if (remoteSize === undefined) {
-      appWarn(`[FileTerm][FTP] Upload size verification skipped for ${remotePath}; remote SIZE/listing did not expose a file size`)
+      appWarn(
+        `[FileTerm][FTP] Upload size verification skipped for ${remotePath}; remote SIZE/listing did not expose a file size`
+      )
       return
     }
     assertTransferSize(remotePath, remoteSize, expectedSize)
@@ -610,9 +619,7 @@ export class LiveFtpSessionController extends BaseFileSessionController implemen
     try {
       const entries = await this.listRemoteDirectoryEntries(path.posix.dirname(remotePath))
       const match = entries.find((entry) => entry.name === path.posix.basename(remotePath))
-      return typeof match?.size === 'number' && Number.isFinite(match.size)
-        ? Math.max(match.size, 0)
-        : undefined
+      return typeof match?.size === 'number' && Number.isFinite(match.size) ? Math.max(match.size, 0) : undefined
     } catch (error) {
       appWarn(`[FileTerm][FTP] Directory listing size probe failed for ${remotePath}`, error)
       return undefined
@@ -635,9 +642,9 @@ function shouldRetryWithClassicList(entries: FileInfo[]) {
 }
 
 function looksLikeStructuredFtpLine(rawLine: string) {
-  return /^\S+=\S+;/.test(rawLine)
-    || /^\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}(AM|PM)/i.test(rawLine)
-    || /^[\-ldpscbD]/.test(rawLine)
+  return (
+    /^\S+=\S+;/.test(rawLine) || /^\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}(AM|PM)/i.test(rawLine) || /^[-ldpscbD]/.test(rawLine)
+  )
 }
 
 function isUnsupportedFtpCommand(code: number) {
@@ -682,7 +689,9 @@ function assertTransferSize(targetPath: string, actualSize: number | undefined, 
   }
 
   const actual = typeof actualSize === 'number' ? formatTransferBytes(actualSize) : '未知大小'
-  throw new Error(`传输校验失败：${path.posix.basename(targetPath)} 实际为 ${actual}，期望 ${formatTransferBytes(expectedSize)}`)
+  throw new Error(
+    `传输校验失败：${path.posix.basename(targetPath)} 实际为 ${actual}，期望 ${formatTransferBytes(expectedSize)}`
+  )
 }
 
 function formatTransferBytes(size: number) {
@@ -791,7 +800,9 @@ function extractRawEntryName(rawLine: string) {
     return dosMatch[1].trim()
   }
 
-  const unixMatch = rawLine.match(/^[bcdelfmpSs-][rwxStTsL-]{9}\+?\s+\d+\s+(?:(?:\S+(?:\s+\S+)*)\s+)?(?:(?:\S+(?:\s+\S+)*)\s+)?(?:\d+(?:,\s*\d+)?)\s+(?:(?:\d+[-/]\d+[-/]\d+)|(?:\S{3}\s+\d{1,2})|(?:\d{1,2}\s+\S{3})|(?:\d{1,2}月\s+\d{1,2}日))\s+(?:(?:\d+(?::\d+)?)|(?:\d{4}年))\s+(.*)$/)
+  const unixMatch = rawLine.match(
+    /^[bcdelfmpSs-][rwxStTsL-]{9}\+?\s+\d+\s+(?:(?:\S+(?:\s+\S+)*)\s+)?(?:(?:\S+(?:\s+\S+)*)\s+)?(?:\d+(?:,\s*\d+)?)\s+(?:(?:\d+[-/]\d+[-/]\d+)|(?:\S{3}\s+\d{1,2})|(?:\d{1,2}\s+\S{3})|(?:\d{1,2}月\s+\d{1,2}日))\s+(?:(?:\d+(?::\d+)?)|(?:\d{4}年))\s+(.*)$/
+  )
   if (unixMatch?.[1]) {
     return unixMatch[1].replace(/\s+->\s+.*$/, '').trim()
   }
@@ -833,7 +844,13 @@ function enrichFromMlsdLine(file: FileInfoWithRaw, rawLine: string) {
       const normalized = value.toLowerCase()
       if (normalized === 'file') {
         file.type = FileType.File
-      } else if (normalized === 'dir' || normalized === 'cdir' || normalized === 'pdir' || normalized === 'folder' || normalized === 'directory') {
+      } else if (
+        normalized === 'dir' ||
+        normalized === 'cdir' ||
+        normalized === 'pdir' ||
+        normalized === 'folder' ||
+        normalized === 'directory'
+      ) {
         file.type = FileType.Directory
       } else if (normalized.includes('slink') || normalized.includes('symlink')) {
         file.type = FileType.SymbolicLink
@@ -906,7 +923,9 @@ function isUnsupportedFtpTransferCommand(error: unknown) {
   return /\b(500|501|502|504)\b|not implemented|not understood|unknown command|unsupported/i.test(errorMessage(error))
 }
 
-export function resolveFtpSecureOption(profile: Pick<FtpProfile, 'secure' | 'securityMode'>): false | true | 'implicit' {
+export function resolveFtpSecureOption(
+  profile: Pick<FtpProfile, 'secure' | 'securityMode'>
+): false | true | 'implicit' {
   const securityMode = profile.securityMode ?? (profile.secure ? 'explicit' : 'none')
   return securityMode === 'implicit' ? 'implicit' : securityMode === 'explicit'
 }

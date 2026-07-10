@@ -42,8 +42,7 @@ function splitOscPayload(payload: string) {
 }
 
 function isOsc52TargetSupported(target: string) {
-  return target === ''
-    || /[cpsq01234567]/.test(target)
+  return target === '' || /[cpsq01234567]/.test(target)
 }
 
 function decodeBase64Utf8(value: string) {
@@ -96,11 +95,9 @@ function looksLikeShellPrompt(line: string) {
     return false
   }
 
-  return [
-    /(?:^|\s)[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+(?::[^\n]*)?[#$%>]$/,
-    /^\[[^\]]+@[^\]]+\][#$]$/,
-    /^[#$%>]$/
-  ].some((pattern) => pattern.test(line))
+  return [/(?:^|\s)[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+(?::[^\n]*)?[#$%>]$/, /^\[[^\]]+@[^\]]+\][#$]$/, /^[#$%>]$/].some(
+    (pattern) => pattern.test(line)
+  )
 }
 
 export const TerminalView = memo(function TerminalView({
@@ -169,12 +166,14 @@ export const TerminalView = memo(function TerminalView({
     brightGreen: readColor('--success', '#52f2a0'),
     blue: readColor('--accent-text', '#c8d0da'),
     brightBlue: readColor('--text-main', '#f1f5f9'),
-    selectionBackground: findOpen && findQuery
-      ? readColor('--terminal-search-active-bg', '#ffd43b')
-      : readColor('--terminal-cmd-bg', 'rgba(148, 163, 184, 0.24)'),
-    selectionForeground: findOpen && findQuery
-      ? readColor('--terminal-search-active-text', '#111111')
-      : readColor('--terminal-text', '#e0e0e0')
+    selectionBackground:
+      findOpen && findQuery
+        ? readColor('--terminal-search-active-bg', '#ffd43b')
+        : readColor('--terminal-cmd-bg', 'rgba(148, 163, 184, 0.24)'),
+    selectionForeground:
+      findOpen && findQuery
+        ? readColor('--terminal-search-active-text', '#111111')
+        : readColor('--terminal-text', '#e0e0e0')
   })
 
   const buildSearchDecorations = () => ({
@@ -286,9 +285,10 @@ export const TerminalView = memo(function TerminalView({
     }
 
     try {
-      const found = direction === -1
-        ? searchAddon.findPrevious(query, buildSearchOptions())
-        : searchAddon.findNext(query, buildSearchOptions())
+      const found =
+        direction === -1
+          ? searchAddon.findPrevious(query, buildSearchOptions())
+          : searchAddon.findNext(query, buildSearchOptions())
 
       if (!found) {
         setFindMiss(true)
@@ -365,8 +365,7 @@ export const TerminalView = memo(function TerminalView({
     }
   }
 
-  const buildExitAlternateScreenSequence = () =>
-    '\x1b[?1049l\x1b[?1047l\x1b[?47l\x1b[?25h'
+  const buildExitAlternateScreenSequence = () => '\x1b[?1049l\x1b[?1047l\x1b[?47l\x1b[?25h'
 
   const snapshotTerminalBuffer = (terminal: Terminal) => {
     const lines: string[] = []
@@ -470,13 +469,9 @@ export const TerminalView = memo(function TerminalView({
     const rows = Math.max(1, proposed.rows - TERMINAL_FIT_GUARD_ROWS)
     const previousSize = lastSyncedSizeRef.current
     const liveCols = Math.max(1, displayCols - TERMINAL_REMOTE_GUARD_COLS)
-    const cols = freezeCols && previousSize
-      ? previousSize.cols
-      : liveCols
+    const cols = freezeCols && previousSize ? previousSize.cols : liveCols
     const shouldPreserveVisibleBuffer = preserveVisibleBuffer && previousSize && previousSize.cols !== cols
-    const visibleBufferSnapshot = shouldPreserveVisibleBuffer
-      ? snapshotTerminalBuffer(terminal)
-      : ''
+    const visibleBufferSnapshot = shouldPreserveVisibleBuffer ? snapshotTerminalBuffer(terminal) : ''
     if (terminal.cols !== cols || terminal.rows !== rows) {
       terminal.resize(cols, rows)
       if (shouldPreserveVisibleBuffer && visibleBufferSnapshot) {
@@ -496,24 +491,18 @@ export const TerminalView = memo(function TerminalView({
       height: Math.floor(height)
     }
     if (
-      !force
-      && previousSize
-      && previousSize.cols === nextSize.cols
-      && previousSize.rows === nextSize.rows
-      && Math.abs(previousSize.width - nextSize.width) <= TERMINAL_RESIZE_PIXEL_EPSILON
-      && Math.abs(previousSize.height - nextSize.height) <= TERMINAL_RESIZE_PIXEL_EPSILON
+      !force &&
+      previousSize &&
+      previousSize.cols === nextSize.cols &&
+      previousSize.rows === nextSize.rows &&
+      Math.abs(previousSize.width - nextSize.width) <= TERMINAL_RESIZE_PIXEL_EPSILON &&
+      Math.abs(previousSize.height - nextSize.height) <= TERMINAL_RESIZE_PIXEL_EPSILON
     ) {
       return
     }
     lastSyncedSizeRef.current = nextSize
 
-    void window.fileterm?.resizeTerminal(
-      tabId,
-      nextSize.cols,
-      nextSize.rows,
-      nextSize.width,
-      nextSize.height
-    )
+    void window.fileterm?.resizeTerminal(tabId, nextSize.cols, nextSize.rows, nextSize.width, nextSize.height)
   }
 
   useEffect(() => {
@@ -626,7 +615,7 @@ export const TerminalView = memo(function TerminalView({
       if (parsed.data === '?') {
         const clipboardText = window.fileterm?.readClipboardText
           ? await window.fileterm.readClipboardText()
-          : await navigator.clipboard?.readText?.() ?? ''
+          : ((await navigator.clipboard?.readText?.()) ?? '')
         const encoded = encodeBase64Utf8(clipboardText)
         await window.fileterm?.writeTerminal(tabId, `\u001b]52;${parsed.target || 'c'};${encoded}\u0007`)
         return true
@@ -771,8 +760,7 @@ export const TerminalView = memo(function TerminalView({
       lastObservedHostRectRef.current = { width, height }
 
       const widthChanged = Boolean(
-        lastObservedRect
-        && Math.abs(lastObservedRect.width - width) > TERMINAL_RESIZE_PIXEL_EPSILON
+        lastObservedRect && Math.abs(lastObservedRect.width - width) > TERMINAL_RESIZE_PIXEL_EPSILON
       )
 
       if (widthChanged) {
@@ -812,13 +800,7 @@ export const TerminalView = memo(function TerminalView({
       const selection = window.getSelection()
       const anchorNode = selection?.anchorNode
       const terminalHost = hostRef.current
-      if (
-        selection
-        && !selection.isCollapsed
-        && anchorNode
-        && terminalHost
-        && !terminalHost.contains(anchorNode)
-      ) {
+      if (selection && !selection.isCollapsed && anchorNode && terminalHost && !terminalHost.contains(anchorNode)) {
         terminal.clearSelection()
       }
     }
@@ -831,17 +813,12 @@ export const TerminalView = memo(function TerminalView({
 
       if (matchesCopy && terminal.hasSelection()) {
         const target = event.target
-        const editableTarget = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
-          ? target
-          : null
-        const editableSelection = editableTarget
-          ? editableTarget.selectionStart !== editableTarget.selectionEnd
-          : false
+        const editableTarget =
+          target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target : null
+        const editableSelection = editableTarget ? editableTarget.selectionStart !== editableTarget.selectionEnd : false
         const documentSelection = window.getSelection()
         const hasDocumentSelection = Boolean(
-          documentSelection
-          && !documentSelection.isCollapsed
-          && documentSelection.toString()
+          documentSelection && !documentSelection.isCollapsed && documentSelection.toString()
         )
 
         if (!editableSelection && !hasDocumentSelection) {
@@ -852,13 +829,7 @@ export const TerminalView = memo(function TerminalView({
         return
       }
 
-      if (
-        document.activeElement === terminal.textarea
-        && !isMac
-        && event.ctrlKey
-        && !event.shiftKey
-        && key === 'l'
-      ) {
+      if (document.activeElement === terminal.textarea && !isMac && event.ctrlKey && !event.shiftKey && key === 'l') {
         event.preventDefault()
         runClear()
       }
@@ -949,9 +920,9 @@ export const TerminalView = memo(function TerminalView({
     bootTextRef.current = bootText
     const terminal = terminalRef.current
     if (
-      !terminal
-      || connected
-      || !shouldHydrateTranscript(renderedTranscriptRef.current, bootText, wasConnectedRef.current)
+      !terminal ||
+      connected ||
+      !shouldHydrateTranscript(renderedTranscriptRef.current, bootText, wasConnectedRef.current)
     ) {
       return
     }
@@ -1082,9 +1053,15 @@ export const TerminalView = memo(function TerminalView({
             >
               .*
             </button>
-            <button type="button" title={t.findPrevious} onClick={() => searchTerminal(findQuery, -1)}><AppIcon name="arrow-up" size={13} /></button>
-            <button type="button" title={t.findNext} onClick={() => searchTerminal(findQuery, 1)}><AppIcon name="arrow-down" size={13} /></button>
-            <button className="terminal-find-submit" type="button" onClick={() => searchTerminal(findQuery, 1)}>{t.find}</button>
+            <button type="button" title={t.findPrevious} onClick={() => searchTerminal(findQuery, -1)}>
+              <AppIcon name="arrow-up" size={13} />
+            </button>
+            <button type="button" title={t.findNext} onClick={() => searchTerminal(findQuery, 1)}>
+              <AppIcon name="arrow-down" size={13} />
+            </button>
+            <button className="terminal-find-submit" type="button" onClick={() => searchTerminal(findQuery, 1)}>
+              {t.find}
+            </button>
           </div>
           <CloseButton onClick={closeFind} size="compact" />
           {findMiss ? <span className="terminal-find-status">{t.findNotFound}</span> : null}

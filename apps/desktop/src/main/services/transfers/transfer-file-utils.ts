@@ -82,10 +82,7 @@ export async function removeLocalFileIfExists(targetPath: string): Promise<void>
 
 export function isMissingFileError(error: unknown): boolean {
   return Boolean(
-    error
-    && typeof error === 'object'
-    && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'ENOENT'
+    error && typeof error === 'object' && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT'
   )
 }
 

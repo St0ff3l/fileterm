@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+exec bash "$(dirname "$0")/scripts/prepare-commit-msg.bash" "$@"

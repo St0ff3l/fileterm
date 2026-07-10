@@ -6,7 +6,12 @@ import type { FileContentSnapshot } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 import { AppIcon } from '../common/AppIcon'
-import { EDITOR_ENCODINGS, findEncodingOption, sortEditorLanguages, type EditorLanguageOption } from './file-editor-config'
+import {
+  EDITOR_ENCODINGS,
+  findEncodingOption,
+  sortEditorLanguages,
+  type EditorLanguageOption
+} from './file-editor-config'
 
 const toTraditional = OpenCC.Converter({ from: 'cn', to: 'tw' })
 const toSimplified = OpenCC.Converter({ from: 'tw', to: 'cn' })
@@ -208,7 +213,7 @@ export function FileEditorModal({
 
     const model = editor.getModel()
     const selection = editor.getSelection()
-    const selectedText = selection ? model?.getValueInRange(selection) ?? '' : ''
+    const selectedText = selection ? (model?.getValueInRange(selection) ?? '') : ''
 
     if (selection && !selection.isEmpty() && selectedText) {
       editor.executeEdits('opencc-convert', [{ range: selection, text: converter(selectedText) }])
@@ -264,31 +269,63 @@ export function FileEditorModal({
           <div className="file-editor-toolbar">
             <div className="file-editor-menubar">
               <EditorMenuButton current={openMenu} label={t.fileEditorFile} menu="file" onToggle={setOpenMenu}>
-                <MenuAction disabled={!isDirty || isBusy || isSaving} label={isSaving ? t.saving : t.save} onClick={() => onSave(content, encoding)} />
+                <MenuAction
+                  disabled={!isDirty || isBusy || isSaving}
+                  label={isSaving ? t.saving : t.save}
+                  onClick={() => onSave(content, encoding)}
+                />
                 <MenuAction label={t.fileEditorReloadEncoding} onClick={() => setOpenMenu('encoding')} />
               </EditorMenuButton>
               <EditorMenuButton current={openMenu} label={t.edit} menu="edit" onToggle={setOpenMenu}>
                 <MenuAction label={t.fileEditorUndo} onClick={() => void runEditorAction('undo')} />
                 <MenuAction label={t.fileEditorRedo} onClick={() => void runEditorAction('redo')} />
                 <MenuSeparator />
-                <MenuAction label={t.fileEditorSelectAll} onClick={() => void runEditorAction('editor.action.selectAll')} />
+                <MenuAction
+                  label={t.fileEditorSelectAll}
+                  onClick={() => void runEditorAction('editor.action.selectAll')}
+                />
                 <MenuSeparator />
                 <MenuAction label={t.fileEditorToTraditional} onClick={() => convertContent(toTraditional)} />
                 <MenuAction label={t.fileEditorToSimplified} onClick={() => convertContent(toSimplified)} />
               </EditorMenuButton>
               <EditorMenuButton current={openMenu} label={t.fileEditorSearch} menu="search" onToggle={setOpenMenu}>
                 <MenuAction label={t.fileEditorFind} onClick={() => void runEditorAction('actions.find')} />
-                <MenuAction label={t.fileEditorReplace} onClick={() => void runEditorAction('editor.action.startFindReplaceAction')} />
-                <MenuAction label={t.fileEditorGoToLine} onClick={() => void runEditorAction('editor.action.gotoLine')} />
+                <MenuAction
+                  label={t.fileEditorReplace}
+                  onClick={() => void runEditorAction('editor.action.startFindReplaceAction')}
+                />
+                <MenuAction
+                  label={t.fileEditorGoToLine}
+                  onClick={() => void runEditorAction('editor.action.gotoLine')}
+                />
               </EditorMenuButton>
-              <EditorMenuButton current={openMenu} label={t.fileEditorPreferences} menu="preferences" onToggle={setOpenMenu}>
-                <MenuToggle label={t.fileEditorWordWrap} checked={wordWrap} onClick={() => setWordWrap((value) => !value)} />
-                <MenuToggle label={t.fileEditorShowLineNumbers} checked={showLineNumbers} onClick={() => setShowLineNumbers((value) => !value)} />
-                <MenuToggle label={t.fileEditorShowMinimap} checked={showMinimap} onClick={() => setShowMinimap((value) => !value)} />
+              <EditorMenuButton
+                current={openMenu}
+                label={t.fileEditorPreferences}
+                menu="preferences"
+                onToggle={setOpenMenu}
+              >
+                <MenuToggle
+                  label={t.fileEditorWordWrap}
+                  checked={wordWrap}
+                  onClick={() => setWordWrap((value) => !value)}
+                />
+                <MenuToggle
+                  label={t.fileEditorShowLineNumbers}
+                  checked={showLineNumbers}
+                  onClick={() => setShowLineNumbers((value) => !value)}
+                />
+                <MenuToggle
+                  label={t.fileEditorShowMinimap}
+                  checked={showMinimap}
+                  onClick={() => setShowMinimap((value) => !value)}
+                />
               </EditorMenuButton>
             </div>
 
-            <div className="file-editor-path" title={file.path}>{file.path}</div>
+            <div className="file-editor-path" title={file.path}>
+              {file.path}
+            </div>
           </div>
 
           {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
@@ -328,16 +365,17 @@ export function FileEditorModal({
 
           <div className="file-editor-statusbar">
             <span>{t.fileEditorStatusReady}</span>
-            <span>{t.fileEditorLines}: {lineCount}</span>
-            <span>{t.fileEditorCharacters}: {characterCount}</span>
-            <span>{t.fileEditorCursor}: {cursorLine}:{cursorColumn}</span>
+            <span>
+              {t.fileEditorLines}: {lineCount}
+            </span>
+            <span>
+              {t.fileEditorCharacters}: {characterCount}
+            </span>
+            <span>
+              {t.fileEditorCursor}: {cursorLine}:{cursorColumn}
+            </span>
             <div className="file-editor-status-actions">
-              <StatusMenu
-                current={openMenu}
-                label={currentEncoding.label}
-                menu="encoding"
-                onToggle={setOpenMenu}
-              >
+              <StatusMenu current={openMenu} label={currentEncoding.label} menu="encoding" onToggle={setOpenMenu}>
                 {EDITOR_ENCODINGS.map((option) => (
                   <button
                     className={option.value === encoding ? 'is-active' : ''}
@@ -353,12 +391,7 @@ export function FileEditorModal({
                   </button>
                 ))}
               </StatusMenu>
-              <StatusMenu
-                current={openMenu}
-                label={currentLanguage}
-                menu="language"
-                onToggle={setOpenMenu}
-              >
+              <StatusMenu current={openMenu} label={currentLanguage} menu="language" onToggle={setOpenMenu}>
                 {languages.map((option) => (
                   <button
                     className={option.id === language ? 'is-active' : ''}
@@ -401,7 +434,11 @@ function EditorMenuButton({
 
   return (
     <div className="file-editor-menu-anchor" data-file-editor-menu-scope="true">
-      <button className={`file-editor-menubar-button ${open ? 'is-open' : ''}`} onClick={() => onToggle(open ? null : menu)} type="button">
+      <button
+        className={`file-editor-menubar-button ${open ? 'is-open' : ''}`}
+        onClick={() => onToggle(open ? null : menu)}
+        type="button"
+      >
         {label}
       </button>
       {open ? <div className="file-editor-menu">{children}</div> : null}
@@ -426,16 +463,28 @@ function StatusMenu({
 
   return (
     <div className="file-editor-status-menu" data-file-editor-menu-scope="true">
-      <button className={`file-editor-status-button ${open ? 'is-open' : ''}`} onClick={() => onToggle(open ? null : menu)} type="button">
+      <button
+        className={`file-editor-status-button ${open ? 'is-open' : ''}`}
+        onClick={() => onToggle(open ? null : menu)}
+        type="button"
+      >
         {label}
       </button>
-      {open ? <div className="file-editor-menu file-editor-menu--wide file-editor-menu--upward file-editor-menu--align-end">{children}</div> : null}
+      {open ? (
+        <div className="file-editor-menu file-editor-menu--wide file-editor-menu--upward file-editor-menu--align-end">
+          {children}
+        </div>
+      ) : null}
     </div>
   )
 }
 
 function MenuAction({ disabled = false, label, onClick }: { disabled?: boolean; label: string; onClick(): void }) {
-  return <button disabled={disabled} onClick={onClick} type="button">{label}</button>
+  return (
+    <button disabled={disabled} onClick={onClick} type="button">
+      {label}
+    </button>
+  )
 }
 
 function MenuToggle({ checked, label, onClick }: { checked: boolean; label: string; onClick(): void }) {

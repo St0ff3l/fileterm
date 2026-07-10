@@ -47,9 +47,7 @@ export class ShellCwdTracker {
       const marker7Start = combined.lastIndexOf(OSC_7_PREFIX)
       const markerUserStart = combined.lastIndexOf('\u001b]1337;')
       const markerStart = Math.max(marker7Start, markerUserStart)
-      this.buffer = markerStart >= 0
-        ? combined.slice(markerStart)
-        : combined.slice(-Math.max(OSC_7_PREFIX.length, 12))
+      this.buffer = markerStart >= 0 ? combined.slice(markerStart) : combined.slice(-Math.max(OSC_7_PREFIX.length, 12))
     }
 
     if (this.buffer.length > 4096) {
@@ -62,9 +60,12 @@ export class ShellCwdTracker {
 
 export const SETUP_NEEDLE = 'test -z "$FISH_VERSION"'
 
-export const SHELL_CWD_SETUP = 'test -z "$FISH_VERSION" && eval \'__tdcwd() { printf "\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007" "$(pwd -P 2>/dev/null)" "$(id -un 2>/dev/null)"; }; if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook -D precmd __tdcwd 2>/dev/null; add-zsh-hook precmd __tdcwd 2>/dev/null; elif [ -n "$BASH_VERSION" ]; then case "$PROMPT_COMMAND" in *"__tdcwd"*) ;; *) PROMPT_COMMAND="__tdcwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;; esac; else case "$PS1" in *"__tdcwd"*) ;; *) PS1="\\$(__tdcwd)$PS1" ;; esac; fi; __tdcwd\''
+export const SHELL_CWD_SETUP =
+  'test -z "$FISH_VERSION" && eval \'__tdcwd() { printf "\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007" "$(pwd -P 2>/dev/null)" "$(id -un 2>/dev/null)"; }; if [ -n "$ZSH_VERSION" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook -D precmd __tdcwd 2>/dev/null; add-zsh-hook precmd __tdcwd 2>/dev/null; elif [ -n "$BASH_VERSION" ]; then case "$PROMPT_COMMAND" in *"__tdcwd"*) ;; *) PROMPT_COMMAND="__tdcwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;; esac; else case "$PS1" in *"__tdcwd"*) ;; *) PS1="\\$(__tdcwd)$PS1" ;; esac; fi; __tdcwd\''
 
-export function findSetupEchoEnd(text: string): { lineStart: number; payloadEnd: number; cwd: string | null; user: string | null } | null {
+export function findSetupEchoEnd(
+  text: string
+): { lineStart: number; payloadEnd: number; cwd: string | null; user: string | null } | null {
   const needleIndex = text.indexOf(SETUP_NEEDLE)
   if (needleIndex < 0) {
     return null
@@ -84,7 +85,7 @@ export function findSetupEchoEnd(text: string): { lineStart: number; payloadEnd:
 
   const osc7End = needleIndex + match7.index + match7[0].length
   const oscUserEnd = matchUser ? needleIndex + matchUser.index + matchUser[0].length : osc7End
-  
+
   const payloadEnd = Math.max(osc7End, oscUserEnd)
   const cwd = parseOsc7Payload(match7[1] ?? '')
   const user = matchUser ? parseRemoteUser(matchUser[1] ?? '') : null

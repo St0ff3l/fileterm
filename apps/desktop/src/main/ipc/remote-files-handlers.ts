@@ -13,8 +13,10 @@ export function registerRemoteFilesHandlers(services: IpcServices) {
     workspaceService.setFollowShellCwd(tabId, enabled)
   )
 
-  ipcMain.handle('remoteFiles:setFileAccessMode', (_, tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
-    workspaceService.setRemoteFileAccessMode(tabId, mode, options)
+  ipcMain.handle(
+    'remoteFiles:setFileAccessMode',
+    (_, tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
+      workspaceService.setRemoteFileAccessMode(tabId, mode, options)
   )
 
   ipcMain.handle('remoteFiles:readFile', (_, tabId: string, targetPath: string, encoding?: string) =>
@@ -33,8 +35,10 @@ export function registerRemoteFilesHandlers(services: IpcServices) {
     workspaceService.createRemoteFile(tabId, parentPath, name)
   )
 
-  ipcMain.handle('remoteFiles:copyPath', (_, tabId: string, targetPath: string, destinationPath: string, targetType: 'file' | 'folder') =>
-    workspaceService.copyRemotePath(tabId, targetPath, destinationPath, targetType)
+  ipcMain.handle(
+    'remoteFiles:copyPath',
+    (_, tabId: string, targetPath: string, destinationPath: string, targetType: 'file' | 'folder') =>
+      workspaceService.copyRemotePath(tabId, targetPath, destinationPath, targetType)
   )
 
   ipcMain.handle('remoteFiles:movePath', (_, tabId: string, targetPath: string, destinationPath: string) =>
@@ -49,7 +53,9 @@ export function registerRemoteFilesHandlers(services: IpcServices) {
     workspaceService.deleteRemotePath(tabId, targetPath, targetType)
   )
 
-  ipcMain.handle('remoteFiles:changePermissions', (_, tabId: string, targetPath: string, options: PermissionChangeOptions) =>
-    workspaceService.changeRemotePermissions(tabId, targetPath, options)
+  ipcMain.handle(
+    'remoteFiles:changePermissions',
+    (_, tabId: string, targetPath: string, options: PermissionChangeOptions) =>
+      workspaceService.changeRemotePermissions(tabId, targetPath, options)
   )
 }

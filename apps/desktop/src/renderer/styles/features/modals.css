@@ -486,7 +486,7 @@
 
 .ssh-checkbox input::after,
 .checkbox-row input::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 2.5px;
   border-radius: 999px;

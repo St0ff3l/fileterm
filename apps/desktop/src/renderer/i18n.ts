@@ -117,7 +117,8 @@ const zhCN = {
   fileRootAccessTargetUser: 'sudo 目标用户',
   fileRootAccessPassword: 'sudo 密码',
   fileRootAccessPasswordHint: '说明',
-  fileRootAccessPasswordHintDetail: '已配置免密 sudo 可留空；否则直接输入密码。终端切换用户时文件区会自动尝试复用该授权，文件区手动切换不会改变终端。',
+  fileRootAccessPasswordHintDetail:
+    '已配置免密 sudo 可留空；否则直接输入密码。终端切换用户时文件区会自动尝试复用该授权，文件区手动切换不会改变终端。',
   fileRootAccessConfirm: '进入 root 视角',
   conflictDialogTitle: '同名文件处理',
   conflictDialogDescription: '目标位置已存在同名文件或文件夹，请选择处理方式。',
@@ -145,7 +146,8 @@ const zhCN = {
   cancel: '取消',
   connectionType: '类型',
   host: '主机',
-  hostInputHint: '支持域名、IPv4、IPv6。不要填写协议、端口或路径；填写 `[2001:db8::10]` 时会自动保存为 `2001:db8::10`。',
+  hostInputHint:
+    '支持域名、IPv4、IPv6。不要填写协议、端口或路径；填写 `[2001:db8::10]` 时会自动保存为 `2001:db8::10`。',
   port: '端口',
   username: '用户名',
   group: '分组',
@@ -233,7 +235,8 @@ const zhCN = {
   ftpSecurityImplicit: 'FTPS（隐式 TLS，兼容旧服务器）',
   ftpAuthHint: 'FTP/FTPS 与 SSH/SFTP 是不同协议。若服务器只开了 SSH 或 SFTP，请选择 SSH / SFTP，不要选 FTP / FTPS。',
   enableExecChannel: '启用 Exec Channel',
-  enableExecChannelHint: '用于系统信息、root 视角和部分后台命令。如果连接后立刻断开，先关闭它再试，跳板机或受限 SSH 环境常见这种情况。',
+  enableExecChannelHint:
+    '用于系统信息、root 视角和部分后台命令。如果连接后立刻断开，先关闭它再试，跳板机或受限 SSH 环境常见这种情况。',
   characterEncoding: '字符编码',
   keySequence: '按键序列(解决退格/删除键失效,乱码问题):',
   backspaceKey: 'Backspace退格键',
@@ -407,7 +410,8 @@ const zhCN = {
   settingsConnectionManagerDescription: '管理所有远程服务器连接与分组，配置 SSH / SFTP 证书、跳板机及代理隧道。',
   settingsCommandManagerDescription: '管理常用命令与快捷脚本，分类存储命令，并在 SSH 终端中一键快速发送。',
   systemLogsInfo: '系统与日志',
-  settingsLogsDescription: '应用程序在运行期间会产生日志。如果遇到任何连接错误或意外崩溃，你可以打开日志目录并查看具体的日志信息。',
+  settingsLogsDescription:
+    '应用程序在运行期间会产生日志。如果遇到任何连接错误或意外崩溃，你可以打开日志目录并查看具体的日志信息。',
   logsDirectory: '日志目录',
   aboutAppInfo: '关于 FileTerm',
   versionLabel: '应用版本',
@@ -455,7 +459,8 @@ const enUS: typeof zhCN = {
   noConnection: 'No Connection',
   noConnectionDescription: 'Open a connection to see host status, resource usage, and network monitoring here.',
   remoteDisconnected: 'Remote connection closed',
-  remoteDisconnectedDescription: 'This session is disconnected. Remote files and system info have stopped updating. Reconnect first.',
+  remoteDisconnectedDescription:
+    'This session is disconnected. Remote files and system info have stopped updating. Reconnect first.',
   remoteSessionDisconnectedAction: 'Session disconnected. Reconnect first.',
   openSystemInfo: 'Open system info',
   accessAddress: 'Access',
@@ -548,15 +553,18 @@ const enUS: typeof zhCN = {
   fileRootViewHint: 'Use sudo to read and edit remote files',
   fileRootViewNeedExec: 'Root view needs Exec Channel and usable sudo credentials.',
   fileRootAccessTitle: 'Enable root view',
-  fileRootAccessDescription: 'Enter the sudo target user and password. The default target user is root, but you can switch it to another account if needed. If the host does not allow passwordless sudo for this user, enter the password directly.',
+  fileRootAccessDescription:
+    'Enter the sudo target user and password. The default target user is root, but you can switch it to another account if needed. If the host does not allow passwordless sudo for this user, enter the password directly.',
   fileRootAccessLoginUser: 'Current SSH login user',
   fileRootAccessTargetUser: 'Sudo target user',
   fileRootAccessPassword: 'Sudo password',
   fileRootAccessPasswordHint: 'Note',
-  fileRootAccessPasswordHintDetail: 'Leave the password blank only if this host allows passwordless sudo. Terminal user changes automatically try to reuse this authorization; changing the file view never changes the terminal.',
+  fileRootAccessPasswordHintDetail:
+    'Leave the password blank only if this host allows passwordless sudo. Terminal user changes automatically try to reuse this authorization; changing the file view never changes the terminal.',
   fileRootAccessConfirm: 'Enter root view',
   conflictDialogTitle: 'Name Conflict',
-  conflictDialogDescription: 'A file or folder with the same name already exists at the destination. Choose how to continue.',
+  conflictDialogDescription:
+    'A file or folder with the same name already exists at the destination. Choose how to continue.',
   conflictSkip: 'Skip',
   conflictKeepBoth: 'Keep both',
   conflictReplace: 'Replace',
@@ -577,7 +585,8 @@ const enUS: typeof zhCN = {
   cancel: 'Cancel',
   connectionType: 'Type',
   host: 'Host',
-  hostInputHint: 'Supports hostnames, IPv4, and IPv6. Do not include a protocol, port, or path. `[2001:db8::10]` will be saved as `2001:db8::10`.',
+  hostInputHint:
+    'Supports hostnames, IPv4, and IPv6. Do not include a protocol, port, or path. `[2001:db8::10]` will be saved as `2001:db8::10`.',
   port: 'Port',
   username: 'Username',
   group: 'Group',
@@ -588,19 +597,23 @@ const enUS: typeof zhCN = {
   password: 'Password',
   privateKey: 'Private Key',
   fillRequired: 'Please fill in name, host, group, and remote path.',
-  invalidHost: 'Enter a valid host address. Hostnames, IPv4, and IPv6 are supported, but do not include a protocol, port, or path.',
+  invalidHost:
+    'Enter a valid host address. Hostnames, IPv4, and IPv6 are supported, but do not include a protocol, port, or path.',
   missingSshPassword: 'Please enter the SSH password.',
   missingPrivateKeyPath: 'Please choose or enter the private key path.',
-  passwordAuthHint: 'Password can be left blank. If this computer already has SSH keys or an SSH agent configured, FileTerm will try those first.',
+  passwordAuthHint:
+    'Password can be left blank. If this computer already has SSH keys or an SSH agent configured, FileTerm will try those first.',
   sshAuthPromptTitle: 'SSH Sign In',
-  sshAuthPromptDescription: 'This connection does not yet have usable login credentials. Enter a username and password to continue.',
+  sshAuthPromptDescription:
+    'This connection does not yet have usable login credentials. Enter a username and password to continue.',
   sshAuthPromptPasswordRequired: 'Enter the SSH login password for the remote host.',
   sshAuthPromptUsername: 'Login User',
   sshAuthPromptFillRequired: 'Enter both username and password.',
   sshAuthPromptConfirm: 'Continue',
   sshHostVerificationTitle: 'Security Warning',
   sshHostVerificationDescription: 'This host key is not trusted yet. Confirm the fingerprint before continuing.',
-  sshHostVerificationChanged: 'The saved fingerprint for this host does not match the current value. Please verify carefully.',
+  sshHostVerificationChanged:
+    'The saved fingerprint for this host does not match the current value. Please verify carefully.',
   sshHostFingerprintLabel: 'Host Key Fingerprint',
   sshHostKnownFingerprintLabel: 'Saved Fingerprint',
   sshHostAcceptOnce: 'Accept Once',
@@ -663,9 +676,11 @@ const enUS: typeof zhCN = {
   ftpSecurityNone: 'FTP (unencrypted)',
   ftpSecurityExplicit: 'FTPS (explicit TLS, recommended)',
   ftpSecurityImplicit: 'FTPS (implicit TLS, legacy)',
-  ftpAuthHint: 'FTP/FTPS is a separate protocol from SSH/SFTP. If the server only exposes SSH or SFTP, choose SSH / SFTP instead of FTP / FTPS.',
+  ftpAuthHint:
+    'FTP/FTPS is a separate protocol from SSH/SFTP. If the server only exposes SSH or SFTP, choose SSH / SFTP instead of FTP / FTPS.',
   enableExecChannel: 'Enable Exec Channel',
-  enableExecChannelHint: 'Used for system info, root file access, and some background commands. If the connection drops right after login, turn this off first; this is common on jump hosts or restricted SSH environments.',
+  enableExecChannelHint:
+    'Used for system info, root file access, and some background commands. If the connection drops right after login, turn this off first; this is common on jump hosts or restricted SSH environments.',
   characterEncoding: 'Character Encoding',
   keySequence: 'Key sequence:',
   backspaceKey: 'Backspace',
@@ -679,7 +694,8 @@ const enUS: typeof zhCN = {
   editLocalFile: 'Edit Local File',
   transferDetails: 'Transfer Details',
   clearTransferHistory: 'Clear History',
-  transferUploadHint: 'Files and folders use .fileterm-part checkpoints, replace targets after verification, and can resume after disconnects or restarts.',
+  transferUploadHint:
+    'Files and folders use .fileterm-part checkpoints, replace targets after verification, and can resume after disconnects or restarts.',
   inProgress: 'In Progress',
   completed: 'Completed/Stopped',
   all: 'All',
@@ -833,14 +849,19 @@ const enUS: typeof zhCN = {
   languageEnglish: 'English',
   themeSelection: 'Theme Selection',
   managerToolsShortcut: 'Management Tools',
-  settingsManagersInlineHint: 'The connection and command managers on the home workspace are the primary editing surfaces. Use this area as a quick jump.',
-  settingsManagersWindowHint: 'Open the managers in separate windows when you want to organize connections or commands outside the current workspace.',
+  settingsManagersInlineHint:
+    'The connection and command managers on the home workspace are the primary editing surfaces. Use this area as a quick jump.',
+  settingsManagersWindowHint:
+    'Open the managers in separate windows when you want to organize connections or commands outside the current workspace.',
   switchToManagerPage: 'Go to Manager',
   openInSeparateWindow: 'Open Separately',
-  settingsConnectionManagerDescription: 'Manage remote server connections and groups, including SSH / SFTP credentials, jump hosts, and proxy tunnels.',
-  settingsCommandManagerDescription: 'Organize reusable commands and quick scripts, then send them to the current SSH terminal with one click.',
+  settingsConnectionManagerDescription:
+    'Manage remote server connections and groups, including SSH / SFTP credentials, jump hosts, and proxy tunnels.',
+  settingsCommandManagerDescription:
+    'Organize reusable commands and quick scripts, then send them to the current SSH terminal with one click.',
   systemLogsInfo: 'System & Logs',
-  settingsLogsDescription: 'The app writes runtime logs while it is running. If you hit a connection error or unexpected crash, open the logs directory to inspect the details.',
+  settingsLogsDescription:
+    'The app writes runtime logs while it is running. If you hit a connection error or unexpected crash, open the logs directory to inspect the details.',
   logsDirectory: 'Logs Directory',
   aboutAppInfo: 'About FileTerm',
   versionLabel: 'Version',
@@ -860,15 +881,18 @@ const enUS: typeof zhCN = {
   overviewGithubDescription: 'View the project source code.',
   notReady: 'Coming later',
   closeConfirmTitle: 'Confirm Exit',
-  closeConfirmActiveWarn: 'There are active remote connections running. Exiting or closing the window may disconnect them.',
+  closeConfirmActiveWarn:
+    'There are active remote connections running. Exiting or closing the window may disconnect them.',
   closeConfirmQuitMsg: 'Are you sure you want to quit FileTerm?',
   closeConfirmWindowsMsg: 'Please choose how to handle the window:',
   closeConfirmQuit: 'Exit App',
   closeConfirmHide: 'Minimize to Tray',
   closeShortcutConnectingTitle: 'Connection Still Starting',
-  closeShortcutConnectingDescription: '"{name}" is still connecting. Closing it now will interrupt that connection. Continue?',
+  closeShortcutConnectingDescription:
+    '"{name}" is still connecting. Closing it now will interrupt that connection. Continue?',
   closeShortcutLastActiveTitle: 'Close Current Connection',
-  closeShortcutLastActiveDescription: '"{name}" is the last active connection. Closing it will return you to a new home tab first. Continue?',
+  closeShortcutLastActiveDescription:
+    '"{name}" is the last active connection. Closing it will return you to a new home tab first. Continue?',
   closeShortcutActiveTitle: 'Close Active Connection',
   closeShortcutActiveDescription: '"{name}" is still active. Closing it now will interrupt that connection. Continue?',
   closeShortcutCloseTab: 'Close Tab',
@@ -902,7 +926,7 @@ function resolveInitialLocale(): AppLocale {
     const preferredLocales = window.navigator.languages?.length
       ? window.navigator.languages
       : [window.navigator.language]
-    const matchedLocale = preferredLocales.find(locale => typeof locale === 'string' && locale.length > 0)
+    const matchedLocale = preferredLocales.find((locale) => typeof locale === 'string' && locale.length > 0)
 
     if (matchedLocale?.toLowerCase().startsWith('zh')) {
       return 'zhCN'

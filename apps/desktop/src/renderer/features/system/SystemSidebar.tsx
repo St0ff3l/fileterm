@@ -39,15 +39,17 @@ export function SystemSidebar({
         .sort((a, b) => a.elapsedSeconds - b.elapsedSeconds || parseFloat(b.cpu) - parseFloat(a.cpu))
         .slice(0, 20)
     }
-    return procs.sort((a, b) => {
-      if (sortMode === 'cpu') {
-        return parseFloat(b.cpu) - parseFloat(a.cpu)
-      }
-      if (sortMode === 'memory') {
-        return parseMemory(b.memory) - parseMemory(a.memory)
-      }
-      return 0
-    }).slice(0, 4)
+    return procs
+      .sort((a, b) => {
+        if (sortMode === 'cpu') {
+          return parseFloat(b.cpu) - parseFloat(a.cpu)
+        }
+        if (sortMode === 'memory') {
+          return parseMemory(b.memory) - parseMemory(a.memory)
+        }
+        return 0
+      })
+      .slice(0, 4)
   }, [metrics?.topProcesses, sortMode])
 
   return (
@@ -82,9 +84,17 @@ export function SystemSidebar({
               <AddressLine label={t.privateIp} value={internalIp} />
               <AddressLine label={t.accessAddress} value={accessAddress} />
             </div>
-            <button className="system-title" onClick={onOpenSystemInfo} type="button">{t.systemInfo}</button>
-            <div className="metric-line"><span>{t.running}</span><strong className="value">{formatUptime(metrics?.uptimeSeconds, metrics?.uptime)}</strong></div>
-            <div className="metric-line"><span>{t.load}</span><strong className="value">{metrics?.load ?? '-'}</strong></div>
+            <button className="system-title" onClick={onOpenSystemInfo} type="button">
+              {t.systemInfo}
+            </button>
+            <div className="metric-line">
+              <span>{t.running}</span>
+              <strong className="value">{formatUptime(metrics?.uptimeSeconds, metrics?.uptime)}</strong>
+            </div>
+            <div className="metric-line">
+              <span>{t.load}</span>
+              <strong className="value">{metrics?.load ?? '-'}</strong>
+            </div>
             <Meter
               label={t.cpu}
               value={metrics?.cpuPercent ?? 0}
@@ -102,23 +112,42 @@ export function SystemSidebar({
               dotTone={getMetricTone(metrics?.swapPercent ?? 0)}
             />
             <div className="mini-tabs">
-              <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => setSortMode('memory')}>{t.memory}</span>
-              <span className={sortMode === 'cpu' ? 'active' : ''} onClick={() => setSortMode('cpu')}>{t.cpu}</span>
-              <span className={sortMode === 'command' ? 'active' : ''} onClick={() => setSortMode('command')}>{t.command}</span>
+              <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => setSortMode('memory')}>
+                {t.memory}
+              </span>
+              <span className={sortMode === 'cpu' ? 'active' : ''} onClick={() => setSortMode('cpu')}>
+                {t.cpu}
+              </span>
+              <span className={sortMode === 'command' ? 'active' : ''} onClick={() => setSortMode('command')}>
+                {t.command}
+              </span>
             </div>
             <ProcessTable rows={sortedProcesses} />
             <NetworkPanel metrics={metrics} />
           </section>
           <section className="disk-table">
-            <div className="disk-head"><span>{t.path}</span><span>{t.availableSize}</span></div>
-            {rows.length ? rows.map((row) => (
-              <div className="disk-row" key={row.path}><span>{row.path}</span><span>{row.usage}</span></div>
-            )) : Array.from({ length: 8 }).map((_, i) => (
-              <div className="disk-row" key={`empty-${i}`}><span></span><span></span></div>
-            ))}
+            <div className="disk-head">
+              <span>{t.path}</span>
+              <span>{t.availableSize}</span>
+            </div>
+            {rows.length
+              ? rows.map((row) => (
+                  <div className="disk-row" key={row.path}>
+                    <span>{row.path}</span>
+                    <span>{row.usage}</span>
+                  </div>
+                ))
+              : Array.from({ length: 8 }).map((_, i) => (
+                  <div className="disk-row" key={`empty-${i}`}>
+                    <span></span>
+                    <span></span>
+                  </div>
+                ))}
           </section>
         </>
-      ) : <CollapsedResourceMeters metrics={metrics} />}
+      ) : (
+        <CollapsedResourceMeters metrics={metrics} />
+      )}
     </div>
   )
 }
@@ -147,7 +176,21 @@ function AddressLine({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Meter({ label, value, tone, caption, percent, dotTone }: { label: string; value: number; tone: string; caption: string; percent?: string; dotTone?: string }) {
+function Meter({
+  label,
+  value,
+  tone,
+  caption,
+  percent,
+  dotTone
+}: {
+  label: string
+  value: number
+  tone: string
+  caption: string
+  percent?: string
+  dotTone?: string
+}) {
   return (
     <div className="meter-group">
       <div className="meter-header">
@@ -158,7 +201,9 @@ function Meter({ label, value, tone, caption, percent, dotTone }: { label: strin
           {percent && <span className="metric-percent">{percent}</span>}
         </strong>
       </div>
-      <div className="meter-track"><i className={`meter-fill ${tone}`} style={{ width: `${value}%` }} /></div>
+      <div className="meter-track">
+        <i className={`meter-fill ${tone}`} style={{ width: `${value}%` }} />
+      </div>
     </div>
   )
 }
@@ -172,13 +217,29 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
   // System meters intentionally use two color protocols:
   // - tone-* for status/warning severity (cpu/swap and memory fallback)
   // - app/cache/kernel for memory composition segments
-  const segments = total > 0
-    ? [
-        { key: 'app', label: t.app, value: metrics?.memoryAppUsage ?? '-', width: Math.max(0, Math.min(100, (app / total) * 100)) },
-        { key: 'cache', label: t.cacheLabel, value: metrics?.memoryCacheUsage ?? '-', width: Math.max(0, Math.min(100, (cache / total) * 100)) },
-        { key: 'kernel', label: t.kernelLabel, value: metrics?.memoryKernelUsage ?? '-', width: Math.max(0, Math.min(100, (kernel / total) * 100)) }
-      ].filter((segment) => parseMemory(segment.value) > 0)
-    : []
+  const segments =
+    total > 0
+      ? [
+          {
+            key: 'app',
+            label: t.app,
+            value: metrics?.memoryAppUsage ?? '-',
+            width: Math.max(0, Math.min(100, (app / total) * 100))
+          },
+          {
+            key: 'cache',
+            label: t.cacheLabel,
+            value: metrics?.memoryCacheUsage ?? '-',
+            width: Math.max(0, Math.min(100, (cache / total) * 100))
+          },
+          {
+            key: 'kernel',
+            label: t.kernelLabel,
+            value: metrics?.memoryKernelUsage ?? '-',
+            width: Math.max(0, Math.min(100, (kernel / total) * 100))
+          }
+        ].filter((segment) => parseMemory(segment.value) > 0)
+      : []
 
   return (
     <div className="meter-group memory-meter-group">
@@ -191,13 +252,17 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
         </strong>
       </div>
       <div className="meter-track meter-track-stacked">
-        {segments.length ? segments.map((segment) => (
-          <i
-            className={`meter-fill stacked ${segment.key}`}
-            key={segment.key}
-            style={{ width: `${segment.width}%` }}
-          />
-        )) : <i className="meter-fill tone-warning" style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />}
+        {segments.length ? (
+          segments.map((segment) => (
+            <i
+              className={`meter-fill stacked ${segment.key}`}
+              key={segment.key}
+              style={{ width: `${segment.width}%` }}
+            />
+          ))
+        ) : (
+          <i className="meter-fill tone-warning" style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />
+        )}
 
         {segments.length ? (
           <div className="memory-hover-popover">
@@ -238,12 +303,12 @@ function CollapsedResourceMeters({ metrics }: { metrics?: SystemMetrics }) {
             <span className="collapsed-resource-track">
               <i className={`collapsed-resource-fill ${tone}`} style={{ height: `${value}%` }} />
             </span>
-                <span className="collapsed-resource-info" aria-hidden="true">
-                  <span className="collapsed-resource-label">{item.label}</span>
-                  <span className="collapsed-resource-value">{value}%</span>
-                </span>
-              </div>
-            )
+            <span className="collapsed-resource-info" aria-hidden="true">
+              <span className="collapsed-resource-label">{item.label}</span>
+              <span className="collapsed-resource-value">{value}%</span>
+            </span>
+          </div>
+        )
       })}
     </div>
   )
@@ -334,11 +399,16 @@ function getMetricTone(percent: number) {
 }
 
 function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
-  const displayRows = rows.length ? rows : Array.from({ length: 4 }).map(() => ({ memory: '', cpu: '', command: '', elapsedSeconds: 0 }))
+  const displayRows = rows.length
+    ? rows
+    : Array.from({ length: 4 }).map(() => ({ memory: '', cpu: '', command: '', elapsedSeconds: 0 }))
   return (
     <div className="process-table scrollbar-scroll">
       {displayRows.map((row, i) => (
-        <div className="process-row" key={rows.length ? `${row.command}-${row.memory}-${row.cpu}-${row.elapsedSeconds}` : `empty-${i}`}>
+        <div
+          className="process-row"
+          key={rows.length ? `${row.command}-${row.memory}-${row.cpu}-${row.elapsedSeconds}` : `empty-${i}`}
+        >
           <span>{row.memory}</span>
           <span>{row.cpu}</span>
           <span>{row.command}</span>
@@ -449,9 +519,10 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
     previousInterfaceRef.current = selectedInterface
     const latestSample = rawSamples.at(-1)
     const previousLastSample = previousLastSampleRef.current
-    const sampleAdvanced = previousSampleCountRef.current !== rawSamples.length
-      || previousLastSample?.rx !== latestSample?.rx
-      || previousLastSample?.tx !== latestSample?.tx
+    const sampleAdvanced =
+      previousSampleCountRef.current !== rawSamples.length ||
+      previousLastSample?.rx !== latestSample?.rx ||
+      previousLastSample?.tx !== latestSample?.tx
 
     previousLastSampleRef.current = latestSample
     previousSampleCountRef.current = rawSamples.length
@@ -462,22 +533,22 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
     }
 
     if (interfaceChanged) {
-      setDisplaySamples((current) => areSampleWindowsEqual(current, samples) ? current : samples)
+      setDisplaySamples((current) => (areSampleWindowsEqual(current, samples) ? current : samples))
       setChartOffset(-chartStep)
       return
     }
 
     if (!sampleAdvanced) {
-      setDisplaySamples((current) => areSampleWindowsEqual(current, samples) ? current : samples)
-      setChartOffset((current) => current === -chartStep ? current : -chartStep)
+      setDisplaySamples((current) => (areSampleWindowsEqual(current, samples) ? current : samples))
+      setChartOffset((current) => (current === -chartStep ? current : -chartStep))
       return
     }
 
     const startTime = performance.now()
     const duration = 420
 
-    setDisplaySamples((current) => areSampleWindowsEqual(current, samples) ? current : samples)
-    setChartOffset((current) => current === 0 ? current : 0)
+    setDisplaySamples((current) => (areSampleWindowsEqual(current, samples) ? current : samples))
+    setChartOffset((current) => (current === 0 ? current : 0))
 
     const animate = (now: number) => {
       const progress = Math.min(1, (now - startTime) / duration)
@@ -506,11 +577,15 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
       <div className="network-panel">
         <div className="network-rates">
           <span className="network-rate up">
-            <i><AppIcon name="arrow-up" size={12} /></i>
+            <i>
+              <AppIcon name="arrow-up" size={12} />
+            </i>
             <strong>{currentRates?.tx ?? '0B'}</strong>
           </span>
           <span className="network-rate down">
-            <i><AppIcon name="arrow-down" size={12} /></i>
+            <i>
+              <AppIcon name="arrow-down" size={12} />
+            </i>
             <strong>{currentRates?.rx ?? '0B'}</strong>
           </span>
         </div>
@@ -520,7 +595,9 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
           onChange={(event) => setSelectedInterface(event.target.value)}
         >
           {interfaceOptions.map((name) => (
-            <option key={name} value={name}>{name === 'all' ? t.total : name}</option>
+            <option key={name} value={name}>
+              {name === 'all' ? t.total : name}
+            </option>
           ))}
         </select>
       </div>
@@ -531,7 +608,12 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
           ))}
         </div>
         <div className="grid-chart">
-          <svg aria-label="Network history chart" className="network-chart-svg" preserveAspectRatio="none" viewBox="0 0 100 100">
+          <svg
+            aria-label="Network history chart"
+            className="network-chart-svg"
+            preserveAspectRatio="none"
+            viewBox="0 0 100 100"
+          >
             <path className="network-guide major" d="M 0 12 H 100" />
             <path className="network-guide minor" d="M 0 44 H 100" />
             <path className="network-guide minor" d="M 0 76 H 100" />

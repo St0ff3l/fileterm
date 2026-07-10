@@ -1,4 +1,17 @@
-import { lazy, startTransition, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type MouseEvent, type ReactNode } from 'react'
+import {
+  lazy,
+  startTransition,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode
+} from 'react'
 import {
   mergeSystemMetricsHistory,
   type CommandExecutionOptions,
@@ -13,14 +26,20 @@ import {
   type RemoteFileItem,
   type SessionMetricsUpdate,
   type SshCredentialsPromptRequest,
-  type SshHostVerificationRequest,
   type SshInteractionRequest,
   type SshInteractionResponse,
   type WorkspaceSnapshot,
   type WorkspaceTab
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
-import { defaultForm, emptyState, localPreviewFiles, previewLocalPath, previewState, profileToForm } from './app/app-data'
+import {
+  defaultForm,
+  emptyState,
+  localPreviewFiles,
+  previewLocalPath,
+  previewState,
+  profileToForm
+} from './app/app-data'
 import { homeTabKey, insertTabKeyAfter, reorderTabKeys, sessionTabKey, withParentRow } from './app/app-utils'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
 import { CommandManagerModal } from './features/commands/CommandManagerModal'
@@ -50,9 +69,11 @@ import { defaultLocale, setLocale, t, type AppLocale } from './i18n'
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
 const MAIN_TAB_UI_STATE_KEY = 'main.tab-ui'
-const FileEditorModal = lazy(() => import('./features/files/FileEditorModal').then((module) => ({
-  default: module.FileEditorModal
-})))
+const FileEditorModal = lazy(() =>
+  import('./features/files/FileEditorModal').then((module) => ({
+    default: module.FileEditorModal
+  }))
+)
 
 type ErrorDetails = {
   item?: RemoteFileItem
@@ -104,12 +125,12 @@ function areClipboardItemsEqual(left: FileDialogTarget[], right: FileDialogTarge
     const leftItem = left[index]
     const rightItem = right[index]
     if (
-      !leftItem
-      || !rightItem
-      || leftItem.pane !== rightItem.pane
-      || leftItem.path !== rightItem.path
-      || leftItem.name !== rightItem.name
-      || leftItem.type !== rightItem.type
+      !leftItem ||
+      !rightItem ||
+      leftItem.pane !== rightItem.pane ||
+      leftItem.path !== rightItem.path ||
+      leftItem.name !== rightItem.name ||
+      leftItem.type !== rightItem.type
     ) {
       return false
     }
@@ -154,9 +175,10 @@ function allocateTargetNames(
 ) {
   const reservedNames = new Set(existingNames)
   return items.map((item) => {
-    const isSameDirectory = item.pane === 'remote'
-      ? remoteDirname(item.path) === destinationPath
-      : localDirname(item.path) === destinationPath
+    const isSameDirectory =
+      item.pane === 'remote'
+        ? remoteDirname(item.path) === destinationPath
+        : localDirname(item.path) === destinationPath
 
     let nextName = item.name
 
@@ -328,19 +350,23 @@ function parseStoredMainTabUiState(raw: string | null | undefined): StoredMainTa
 
   try {
     const parsed = JSON.parse(raw) as Partial<StoredMainTabUiState>
-    const localTabs = uniqueItemsById(Array.isArray(parsed.localTabs)
-      ? parsed.localTabs.filter((tab): tab is LocalTab => {
-          if (!tab || typeof tab !== 'object' || typeof tab.id !== 'string' || typeof tab.title !== 'string') {
-            return false
-          }
-          if (tab.kind === 'home') {
-            return true
-          }
-          return tab.kind === 'system'
-            && typeof (tab as Extract<LocalTab, { kind: 'system' }>).sessionTabId === 'string'
-            && typeof (tab as Extract<LocalTab, { kind: 'system' }>).sourceTabTitle === 'string'
-        })
-      : [])
+    const localTabs = uniqueItemsById(
+      Array.isArray(parsed.localTabs)
+        ? parsed.localTabs.filter((tab): tab is LocalTab => {
+            if (!tab || typeof tab !== 'object' || typeof tab.id !== 'string' || typeof tab.title !== 'string') {
+              return false
+            }
+            if (tab.kind === 'home') {
+              return true
+            }
+            return (
+              tab.kind === 'system' &&
+              typeof (tab as Extract<LocalTab, { kind: 'system' }>).sessionTabId === 'string' &&
+              typeof (tab as Extract<LocalTab, { kind: 'system' }>).sourceTabTitle === 'string'
+            )
+          })
+        : []
+    )
     const tabOrder = Array.isArray(parsed.tabOrder)
       ? uniqueStrings(parsed.tabOrder.filter((entry): entry is string => typeof entry === 'string'))
       : []
@@ -348,9 +374,10 @@ function parseStoredMainTabUiState(raw: string | null | undefined): StoredMainTa
     return {
       localTabs,
       activeLocalTabId: typeof parsed.activeLocalTabId === 'string' ? parsed.activeLocalTabId : null,
-      nextHomeTabNumber: typeof parsed.nextHomeTabNumber === 'number' && Number.isFinite(parsed.nextHomeTabNumber)
-        ? Math.max(1, Math.floor(parsed.nextHomeTabNumber))
-        : 1,
+      nextHomeTabNumber:
+        typeof parsed.nextHomeTabNumber === 'number' && Number.isFinite(parsed.nextHomeTabNumber)
+          ? Math.max(1, Math.floor(parsed.nextHomeTabNumber))
+          : 1,
       tabOrder,
       isSystemSidebarCollapsed: parsed.isSystemSidebarCollapsed === true
     }
@@ -383,11 +410,7 @@ function createInitialMainTabUiState(enabled: boolean, stored: StoredMainTabUiSt
   }
 }
 
-function collectConnectionGroups(
-  folderNames: string[],
-  profileGroups: string[],
-  currentGroup?: string
-) {
+function collectConnectionGroups(folderNames: string[], profileGroups: string[], currentGroup?: string) {
   const next = new Set<string>()
 
   next.add('默认')
@@ -489,11 +512,12 @@ export function App() {
   const isConnectionFormWindow = windowMode === 'connection-form'
   const isCommandFormWindow = windowMode === 'command-form'
   const isFileEditorWindow = windowMode === 'file-editor'
-  const isMainWorkspaceWindow = !isConnectionManagerWindow
-    && !isCommandManagerWindow
-    && !isConnectionFormWindow
-    && !isCommandFormWindow
-    && !isFileEditorWindow
+  const isMainWorkspaceWindow =
+    !isConnectionManagerWindow &&
+    !isCommandManagerWindow &&
+    !isConnectionFormWindow &&
+    !isCommandFormWindow &&
+    !isFileEditorWindow
   const formWindowMode = (searchParams.get('mode') as ConnectionFormMode | null) ?? 'create'
   const formWindowProfileId = searchParams.get('profileId')
   const formWindowCommandId = searchParams.get('commandId')
@@ -526,7 +550,9 @@ export function App() {
   const [activeLocalTabId, setActiveLocalTabId] = useState<string | null>(() => initialMainTabUiState.activeLocalTabId)
   const [nextHomeTabNumber, setNextHomeTabNumber] = useState(() => initialMainTabUiState.nextHomeTabNumber)
   const [tabOrder, setTabOrder] = useState<string[]>(() => initialMainTabUiState.tabOrder)
-  const [terminalDockSendStateByTabId, setTerminalDockSendStateByTabId] = useState<Record<string, TerminalDockSendState>>({})
+  const [terminalDockSendStateByTabId, setTerminalDockSendStateByTabId] = useState<
+    Record<string, TerminalDockSendState>
+  >({})
   const [draggingTabKey, setDraggingTabKey] = useState<string | null>(null)
   const [tabContextMenu, setTabContextMenu] = useState<{
     x: number
@@ -534,7 +560,9 @@ export function App() {
     target: TabContextTarget
   } | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(214)
-  const [isSystemSidebarCollapsed, setIsSystemSidebarCollapsed] = useState(() => initialMainTabUiState.isSystemSidebarCollapsed)
+  const [isSystemSidebarCollapsed, setIsSystemSidebarCollapsed] = useState(
+    () => initialMainTabUiState.isSystemSidebarCollapsed
+  )
   const [isWorkspaceFocusMode, setIsWorkspaceFocusMode] = useState(false)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [fileEditor, setFileEditor] = useState<FileContentSnapshot | null>(
@@ -565,11 +593,12 @@ export function App() {
     sudoUser: string
   } | null>(null)
   const connectionGroupOptions = useMemo(
-    () => collectConnectionGroups(
-      (workspace.folders ?? []).map((folder) => folder.name),
-      workspace.profiles.map((profile) => profile.group),
-      form.group
-    ),
+    () =>
+      collectConnectionGroups(
+        (workspace.folders ?? []).map((folder) => folder.name),
+        workspace.profiles.map((profile) => profile.group),
+        form.group
+      ),
     [workspace.folders, workspace.profiles, form.group]
   )
   const [rootAccessDialogError, setRootAccessDialogError] = useState<string | null>(null)
@@ -578,7 +607,10 @@ export function App() {
   const [sshInteractionError, setSshInteractionError] = useState<string | null>(null)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams))
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams))
-  const [closeConfirmDialog, setCloseConfirmDialog] = useState<{ isQuit: boolean; hasActiveConnections: boolean } | null>(null)
+  const [closeConfirmDialog, setCloseConfirmDialog] = useState<{
+    isQuit: boolean
+    hasActiveConnections: boolean
+  } | null>(null)
   const [shortcutCloseConfirm, setShortcutCloseConfirm] = useState<{
     tabId: string
     title: string
@@ -718,7 +750,8 @@ export function App() {
           changed = true
           return { ...tab, title: t.untitledTab }
         }
-        const sourceTabTitle = visibleWorkspaceTabs.find((entry) => entry.id === tab.sessionTabId)?.title ?? tab.sourceTabTitle
+        const sourceTabTitle =
+          visibleWorkspaceTabs.find((entry) => entry.id === tab.sessionTabId)?.title ?? tab.sourceTabTitle
         const title = formatSystemInfoTabTitle(sourceTabTitle)
         if (tab.sourceTabTitle === sourceTabTitle && tab.title === title) {
           return tab
@@ -780,9 +813,9 @@ export function App() {
       .then((snapshot) => {
         setWorkspace(snapshot)
         if (isMainWorkspaceWindow && snapshot.tabs.length === 0) {
-          setLocalTabs((current) => current.length ? current : [{ id: 'home-1', kind: 'home', title: t.untitledTab }])
+          setLocalTabs((current) => (current.length ? current : [{ id: 'home-1', kind: 'home', title: t.untitledTab }]))
           setActiveLocalTabId((current) => current ?? 'home-1')
-          setTabOrder((current) => current.includes('home:home-1') ? current : ['home:home-1', ...current])
+          setTabOrder((current) => (current.includes('home:home-1') ? current : ['home:home-1', ...current]))
           setNextHomeTabNumber((current) => Math.max(current, 2))
         }
         setHasLoadedInitialSnapshot(true)
@@ -803,7 +836,13 @@ export function App() {
       applySessionMetrics(payload)
     })
 
-    if (!isConnectionManagerWindow && !isConnectionFormWindow && !isCommandManagerWindow && !isCommandFormWindow && !isFileEditorWindow) {
+    if (
+      !isConnectionManagerWindow &&
+      !isConnectionFormWindow &&
+      !isCommandManagerWindow &&
+      !isCommandFormWindow &&
+      !isFileEditorWindow
+    ) {
       desktopApi
         .listLocalDirectory()
         .then(({ path, items }) => {
@@ -817,7 +856,14 @@ export function App() {
       offSnapshot()
       offSessionMetrics()
     }
-  }, [desktopApi, isCommandFormWindow, isCommandManagerWindow, isConnectionFormWindow, isConnectionManagerWindow, isFileEditorWindow])
+  }, [
+    desktopApi,
+    isCommandFormWindow,
+    isCommandManagerWindow,
+    isConnectionFormWindow,
+    isConnectionManagerWindow,
+    isFileEditorWindow
+  ])
 
   useEffect(() => {
     if (!desktopApi) {
@@ -831,18 +877,25 @@ export function App() {
   }, [desktopApi])
 
   useEffect(() => {
-    if (!desktopApi || !isFileEditorWindow || !fileEditorWindowSource || !fileEditorWindowPath || !fileEditorWindowName) {
+    if (
+      !desktopApi ||
+      !isFileEditorWindow ||
+      !fileEditorWindowSource ||
+      !fileEditorWindowPath ||
+      !fileEditorWindowName
+    ) {
       return
     }
 
     void (async () => {
-    try {
-      setIsBusy(true)
-      const content = fileEditorWindowSource === 'local'
-        ? await desktopApi.readLocalFile(fileEditorWindowPath, fileEditorWindowEncoding)
-        : fileEditorWindowTabId
-            ? await desktopApi.readRemoteFile(fileEditorWindowTabId, fileEditorWindowPath, fileEditorWindowEncoding)
-            : ''
+      try {
+        setIsBusy(true)
+        const content =
+          fileEditorWindowSource === 'local'
+            ? await desktopApi.readLocalFile(fileEditorWindowPath, fileEditorWindowEncoding)
+            : fileEditorWindowTabId
+              ? await desktopApi.readRemoteFile(fileEditorWindowTabId, fileEditorWindowPath, fileEditorWindowEncoding)
+              : ''
 
         setFileEditor({
           source: fileEditorWindowSource,
@@ -859,7 +912,15 @@ export function App() {
         setIsBusy(false)
       }
     })()
-  }, [desktopApi, fileEditorWindowEncoding, fileEditorWindowName, fileEditorWindowPath, fileEditorWindowSource, fileEditorWindowTabId, isFileEditorWindow])
+  }, [
+    desktopApi,
+    fileEditorWindowEncoding,
+    fileEditorWindowName,
+    fileEditorWindowPath,
+    fileEditorWindowSource,
+    fileEditorWindowTabId,
+    isFileEditorWindow
+  ])
 
   useEffect(() => {
     if (!isConnectionFormWindow) {
@@ -917,15 +978,27 @@ export function App() {
   }, [hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs, visibleWorkspaceTabs])
 
   useEffect(() => {
-    if (!isMainWorkspaceWindow || !hasLoadedInitialSnapshot || !hasHydratedMainTabUiState || localTabs.length > 0 || visibleWorkspaceTabs.length > 0) {
+    if (
+      !isMainWorkspaceWindow ||
+      !hasLoadedInitialSnapshot ||
+      !hasHydratedMainTabUiState ||
+      localTabs.length > 0 ||
+      visibleWorkspaceTabs.length > 0
+    ) {
       return
     }
 
     setLocalTabs([{ id: 'home-1', kind: 'home', title: t.untitledTab }])
     setActiveLocalTabId((current) => current ?? 'home-1')
-    setTabOrder((prev) => prev.includes('home:home-1') ? prev : ['home:home-1', ...prev])
+    setTabOrder((prev) => (prev.includes('home:home-1') ? prev : ['home:home-1', ...prev]))
     setNextHomeTabNumber((prev) => Math.max(prev, 2))
-  }, [hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs.length, visibleWorkspaceTabs.length])
+  }, [
+    hasHydratedMainTabUiState,
+    hasLoadedInitialSnapshot,
+    isMainWorkspaceWindow,
+    localTabs.length,
+    visibleWorkspaceTabs.length
+  ])
 
   useEffect(() => {
     if (!isMainWorkspaceWindow || !hasLoadedInitialSnapshot || !hasHydratedMainTabUiState) {
@@ -960,7 +1033,15 @@ export function App() {
       }
       return resolveFallbackHomeTabId(nextLocalTabs, tabOrder)
     })
-  }, [activeLocalTabId, hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, localTabs, tabOrder, visibleWorkspaceTabs])
+  }, [
+    activeLocalTabId,
+    hasHydratedMainTabUiState,
+    hasLoadedInitialSnapshot,
+    isMainWorkspaceWindow,
+    localTabs,
+    tabOrder,
+    visibleWorkspaceTabs
+  ])
 
   useEffect(() => {
     if (!hasLoadedInitialSnapshot || !hasHydratedMainTabUiState) {
@@ -972,14 +1053,27 @@ export function App() {
     }
 
     const uiStateApi = desktopApi
-    void uiStateApi.setUiStateItem(MAIN_TAB_UI_STATE_KEY, JSON.stringify({
-      localTabs,
-      activeLocalTabId,
-      nextHomeTabNumber,
-      tabOrder,
-      isSystemSidebarCollapsed
-    } satisfies StoredMainTabUiState))
-  }, [activeLocalTabId, desktopApi, hasHydratedMainTabUiState, hasLoadedInitialSnapshot, isMainWorkspaceWindow, isSystemSidebarCollapsed, localTabs, nextHomeTabNumber, tabOrder])
+    void uiStateApi.setUiStateItem(
+      MAIN_TAB_UI_STATE_KEY,
+      JSON.stringify({
+        localTabs,
+        activeLocalTabId,
+        nextHomeTabNumber,
+        tabOrder,
+        isSystemSidebarCollapsed
+      } satisfies StoredMainTabUiState)
+    )
+  }, [
+    activeLocalTabId,
+    desktopApi,
+    hasHydratedMainTabUiState,
+    hasLoadedInitialSnapshot,
+    isMainWorkspaceWindow,
+    isSystemSidebarCollapsed,
+    localTabs,
+    nextHomeTabNumber,
+    tabOrder
+  ])
 
   useEffect(() => {
     if (!isResizingSidebar) {
@@ -1013,7 +1107,7 @@ export function App() {
     }
 
     const timeoutId = window.setTimeout(() => {
-      setError((current) => current === error ? null : current)
+      setError((current) => (current === error ? null : current))
     }, STATUS_MESSAGE_TIMEOUT_MS)
 
     return () => {
@@ -1037,7 +1131,7 @@ export function App() {
     return () => window.removeEventListener('keydown', handleEscapeClearClipboard)
   }, [fileClipboard])
 
-  const activeLocalTab = activeLocalTabId ? localTabs.find((tab) => tab.id === activeLocalTabId) ?? null : null
+  const activeLocalTab = activeLocalTabId ? (localTabs.find((tab) => tab.id === activeLocalTabId) ?? null) : null
   const visibleSessionTabOrder = uniqueStrings(tabOrder)
     .filter((key) => key.startsWith('session:'))
     .map((key) => key.slice('session:'.length))
@@ -1046,22 +1140,23 @@ export function App() {
     ? null
     : visibleWorkspaceTabs.some((tab) => tab.id === workspace.activeTabId)
       ? workspace.activeTabId
-      : visibleSessionTabOrder.at(-1) ?? visibleWorkspaceTabs.at(-1)?.id ?? null
+      : (visibleSessionTabOrder.at(-1) ?? visibleWorkspaceTabs.at(-1)?.id ?? null)
   const displayedSessionTabId = activeLocalTab
-    ? activeLocalTab.kind === 'system' ? activeLocalTab.sessionTabId : null
+    ? activeLocalTab.kind === 'system'
+      ? activeLocalTab.sessionTabId
+      : null
     : visibleActiveSessionTabId
-  const activeTab = displayedSessionTabId ? visibleWorkspaceTabs.find((tab) => tab.id === displayedSessionTabId) ?? null : null
+  const activeTab = displayedSessionTabId
+    ? (visibleWorkspaceTabs.find((tab) => tab.id === displayedSessionTabId) ?? null)
+    : null
   const activeSession = activeTab ? workspace.sessions[activeTab.id] : null
-  const workspaceStageKind = activeLocalTab?.kind === 'system'
-    ? 'system'
-    : activeTab && activeSession && !activeLocalTab
-      ? 'session'
-      : 'home'
+  const workspaceStageKind =
+    activeLocalTab?.kind === 'system' ? 'system' : activeTab && activeSession && !activeLocalTab ? 'session' : 'home'
   const isHomeWorkspaceVisible = workspaceStageKind === 'home'
-  const effectiveActiveLocalTabId = activeLocalTab?.id
-    ?? (isHomeWorkspaceVisible ? resolveFallbackHomeTabId(localTabs, tabOrder) : null)
+  const effectiveActiveLocalTabId =
+    activeLocalTab?.id ?? (isHomeWorkspaceVisible ? resolveFallbackHomeTabId(localTabs, tabOrder) : null)
   const activeProfile = activeTab
-    ? workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null
+    ? (workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null)
     : null
   const activeWorkspaceOrderKey = activeLocalTab
     ? homeTabKey(activeLocalTab.id)
@@ -1085,7 +1180,9 @@ export function App() {
   const showSidebar = activeTab !== null && activeSession !== null && !isHomeWorkspaceVisible
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
   const brandWidth = isHomeTabActive
-    ? isSystemSidebarCollapsed ? 214 : resolvedSidebarWidth
+    ? isSystemSidebarCollapsed
+      ? 214
+      : resolvedSidebarWidth
     : showSidebar && !isSystemSidebarCollapsed
       ? sidebarWidth
       : 214
@@ -1097,9 +1194,13 @@ export function App() {
 
   const formatAppError = (scope: string, err: unknown, details?: ErrorDetails) => {
     const message = normalizeErrorMessage(err)
-    const likelyDisconnectedSession = /会话已断开|session disconnected|session not found|remote connection closed|connection closed/i.test(message)
-    const likelyConcurrentRequestIssue = /another one is still running|forgot to use 'await'|client is closed because user launched a task/i.test(message)
-    const likelyPathIssue = /can't cd to|__NOT_DIR__|no such file|not a directory|permission denied|\b550\b/i.test(message)
+    const likelyDisconnectedSession =
+      /会话已断开|session disconnected|session not found|remote connection closed|connection closed/i.test(message)
+    const likelyConcurrentRequestIssue =
+      /another one is still running|forgot to use 'await'|client is closed because user launched a task/i.test(message)
+    const likelyPathIssue = /can't cd to|__NOT_DIR__|no such file|not a directory|permission denied|\b550\b/i.test(
+      message
+    )
     const metadata = details?.item
       ? ` (${t.permission}: ${details.item.permission || '-'}, ${t.ownerGroup}: ${details.item.ownerGroup || '-'})`
       : ''
@@ -1148,7 +1249,9 @@ export function App() {
 
   const shouldPromptForRootAccess = (err: unknown) => {
     const message = normalizeErrorMessage(err)
-    return /未检测到可复用的 sudo 授权|sudo 密码错误|sudo 密码无效|sudo credentials|incorrect password|authentication failure/i.test(message)
+    return /未检测到可复用的 sudo 授权|sudo 密码错误|sudo 密码无效|sudo credentials|incorrect password|authentication failure/i.test(
+      message
+    )
   }
 
   const applySnapshot = (snapshot: WorkspaceSnapshot) => {
@@ -1165,9 +1268,10 @@ export function App() {
           return current
         }
 
-        const nextSystemMetrics = systemMetrics && mode === 'append'
-          ? mergeSystemMetricsHistory(currentSession.systemMetrics, systemMetrics)
-          : systemMetrics
+        const nextSystemMetrics =
+          systemMetrics && mode === 'append'
+            ? mergeSystemMetricsHistory(currentSession.systemMetrics, systemMetrics)
+            : systemMetrics
 
         if (currentSession.systemMetrics === nextSystemMetrics) {
           return current
@@ -1187,9 +1291,7 @@ export function App() {
     })
   }
 
-  const updateForm = (
-    updater: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)
-  ) => {
+  const updateForm = (updater: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)) => {
     setForm((prev) => (typeof updater === 'function' ? updater(prev) : updater))
     setFormError(null)
   }
@@ -1346,7 +1448,10 @@ export function App() {
     }
   }
 
-  const updateCommandFolder = async (folderId: string, updates: { name?: string; parentId?: string; order?: number }) => {
+  const updateCommandFolder = async (
+    folderId: string,
+    updates: { name?: string; parentId?: string; order?: number }
+  ) => {
     if (!desktopApi) {
       return
     }
@@ -1527,9 +1632,7 @@ export function App() {
     }
   }
 
-  const updateTerminalDockSendState = (
-    updater: (prev: TerminalDockSendState) => TerminalDockSendState
-  ) => {
+  const updateTerminalDockSendState = (updater: (prev: TerminalDockSendState) => TerminalDockSendState) => {
     if (!activeTab) {
       return
     }
@@ -1546,7 +1649,9 @@ export function App() {
         ...prev,
         [activeTab.id]: {
           ...next,
-          selectedTabIds: next.selectedTabIds.filter((tabId) => sessionSendTargets.some((target) => target.tabId === tabId))
+          selectedTabIds: next.selectedTabIds.filter((tabId) =>
+            sessionSendTargets.some((target) => target.tabId === tabId)
+          )
         }
       }
     })
@@ -1569,7 +1674,7 @@ export function App() {
       setFormError(null)
       if (activeHomeId && snapshot.activeTabId && replacementKey) {
         const nextSessionKey = sessionTabKey(snapshot.activeTabId)
-        setTabOrder((prev) => uniqueStrings(prev.map((key) => key === replacementKey ? nextSessionKey : key)))
+        setTabOrder((prev) => uniqueStrings(prev.map((key) => (key === replacementKey ? nextSessionKey : key))))
         setLocalTabs((prev) => prev.filter((tab) => tab.id !== activeHomeId))
         pendingHomeReplacementKeyRef.current = null
       }
@@ -1654,12 +1759,15 @@ export function App() {
     } catch (err) {
       reportError(setError, '响应 SSH 交互', err)
     } finally {
-      setSshInteraction((current) => current?.requestId === requestId ? null : current)
+      setSshInteraction((current) => (current?.requestId === requestId ? null : current))
       setSshInteractionError(null)
     }
   }
 
-  const handleSubmitSshCredentials = (request: SshCredentialsPromptRequest, input: { username: string; password: string }) => {
+  const handleSubmitSshCredentials = (
+    request: SshCredentialsPromptRequest,
+    input: { username: string; password: string }
+  ) => {
     const username = input.username.trim()
     const password = input.password
 
@@ -1703,7 +1811,7 @@ export function App() {
       .filter((tab) => tab.kind === 'system' && tab.sessionTabId === tabId)
       .map((tab) => tab.id)
 
-    setClosingSessionTabIds((prev) => prev.includes(tabId) ? prev : [...prev, tabId])
+    setClosingSessionTabIds((prev) => (prev.includes(tabId) ? prev : [...prev, tabId]))
     setTabOrder((prev) => prev.filter((key) => key !== sessionTabKey(tabId)))
     if (relatedLocalTabs.length) {
       closeHomeTabs(
@@ -1718,7 +1826,7 @@ export function App() {
     const snapshot = await desktopApi.closeTab(tabId)
     applySnapshot(snapshot)
     if (snapshot.activeTabId === null) {
-      setLocalTabs((prev) => prev.length ? prev : [{ id: 'home-1', kind: 'home', title: t.untitledTab }])
+      setLocalTabs((prev) => (prev.length ? prev : [{ id: 'home-1', kind: 'home', title: t.untitledTab }]))
       setTabOrder((prev) => {
         const filtered = prev.filter((key) => key !== sessionTabKey(tabId))
         return filtered.some((key) => key.startsWith('home:')) ? filtered : ['home:home-1', ...filtered]
@@ -1872,12 +1980,11 @@ export function App() {
       return
     }
 
-    const activeLocalTab = activeLocalTabId
-      ? localTabs.find((tab) => tab.id === activeLocalTabId) ?? null
-      : null
-    const activeSessionTab = !activeLocalTab && visibleActiveSessionTabId
-      ? visibleWorkspaceTabs.find((tab) => tab.id === visibleActiveSessionTabId) ?? null
-      : null
+    const activeLocalTab = activeLocalTabId ? (localTabs.find((tab) => tab.id === activeLocalTabId) ?? null) : null
+    const activeSessionTab =
+      !activeLocalTab && visibleActiveSessionTabId
+        ? (visibleWorkspaceTabs.find((tab) => tab.id === visibleActiveSessionTabId) ?? null)
+        : null
     const totalClosableItems = localTabs.length + visibleWorkspaceTabs.length
 
     if (activeLocalTab) {
@@ -1898,11 +2005,12 @@ export function App() {
         setShortcutCloseConfirm({
           tabId: activeSessionTab.id,
           title: activeSessionTab.title,
-          variant: activeSessionTab.status === 'connecting'
-            ? 'connecting'
-            : isLastSessionTab
-              ? 'active-last-session'
-              : 'active-session'
+          variant:
+            activeSessionTab.status === 'connecting'
+              ? 'connecting'
+              : isLastSessionTab
+                ? 'active-last-session'
+                : 'active-session'
         })
         return
       }
@@ -1994,7 +2102,9 @@ export function App() {
       if (!desktopApi) {
         return
       }
-      const reconnectableTabs = visibleWorkspaceTabs.filter((tab) => tab.status !== 'connected' && tab.status !== 'connecting')
+      const reconnectableTabs = visibleWorkspaceTabs.filter(
+        (tab) => tab.status !== 'connected' && tab.status !== 'connecting'
+      )
       if (!reconnectableTabs.length) {
         return
       }
@@ -2032,21 +2142,27 @@ export function App() {
       return
     }
 
-    const sessionTabsToClose = action === 'closeAll'
-      ? visibleWorkspaceTabs.map((tab) => tab.id)
-      : action === 'close'
-        ? target.kind === 'session' ? [target.id] : []
-        : target.kind === 'session'
-          ? visibleWorkspaceTabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
-          : visibleWorkspaceTabs.map((tab) => tab.id)
+    const sessionTabsToClose =
+      action === 'closeAll'
+        ? visibleWorkspaceTabs.map((tab) => tab.id)
+        : action === 'close'
+          ? target.kind === 'session'
+            ? [target.id]
+            : []
+          : target.kind === 'session'
+            ? visibleWorkspaceTabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
+            : visibleWorkspaceTabs.map((tab) => tab.id)
 
-    const homeTabsToClose = action === 'closeAll'
-      ? localTabs.map((tab) => tab.id)
-      : action === 'close'
-        ? target.kind === 'local' ? [target.id] : []
-        : target.kind === 'local'
-          ? localTabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
-          : localTabs.map((tab) => tab.id)
+    const homeTabsToClose =
+      action === 'closeAll'
+        ? localTabs.map((tab) => tab.id)
+        : action === 'close'
+          ? target.kind === 'local'
+            ? [target.id]
+            : []
+          : target.kind === 'local'
+            ? localTabs.filter((tab) => tab.id !== target.id).map((tab) => tab.id)
+            : localTabs.map((tab) => tab.id)
 
     const remainingSessionTabs = visibleWorkspaceTabs.filter((tab) => !sessionTabsToClose.includes(tab.id))
     const preferredActiveHomeId = target.kind === 'local' && action !== 'close' ? target.id : null
@@ -2169,10 +2285,15 @@ export function App() {
           await openLocalDirectory(localPath)
         }
       } else if (fileEditor.tabId ?? activeTab?.id) {
-        const snapshot = await desktopApi.writeRemoteFile(fileEditor.tabId ?? activeTab!.id, fileEditor.path, content, encoding)
+        const snapshot = await desktopApi.writeRemoteFile(
+          fileEditor.tabId ?? activeTab!.id,
+          fileEditor.path,
+          content,
+          encoding
+        )
         applySnapshot(snapshot)
       }
-      setFileEditor((prev) => prev ? { ...prev, content, encoding } : prev)
+      setFileEditor((prev) => (prev ? { ...prev, content, encoding } : prev))
       setFileEditorError(null)
     } catch (err) {
       reportError(setFileEditorError, '保存文件', err, { targetPath: fileEditor.path })
@@ -2189,11 +2310,12 @@ export function App() {
 
     try {
       setIsBusy(true)
-      const content = fileEditor.source === 'local'
-        ? await desktopApi.readLocalFile(fileEditor.path, encoding)
-        : (fileEditor.tabId ?? activeTab?.id)
-          ? await desktopApi.readRemoteFile(fileEditor.tabId ?? activeTab!.id, fileEditor.path, encoding)
-          : fileEditor.content
+      const content =
+        fileEditor.source === 'local'
+          ? await desktopApi.readLocalFile(fileEditor.path, encoding)
+          : (fileEditor.tabId ?? activeTab?.id)
+            ? await desktopApi.readRemoteFile(fileEditor.tabId ?? activeTab!.id, fileEditor.path, encoding)
+            : fileEditor.content
       setFileEditor({ ...fileEditor, content, encoding })
       setFileEditorError(null)
     } catch (err) {
@@ -2217,7 +2339,11 @@ export function App() {
     }
   }
 
-  const setClipboardItems = (operation: 'copy' | 'cut', pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>) => {
+  const setClipboardItems = (
+    operation: 'copy' | 'cut',
+    pane: 'local' | 'remote',
+    items: Array<LocalFileItem | RemoteFileItem>
+  ) => {
     const normalizedItems = items
       .filter((item) => item.name !== '..')
       .map((item) => ({
@@ -2240,11 +2366,11 @@ export function App() {
 
     setFileClipboard((current) => {
       if (
-        current
-        && current.pane === nextClipboard.pane
-        && current.operation === nextClipboard.operation
-        && current.tabId === nextClipboard.tabId
-        && areClipboardItemsEqual(current.items, nextClipboard.items)
+        current &&
+        current.pane === nextClipboard.pane &&
+        current.operation === nextClipboard.operation &&
+        current.tabId === nextClipboard.tabId &&
+        areClipboardItemsEqual(current.items, nextClipboard.items)
       ) {
         return null
       }
@@ -2254,37 +2380,32 @@ export function App() {
   }
 
   const canPasteIntoLocal = Boolean(
-    fileClipboard
-    && (
-      fileClipboard.pane !== 'remote'
-      || workspace.sessions[fileClipboard.tabId ?? '']?.connected
-    )
+    fileClipboard && (fileClipboard.pane !== 'remote' || workspace.sessions[fileClipboard.tabId ?? '']?.connected)
   )
 
   const canPasteIntoRemote = Boolean(
-    fileClipboard
-    && activeTab
-    && activeSession?.connected
-    && (
-      fileClipboard.pane !== 'remote'
-      || fileClipboard.tabId === activeTab.id
-    )
+    fileClipboard &&
+    activeTab &&
+    activeSession?.connected &&
+    (fileClipboard.pane !== 'remote' || fileClipboard.tabId === activeTab.id)
   )
 
-  const localCutPaths = fileClipboard?.operation === 'cut' && fileClipboard.pane === 'local'
-    ? fileClipboard.items.map((item) => item.path)
-    : []
-  const remoteCutPaths = fileClipboard?.operation === 'cut' && fileClipboard.pane === 'remote'
-    ? fileClipboard.items.map((item) => item.path)
-    : []
+  const localCutPaths =
+    fileClipboard?.operation === 'cut' && fileClipboard.pane === 'local'
+      ? fileClipboard.items.map((item) => item.path)
+      : []
+  const remoteCutPaths =
+    fileClipboard?.operation === 'cut' && fileClipboard.pane === 'remote'
+      ? fileClipboard.items.map((item) => item.path)
+      : []
   const clipboardStatusText = fileClipboard
     ? fileClipboard.operation === 'cut'
-      ? (locale === 'zhCN'
+      ? locale === 'zhCN'
         ? `已剪切 ${fileClipboard.items.length} 个文件，按 Esc 取消`
-        : `Cut ${fileClipboard.items.length} files, press Esc to cancel`)
-      : (locale === 'zhCN'
+        : `Cut ${fileClipboard.items.length} files, press Esc to cancel`
+      : locale === 'zhCN'
         ? `已复制 ${fileClipboard.items.length} 个文件，可在其他目录粘贴，按 Esc 取消`
-        : `Copied ${fileClipboard.items.length} files, ready to paste in another folder. Press Esc to cancel`)
+        : `Copied ${fileClipboard.items.length} files, ready to paste in another folder. Press Esc to cancel`
     : null
 
   const clearCutState = () => {
@@ -2321,10 +2442,16 @@ export function App() {
           throw new Error('暂不支持跨远程会话粘贴，请在原会话内操作或先下载到本地')
         }
 
-        const existingNames = pane === 'local'
-          ? localItems.filter((item) => item.name !== '..').map((item) => item.name)
-          : (activeSession?.remoteFiles ?? []).filter((item) => item.name !== '..').map((item) => item.name)
-        const targetNames = allocateTargetNames(fileClipboard.items, existingNames, fileClipboard.operation, destinationDirectory)
+        const existingNames =
+          pane === 'local'
+            ? localItems.filter((item) => item.name !== '..').map((item) => item.name)
+            : (activeSession?.remoteFiles ?? []).filter((item) => item.name !== '..').map((item) => item.name)
+        const targetNames = allocateTargetNames(
+          fileClipboard.items,
+          existingNames,
+          fileClipboard.operation,
+          destinationDirectory
+        )
 
         if (fileClipboard.pane === 'local' && pane === 'local') {
           for (const [index, item] of fileClipboard.items.entries()) {
@@ -2350,9 +2477,15 @@ export function App() {
           await refreshCurrentPane('remote')
         } else if (fileClipboard.pane === 'remote' && pane === 'local') {
           for (const [index, item] of fileClipboard.items.entries()) {
-            const snapshot = await desktopApi.downloadRemotePath(fileClipboard.tabId!, item.path, item.type, destinationDirectory, {
-              targetName: targetNames[index]
-            })
+            const snapshot = await desktopApi.downloadRemotePath(
+              fileClipboard.tabId!,
+              item.path,
+              item.type,
+              destinationDirectory,
+              {
+                targetName: targetNames[index]
+              }
+            )
             applySnapshot(snapshot)
             if (fileClipboard.operation === 'cut') {
               const deleteSnapshot = await desktopApi.deleteRemotePath(fileClipboard.tabId!, item.path, item.type)
@@ -2366,9 +2499,10 @@ export function App() {
         } else if (fileClipboard.pane === 'remote' && pane === 'remote') {
           for (const [index, item] of fileClipboard.items.entries()) {
             const destinationPath = joinRemotePath(destinationDirectory, targetNames[index]!)
-            const snapshot = fileClipboard.operation === 'copy'
-              ? await desktopApi.copyRemotePath(activeTab!.id, item.path, destinationPath, item.type)
-              : await desktopApi.moveRemotePath(activeTab!.id, item.path, destinationPath)
+            const snapshot =
+              fileClipboard.operation === 'copy'
+                ? await desktopApi.copyRemotePath(activeTab!.id, item.path, destinationPath, item.type)
+                : await desktopApi.moveRemotePath(activeTab!.id, item.path, destinationPath)
             applySnapshot(snapshot)
           }
           await refreshCurrentPane('remote')
@@ -2483,7 +2617,6 @@ export function App() {
       })
       return
     }
-
   }
 
   const requestNewFolder = (pane: 'local' | 'remote', directoryPath: string) => {
@@ -2519,7 +2652,14 @@ export function App() {
   const requestChangePermissions = (pane: 'local' | 'remote', item: LocalFileItem | RemoteFileItem) => {
     setPermissionDialogError(null)
     setPermissionDialog({
-      target: { pane, path: item.path, name: item.name, type: item.type, permission: item.permission, ownerGroup: item.ownerGroup },
+      target: {
+        pane,
+        path: item.path,
+        name: item.name,
+        type: item.type,
+        permission: item.permission,
+        ownerGroup: item.ownerGroup
+      },
       supportsRecursive: item.type === 'folder' && (pane === 'local' || activeTab?.sessionType === 'ssh')
     })
   }
@@ -2571,7 +2711,12 @@ export function App() {
         await refreshCurrentPane('remote')
       } catch (err) {
         const firstItem = items[0]
-        reportError(setError, '快速删除远程文件', err, firstItem ? { item: firstItem, targetPath: firstItem.path } : undefined)
+        reportError(
+          setError,
+          '快速删除远程文件',
+          err,
+          firstItem ? { item: firstItem, targetPath: firstItem.path } : undefined
+        )
       } finally {
         setIsBusy(false)
       }
@@ -2633,23 +2778,25 @@ export function App() {
           return []
         }
 
-        return [{
-          tabId: entry.tab.id,
-          index: index + 1,
-          title: entry.tab.title,
-          label: `${index + 1} ${entry.tab.title}`,
-          isCurrent: entry.tab.id === activeTab?.id
-        }]
+        return [
+          {
+            tabId: entry.tab.id,
+            index: index + 1,
+            title: entry.tab.title,
+            label: `${index + 1} ${entry.tab.title}`,
+            isCurrent: entry.tab.id === activeTab?.id
+          }
+        ]
       }),
     [activeTab?.id, orderedTabs, workspace.sessions]
   )
 
   const activeTerminalDockSendState = activeTab
-    ? terminalDockSendStateByTabId[activeTab.id] ?? {
+    ? (terminalDockSendStateByTabId[activeTab.id] ?? {
         scope: 'current' as SendScope,
         selectedTabIds: [],
         rememberSelection: false
-      }
+      })
     : {
         scope: 'current' as SendScope,
         selectedTabIds: [],
@@ -2659,9 +2806,7 @@ export function App() {
   useEffect(() => {
     const validTabIds = new Set(visibleWorkspaceTabs.map((tab) => tab.id))
     setTerminalDockSendStateByTabId((prev) => {
-      const next = Object.fromEntries(
-        Object.entries(prev).filter(([tabId]) => validTabIds.has(tabId))
-      )
+      const next = Object.fromEntries(Object.entries(prev).filter(([tabId]) => validTabIds.has(tabId)))
       return Object.keys(next).length === Object.keys(prev).length ? prev : next
     })
   }, [visibleWorkspaceTabs])
@@ -2713,7 +2858,7 @@ export function App() {
       } catch (err) {
         reportError(setError, '打开远程文件夹', err, { targetPath: item.path, item })
       } finally {
-        setRemoteDirectoryLoadingTabId((current) => current === activeTab.id ? null : current)
+        setRemoteDirectoryLoadingTabId((current) => (current === activeTab.id ? null : current))
       }
     })()
   }
@@ -2734,7 +2879,7 @@ export function App() {
       } catch (err) {
         reportError(setError, '打开远程路径', err, { targetPath })
       } finally {
-        setRemoteDirectoryLoadingTabId((current) => current === activeTab.id ? null : current)
+        setRemoteDirectoryLoadingTabId((current) => (current === activeTab.id ? null : current))
       }
     })()
   }
@@ -2757,7 +2902,7 @@ export function App() {
       } catch (err) {
         reportError(setError, '刷新工作区', err, { targetPath: activeSession.remotePath })
       } finally {
-        setRemoteDirectoryLoadingTabId((current) => current === activeTab.id ? null : current)
+        setRemoteDirectoryLoadingTabId((current) => (current === activeTab.id ? null : current))
       }
     })()
   }
@@ -2831,10 +2976,7 @@ export function App() {
 
     void (async () => {
       try {
-        const snapshot = await desktopApi.setFollowShellCwd(
-          activeTab.id,
-          activeSession.followShellCwd === false
-        )
+        const snapshot = await desktopApi.setFollowShellCwd(activeTab.id, activeSession.followShellCwd === false)
         applySnapshot(snapshot)
       } catch (err) {
         reportError(setError, '切换终端目录跟随', err)
@@ -2925,7 +3067,7 @@ export function App() {
         return
       }
 
-      const downloadDirectory = targetDirectory ?? await desktopApi.selectLocalDirectory()
+      const downloadDirectory = targetDirectory ?? (await desktopApi.selectLocalDirectory())
       if (!downloadDirectory) {
         return
       }
@@ -2956,17 +3098,20 @@ export function App() {
           onCreate={openCreateConnection}
           onDeleteProfile={handleDeleteProfile}
           onEditProfile={openEditConnection}
-              onOpenProfile={(profileId) => {
-                if (desktopApi) {
-                  void desktopApi.openProfileFromManager(profileId).then(() => {
-                    closeCurrentWindow()
-                  }).catch((err: Error) => {
-                    reportError(setError, '从管理器打开连接', err)
-                  })
-                  return
-                }
-                void handleOpenProfile(profileId)
-              }}
+          onOpenProfile={(profileId) => {
+            if (desktopApi) {
+              void desktopApi
+                .openProfileFromManager(profileId)
+                .then(() => {
+                  closeCurrentWindow()
+                })
+                .catch((err: Error) => {
+                  reportError(setError, '从管理器打开连接', err)
+                })
+              return
+            }
+            void handleOpenProfile(profileId)
+          }}
           onCreateFolder={(name) => desktopApi?.createFolder(name)}
           onDeleteFolder={(id) => desktopApi?.deleteFolder(id)}
           onUpdateFolder={(id, updates) => desktopApi?.updateFolder(id, updates)}
@@ -2981,7 +3126,7 @@ export function App() {
             setForm={updateForm}
             onClearHostFingerprint={() => {
               const editingProfile = editingProfileId
-                ? workspace.profiles.find((profile) => profile.id === editingProfileId) ?? null
+                ? (workspace.profiles.find((profile) => profile.id === editingProfileId) ?? null)
                 : null
               if (editingProfile) {
                 void handleClearHostFingerprint(editingProfile)
@@ -3035,20 +3180,27 @@ export function App() {
   }
 
   if (isCommandFormWindow) {
-    const editingCommand = formWindowMode === 'edit'
-      ? workspace.commandTemplates.find((item) => item.id === formWindowCommandId) ?? null
-      : null
+    const editingCommand =
+      formWindowMode === 'edit'
+        ? (workspace.commandTemplates.find((item) => item.id === formWindowCommandId) ?? null)
+        : null
 
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={editingCommand ? t.commandEdit : t.commandCreate}>
+      <StandaloneWindowFrame
+        isWindows={isWindowsDesktop}
+        showPlatformTitlebar={false}
+        title={editingCommand ? t.commandEdit : t.commandCreate}
+      >
         <CommandEditorModal
           folders={workspace.commandFolders || []}
-          initialValue={editingCommand
-            ? toCommandTemplateInput(editingCommand)
-            : {
-                ...emptyCommandForm,
-                parentId: formWindowFolderId || undefined
-              }}
+          initialValue={
+            editingCommand
+              ? toCommandTemplateInput(editingCommand)
+              : {
+                  ...emptyCommandForm,
+                  parentId: formWindowFolderId || undefined
+                }
+          }
           mode={editingCommand ? 'edit' : formWindowMode}
           standalone
           onClose={closeCurrentWindow}
@@ -3062,7 +3214,11 @@ export function App() {
 
   if (isConnectionFormWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={editingProfileId ? t.editConnection : t.newConnection}>
+      <StandaloneWindowFrame
+        isWindows={isWindowsDesktop}
+        showPlatformTitlebar={false}
+        title={editingProfileId ? t.editConnection : t.newConnection}
+      >
         <ConnectionFormHost
           editingProfileId={editingProfileId}
           errorMessage={formError}
@@ -3071,7 +3227,9 @@ export function App() {
           form={form}
           profiles={workspace.profiles}
           setForm={updateForm}
-          onClearHostFingerprint={(profile) => { void handleClearHostFingerprint(profile) }}
+          onClearHostFingerprint={(profile) => {
+            void handleClearHostFingerprint(profile)
+          }}
           standalone
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
@@ -3104,9 +3262,15 @@ export function App() {
 
   if (isFileEditorWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={fileEditorWindowName ?? t.appTitle}>
+      <StandaloneWindowFrame
+        isWindows={isWindowsDesktop}
+        showPlatformTitlebar={false}
+        title={fileEditorWindowName ?? t.appTitle}
+      >
         <div className="standalone-shell file-editor-window">
-          <div className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}>
+          <div
+            className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}
+          >
             <div className="modal-header">
               <div className="file-editor-title">
                 <span>{fileEditorWindowSource === 'remote' ? t.editRemoteFile : t.editLocalFile}</span>
@@ -3116,7 +3280,11 @@ export function App() {
                 <CloseButton onClick={closeCurrentWindow} />
               </div>
             </div>
-            {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : <div className="file-editor-path">{t.updating}</div>}
+            {fileEditorError ? (
+              <div className="modal-error">{fileEditorError}</div>
+            ) : (
+              <div className="file-editor-path">{t.updating}</div>
+            )}
           </div>
         </div>
       </StandaloneWindowFrame>
@@ -3170,15 +3338,15 @@ export function App() {
     <>
       <div
         className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
-        style={{
-          '--sidebar-width': `${resolvedSidebarWidth}px`,
-          '--brand-width': `${brandWidth}px`
-        } as CSSProperties}
+        style={
+          {
+            '--sidebar-width': `${resolvedSidebarWidth}px`,
+            '--brand-width': `${brandWidth}px`
+          } as CSSProperties
+        }
       >
         {isWindowsDesktop ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
-        {!isHomeWorkspaceVisible && (
-          <TabBar {...tabBarProps} />
-        )}
+        {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
 
         {showSidebar ? (
           <SystemSidebarShell
@@ -3197,11 +3365,7 @@ export function App() {
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>
-              <CloseButton
-                aria-label={t.closeTab}
-                onClick={() => setError(null)}
-                size="compact"
-              />
+              <CloseButton aria-label={t.closeTab} onClick={() => setError(null)} size="compact" />
             </div>
           ) : null}
           <div className="workspace-stage">
@@ -3260,54 +3424,58 @@ export function App() {
                 onDropUpload={handleDropUpload}
                 onOpenLocalItem={handleOpenLocalItem}
                 onOpenLocalPath={(targetPath) => {
-                  void openLocalDirectory(targetPath).catch((err: Error) => reportError(setError, '打开本地路径', err, { targetPath }))
+                  void openLocalDirectory(targetPath).catch((err: Error) =>
+                    reportError(setError, '打开本地路径', err, { targetPath })
+                  )
                 }}
-              onOpenProfile={handleOpenProfile}
-              onOpenRemoteItem={handleOpenRemoteItem}
-              onOpenRemotePath={handleOpenRemotePath}
-              onPasteIntoPane={handlePasteIntoPane}
-              onRequestChangePermissions={requestChangePermissions}
-              onRequestDelete={requestDelete}
-              onRequestNewFile={requestNewFile}
-              onRequestNewFolder={requestNewFolder}
-              onRequestQuickDelete={handleQuickDelete}
-              onRequestRename={requestRename}
-              onToggleFollowShellCwd={handleToggleFollowShellCwd}
-              onToggleRemoteFileAccessMode={handleToggleRemoteFileAccessMode}
-              remoteFileAccessMode={activeSession?.fileAccessMode ?? 'user'}
-              isRemoteDirectoryLoading={remoteDirectoryLoadingTabId === activeTab?.id}
-              onRefresh={handleRefreshWorkspace}
-              onUploadFiles={handleUploadFiles}
-              theme={themeMode}
-              locale={locale}
-              onCreateConnection={() => {
-                if (desktopApi) void desktopApi.openConnectionFormWindow('create')
-              }}
-              onEditConnection={openEditConnection}
-              onDeleteConnection={handleDeleteProfile}
-              onCreateConnectionFolder={createConnectionFolder}
-              onDeleteConnectionFolder={deleteConnectionFolder}
-              onUpdateConnectionFolder={updateConnectionFolder}
-              onUpdateConnectionOrder={updateConnectionOrder}
-              onCreateCommand={(input) => { void saveCommandTemplate(null, input) }}
-              onUpdateCommand={saveCommandTemplate}
-              onDeleteCommand={deleteCommandTemplate}
-              onCreateCommandFolder={createCommandFolder}
-              onDeleteCommandFolder={deleteCommandFolder}
-              onUpdateCommandFolder={updateCommandFolder}
-              onUpdateCommandOrder={updateCommandOrder}
-              onSetTheme={setThemeMode}
-              onSetLocale={(nextLocale) => {
-                setLocale(nextLocale)
-                setLocaleState(nextLocale)
-              }}
-              onOpenLogsDirectory={openLogsDirectory}
-              isSidebarCollapsed={isSystemSidebarCollapsed}
-              isWorkspaceFocusMode={isWorkspaceFocusMode}
-              tabBarProps={tabBarProps}
-              isResizingSidebar={isResizingSidebar}
-              onResizeStart={() => setIsResizingSidebar(true)}
-            />
+                onOpenProfile={handleOpenProfile}
+                onOpenRemoteItem={handleOpenRemoteItem}
+                onOpenRemotePath={handleOpenRemotePath}
+                onPasteIntoPane={handlePasteIntoPane}
+                onRequestChangePermissions={requestChangePermissions}
+                onRequestDelete={requestDelete}
+                onRequestNewFile={requestNewFile}
+                onRequestNewFolder={requestNewFolder}
+                onRequestQuickDelete={handleQuickDelete}
+                onRequestRename={requestRename}
+                onToggleFollowShellCwd={handleToggleFollowShellCwd}
+                onToggleRemoteFileAccessMode={handleToggleRemoteFileAccessMode}
+                remoteFileAccessMode={activeSession?.fileAccessMode ?? 'user'}
+                isRemoteDirectoryLoading={remoteDirectoryLoadingTabId === activeTab?.id}
+                onRefresh={handleRefreshWorkspace}
+                onUploadFiles={handleUploadFiles}
+                theme={themeMode}
+                locale={locale}
+                onCreateConnection={() => {
+                  if (desktopApi) void desktopApi.openConnectionFormWindow('create')
+                }}
+                onEditConnection={openEditConnection}
+                onDeleteConnection={handleDeleteProfile}
+                onCreateConnectionFolder={createConnectionFolder}
+                onDeleteConnectionFolder={deleteConnectionFolder}
+                onUpdateConnectionFolder={updateConnectionFolder}
+                onUpdateConnectionOrder={updateConnectionOrder}
+                onCreateCommand={(input) => {
+                  void saveCommandTemplate(null, input)
+                }}
+                onUpdateCommand={saveCommandTemplate}
+                onDeleteCommand={deleteCommandTemplate}
+                onCreateCommandFolder={createCommandFolder}
+                onDeleteCommandFolder={deleteCommandFolder}
+                onUpdateCommandFolder={updateCommandFolder}
+                onUpdateCommandOrder={updateCommandOrder}
+                onSetTheme={setThemeMode}
+                onSetLocale={(nextLocale) => {
+                  setLocale(nextLocale)
+                  setLocaleState(nextLocale)
+                }}
+                onOpenLogsDirectory={openLogsDirectory}
+                isSidebarCollapsed={isSystemSidebarCollapsed}
+                isWorkspaceFocusMode={isWorkspaceFocusMode}
+                tabBarProps={tabBarProps}
+                isResizingSidebar={isResizingSidebar}
+                onResizeStart={() => setIsResizingSidebar(true)}
+              />
             </div>
           </div>
         </main>
@@ -3381,7 +3549,9 @@ export function App() {
         <TabContextMenu
           canConnectAll={visibleWorkspaceTabs.some((tab) => tab.status !== 'connected' && tab.status !== 'connecting')}
           canCloseAll={localTabs.length + visibleWorkspaceTabs.length > 0}
-          canCloseCurrent={tabContextMenu.target.kind === 'session' ? true : localTabs.length + visibleWorkspaceTabs.length > 1}
+          canCloseCurrent={
+            tabContextMenu.target.kind === 'session' ? true : localTabs.length + visibleWorkspaceTabs.length > 1
+          }
           canCloseOthers={localTabs.length + visibleWorkspaceTabs.length > 1}
           isSessionTab={tabContextMenu.target.kind === 'session'}
           onAction={(action) => {
@@ -3416,7 +3586,6 @@ export function App() {
           onUpdateFolder={(id, updates) => desktopApi?.updateFolder(id, updates)}
           onUpdateOrder={(id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order)}
         />
-
       ) : null}
 
       {showCommandManager ? (
@@ -3481,7 +3650,9 @@ export function App() {
           form={form}
           profiles={workspace.profiles}
           setForm={updateForm}
-          onClearHostFingerprint={(profile) => { void handleClearHostFingerprint(profile) }}
+          onClearHostFingerprint={(profile) => {
+            void handleClearHostFingerprint(profile)
+          }}
           onSubmit={handleSaveProfile}
           onClose={() => {
             setShowForm(false)
@@ -3516,14 +3687,10 @@ export function App() {
           confirmLabel={t.confirm}
           errorMessage={fileActionError}
           hint={fileActionDialog.kind === 'new-file' ? t.newFileExtensionHint : undefined}
-          initialValue={
-            fileActionDialog.kind === 'rename' ? fileActionDialog.target.name : ''
-          }
+          initialValue={fileActionDialog.kind === 'rename' ? fileActionDialog.target.name : ''}
           isSubmitting={isFileActionSubmitting}
           inputLabel={t.fileName}
-          inputPlaceholder={
-            fileActionDialog.kind === 'new-folder' ? t.folderName : t.fileName
-          }
+          inputPlaceholder={fileActionDialog.kind === 'new-folder' ? t.folderName : t.fileName}
           onClose={() => {
             setFileActionDialog(null)
             setFileActionError(null)
@@ -3564,14 +3731,12 @@ export function App() {
       {shortcutCloseConfirm ? (
         <ConfirmActionDialog
           confirmLabel={t.closeShortcutCloseTab}
-          description={
-            (shortcutCloseConfirm.variant === 'connecting'
-              ? t.closeShortcutConnectingDescription
-              : shortcutCloseConfirm.variant === 'active-session'
-                ? t.closeShortcutActiveDescription
-              : t.closeShortcutLastActiveDescription)
-              .replace('{name}', shortcutCloseConfirm.title)
-          }
+          description={(shortcutCloseConfirm.variant === 'connecting'
+            ? t.closeShortcutConnectingDescription
+            : shortcutCloseConfirm.variant === 'active-session'
+              ? t.closeShortcutActiveDescription
+              : t.closeShortcutLastActiveDescription
+          ).replace('{name}', shortcutCloseConfirm.title)}
           isSubmitting={isBusy}
           onClose={() => setShortcutCloseConfirm(null)}
           onConfirm={() => {
@@ -3594,29 +3759,27 @@ export function App() {
           description={
             <>
               {closeConfirmDialog.hasActiveConnections ? (
-                <div className="confirm-action-dialog__warning">
-                  {t.closeConfirmActiveWarn}
-                </div>
+                <div className="confirm-action-dialog__warning">{t.closeConfirmActiveWarn}</div>
               ) : closeConfirmDialog.isQuit ? (
                 <div>{t.closeConfirmQuitMsg}</div>
               ) : null}
-              {!closeConfirmDialog.isQuit ? (
-                <div>{t.closeConfirmWindowsMsg}</div>
-              ) : null}
+              {!closeConfirmDialog.isQuit ? <div>{t.closeConfirmWindowsMsg}</div> : null}
             </>
           }
-          extraActions={!closeConfirmDialog.isQuit ? (
-            <button
-              className="confirm-action-dialog__button confirm-action-dialog__button--primary"
-              onClick={() => {
-                setCloseConfirmDialog(null)
-                void desktopApi?.confirmCloseWindow('hide')
-              }}
-              type="button"
-            >
-              {t.closeConfirmHide}
-            </button>
-          ) : null}
+          extraActions={
+            !closeConfirmDialog.isQuit ? (
+              <button
+                className="confirm-action-dialog__button confirm-action-dialog__button--primary"
+                onClick={() => {
+                  setCloseConfirmDialog(null)
+                  void desktopApi?.confirmCloseWindow('hide')
+                }}
+                type="button"
+              >
+                {t.closeConfirmHide}
+              </button>
+            ) : null
+          }
           onClose={() => {
             setCloseConfirmDialog(null)
             void desktopApi?.confirmCloseWindow('cancel')
@@ -3677,17 +3840,46 @@ function StandaloneWindowTitlebar({ isWindows, title }: { isWindows: boolean; ti
         <span>{title}</span>
       </div>
       <div className="window-control-buttons">
-        <button aria-label="Minimize" type="button" onClick={() => { void desktopApi?.minimizeCurrentWindow() }}>
-          <svg width="10" height="10" viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" strokeWidth="1" /></svg>
+        <button
+          aria-label="Minimize"
+          type="button"
+          onClick={() => {
+            void desktopApi?.minimizeCurrentWindow()
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10">
+            <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" strokeWidth="1" />
+          </svg>
         </button>
-        <button aria-label="Maximize" type="button" onClick={() => { void desktopApi?.toggleMaximizeCurrentWindow() }}>
+        <button
+          aria-label="Maximize"
+          type="button"
+          onClick={() => {
+            void desktopApi?.toggleMaximizeCurrentWindow()
+          }}
+        >
           {isMaximized ? (
-            <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1.5,3.5 L6.5,3.5 L6.5,8.5 L1.5,8.5 Z M3.5,3.5 L3.5,1.5 L8.5,1.5 L8.5,6.5 L6.5,6.5" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <path
+                d="M1.5,3.5 L6.5,3.5 L6.5,8.5 L1.5,8.5 Z M3.5,3.5 L3.5,1.5 L8.5,1.5 L8.5,6.5 L6.5,6.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+              />
+            </svg>
           ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
+            </svg>
           )}
         </button>
-        <CloseButton aria-label="Close" onClick={() => { void desktopApi?.closeCurrentWindow() }} size="window" />
+        <CloseButton
+          aria-label="Close"
+          onClick={() => {
+            void desktopApi?.closeCurrentWindow()
+          }}
+          size="window"
+        />
       </div>
     </div>
   )
@@ -3701,8 +3893,8 @@ function extractDroppedLocalPaths(event: DragEvent<HTMLDivElement>) {
   const desktopApi = window.fileterm
   const fileList = Array.from(event.dataTransfer.files)
   const filePaths = (
-    desktopApi?.getDroppedFilePaths?.(fileList)
-    ?? fileList.map((file) => (file as File & { path?: string }).path).filter(Boolean)
+    desktopApi?.getDroppedFilePaths?.(fileList) ??
+    fileList.map((file) => (file as File & { path?: string }).path).filter(Boolean)
   ).filter((filePath): filePath is string => Boolean(filePath))
 
   if (filePaths.length) {

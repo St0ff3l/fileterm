@@ -38,10 +38,9 @@ export class TransferJournal {
 
   async load(): Promise<TransferTask[]> {
     await mkdir(path.dirname(this.filePath), { recursive: true })
-    const journal = await this.readJournal(this.filePath) ?? await this.readJournal(this.backupPath) ?? EMPTY_JOURNAL
-    return journal.transfers
-      .filter(isStoredTransferTask)
-      .map((transfer) => normalizeRestoredTransfer(transfer))
+    const journal =
+      (await this.readJournal(this.filePath)) ?? (await this.readJournal(this.backupPath)) ?? EMPTY_JOURNAL
+    return journal.transfers.filter(isStoredTransferTask).map((transfer) => normalizeRestoredTransfer(transfer))
   }
 
   save(transfers: TransferTask[]): Promise<void> {
@@ -99,41 +98,35 @@ export class TransferJournal {
 }
 
 function normalizeRestoredTransfer(transfer: TransferTask): TransferTask {
-  const wasActive = transfer.status === 'queued'
-    || transfer.status === 'running'
-    || transfer.status === 'verifying'
-    || transfer.status === 'finalizing'
+  const wasActive =
+    transfer.status === 'queued' ||
+    transfer.status === 'running' ||
+    transfer.status === 'verifying' ||
+    transfer.status === 'finalizing'
 
   const manifest = isValidTransferManifest(transfer.manifest)
     ? {
         ...transfer.manifest,
         files: transfer.manifest.files.map((file) => ({
           ...file,
-          status: file.status === 'running' ? 'pending' as const : file.status
+          status: file.status === 'running' ? ('pending' as const) : file.status
         }))
       }
     : undefined
-  const hasFileResumeMetadata = transfer.targetType === 'file'
-    && Boolean(transfer.sourcePath && transfer.destinationPath && transfer.partialPath)
-  const hasDirectoryResumeMetadata = transfer.targetType === 'folder'
-    && Boolean(transfer.sourcePath && transfer.destinationPath && manifest)
+  const hasFileResumeMetadata =
+    transfer.targetType === 'file' && Boolean(transfer.sourcePath && transfer.destinationPath && transfer.partialPath)
+  const hasDirectoryResumeMetadata =
+    transfer.targetType === 'folder' && Boolean(transfer.sourcePath && transfer.destinationPath && manifest)
   const isResumable = Boolean(
-    transfer.resumable
-    && transfer.profileId
-    && (hasFileResumeMetadata || hasDirectoryResumeMetadata)
+    transfer.resumable && transfer.profileId && (hasFileResumeMetadata || hasDirectoryResumeMetadata)
   )
   const wasInterrupted = transfer.status === 'interrupted' && isResumable
 
   return {
     ...transfer,
     manifest,
-    status: wasActive
-      ? isResumable ? 'paused' : 'canceled'
-      : wasInterrupted ? 'paused'
-      : transfer.status,
-    message: wasActive
-      ? isResumable ? '应用退出前传输未完成，可手动继续' : '应用退出前传输未完成'
-      : transfer.message,
+    status: wasActive ? (isResumable ? 'paused' : 'canceled') : wasInterrupted ? 'paused' : transfer.status,
+    message: wasActive ? (isResumable ? '应用退出前传输未完成，可手动继续' : '应用退出前传输未完成') : transfer.message,
     speed: undefined,
     resumable: isResumable
   }
@@ -144,15 +137,17 @@ function isStoredTransferTask(value: unknown): value is TransferTask {
     return false
   }
   const task = value as Partial<TransferTask>
-  return typeof task.id === 'string'
-    && (task.direction === 'upload' || task.direction === 'download')
-    && typeof task.name === 'string'
-    && typeof task.progress === 'number'
-    && Number.isFinite(task.progress)
-    && task.progress >= 0
-    && task.progress <= 100
-    && typeof task.status === 'string'
-    && TRANSFER_STATUSES.has(task.status as TransferTask['status'])
+  return (
+    typeof task.id === 'string' &&
+    (task.direction === 'upload' || task.direction === 'download') &&
+    typeof task.name === 'string' &&
+    typeof task.progress === 'number' &&
+    Number.isFinite(task.progress) &&
+    task.progress >= 0 &&
+    task.progress <= 100 &&
+    typeof task.status === 'string' &&
+    TRANSFER_STATUSES.has(task.status as TransferTask['status'])
+  )
 }
 
 function isValidTransferManifest(value: unknown): value is TransferManifest {
@@ -160,23 +155,27 @@ function isValidTransferManifest(value: unknown): value is TransferManifest {
     return false
   }
   const manifest = value as Partial<TransferManifest>
-  return manifest.version === 1
-    && Array.isArray(manifest.directories)
-    && manifest.directories.every((entry) => typeof entry === 'string')
-    && Array.isArray(manifest.files)
-    && manifest.files.every((entry) => Boolean(
-      entry
-      && typeof entry.relativePath === 'string'
-      && typeof entry.sourcePath === 'string'
-      && typeof entry.destinationPath === 'string'
-      && typeof entry.partialPath === 'string'
-      && (entry.stagingPath === undefined || typeof entry.stagingPath === 'string')
-      && typeof entry.sourceIdentity?.size === 'number'
-      && Number.isFinite(entry.sourceIdentity.size)
-      && entry.sourceIdentity.size >= 0
-      && (entry.status === 'pending' || entry.status === 'running' || entry.status === 'done')
-      && typeof entry.transferredBytes === 'number'
-      && Number.isFinite(entry.transferredBytes)
-      && entry.transferredBytes >= 0
-    ))
+  return (
+    manifest.version === 1 &&
+    Array.isArray(manifest.directories) &&
+    manifest.directories.every((entry) => typeof entry === 'string') &&
+    Array.isArray(manifest.files) &&
+    manifest.files.every((entry) =>
+      Boolean(
+        entry &&
+        typeof entry.relativePath === 'string' &&
+        typeof entry.sourcePath === 'string' &&
+        typeof entry.destinationPath === 'string' &&
+        typeof entry.partialPath === 'string' &&
+        (entry.stagingPath === undefined || typeof entry.stagingPath === 'string') &&
+        typeof entry.sourceIdentity?.size === 'number' &&
+        Number.isFinite(entry.sourceIdentity.size) &&
+        entry.sourceIdentity.size >= 0 &&
+        (entry.status === 'pending' || entry.status === 'running' || entry.status === 'done') &&
+        typeof entry.transferredBytes === 'number' &&
+        Number.isFinite(entry.transferredBytes) &&
+        entry.transferredBytes >= 0
+      )
+    )
+  )
 }

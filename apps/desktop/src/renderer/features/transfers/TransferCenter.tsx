@@ -29,16 +29,8 @@ export function TransferCenter({
   const [transfers, setTransfers] = useState(initialTransfers)
   const [showTransfers, setShowTransfers] = useState(false)
   const previousActiveCountRef = useRef(0)
-  const scopedTransfers = scopeTransfersToSession(
-    transfers,
-    activeTabId,
-    activeProfileId,
-    sessionTabs
-  )
-  const activeCount = scopedTransfers.reduce(
-    (count, transfer) => count + (isActiveTransfer(transfer) ? 1 : 0),
-    0
-  )
+  const scopedTransfers = scopeTransfersToSession(transfers, activeTabId, activeProfileId, sessionTabs)
+  const activeCount = scopedTransfers.reduce((count, transfer) => count + (isActiveTransfer(transfer) ? 1 : 0), 0)
 
   useEffect(() => {
     setTransfers(initialTransfers)
@@ -125,15 +117,17 @@ export function TransferCenter({
       {showTransfers ? (
         <TransferPopover
           transfers={scopedTransfers}
-          onDiscardTransfer={(transferId) => desktopApi
-            ? runTransferAction('丢弃传输断点', (id) => desktopApi.discardTransfer(id), transferId)
-            : undefined}
-          onPauseTransfer={(transferId) => desktopApi
-            ? runTransferAction('暂停传输', (id) => desktopApi.pauseTransfer(id), transferId)
-            : undefined}
-          onResumeTransfer={(transferId) => desktopApi
-            ? runTransferAction('继续传输', (id) => desktopApi.resumeTransfer(id), transferId)
-            : undefined}
+          onDiscardTransfer={(transferId) =>
+            desktopApi
+              ? runTransferAction('丢弃传输断点', (id) => desktopApi.discardTransfer(id), transferId)
+              : undefined
+          }
+          onPauseTransfer={(transferId) =>
+            desktopApi ? runTransferAction('暂停传输', (id) => desktopApi.pauseTransfer(id), transferId) : undefined
+          }
+          onResumeTransfer={(transferId) =>
+            desktopApi ? runTransferAction('继续传输', (id) => desktopApi.resumeTransfer(id), transferId) : undefined
+          }
           onClearTransfers={clearTransfers}
           onClose={() => setShowTransfers(false)}
         />

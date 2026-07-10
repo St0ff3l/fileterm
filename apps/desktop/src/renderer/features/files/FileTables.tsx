@@ -105,7 +105,7 @@ export function FileTable({
     const trElement = thElement.parentElement
     if (!trElement) return
     const ths = Array.from(trElement.querySelectorAll('th'))
-    const currentWidths = ths.map(th => th.offsetWidth)
+    const currentWidths = ths.map((th) => th.offsetWidth)
     setWidths(currentWidths)
 
     const startX = e.clientX
@@ -146,9 +146,8 @@ export function FileTable({
 
   const virtualItems = rowVirtualizer.getVirtualItems()
   const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0
-  const paddingBottom = virtualItems.length > 0
-    ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
-    : 0
+  const paddingBottom =
+    virtualItems.length > 0 ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end : 0
 
   return (
     <table
@@ -168,9 +167,9 @@ export function FileTable({
             }
 
             const isActive = sortState?.field === header.field
-            const directionIcon = isActive
-              ? <AppIcon name={sortState?.direction === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} />
-              : null
+            const directionIcon = isActive ? (
+              <AppIcon name={sortState?.direction === 'asc' ? 'arrow-up' : 'arrow-down'} size={11} />
+            ) : null
 
             return (
               <th
@@ -202,55 +201,67 @@ export function FileTable({
           })}
         </tr>
       </thead>
-      <tbody onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClearSelection?.()
-        }
-      }}>
+      <tbody
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClearSelection?.()
+          }
+        }}
+      >
         {rows.length ? (
           <>
-            {paddingTop > 0 && <tr><td colSpan={compact ? 1 : 6} style={{ height: `${paddingTop}px`, padding: 0, border: 0 }} /></tr>}
+            {paddingTop > 0 && (
+              <tr>
+                <td colSpan={compact ? 1 : 6} style={{ height: `${paddingTop}px`, padding: 0, border: 0 }} />
+              </tr>
+            )}
             {virtualItems.map((virtualRow) => {
               const row = rows[virtualRow.index]
               const typeLabel = getDisplayFileTypeLabel(row)
               const iconName = getDisplayFileIconName(row)
 
               return (
-              <tr
-                key={row.path}
-                ref={rowVirtualizer.measureElement}
-                data-index={virtualRow.index}
-                className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths?.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
-                onClick={(event) => onSelectItem?.(event, row)}
-                onContextMenu={(event) => onContextItem?.(event, row)}
-                onDoubleClick={() => onOpenItem?.(row)}
-                onMouseDown={(event) => {
-                  if (event.button === 0) {
-                    onSelectionDragStart?.(event, row)
-                  }
-                }}
-                onMouseEnter={() => onSelectionDragEnter?.(row)}
-              >
-                <td>
-                  <FileNameCell
-                    iconName={iconName}
-                    item={row}
-                    draggable={row.type === 'file'}
-                    onDragStart={(event) => onDragItem?.(event, row)}
-                  />
-                </td>
-                {!compact ? <td>{row.size}</td> : null}
-                {!compact ? <td>{typeLabel}</td> : null}
-                {!compact ? <td>{row.modified}</td> : null}
-                {!compact ? <td>{row.permission ?? ''}</td> : null}
-                {!compact ? <td>{row.ownerGroup ?? ''}</td> : null}
-              </tr>
+                <tr
+                  key={row.path}
+                  ref={rowVirtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths?.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
+                  onClick={(event) => onSelectItem?.(event, row)}
+                  onContextMenu={(event) => onContextItem?.(event, row)}
+                  onDoubleClick={() => onOpenItem?.(row)}
+                  onMouseDown={(event) => {
+                    if (event.button === 0) {
+                      onSelectionDragStart?.(event, row)
+                    }
+                  }}
+                  onMouseEnter={() => onSelectionDragEnter?.(row)}
+                >
+                  <td>
+                    <FileNameCell
+                      iconName={iconName}
+                      item={row}
+                      draggable={row.type === 'file'}
+                      onDragStart={(event) => onDragItem?.(event, row)}
+                    />
+                  </td>
+                  {!compact ? <td>{row.size}</td> : null}
+                  {!compact ? <td>{typeLabel}</td> : null}
+                  {!compact ? <td>{row.modified}</td> : null}
+                  {!compact ? <td>{row.permission ?? ''}</td> : null}
+                  {!compact ? <td>{row.ownerGroup ?? ''}</td> : null}
+                </tr>
               )
             })}
-            {paddingBottom > 0 && <tr><td colSpan={compact ? 1 : 6} style={{ height: `${paddingBottom}px`, padding: 0, border: 0 }} /></tr>}
+            {paddingBottom > 0 && (
+              <tr>
+                <td colSpan={compact ? 1 : 6} style={{ height: `${paddingBottom}px`, padding: 0, border: 0 }} />
+              </tr>
+            )}
           </>
         ) : (
-          <tr><td colSpan={compact ? 1 : 6}>{emptyText ?? t.emptyFiles}</td></tr>
+          <tr>
+            <td colSpan={compact ? 1 : 6}>{emptyText ?? t.emptyFiles}</td>
+          </tr>
         )}
       </tbody>
     </table>
@@ -291,9 +302,8 @@ export function LocalFileTable({
 
   const virtualItems = rowVirtualizer.getVirtualItems()
   const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0
-  const paddingBottom = virtualItems.length > 0
-    ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
-    : 0
+  const paddingBottom =
+    virtualItems.length > 0 ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end : 0
 
   return (
     <table
@@ -309,44 +319,54 @@ export function LocalFileTable({
           <th>{t.fileName}</th>
         </tr>
       </thead>
-      <tbody onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClearSelection()
-        }
-      }}>
-        {paddingTop > 0 && <tr><td colSpan={1} style={{ height: `${paddingTop}px`, padding: 0, border: 0 }} /></tr>}
+      <tbody
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClearSelection()
+          }
+        }}
+      >
+        {paddingTop > 0 && (
+          <tr>
+            <td colSpan={1} style={{ height: `${paddingTop}px`, padding: 0, border: 0 }} />
+          </tr>
+        )}
         {virtualItems.map((virtualRow) => {
           const row = rows[virtualRow.index]
           const iconName = getDisplayFileIconName(row)
 
           return (
-          <tr
-            key={`${row.path}:${row.name}`}
-            ref={rowVirtualizer.measureElement}
-            data-index={virtualRow.index}
-            className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
-            onClick={(event) => onSelectItem(event, row)}
-            onContextMenu={(event) => onContextItem(event, row)}
-            onDoubleClick={() => onOpenItem(row)}
-            onMouseDown={(event) => {
-              if (event.button === 0) {
-                onSelectionDragStart(event, row)
-              }
-            }}
-            onMouseEnter={() => onSelectionDragEnter(row)}
-          >
-            <td>
-              <FileNameCell
-                iconName={iconName}
-                item={row}
-                draggable={row.name !== '..'}
-                onDragStart={(event) => onDragItem(event, row)}
-              />
-            </td>
-          </tr>
+            <tr
+              key={`${row.path}:${row.name}`}
+              ref={rowVirtualizer.measureElement}
+              data-index={virtualRow.index}
+              className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
+              onClick={(event) => onSelectItem(event, row)}
+              onContextMenu={(event) => onContextItem(event, row)}
+              onDoubleClick={() => onOpenItem(row)}
+              onMouseDown={(event) => {
+                if (event.button === 0) {
+                  onSelectionDragStart(event, row)
+                }
+              }}
+              onMouseEnter={() => onSelectionDragEnter(row)}
+            >
+              <td>
+                <FileNameCell
+                  iconName={iconName}
+                  item={row}
+                  draggable={row.name !== '..'}
+                  onDragStart={(event) => onDragItem(event, row)}
+                />
+              </td>
+            </tr>
           )
         })}
-        {paddingBottom > 0 && <tr><td colSpan={1} style={{ height: `${paddingBottom}px`, padding: 0, border: 0 }} /></tr>}
+        {paddingBottom > 0 && (
+          <tr>
+            <td colSpan={1} style={{ height: `${paddingBottom}px`, padding: 0, border: 0 }} />
+          </tr>
+        )}
       </tbody>
     </table>
   )

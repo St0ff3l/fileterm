@@ -70,10 +70,10 @@ git push -u origin feat/add-video-player-v0.1.0-beta.10
 
 在 GitHub 创建 Pull Request 时：
 
-| 字段 | 填写 |
-|---|---|
-| **Base** | `release/0.1.0-beta.10`（⚠️ 不是 main） |
-| **Compare** | `feat/add-video-player-v0.1.0-beta.10` |
+| 字段        | 填写                                    |
+| ----------- | --------------------------------------- |
+| **Base**    | `release/0.1.0-beta.10`（⚠️ 不是 main） |
+| **Compare** | `feat/add-video-player-v0.1.0-beta.10`  |
 
 > 这一步最关键：日常 PR 全部往 release 分支合，main 平时不碰。
 

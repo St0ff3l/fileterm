@@ -1,6 +1,10 @@
 /* 精细化 Material Symbols 图标 */
 .material-symbols-outlined {
-  font-variation-settings: 'wght' 300, 'opsz' 20, 'GRAD' 0, 'FILL' 0;
+  font-variation-settings:
+    'wght' 300,
+    'opsz' 20,
+    'GRAD' 0,
+    'FILL' 0;
   vertical-align: middle;
 }
 
@@ -12,7 +16,13 @@
   height: 100%;
   background-color: var(--bg-main) !important;
   color: var(--text-main);
-  font-family: "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  font-family:
+    'PingFang SC',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Helvetica Neue',
+    'Microsoft YaHei',
+    sans-serif;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -31,7 +41,10 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: width 0.24s linear, min-width 0.24s linear, padding 0.24s linear;
+  transition:
+    width 0.24s linear,
+    min-width 0.24s linear,
+    padding 0.24s linear;
 }
 
 /* Browser preview decoration; Electron uses native platform controls. */
@@ -114,7 +127,10 @@
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease, padding-left 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    padding-left 0.2s ease;
   font-family: 'Inter', sans-serif;
   box-sizing: border-box;
 }
@@ -389,22 +405,44 @@
 }
 
 /* stagger direct child sections so cards cascade in */
-.page-transition > div > *:nth-child(1) { animation-delay: 0.02s; }
-.page-transition > div > *:nth-child(2) { animation-delay: 0.08s; }
-.page-transition > div > *:nth-child(3) { animation-delay: 0.14s; }
-.page-transition > div > *:nth-child(4) { animation-delay: 0.2s; }
-.page-transition > div > *:nth-child(n+5) { animation-delay: 0.26s; }
+.page-transition > div > *:nth-child(1) {
+  animation-delay: 0.02s;
+}
+.page-transition > div > *:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.page-transition > div > *:nth-child(3) {
+  animation-delay: 0.14s;
+}
+.page-transition > div > *:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.page-transition > div > *:nth-child(n + 5) {
+  animation-delay: 0.26s;
+}
 
 /* navigate down -> cards fly in from below */
 @keyframes page-card-in-up {
-  from { opacity: 0; transform: translate3d(0, 26px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 /* navigate up -> cards fly in from above */
 @keyframes page-card-in-down {
-  from { opacity: 0; transform: translate3d(0, -26px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+  from {
+    opacity: 0;
+    transform: translate3d(0, -26px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -467,7 +505,7 @@
 
 /* Hover left-indicator vertical bar */
 .flat-grid-row::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
   top: 15%;
@@ -520,7 +558,9 @@
   color: var(--type-muted);
   margin-right: 8px;
   cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s ease;
 }
 
 .folder-chevron.expanded {
@@ -528,7 +568,8 @@
   color: var(--text-muted);
 }
 
-.col-path, .col-user {
+.col-path,
+.col-user {
   font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
   font-size: 13px;
   color: var(--text-muted);
@@ -556,9 +597,19 @@
 }
 
 @keyframes dot-glow {
-  0% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 10px color-mix(in srgb, var(--success) 95%, transparent); }
-  100% { transform: scale(1); opacity: 0.9; }
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--success) 95%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
 }
 
 .type-dot.dot-ssh {
@@ -609,7 +660,11 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .col-action button:hover {
@@ -696,7 +751,9 @@
   cursor: pointer;
   padding: 4px 6px;
   border-radius: 4px;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .footer-nav button:hover {
@@ -726,9 +783,18 @@
 }
 
 @keyframes status-pulse {
-  0% { transform: scale(1); box-shadow: 0 0 6px color-mix(in srgb, var(--success) 80%, transparent); }
-  50% { transform: scale(1.2); box-shadow: 0 0 12px var(--success); }
-  100% { transform: scale(1); box-shadow: 0 0 6px color-mix(in srgb, var(--success) 80%, transparent); }
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--success) 80%, transparent);
+  }
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 0 12px var(--success);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--success) 80%, transparent);
+  }
 }
 
 .footer-status-dot {

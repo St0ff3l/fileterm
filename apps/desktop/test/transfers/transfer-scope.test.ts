@@ -3,11 +3,7 @@ import test from 'node:test'
 import type { TransferTask } from '@fileterm/core'
 import { scopeTransfersToSession } from '../../src/renderer/features/transfers/transfer-scope.ts'
 
-const transfer = (
-  id: string,
-  profileId: string,
-  tabId?: string
-): TransferTask => ({
+const transfer = (id: string, profileId: string, tabId?: string): TransferTask => ({
   id,
   direction: 'upload',
   name: `${id}.txt`,
@@ -32,11 +28,17 @@ test('transfer scope isolates active sibling tabs and retains reopenable history
     { id: 'tab-c', profileId: 'profile-2' }
   ])
 
-  assert.deepEqual(scoped.map((item) => item.id), ['active', 'closed-tab', 'legacy'])
+  assert.deepEqual(
+    scoped.map((item) => item.id),
+    ['active', 'closed-tab', 'legacy']
+  )
 })
 
 test('transfer scope is empty outside a session tab', () => {
-  assert.deepEqual(scopeTransfersToSession([
-    transfer('paused', 'profile-1', 'tab-a')
-  ], null, 'profile-1', [{ id: 'tab-a', profileId: 'profile-1' }]), [])
+  assert.deepEqual(
+    scopeTransfersToSession([transfer('paused', 'profile-1', 'tab-a')], null, 'profile-1', [
+      { id: 'tab-a', profileId: 'profile-1' }
+    ]),
+    []
+  )
 })
