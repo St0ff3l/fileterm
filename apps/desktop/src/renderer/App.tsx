@@ -1,8 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import {
   type CommandExecutionOptions,
-  type CommandTemplateInput,
-  type ConnectionFolder,
   type ConnectionFormMode,
   type ConnectionProfile,
   type CreateProfileInput,
@@ -37,6 +35,7 @@ import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
 import { useFileEditor } from './hooks/useFileEditor'
+import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
 import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
 import { StandaloneWindowFrame } from './features/layout/StandaloneWindowFrame'
 
@@ -450,6 +449,27 @@ export function App() {
     setter(formatAppError(scope, err, details))
   }
 
+  // 6. Workspace Data Operations Hook
+  const {
+    saveCommandTemplate,
+    createCommandFolder,
+    updateCommandFolder,
+    updateCommandOrder,
+    deleteCommandFolder,
+    deleteCommandTemplate,
+    createConnectionFolder,
+    updateConnectionFolder,
+    deleteConnectionFolder,
+    updateConnectionOrder
+  } = useWorkspaceDataOps({
+    desktopApi,
+    isCommandFormWindow,
+    onApplySnapshot: applySnapshot,
+    onBusyChange: setIsBusy,
+    onError: (scope, err) => reportError(setError, scope, err),
+    onCloseCurrentWindow: closeCurrentWindow
+  })
+
   const handleSaveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -529,162 +549,6 @@ export function App() {
       setError(null)
     } catch (err) {
       reportError(setError, '清除主机指纹', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const saveCommandTemplate = async (commandId: string | null, input: CommandTemplateInput) => {
-    if (!desktopApi) {
-      return
-    }
-
-    try {
-      setIsBusy(true)
-      const snapshot = commandId
-        ? await desktopApi.updateCommandTemplate(commandId, input)
-        : await desktopApi.createCommandTemplate(input)
-      applySnapshot(snapshot)
-      if (isCommandFormWindow) {
-        closeCurrentWindow()
-      }
-    } catch (err) {
-      reportError(setError, '保存命令模板', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const createCommandFolder = async (name: string) => {
-    if (!desktopApi) {
-      return
-    }
-
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.createCommandFolder(name)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '新建命令分类', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const updateCommandFolder = async (
-    folderId: string,
-    updates: { name?: string; parentId?: string; order?: number }
-  ) => {
-    if (!desktopApi) {
-      return
-    }
-
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.updateCommandFolder(folderId, updates)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '更新命令分类', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const updateCommandOrder = async (id: string, parentId: string | undefined, order: number) => {
-    if (!desktopApi) {
-      return
-    }
-
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.updateCommandOrder(id, parentId, order)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '调整命令顺序', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const deleteCommandFolder = async (folderId: string) => {
-    if (!desktopApi) {
-      return
-    }
-
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.deleteCommandFolder(folderId)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '删除命令分类', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const deleteCommandTemplate = async (commandId: string) => {
-    if (!desktopApi) {
-      return
-    }
-
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.deleteCommandTemplate(commandId)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '删除命令模板', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const createConnectionFolder = async (name: string) => {
-    if (!desktopApi) return
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.createFolder(name)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '新建连接分类', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const updateConnectionFolder = async (folderId: string, updates: Partial<ConnectionFolder>) => {
-    if (!desktopApi) return
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.updateFolder(folderId, updates)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '更新连接分类', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const deleteConnectionFolder = async (folderId: string) => {
-    if (!desktopApi) return
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.deleteFolder(folderId)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '删除连接分类', err)
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  const updateConnectionOrder = async (id: string, newParentId: string | undefined, newOrder: number) => {
-    if (!desktopApi) return
-    try {
-      setIsBusy(true)
-      const snapshot = await desktopApi.updateEntityOrder(id, newParentId, newOrder)
-      applySnapshot(snapshot)
-    } catch (err) {
-      reportError(setError, '调整连接顺序', err)
     } finally {
       setIsBusy(false)
     }
