@@ -522,15 +522,9 @@ tokens -> theme vars -> component skins -> terminal colors
 
 当前策略：
 
-- 连接配置使用文件型 profile 存储。
-- 密码、私钥和系统钥匙串接入仍属于后续安全专项。
-
-后续如果迁移存储，再评估：
-
-- 连接元数据存 SQLite
-- 密码与私钥密文单独存储
-- 优先使用 Electron `safeStorage`
-- 后续可接系统钥匙串
+- 连接配置、密码、私钥均使用文件型 profile 存储，以 `profiles.json` 明文保存在应用用户数据目录下。
+- 产品定位偏向个人/小团队的本地桌面工具，依赖操作系统对应用用户数据目录的权限隔离；不额外引入 Electron `safeStorage`、系统钥匙串或密文存储层，避免跨平台弹窗和钥匙串依赖破坏独立运行体验。
+- 该策略是有意为之，不作为后续安全专项规划。如果未来产品定位转向多用户/企业场景，再重新评估存储安全模型，届时单独出 ADR 决策。
 
 ## 13. 状态管理
 
@@ -548,16 +542,20 @@ tokens -> theme vars -> component skins -> terminal colors
 
 ## 14. 当前重构热点
 
-当前最重的实现集中在：
+上一轮重构热点（`workspace-service.ts` 臃肿、`session-controllers.ts` 混合、App.tsx 上帝组件）已结束。拆分结果：
 
-- `apps/desktop/src/main/services/workspace-service.ts`
-  - 工作区状态中心，已经承担了 profile、tab、session、transfer 的主要调度职责。
-- `apps/desktop/src/main/services/session-controllers.ts`
-  - SSH / FTP 的运行时协议接入。
-- `apps/desktop/src/renderer/App.tsx`
-  - UI 逻辑较重，承接了较多页面状态与交互。
+- `apps/desktop/src/main/services/workspace-service.ts`：已收敛为 façade，薄委托给 `WorkspaceTabsState`、`WorkspaceSessionRuntime`、`TransferService`、`WorkspaceTabLifecycleService` 与 `ProfileRepository`。
+- `apps/desktop/src/main/services/session-controllers.ts`：已拆分为 `ssh-session-controller.ts` 与 `ftp-session-controller.ts`，SSH/SFTP 与 FTP 物理隔离。
+- `apps/desktop/src/renderer/App.tsx`：已从 3898 行收敛至 1337 行，工作区逻辑拆出 8 个领域 hooks，由 `ModalPortalManager` 统一收口全局模态框。
 
-建议优先小步拆分这些热点，而不是一边加功能一边继续堆。
+当前阶段的关注重点已转移：
+
+- **存储策略已明确**：连接配置、密码、私钥继续采用 `profiles.json` 明文文件型存储，不引入 `safeStorage`、系统钥匙串或密文存储层。详见第 12 节。该策略是有意为之，非待办债务。
+- **系统指标多平台覆盖**：`apps/desktop/src/main/services/sessions/system-metrics/` 是新增活跃区域，重点在 POSIX/BusyBox/Windows 的 CRLF 归一化、平台探测与遥测注入门控。
+- **controller 测试工程效率**：`test/controllers/` 当前依赖 `dist-electron/main` 产物，需先 build main 才能运行。后续应逐步支持 TypeScript 源码级测试，缩短反馈循环。
+- **renderer 组件测试**：当前测试集中在 main/services 领域逻辑，UI 组件与交互暂无自动化覆盖，可作为下一步补充。
+
+建议进入小步迭代阶段：不再做大规模结构拆分，而是围绕安全专项、平台扩展和测试厚度持续巩固。
 
 ## 15. 第一版不做的内容
 
