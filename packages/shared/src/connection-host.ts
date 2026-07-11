@@ -36,11 +36,7 @@ export function validateConnectionHost(rawHost: string): ConnectionHostValidatio
   }
 
   const trimmed = rawHost.trim()
-  if (
-    INVALID_HOST_CHARACTERS.test(trimmed) ||
-    URL_SCHEME_PREFIX.test(trimmed) ||
-    hasMismatchedIpv6Brackets(trimmed)
-  ) {
+  if (INVALID_HOST_CHARACTERS.test(trimmed) || URL_SCHEME_PREFIX.test(trimmed) || hasMismatchedIpv6Brackets(trimmed)) {
     return {
       valid: false,
       normalizedHost,

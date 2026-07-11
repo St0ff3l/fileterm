@@ -18,10 +18,7 @@ export function extractCommandParams(command: string) {
   return [...seen].sort((left, right) => left - right)
 }
 
-export function groupCommands(
-  folders: CommandFolder[],
-  templates: CommandTemplate[]
-) {
+export function groupCommands(folders: CommandFolder[], templates: CommandTemplate[]) {
   const sortedFolders = sortByOrder(folders)
   const sortedTemplates = sortByOrder(templates)
 

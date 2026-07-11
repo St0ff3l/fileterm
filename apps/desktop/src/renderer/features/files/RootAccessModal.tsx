@@ -74,10 +74,16 @@ export function RootAccessModal({
           <div className="root-access-note-title">{t.fileRootAccessPasswordHint}</div>
           <div className="root-access-note-body">{t.fileRootAccessPasswordHintDetail}</div>
         </div>
-        {errorMessage ? <div className="modal-error" role="alert">{errorMessage}</div> : null}
+        {errorMessage ? (
+          <div className="modal-error" role="alert">
+            {errorMessage}
+          </div>
+        ) : null}
 
         <div className="form-actions">
-          <button className="flat-button" onClick={onClose} type="button">{t.cancel}</button>
+          <button className="flat-button" onClick={onClose} type="button">
+            {t.cancel}
+          </button>
           <button
             className="primary-button file-action-submit-button"
             disabled={isSubmitting}

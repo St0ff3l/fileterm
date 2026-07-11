@@ -11,9 +11,27 @@ body,
   overflow: hidden;
   background: var(--bg-main);
   color: var(--text-main);
-  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   color-scheme: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+[contenteditable='true'],
+.xterm,
+.monaco-editor,
+.selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+input::placeholder,
+textarea::placeholder {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button,

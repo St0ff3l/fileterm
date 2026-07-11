@@ -6,7 +6,12 @@ export const localFileDragType = 'application/x-fileterm-local-file'
 export const remoteFileDragType = 'application/x-fileterm-remote-file'
 
 export function isActiveTransfer(transfer: TransferTask) {
-  return transfer.status === 'running' || transfer.status === 'queued'
+  return (
+    transfer.status === 'running' ||
+    transfer.status === 'queued' ||
+    transfer.status === 'verifying' ||
+    transfer.status === 'finalizing'
+  )
 }
 
 export function isCompletedTransfer(transfer: TransferTask) {
@@ -95,16 +100,18 @@ export function tabStatusClass(status: WorkspaceTab['status']) {
 
 export function withParentRow(dirPath: string, items: LocalFileItem[]) {
   const parentPath = dirPath.includes('/') ? dirPath.split('/').slice(0, -1).join('/') || '/' : dirPath
-  return dirPath === '/' ? items : [
-    {
-      path: parentPath,
-      name: '..',
-      type: 'folder' as const,
-      modified: '',
-      size: '-'
-    },
-    ...items
-  ]
+  return dirPath === '/'
+    ? items
+    : [
+        {
+          path: parentPath,
+          name: '..',
+          type: 'folder' as const,
+          modified: '',
+          size: '-'
+        },
+        ...items
+      ]
 }
 
 export function nextSelection<T extends { path: string }>({
@@ -197,6 +204,18 @@ export function transferStatusText(transfer: TransferTask) {
   }
   if (transfer.status === 'queued') {
     return transfer.direction === 'upload' ? t.waitingUpload : t.waitingDownload
+  }
+  if (transfer.status === 'paused') {
+    return t.transferPaused
+  }
+  if (transfer.status === 'interrupted') {
+    return t.transferInterrupted
+  }
+  if (transfer.status === 'verifying') {
+    return t.transferVerifying
+  }
+  if (transfer.status === 'finalizing') {
+    return t.transferFinalizing
   }
   return transfer.direction === 'upload' ? t.uploading : t.downloading
 }

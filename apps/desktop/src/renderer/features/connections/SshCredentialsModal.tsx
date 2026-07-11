@@ -69,7 +69,9 @@ export function SshCredentialsModal({
         {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
 
         <div className="form-actions">
-          <button className="flat-button" onClick={onCancel} type="button">{t.cancel}</button>
+          <button className="flat-button" onClick={onCancel} type="button">
+            {t.cancel}
+          </button>
           <button className="primary-button" onClick={() => onSubmit({ username, password })} type="button">
             {t.sshAuthPromptConfirm}
           </button>

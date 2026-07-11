@@ -5,10 +5,12 @@
 
   --bg-main: #151515;
   --bg-sidebar: #242424;
-  --bg-card: #1f1f1f;
+  --bg-card: #1e1e1e;
   --bg-elevated: #2a2a2a;
   --bg-hover: #303030;
   --bg-active: #3a3d42;
+  --manager-head-bg: #242424;
+  --input-bg: #1a1a1a;
 
   --border-light: rgba(255, 255, 255, 0.08);
   --border-dark: rgba(255, 255, 255, 0.16);
@@ -142,9 +144,7 @@
   --confirm-dialog-text: #cfd4dc;
   --dialog-surface: var(--bg-card);
   --dialog-border: color-mix(in srgb, var(--border-light) 82%, transparent);
-  --dialog-shadow:
-    0 22px 70px rgba(0, 0, 0, 0.45),
-    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --dialog-shadow: 0 22px 70px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
   --dialog-title: var(--text-main);
   --dialog-description: var(--text-muted);
   --dialog-footer-border: color-mix(in srgb, var(--border-light) 78%, transparent);
@@ -198,7 +198,6 @@
 :root[data-theme='default'] .sidebar-resizer.is-active {
   background: transparent;
 }
-
 
 :root:not([data-theme]) .sync-dot,
 :root[data-theme='default-dark'] .sync-dot,
@@ -410,8 +409,7 @@
 :root:not([data-theme]) .grid-chart,
 :root[data-theme='default-dark'] .grid-chart,
 :root[data-theme='default'] .grid-chart {
-  background: linear-gradient(to bottom, rgba(91, 141, 239, 0.04), rgba(91, 141, 239, 0)),
-    var(--bg-card);
+  background: linear-gradient(to bottom, rgba(91, 141, 239, 0.04), rgba(91, 141, 239, 0)), var(--bg-card);
 }
 
 :root:not([data-theme]) .network-guide,
@@ -466,8 +464,6 @@
 :root[data-theme='default'] .disk-row {
   color: var(--text-main);
 }
-
-
 
 :root:not([data-theme]) .disk-row:hover,
 :root[data-theme='default-dark'] .disk-row:hover,
@@ -602,7 +598,9 @@
 :root[data-theme='default-dark'] .tab-dot.connected,
 :root[data-theme='default'] .tab-dot.connected {
   background: var(--success);
-  box-shadow: 0 0 4px rgba(57, 217, 138, 0.9), 0 0 10px rgba(57, 217, 138, 0.68);
+  box-shadow:
+    0 0 4px rgba(57, 217, 138, 0.9),
+    0 0 10px rgba(57, 217, 138, 0.68);
 }
 
 :root:not([data-theme]) .tab-dot.disconnected,
@@ -940,13 +938,13 @@
 :root:not([data-theme]) .fs-file-table tbody tr.is-selected,
 :root[data-theme='default-dark'] .fs-file-table tbody tr.is-selected,
 :root[data-theme='default'] .fs-file-table tbody tr.is-selected {
-  background: var(--selection-bg);
+  background: var(--selection-bg) !important;
 }
 
 :root:not([data-theme]) .fs-file-table tbody tr.is-selected:nth-child(even),
 :root[data-theme='default-dark'] .fs-file-table tbody tr.is-selected:nth-child(even),
 :root[data-theme='default'] .fs-file-table tbody tr.is-selected:nth-child(even) {
-  background: var(--selection-bg);
+  background: var(--selection-bg) !important;
 }
 
 :root:not([data-theme]) .file-drag-preview,
@@ -1304,13 +1302,13 @@
 :root:not([data-theme]) .manager-table,
 :root[data-theme='default-dark'] .manager-table,
 :root[data-theme='default'] .manager-table {
-  background: var(--bg-main);
+  background: #1b1b1b !important;
 }
 
 :root:not([data-theme]) .manager-head,
 :root[data-theme='default-dark'] .manager-head,
 :root[data-theme='default'] .manager-head {
-  background: var(--bg-hover);
+  background: var(--manager-head-bg);
   color: var(--text-muted);
 }
 
@@ -1388,7 +1386,7 @@
 :root:not([data-theme]) .ssh-modal-nav,
 :root[data-theme='default-dark'] .ssh-modal-nav,
 :root[data-theme='default'] .ssh-modal-nav {
-  background: var(--bg-main);
+  background: #242424 !important;
 }
 
 :root:not([data-theme]) .ssh-modal-nav button,
@@ -1412,14 +1410,14 @@
 :root:not([data-theme]) .ssh-grid textarea,
 :root[data-theme='default-dark'] .ssh-grid textarea,
 :root[data-theme='default'] .ssh-grid textarea {
-  background: var(--bg-main);
+  background: var(--input-bg);
 }
 
 :root:not([data-theme]) .ssh-placeholder,
 :root[data-theme='default-dark'] .ssh-placeholder,
 :root[data-theme='default'] .ssh-placeholder {
   color: var(--text-muted);
-  background: var(--bg-main);
+  background: var(--input-bg);
 }
 
 :root:not([data-theme]) .modal-error,
@@ -1442,7 +1440,7 @@
 :root:not([data-theme]) .connection-form select,
 :root[data-theme='default-dark'] .connection-form select,
 :root[data-theme='default'] .connection-form select {
-  background: var(--bg-main);
+  background: var(--input-bg);
   color: var(--text-main);
 }
 
@@ -1670,7 +1668,9 @@
 :root[data-theme='default-dark'] .sync-dot.online,
 :root[data-theme='default'] .sync-dot.online {
   background: var(--success);
-  box-shadow: 0 0 4px rgba(57, 217, 138, 0.9), 0 0 10px rgba(57, 217, 138, 0.68);
+  box-shadow:
+    0 0 4px rgba(57, 217, 138, 0.9),
+    0 0 10px rgba(57, 217, 138, 0.68);
 }
 
 :root:not([data-theme]) .sync-dot.offline,
@@ -1859,12 +1859,10 @@
   background: #202020;
 }
 
-
-
 :root:not([data-theme]) .disk-head,
 :root[data-theme='default-dark'] .disk-head,
 :root[data-theme='default'] .disk-head {
-  background: #252525;
+  background: #242424;
   border-top: 1px solid #363636;
   color: #aaa;
 }
@@ -1874,8 +1872,6 @@
 :root[data-theme='default'] .disk-row {
   color: #c2c2c2;
 }
-
-
 
 :root:not([data-theme]) .session-workspace,
 :root[data-theme='default-dark'] .session-workspace,
@@ -1914,21 +1910,21 @@
   background: transparent;
 }
 
-:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element>.scrollbar,
-:root[data-theme='default-dark'] .terminal-host .xterm .xterm-scrollable-element>.scrollbar,
-:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element>.scrollbar {
+:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element > .scrollbar,
+:root[data-theme='default-dark'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar,
+:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar {
   background: transparent !important;
 }
 
-:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element>.scrollbar>.slider,
-:root[data-theme='default-dark'] .terminal-host .xterm .xterm-scrollable-element>.scrollbar>.slider,
-:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element>.scrollbar>.slider {
+:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider,
+:root[data-theme='default-dark'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider,
+:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider {
   background: var(--border, var(--border-light)) !important;
 }
 
-:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element>.scrollbar>.slider:hover,
-:root[data-theme='default-dark'] .terminal-host .xterm .xterm-scrollable-element>.scrollbar>.slider:hover,
-:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element>.scrollbar>.slider:hover {
+:root:not([data-theme]) .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+:root[data-theme='default-dark'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover,
+:root[data-theme='default'] .terminal-host .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
   background: var(--muted-foreground, var(--text-muted)) !important;
 }
 
@@ -1962,9 +1958,9 @@
   background: rgba(20, 21, 24, 0.72);
 }
 
-:root:not([data-theme]) .terminal-find .terminal-find-actions>button,
-:root[data-theme='default-dark'] .terminal-find .terminal-find-actions>button,
-:root[data-theme='default'] .terminal-find .terminal-find-actions>button {
+:root:not([data-theme]) .terminal-find .terminal-find-actions > button,
+:root[data-theme='default-dark'] .terminal-find .terminal-find-actions > button,
+:root[data-theme='default'] .terminal-find .terminal-find-actions > button {
   background: transparent;
   color: #cdd2dc;
 }
@@ -1975,9 +1971,9 @@
   background: #363942;
 }
 
-:root:not([data-theme]) .terminal-find .terminal-find-actions>button:hover,
-:root[data-theme='default-dark'] .terminal-find .terminal-find-actions>button:hover,
-:root[data-theme='default'] .terminal-find .terminal-find-actions>button:hover {
+:root:not([data-theme]) .terminal-find .terminal-find-actions > button:hover,
+:root[data-theme='default-dark'] .terminal-find .terminal-find-actions > button:hover,
+:root[data-theme='default'] .terminal-find .terminal-find-actions > button:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
 }
@@ -2076,7 +2072,7 @@
 :root:not([data-theme]) .file-toolbar,
 :root[data-theme='default-dark'] .file-toolbar,
 :root[data-theme='default'] .file-toolbar {
-  background: linear-gradient(180deg, #242424 0%, #1f1f1f 100%);
+  background: linear-gradient(180deg, #242424 0%, #1e1e1e 100%);
   border-bottom: 1px solid #303030;
   color: #8f8f8f;
 }
@@ -2173,13 +2169,32 @@
 :root:not([data-theme]) .process-row:nth-child(even),
 :root[data-theme='default-dark'] .process-row:nth-child(even),
 :root[data-theme='default'] .process-row:nth-child(even),
-:root:not([data-theme]) .disk-row:nth-child(even),
-:root[data-theme='default-dark'] .disk-row:nth-child(even),
-:root[data-theme='default'] .disk-row:nth-child(even),
 :root:not([data-theme]) .fs-file-table tbody tr:nth-child(even),
 :root[data-theme='default-dark'] .fs-file-table tbody tr:nth-child(even),
 :root[data-theme='default'] .fs-file-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.018);
+  background: #242424;
+}
+
+:root:not([data-theme]) .process-row:nth-child(odd),
+:root[data-theme='default-dark'] .process-row:nth-child(odd),
+:root[data-theme='default'] .process-row:nth-child(odd),
+:root:not([data-theme]) .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme='default-dark'] .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme='default'] .fs-file-table tbody tr:nth-child(odd) {
+  background: #1e1e1e;
+}
+
+/* disk-row: odd=light(浅), even=dark(深) */
+:root:not([data-theme]) .disk-row:nth-child(odd),
+:root[data-theme='default-dark'] .disk-row:nth-child(odd),
+:root[data-theme='default'] .disk-row:nth-child(odd) {
+  background: #242424;
+}
+
+:root:not([data-theme]) .disk-row:nth-child(even),
+:root[data-theme='default-dark'] .disk-row:nth-child(even),
+:root[data-theme='default'] .disk-row:nth-child(even) {
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) .quick-row:hover,
@@ -2304,7 +2319,13 @@
 :root:not([data-theme]) .system-table tbody tr:nth-child(even),
 :root[data-theme='default-dark'] .system-table tbody tr:nth-child(even),
 :root[data-theme='default'] .system-table tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.015);
+  background: #242424;
+}
+
+:root:not([data-theme]) .system-table tbody tr:nth-child(odd),
+:root[data-theme='default-dark'] .system-table tbody tr:nth-child(odd),
+:root[data-theme='default'] .system-table tbody tr:nth-child(odd) {
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) .quick-panel,
@@ -2346,6 +2367,13 @@
 :root[data-theme='default-dark'] *::-webkit-scrollbar-track,
 :root[data-theme='default'] *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* File manager pane scrollbar track */
+:root:not([data-theme]) .file-table-shell::-webkit-scrollbar-track,
+:root[data-theme='default-dark'] .file-table-shell::-webkit-scrollbar-track,
+:root[data-theme='default'] .file-table-shell::-webkit-scrollbar-track {
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) *::-webkit-scrollbar-thumb,
@@ -2418,9 +2446,9 @@
   background: var(--modal-backdrop-bg);
 }
 
-:root:not([data-theme]) .ssh-modal-nav,
-:root[data-theme='default-dark'] .ssh-modal-nav,
-:root[data-theme='default'] .ssh-modal-nav,
+:root:not([data-theme]) .ssh-form-shell,
+:root[data-theme='default-dark'] .ssh-form-shell,
+:root[data-theme='default'] .ssh-form-shell,
 :root:not([data-theme]) .ssh-fieldset,
 :root[data-theme='default-dark'] .ssh-fieldset,
 :root[data-theme='default'] .ssh-fieldset,
@@ -2449,7 +2477,7 @@
 :root:not([data-theme]) .connection-form select,
 :root[data-theme='default-dark'] .connection-form select,
 :root[data-theme='default'] .connection-form select {
-  background: #151515;
+  background: var(--input-bg);
   border-color: rgba(255, 255, 255, 0.12);
   color: #e7e7e7;
 }
@@ -2470,14 +2498,20 @@
 :root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
-  background: #151515;
+  background: var(--input-bg);
   border-color: rgba(255, 255, 255, 0.12);
   color: #e7e7e7;
 }
 
-:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):not(.command-code-area textarea):focus,
-:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):not(.command-code-area textarea):focus,
-:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):not(.command-code-area textarea):focus,
+:root:not([data-theme])
+  .command-form-standalone-page
+  input:not([type='checkbox']):not(.command-code-area textarea):focus,
+:root[data-theme='default-dark']
+  .command-form-standalone-page
+  input:not([type='checkbox']):not(.command-code-area textarea):focus,
+:root[data-theme='default']
+  .command-form-standalone-page
+  input:not([type='checkbox']):not(.command-code-area textarea):focus,
 :root:not([data-theme]) .command-form-standalone-page select:focus,
 :root[data-theme='default-dark'] .command-form-standalone-page select:focus,
 :root[data-theme='default'] .command-form-standalone-page select:focus {
@@ -2517,4 +2551,591 @@
 :root[data-theme='default'] .command-editor-dialog-form textarea.is-invalid:focus {
   border-color: var(--danger) !important;
   box-shadow: 0 0 0 3px rgba(201, 61, 61, 0.22) !important;
+}
+
+/* Custom Redesign for Command Dialog & Standalone Forms in Dark Mode */
+:root:not([data-theme]) .command-dialog,
+:root[data-theme='default-dark'] .command-dialog,
+:root[data-theme='default'] .command-dialog,
+:root:not([data-theme]) .command-form-standalone,
+:root[data-theme='default-dark'] .command-form-standalone,
+:root[data-theme='default'] .command-form-standalone {
+  width: min(900px, 88vw) !important;
+  min-height: 560px !important;
+  background: var(--bg-sidebar) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--modal-card-shadow) !important;
+}
+
+/* Standalone fullscreen modal-card should have 0 border-radius and no border */
+:root:not([data-theme]) .command-form-standalone,
+:root[data-theme='default-dark'] .command-form-standalone,
+:root[data-theme='default'] .command-form-standalone {
+  width: 100% !important;
+  border-radius: 0 !important;
+  border: none !important;
+  height: 100vh !important;
+  box-shadow: none !important;
+}
+
+/* Ensure the background of pages/body matches */
+:root:not([data-theme]) .command-editor-page.standalone,
+:root[data-theme='default-dark'] .command-editor-page.standalone,
+:root[data-theme='default'] .command-editor-page.standalone,
+:root:not([data-theme]) .command-editor-page,
+:root[data-theme='default-dark'] .command-editor-page,
+:root[data-theme='default'] .command-editor-page,
+:root:not([data-theme]) .command-editor-window,
+:root[data-theme='default-dark'] .command-editor-window,
+:root[data-theme='default'] .command-editor-window,
+:root:not([data-theme]) .standalone-shell,
+:root[data-theme='default-dark'] .standalone-shell,
+:root[data-theme='default'] .standalone-shell {
+  background: var(--bg-sidebar) !important;
+}
+
+:root:not([data-theme]) .command-editor-page,
+:root[data-theme='default-dark'] .command-editor-page,
+:root[data-theme='default'] .command-editor-page {
+  width: min(900px, 88vw) !important;
+  min-height: 560px !important;
+  max-height: none !important;
+}
+
+/* Headers */
+:root:not([data-theme]) .command-dialog .connection-manager-header,
+:root[data-theme='default-dark'] .command-dialog .connection-manager-header,
+:root[data-theme='default'] .command-dialog .connection-manager-header,
+:root:not([data-theme]) .command-form-standalone .connection-manager-header,
+:root[data-theme='default-dark'] .command-form-standalone .connection-manager-header,
+:root[data-theme='default'] .command-form-standalone .connection-manager-header {
+  background: var(--bg-sidebar) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  padding: 0 16px !important;
+  min-height: 48px !important;
+}
+
+:root:not([data-theme]) .command-dialog .connection-manager-title,
+:root[data-theme='default-dark'] .command-dialog .connection-manager-title,
+:root[data-theme='default'] .command-dialog .connection-manager-title,
+:root:not([data-theme]) .command-form-standalone .connection-manager-title,
+:root[data-theme='default-dark'] .command-form-standalone .connection-manager-title,
+:root[data-theme='default'] .command-form-standalone .connection-manager-title {
+  color: var(--text-main) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+:root:not([data-theme]) .command-dialog .connection-manager-header-actions,
+:root[data-theme='default-dark'] .command-dialog .connection-manager-header-actions,
+:root[data-theme='default'] .command-dialog .connection-manager-header-actions,
+:root:not([data-theme]) .command-form-standalone .connection-manager-header-actions,
+:root[data-theme='default-dark'] .command-form-standalone .connection-manager-header-actions,
+:root[data-theme='default'] .command-form-standalone .connection-manager-header-actions {
+  display: flex !important;
+  align-items: center !important;
+}
+
+:root:not([data-theme]) .command-dialog-body,
+:root[data-theme='default-dark'] .command-dialog-body,
+:root[data-theme='default'] .command-dialog-body,
+:root:not([data-theme]) .command-editor-dialog-form,
+:root[data-theme='default-dark'] .command-editor-dialog-form,
+:root[data-theme='default'] .command-editor-dialog-form,
+:root:not([data-theme]) .command-form-standalone-body,
+:root[data-theme='default-dark'] .command-form-standalone-body,
+:root[data-theme='default'] .command-form-standalone-body,
+:root:not([data-theme]) .command-form-standalone-page,
+:root[data-theme='default-dark'] .command-form-standalone-page,
+:root[data-theme='default'] .command-form-standalone-page {
+  background: #1b1b1b !important;
+}
+
+:root:not([data-theme]) .command-dialog-body,
+:root[data-theme='default-dark'] .command-dialog-body,
+:root[data-theme='default'] .command-dialog-body {
+  padding: 20px 24px 0 !important;
+}
+
+/* Labels */
+:root:not([data-theme]) .command-editor-dialog-form label,
+:root[data-theme='default-dark'] .command-editor-dialog-form label,
+:root[data-theme='default'] .command-editor-dialog-form label,
+:root:not([data-theme]) .command-form-standalone-page label,
+:root[data-theme='default-dark'] .command-form-standalone-page label,
+:root[data-theme='default'] .command-form-standalone-page label {
+  color: var(--text-main) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  margin-bottom: 4px !important;
+}
+
+/* Form inputs (textbox, select, textarea) */
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']),
+:root:not([data-theme]) .command-editor-dialog-form select,
+:root[data-theme='default-dark'] .command-editor-dialog-form select,
+:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
+:root:not([data-theme]) .command-form-standalone-page select,
+:root[data-theme='default-dark'] .command-form-standalone-page select,
+:root[data-theme='default'] .command-form-standalone-page select,
+:root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 4px !important;
+  color: var(--text-main) !important;
+  font-size: 14px !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  padding: 0 14px !important;
+  transition:
+    border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']),
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']),
+:root:not([data-theme]) .command-editor-dialog-form select,
+:root[data-theme='default-dark'] .command-editor-dialog-form select,
+:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']),
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']),
+:root:not([data-theme]) .command-form-standalone-page select,
+:root[data-theme='default-dark'] .command-form-standalone-page select,
+:root[data-theme='default'] .command-form-standalone-page select {
+  font-size: 13px !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-form select,
+:root[data-theme='default-dark'] .command-editor-dialog-form select,
+:root[data-theme='default'] .command-editor-dialog-form select,
+:root:not([data-theme]) .command-form-standalone-page select,
+:root[data-theme='default-dark'] .command-form-standalone-page select,
+:root[data-theme='default'] .command-form-standalone-page select {
+  padding-right: 60px !important;
+}
+
+/* Adjust paddings for textareas */
+:root:not([data-theme]) .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-editor-dialog-form textarea:not(.command-code-area textarea),
+:root:not([data-theme]) .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
+:root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
+  height: auto !important;
+  padding: 12px 14px !important;
+}
+
+/* Hover styles for inputs */
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']):hover,
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']):hover,
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']):hover,
+:root:not([data-theme]) .command-editor-dialog-form select:hover,
+:root[data-theme='default-dark'] .command-editor-dialog-form select:hover,
+:root[data-theme='default'] .command-editor-dialog-form select:hover,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):hover,
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):hover,
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):hover,
+:root:not([data-theme]) .command-form-standalone-page select:hover,
+:root[data-theme='default-dark'] .command-form-standalone-page select:hover,
+:root[data-theme='default'] .command-form-standalone-page select:hover {
+  border-color: var(--border-dark) !important;
+}
+
+/* Focus styles for inputs */
+:root:not([data-theme]) .command-editor-dialog-form input:not([type='checkbox']):focus,
+:root[data-theme='default-dark'] .command-editor-dialog-form input:not([type='checkbox']):focus,
+:root[data-theme='default'] .command-editor-dialog-form input:not([type='checkbox']):focus,
+:root:not([data-theme]) .command-editor-dialog-form select:focus,
+:root[data-theme='default-dark'] .command-editor-dialog-form select:focus,
+:root[data-theme='default'] .command-editor-dialog-form select:focus,
+:root:not([data-theme]) .command-form-standalone-page input:not([type='checkbox']):focus,
+:root[data-theme='default-dark'] .command-form-standalone-page input:not([type='checkbox']):focus,
+:root[data-theme='default'] .command-form-standalone-page input:not([type='checkbox']):focus,
+:root:not([data-theme]) .command-form-standalone-page select:focus,
+:root[data-theme='default-dark'] .command-form-standalone-page select:focus,
+:root[data-theme='default'] .command-form-standalone-page select:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  background: var(--input-bg) !important;
+  outline: none !important;
+}
+
+/* Code area editor wrapper */
+:root:not([data-theme]) .command-editor-dialog-textarea .command-code-area,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area,
+:root[data-theme='default'] .command-editor-dialog-textarea .command-code-area,
+:root:not([data-theme]) .command-form-standalone-page .command-code-area,
+:root[data-theme='default-dark'] .command-form-standalone-page .command-code-area,
+:root[data-theme='default'] .command-form-standalone-page .command-code-area {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 4px !important;
+  overflow: hidden !important;
+  transition:
+    border-color 0.18s,
+    box-shadow 0.18s !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-textarea .command-code-area:hover,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area:hover,
+:root[data-theme='default'] .command-editor-dialog-textarea .command-code-area:hover {
+  border-color: var(--border-dark) !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-textarea .command-code-area:focus-within,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area:focus-within,
+:root[data-theme='default'] .command-editor-dialog-textarea .command-code-area:focus-within {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+}
+
+/* Line numbers column */
+:root:not([data-theme]) .command-line-numbers,
+:root[data-theme='default-dark'] .command-line-numbers,
+:root[data-theme='default'] .command-line-numbers {
+  background: var(--bg-main) !important;
+  border-right: 1px solid var(--border-light) !important;
+}
+
+:root:not([data-theme]) .command-line-number,
+:root[data-theme='default-dark'] .command-line-number,
+:root[data-theme='default'] .command-line-number {
+  color: var(--text-muted) !important;
+}
+
+/* Code area textarea */
+:root:not([data-theme]) .command-editor-dialog-textarea textarea,
+:root[data-theme='default-dark'] .command-editor-dialog-textarea textarea,
+:root[data-theme='default'] .command-editor-dialog-textarea textarea {
+  background: transparent !important;
+  color: var(--text-main) !important;
+  font-size: 13px !important;
+}
+
+/* Parameters section */
+:root:not([data-theme]) .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default-dark'] .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default'] .command-editor-dialog-params .command-param-hints button {
+  background: var(--accent-tint-weak) !important;
+  border: 1px solid var(--accent-tint) !important;
+  color: var(--accent-primary) !important;
+  border-radius: var(--radius-sm) !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    transform 0.18s !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-params .command-param-hints button:hover,
+:root[data-theme='default-dark'] .command-editor-dialog-params .command-param-hints button:hover,
+:root[data-theme='default'] .command-editor-dialog-params .command-param-hints button:hover {
+  background: var(--accent-tint) !important;
+  border-color: var(--accent-focus-ring) !important;
+}
+
+/* Dialog actions wrapper */
+:root:not([data-theme]) .command-dialog-actions,
+:root[data-theme='default-dark'] .command-dialog-actions,
+:root[data-theme='default'] .command-dialog-actions {
+  background: #1b1b1b !important;
+  margin: 20px -24px -20px -24px !important;
+  padding: 16px 24px !important;
+  border-top: 1px solid var(--border-light) !important;
+}
+
+/* Cancel / Flat Button */
+:root:not([data-theme]) .command-dialog-actions .flat-button,
+:root[data-theme='default-dark'] .command-dialog-actions .flat-button,
+:root[data-theme='default'] .command-dialog-actions .flat-button {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 10px !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition:
+    background 0.18s,
+    transform 0.18s !important;
+}
+
+:root:not([data-theme]) .command-dialog-actions .flat-button:hover,
+:root[data-theme='default-dark'] .command-dialog-actions .flat-button:hover,
+:root[data-theme='default'] .command-dialog-actions .flat-button:hover {
+  background: var(--bg-active) !important;
+}
+
+/* Save / Primary Button */
+:root:not([data-theme]) .command-dialog-actions .primary-button,
+:root[data-theme='default-dark'] .command-dialog-actions .primary-button,
+:root[data-theme='default'] .command-dialog-actions .primary-button {
+  background: var(--button-primary-bg) !important;
+  color: var(--button-primary-text) !important;
+  border: 1px solid var(--button-primary-border) !important;
+  border-radius: 10px !important;
+  height: 40px !important;
+  padding: 0 20px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition:
+    background 0.18s,
+    transform 0.18s !important;
+}
+
+:root:not([data-theme]) .command-dialog-actions .primary-button:hover,
+:root[data-theme='default-dark'] .command-dialog-actions .primary-button:hover,
+:root[data-theme='default'] .command-dialog-actions .primary-button:hover {
+  background: var(--button-primary-hover) !important;
+}
+
+:root:not([data-theme]) .command-dialog-actions .primary-button:active,
+:root[data-theme='default-dark'] .command-dialog-actions .primary-button:active,
+:root[data-theme='default'] .command-dialog-actions .primary-button:active {
+  background: var(--button-primary-hover) !important;
+  opacity: 0.9 !important;
+}
+
+/* Option checkbox row alignment & decoration */
+:root:not([data-theme]) .command-editor-checkbox-row,
+:root[data-theme='default-dark'] .command-editor-checkbox-row,
+:root[data-theme='default'] .command-editor-checkbox-row {
+  margin-top: 4px !important;
+  font-size: 13px !important;
+  color: var(--text-main) !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-params > span,
+:root[data-theme='default-dark'] .command-editor-dialog-params > span,
+:root[data-theme='default'] .command-editor-dialog-params > span,
+:root:not([data-theme]) .command-editor-checkbox-row span,
+:root[data-theme='default-dark'] .command-editor-checkbox-row span,
+:root[data-theme='default'] .command-editor-checkbox-row span {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+:root:not([data-theme]) .command-param-hints-row > small,
+:root[data-theme='default-dark'] .command-param-hints-row > small,
+:root[data-theme='default'] .command-param-hints-row > small {
+  font-size: 12px !important;
+}
+
+:root:not([data-theme]) .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default-dark'] .command-editor-dialog-params .command-param-hints button,
+:root[data-theme='default'] .command-editor-dialog-params .command-param-hints button,
+:root:not([data-theme]) .command-preview span,
+:root[data-theme='default-dark'] .command-preview span,
+:root[data-theme='default'] .command-preview span,
+:root:not([data-theme]) .command-preview code,
+:root[data-theme='default-dark'] .command-preview code,
+:root[data-theme='default'] .command-preview code {
+  font-size: 13px !important;
+}
+
+/* Detected parameters preview box */
+:root:not([data-theme]) .command-preview,
+:root[data-theme='default-dark'] .command-preview,
+:root[data-theme='default'] .command-preview {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  margin-top: 4px !important;
+}
+
+:root:not([data-theme]) .command-preview code,
+:root[data-theme='default-dark'] .command-preview code,
+:root[data-theme='default'] .command-preview code {
+  color: var(--accent-primary) !important;
+  font-family: var(--font-mono) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 0 0 0 !important;
+  display: block !important;
+}
+
+:root:not([data-theme]) .command-preview code.is-empty,
+:root[data-theme='default-dark'] .command-preview code.is-empty,
+:root[data-theme='default'] .command-preview code.is-empty {
+  color: var(--text-muted) !important;
+  opacity: 0.7 !important;
+}
+
+/* Placeholder text color inside command dialog inputs */
+:root:not([data-theme]) .command-editor-dialog-form input::placeholder,
+:root[data-theme='default-dark'] .command-editor-dialog-form input::placeholder,
+:root[data-theme='default'] .command-editor-dialog-form input::placeholder,
+:root:not([data-theme]) .command-editor-dialog-form textarea::placeholder,
+:root[data-theme='default-dark'] .command-editor-dialog-form textarea::placeholder,
+:root[data-theme='default'] .command-editor-dialog-form textarea::placeholder,
+:root:not([data-theme]) .command-form-standalone-page input::placeholder,
+:root[data-theme='default-dark'] .command-form-standalone-page input::placeholder,
+:root[data-theme='default'] .command-form-standalone-page input::placeholder,
+:root:not([data-theme]) .command-form-standalone-page textarea::placeholder,
+:root[data-theme='default-dark'] .command-form-standalone-page textarea::placeholder,
+:root[data-theme='default'] .command-form-standalone-page textarea::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.6 !important;
+}
+
+/* Connection Modal Overrides to match Command Dialog colors & border-radius */
+:root:not([data-theme]) .modal-card.ssh-modal,
+:root[data-theme='default-dark'] .modal-card.ssh-modal,
+:root[data-theme='default'] .modal-card.ssh-modal {
+  width: min(900px, 88vw) !important;
+  min-height: 560px !important;
+  background: var(--bg-sidebar) !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: var(--modal-card-shadow) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal.standalone,
+:root[data-theme='default-dark'] .modal-card.ssh-modal.standalone,
+:root[data-theme='default'] .modal-card.ssh-modal.standalone {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']),
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']),
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']),
+:root:not([data-theme]) .modal-card.ssh-modal select,
+:root[data-theme='default-dark'] .modal-card.ssh-modal select,
+:root[data-theme='default'] .modal-card.ssh-modal select,
+:root:not([data-theme]) .modal-card.ssh-modal textarea,
+:root[data-theme='default-dark'] .modal-card.ssh-modal textarea,
+:root[data-theme='default'] .modal-card.ssh-modal textarea {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 4px !important;
+  color: var(--text-main) !important;
+  transition:
+    border-color 0.18s,
+    box-shadow 0.18s !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root:not([data-theme]) .modal-card.ssh-modal select:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal select:hover,
+:root[data-theme='default'] .modal-card.ssh-modal select:hover,
+:root:not([data-theme]) .modal-card.ssh-modal textarea:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal textarea:hover,
+:root[data-theme='default'] .modal-card.ssh-modal textarea:hover {
+  border-color: var(--border-dark) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root:not([data-theme]) .modal-card.ssh-modal select:focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal select:focus,
+:root[data-theme='default'] .modal-card.ssh-modal select:focus,
+:root:not([data-theme]) .modal-card.ssh-modal textarea:focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal textarea:focus,
+:root[data-theme='default'] .modal-card.ssh-modal textarea:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  background: var(--input-bg) !important;
+  outline: none !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .flat-button,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .flat-button,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .flat-button {
+  background: var(--bg-hover) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 10px !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .flat-button:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .flat-button:hover,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .flat-button:hover {
+  background: var(--bg-active) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .primary-button,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .primary-button,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .primary-button {
+  background: var(--button-primary-bg) !important;
+  color: var(--button-primary-text) !important;
+  border: 1px solid var(--button-primary-border) !important;
+  border-radius: 10px !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions .primary-button:hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions .primary-button:hover,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions .primary-button:hover {
+  background: var(--button-primary-hover) !important;
+}
+
+:root:not([data-theme]) .modal-card.ssh-modal .form-actions.ssh-actions,
+:root[data-theme='default-dark'] .modal-card.ssh-modal .form-actions.ssh-actions,
+:root[data-theme='default'] .modal-card.ssh-modal .form-actions.ssh-actions {
+  background: #1b1b1b !important;
+  margin: 20px -24px -20px -24px !important;
+  padding: 16px 24px !important;
+  border-top: 1px solid var(--border-light) !important;
+}
+
+/* Settings standalone and tab pages backgrounds override */
+:root:not([data-theme]) .settings-modal,
+:root[data-theme='default-dark'] .settings-modal,
+:root[data-theme='default'] .settings-modal,
+:root:not([data-theme]) .settings-modal .connection-manager-layout,
+:root[data-theme='default-dark'] .settings-modal .connection-manager-layout,
+:root[data-theme='default'] .settings-modal .connection-manager-layout {
+  background: #1b1b1b !important;
+  background-color: #1b1b1b !important;
+}
+
+/* Connection & Command managers search box background override */
+:root:not([data-theme]) .connection-manager-search,
+:root[data-theme='default-dark'] .connection-manager-search,
+:root[data-theme='default'] .connection-manager-search {
+  background: #1e1e1e !important;
+}
+
+/* Connection & Command managers footer background override */
+:root:not([data-theme]) .connection-manager-footer,
+:root[data-theme='default-dark'] .connection-manager-footer,
+:root[data-theme='default'] .connection-manager-footer {
+  background-color: #151515 !important;
+}
+
+/* Connection & Command managers search input border and outline reset override */
+:root:not([data-theme]) .connection-manager-search input,
+:root[data-theme='default-dark'] .connection-manager-search input,
+:root[data-theme='default'] .connection-manager-search input,
+:root:not([data-theme]) .connection-manager-search input:focus,
+:root[data-theme='default-dark'] .connection-manager-search input:focus,
+:root[data-theme='default'] .connection-manager-search input:focus {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }

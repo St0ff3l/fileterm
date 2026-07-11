@@ -14,22 +14,11 @@ import type {
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import type { ProfileRepository } from '@fileterm/storage'
 
-const legacyDemoProfileIds = new Set([
-  'profile-ssh-prod',
-  'profile-ssh-nas',
-  'profile-ftp-archive'
-])
+const legacyDemoProfileIds = new Set(['profile-ssh-prod', 'profile-ssh-nas', 'profile-ftp-archive'])
 
-const legacyDemoCommandFolderIds = new Set([
-  'cmd-folder-default',
-  'cmd-folder-deploy'
-])
+const legacyDemoCommandFolderIds = new Set(['cmd-folder-default', 'cmd-folder-deploy'])
 
-const legacyDemoCommandTemplateIds = new Set([
-  'cmd-docker-ps',
-  'cmd-tail-log',
-  'cmd-restart-service'
-])
+const legacyDemoCommandTemplateIds = new Set(['cmd-docker-ps', 'cmd-tail-log', 'cmd-restart-service'])
 
 type ProfileSecretField = 'password' | 'privateKeyPath' | 'passphrase'
 
@@ -81,8 +70,12 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async create(input: CreateProfileInput): Promise<ConnectionProfile> {
-    const profiles = await this.readProfiles()
+    const [profiles, folders] = await Promise.all([this.readProfiles(), this.readFolders()])
+    const matchingFolder = folders.find((f) => f.name === input.group)
+    const parentId = matchingFolder ? matchingFolder.id : undefined
+
     const profile = toProfile(randomUUID(), input)
+    profile.parentId = parentId
 
     const nextProfiles = [profile, ...profiles]
     await this.writeProfiles(nextProfiles)
@@ -90,12 +83,17 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async update(id: string, input: CreateProfileInput): Promise<ConnectionProfile> {
-    const profiles = await this.readProfiles()
+    const [profiles, folders] = await Promise.all([this.readProfiles(), this.readFolders()])
     const previous = profiles.find((item) => item.id === id)
     if (!previous) {
       throw new Error('Profile not found')
     }
+    const matchingFolder = folders.find((f) => f.name === input.group)
+    const parentId = matchingFolder ? matchingFolder.id : undefined
+
     const profile = preserveProfileMetadata(toProfile(id, input), previous)
+    profile.parentId = parentId
+
     const nextProfiles = profiles.map((item) => (item.id === id ? profile : item))
     await this.writeProfiles(nextProfiles)
     return profile
@@ -138,9 +136,7 @@ export class FileProfileRepository implements ProfileRepository {
   async touchProfile(id: string): Promise<void> {
     const profiles = await this.readProfiles()
     const now = Date.now()
-    const nextProfiles = profiles.map((profile) =>
-      profile.id === id ? { ...profile, lastUsedAt: now } : profile
-    )
+    const nextProfiles = profiles.map((profile) => (profile.id === id ? { ...profile, lastUsedAt: now } : profile))
     await this.writeProfiles(nextProfiles)
   }
 
@@ -163,7 +159,7 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async updateFolder(id: string, updates: Partial<ConnectionFolder>): Promise<ConnectionFolder> {
-    const folders = await this.readFolders()
+    const [folders, profiles] = await Promise.all([this.readFolders(), this.readProfiles()])
     let updatedFolder: ConnectionFolder | undefined
     const nextFolders = folders.map((f) => {
       if (f.id === id) {
@@ -173,39 +169,51 @@ export class FileProfileRepository implements ProfileRepository {
       return f
     })
     if (!updatedFolder) throw new Error('Folder not found')
-    await this.writeFolders(nextFolders)
+
+    const nextProfiles =
+      updates.name !== undefined
+        ? profiles.map((p) => (p.parentId === id ? { ...p, group: updates.name! } : p))
+        : profiles
+
+    await Promise.all([
+      this.writeFolders(nextFolders),
+      updates.name !== undefined ? this.writeProfiles(nextProfiles) : Promise.resolve()
+    ])
     return updatedFolder
   }
 
   async deleteFolder(id: string): Promise<void> {
-    const [profiles, folders] = await Promise.all([
-      this.readProfiles(),
-      this.readFolders()
-    ])
+    const [profiles, folders] = await Promise.all([this.readProfiles(), this.readFolders()])
     const folder = folders.find((item) => item.id === id)
     if (!folder) {
       return
     }
     const nextParentId = folder.parentId
+    const remainingFolders = folders.filter((item) => item.id !== id)
+    const nextParentFolder = nextParentId ? remainingFolders.find((f) => f.id === nextParentId) : undefined
+    const groupName = nextParentFolder ? nextParentFolder.name : '默认'
+
     await Promise.all([
-      this.writeProfiles(profiles.map((profile) => (
-        profile.parentId === id ? { ...profile, parentId: nextParentId } : profile
-      ))),
-      this.writeFolders(folders
-        .filter((item) => item.id !== id)
-        .map((item) => (
-          item.parentId === id ? { ...item, parentId: nextParentId } : item
-        )))
+      this.writeProfiles(
+        profiles.map((profile) =>
+          profile.parentId === id ? { ...profile, parentId: nextParentId, group: groupName } : profile
+        )
+      ),
+      this.writeFolders(
+        remainingFolders.map((item) => (item.parentId === id ? { ...item, parentId: nextParentId } : item))
+      )
     ])
   }
 
   async updateOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
-    const profiles = await this.readProfiles()
+    const [profiles, folders] = await Promise.all([this.readProfiles(), this.readFolders()])
     let found = false
     const nextProfiles = profiles.map((p) => {
       if (p.id === id) {
         found = true
-        return { ...p, parentId: newParentId, order: newOrder }
+        const matchingFolder = newParentId ? folders.find((f) => f.id === newParentId) : undefined
+        const group = matchingFolder ? matchingFolder.name : '默认'
+        return { ...p, parentId: newParentId, order: newOrder, group }
       }
       return p
     })
@@ -214,7 +222,6 @@ export class FileProfileRepository implements ProfileRepository {
       return
     }
 
-    const folders = await this.readFolders()
     const nextFolders = folders.map((f) => {
       if (f.id === id) {
         return { ...f, parentId: newParentId, order: newOrder }
@@ -258,24 +265,21 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async deleteCommandFolder(id: string): Promise<void> {
-    const [folders, commands] = await Promise.all([
-      this.readCommandFolders(),
-      this.readCommandTemplates()
-    ])
+    const [folders, commands] = await Promise.all([this.readCommandFolders(), this.readCommandTemplates()])
     const folder = folders.find((item) => item.id === id)
     if (!folder) {
       return
     }
     const nextParentId = folder.parentId
     await Promise.all([
-      this.writeCommandFolders(folders
-        .filter((item) => item.id !== id)
-        .map((item) => (
-          item.parentId === id ? { ...item, parentId: nextParentId } : item
-        ))),
-      this.writeCommandTemplates(commands.map((item) => (
-        item.parentId === id ? { ...item, parentId: nextParentId } : item
-      )))
+      this.writeCommandFolders(
+        folders
+          .filter((item) => item.id !== id)
+          .map((item) => (item.parentId === id ? { ...item, parentId: nextParentId } : item))
+      ),
+      this.writeCommandTemplates(
+        commands.map((item) => (item.parentId === id ? { ...item, parentId: nextParentId } : item))
+      )
     ])
   }
 
@@ -310,21 +314,18 @@ export class FileProfileRepository implements ProfileRepository {
   }
 
   async updateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<void> {
-    const [folders, commands] = await Promise.all([
-      this.readCommandFolders(),
-      this.readCommandTemplates()
-    ])
+    const [folders, commands] = await Promise.all([this.readCommandFolders(), this.readCommandTemplates()])
     const folderFound = folders.some((item) => item.id === id)
     if (folderFound) {
-      await this.writeCommandFolders(folders.map((item) => (
-        item.id === id ? { ...item, parentId: newParentId, order: newOrder } : item
-      )))
+      await this.writeCommandFolders(
+        folders.map((item) => (item.id === id ? { ...item, parentId: newParentId, order: newOrder } : item))
+      )
       return
     }
 
-    await this.writeCommandTemplates(commands.map((item) => (
-      item.id === id ? { ...item, parentId: newParentId, order: newOrder } : item
-    )))
+    await this.writeCommandTemplates(
+      commands.map((item) => (item.id === id ? { ...item, parentId: newParentId, order: newOrder } : item))
+    )
   }
 
   async getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]> {
@@ -411,17 +412,17 @@ export class FileProfileRepository implements ProfileRepository {
     const nextCommandFolders = commandFolders.filter((folder) => !legacyDemoCommandFolderIds.has(folder.id))
     const nextCommandTemplates = commandTemplates
       .filter((command) => !legacyDemoCommandTemplateIds.has(command.id))
-      .map((command) => (
+      .map((command) =>
         command.parentId && legacyDemoCommandFolderIds.has(command.parentId)
           ? { ...command, parentId: undefined }
           : command
-      ))
+      )
 
     await Promise.all([
       nextProfiles.length === profiles.length ? undefined : this.writeProfiles(nextProfiles),
       nextCommandFolders.length === commandFolders.length ? undefined : this.writeCommandFolders(nextCommandFolders),
-      nextCommandTemplates.length === commandTemplates.length
-        && nextCommandTemplates.every((command, index) => command.parentId === commandTemplates[index]?.parentId)
+      nextCommandTemplates.length === commandTemplates.length &&
+      nextCommandTemplates.every((command, index) => command.parentId === commandTemplates[index]?.parentId)
         ? undefined
         : this.writeCommandTemplates(nextCommandTemplates)
     ])
@@ -456,7 +457,68 @@ export class FileProfileRepository implements ProfileRepository {
     const content = await readFile(this.filePath, 'utf8')
     const profiles = JSON.parse(content) as ConnectionProfile[]
     const secrets = await this.readProfileSecrets()
-    return profiles.map((profile) => mergeProfileSecrets(profile, secrets.profiles[profile.id]))
+    const mergedProfiles = profiles.map((profile) => mergeProfileSecrets(profile, secrets.profiles[profile.id]))
+
+    let folders: ConnectionFolder[] = []
+    try {
+      const foldersContent = await readFile(this.foldersPath, 'utf8')
+      folders = JSON.parse(foldersContent) as ConnectionFolder[]
+    } catch {
+      // Ignored
+    }
+
+    let modified = false
+    const healedProfiles = mergedProfiles.map((p) => {
+      let profileChanged = false
+      let parentId = p.parentId
+      let group = p.group
+
+      if (group && group !== '默认') {
+        const matchingFolder = folders.find((f) => f.name === group)
+        if (matchingFolder) {
+          if (parentId !== matchingFolder.id) {
+            parentId = matchingFolder.id
+            profileChanged = true
+          }
+        } else {
+          if (parentId !== undefined || group !== '默认') {
+            parentId = undefined
+            group = '默认'
+            profileChanged = true
+          }
+        }
+      } else {
+        if (parentId !== undefined) {
+          const matchingFolder = folders.find((f) => f.id === parentId)
+          if (matchingFolder) {
+            if (group !== matchingFolder.name) {
+              group = matchingFolder.name
+              profileChanged = true
+            }
+          } else {
+            parentId = undefined
+            group = '默认'
+            profileChanged = true
+          }
+        }
+      }
+
+      if (profileChanged) {
+        modified = true
+        return {
+          ...p,
+          parentId,
+          group
+        }
+      }
+      return p
+    })
+
+    if (modified) {
+      await this.writeProfiles(healedProfiles)
+    }
+
+    return healedProfiles
   }
 
   private async writeProfiles(profiles: ConnectionProfile[]) {
@@ -540,10 +602,7 @@ function preserveProfileMetadata(profile: ConnectionProfile, previous: Connectio
 }
 
 function hasInlineProfileSecret(profile: ConnectionProfile) {
-  return Boolean(
-    profile.password
-      || (profile.type === 'ssh' && (profile.privateKeyPath || profile.passphrase))
-  )
+  return Boolean(profile.password || (profile.type === 'ssh' && (profile.privateKeyPath || profile.passphrase)))
 }
 
 function splitProfileSecrets(profiles: ConnectionProfile[]) {
@@ -571,9 +630,7 @@ function extractProfileSecrets(profile: ConnectionProfile): Partial<Record<Profi
 }
 
 function getProfileSecretFields(profile: ConnectionProfile): ProfileSecretField[] {
-  return profile.type === 'ssh'
-    ? ['password', 'privateKeyPath', 'passphrase']
-    : ['password']
+  return profile.type === 'ssh' ? ['password', 'privateKeyPath', 'passphrase'] : ['password']
 }
 
 function getProfileSecretValue(profile: ConnectionProfile, field: ProfileSecretField) {
@@ -688,7 +745,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         username: input.username,
         note: input.note,
         password: input.password,
-        secure: input.secure ?? false,
+        secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
+        securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
         group: input.group,
         remotePath: input.remotePath
       }

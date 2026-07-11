@@ -84,24 +84,28 @@ export function ContextMenu({
       onClick={(event) => event.stopPropagation()}
       style={{ left: resolvedPosition.x, top: resolvedPosition.y } as CSSProperties}
     >
-      {items.map((item, index) => item.separator ? (
-        <span key={`sep-${index}`} className="context-menu-separator" />
-      ) : (
-        <button
-          key={`${item.label}-${index}`}
-          className={item.danger ? 'is-danger' : ''}
-          disabled={item.disabled}
-          onClick={() => {
-            item.action?.()
-            onClose()
-          }}
-          type="button"
-        >
-          <span>{item.label}</span>
-          {item.shortcut ? <span className="context-menu-shortcut">{item.shortcut}</span> : null}
-        </button>
-      ))}
-      <button className="context-close" type="button" onClick={onClose}>{t.closeTab}</button>
+      {items.map((item, index) =>
+        item.separator ? (
+          <span key={`sep-${index}`} className="context-menu-separator" />
+        ) : (
+          <button
+            key={`${item.label}-${index}`}
+            className={item.danger ? 'is-danger' : ''}
+            disabled={item.disabled}
+            onClick={() => {
+              item.action?.()
+              onClose()
+            }}
+            type="button"
+          >
+            <span>{item.label}</span>
+            {item.shortcut ? <span className="context-menu-shortcut">{item.shortcut}</span> : null}
+          </button>
+        )
+      )}
+      <button className="context-close" type="button" onClick={onClose}>
+        {t.closeTab}
+      </button>
     </div>
   )
 

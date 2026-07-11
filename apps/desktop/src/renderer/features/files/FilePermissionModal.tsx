@@ -183,7 +183,9 @@ export function FilePermissionModal({
         </div>
 
         <div className="form-actions file-permission-dialog__actions">
-          <button className="flat-button compact" onClick={onClose} type="button">{t.cancel}</button>
+          <button className="flat-button compact" onClick={onClose} type="button">
+            {t.cancel}
+          </button>
           <button
             className="primary-button compact"
             disabled={!isModeValid}
@@ -220,9 +222,21 @@ function PermissionRow({
   return (
     <div className="file-permission-dialog__matrix-row">
       <div className="file-permission-dialog__matrix-label">{label}</div>
-      <PermissionCell checked={value.read} label={`${label} ${t.permissionRead}`} onChange={(checked) => onChange({ ...value, read: checked })} />
-      <PermissionCell checked={value.write} label={`${label} ${t.permissionWrite}`} onChange={(checked) => onChange({ ...value, write: checked })} />
-      <PermissionCell checked={value.execute} label={`${label} ${t.permissionExecute}`} onChange={(checked) => onChange({ ...value, execute: checked })} />
+      <PermissionCell
+        checked={value.read}
+        label={`${label} ${t.permissionRead}`}
+        onChange={(checked) => onChange({ ...value, read: checked })}
+      />
+      <PermissionCell
+        checked={value.write}
+        label={`${label} ${t.permissionWrite}`}
+        onChange={(checked) => onChange({ ...value, write: checked })}
+      />
+      <PermissionCell
+        checked={value.execute}
+        label={`${label} ${t.permissionExecute}`}
+        onChange={(checked) => onChange({ ...value, execute: checked })}
+      />
     </div>
   )
 }
@@ -238,7 +252,12 @@ function PermissionCell({
 }) {
   return (
     <label className="file-permission-dialog__matrix-cell">
-      <input aria-label={label} checked={checked} type="checkbox" onChange={(event) => onChange(event.target.checked)} />
+      <input
+        aria-label={label}
+        checked={checked}
+        type="checkbox"
+        onChange={(event) => onChange(event.target.checked)}
+      />
       <span />
     </label>
   )
@@ -312,11 +331,13 @@ function parsePermission(permission?: string): PermissionMatrix {
 
 function matrixToMode(matrix: PermissionMatrix) {
   const rows = [matrix.owner, matrix.group, matrix.other]
-  return rows.map((row) => {
-    let value = 0
-    if (row.read) value += 4
-    if (row.write) value += 2
-    if (row.execute) value += 1
-    return String(value)
-  }).join('')
+  return rows
+    .map((row) => {
+      let value = 0
+      if (row.read) value += 4
+      if (row.write) value += 2
+      if (row.execute) value += 1
+      return String(value)
+    })
+    .join('')
 }

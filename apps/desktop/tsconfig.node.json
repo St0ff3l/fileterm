@@ -5,16 +5,8 @@
     "rootDir": "src",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": [
-      "ES2022",
-      "DOM"
-    ],
-    "types": [
-      "node"
-    ]
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
   },
-  "include": [
-    "src/main",
-    "src/preload"
-  ]
+  "include": ["src/main", "src/preload"]
 }

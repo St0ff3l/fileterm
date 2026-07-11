@@ -8,16 +8,16 @@
 
 ```txt
 remote shell integration
-  -> OSC 7 cwd extraction
-    -> controller cwd changed callback
-      -> workspace runtime follow policy
+  -> OSC cwd/user extraction
+    -> controller shell state callbacks
+      -> workspace runtime one-way follow policy
         -> remote file snapshot refresh
           -> renderer display and toggle
 ```
 
-- `packages/core`：区分 `shellCwd`、`remotePath`、`followShellCwd`。
-- `ssh-session-controller`：探测远端登录 shell，安装可降级的 cwd integration，并解析 OSC 7。
-- `workspace-session-runtime`：按 tab 去重 cwd，串行执行目录读取，决定是否跟随。
+- `packages/core`：区分 `shellCwd`、`shellUser`、`remotePath`、`followShellCwd`。
+- `ssh-session-controller`：探测远端登录 shell，安装可降级的 shell state integration，并解析 OSC cwd/user。
+- `workspace-session-runtime`：按 tab 去重 cwd/user，串行执行目录读取和文件身份切换，决定是否跟随。
 - `renderer`：只展示状态和切换跟随，不解析终端输出。
 
 ## 第一阶段范围
@@ -27,6 +27,7 @@ remote shell integration
 - SSH tab 默认开启跟随。
 - 手动浏览文件目录后保持跟随开关开启，但相同 cwd 的重复 prompt 不抢回文件面板；下一次真实 cwd 变化重新跟随。
 - cwd 相同则不重复刷新远程目录。
+- 终端实际切换用户时，文件区单向跟随对应身份；文件区手动切换身份不向终端写命令，也不改变当前 shell。
 
 ## 暂不处理
 
@@ -41,6 +42,8 @@ remote shell integration
 - `pushd/popd`、alias/function 内切目录可被识别。
 - 手动浏览文件区后，同 cwd prompt 不回抢；再次切换 shell cwd 后恢复跟随。
 - 关闭跟随后 shell cwd 仍更新，但文件区不跳转；重新开启时同步到最新 cwd。
+- `sudo -i` 进入 root 后文件区切到 root 身份并重新跟随 `/root`；`exit` 回到登录用户后文件区回到普通身份。
+- 文件区手动切换 user/root 不改变终端用户，且相同 shell 用户的重复 prompt 不覆盖手动选择。
 - `npm run typecheck -w @fileterm/desktop` 通过。
 
 ## 进度记录
@@ -48,4 +51,5 @@ remote shell integration
 - 2026-06-21：完成 core 状态、OSC 7 解析、shell 策略注入、runtime 跟随、IPC 开关和 renderer 入口；构建与本地 shell 语法检查通过，待连接真实远端主机回归。
 - 2026-06-21：cwd 上报改用 `pwd -P` 物理路径并限制异常长的 OSC 7 payload，避免 `/bin/X11 -> .` 这类循环符号链接让逻辑 `$PWD` 无限增长并触发重复目录读取。
 - 2026-06-30：文件面板 root 视角与交互 shell 提权解耦；注入探测 1.5 秒未完成时释放暂存输出，确保探测失败不会阻塞终端输入输出。
-- 2026-07-01：断线与重连链路统一清理缓存的 sudo/root 文件态；session 断开后文件访问模式回退到 `user`，重连不再预恢复 root，只有用户再次手动切到 root 视角时才重新走授权流程。
+- 2026-07-01：断线与重连链路统一清理缓存的 sudo/root 文件态；session 断开后文件访问模式回退到 `user`，重连不预恢复 root，后续由文件区手动切换或新的终端用户变化重新走授权流程。
+- 2026-07-08：接通 prompt 中已有的 `RemoteUser` 结构化上报。终端用户变化会单向同步文件身份，并在身份切换后重新核对 cwd；文件区手动身份切换仍与终端解耦。

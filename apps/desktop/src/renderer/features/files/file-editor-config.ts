@@ -30,9 +30,7 @@ export function findEncodingOption(value: string) {
   return EDITOR_ENCODINGS.find((option) => option.value === value) ?? EDITOR_ENCODINGS[0]
 }
 
-export function sortEditorLanguages(
-  languages: Array<{ id: string; aliases?: string[] }>
-): EditorLanguageOption[] {
+export function sortEditorLanguages(languages: Array<{ id: string; aliases?: string[] }>): EditorLanguageOption[] {
   return languages
     .map((language) => ({
       id: language.id,

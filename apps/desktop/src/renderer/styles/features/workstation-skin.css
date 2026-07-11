@@ -1,7 +1,7 @@
 html,
 body,
 #root {
-  font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
 }
 
 button:focus-visible,
@@ -30,7 +30,9 @@ textarea:focus-visible,
   min-width: 0;
   z-index: 10;
   position: relative;
-  transition: width 0.24s linear, min-width 0.24s linear;
+  transition:
+    width 0.24s linear,
+    min-width 0.24s linear;
 }
 
 .fs-shell.is-resizing-sidebar,
@@ -330,7 +332,7 @@ textarea:focus-visible,
   width: 40px;
   max-width: 40px;
   color: var(--text-main);
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 9px;
   font-weight: 600;
   line-height: 1;
@@ -341,7 +343,7 @@ textarea:focus-visible,
 
 .collapsed-resource-label {
   color: var(--text-muted);
-  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   font-size: 10px;
   line-height: 1;
 }
@@ -386,7 +388,7 @@ textarea:focus-visible,
 .address-row strong {
   min-width: 0;
   overflow: hidden;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -488,7 +490,7 @@ textarea:focus-visible,
 }
 
 .memory-meter-group .meter-track::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 0;
@@ -552,7 +554,7 @@ textarea:focus-visible,
 
 .mini-tabs {
   display: grid;
-  grid-template-columns: minmax(52px, 0.9fr) minmax(38px, 0.48fr) minmax(0, 1fr);
+  grid-template-columns: 64px 58px minmax(0, 1fr);
   margin: 6px -12px 0;
   border-radius: 0;
   font-size: 11px;
@@ -564,7 +566,9 @@ textarea:focus-visible,
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
 }
 
 .process-table {
@@ -577,29 +581,28 @@ textarea:focus-visible,
 }
 
 .process-row {
-  grid-template-columns: minmax(52px, 0.9fr) minmax(38px, 0.48fr) minmax(0, 1fr);
+  grid-template-columns: 64px 58px minmax(0, 1fr);
   min-height: 24px;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
 }
 
 .process-row span {
-  padding: 2px 8px;
-}
-
-.process-row span:first-child {
-  text-align: right;
+  padding: 2px 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .process-row span:nth-child(2) {
   font-weight: 700;
-  text-align: center;
 }
 
 .network-panel {
-  height: 30px;
-  margin-top: 4px;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  height: 36px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
 }
 
@@ -655,9 +658,9 @@ textarea:focus-visible,
 
 .disk-head,
 .disk-row {
-  grid-template-columns: 1.25fr 1fr;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   height: 24px;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
 }
 
@@ -727,7 +730,7 @@ textarea:focus-visible,
   display: flex;
   align-items: center;
   margin-left: 0;
-  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   font-size: 12px;
   font-weight: 400;
 }
@@ -760,15 +763,15 @@ textarea:focus-visible,
   font-size: 11px;
 }
 
-.file-toolbar>span {
+.file-toolbar > span {
   min-width: 0;
   overflow: hidden;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.file-toolbar>div {
+.file-toolbar > div {
   gap: 5px;
 }
 
@@ -796,7 +799,7 @@ textarea:focus-visible,
   left: 50%;
   transform: translateX(-50%);
   width: 1px;
-  content: "";
+  content: '';
 }
 
 .pane-title {
@@ -816,12 +819,19 @@ textarea:focus-visible,
 }
 
 .fs-file-table {
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
 }
 
 .fs-file-table th,
 .fs-file-table td {
+  height: 24px;
+  padding: 0 10px;
+}
+
+/* compact (local pane) must explicitly override session.css's higher-specificity compact rule */
+.fs-file-table.compact th,
+.fs-file-table.compact td {
   height: 24px;
   padding: 0 10px;
 }
@@ -952,7 +962,7 @@ textarea:focus-visible,
 .system-description-row strong {
   min-width: 0;
   overflow: hidden;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -966,7 +976,7 @@ textarea:focus-visible,
 .system-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
 }
 
@@ -1001,16 +1011,6 @@ textarea:focus-visible,
   border-radius: 8px;
 }
 
-* {
-  scrollbar-color: var(--border, var(--border-light)) transparent;
-  scrollbar-width: thin;
-}
-
-.scrollbar-hover,
-.scrollbar-scroll {
-  scrollbar-color: transparent transparent;
-}
-
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1020,14 +1020,7 @@ textarea:focus-visible,
   border-radius: 999px;
 }
 
-.group:hover .scrollbar-hover,
-.scrollbar-scroll:hover,
-.scrollbar-scroll.is-scrolling {
-  scrollbar-color: var(--border, var(--border-light)) transparent;
-}
-
-.local-pane::-webkit-scrollbar:horizontal,
-.remote-pane::-webkit-scrollbar:horizontal,
+.file-table-shell::-webkit-scrollbar:horizontal,
 .pane-scroll::-webkit-scrollbar:horizontal {
   height: 4px;
 }
@@ -1172,4 +1165,30 @@ textarea:focus-visible,
 .has-standalone-titlebar .command-editor-page.standalone > .modal-header,
 .has-standalone-titlebar .command-manager-modal.standalone > .modal-header {
   display: none;
+}
+
+.fs-file-table th {
+  position: relative;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  background: transparent;
+}
+
+.col-resizer:hover::after,
+.col-resizer:active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 2px;
+  width: 2px;
+  background-color: var(--accent-primary, #7eaef7);
 }

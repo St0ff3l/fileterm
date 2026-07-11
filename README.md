@@ -14,6 +14,13 @@
   </p>
 
   <p>
+    <strong>A modern remote workspace desktop workbench built for developers and ops teams.</strong>
+  </p>
+  <p>
+    SSH terminal, SFTP files, FTP files, multi-tab workspace, and transfer center all in one focused desktop client.
+  </p>
+
+  <p>
     <kbd><a href="#中文">中文</a></kbd>
     <kbd><a href="#english">English</a></kbd>
   </p>
@@ -31,10 +38,10 @@
 
 ## 中文
 
-## 技术栈
+### 技术栈
 
-| Desktop | Renderer | Language | Terminal | Editor | Protocols | Tooling |
-| --- | --- | --- | --- | --- | --- | --- |
+| Desktop                                                                                                                      | Renderer                                                                                                                                                                                                                            | Language                                                                                                                          | Terminal                                                                                    | Editor                                                                                                                                        | Protocols                                                                                                                                                                          | Tooling                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /> | <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React" /> <img src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /> | <img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /> | <img src="https://img.shields.io/badge/xterm.js-111827?style=flat-square" alt="xterm.js" /> | <img src="https://img.shields.io/badge/Monaco%20Editor-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="Monaco Editor" /> | <img src="https://img.shields.io/badge/ssh2-0F766E?style=flat-square" alt="ssh2" /> <img src="https://img.shields.io/badge/basic--ftp-2563EB?style=flat-square" alt="basic-ftp" /> | <img src="https://img.shields.io/badge/npm%20workspaces-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm workspaces" /> |
 
 ```txt
@@ -45,7 +52,7 @@ protocols      ███████████████░░░░░  SSH
 theme system   ████████████████░░░░  tokens -> vars -> skins -> terminal colors
 ```
 
-## 为什么做 FileTerm
+### 为什么做 FileTerm
 
 远程工作每天都在发生，但工具常常被割裂成终端、文件管理器、传输窗口和连接配置。FileTerm 想做的是一个真正面向日常工作的桌面 remote workspace：
 
@@ -57,32 +64,37 @@ theme system   ████████████████░░░░  tok
 
 第一版目标不是“支持所有协议”，而是把 `SSH / SFTP / FTP` 这条最高频链路做稳、做顺、做漂亮。
 
-## 核心能力
+### 核心能力
 
-| 能力 | 状态 | 说明 |
-| --- | --- | --- |
-| SSH profile 管理 | 已完成 | 新增、编辑、删除、文件夹分组、JSON 文件持久化 |
-| FTP profile 管理 | 已完成 | 独立于 SSH 的连接模型 |
-| SSH shell | 已完成 | xterm.js 渲染、输入输出、自适应 resize、搜索、剪贴板互通、雾透悬浮命令输入条 |
-| 文件编辑器 | 已完成 | Monaco Editor 提供双栏文件树/编辑区、语法高亮、查找替换、编码与语言切换 |
-| SFTP 文件管理 | 已完成 | 远程目录浏览、读/写/新建/删除/重命名/权限修改 |
-| FTP 文件管理 | 已完成 | FTP 会话与远程文件能力 |
-| Transfer center | 已完成 | 上传下载任务队列、进度、速度、取消、文件/文件夹递归 |
-| Workspace tabs | 已完成 | 多标签并行连接、断开/重连、session 状态持久化、标签切换动效 |
-| Theme system | 已完成 | tokens → CSS vars → skin，深色/浅色主题一键切换 |
-| 远程连接状态 | 已完成 | 连接状态提示、系统资源监控面板、侧栏收起态资源摘要 |
-| 命令模板 | 已完成 | 快捷命令模板、文件夹分组、参数占位符、一键发送 |
-| 桌面壳与布局 | 已完成 | macOS 标题栏避让、侧栏收起、文件面板抽屉、工作区焦点模式、macOS template 托盘图标 |
-| 窗口管理 | 已完成 | 主窗口、连接管理器、命令管理器、文件编辑器独立窗口 |
+| 能力                  | 状态   | 说明                                                                                                            |
+| --------------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
+| SSH profile 管理      | 已完成 | 新增、编辑、删除、文件夹分组、JSON 文件持久化、group/parentId 双向同步                                          |
+| FTP/FTPS profile 管理 | 已完成 | 独立于 SSH 的 FTP/FTPS 连接模型                                                                                 |
+| SSH shell             | 已完成 | xterm.js 渲染、输入输出、自适应 resize、搜索、剪贴板互通、雾透悬浮命令输入条                                    |
+| 文件编辑器            | 已完成 | Monaco Editor 提供双栏文件树/编辑区、语法高亮、查找替换、编码与语言切换                                         |
+| SFTP 文件管理         | 已完成 | 远程目录浏览、读/写/新建/删除/重命名/权限修改                                                                   |
+| FTP/FTPS 文件管理     | 已完成 | FTP/FTPS 会话安全传输与远程文件能力                                                                             |
+| 终端目录跟随 (CWD)    | 已完成 | SSH 终端与文件管理器当前工作目录自动双向同步跟随                                                                |
+| Sudo 与 Root 权限同步 | 已完成 | 终端执行 sudo/su 时自动感知并双向同步更新文件管理器为 Root 对应读写权限                                         |
+| 虚拟滚动文件列表      | 已完成 | 引入虚拟列表（Virtual List）高效率渲染，万级文件目录浏览极速不卡顿                                              |
+| Transfer center       | 已完成 | 支持断点续传（SFTP/FTP/FTPS）、上传下载任务队列、进度、速度、取消、文件/文件夹递归                              |
+| Workspace tabs        | 已完成 | 多标签并行连接、断开/重连、session 状态持久化、标签切换动效                                                     |
+| Theme system          | 已完成 | tokens → CSS vars → skin，深色/浅色主题一键切换，焦点模式适配                                                   |
+| 远程连接状态          | 已完成 | 连接状态提示、系统资源监控面板、侧栏收起态资源摘要                                                              |
+| 命令模板              | 已完成 | 快捷命令模板（支持命令编辑行号）、文件夹分组、参数占位符、一键发送                                              |
+| 桌面壳与布局          | 已完成 | 左侧边栏宽度支持鼠标拖拽拉伸、macOS 标题栏避让、侧栏收起、文件面板抽屉、工作区焦点模式、macOS template 托盘图标 |
+| 工作区侧边栏          | 已完成 | 概览 → 连接管理器 → 命令管理器 → 设置四页导航（支持自定义按钮动作）                                             |
+| 离线化适配            | 已完成 | 全局图标与字体资源本地离线化部署，优化 macOS 钥匙串存储策略规避重复系统弹窗，适配内网气泡开发环境               |
+| 窗口管理              | 已完成 | 主窗口、连接管理器、命令管理器、文件编辑器独立窗口                                                              |
 
-## 外部开源项目
+### 外部开源项目
 
 FileTerm 的核心交互里使用了两个成熟的开源项目：
 
 - [xterm.js](https://xtermjs.org/)：用于 SSH 终端渲染、输入输出和窗口 resize。
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/)：用于文件编辑器，提供语法高亮、编辑体验和查找替换。
 
-## 架构原则
+### 架构原则
 
 FileTerm 从第一天就避免把远程协议揉成一个模糊的大对象。
 
@@ -106,7 +118,7 @@ Renderer UI
 
 更完整的说明见 [docs/architecture.md](./docs/architecture.md)。
 
-## 快速开始
+### 快速开始
 
 要求：
 
@@ -126,7 +138,7 @@ npm run typecheck
 npm run build
 ```
 
-## 仓库结构
+### 仓库结构
 
 ```txt
 fileterm/
@@ -149,19 +161,19 @@ fileterm/
   AGENTS.md                  # short map for human/AI collaborators
 ```
 
-## 路线图
+### 路线图
 
 当前重点：
 
-1. 稳住 `SSH / SFTP / FTP` MVP 主链路。
-2. 拆分 `ipc.ts`、`workspace-service.ts`、`session-controllers.ts`、`App.tsx`。
+1. 稳住 `SSH / SFTP / FTP / FTPS` MVP 主链路与断点续传。
+2. 拆分 `workspace-service.ts`、`session-controllers.ts`、`App.tsx`（已完成 `ipc/` 拆分）。
 3. 把领域类型继续收敛到 `packages/core`。
 4. 完善 transfer center、错误提示、主题、终端输入、文件抽屉和桌面壳体验。
 5. 准备 macOS / Windows 可分发版本。
 
 完整计划见 [docs/roadmap.md](./docs/roadmap.md)。
 
-## 协作方式
+### 协作方式
 
 这个仓库把代码库本身当作记录系统：
 
@@ -173,7 +185,7 @@ fileterm/
 
 如果你要贡献一个较大的功能，建议先补一份 active plan，再开始改代码。
 
-## 贡献者
+### 贡献者
 
 感谢每一位让 FileTerm 变得更好的贡献者。
 
@@ -204,64 +216,195 @@ fileterm/
   </tr>
 </table>
 
-<a id="english"></a>
-
 ---
+
+<a id="english"></a>
 
 ## English
 
-<p>
-  <kbd><a href="#中文">中文</a></kbd>
-  <kbd><a href="#english">English</a></kbd>
-</p>
+### Tech Stack
 
-FileTerm is a modern desktop remote workspace for developers and operations teams. It brings SSH terminals, SFTP files, FTP files, workspace tabs, and transfer tasks into one focused desktop client.
+| Desktop                                                                                                                      | Renderer                                                                                                                                                                                                                            | Language                                                                                                                          | Terminal                                                                                    | Editor                                                                                                                                        | Protocols                                                                                                                                                                          | Tooling                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /> | <img src="https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white" alt="React" /> <img src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" /> | <img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /> | <img src="https://img.shields.io/badge/xterm.js-111827?style=flat-square" alt="xterm.js" /> | <img src="https://img.shields.io/badge/Monaco%20Editor-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="Monaco Editor" /> | <img src="https://img.shields.io/badge/ssh2-0F766E?style=flat-square" alt="ssh2" /> <img src="https://img.shields.io/badge/basic--ftp-2563EB?style=flat-square" alt="basic-ftp" /> | <img src="https://img.shields.io/badge/npm%20workspaces-CB3837?style=flat-square&logo=npm&logoColor=white" alt="npm workspaces" /> |
 
-### Highlights
+```txt
+main process   ████████████████████  Electron services, IPC, protocol lifecycle
+preload bridge ████████████████░░░░  Secure API boundary for renderer
+renderer UI    ███████████████████░  React workspace, tabs, files, terminal
+protocols      ███████████████░░░░░  SSH shell, SFTP, FTP adapters
+theme system   ████████████████░░░░  tokens -> vars -> skins -> terminal colors
+```
 
-- SSH sessions with terminal and SFTP file panels.
-- File editing powered by Monaco Editor.
-- FTP sessions with a clean file-only workflow.
-- Workspace tabs for parallel remote work.
-- A refined desktop shell with collapsible sidebars, a file drawer, workspace focus mode, and animated tab transitions.
-- A floating frosted command bar above the terminal output.
-- A two-pane Monaco editor with a file tree and editor area.
-- Unified transfer center for uploads, downloads, progress, and errors.
-- A layered Electron architecture: `main -> preload -> renderer`.
-- MIT licensed and open for collaboration.
+### Why FileTerm
 
-### Open Source Components
+Remote work happens daily, but tools are often fragmented into separate applications for terminal emulators, file managers, transfer dialogs, and connection configuration. FileTerm aims to provide a unified desktop remote workspace for day-to-day operations:
 
-FileTerm uses two well-known open source projects in its core UI:
+- When opening an SSH session, the terminal and the SFTP file explorer panel are naturally linked.
+- When opening an FTP connection, the interface directly initiates a clean, file-only workflow.
+- Multiple active sessions run in parallel via workspace tabs without interrupting each other.
+- Uploads, downloads, progress queues, and error statuses are handled by a unified transfer system.
+- Connection profiles, workspace state management, and the overall visual themes are optimized for long-term usability.
 
-- [xterm.js](https://xtermjs.org/) for SSH terminal rendering, input/output, and resize handling.
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) for file editing, syntax highlighting, and search/replace.
+The goal of the initial version is not to support every possible protocol, but rather to build a highly stable, seamless, and visually appealing experience for the core `SSH / SFTP / FTP` workflows.
 
-### Contributors
+### Core Capabilities
 
-- **StOff31** built the complete backend logic, including Electron main process services, IPC, session control, file capabilities, and workspace state.
-- **Flashhhhhhzj** refactored and designed the frontend styling, unified the design language, and shaped the theme tokens, component skins, and visual experience.
+| Capability                  | Status    | Description                                                                                                                                                         |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSH Profile Management      | Completed | Create, edit, delete connection profiles, group profiles into folders, persist using JSON files, and synchronize `group` name and `parentId` bidirectionally        |
+| FTP/FTPS Profile Management | Completed | Separate FTP/FTPS connection model independent of SSH profiles                                                                                                      |
+| SSH Shell                   | Completed | Powered by xterm.js, input/output handling, adaptive resizing, text search, clipboard sync, and floating frosted command bar                                        |
+| File Editor                 | Completed | Powered by Monaco Editor, dual-pane layout (file tree & edit area), syntax highlighting, search/replace, encoding, and language selection                           |
+| SFTP File Explorer          | Completed | Directory navigation, read/write actions, create/delete files/folders, rename, and permissions modification (chmod)                                                 |
+| FTP/FTPS File Explorer      | Completed | Clean FTP/FTPS session management, secure transfers, and remote file actions                                                                                        |
+| Transfer Center             | Completed | Resumable transfers (SFTP/FTP/FTPS), upload/download queue, progress updates, speed rates, task cancellation, and recursive directory handling                      |
+| Terminal CWD Sync           | Completed | Active SSH terminal current working directory automatically syncs bidirectionally with the file explorer view                                                       |
+| Sudo & Root Sync            | Completed | Detects sudo/su actions inside terminal and updates file manager credentials for root file read/write operations                                                    |
+| Virtualized File List       | Completed | Uses virtualized list (virtual scrolling) for high-performance rendering of directories containing tens of thousands of files                                       |
+| Workspace Tabs              | Completed | Multi-tab parallel connections, disconnect/reconnect, session persistence, and smooth tab transition animations                                                     |
+| Theme System                | Completed | tokens → CSS variables → components skins, one-click dark/light mode toggle, and focus mode adaptation                                                              |
+| Connection Status Panel     | Completed | Active connection health indicator, system resource usage graphs, and sidebar collapsed metadata overview                                                           |
+| Command Templates           | Completed | Quick snippets (with editor line numbers), folder nesting, parameter placeholders, and single-click terminal dispatching                                            |
+| Desktop Shell & Layout      | Completed | Mouse resizable left sidebar, macOS native title bar spacing, collapsible sidebars, file drawer panel, focus mode toggle, and macOS template tray icon              |
+| Workspace Sidebar           | Completed | Overview → Connection Manager → Command Manager → Settings navigation (supports custom actions)                                                                     |
+| Air-Gapped Compliance       | Completed | Fully offlined icon/font assets, optimized macOS Keychain credentials storage logic to eliminate security dialogs, ideal for secure intranet developer environments |
+| Window Manager              | Completed | Independent windows for main app, connection manager, command manager, and file editor                                                                              |
+
+### External Open Source Projects
+
+FileTerm's core interactions leverage two mature open-source projects:
+
+- [xterm.js](https://xtermjs.org/): Used for SSH terminal rendering, user input, and terminal dimensions resizing.
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/): Powering the file editor with rich syntax highlighting, code editing, and search/replace features.
+
+### Architecture Principles
+
+From day one, FileTerm has avoided mixing different remote protocols into a single bloated class.
+
+```txt
+Renderer UI
+  -> Application State
+    -> Preload API
+      -> IPC
+        -> Desktop Services
+          -> Session Controllers
+            -> Protocol Clients
+```
+
+Hard Boundaries:
+
+- `packages/core` acts as the single source of truth for all domain models.
+- The React Renderer process never directly accesses SSH / SFTP / FTP protocol clients.
+- All OS-level or backend capabilities must travel through the `main -> preload -> renderer` bridge.
+- SSH/SFTP and FTP controller/protocol layers are strictly separated.
+- File transfers and progress monitoring are handled globally by the unified transfer system.
+
+For a detailed walkthrough, please see [docs/architecture.md](./docs/architecture.md).
 
 ### Quick Start
+
+Prerequisites:
+
+- Node.js >= 20
+- npm
 
 ```bash
 npm install
 npm run dev
 ```
 
-### Docs
+Available npm scripts:
 
-- [Architecture](./docs/architecture.md)
-- [Roadmap](./docs/roadmap.md)
-- [Agent Guide](./AGENTS.md)
+```bash
+npm run dev
+npm run typecheck
+npm run build
+```
 
-<p align="right">
-  <a href="#readme-top">Back to top</a>
-</p>
+### Repository Structure
 
-## 开源协议
+```txt
+fileterm/
+  apps/
+    desktop/                 # Electron + React desktop app
+      src/
+        main/                # main process, IPC, services
+        preload/             # secure renderer API
+        renderer/            # React workspace UI
+  packages/
+    core/                    # domain types
+    storage/                 # repository abstractions
+    shared/                  # shared constants and utilities
+  docs/
+    architecture.md          # architecture map
+    roadmap.md               # product roadmap
+    plans/                   # active and completed execution plans
+    decisions/               # architecture decisions
+    quality/                 # quality and release checks
+  AGENTS.md                  # short map for human/AI collaborators
+```
 
-FileTerm 使用 [MIT License](./LICENSE) 开源。
+### Roadmap
+
+Current Priorities:
+
+1. Stabilize the core `SSH / SFTP / FTP / FTPS` MVP path and resumable transfers.
+2. Refactor and split code: `workspace-service.ts`, `session-controllers.ts`, and `App.tsx` (Completed splitting `ipc/` into submodules).
+3. Consolidate and move all shared types into `packages/core`.
+4. Improve the transfer center UI, global error reporting, theme stability, terminal input shortcuts, file drawers, and desktop shell integration.
+5. Package and prepare production-ready distributables for macOS and Windows.
+
+For the full scope, read [docs/roadmap.md](./docs/roadmap.md).
+
+### Collaboration Workflows
+
+This repository treats the codebase itself as the source of documentation:
+
+- `AGENTS.md` is a short entry-level guide, not an exhaustive documentation hub.
+- Stable structural information belongs in `docs/architecture.md`.
+- Active multi-file development plans go to `docs/plans/active/`.
+- Documented engineering decisions are kept in `docs/decisions/`.
+- Feature drafts and draft proposals reside in `.agents/extensions/`.
+
+If you are planning to contribute a significant feature, we recommend writing an active plan before making any code modifications.
+
+### Contributors
+
+We thank everyone who has contributed to making FileTerm a better workspace.
+
+<table>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://github.com/St0ff3l">
+        <img src="https://avatars.githubusercontent.com/St0ff3l?s=120" width="72" height="72" alt="StOff31" />
+        <br />
+        <sub><b>St0ff3l</b></sub>
+      </a>
+    </td>
+    <td>
+      Designed and implemented the core backend logic, connecting Electron main processes, IPC handlers, session controllers, file services, and workspace state synchronization.
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="180">
+      <a href="https://github.com/Flashhhhhhzj">
+        <img src="https://avatars.githubusercontent.com/Flashhhhhhzj?s=120" width="72" height="72" alt="Flashhhhhhzj" />
+        <br />
+        <sub><b>Flashhhhhhzj</b></sub>
+      </a>
+    </td>
+    <td>
+      Redesigned and modernized the frontend styling, aligned theme tokens, created component skins, and polished the overall visual interface and layout.
+    </td>
+  </tr>
+</table>
+
+---
+
+## 开源协议 / License
+
+FileTerm is open-source software licensed under the [MIT License](./LICENSE).
 
 ## Star History
 

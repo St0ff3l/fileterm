@@ -1,7 +1,13 @@
 import { BrowserWindow } from 'electron'
 import { FileProfileRepository } from '../services/file-profile-repository.js'
 import { LocalFilesService } from '../services/local-files-service.js'
-import { WorkspaceService, seedCommandFolders, seedCommandTemplates, seedProfiles } from '../services/workspace-service.js'
+import {
+  WorkspaceService,
+  seedCommandFolders,
+  seedCommandTemplates,
+  seedProfiles
+} from '../services/workspace-service.js'
+import { TransferJournal } from '../services/transfers/transfer-journal.js'
 import { registerAppHandlers } from './app-handlers.js'
 import { registerLocalFilesHandlers } from './local-files-handlers.js'
 import { registerRemoteFilesHandlers } from './remote-files-handlers.js'
@@ -15,7 +21,8 @@ export function registerIpcHandlers(userDataPath: string, options: IpcWindowOpti
   const workspaceService = new WorkspaceService(
     new FileProfileRepository(userDataPath, seedProfiles, seedCommandTemplates, seedCommandFolders),
     {
-      getLocale: () => options.getUiPreferences().locale
+      getLocale: () => options.getUiPreferences().locale,
+      transferJournal: new TransferJournal(userDataPath)
     }
   )
   const services: IpcServices = {
@@ -57,7 +64,9 @@ function isIgnorableBroadcastError(error: unknown) {
     return true
   }
 
-  return error.message.includes('Render frame was disposed')
-    || error.message.includes('Object has been destroyed')
-    || error.message.includes('WebContents was destroyed')
+  return (
+    error.message.includes('Render frame was disposed') ||
+    error.message.includes('Object has been destroyed') ||
+    error.message.includes('WebContents was destroyed')
+  )
 }

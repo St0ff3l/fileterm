@@ -292,7 +292,7 @@
   min-width: 0;
   padding: 0;
   overflow: hidden;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -454,7 +454,6 @@
   .file-editor-menubar {
     overflow-x: auto;
     flex-wrap: nowrap;
-    scrollbar-width: thin;
   }
 
   .file-editor-menubar::-webkit-scrollbar {

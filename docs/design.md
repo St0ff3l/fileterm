@@ -40,18 +40,18 @@ tokens -> theme vars -> component skins -> terminal colors
 
 浅色主题基准：
 
-| Role | Token | Value / Usage |
-| --- | --- | --- |
-| App background | `--bg-main` | `#f4f5f7`，窗口和工作区底色 |
-| Sidebar / chrome | `--bg-sidebar` | `#ffffff`，左侧栏和顶部栏 |
-| Card / panel | `--bg-card` | `#ffffff`，终端外围、表格面板、弹层 |
-| Hover | `--bg-hover` | `#eceff3`，导航 hover、轻按钮 hover |
-| Active | `--bg-active` | `#dde2e8`，更强的选中背景 |
-| Main text | `--text-main` | `#1f2933`，正文和关键标签 |
-| Muted text | `--text-muted` | `#66717f`，辅助信息 |
-| Soft text | `--text-soft` | `#7b8794`，弱辅助信息 |
-| Border | `--border-light` | 低对比 1px 分割线 |
-| Primary | `--primary` | 只用于主要动作、链接、焦点环 |
+| Role             | Token            | Value / Usage                       |
+| ---------------- | ---------------- | ----------------------------------- |
+| App background   | `--bg-main`      | `#f4f5f7`，窗口和工作区底色         |
+| Sidebar / chrome | `--bg-sidebar`   | `#ffffff`，左侧栏和顶部栏           |
+| Card / panel     | `--bg-card`      | `#ffffff`，终端外围、表格面板、弹层 |
+| Hover            | `--bg-hover`     | `#eceff3`，导航 hover、轻按钮 hover |
+| Active           | `--bg-active`    | `#dde2e8`，更强的选中背景           |
+| Main text        | `--text-main`    | `#1f2933`，正文和关键标签           |
+| Muted text       | `--text-muted`   | `#66717f`，辅助信息                 |
+| Soft text        | `--text-soft`    | `#7b8794`，弱辅助信息               |
+| Border           | `--border-light` | 低对比 1px 分割线                   |
+| Primary          | `--primary`      | 只用于主要动作、链接、焦点环        |
 
 状态色规则：
 

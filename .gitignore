@@ -28,3 +28,4 @@ coverage/
 .vscode/
 .claude/
 .githooks/
+.workbuddy/

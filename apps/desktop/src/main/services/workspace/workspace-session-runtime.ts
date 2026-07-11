@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import type { WebContents } from 'electron'
 import {
   mergeSystemMetricsHistory,
@@ -11,53 +12,69 @@ import {
   type SshInteractionRequest,
   type SshInteractionResponse,
   type WorkspaceSnapshot,
+  type WorkspaceSessionTabEvent,
   type WorkspaceTab
 } from '@fileterm/core'
 import { LiveFtpSessionController, LiveSshSessionController } from '../session-controllers.js'
+import { appWarn } from '../app-logger.js'
+import { resolveShellFileAccess } from '../sessions/shell-cwd-integration.js'
+import { TerminalOutputBatcher } from './terminal-output-batcher.js'
 
 export type LiveSessionController = LiveSshSessionController | LiveFtpSessionController
 
 export const REMOTE_SESSION_DISCONNECTED_MESSAGE = '会话已断开，请先重连。'
 
-export class WorkspaceSessionRuntime {
-  private static readonly TERMINAL_OUTPUT_FLUSH_INTERVAL_MS = 16
+type WorkspaceSessionRuntimeEvents = {
+  'tab-event': [event: WorkspaceSessionTabEvent]
+}
+
+export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntimeEvents> {
   private readonly sessions = new Map<string, SessionSnapshot>()
   private readonly liveControllers = new Map<string, LiveSessionController>()
-  private readonly metricsPollers = new Map<string, ReturnType<typeof setInterval>>()
-  private readonly metricsRefreshInFlight = new Set<string>()
+  private readonly metricsPollers = new Map<
+    string,
+    { timer: ReturnType<typeof setInterval>; controller: LiveSshSessionController }
+  >()
+  private readonly metricsRefreshInFlight = new Map<string, { token: symbol; controller: LiveSshSessionController }>()
   private readonly tabSenders = new Map<string, WebContents>()
   private readonly invalidSenders = new WeakSet<WebContents>()
   private readonly senderLifecycleListeners = new WeakSet<WebContents>()
-  private readonly snapshotEmitStates = new WeakMap<WebContents, {
-    inFlight?: Promise<void>
-    pending: boolean
-  }>()
+  private readonly snapshotEmitStates = new WeakMap<
+    WebContents,
+    {
+      inFlight?: Promise<void>
+      pending: boolean
+    }
+  >()
   private readonly remoteFileOperations = new Map<string, Promise<void>>()
-  private readonly terminalOutputBuffers = new Map<string, string[]>()
-  private readonly terminalOutputTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly terminalOutputBatcher: TerminalOutputBatcher
   private readonly metricsPausedRemoteFileOperations = new Set<string>()
-  private readonly pendingSshInteractions = new Map<string, {
-    tabId: string
-    resolve(response: SshInteractionResponse): void
-    reject(error: Error): void
-  }>()
+  private readonly shellLoginUsers = new Map<string, string>()
+  private readonly pendingSshInteractions = new Map<
+    string,
+    {
+      tabId: string
+      resolve(response: SshInteractionResponse): void
+      reject(error: Error): void
+    }
+  >()
 
   constructor(
     private readonly options: {
       getSnapshot(): Promise<WorkspaceSnapshot>
-      updateTabStatus(tabId: string, status: WorkspaceTab['status']): void
       getTabStatus(tabId: string): WorkspaceTab['status'] | undefined
       rememberTrustedHostFingerprint(profileId: string, fingerprint: string): Promise<void>
-      onTabDisconnected?(tabId: string, summary: string): void | Promise<void>
     }
-  ) {}
+  ) {
+    super()
+    this.terminalOutputBatcher = new TerminalOutputBatcher((tabId, chunk) => {
+      this.sendToTab(tabId, 'terminal:data', { tabId, chunk })
+    })
+  }
 
   list() {
     return Object.fromEntries(
-      [...this.sessions.entries()].map(([tabId, snapshot]) => [
-        tabId,
-        this.withLiveTerminalTranscript(tabId, snapshot)
-      ])
+      [...this.sessions.entries()].map(([tabId, snapshot]) => [tabId, this.withLiveTerminalTranscript(tabId, snapshot)])
     )
   }
 
@@ -78,10 +95,10 @@ export class WorkspaceSessionRuntime {
     const controller = this.liveControllers.get(tabId)
     const session = this.sessions.get(tabId)
     if (
-      controller?.type === 'ssh'
-      && session?.connected
-      && !this.metricsPollers.has(tabId)
-      && this.shouldPollMetrics(controller)
+      controller?.type === 'ssh' &&
+      session?.connected &&
+      !this.metricsPollers.has(tabId) &&
+      this.shouldPollMetrics(controller)
     ) {
       this.startMetricsPolling(tabId, controller)
     }
@@ -93,10 +110,11 @@ export class WorkspaceSessionRuntime {
 
   async teardown(tabId: string) {
     this.stopMetricsPolling(tabId)
-    this.flushTerminalOutput(tabId)
+    this.terminalOutputBatcher.flush(tabId)
     await this.liveControllers.get(tabId)?.disconnect()
-    this.flushTerminalOutput(tabId)
+    this.terminalOutputBatcher.flush(tabId)
     this.liveControllers.delete(tabId)
+    this.shellLoginUsers.delete(tabId)
     this.remoteFileOperations.delete(tabId)
     this.tabSenders.delete(tabId)
     this.sessions.delete(tabId)
@@ -104,10 +122,10 @@ export class WorkspaceSessionRuntime {
 
   async disconnect(tabId: string) {
     this.stopMetricsPolling(tabId)
-    this.flushTerminalOutput(tabId)
+    this.terminalOutputBatcher.flush(tabId)
     const controller = this.liveControllers.get(tabId)
     await controller?.disconnect()
-    this.flushTerminalOutput(tabId)
+    this.terminalOutputBatcher.flush(tabId)
     const current = this.sessions.get(tabId)
     if (current && controller?.type === 'ssh') {
       this.sessions.set(tabId, {
@@ -116,6 +134,7 @@ export class WorkspaceSessionRuntime {
       })
     }
     this.liveControllers.delete(tabId)
+    this.shellLoginUsers.delete(tabId)
   }
 
   async shutdown() {
@@ -128,9 +147,7 @@ export class WorkspaceSessionRuntime {
       pending.reject(new Error('Workspace runtime is shutting down'))
     }
 
-    for (const tabId of this.terminalOutputBuffers.keys()) {
-      this.flushTerminalOutput(tabId)
-    }
+    this.terminalOutputBatcher.flushAll()
 
     const controllerEntries = [...this.liveControllers.entries()]
     this.liveControllers.clear()
@@ -145,11 +162,8 @@ export class WorkspaceSessionRuntime {
       })
     )
 
-    for (const timer of this.terminalOutputTimers.values()) {
-      clearTimeout(timer)
-    }
-    this.terminalOutputTimers.clear()
-    this.terminalOutputBuffers.clear()
+    this.terminalOutputBatcher.dispose()
+    this.shellLoginUsers.clear()
   }
 
   requireController(tabId: string) {
@@ -180,9 +194,14 @@ export class WorkspaceSessionRuntime {
   ): Promise<T> {
     const previous = this.remoteFileOperations.get(tabId) ?? Promise.resolve()
     let releaseCurrent: () => void = () => undefined
-    const currentOperation = previous.catch(() => undefined).then(() => new Promise<void>((resolve) => {
-      releaseCurrent = resolve
-    }))
+    const currentOperation = previous
+      .catch(() => undefined)
+      .then(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseCurrent = resolve
+          })
+      )
 
     this.remoteFileOperations.set(tabId, currentOperation)
     await previous.catch(() => undefined)
@@ -224,54 +243,67 @@ export class WorkspaceSessionRuntime {
     }
 
     if (profile.type === 'ssh') {
+      this.shellLoginUsers.delete(tabId)
       let sshController: LiveSshSessionController | null = null
       sshController = new LiveSshSessionController(
-          tabId,
-          profile,
-          (request) => this.requestSshInteraction(tabId, profile, request),
-          (fingerprint) => this.options.rememberTrustedHostFingerprint(profile.id, fingerprint),
-          (chunk) => {
-            this.queueTerminalOutput(tabId, chunk)
-          },
-          (cwd) => {
-            void this.handleShellCwdChanged(tabId, cwd).catch(() => undefined)
-          },
-          () => undefined,
-          (summary, transcript, connected) => {
-            this.flushTerminalOutput(tabId)
-            const current = this.sessions.get(tabId)
-            if (!current) {
-              return
-            }
-            const wasConnected = current.connected === true
+        tabId,
+        profile,
+        (request) => this.requestSshInteraction(tabId, profile, request),
+        (fingerprint) => this.options.rememberTrustedHostFingerprint(profile.id, fingerprint),
+        (chunk) => {
+          this.terminalOutputBatcher.queue(tabId, chunk)
+        },
+        (cwd) => {
+          void this.handleShellCwdChanged(tabId, cwd).catch(() => undefined)
+        },
+        (user) => {
+          if (!this.shellLoginUsers.has(tabId)) {
+            this.shellLoginUsers.set(tabId, user)
+          }
+          void this.handleShellUserChanged(tabId, user).catch((error) => {
+            appWarn(`[FileTerm][SSH] Could not synchronize file access for shell user ${user}`, error)
+          })
+        },
+        (summary, transcript, connected) => {
+          this.terminalOutputBatcher.flush(tabId)
+          const current = this.sessions.get(tabId)
+          if (!current) {
+            return
+          }
+          const wasConnected = current.connected === true
 
-            this.sessions.set(tabId, {
-              ...current,
-              summary,
-              terminalTranscript: transcript,
-              remoteFiles: connected ? current.remoteFiles : [],
-              fileAccessMode: connected ? (sshController?.getFileAccessMode() ?? current.fileAccessMode) : 'user',
-              hasReusableSudoAuth: connected ? (sshController?.hasReusableSudoAuth() ?? false) : false,
-              connected,
-              systemMetrics: connected ? current.systemMetrics : undefined
-            })
-            this.options.updateTabStatus(
-              tabId,
-              statusFromTerminalState(summary, connected, this.options.getTabStatus(tabId))
-            )
-            this.sendToTab(tabId, 'terminal:state', {
-              tabId,
-              summary,
-              transcript,
-              connected
-            })
-            if (wasConnected && !connected) {
-              void this.options.onTabDisconnected?.(tabId, summary)
-            }
-            void this.emitSnapshotForTab(tabId)
-          },
-          initialTranscript
-        )
+          this.sessions.set(tabId, {
+            ...current,
+            summary,
+            terminalTranscript: transcript,
+            remoteFiles: connected ? current.remoteFiles : [],
+            shellUser: connected ? current.shellUser : undefined,
+            fileAccessMode: connected ? (sshController?.getFileAccessMode() ?? current.fileAccessMode) : 'user',
+            hasReusableSudoAuth: connected ? (sshController?.hasReusableSudoAuth() ?? false) : false,
+            connected,
+            systemMetrics: connected ? current.systemMetrics : undefined
+          })
+          const status = statusFromTerminalState(summary, connected, this.options.getTabStatus(tabId))
+          this.emit('tab-event', {
+            type: 'status-changed',
+            tabId,
+            status,
+            summary,
+            connected
+          })
+          this.sendToTab(tabId, 'terminal:state', {
+            tabId,
+            summary,
+            transcript,
+            connected
+          })
+          if (wasConnected && !connected) {
+            this.emit('tab-event', { type: 'disconnected', tabId, summary })
+          }
+          void this.emitSnapshotForTab(tabId)
+        },
+        initialTranscript
+      )
       return sshController
     }
 
@@ -296,8 +328,7 @@ export class WorkspaceSessionRuntime {
       this.sessions.set(tabId, {
         ...current,
         summary: controller.getSummary(),
-        terminalTranscript:
-          controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
+        terminalTranscript: controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
         remotePath: controller.getRemotePath(),
         shellCwd: controller.type === 'ssh' ? controller.getShellCwd() : undefined,
         followShellCwd: current.followShellCwd,
@@ -307,8 +338,22 @@ export class WorkspaceSessionRuntime {
         remoteFiles: current.remoteFiles,
         systemMetrics: current.systemMetrics
       })
-      this.options.updateTabStatus(tabId, 'connected')
+      const summary = controller.getSummary()
+      this.emit('tab-event', {
+        type: 'status-changed',
+        tabId,
+        status: 'connected',
+        summary,
+        connected: true
+      })
+      if (controller.type === 'ssh') {
+        this.emit('tab-event', { type: 'ssh-handshake', tabId, phase: 'connected', summary })
+      }
       await this.emitSnapshotForTab(tabId)
+
+      if (controller.type === 'ssh' && this.shouldPollMetrics(controller)) {
+        this.startMetricsPolling(tabId, controller)
+      }
 
       let remoteFilesError: string | null = null
       try {
@@ -325,7 +370,11 @@ export class WorkspaceSessionRuntime {
           this.emitMetricsForTab(tabId)
         }
       } catch (error) {
-        if (controller.type === 'ssh' && controller.getFileAccessMode() === 'root' && shouldFallbackRootFileAccess(error)) {
+        if (
+          controller.type === 'ssh' &&
+          controller.getFileAccessMode() === 'root' &&
+          shouldFallbackRootFileAccess(error)
+        ) {
           await controller.setFileAccessMode('user', {
             sudoUser: this.sessions.get(tabId)?.sudoUser ?? 'root',
             sudoPassword: ''
@@ -351,34 +400,19 @@ export class WorkspaceSessionRuntime {
         const shellCwd = controller.getShellCwd()
         const sessionBeforeMetrics = this.sessions.get(tabId)
         if (
-          shellCwd
-          && sessionBeforeMetrics?.followShellCwd !== false
-          && sessionBeforeMetrics?.remotePath !== shellCwd
+          shellCwd &&
+          sessionBeforeMetrics?.followShellCwd !== false &&
+          sessionBeforeMetrics?.remotePath !== shellCwd
         ) {
           await this.followShellCwd(tabId, shellCwd)
         }
 
-        const systemMetrics = await controller.refreshSystemMetrics()
-        const latest = this.sessions.get(tabId)
-        if (latest && systemMetrics) {
-          this.sessions.set(tabId, {
-            ...latest,
-            systemMetrics: mergeSystemMetricsHistory(undefined, systemMetrics)
-          })
-          await this.emitSnapshotForTab(tabId)
-        }
         if (remoteFilesError) {
           controller.pushClientNotice(`SFTP 初始化失败: ${remoteFilesError}`)
         }
       }
-
-      if (controller.type === 'ssh') {
-        if (this.shouldPollMetrics(controller)) {
-          this.startMetricsPolling(tabId, controller)
-        }
-      }
     } catch (error) {
-      this.flushTerminalOutput(tabId)
+      this.terminalOutputBatcher.flush(tabId)
       if (this.liveControllers.get(tabId) === controller) {
         this.liveControllers.delete(tabId)
       }
@@ -386,9 +420,7 @@ export class WorkspaceSessionRuntime {
       if (current) {
         const message = error instanceof Error ? error.message : '未知错误'
         const summary = `连接失败: ${message}`
-        let transcript = controller.type === 'ssh'
-          ? controller.getTerminalTranscript()
-          : current.terminalTranscript
+        let transcript = controller.type === 'ssh' ? controller.getTerminalTranscript() : current.terminalTranscript
         if (controller.type === 'ssh') {
           if (!transcript?.includes(message)) {
             controller.pushClientNotice(summary)
@@ -410,7 +442,17 @@ export class WorkspaceSessionRuntime {
           })
         }
       }
-      this.options.updateTabStatus(tabId, 'error')
+      const summary = this.sessions.get(tabId)?.summary ?? '连接失败'
+      this.emit('tab-event', {
+        type: 'status-changed',
+        tabId,
+        status: 'error',
+        summary,
+        connected: false
+      })
+      if (controller.type === 'ssh') {
+        this.emit('tab-event', { type: 'ssh-handshake', tabId, phase: 'failed', summary })
+      }
       this.stopMetricsPolling(tabId)
     }
 
@@ -418,68 +460,88 @@ export class WorkspaceSessionRuntime {
   }
 
   async refreshRemoteFiles(tabId: string) {
-    await this.runRemoteFileOperation(tabId, async (controller, current) => {
-      const remoteFiles = await controller.listRemoteFiles()
-      const latest = this.sessions.get(tabId) ?? current
-      this.sessions.set(tabId, {
-        ...latest,
-        remotePath: controller.getRemotePath(),
-        fileAccessMode: controller.getFileAccessMode(),
-        hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
-        remoteFiles
-      })
-    }, { pauseMetrics: true })
-  }
-
-  async setFileAccessMode(tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) {
-    await this.runRemoteFileOperation(tabId, async (controller, current) => {
-      const previousMode = controller.getFileAccessMode()
-      if (previousMode === mode) {
-        return
-      }
-
-      const nextSudoUser = options?.sudoUser?.trim() || current.sudoUser || 'root'
-
-      await controller.setFileAccessMode(mode, options)
-      try {
+    await this.runRemoteFileOperation(
+      tabId,
+      async (controller, current) => {
         const remoteFiles = await controller.listRemoteFiles()
         const latest = this.sessions.get(tabId) ?? current
         this.sessions.set(tabId, {
           ...latest,
-          fileAccessMode: controller.getFileAccessMode(),
-          sudoUser: nextSudoUser,
-          hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
           remotePath: controller.getRemotePath(),
+          fileAccessMode: controller.getFileAccessMode(),
+          hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
           remoteFiles
         })
-        await this.emitSnapshotForTab(tabId)
-      } catch (error) {
-        if (mode === 'root') {
-          try {
-            await controller.setFileAccessMode(previousMode, { sudoUser: current.sudoUser })
-          } catch {
-            // Keep the original error; this rollback is best-effort.
+      },
+      { pauseMetrics: true }
+    )
+  }
+
+  async setFileAccessMode(
+    tabId: string,
+    mode: 'user' | 'root',
+    options?: RemoteFileAccessOptions,
+    source: 'shell' | 'manual' = 'manual'
+  ) {
+    await this.runRemoteFileOperation(
+      tabId,
+      async (controller, current) => {
+        const previousMode = controller.getFileAccessMode()
+        const nextSudoUser = options?.sudoUser?.trim() || current.sudoUser || 'root'
+        if (previousMode === mode && (mode === 'user' || nextSudoUser === current.sudoUser)) {
+          if (source === 'shell') {
+            this.emitFileAccessChanged(tabId, source)
           }
+          return
         }
-        throw error
-      }
-    }, { pauseMetrics: true })
+
+        await controller.setFileAccessMode(mode, options)
+        try {
+          const remoteFiles = await controller.listRemoteFiles()
+          const latest = this.sessions.get(tabId) ?? current
+          this.sessions.set(tabId, {
+            ...latest,
+            fileAccessMode: controller.getFileAccessMode(),
+            sudoUser: nextSudoUser,
+            hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
+            remotePath: controller.getRemotePath(),
+            remoteFiles
+          })
+          this.emitFileAccessChanged(tabId, source)
+          await this.emitSnapshotForTab(tabId)
+        } catch (error) {
+          if (mode === 'root') {
+            try {
+              await controller.setFileAccessMode(previousMode, { sudoUser: current.sudoUser })
+            } catch {
+              // Keep the original error; this rollback is best-effort.
+            }
+          }
+          throw error
+        }
+      },
+      { pauseMetrics: true }
+    )
   }
 
   async openRemotePath(tabId: string, targetPath: string) {
     await this.setRemoteFilesLoading(tabId, true)
     try {
-      await this.runRemoteFileOperation(tabId, async (controller, current) => {
-        const remoteFiles = await controller.openRemotePath(targetPath)
-        const latest = this.sessions.get(tabId) ?? current
-        this.sessions.set(tabId, {
-          ...latest,
-          remotePath: controller.getRemotePath(),
-          fileAccessMode: controller.getFileAccessMode(),
-          hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
-          remoteFiles
-        })
-      }, { pauseMetrics: true })
+      await this.runRemoteFileOperation(
+        tabId,
+        async (controller, current) => {
+          const remoteFiles = await controller.openRemotePath(targetPath)
+          const latest = this.sessions.get(tabId) ?? current
+          this.sessions.set(tabId, {
+            ...latest,
+            remotePath: controller.getRemotePath(),
+            fileAccessMode: controller.getFileAccessMode(),
+            hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
+            remoteFiles
+          })
+        },
+        { pauseMetrics: true }
+      )
     } finally {
       await this.setRemoteFilesLoading(tabId, false)
     }
@@ -514,36 +576,108 @@ export class WorkspaceSessionRuntime {
 
     if (current.followShellCwd !== false && current.remotePath !== cwd) {
       await this.followShellCwd(tabId, cwd)
+      this.emitCwdChanged(tabId)
       return
     }
 
     await this.emitSnapshotForTab(tabId)
+    this.emitCwdChanged(tabId)
+  }
+
+  private async handleShellUserChanged(tabId: string, user: string) {
+    const current = this.sessions.get(tabId)
+    const loginUser = this.shellLoginUsers.get(tabId)
+    if (!current || !loginUser || current.shellUser === user) {
+      return
+    }
+
+    this.sessions.set(tabId, {
+      ...current,
+      shellUser: user
+    })
+    if (!current.connected) {
+      await this.emitSnapshotForTab(tabId)
+      return
+    }
+
+    const target = resolveShellFileAccess(loginUser, user)
+    try {
+      await this.setFileAccessMode(
+        tabId,
+        target.mode,
+        target.sudoUser ? { sudoUser: target.sudoUser } : undefined,
+        'shell'
+      )
+    } catch (error) {
+      await this.emitSnapshotForTab(tabId)
+      throw error
+    }
+
+    const latest = this.sessions.get(tabId)
+    if (latest?.followShellCwd !== false && latest?.shellCwd && latest.remotePath !== latest.shellCwd) {
+      await this.followShellCwd(tabId, latest.shellCwd)
+      return
+    }
+    await this.emitSnapshotForTab(tabId)
+  }
+
+  private emitCwdChanged(tabId: string) {
+    const current = this.sessions.get(tabId)
+    if (!current?.shellCwd) {
+      return
+    }
+    this.emit('tab-event', {
+      type: 'cwd-changed',
+      tabId,
+      shellCwd: current.shellCwd,
+      remotePath: current.remotePath,
+      followShellCwd: current.followShellCwd !== false
+    })
+  }
+
+  private emitFileAccessChanged(tabId: string, source: 'shell' | 'manual') {
+    const current = this.sessions.get(tabId)
+    if (!current) {
+      return
+    }
+    this.emit('tab-event', {
+      type: 'file-access-changed',
+      tabId,
+      source,
+      fileAccessMode: current.fileAccessMode ?? 'user',
+      shellUser: current.shellUser,
+      sudoUser: current.sudoUser
+    })
   }
 
   private async followShellCwd(tabId: string, cwd: string) {
     await this.setRemoteFilesLoading(tabId, true)
     try {
-      await this.runRemoteFileOperation(tabId, async (controller, current) => {
-        if (controller.type !== 'ssh') {
-          return
-        }
-        if (current.shellCwd !== cwd || current.followShellCwd === false) {
-          return
-        }
-        const remoteFiles = await controller.openRemotePath(cwd)
-        const latest = this.sessions.get(tabId) ?? current
-        if (latest.shellCwd !== cwd || latest.followShellCwd === false) {
-          if (controller.getRemotePath() !== latest.remotePath) {
-            await controller.openRemotePath(latest.remotePath)
+      await this.runRemoteFileOperation(
+        tabId,
+        async (controller, current) => {
+          if (controller.type !== 'ssh') {
+            return
           }
-          return
-        }
-        this.sessions.set(tabId, {
-          ...latest,
-          remotePath: controller.getRemotePath(),
-          remoteFiles
-        })
-      }, { pauseMetrics: true })
+          if (current.shellCwd !== cwd || current.followShellCwd === false) {
+            return
+          }
+          const remoteFiles = await controller.openRemotePath(cwd)
+          const latest = this.sessions.get(tabId) ?? current
+          if (latest.shellCwd !== cwd || latest.followShellCwd === false) {
+            if (controller.getRemotePath() !== latest.remotePath) {
+              await controller.openRemotePath(latest.remotePath)
+            }
+            return
+          }
+          this.sessions.set(tabId, {
+            ...latest,
+            remotePath: controller.getRemotePath(),
+            remoteFiles
+          })
+        },
+        { pauseMetrics: true }
+      )
     } catch {
       // Cwd reporting is best-effort. Keep the terminal usable when the file view cannot read this path.
     } finally {
@@ -645,36 +779,25 @@ export class WorkspaceSessionRuntime {
 
     if (!current.remoteFiles.length) {
       try {
-        await this.runRemoteFileOperation(tabId, async (latestController, latestSession) => {
-          const remoteFiles = await latestController.listRemoteFiles()
-          const freshSession = this.sessions.get(tabId) ?? latestSession
-          nextSnapshot = {
-            ...freshSession,
-            remotePath: latestController.getRemotePath(),
-            fileAccessMode: latestController.getFileAccessMode(),
-            hasReusableSudoAuth: latestController.type === 'ssh' ? latestController.hasReusableSudoAuth() : false,
-            remoteFiles
-          }
-          this.sessions.set(tabId, nextSnapshot)
-        }, { pauseMetrics: true })
+        await this.runRemoteFileOperation(
+          tabId,
+          async (latestController, latestSession) => {
+            const remoteFiles = await latestController.listRemoteFiles()
+            const freshSession = this.sessions.get(tabId) ?? latestSession
+            nextSnapshot = {
+              ...freshSession,
+              remotePath: latestController.getRemotePath(),
+              fileAccessMode: latestController.getFileAccessMode(),
+              hasReusableSudoAuth: latestController.type === 'ssh' ? latestController.hasReusableSudoAuth() : false,
+              remoteFiles
+            }
+            this.sessions.set(tabId, nextSnapshot)
+          },
+          { pauseMetrics: true }
+        )
         changed = true
       } catch {
         // Keep the existing session data; this restoration is best-effort.
-      }
-    }
-
-    if (controller.type === 'ssh' && !nextSnapshot.systemMetrics) {
-      try {
-        const systemMetrics = await controller.refreshSystemMetrics()
-        if (systemMetrics) {
-          nextSnapshot = {
-            ...nextSnapshot,
-            systemMetrics: mergeSystemMetricsHistory(undefined, systemMetrics)
-          }
-          changed = true
-        }
-      } catch {
-        // Ignore restoration errors; polling will keep trying after the tab is rebound.
       }
     }
 
@@ -689,17 +812,22 @@ export class WorkspaceSessionRuntime {
   }
 
   private startMetricsPolling(tabId: string, controller: LiveSshSessionController) {
+    const existing = this.metricsPollers.get(tabId)
+    if (existing?.controller === controller) {
+      return
+    }
     this.stopMetricsPolling(tabId)
     const timer = setInterval(() => {
       void this.refreshMetricsForTab(tabId, controller)
     }, 1000)
-    this.metricsPollers.set(tabId, timer)
+    this.metricsPollers.set(tabId, { timer, controller })
+    void this.refreshMetricsForTab(tabId, controller)
   }
 
   private stopMetricsPolling(tabId: string) {
-    const timer = this.metricsPollers.get(tabId)
-    if (timer) {
-      clearInterval(timer)
+    const poller = this.metricsPollers.get(tabId)
+    if (poller) {
+      clearInterval(poller.timer)
       this.metricsPollers.delete(tabId)
     }
     this.metricsRefreshInFlight.delete(tabId)
@@ -725,16 +853,18 @@ export class WorkspaceSessionRuntime {
       return
     }
 
-    this.metricsRefreshInFlight.add(tabId)
+    const flight = { token: Symbol(tabId), controller }
+    this.metricsRefreshInFlight.set(tabId, flight)
     try {
       const systemMetrics = await controller.refreshSystemMetrics()
-      if (!systemMetrics) {
+      if (!systemMetrics || this.metricsRefreshInFlight.get(tabId) !== flight) {
         return
       }
 
       const latest = this.sessions.get(tabId)
       const liveController = this.liveControllers.get(tabId)
-      if (!latest || !latest.connected || liveController !== controller) {
+      const liveSender = this.tabSenders.get(tabId)
+      if (!latest || !latest.connected || liveController !== controller || liveSender !== sender) {
         return
       }
 
@@ -750,7 +880,9 @@ export class WorkspaceSessionRuntime {
 
       this.emitMetrics(sender, tabId, systemMetrics, 'append')
     } finally {
-      this.metricsRefreshInFlight.delete(tabId)
+      if (this.metricsRefreshInFlight.get(tabId) === flight) {
+        this.metricsRefreshInFlight.delete(tabId)
+      }
     }
   }
 
@@ -926,42 +1058,6 @@ export class WorkspaceSessionRuntime {
     }
   }
 
-  private queueTerminalOutput(tabId: string, chunk: string) {
-    const chunks = this.terminalOutputBuffers.get(tabId)
-    if (chunks) {
-      chunks.push(chunk)
-    } else {
-      this.terminalOutputBuffers.set(tabId, [chunk])
-    }
-
-    if (this.terminalOutputTimers.has(tabId)) {
-      return
-    }
-
-    const timer = setTimeout(() => {
-      this.terminalOutputTimers.delete(tabId)
-      this.flushTerminalOutput(tabId)
-    }, WorkspaceSessionRuntime.TERMINAL_OUTPUT_FLUSH_INTERVAL_MS)
-    this.terminalOutputTimers.set(tabId, timer)
-  }
-
-  private flushTerminalOutput(tabId: string) {
-    const timer = this.terminalOutputTimers.get(tabId)
-    if (timer) {
-      clearTimeout(timer)
-      this.terminalOutputTimers.delete(tabId)
-    }
-
-    const chunks = this.terminalOutputBuffers.get(tabId)
-    if (!chunks?.length) {
-      return
-    }
-    this.terminalOutputBuffers.delete(tabId)
-
-    const chunk = chunks.length === 1 ? chunks[0]! : chunks.join('')
-    this.sendToTab(tabId, 'terminal:data', { tabId, chunk })
-  }
-
   private withLiveTerminalTranscript(tabId: string, snapshot: SessionSnapshot) {
     const controller = this.liveControllers.get(tabId)
     if (controller?.type !== 'ssh') {
@@ -969,16 +1065,15 @@ export class WorkspaceSessionRuntime {
     }
 
     const terminalTranscript = controller.getTerminalTranscript()
-    return terminalTranscript === snapshot.terminalTranscript
-      ? snapshot
-      : { ...snapshot, terminalTranscript }
+    return terminalTranscript === snapshot.terminalTranscript ? snapshot : { ...snapshot, terminalTranscript }
   }
-
 }
 
 function shouldFallbackRootFileAccess(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
-  return /未检测到可复用的 sudo 授权|sudo 密码错误|sudo 密码无效|sudo credentials|incorrect password|authentication failure/i.test(message)
+  return /未检测到可复用的 sudo 授权|sudo 密码错误|sudo 密码无效|sudo credentials|incorrect password|authentication failure/i.test(
+    message
+  )
 }
 
 function isIgnorableWebContentsSendError(error: unknown) {
@@ -991,9 +1086,11 @@ function isIgnorableWebContentsSendError(error: unknown) {
     return true
   }
 
-  return error.message.includes('Render frame was disposed')
-    || error.message.includes('Object has been destroyed')
-    || error.message.includes('WebContents was destroyed')
+  return (
+    error.message.includes('Render frame was disposed') ||
+    error.message.includes('Object has been destroyed') ||
+    error.message.includes('WebContents was destroyed')
+  )
 }
 
 function statusFromTerminalState(

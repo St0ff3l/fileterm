@@ -81,7 +81,13 @@ export function SessionWorkspace({
   onCopyItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onCutItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onClearCutState(): void
-  onExecuteCommand(commandId: string, args: string[], options: CommandExecutionOptions, scope: SendScope, selectedTabIds: string[]): void
+  onExecuteCommand(
+    commandId: string,
+    args: string[],
+    options: CommandExecutionOptions,
+    scope: SendScope,
+    selectedTabIds: string[]
+  ): void
   onSendTerminalCommand(command: string): Promise<void>
   onTerminalDockSendScopeChange(scope: SendScope, rememberSelection: boolean): void
   onTerminalDockSelectedTabIdsChange(tabIds: string[], rememberSelection: boolean): void
@@ -143,8 +149,8 @@ export function SessionWorkspace({
       if (diskHeadRect) {
         const nextHeight = workspaceRect.bottom - diskHeadRect.top
         const clampedHeight = clampFilePanelHeight(workspaceRect.height, nextHeight)
-        
-        setFilePanelHeight((prev) => prev === clampedHeight ? prev : clampedHeight)
+
+        setFilePanelHeight((prev) => (prev === clampedHeight ? prev : clampedHeight))
         isSnappedToDiskHead.current = true
         return
       }
@@ -181,7 +187,7 @@ export function SessionWorkspace({
       return
     }
 
-    setFilePanelHeight((prev) => prev > 0 ? prev : lastExpandedFilePanelHeight.current || DEFAULT_FILE_PANEL_HEIGHT)
+    setFilePanelHeight((prev) => (prev > 0 ? prev : lastExpandedFilePanelHeight.current || DEFAULT_FILE_PANEL_HEIGHT))
     setIsFilePanelCollapsed(false)
   }, [isFileOnly, isWorkspaceFocusMode])
 
@@ -298,7 +304,7 @@ export function SessionWorkspace({
 
   const handleToggleFilePanelCollapsed = () => {
     if (isFilePanelCollapsed) {
-      setFilePanelHeight((prev) => prev > 0 ? prev : lastExpandedFilePanelHeight.current || DEFAULT_FILE_PANEL_HEIGHT)
+      setFilePanelHeight((prev) => (prev > 0 ? prev : lastExpandedFilePanelHeight.current || DEFAULT_FILE_PANEL_HEIGHT))
       setIsFilePanelCollapsed(false)
       return
     }
@@ -354,7 +360,7 @@ export function SessionWorkspace({
           onMouseDown={() => {
             isResizingFilePanel.current = true
             hasUserResizedFilePanel.current = true
-            
+
             if (workspaceRef.current) {
               const rect = workspaceRef.current.getBoundingClientRect()
               const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
@@ -364,7 +370,7 @@ export function SessionWorkspace({
                 snapHeight: diskHeadRect ? rect.bottom - diskHeadRect.top : null
               }
             }
-            
+
             document.body.style.cursor = 'row-resize'
             document.body.style.userSelect = 'none'
           }}

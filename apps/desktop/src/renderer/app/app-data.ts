@@ -1,9 +1,4 @@
-import type {
-  ConnectionProfile,
-  CreateProfileInput,
-  LocalFileItem,
-  WorkspaceSnapshot
-} from '@fileterm/core'
+import type { ConnectionProfile, CreateProfileInput, LocalFileItem, WorkspaceSnapshot } from '@fileterm/core'
 
 export const emptyState: WorkspaceSnapshot = {
   profiles: [],
@@ -40,7 +35,8 @@ export const defaultForm: CreateProfileInput = {
   backspaceKey: 'ASCII',
   deleteKey: 'VT220',
   enableExecChannel: true,
-  secure: false
+  secure: false,
+  securityMode: 'none'
 }
 
 export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
@@ -54,16 +50,15 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     remotePath: profile.remotePath,
     note: profile.note ?? '',
     password: profile.password ?? '',
-    trustedHostFingerprint: profile.type === 'ssh' ? profile.trustedHostFingerprint ?? '' : '',
-    authType: profile.type === 'ssh'
-      ? (profile.authType === 'system' ? 'password' : profile.authType)
-      : 'password',
-    privateKeyPath: profile.type === 'ssh' ? profile.privateKeyPath ?? '' : '',
-    passphrase: profile.type === 'ssh' ? profile.passphrase ?? '' : '',
-    encoding: profile.type === 'ssh' ? profile.encoding ?? 'UTF-8' : 'UTF-8',
-    backspaceKey: profile.type === 'ssh' ? profile.backspaceKey ?? 'ASCII' : 'ASCII',
-    deleteKey: profile.type === 'ssh' ? profile.deleteKey ?? 'VT220' : 'VT220',
-    enableExecChannel: profile.type === 'ssh' ? profile.enableExecChannel ?? true : true,
-    secure: profile.type === 'ftp' ? profile.secure : false
+    trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',
+    authType: profile.type === 'ssh' ? (profile.authType === 'system' ? 'password' : profile.authType) : 'password',
+    privateKeyPath: profile.type === 'ssh' ? (profile.privateKeyPath ?? '') : '',
+    passphrase: profile.type === 'ssh' ? (profile.passphrase ?? '') : '',
+    encoding: profile.type === 'ssh' ? (profile.encoding ?? 'UTF-8') : 'UTF-8',
+    backspaceKey: profile.type === 'ssh' ? (profile.backspaceKey ?? 'ASCII') : 'ASCII',
+    deleteKey: profile.type === 'ssh' ? (profile.deleteKey ?? 'VT220') : 'VT220',
+    enableExecChannel: profile.type === 'ssh' ? (profile.enableExecChannel ?? true) : true,
+    secure: profile.type === 'ftp' ? profile.secure : false,
+    securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none'
   }
 }

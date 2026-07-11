@@ -43,12 +43,8 @@ export function SettingsModal({
     return `${platform} / ${arch}`
   })()
 
-  const managerToolsHint = inline
-    ? t.settingsManagersInlineHint
-    : t.settingsManagersWindowHint
-  const managerToolsActionLabel = inline
-    ? t.switchToManagerPage
-    : t.openInSeparateWindow
+  const managerToolsHint = inline ? t.settingsManagersInlineHint : t.settingsManagersWindowHint
+  const managerToolsActionLabel = inline ? t.switchToManagerPage : t.openInSeparateWindow
 
   const content = (
     <div
@@ -118,7 +114,9 @@ export function SettingsModal({
                         <div className="preview-content"></div>
                       </div>
                     </div>
-                    <span>{t.theme}: {t.defaultDark}</span>
+                    <span>
+                      {t.theme}: {t.defaultDark}
+                    </span>
                   </button>
                   <button
                     className={`theme-card light ${theme === 'default-light' ? 'active' : ''}`}
@@ -132,7 +130,9 @@ export function SettingsModal({
                         <div className="preview-content"></div>
                       </div>
                     </div>
-                    <span>{t.theme}: {t.defaultLight}</span>
+                    <span>
+                      {t.theme}: {t.defaultLight}
+                    </span>
                   </button>
                 </div>
               </section>
@@ -215,7 +215,12 @@ export function SettingsModal({
                 <div className="logs-shortcut-card">
                   <p>{t.settingsLogsDescription}</p>
                   <button className="flat-button compact" onClick={onOpenLogsDirectory} type="button">
-                    <span className="material-symbols-outlined" style={{ fontSize: '14px', marginRight: '4px', verticalAlign: 'middle' }}>folder_open</span>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: '14px', marginRight: '4px', verticalAlign: 'middle' }}
+                    >
+                      folder_open
+                    </span>
                     {t.openLogsDirectory}
                   </button>
                 </div>

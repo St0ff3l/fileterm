@@ -8,6 +8,7 @@
 - 提交到 GitHub 的分支与 Pull Request 默认通过常规 CI，至少覆盖 `npm ci`、`npm run typecheck` 与 `npm run build`。
 - IPC 变更需要确认 `main -> preload -> renderer` 三层类型和调用保持一致。
 - 协议相关改动需要覆盖 SSH/SFTP 与 FTP 的差异路径。
+- SSH/FTP controller 的连接生命周期、平台门控、输入输出、断线重连与操作串行化由 `apps/desktop/test/controllers/` 直接测试；测试使用注入式协议 client，不访问真实网络。
 - 文件传输相关改动需要确认任务状态、进度、取消或失败提示不回退。
 - 主题相关改动需要确认明暗主题、终端配色和高频组件外观一致。
 - 桌面壳和布局相关改动需要同时检查 macOS 标题栏避让、明暗主题、收起态侧栏、终端输入条和文件面板抽屉。

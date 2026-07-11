@@ -18,16 +18,18 @@ export function OverviewPage({
   onOpenCommandManager(): void
   onOpenDocs(): void
 }) {
-  const usedProfiles = profiles.filter(p => p.lastUsedAt != null)
-  const recentProfiles = usedProfiles.length > 0
-    ? [
-        ...[...usedProfiles].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0)),
-        ...profiles.filter(p => p.lastUsedAt == null)
-      ]
-    : profiles
-  const sshCount = profiles.filter(p => p.type === 'ssh').length
-  const ftpCount = profiles.filter(p => p.type === 'ftp').length
-  const secureFtpCount = profiles.filter(p => p.type === 'ftp' && p.secure).length
+  const usedProfiles = profiles.filter((p) => p.lastUsedAt != null)
+  const recentProfiles =
+    usedProfiles.length > 0
+      ? [
+          ...[...usedProfiles].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0)),
+          ...profiles.filter((p) => p.lastUsedAt == null)
+        ]
+      : profiles
+  const visibleRecentProfiles = recentProfiles.slice(0, 6)
+  const sshCount = profiles.filter((p) => p.type === 'ssh').length
+  const ftpCount = profiles.filter((p) => p.type === 'ftp').length
+  const secureFtpCount = profiles.filter((p) => p.type === 'ftp' && p.secure).length
 
   return (
     <div className="overview-page">
@@ -35,23 +37,13 @@ export function OverviewPage({
       <section className="overview-hero">
         <div className="hero-content">
           <h1 className="hero-title">{t.overviewWelcomeTitle}</h1>
-          <p className="hero-subtitle">
-            {t.overviewWelcomeSubtitle}
-          </p>
+          <p className="hero-subtitle">{t.overviewWelcomeSubtitle}</p>
           <div className="hero-actions">
-            <button
-              className="hero-btn hero-btn-primary"
-              onClick={onOpenNewConnection}
-              type="button"
-            >
+            <button className="hero-btn hero-btn-primary" onClick={onOpenNewConnection} type="button">
               <span className="material-symbols-outlined">add</span>
               <span>{t.newConnection}</span>
             </button>
-            <button
-              className="hero-btn hero-btn-secondary"
-              onClick={onOpenConnectionManager}
-              type="button"
-            >
+            <button className="hero-btn hero-btn-secondary" onClick={onOpenConnectionManager} type="button">
               <span className="material-symbols-outlined">settings_ethernet</span>
               <span>{t.connectionManager}</span>
             </button>
@@ -100,13 +92,13 @@ export function OverviewPage({
       </section>
 
       {/* Recent Connections */}
-      {recentProfiles.length > 0 && (
+      {visibleRecentProfiles.length > 0 && (
         <section className="overview-recent">
           <div className="section-header">
             <h2 className="section-title">{t.overviewRecentConnections}</h2>
           </div>
           <div className="recent-grid">
-            {recentProfiles.map((profile) => (
+            {visibleRecentProfiles.map((profile) => (
               <div
                 key={profile.id}
                 className="recent-card"
@@ -130,7 +122,9 @@ export function OverviewPage({
                 <div className="recent-card-body">
                   <h3 className="recent-name">{profile.name}</h3>
                   <div className="recent-info">
-                    <span className="recent-user">{profile.username}@{profile.host}</span>
+                    <span className="recent-user">
+                      {profile.username}@{profile.host}
+                    </span>
                   </div>
                 </div>
                 <div className="recent-card-footer">
@@ -157,11 +151,7 @@ export function OverviewPage({
           <h2 className="section-title">{t.overviewQuickActions}</h2>
         </div>
         <div className="action-grid">
-          <button
-            className="action-card"
-            onClick={onOpenCommandManager}
-            type="button"
-          >
+          <button className="action-card" onClick={onOpenCommandManager} type="button">
             <div className="action-icon">
               <span className="material-symbols-outlined">terminal</span>
             </div>
@@ -170,11 +160,7 @@ export function OverviewPage({
               <p className="action-desc">{t.overviewCommandManagerDescription}</p>
             </div>
           </button>
-          <button
-            className="action-card"
-            onClick={onOpenConnectionManager}
-            type="button"
-          >
+          <button className="action-card" onClick={onOpenConnectionManager} type="button">
             <div className="action-icon">
               <span className="material-symbols-outlined">tune</span>
             </div>
@@ -183,11 +169,7 @@ export function OverviewPage({
               <p className="action-desc">{t.overviewConnectionManagerDescription}</p>
             </div>
           </button>
-          <button
-            className="action-card"
-            onClick={onOpenDocs}
-            type="button"
-          >
+          <button className="action-card" onClick={onOpenDocs} type="button">
             <div className="action-icon">
               <span className="material-symbols-outlined">description</span>
             </div>

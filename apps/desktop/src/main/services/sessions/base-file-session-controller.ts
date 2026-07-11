@@ -1,4 +1,13 @@
-import type { ConnectionProfile, FileSessionController, PermissionChangeOptions, RemoteFileAccessOptions, RemoteFileItem, TransferProgress } from '@fileterm/core'
+import type {
+  ConnectionProfile,
+  FileSessionController,
+  PermissionChangeOptions,
+  RemoteFileAccessOptions,
+  RemoteFileItem,
+  RemoteFileStat,
+  TransferFileOptions,
+  TransferProgress
+} from '@fileterm/core'
 
 export abstract class BaseFileSessionController implements FileSessionController {
   readonly id: string
@@ -56,6 +65,19 @@ export abstract class BaseFileSessionController implements FileSessionController
   abstract changeRemotePermissions(path: string, options: PermissionChangeOptions): Promise<void>
   abstract ensureRemoteDirectory(path: string): Promise<void>
   abstract abortTransfer(): Promise<void>
-  abstract uploadFile(localPath: string, remotePath: string, onProgress: (progress: TransferProgress) => void): Promise<void>
-  abstract downloadFile(remotePath: string, localPath: string, onProgress: (progress: TransferProgress) => void): Promise<void>
+  abstract statRemoteFile(path: string): Promise<RemoteFileStat | null>
+  abstract replaceRemoteFile(partialPath: string, destinationPath: string): Promise<void>
+  abstract removeRemoteFileIfExists(path: string): Promise<void>
+  abstract uploadFile(
+    localPath: string,
+    remotePath: string,
+    onProgress: (progress: TransferProgress) => void,
+    options?: TransferFileOptions
+  ): Promise<void>
+  abstract downloadFile(
+    remotePath: string,
+    localPath: string,
+    onProgress: (progress: TransferProgress) => void,
+    options?: TransferFileOptions
+  ): Promise<void>
 }

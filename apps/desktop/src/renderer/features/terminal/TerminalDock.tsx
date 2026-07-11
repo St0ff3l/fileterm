@@ -30,10 +30,6 @@ function normalizePreferences(value: Partial<DockPreferences> | null | undefined
   }
 }
 
-function isHiddenPath(path: string) {
-  return path.split('/').some((segment) => segment.startsWith('.') && segment.length > 1)
-}
-
 function formatHistoryTime(timestamp: number) {
   const date = new Date(timestamp)
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -100,8 +96,9 @@ export function TerminalDock({
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node
       const clickedInsideDock = rootRef.current && rootRef.current.contains(target)
-      const clickedInsideDropdown = (target as HTMLElement).closest && (target as HTMLElement).closest('.custom-select-dropdown')
-      
+      const clickedInsideDropdown =
+        (target as HTMLElement).closest && (target as HTMLElement).closest('.custom-select-dropdown')
+
       if (!clickedInsideDock && !clickedInsideDropdown) {
         setPanel(null)
       }
@@ -324,12 +321,7 @@ export function TerminalDock({
   }
 
   const canSend = connected && activeTab.sessionType === 'ssh' && command.trim().length > 0
-  const activeTargetSummary = summarizeSendTarget(
-    sendScope,
-    selectedTabIds,
-    sendTargets,
-    t.commandSendCurrent
-  )
+  const activeTargetSummary = summarizeSendTarget(sendScope, selectedTabIds, sendTargets, t.commandSendCurrent)
 
   const sendCommand = async (nextCommand: string) => {
     const trimmed = nextCommand.trim()
@@ -408,99 +400,101 @@ export function TerminalDock({
   const renderHistoryPanel = () => (
     <div className="terminal-dock-panel terminal-dock-history">
       <div className="terminal-dock-history-list">
-        {filteredHistory.length ? filteredHistory.map((entry, index) => {
-          const isActive = activeHistoryIndex === index
-          const tokens = entry.command.split(/\s+/).filter(Boolean)
-          return (
-            <div
-              key={`${entry.createdAt}-${entry.command}`}
-              ref={isActive ? activeItemRef : undefined}
-              className={`terminal-dock-history-wrapper ${isActive ? 'is-active' : ''}`}
-              onClick={() => {
-                setActiveHistoryIndex(index)
-                setActiveTokenIndex(0)
-              }}
-              onDoubleClick={() => {
-                void handleHistoryAction(entry.command, 0)
-              }}
-            >
-              <div className="terminal-dock-history-left">
-                <code>
-                  {isActive ? (
-                    tokens.map((token, tokenIdx) => (
-                      <span
-                        key={tokenIdx}
-                        className={`history-token ${activeTokenIndex === tokenIdx ? 'is-selected' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setCommand((prev) => {
-                            const trimmed = prev.trim()
-                            return trimmed ? `${trimmed} ${token}` : token
-                          })
-                          setPanel(null)
-                          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
-                        }}
-                      >
-                        {token}
-                      </span>
-                    ))
-                  ) : (
-                    entry.command
-                  )}
-                </code>
-              </div>
-              <div className="terminal-dock-history-right">
-                <span className="terminal-dock-history-time">
-                  {formatHistoryTime(entry.createdAt)}
-                </span>
-                <div className="terminal-dock-history-actions">
-                  <button
-                    className="terminal-dock-action-btn btn-play"
-                    type="button"
-                    title={t.send}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleHistoryAction(entry.command, 0)
-                    }}
-                  >
-                    <AppIcon name="play" />
-                  </button>
-                  <button
-                    className="terminal-dock-action-btn btn-copy"
-                    type="button"
-                    title={t.copy}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleHistoryAction(entry.command, 1)
-                    }}
-                  >
-                    <AppIcon name="copy" />
-                  </button>
-                  <button
-                    className="terminal-dock-action-btn btn-delete"
-                    type="button"
-                    title={t.clear}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleHistoryAction(entry.command, 2)
-                    }}
-                  >
-                    <AppIcon name="trash" />
-                  </button>
+        {filteredHistory.length ? (
+          filteredHistory.map((entry, index) => {
+            const isActive = activeHistoryIndex === index
+            const tokens = entry.command.split(/\s+/).filter(Boolean)
+            return (
+              <div
+                key={`${entry.createdAt}-${entry.command}`}
+                ref={isActive ? activeItemRef : undefined}
+                className={`terminal-dock-history-wrapper ${isActive ? 'is-active' : ''}`}
+                onClick={() => {
+                  setActiveHistoryIndex(index)
+                  setActiveTokenIndex(0)
+                }}
+                onDoubleClick={() => {
+                  void handleHistoryAction(entry.command, 0)
+                }}
+              >
+                <div className="terminal-dock-history-left">
+                  <code>
+                    {isActive
+                      ? tokens.map((token, tokenIdx) => (
+                          <span
+                            key={tokenIdx}
+                            className={`history-token ${activeTokenIndex === tokenIdx ? 'is-selected' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCommand((prev) => {
+                                const trimmed = prev.trim()
+                                return trimmed ? `${trimmed} ${token}` : token
+                              })
+                              setPanel(null)
+                              window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
+                            }}
+                          >
+                            {token}
+                          </span>
+                        ))
+                      : entry.command}
+                  </code>
+                </div>
+                <div className="terminal-dock-history-right">
+                  <span className="terminal-dock-history-time">{formatHistoryTime(entry.createdAt)}</span>
+                  <div className="terminal-dock-history-actions">
+                    <button
+                      className="terminal-dock-action-btn btn-play"
+                      type="button"
+                      title={t.send}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleHistoryAction(entry.command, 0)
+                      }}
+                    >
+                      <AppIcon name="play" />
+                    </button>
+                    <button
+                      className="terminal-dock-action-btn btn-copy"
+                      type="button"
+                      title={t.copy}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleHistoryAction(entry.command, 1)
+                      }}
+                    >
+                      <AppIcon name="copy" />
+                    </button>
+                    <button
+                      className="terminal-dock-action-btn btn-delete"
+                      type="button"
+                      title={t.clear}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void handleHistoryAction(entry.command, 2)
+                      }}
+                    >
+                      <AppIcon name="trash" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        }) : (
+            )
+          })
+        ) : (
           <div className="terminal-dock-empty">{t.terminalDockHistoryEmpty}</div>
         )}
       </div>
       <div className="terminal-dock-history-footer">
         <span className="terminal-dock-history-hint">{t.terminalDockHistoryInsertHint}</span>
-        <button className="terminal-dock-clear-btn" type="button" onClick={() => {
-          setHistory([])
-          void persistHistory([])
-        }}>
+        <button
+          className="terminal-dock-clear-btn"
+          type="button"
+          onClick={() => {
+            setHistory([])
+            void persistHistory([])
+          }}
+        >
           {t.terminalDockClearList}
         </button>
       </div>
@@ -529,8 +523,13 @@ export function TerminalDock({
       </label>
       <SessionSendTargetPicker
         allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
-        currentLabel={t.commandSendCurrentWithIndex.replace('{index}', String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-'))}
-        onRememberSelectionChange={(nextValue) => updatePreferences((prev) => ({ ...prev, rememberSendTarget: nextValue }))}
+        currentLabel={t.commandSendCurrentWithIndex.replace(
+          '{index}',
+          String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
+        )}
+        onRememberSelectionChange={(nextValue) =>
+          updatePreferences((prev) => ({ ...prev, rememberSendTarget: nextValue }))
+        }
         onScopeChange={(nextScope) => onSendScopeChange(nextScope, preferences.rememberSendTarget)}
         onSelectedTabIdsChange={(tabIds) => onSelectedTabIdsChange(tabIds, preferences.rememberSendTarget)}
         rememberSelection={preferences.rememberSendTarget}
@@ -544,9 +543,8 @@ export function TerminalDock({
 
   const isMac = window.fileterm?.platform === 'darwin'
   const placeholderText = isMac ? t.terminalDockPlaceholderMac : t.terminalDockPlaceholderWin
-  const connectionStateClass = activeTab.status === 'connecting'
-    ? 'is-connecting'
-    : connected ? 'is-connected' : 'is-disconnected'
+  const connectionStateClass =
+    activeTab.status === 'connecting' ? 'is-connecting' : connected ? 'is-connected' : 'is-disconnected'
 
   return (
     <section ref={rootRef} className="terminal-dock">
@@ -571,7 +569,7 @@ export function TerminalDock({
             aria-pressed={panel === 'history'}
             className={panel === 'history' ? 'is-active' : undefined}
             type="button"
-            onClick={() => setPanel((prev) => prev === 'history' ? null : 'history')}
+            onClick={() => setPanel((prev) => (prev === 'history' ? null : 'history'))}
           >
             {t.history}
           </button>
@@ -579,7 +577,7 @@ export function TerminalDock({
             aria-pressed={panel === 'options'}
             className={panel === 'options' ? 'is-active' : undefined}
             type="button"
-            onClick={() => setPanel((prev) => prev === 'options' ? null : 'options')}
+            onClick={() => setPanel((prev) => (prev === 'options' ? null : 'options'))}
           >
             {`${t.options} · ${activeTargetSummary}`}
           </button>

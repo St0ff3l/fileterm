@@ -1,5 +1,7 @@
 export type SessionType = 'ssh' | 'ftp'
 
+export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
+
 export type TabLayout = 'terminal-file' | 'file-only'
 
 export type TabStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'closed'
@@ -58,6 +60,7 @@ export interface FtpProfile extends BaseProfile {
   note?: string
   password?: string
   secure: boolean
+  securityMode?: FtpSecurityMode
   remotePath: string
 }
 
@@ -71,6 +74,41 @@ export interface WorkspaceTab {
   layout: TabLayout
   status: TabStatus
 }
+
+export type WorkspaceSessionTabEvent =
+  | {
+      type: 'status-changed'
+      tabId: string
+      status: TabStatus
+      summary: string
+      connected: boolean
+    }
+  | {
+      type: 'disconnected'
+      tabId: string
+      summary: string
+    }
+  | {
+      type: 'cwd-changed'
+      tabId: string
+      shellCwd: string
+      remotePath: string
+      followShellCwd: boolean
+    }
+  | {
+      type: 'file-access-changed'
+      tabId: string
+      source: 'shell' | 'manual'
+      fileAccessMode: 'user' | 'root'
+      shellUser?: string
+      sudoUser?: string
+    }
+  | {
+      type: 'ssh-handshake'
+      tabId: string
+      phase: 'connected' | 'failed'
+      summary: string
+    }
 
 export interface RemoteFileItem {
   path: string
@@ -86,16 +124,59 @@ export interface LocalFileItem extends RemoteFileItem {
   path: string
 }
 
+export type TransferStatus =
+  'queued' | 'running' | 'paused' | 'interrupted' | 'verifying' | 'finalizing' | 'done' | 'failed' | 'canceled'
+
+export interface TransferFileIdentity {
+  size: number
+  modifiedAt?: number
+}
+
+export type TransferManifestEntryStatus = 'pending' | 'running' | 'done'
+
+export interface TransferManifestEntry {
+  relativePath: string
+  sourcePath: string
+  destinationPath: string
+  partialPath: string
+  stagingPath?: string
+  sourceIdentity: TransferFileIdentity
+  status: TransferManifestEntryStatus
+  transferredBytes: number
+}
+
+export interface TransferManifest {
+  version: 1
+  directories: string[]
+  files: TransferManifestEntry[]
+}
+
 export interface TransferTask {
   id: string
   direction: 'upload' | 'download'
   name: string
   progress: number
-  status: 'queued' | 'running' | 'done' | 'failed' | 'canceled'
+  status: TransferStatus
   message?: string
   speed?: string
   transferredBytes?: number
   totalBytes?: number
+  tabId?: string
+  profileId?: string
+  sessionType?: SessionType
+  fileAccessMode?: 'user' | 'root'
+  targetType?: RemoteFileItem['type']
+  sourcePath?: string
+  destinationPath?: string
+  partialPath?: string
+  stagingPath?: string
+  sourceIdentity?: TransferFileIdentity
+  manifest?: TransferManifest
+  resumable?: boolean
+  retryAttempt?: number
+  cleanupPending?: boolean
+  createdAt?: number
+  updatedAt?: number
 }
 
 export interface TransferProgress {
@@ -107,6 +188,17 @@ export interface TransferProgress {
 
 export interface TransferTargetOptions {
   targetName?: string
+}
+
+export interface TransferFileOptions {
+  resumeOffset?: number
+  signal?: AbortSignal
+  stagingPath?: string
+}
+
+export interface RemoteFileStat {
+  size: number
+  modifiedAt?: number
 }
 
 export interface PermissionChangeOptions {
@@ -152,6 +244,23 @@ export interface NetworkSamplePoint {
 export interface NetworkRates {
   rx: string
   tx: string
+}
+
+export type RemoteSystemPlatform = 'linux' | 'busybox' | 'windows' | 'unknown'
+
+export interface RawResourceUsageBreakdown {
+  totalBytes: number
+  usedBytes: number
+  availableBytes: number
+  percent: number
+}
+
+export interface RawNetworkInterfaceMetrics {
+  name: string
+  rxBytes: number
+  txBytes: number
+  rxBytesPerSecond: number
+  txBytesPerSecond: number
 }
 
 export interface SystemIdentity {
@@ -213,10 +322,12 @@ export interface FileSystemRow {
 }
 
 export interface SystemMetrics {
+  platform?: RemoteSystemPlatform
   ip: string
   uptime: string
   uptimeSeconds?: number
   load: string
+  loadUnit?: 'busy-logical-processors'
   identity: SystemIdentity
   cpuPercent: number
   cpuUsage: CpuUsageBreakdown
@@ -228,9 +339,15 @@ export interface SystemMetrics {
   memoryCacheUsage?: string
   memoryKernelUsage?: string
   memoryBreakdown: ResourceUsageBreakdown
+  memoryRaw?: RawResourceUsageBreakdown & {
+    appBytes?: number
+    cacheBytes?: number
+    kernelBytes?: number
+  }
   swapPercent: number
   swapUsage: string
   swapBreakdown: ResourceUsageBreakdown
+  swapRaw?: RawResourceUsageBreakdown
   diskRows: Array<{ path: string; usage: string }>
   fileSystemRows: FileSystemRow[]
   networkInterfaces: string[]
@@ -240,6 +357,7 @@ export interface SystemMetrics {
   networkInterfaceRows: NetworkInterfaceRow[]
   networkRatesByInterface?: Record<string, NetworkRates>
   networkSamplesByInterface?: Record<string, NetworkSamplePoint[]>
+  networkRawByInterface?: Record<string, RawNetworkInterfaceMetrics>
   topProcesses: SidebarProcessItem[]
 }
 
@@ -274,6 +392,7 @@ export interface SessionSnapshot {
   terminalTranscript?: string
   remotePath: string
   shellCwd?: string
+  shellUser?: string
   followShellCwd?: boolean
   remoteFilesLoading?: boolean
   remoteFiles: RemoteFileItem[]
@@ -321,6 +440,7 @@ export interface CreateProfileInput {
   authType?: 'password' | 'privateKey' | 'system'
   trustedHostFingerprint?: string
   secure?: boolean
+  securityMode?: FtpSecurityMode
   encoding?: string
   backspaceKey?: string
   deleteKey?: string
@@ -432,7 +552,10 @@ export interface FileTermDesktopApi {
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
-  setUiPreferences(input: { theme?: 'default-dark' | 'default-light'; locale?: 'zhCN' | 'enUS' }): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
+  setUiPreferences(input: {
+    theme?: 'default-dark' | 'default-light'
+    locale?: 'zhCN' | 'enUS'
+  }): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -447,9 +570,14 @@ export interface FileTermDesktopApi {
   isCurrentWindowMaximized(): Promise<boolean>
   toggleMaximizeCurrentWindow(): Promise<void>
   closeCurrentWindow(): Promise<void>
+  confirmCloseCurrentFileEditor(): Promise<void>
+  cancelCloseCurrentFileEditor(): Promise<void>
   showWindowMenu(menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
-  onUiPreferencesChanged(listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void): () => void
+  onUiPreferencesChanged(
+    listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
+  ): () => void
+  onFileEditorCloseRequest(listener: () => void): () => void
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   getConnectionLibrary(): Promise<ConnectionLibrarySnapshot>
@@ -464,7 +592,12 @@ export interface FileTermDesktopApi {
   createCommandTemplate(input: CommandTemplateInput): Promise<WorkspaceSnapshot>
   updateCommandTemplate(commandId: string, input: CommandTemplateInput): Promise<WorkspaceSnapshot>
   deleteCommandTemplate(commandId: string): Promise<WorkspaceSnapshot>
-  executeCommandTemplate(tabId: string, commandId: string, args?: string[], options?: CommandExecutionOptions): Promise<CommandExecutionResult>
+  executeCommandTemplate(
+    tabId: string,
+    commandId: string,
+    args?: string[],
+    options?: CommandExecutionOptions
+  ): Promise<CommandExecutionResult>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
   getCommandSendPreferences(): Promise<CommandSendPreferences>
@@ -493,11 +626,34 @@ export interface FileTermDesktopApi {
   selectLocalDirectory(defaultPath?: string): Promise<string | null>
   queueUpload(fileNames: string[]): Promise<WorkspaceSnapshot>
   cancelTransfer(transferId: string): Promise<WorkspaceSnapshot>
+  pauseTransfer(transferId: string): Promise<WorkspaceSnapshot>
+  resumeTransfer(transferId: string): Promise<WorkspaceSnapshot>
+  discardTransfer(transferId: string): Promise<WorkspaceSnapshot>
   clearTransfers(transferIds: string[]): Promise<WorkspaceSnapshot>
-  uploadFile(tabId: string, localPath: string, remoteDirectory: string, options?: TransferTargetOptions): Promise<WorkspaceSnapshot>
-  downloadFile(tabId: string, remotePath: string, localDirectory: string, options?: TransferTargetOptions): Promise<WorkspaceSnapshot>
-  downloadRemotePath(tabId: string, remotePath: string, targetType: RemoteFileItem['type'], localDirectory: string, options?: TransferTargetOptions): Promise<WorkspaceSnapshot>
-  setRemoteFileAccessMode(tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions): Promise<WorkspaceSnapshot>
+  uploadFile(
+    tabId: string,
+    localPath: string,
+    remoteDirectory: string,
+    options?: TransferTargetOptions
+  ): Promise<WorkspaceSnapshot>
+  downloadFile(
+    tabId: string,
+    remotePath: string,
+    localDirectory: string,
+    options?: TransferTargetOptions
+  ): Promise<WorkspaceSnapshot>
+  downloadRemotePath(
+    tabId: string,
+    remotePath: string,
+    targetType: RemoteFileItem['type'],
+    localDirectory: string,
+    options?: TransferTargetOptions
+  ): Promise<WorkspaceSnapshot>
+  setRemoteFileAccessMode(
+    tabId: string,
+    mode: 'user' | 'root',
+    options?: RemoteFileAccessOptions
+  ): Promise<WorkspaceSnapshot>
   writeTerminal(tabId: string, data: string): Promise<void>
   resizeTerminal(tabId: string, cols: number, rows: number, width: number, height: number): Promise<void>
   openRemotePath(tabId: string, targetPath: string): Promise<WorkspaceSnapshot>
@@ -506,12 +662,21 @@ export interface FileTermDesktopApi {
   writeRemoteFile(tabId: string, targetPath: string, content: string, encoding?: string): Promise<WorkspaceSnapshot>
   createRemoteDirectory(tabId: string, parentPath: string, name: string): Promise<WorkspaceSnapshot>
   createRemoteFile(tabId: string, parentPath: string, name: string): Promise<WorkspaceSnapshot>
-  copyRemotePath(tabId: string, targetPath: string, destinationPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
+  copyRemotePath(
+    tabId: string,
+    targetPath: string,
+    destinationPath: string,
+    targetType: RemoteFileItem['type']
+  ): Promise<WorkspaceSnapshot>
   moveRemotePath(tabId: string, targetPath: string, destinationPath: string): Promise<WorkspaceSnapshot>
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
-  changeRemotePermissions(tabId: string, targetPath: string, options: PermissionChangeOptions): Promise<WorkspaceSnapshot>
+  changeRemotePermissions(
+    tabId: string,
+    targetPath: string,
+    options: PermissionChangeOptions
+  ): Promise<WorkspaceSnapshot>
   onTerminalData(listener: (payload: TerminalDataPayload) => void): () => void
   onTerminalState(listener: (payload: TerminalStatePayload) => void): () => void
   onTransferUpdate(listener: (transfer: TransferTask) => void): () => void
@@ -555,8 +720,21 @@ export interface FileSessionController extends SessionController {
   changeRemotePermissions(path: string, options: PermissionChangeOptions): Promise<void>
   ensureRemoteDirectory(path: string): Promise<void>
   abortTransfer(): Promise<void>
-  uploadFile(localPath: string, remotePath: string, onProgress: (progress: TransferProgress) => void): Promise<void>
-  downloadFile(remotePath: string, localPath: string, onProgress: (progress: TransferProgress) => void): Promise<void>
+  statRemoteFile(path: string): Promise<RemoteFileStat | null>
+  replaceRemoteFile(partialPath: string, destinationPath: string): Promise<void>
+  removeRemoteFileIfExists(path: string): Promise<void>
+  uploadFile(
+    localPath: string,
+    remotePath: string,
+    onProgress: (progress: TransferProgress) => void,
+    options?: TransferFileOptions
+  ): Promise<void>
+  downloadFile(
+    remotePath: string,
+    localPath: string,
+    onProgress: (progress: TransferProgress) => void,
+    options?: TransferFileOptions
+  ): Promise<void>
 }
 
 export interface SshSessionController extends ShellSessionController, FileSessionController {

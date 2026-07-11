@@ -1,4 +1,10 @@
-import type { ConnectionProfile, ConnectionFolder, CommandFolder, CommandTemplate } from '@fileterm/core'
+import type {
+  CommandFolder,
+  CommandTemplate,
+  CommandTemplateInput,
+  ConnectionFolder,
+  ConnectionProfile
+} from '@fileterm/core'
 import { useState } from 'react'
 import { t } from '../../i18n'
 import { OverviewPage } from './OverviewPage'
@@ -6,7 +12,7 @@ import { QuickLinksPage } from './QuickLinksPage'
 import { ConnectionManagerModal } from '../connections/ConnectionManagerModal'
 import { CommandManagerModal } from '../commands/CommandManagerModal'
 import { SettingsModal } from '../settings/SettingsModal'
-import { TabBar } from '../layout/TabBar'
+import { TabBar, type TabBarProps } from '../layout/TabBar'
 
 export function HomeWorkspace({
   profiles,
@@ -52,8 +58,8 @@ export function HomeWorkspace({
   onDeleteConnectionFolder(folderId: string): void
   onUpdateConnectionFolder(folderId: string, updates: Partial<ConnectionFolder>): void
   onUpdateConnectionOrder(id: string, newParentId: string | undefined, newOrder: number): void
-  onCreateCommand(input: any): void
-  onUpdateCommand(commandId: string, input: any): void
+  onCreateCommand(input: CommandTemplateInput): void
+  onUpdateCommand(commandId: string, input: CommandTemplateInput): void
   onDeleteCommand(commandId: string): void
   onCreateCommandFolder(name: string): void
   onDeleteCommandFolder(folderId: string): void
@@ -63,11 +69,13 @@ export function HomeWorkspace({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   isSidebarCollapsed: boolean
-  tabBarProps: any
+  tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
   onResizeStart(): void
 }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'settings'>('overview')
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'settings'
+  >('overview')
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
@@ -75,10 +83,10 @@ export function HomeWorkspace({
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
   const tabOrder: Record<string, number> = {
     overview: 0,
-    'quick-links': 1,
+    'connection-manager': 1,
     'command-manager': 2,
-    'connection-manager': 3,
-    settings: 4
+    settings: 3,
+    'quick-links': 4
   }
   const selectTab = (tab: typeof activeTab) => {
     if (tab === activeTab) return
@@ -135,14 +143,14 @@ export function HomeWorkspace({
             <span>概览</span>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'quick-links' ? 'active' : ''}`}
-            onClick={() => selectTab('quick-links')}
-            aria-label={t.quickConnect}
-            title={t.quickConnect}
+            className={`sidebar-nav-link ${activeTab === 'connection-manager' ? 'active' : ''}`}
+            onClick={() => selectTab('connection-manager')}
+            aria-label={t.connectionManager}
+            title={t.connectionManager}
             type="button"
           >
-            <span className="material-symbols-outlined">link</span>
-            <span>{t.quickConnect}</span>
+            <span className="material-symbols-outlined">settings_ethernet</span>
+            <span>{t.connectionManager}</span>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'command-manager' ? 'active' : ''}`}
@@ -155,16 +163,6 @@ export function HomeWorkspace({
             <span>{t.commandManager}</span>
           </button>
           <button
-            className={`sidebar-nav-link ${activeTab === 'connection-manager' ? 'active' : ''}`}
-            onClick={() => selectTab('connection-manager')}
-            aria-label={t.connectionManager}
-            title={t.connectionManager}
-            type="button"
-          >
-            <span className="material-symbols-outlined">settings_ethernet</span>
-            <span>{t.connectionManager}</span>
-          </button>
-          <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => selectTab('settings')}
             aria-label={t.settings}
@@ -174,15 +172,19 @@ export function HomeWorkspace({
             <span className="material-symbols-outlined">settings</span>
             <span>{t.settings}</span>
           </button>
+          {/* Quick Connect sidebar button hidden — code preserved in QuickLinksPage.tsx */}
+          {/* Docs sidebar button hidden — handleOpenDocs still available */}
         </nav>
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
-          <button className="sidebar-nav-link" onClick={handleOpenDocs} aria-label="Docs" title="Docs" type="button">
-            <span className="material-symbols-outlined">description</span>
-            <span>Docs</span>
-          </button>
-          <button className="sidebar-nav-link" onClick={handleOpenDocs} aria-label="GitHub" title="GitHub" type="button">
+          <button
+            className="sidebar-nav-link"
+            onClick={handleOpenDocs}
+            aria-label="GitHub"
+            title="GitHub"
+            type="button"
+          >
             <span className="material-symbols-outlined">star</span>
             <span>GitHub</span>
           </button>
@@ -278,13 +280,17 @@ export function HomeWorkspace({
         {/* Custom Footer */}
         <footer className="home-footer">
           <div className="footer-copyright">
-            <span>© 2026 FileTerm Team. MIT Licensed. System: 0.1ms latency</span>
+            <span>© 2026 FileTerm Team. MIT Licensed.</span>
             {activeTab === 'connection-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
-                <span>{profiles.length} {t.connectionCountLabel}</span>
+                <span>
+                  {profiles.length} {t.connectionCountLabel}
+                </span>
                 <span className="footer-meta-separator">|</span>
-                <span>{folders.length} {t.folderCountLabel}</span>
+                <span>
+                  {folders.length} {t.folderCountLabel}
+                </span>
                 {activeConnectionFolderName && (
                   <>
                     <span className="footer-meta-separator">|</span>
@@ -296,9 +302,13 @@ export function HomeWorkspace({
             {activeTab === 'command-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
-                <span>{commandTemplates.length} {t.commandCountLabel}</span>
+                <span>
+                  {commandTemplates.length} {t.commandCountLabel}
+                </span>
                 <span className="footer-meta-separator">|</span>
-                <span>{commandFolders.length} {t.folderCountLabel}</span>
+                <span>
+                  {commandFolders.length} {t.folderCountLabel}
+                </span>
                 {activeCommandFolderName && (
                   <>
                     <span className="footer-meta-separator">|</span>
@@ -308,14 +318,7 @@ export function HomeWorkspace({
               </>
             )}
           </div>
-          <nav className="footer-nav">
-            <button onClick={handleOpenDocs} type="button">Changelog</button>
-            <button onClick={handleOpenDocs} type="button">API Reference</button>
-            <button className="footer-status-link" type="button">
-              <span className="footer-status-dot"></span>
-              <span>Status</span>
-            </button>
-          </nav>
+          {/* Footer nav hidden: Changelog, API Reference, Status — code/handlers preserved */}
         </footer>
       </main>
     </section>

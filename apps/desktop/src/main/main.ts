@@ -23,8 +23,16 @@ let connectionManagerWindow: BrowserWindow | null = null
 let connectionFormWindow: BrowserWindow | null = null
 let commandManagerWindow: BrowserWindow | null = null
 let commandFormWindow: BrowserWindow | null = null
-let fileEditorWindow: BrowserWindow | null = null
+const fileEditorWindows = new Set<BrowserWindow>()
+const approvedFileEditorCloses = new Set<BrowserWindow>()
+const fileEditorWindowsByKey = new Map<string, BrowserWindow>()
+const pendingFileEditorCloseRequests = new Map<
+  BrowserWindow,
+  { promise: Promise<boolean>; resolve(approved: boolean): void }
+>()
+const childWindowsHiddenWithMain = new Set<BrowserWindow>()
 let isQuitting = false
+let quitPreparationPromise: Promise<void> | undefined
 let tray: Tray | null = null
 
 const isMac = process.platform === 'darwin'
@@ -43,7 +51,8 @@ const OWNED_USER_DATA_FILES = [
   'command-history.json',
   'command-send-preferences.json',
   'ui-state.json',
-  'ui-preferences.json'
+  'ui-preferences.json',
+  'transfer-journal.json'
 ] as const
 const DEFAULT_WINDOW_BOUNDS = {
   main: {
@@ -98,9 +107,7 @@ let ipcServices: ReturnType<typeof registerIpcHandlers> | null = null
 let uiStateStore: AppUiStateStore | null = null
 
 function isBrokenPipeError(error: unknown): boolean {
-  return error instanceof Error
-    && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'EPIPE'
+  return error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'EPIPE'
 }
 
 function migrateLegacyUserData() {
@@ -208,12 +215,8 @@ async function openExternalUrl(rawUrl: string) {
 
 function installContentSecurityPolicy() {
   const appSession = session.fromPartition(APP_SESSION_PARTITION)
-  const connectSrc = app.isPackaged
-    ? ["'self'"]
-    : ["'self'", 'http://localhost:5188', 'ws://localhost:5188']
-  const scriptSrc = app.isPackaged
-    ? ["'self'"]
-    : ["'self'", "'unsafe-inline'"]
+  const connectSrc = app.isPackaged ? ["'self'"] : ["'self'", 'http://localhost:5188', 'ws://localhost:5188']
+  const scriptSrc = app.isPackaged ? ["'self'"] : ["'self'", "'unsafe-inline'"]
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(' ')}`,
@@ -320,16 +323,100 @@ function getWindowIconOptions() {
 }
 
 function requestQuitConfirmation() {
+  if (quitPreparationPromise) {
+    return
+  }
+
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.show()
-    mainWindow.focus()
+    showMainWindowAndChildren()
     mainWindow.webContents.send('app:window-close-request', { isQuit: true })
     return
   }
 
-  isQuitting = true
-  void ipcServices?.workspaceService.shutdown()
-  app.quit()
+  void quitApplication()
+}
+
+function getOpenChildWindows() {
+  return [
+    connectionManagerWindow,
+    connectionFormWindow,
+    commandManagerWindow,
+    commandFormWindow,
+    ...fileEditorWindows
+  ].filter((window): window is BrowserWindow => Boolean(window && !window.isDestroyed()))
+}
+
+function showMainWindowAndChildren() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  mainWindow.show()
+  mainWindow.focus()
+  for (const child of childWindowsHiddenWithMain) {
+    if (!child.isDestroyed()) {
+      child.show()
+    }
+  }
+  childWindowsHiddenWithMain.clear()
+}
+
+function hideMainWindowAndChildren() {
+  childWindowsHiddenWithMain.clear()
+  for (const child of getOpenChildWindows()) {
+    if (child.isVisible()) {
+      childWindowsHiddenWithMain.add(child)
+      child.hide()
+    }
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide()
+  }
+}
+
+function shutdownWorkspace() {
+  return Promise.resolve(ipcServices?.workspaceService.shutdown()).catch((error) => {
+    safeConsoleError('[FileTerm] failed to shut down workspace cleanly', error)
+  })
+}
+
+function quitApplication(): Promise<void> {
+  if (quitPreparationPromise) {
+    return quitPreparationPromise
+  }
+
+  const prepareQuit = async () => {
+    // File editor renderers own their draft state. Ask every editor to close
+    // before shutting down the workspace so Cmd/Ctrl+Q cannot silently discard
+    // an unsaved draft. Dirty editors answer only after the user decides.
+    for (const editorWindow of [...fileEditorWindows]) {
+      if (!(await requestFileEditorWindowClose(editorWindow))) {
+        return
+      }
+    }
+
+    await shutdownWorkspace()
+    isQuitting = true
+
+    for (const child of getOpenChildWindows()) {
+      if (!child.isDestroyed()) {
+        child.close()
+      }
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.close()
+    }
+    app.quit()
+  }
+
+  const preparation = prepareQuit()
+  const preparationWithCleanup = preparation.finally(() => {
+    if (!isQuitting) {
+      quitPreparationPromise = undefined
+    }
+  })
+  quitPreparationPromise = preparationWithCleanup
+
+  return quitPreparationPromise
 }
 
 function requestCloseFocusedWindow() {
@@ -408,7 +495,11 @@ function installApplicationMenu() {
   Menu.setApplicationMenu(menu)
 }
 
-function loadAppWindow(win: BrowserWindow, searchParams?: Record<string, string>, preferences: UiPreferences = uiPreferences) {
+function loadAppWindow(
+  win: BrowserWindow,
+  searchParams?: Record<string, string>,
+  preferences: UiPreferences = uiPreferences
+) {
   const query = {
     ...(searchParams ?? {}),
     theme: preferences.theme,
@@ -430,17 +521,14 @@ function loadAppWindow(win: BrowserWindow, searchParams?: Record<string, string>
 }
 
 function createTray() {
-  const iconPath = isMac
-    ? getTrayTemplateIconPath() ?? getAppIconPath()
-    : getAppIconPath()
+  const iconPath = isMac ? (getTrayTemplateIconPath() ?? getAppIconPath()) : getAppIconPath()
   if (!iconPath) {
     return
   }
 
   const image = nativeImage.createFromPath(iconPath)
-  const trayImage = process.platform === 'darwin'
-    ? image.resize({ width: 18, height: 18 })
-    : image.resize({ width: 16, height: 16 })
+  const trayImage =
+    process.platform === 'darwin' ? image.resize({ width: 18, height: 18 }) : image.resize({ width: 16, height: 16 })
 
   if (process.platform === 'darwin') {
     trayImage.setTemplateImage(true)
@@ -452,8 +540,7 @@ function createTray() {
       label: '显示主窗口',
       click: () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.show()
-          mainWindow.focus()
+          showMainWindowAndChildren()
         } else {
           createMainWindow()
         }
@@ -475,13 +562,12 @@ function createTray() {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isVisible()) {
         if (mainWindow.isFocused()) {
-          mainWindow.hide()
+          hideMainWindowAndChildren()
         } else {
           mainWindow.focus()
         }
       } else {
-        mainWindow.show()
-        mainWindow.focus()
+        showMainWindowAndChildren()
       }
     } else {
       createMainWindow()
@@ -523,6 +609,9 @@ function createMainWindow() {
       return
     }
     event.preventDefault()
+    if (quitPreparationPromise) {
+      return
+    }
     win.webContents.send('app:window-close-request', { isQuit: false })
   })
   win.webContents.on('before-input-event', (event, input) => {
@@ -546,7 +635,7 @@ function createMainWindow() {
         connectionFormWindow,
         commandManagerWindow,
         commandFormWindow,
-        fileEditorWindow
+        ...fileEditorWindows
       ]
       for (const child of childWindows) {
         if (child && !child.isDestroyed()) {
@@ -584,18 +673,21 @@ function registerWindowStateListeners(win: BrowserWindow) {
   })
 }
 
-function createNativeChildWindow(parent: BrowserWindow, options: {
-  title: string
-  width: number
-  height: number
-  minWidth: number
-  minHeight: number
-  backgroundColor?: string
-  useVibrancy?: boolean
-  visualEffectState?: 'followWindow' | 'active' | 'inactive'
-  titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'
-  frame?: boolean
-}) {
+function createNativeChildWindow(
+  parent: BrowserWindow,
+  options: {
+    title: string
+    width: number
+    height: number
+    minWidth: number
+    minHeight: number
+    backgroundColor?: string
+    useVibrancy?: boolean
+    visualEffectState?: 'followWindow' | 'active' | 'inactive'
+    titleBarStyle?: 'default' | 'hidden' | 'hiddenInset' | 'customButtonsOnHover'
+    frame?: boolean
+  }
+) {
   const enableVibrancy = isMac && options.useVibrancy === true
   const frame = options.frame ?? (isWindows ? false : isMac ? undefined : true)
   const win = new BrowserWindow({
@@ -611,11 +703,11 @@ function createNativeChildWindow(parent: BrowserWindow, options: {
     backgroundColor: options.backgroundColor ?? getWindowBackgroundColor(uiPreferences.theme),
     autoHideMenuBar: true,
     frame,
-    titleBarStyle: isMac && frame !== false ? options.titleBarStyle ?? 'hiddenInset' : 'default',
+    titleBarStyle: isMac && frame !== false ? (options.titleBarStyle ?? 'hiddenInset') : 'default',
     trafficLightPosition: isMac && frame !== false ? { x: 16, y: 14 } : undefined,
     minimizable: isWindows,
     vibrancy: enableVibrancy ? 'sidebar' : undefined,
-    visualEffectState: enableVibrancy ? options.visualEffectState ?? 'active' : undefined,
+    visualEffectState: enableVibrancy ? (options.visualEffectState ?? 'active') : undefined,
     ...getWindowIconOptions(),
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.cjs'),
@@ -626,6 +718,9 @@ function createNativeChildWindow(parent: BrowserWindow, options: {
     }
   })
   registerWindowStateListeners(win)
+  if (isMac) {
+    win.setWindowButtonVisibility(false)
+  }
   return win
 }
 
@@ -657,8 +752,7 @@ function openConnectionManagerWindow(parent: BrowserWindow) {
     width: DEFAULT_WINDOW_BOUNDS.connectionManager.width,
     height: DEFAULT_WINDOW_BOUNDS.connectionManager.height,
     minWidth: DEFAULT_WINDOW_BOUNDS.connectionManager.minWidth,
-    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight,
-    frame: false
+    minHeight: DEFAULT_WINDOW_BOUNDS.connectionManager.minHeight
   })
 
   connectionManagerWindow = win
@@ -694,8 +788,7 @@ function openCommandManagerWindow(parent: BrowserWindow) {
     width: DEFAULT_WINDOW_BOUNDS.commandManager.width,
     height: DEFAULT_WINDOW_BOUNDS.commandManager.height,
     minWidth: DEFAULT_WINDOW_BOUNDS.commandManager.minWidth,
-    minHeight: DEFAULT_WINDOW_BOUNDS.commandManager.minHeight,
-    frame: false
+    minHeight: DEFAULT_WINDOW_BOUNDS.commandManager.minHeight
   })
 
   commandManagerWindow = win
@@ -739,11 +832,15 @@ function openConnectionFormWindow(parent: BrowserWindow, mode: 'create' | 'edit'
     }
   })
 
-  loadAppWindow(win, {
-    window: 'connection-form',
-    mode,
-    ...(profileId ? { profileId } : {})
-  }, uiPreferences)
+  loadAppWindow(
+    win,
+    {
+      window: 'connection-form',
+      mode,
+      ...(profileId ? { profileId } : {})
+    },
+    uiPreferences
+  )
 }
 
 function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', commandId?: string, folderId?: string) {
@@ -772,23 +869,40 @@ function openCommandFormWindow(parent: BrowserWindow, mode: 'create' | 'edit', c
     }
   })
 
-  loadAppWindow(win, {
-    window: 'command-form',
-    mode,
-    ...(commandId ? { commandId } : {}),
-    ...(folderId ? { folderId } : {})
-  }, uiPreferences)
+  loadAppWindow(
+    win,
+    {
+      window: 'command-form',
+      mode,
+      ...(commandId ? { commandId } : {}),
+      ...(folderId ? { folderId } : {})
+    },
+    uiPreferences
+  )
 }
 
-function openFileEditorWindow(parent: BrowserWindow, input: {
-  source: 'local' | 'remote'
-  path: string
-  name: string
-  tabId?: string
-  encoding?: string
-}) {
-  if (fileEditorWindow && !fileEditorWindow.isDestroyed()) {
-    fileEditorWindow.close()
+function getFileEditorWindowKey(input: { source: 'local' | 'remote'; path: string; tabId?: string }) {
+  const normalizedPath = input.source === 'local' && isWindows ? input.path.toLocaleLowerCase() : input.path
+  return `${input.source}:${input.tabId ?? ''}:${normalizedPath}`
+}
+
+function openFileEditorWindow(
+  parent: BrowserWindow,
+  input: {
+    source: 'local' | 'remote'
+    path: string
+    name: string
+    tabId?: string
+    encoding?: string
+  }
+) {
+  const editorKey = getFileEditorWindowKey(input)
+  const existingWindow = fileEditorWindowsByKey.get(editorKey)
+  if (existingWindow && !existingWindow.isDestroyed()) {
+    showMainWindowAndChildren()
+    existingWindow.show()
+    existingWindow.focus()
+    return
   }
 
   const win = createNativeChildWindow(parent, {
@@ -801,26 +915,107 @@ function openFileEditorWindow(parent: BrowserWindow, input: {
     frame: false
   })
 
-  fileEditorWindow = win
+  fileEditorWindows.add(win)
+  fileEditorWindowsByKey.set(editorKey, win)
   attachWindowDiagnostics(win, 'file-editor')
+  win.webContents.on('render-process-gone', () => {
+    resolvePendingFileEditorClose(win, true)
+    approvedFileEditorCloses.add(win)
+    if (!win.isDestroyed()) {
+      win.destroy()
+    }
+  })
   win.once('ready-to-show', () => {
     centerChildWindowToParent(parent, win)
     win.show()
   })
-  win.on('closed', () => {
-    if (fileEditorWindow === win) {
-      fileEditorWindow = null
+  win.on('close', (event) => {
+    if (isQuitting || approvedFileEditorCloses.delete(win)) {
+      return
     }
+    if (win.webContents.isDestroyed() || win.webContents.isCrashed()) {
+      return
+    }
+    event.preventDefault()
+    void requestFileEditorWindowClose(win)
+  })
+  win.on('closed', () => {
+    fileEditorWindows.delete(win)
+    approvedFileEditorCloses.delete(win)
+    childWindowsHiddenWithMain.delete(win)
+    if (fileEditorWindowsByKey.get(editorKey) === win) {
+      fileEditorWindowsByKey.delete(editorKey)
+    }
+    resolvePendingFileEditorClose(win, true)
   })
 
-  loadAppWindow(win, {
-    window: 'file-editor',
-    source: input.source,
-    path: input.path,
-    name: input.name,
-    ...(input.tabId ? { tabId: input.tabId } : {}),
-    ...(input.encoding ? { encoding: input.encoding } : {})
-  }, uiPreferences)
+  loadAppWindow(
+    win,
+    {
+      window: 'file-editor',
+      source: input.source,
+      path: input.path,
+      name: input.name,
+      ...(input.tabId ? { tabId: input.tabId } : {}),
+      ...(input.encoding ? { encoding: input.encoding } : {})
+    },
+    uiPreferences
+  )
+}
+
+function requestFileEditorWindowClose(win: BrowserWindow): Promise<boolean> {
+  if (!fileEditorWindows.has(win) || win.isDestroyed()) {
+    return Promise.resolve(true)
+  }
+
+  const pending = pendingFileEditorCloseRequests.get(win)
+  if (pending) {
+    return pending.promise
+  }
+
+  if (win.webContents.isDestroyed() || win.webContents.isCrashed()) {
+    approvedFileEditorCloses.add(win)
+    win.destroy()
+    return Promise.resolve(true)
+  }
+
+  let resolveRequest: (approved: boolean) => void = () => undefined
+  const promise = new Promise<boolean>((resolve) => {
+    resolveRequest = resolve
+  })
+  pendingFileEditorCloseRequests.set(win, { promise, resolve: resolveRequest })
+  try {
+    win.webContents.send('app:file-editor-close-request')
+  } catch (error) {
+    safeConsoleError('[FileTerm] failed to request file editor close', error)
+    pendingFileEditorCloseRequests.delete(win)
+    approvedFileEditorCloses.add(win)
+    win.destroy()
+    resolveRequest(true)
+  }
+  return promise
+}
+
+function resolvePendingFileEditorClose(win: BrowserWindow, approved: boolean) {
+  const pending = pendingFileEditorCloseRequests.get(win)
+  if (!pending) {
+    return
+  }
+  pendingFileEditorCloseRequests.delete(win)
+  pending.resolve(approved)
+}
+
+function confirmCloseFileEditorWindow(win: BrowserWindow) {
+  if (!fileEditorWindows.has(win) || win.isDestroyed()) {
+    return
+  }
+  resolvePendingFileEditorClose(win, true)
+  approvedFileEditorCloses.add(win)
+  win.close()
+}
+
+function cancelCloseFileEditorWindow(win: BrowserWindow) {
+  resolvePendingFileEditorClose(win, false)
 }
 
 app.whenReady().then(() => {
@@ -860,45 +1055,17 @@ app.whenReady().then(() => {
     openConnectionFormWindow,
     openCommandFormWindow,
     openFileEditorWindow,
+    confirmCloseFileEditorWindow,
+    cancelCloseFileEditorWindow,
     openLogsDirectory,
     requestQuitApp: () => {
       requestQuitConfirmation()
     },
-    confirmCloseWindow: (action) => {
+    confirmCloseWindow: async (action) => {
       if (action === 'quit') {
-        isQuitting = true
-        const childWindows = [
-          connectionManagerWindow,
-          connectionFormWindow,
-          commandManagerWindow,
-          commandFormWindow,
-          fileEditorWindow
-        ]
-        for (const child of childWindows) {
-          if (child && !child.isDestroyed()) {
-            child.close()
-          }
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.close()
-        }
-        app.quit()
+        await quitApplication()
       } else if (action === 'hide') {
-        const childWindows = [
-          connectionManagerWindow,
-          connectionFormWindow,
-          commandManagerWindow,
-          commandFormWindow,
-          fileEditorWindow
-        ]
-        for (const child of childWindows) {
-          if (child && !child.isDestroyed()) {
-            child.close()
-          }
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.hide()
-        }
+        hideMainWindowAndChildren()
       }
     }
   })
@@ -906,8 +1073,7 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show()
-      mainWindow.focus()
+      showMainWindowAndChildren()
       return
     }
 
@@ -918,7 +1084,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  void ipcServices?.workspaceService.shutdown()
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -926,7 +1091,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
   if (isQuitting) {
-    void ipcServices?.workspaceService.shutdown()
     return
   }
 

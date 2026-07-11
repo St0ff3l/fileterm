@@ -5,22 +5,26 @@ import { formatTransferBytes, isActiveTransfer, isCompletedTransfer, transferSta
 import { t } from '../../i18n'
 
 export function TransferPopover({
-  onCancelTransfer,
   onClearTransfers,
   onClose,
+  onDiscardTransfer,
+  onPauseTransfer,
+  onResumeTransfer,
   transfers
 }: {
-  onCancelTransfer(transferId: string): Promise<void> | void
   onClearTransfers(transferIds: string[]): Promise<void> | void
   onClose(): void
+  onDiscardTransfer(transferId: string): Promise<void> | void
+  onPauseTransfer(transferId: string): Promise<void> | void
+  onResumeTransfer(transferId: string): Promise<void> | void
   transfers: TransferTask[]
 }) {
   const [statusFilter, setStatusFilter] = useState<'running' | 'completed' | 'all'>('running')
   const [directionFilter, setDirectionFilter] = useState<'all' | 'download' | 'upload'>('all')
-  const [pendingCancelIds, setPendingCancelIds] = useState<string[]>([])
+  const [pendingActions, setPendingActions] = useState<Record<string, 'pause' | 'resume' | 'discard'>>({})
   const visibleTransfers: TransferTask[] = []
   for (const transfer of transfers) {
-    if (statusFilter === 'running' && !isActiveTransfer(transfer)) {
+    if (statusFilter === 'running' && isCompletedTransfer(transfer)) {
       continue
     }
     if (statusFilter === 'completed' && !isCompletedTransfer(transfer)) {
@@ -35,12 +39,44 @@ export function TransferPopover({
     }
   }
   const clearableTransferIds = visibleTransfers
-    .filter((transfer) => !isActiveTransfer(transfer))
+    .filter((transfer) => !isActiveTransfer(transfer) && !transfer.resumable && !transfer.cleanupPending)
     .map((transfer) => transfer.id)
 
   useEffect(() => {
-    setPendingCancelIds((prev) => prev.filter((id) => transfers.some((transfer) => transfer.id === id && isActiveTransfer(transfer))))
+    setPendingActions((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([id, action]) =>
+          transfers.some((transfer) => {
+            if (transfer.id !== id) {
+              return false
+            }
+            if (action === 'resume') {
+              return transfer.status === 'paused' || transfer.status === 'interrupted'
+            }
+            return isActiveTransfer(transfer)
+          })
+        )
+      )
+    )
   }, [transfers])
+
+  const runAction = (
+    transferId: string,
+    action: 'pause' | 'resume' | 'discard',
+    handler: (id: string) => Promise<void> | void
+  ) => {
+    setPendingActions((current) => ({ ...current, [transferId]: action }))
+    void Promise.resolve()
+      .then(() => handler(transferId))
+      .catch(() => undefined)
+      .finally(() => {
+        setPendingActions((current) => {
+          const next = { ...current }
+          delete next[transferId]
+          return next
+        })
+      })
+  }
 
   const getTransferSizeText = (transfer: TransferTask) => {
     const transferred = formatTransferBytes(transfer.transferredBytes)
@@ -76,58 +112,138 @@ export function TransferPopover({
       </div>
       <div className="transfer-filters">
         <div className="transfer-segments">
-          <button className={statusFilter === 'running' ? 'active' : ''} onClick={() => setStatusFilter('running')} type="button">{t.inProgress}</button>
-          <button className={statusFilter === 'completed' ? 'active' : ''} onClick={() => setStatusFilter('completed')} type="button">{t.completed}</button>
-          <button className={statusFilter === 'all' ? 'active' : ''} onClick={() => setStatusFilter('all')} type="button">{t.all}</button>
+          <button
+            className={statusFilter === 'running' ? 'active' : ''}
+            onClick={() => setStatusFilter('running')}
+            type="button"
+          >
+            {t.inProgress}
+          </button>
+          <button
+            className={statusFilter === 'completed' ? 'active' : ''}
+            onClick={() => setStatusFilter('completed')}
+            type="button"
+          >
+            {t.completed}
+          </button>
+          <button
+            className={statusFilter === 'all' ? 'active' : ''}
+            onClick={() => setStatusFilter('all')}
+            type="button"
+          >
+            {t.all}
+          </button>
         </div>
         <div className="transfer-segments transfer-segments-sub">
-          <button className={directionFilter === 'all' ? 'active' : ''} onClick={() => setDirectionFilter('all')} type="button">{t.all}</button>
-          <button className={directionFilter === 'download' ? 'active' : ''} onClick={() => setDirectionFilter('download')} type="button">{t.download}</button>
-          <button className={directionFilter === 'upload' ? 'active' : ''} onClick={() => setDirectionFilter('upload')} type="button">{t.upload}</button>
+          <button
+            className={directionFilter === 'all' ? 'active' : ''}
+            onClick={() => setDirectionFilter('all')}
+            type="button"
+          >
+            {t.all}
+          </button>
+          <button
+            className={directionFilter === 'download' ? 'active' : ''}
+            onClick={() => setDirectionFilter('download')}
+            type="button"
+          >
+            {t.download}
+          </button>
+          <button
+            className={directionFilter === 'upload' ? 'active' : ''}
+            onClick={() => setDirectionFilter('upload')}
+            type="button"
+          >
+            {t.upload}
+          </button>
         </div>
         <small className="transfer-hint">{t.transferUploadHint}</small>
       </div>
       <div className="transfer-popover-list">
-        {visibleTransfers.length ? visibleTransfers.map((transfer) => {
-          const transferSizeText = getTransferSizeText(transfer)
-          return (
-            <div className={`transfer-row transfer-${transfer.status}`} key={transfer.id}>
-              <div className="transfer-row-head">
-                <strong title={transfer.name}>{transfer.name}</strong>
-                {isActiveTransfer(transfer) ? (
-                  <button
-                    className="transfer-cancel"
-                    disabled={pendingCancelIds.includes(transfer.id)}
-                    onClick={() => {
-                      setPendingCancelIds((prev) => prev.includes(transfer.id) ? prev : [...prev, transfer.id])
-                      void Promise.resolve(onCancelTransfer(transfer.id)).catch(() => {
-                        setPendingCancelIds((prev) => prev.filter((id) => id !== transfer.id))
-                      })
-                    }}
-                    type="button"
-                  >
-                    {pendingCancelIds.includes(transfer.id) ? t.stopping : t.stop}
-                  </button>
-                ) : null}
+        {visibleTransfers.length ? (
+          visibleTransfers.map((transfer) => {
+            const transferSizeText = getTransferSizeText(transfer)
+            return (
+              <div className={`transfer-row transfer-${transfer.status}`} key={transfer.id}>
+                <div className="transfer-row-head">
+                  <strong title={transfer.name}>{transfer.name}</strong>
+                  {(transfer.status === 'running' || transfer.status === 'queued') && transfer.resumable ? (
+                    <button
+                      className="transfer-cancel"
+                      disabled={Boolean(pendingActions[transfer.id])}
+                      onClick={() => runAction(transfer.id, 'pause', onPauseTransfer)}
+                      type="button"
+                    >
+                      {pendingActions[transfer.id] === 'pause' ? t.pausingTransfer : t.pauseTransfer}
+                    </button>
+                  ) : transfer.status === 'running' || transfer.status === 'queued' ? (
+                    <button
+                      className="transfer-cancel"
+                      disabled={Boolean(pendingActions[transfer.id])}
+                      onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
+                      type="button"
+                    >
+                      {pendingActions[transfer.id] === 'discard' ? t.stopping : t.stop}
+                    </button>
+                  ) : transfer.resumable &&
+                    (transfer.status === 'paused' ||
+                      transfer.status === 'interrupted' ||
+                      transfer.status === 'failed') ? (
+                    <span className="transfer-row-actions">
+                      <button
+                        className="transfer-cancel"
+                        disabled={Boolean(pendingActions[transfer.id])}
+                        onClick={() => runAction(transfer.id, 'resume', onResumeTransfer)}
+                        type="button"
+                      >
+                        {pendingActions[transfer.id] === 'resume' ? t.resumingTransfer : t.resumeTransfer}
+                      </button>
+                      <button
+                        className="transfer-cancel"
+                        disabled={Boolean(pendingActions[transfer.id])}
+                        onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
+                        type="button"
+                      >
+                        {pendingActions[transfer.id] === 'discard' ? t.discardingCheckpoint : t.discardCheckpoint}
+                      </button>
+                    </span>
+                  ) : transfer.cleanupPending ||
+                    transfer.status === 'paused' ||
+                    transfer.status === 'interrupted' ||
+                    (transfer.status === 'failed' && Boolean(transfer.partialPath)) ? (
+                    <button
+                      className="transfer-cancel"
+                      disabled={Boolean(pendingActions[transfer.id])}
+                      onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
+                      type="button"
+                    >
+                      {pendingActions[transfer.id] === 'discard' ? t.discardingCheckpoint : t.discardCheckpoint}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="transfer-row-main">
+                  <span>{transferStatusText(transfer)}</span>
+                </div>
+                <div className="transfer-row-meta">
+                  <span>
+                    {[
+                      transfer.direction === 'upload' ? t.upload : t.download,
+                      transferSizeText,
+                      transfer.speed,
+                      `${transfer.progress}%`
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </div>
+                <i className="transfer-progress">
+                  <b style={{ width: `${transfer.progress}%` }} />
+                </i>
+                {transfer.message ? <small title={transfer.message}>{transfer.message}</small> : null}
               </div>
-              <div className="transfer-row-main">
-                <span>{transferStatusText(transfer)}</span>
-              </div>
-              <div className="transfer-row-meta">
-                <span>
-                  {[
-                    transfer.direction === 'upload' ? t.upload : t.download,
-                    transferSizeText,
-                    transfer.speed,
-                    `${transfer.progress}%`
-                  ].filter(Boolean).join(' · ')}
-                </span>
-              </div>
-              <i className="transfer-progress"><b style={{ width: `${transfer.progress}%` }} /></i>
-              {transfer.message ? <small title={transfer.message}>{transfer.message}</small> : null}
-            </div>
-          )
-        }) : (
+            )
+          })
+        ) : (
           <div className="transfer-empty">{t.noTransferTasks}</div>
         )}
       </div>

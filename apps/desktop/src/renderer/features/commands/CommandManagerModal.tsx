@@ -6,9 +6,7 @@ import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 
-type CommandTreeNode =
-  | (CommandFolder & { children: CommandTreeNode[] })
-  | (CommandTemplate & { children?: never })
+type CommandTreeNode = (CommandFolder & { children: CommandTreeNode[] }) | (CommandTemplate & { children?: never })
 
 export function CommandManagerModal({
   commandFolders,
@@ -50,9 +48,7 @@ export function CommandManagerModal({
   const [newFolderName, setNewFolderName] = useState('')
   const [editorState, setEditorState] = useState<{ mode: 'create' | 'edit'; commandId?: string } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<
-    | { kind: 'folder'; id: string; name: string }
-    | { kind: 'command'; id: string; name: string }
-    | null
+    { kind: 'folder'; id: string; name: string } | { kind: 'command'; id: string; name: string } | null
   >(null)
   const suppressRowClickRef = useRef(false)
 
@@ -64,7 +60,7 @@ export function CommandManagerModal({
 
   const toggleFolder = (folderId: string, event?: React.MouseEvent) => {
     event?.stopPropagation()
-    setExpandedFolders(prev => {
+    setExpandedFolders((prev) => {
       const next = new Set(prev)
       if (next.has(folderId)) next.delete(folderId)
       else next.add(folderId)
@@ -88,11 +84,11 @@ export function CommandManagerModal({
     const roots: CommandTreeNode[] = []
     const map = new Map<string, CommandTreeNode>()
 
-    items.forEach(item => {
+    items.forEach((item) => {
       map.set(item.id, item)
     })
 
-    items.forEach(item => {
+    items.forEach((item) => {
       const parent = item.parentId ? map.get(item.parentId) : undefined
       if (parent?.type === 'command-folder') {
         parent.children.push(item)
@@ -103,7 +99,7 @@ export function CommandManagerModal({
 
     const sortNodes = (nodes: CommandTreeNode[]) => {
       nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      nodes.forEach(n => {
+      nodes.forEach((n) => {
         if (n.type === 'command-folder') sortNodes(n.children)
       })
     }
@@ -162,13 +158,8 @@ export function CommandManagerModal({
     const matches: CommandTreeNode[] = []
     const walkNodes = (nodes: CommandTreeNode[]) => {
       nodes.forEach((node) => {
-        const searchableText = node.type === 'command-folder'
-          ? node.name
-          : [
-              node.name,
-              node.command,
-              node.description ?? ''
-            ].join(' ')
+        const searchableText =
+          node.type === 'command-folder' ? node.name : [node.name, node.command, node.description ?? ''].join(' ')
 
         if (searchableText.toLocaleLowerCase().includes(query)) {
           matches.push(node)
@@ -252,7 +243,7 @@ export function CommandManagerModal({
 
     const targetParent = targetNode.parentId ? tree.map.get(targetNode.parentId) : undefined
     let newParentId = targetParent?.type === 'command-folder' ? targetParent.id : undefined
-    let siblings = targetParent?.type === 'command-folder' ? targetParent.children : tree.roots
+    const siblings = targetParent?.type === 'command-folder' ? targetParent.children : tree.roots
 
     let newOrder = targetNode.order ?? 0
 
@@ -260,9 +251,9 @@ export function CommandManagerModal({
       newParentId = targetNode.id
       const children = targetNode.children || []
       newOrder = children.length > 0 ? (children[children.length - 1].order ?? 0) + 1000 : 1000
-      setExpandedFolders(prev => new Set(prev).add(targetNode.id))
+      setExpandedFolders((prev) => new Set(prev).add(targetNode.id))
     } else {
-      const targetIndex = siblings.findIndex(s => s.id === targetId)
+      const targetIndex = siblings.findIndex((s) => s.id === targetId)
       if (dragPosition === 'top') {
         const prev = siblings[targetIndex - 1]
         newOrder = prev ? ((prev.order ?? 0) + (targetNode.order ?? 0)) / 2 : (targetNode.order ?? 0) - 1000
@@ -295,18 +286,15 @@ export function CommandManagerModal({
     void desktopApi.openCommandFormWindow(mode, commandId)
   }
 
-  const editorInitialValue = editorState?.mode === 'edit'
-    ? (() => {
-        const command = commandTemplates.find((item) => item.id === editorState.commandId)
-        return command ? toCommandTemplateInput(command) : emptyCommandForm
-      })()
-    : emptyCommandForm
+  const editorInitialValue =
+    editorState?.mode === 'edit'
+      ? (() => {
+          const command = commandTemplates.find((item) => item.id === editorState.commandId)
+          return command ? toCommandTemplateInput(command) : emptyCommandForm
+        })()
+      : emptyCommandForm
 
-  const renderNode = (
-    node: CommandTreeNode,
-    depth: number,
-    options: { includeChildren?: boolean } = {}
-  ) => {
+  const renderNode = (node: CommandTreeNode, depth: number, options: { includeChildren?: boolean } = {}) => {
     const includeChildren = options.includeChildren ?? true
     const isFolder = node.type === 'command-folder'
     const isExpanded = expandedFolders.has(node.id)
@@ -362,17 +350,39 @@ export function CommandManagerModal({
         >
           <span className="manager-name-cell" style={{ paddingLeft: `${depth * 18}px` }}>
             {isFolder && (
-              <span className="folder-icon manager-folder-toggle" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}>
+              <span
+                className="folder-icon manager-folder-toggle"
+                style={{ transform: isExpanded ? 'rotate(90deg)' : 'none' }}
+              >
                 <AppIcon name="chevron-right" size={12} />
               </span>
             )}
-            {!isFolder && <span className="manager-node-icon"><AppIcon name="brand" size={14} /></span>}
+            {!isFolder && (
+              <span className="manager-node-icon">
+                <AppIcon name="brand" size={14} />
+              </span>
+            )}
             <span className="manager-node-name">{node.name}</span>
           </span>
           <span>
-            {isFolder ? '--' : <code style={{ fontSize: '11px', opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{node.command}</code>}
+            {isFolder ? (
+              '--'
+            ) : (
+              <code
+                style={{
+                  fontSize: '11px',
+                  opacity: 0.8,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: 'block'
+                }}
+              >
+                {node.command}
+              </code>
+            )}
           </span>
-          <span>{isFolder ? '--' : (node.description || '/')}</span>
+          <span>{isFolder ? '--' : node.description || '/'}</span>
           <span className="manager-actions">
             {!isFolder && (
               <button
@@ -428,7 +438,9 @@ export function CommandManagerModal({
   const emptyMessage = isSearching ? t.noMatchingCommands : t.commandEmpty
 
   const content = (
-    <div className={`modal-card manager-modal connection-manager-modal command-manager-modal ${standalone ? 'standalone' : ''} ${inline ? 'manager-inline' : ''}`}>
+    <div
+      className={`modal-card manager-modal connection-manager-modal command-manager-modal ${standalone ? 'standalone' : ''} ${inline ? 'manager-inline' : ''}`}
+    >
       <div className="connection-manager-header">
         <span className="connection-manager-title">
           <span className="material-symbols-outlined">terminal</span>
@@ -479,7 +491,9 @@ export function CommandManagerModal({
               {isCreatingFolder && resolvedActiveFolderId === 'all' && (
                 <div className="manager-row folder-row">
                   <span className="manager-name-cell">
-                    <span className="folder-icon manager-folder-toggle"><AppIcon name="chevron-right" size={12} /></span>
+                    <span className="folder-icon manager-folder-toggle">
+                      <AppIcon name="chevron-right" size={12} />
+                    </span>
                     <input
                       type="text"
                       autoFocus
@@ -508,9 +522,7 @@ export function CommandManagerModal({
               )}
               {visibleNodes.map((node) => renderNode(node, 0, { includeChildren: !isSearching }))}
               {visibleNodes.length === 0 && !(isCreatingFolder && resolvedActiveFolderId === 'all') && (
-                <div className="connection-manager-empty">
-                  {emptyMessage}
-                </div>
+                <div className="connection-manager-empty">{emptyMessage}</div>
               )}
             </div>
           </div>
@@ -554,9 +566,13 @@ export function CommandManagerModal({
       </div>
       {!inline && (
         <div className="connection-manager-footer">
-          <span>{commandTemplates.length} {t.commandCountLabel}</span>
+          <span>
+            {commandTemplates.length} {t.commandCountLabel}
+          </span>
           <span className="connection-manager-footer-separator"></span>
-          <span>{commandFolders.length} {t.folderCountLabel}</span>
+          <span>
+            {commandFolders.length} {t.folderCountLabel}
+          </span>
           <span className="connection-manager-footer-spacer"></span>
           <span>{resolvedActiveFolderId === 'all' ? t.allCommands : activeFolderNode?.name}</span>
         </div>

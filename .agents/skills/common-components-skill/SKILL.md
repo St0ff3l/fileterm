@@ -28,6 +28,7 @@ renderer/
 **文件路径**：`apps/desktop/src/renderer/components/TerminalView.tsx`
 
 **功能特性**：
+
 - 基于 `@xterm/xterm` 构建的终端视图
 - 支持主题颜色定制（通过 CSS 变量）
 - 快捷键支持：复制(⌘C/Ctrl+Shift+C)、粘贴(⌘V/Ctrl+Shift+V)、查找(⌘F/Ctrl+F)
@@ -36,6 +37,7 @@ renderer/
 - 国际化文本支持
 
 **关键依赖**：
+
 ```typescript
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -47,26 +49,29 @@ import { ContextMenu } from '../features/common/ContextMenu'
 **文件路径**：`apps/desktop/src/renderer/features/common/AppIcon.tsx`
 
 **支持的图标类型**：
-| 图标名 | 用途 |
-|--------|------|
-| `grid` | 网格视图 |
-| `menu` | 菜单按钮 |
-| `server` | 服务器连接 |
-| `connections` | 连接管理 |
-| `folder` | 文件夹 |
-| `file` | 文件 |
-| `history` | 历史记录 |
-| `refresh` | 刷新 |
-| `upload` | 上传 |
-| `download` | 下载 |
-| `flash` | 快速操作 |
+
+| 图标名        | 用途       |
+| ------------- | ---------- |
+| `grid`        | 网格视图   |
+| `menu`        | 菜单按钮   |
+| `server`      | 服务器连接 |
+| `connections` | 连接管理   |
+| `folder`      | 文件夹     |
+| `file`        | 文件       |
+| `history`     | 历史记录   |
+| `refresh`     | 刷新       |
+| `upload`      | 上传       |
+| `download`    | 下载       |
+| `flash`       | 快速操作   |
 
 **使用方式**：
+
 ```tsx
 <AppIcon name="folder" size={16} />
 ```
 
 **特性**：
+
 - 统一 SVG 图标系统
 - 可自定义尺寸（默认 14px）
 - 颜色继承父元素 `currentColor`
@@ -76,12 +81,14 @@ import { ContextMenu } from '../features/common/ContextMenu'
 **文件路径**：`apps/desktop/src/renderer/features/common/ContextMenu.tsx`
 
 **功能特性**：
+
 - 点击外部区域自动关闭
 - Esc 键关闭
 - 位置自动调整（避免超出视口）
 - 支持禁用状态和危险操作样式
 
 **接口定义**：
+
 ```typescript
 type ContextMenuEntry = {
   label?: string
@@ -94,6 +101,7 @@ type ContextMenuEntry = {
 ```
 
 **使用方式**：
+
 ```tsx
 <ContextMenu
   items={[
@@ -113,14 +121,14 @@ type ContextMenuEntry = {
 **功能**：支持鼠标滚轮水平滚动容器
 
 **特性**：
+
 - 兼容不同浏览器的 deltaMode
 - 边界检测（不滚动超出内容范围）
 
 **使用方式**：
+
 ```tsx
-<div onWheel={handleHorizontalWheelScroll}>
-  {/* 可水平滚动内容 */}
-</div>
+<div onWheel={handleHorizontalWheelScroll}>{/* 可水平滚动内容 */}</div>
 ```
 
 ---
@@ -152,15 +160,16 @@ renderer/styles/
 
 **核心 CSS 变量**：
 
-| 变量名 | 用途 | 示例值 |
-|--------|------|--------|
-| `--terminal-bg` | 终端背景色 | `#1e1e1e` |
+| 变量名            | 用途       | 示例值    |
+| ----------------- | ---------- | --------- |
+| `--terminal-bg`   | 终端背景色 | `#1e1e1e` |
 | `--terminal-text` | 终端文字色 | `#e0e0e0` |
-| `--success` | 成功状态色 | `#39d98a` |
-| `--accent-text` | 强调文字色 | `#c8d0da` |
-| `--text-main` | 主文字色 | `#f1f5f9` |
+| `--success`       | 成功状态色 | `#39d98a` |
+| `--accent-text`   | 强调文字色 | `#c8d0da` |
+| `--text-main`     | 主文字色   | `#f1f5f9` |
 
 **终端主题变量**：
+
 ```css
 :root {
   --terminal-bg: #1e1e1e;
@@ -189,6 +198,7 @@ renderer/styles/
 ```
 
 **实现方式**：
+
 - 在 `html` 根元素上设置 `data-theme="default-dark|default-light"`
 - 通过 `apps/desktop/src/renderer/hooks/useThemeMode.ts` 同步 `dataset.theme` 与 `color-scheme`
 - 通过 `apps/desktop/src/renderer/App.tsx` 持久化 `theme` / `locale`
@@ -228,10 +238,10 @@ renderer/styles/
 
 组件的结构样式（layout）与主题颜色（theme）必须分离，遵循以下规则：
 
-| 分类 | 内容 | 示例 |
-|------|------|------|
+| 分类         | 内容                   | 示例                                               |
+| ------------ | ---------------------- | -------------------------------------------------- |
 | **结构样式** | 布局、尺寸、间距、定位 | `display`, `flex`, `margin`, `padding`, `position` |
-| **主题颜色** | 颜色、背景色、边框色 | `color`, `background-color`, `border-color` |
+| **主题颜色** | 颜色、背景色、边框色   | `color`, `background-color`, `border-color`        |
 
 #### 分离实现
 
@@ -286,15 +296,15 @@ renderer/styles/
   --primary-border: #2563eb;
   --primary-hover: #2563eb;
   --primary-active: #1d4ed8;
-  
+
   /* 成功状态 */
   --success-bg: #22c55e;
   --success-text: #ffffff;
-  
+
   /* 警告状态 */
   --warning-bg: #f59e0b;
   --warning-text: #ffffff;
-  
+
   /* 危险状态 */
   --danger-bg: #ef4444;
   --danger-text: #ffffff;
@@ -386,9 +396,9 @@ CommandCenter
 在 `AppIcon.tsx` 中添加新的图标类型：
 
 ```tsx
-{name === 'new-icon' ? (
-  <path {...commonProps} d="M..." />
-) : null}
+{
+  name === 'new-icon' ? <path {...commonProps} d="M..." /> : null
+}
 ```
 
 ### 4.2 添加新主题

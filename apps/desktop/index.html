@@ -2,10 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/icon.png" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <title>FileTerm</title>
@@ -25,16 +22,12 @@
       }
     </style>
     <script>
-      (() => {
+      ;(() => {
         const searchParams = new URLSearchParams(window.location.search)
         const queryTheme = searchParams.get('theme')
         const queryLocale = searchParams.get('locale')
-        const theme = queryTheme === 'default-light' || queryTheme === 'default-dark'
-          ? queryTheme
-          : 'default-dark'
-        const locale = queryLocale === 'enUS' || queryLocale === 'zhCN'
-          ? queryLocale
-          : 'zhCN'
+        const theme = queryTheme === 'default-light' || queryTheme === 'default-dark' ? queryTheme : 'default-dark'
+        const locale = queryLocale === 'enUS' || queryLocale === 'zhCN' ? queryLocale : 'zhCN'
         const background = theme === 'default-light' ? '#f8fafc' : '#151515'
         const colorScheme = theme === 'default-light' ? 'light' : 'dark'
 
@@ -48,9 +41,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script
-      type="module"
-      src="/src/renderer/main.tsx"
-    ></script>
+    <script type="module" src="/src/renderer/main.tsx"></script>
   </body>
-  </html>
+</html>
