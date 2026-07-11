@@ -35,6 +35,14 @@ import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug
 import { decodeBuffer, encodeText } from '../text-encoding.js'
 import { appLog, appWarn } from '../app-logger.js'
 
+export interface SshSessionClientDependencies {
+  main?: Client
+  exec?: Client
+  sftp?: Client
+  transfer?: Client
+  createTransferClient?: () => Client
+}
+
 export class LiveSshSessionController extends BaseFileSessionController implements SshSessionController {
   readonly type = 'ssh'
   private static readonly TRANSCRIPT_LIMIT = 200_000
@@ -44,10 +52,11 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private static readonly SHELL_SETUP_SETTLE_MS = 200
   private static readonly SHELL_SETUP_TIMEOUT_MS = 1200
 
-  private readonly ssh = new Client()
-  private readonly execSsh = new Client()
-  private readonly sftpSsh = new Client()
-  private transferSsh = new Client()
+  private readonly ssh: Client
+  private readonly execSsh: Client
+  private readonly sftpSsh: Client
+  private transferSsh: Client
+  private readonly createTransferClient: () => Client
   private readonly sshDebug = createSshDebugLogger(isSshDebugEnabled(), (message) => {
     this.appendSystemMessage(message)
   })
@@ -108,9 +117,15 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     private readonly onShellCwdChange: (cwd: string) => void,
     private readonly onShellUserChange: (user: string) => void,
     private readonly onStateChange: (summary: string, transcript: string, connected: boolean) => void,
-    initialTranscript?: string
+    initialTranscript?: string,
+    clients: SshSessionClientDependencies = {}
   ) {
     super(id, 'ssh', profile)
+    this.createTransferClient = clients.createTransferClient ?? (() => new Client())
+    this.ssh = clients.main ?? new Client()
+    this.execSsh = clients.exec ?? new Client()
+    this.sftpSsh = clients.sftp ?? new Client()
+    this.transferSsh = clients.transfer ?? this.createTransferClient()
     this.currentRemotePath = profile.remotePath || '.'
     this.transcript = new BoundedTextBuffer(LiveSshSessionController.TRANSCRIPT_LIMIT, initialTranscript)
     this.appendSystemMessage('连接主机...\r\n')
@@ -632,8 +647,6 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.closeSftpSession()
     this.closeTransferSftpSession()
     this.ssh.end()
-    this.sftpSsh.end()
-    this.transferSsh.end()
     this.resetPrivilegedFileAccess()
     this.connected = false
   }
@@ -1616,7 +1629,7 @@ fi
     if (endCurrent) {
       currentTransferSsh.end()
     }
-    this.transferSsh = new Client()
+    this.transferSsh = this.createTransferClient()
     this.hasRegisteredTransferLifecycle = false
     this.transferSshClosed = false
   }

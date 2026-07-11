@@ -122,6 +122,29 @@ consider_ip() {
     best_ip_rank="$rank"
   fi
 }
+is_virtual_iface() {
+  case "$1" in
+    tailscale*|zt*|zerotier*|docker*|veth*|virbr*|br-*|cni*|flannel*|tun*|tap*|wg*|vethernet*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+default_ifaces=$(
+  {
+    ip route show default 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "dev") print $(i+1)}'
+    awk '$2 == "00000000" {print $1}' /proc/net/route 2>/dev/null
+  } | awk 'NF && !seen[$0]++'
+)
+for iface in $default_ifaces; do
+  is_virtual_iface "$iface" && continue
+  for candidate in $(ip -o -4 addr show dev "$iface" scope global 2>/dev/null | awk '{print $4}'); do
+    consider_ip "$candidate"
+  done
+  for candidate in $(ifconfig "$iface" 2>/dev/null | awk '/inet / && $2 !~ /^127\\./ {print $2} /inet addr:/ && $2 !~ /127\\.0\\.0\\.1/ {sub("addr:", "", $2); print $2}'); do
+    consider_ip "$candidate"
+  done
+done
 for candidate in $(ip route get 1 2>/dev/null | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1)}}'); do
   consider_ip "$candidate"
 done
