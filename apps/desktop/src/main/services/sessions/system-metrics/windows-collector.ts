@@ -213,7 +213,7 @@ $swapUsedBytes = [double] (($pageFiles | Measure-Object -Property CurrentUsage -
 $swapAvailableBytes = [math]::Max([double] 0, $swapTotalBytes - $swapUsedBytes)
 $swapPercent = if ($swapTotalBytes -gt 0) { [int] (($swapUsedBytes * 100) / $swapTotalBytes) } else { 0 }
 
-$ip = ""
+$sshServerAddress = ""
 try {
   $sshConnectionParts = @(([string] $env:SSH_CONNECTION).Trim() -split "\\s+")
   if (
@@ -222,10 +222,46 @@ try {
     $sshConnectionParts[2] -notlike "127.*" -and
     $sshConnectionParts[2] -notlike "169.254.*"
   ) {
-    $ip = [string] $sshConnectionParts[2]
+    $sshServerAddress = [string] $sshConnectionParts[2]
   }
 } catch {}
 
+$ipCandidates = @()
+try {
+  [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
+    $_.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up -and
+    $_.NetworkInterfaceType -ne [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback
+  } | ForEach-Object {
+    $networkInterface = $_
+    $properties = $networkInterface.GetIPProperties()
+    $identity = (([string] $networkInterface.Name) + " " + ([string] $networkInterface.Description)).ToLowerInvariant()
+    $isVirtual = $identity -match "tailscale|zerotier|vethernet|hyper-v|virtual|vmware|virtualbox|docker|wsl|bluetooth"
+    $hasGateway = @($properties.GatewayAddresses | Where-Object {
+      $gateway = $_.Address.IPAddressToString
+      $gateway -match "^[0-9]+\\." -and $gateway -ne "0.0.0.0"
+    }).Count -gt 0
+    $isPhysicalType =
+      $networkInterface.NetworkInterfaceType -eq [System.Net.NetworkInformation.NetworkInterfaceType]::Wireless80211 -or
+      $networkInterface.NetworkInterfaceType -eq [System.Net.NetworkInformation.NetworkInterfaceType]::Ethernet -or
+      $networkInterface.NetworkInterfaceType -eq [System.Net.NetworkInformation.NetworkInterfaceType]::GigabitEthernet -or
+      $networkInterface.NetworkInterfaceType -eq [System.Net.NetworkInformation.NetworkInterfaceType]::FastEthernetFx -or
+      $networkInterface.NetworkInterfaceType -eq [System.Net.NetworkInformation.NetworkInterfaceType]::FastEthernetT
+
+    $properties.UnicastAddresses | ForEach-Object {
+      $address = $_.Address.IPAddressToString
+      if ($address -notmatch "^[0-9]+\\." -or $address -like "127.*" -or $address -like "169.254.*") { return }
+      $score = 0
+      if (-not $isVirtual) { $score += 100 } else { $score -= 200 }
+      if ($hasGateway) { $score += 80 }
+      if ($isPhysicalType) { $score += 30 }
+      if ($address -match "^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.)") { $score += 40 }
+      if ($address -eq $sshServerAddress) { $score += 25 }
+      $ipCandidates += [pscustomobject]@{ Address = $address; Score = $score }
+    }
+  }
+} catch {}
+
+$ip = [string] (($ipCandidates | Sort-Object -Property Score -Descending | Select-Object -First 1).Address)
 $addresses = @()
 if (-not $ip) {
   try {
@@ -265,11 +301,17 @@ try {
 } catch {}
 $sampleStartedAt = Get-Date
 $processCpuBefore = $null
-if (-not $hasReportedCpuLoad) {
-  try {
-    $processCpuBefore = [double] ((Get-Process -ErrorAction Stop | Measure-Object -Property CPU -Sum).Sum)
-  } catch {}
-}
+$processCpuBeforeById = @{}
+try {
+  $processSnapshotBefore = @(Get-Process -ErrorAction Stop)
+  $processCpuBefore = [double] (($processSnapshotBefore | Measure-Object -Property CPU -Sum).Sum)
+  foreach ($process in $processSnapshotBefore) {
+    $cpuSeconds = 0.0
+    if ([double]::TryParse([string] $process.CPU, [ref] $cpuSeconds)) {
+      $processCpuBeforeById[[int] $process.Id] = $cpuSeconds
+    }
+  }
+} catch {}
 Start-Sleep -Milliseconds 250
 $netAfter = @()
 try {
@@ -282,10 +324,30 @@ try {
   })
 } catch {}
 $sampleMs = [math]::Max(1, [int] ((Get-Date) - $sampleStartedAt).TotalMilliseconds)
-if (-not $hasReportedCpuLoad -and $null -ne $processCpuBefore) {
+$processorCount = [math]::Max(1, [Environment]::ProcessorCount)
+$processSnapshotAfter = @()
+$processCpuPercentById = @{}
+$processCpuAfter = $null
+try {
+  $processSnapshotAfter = @(Get-Process -ErrorAction Stop)
+  $processCpuAfter = [double] (($processSnapshotAfter | Measure-Object -Property CPU -Sum).Sum)
+  foreach ($process in $processSnapshotAfter) {
+    $processId = [int] $process.Id
+    $cpuSecondsAfter = 0.0
+    if (
+      $processCpuBeforeById.ContainsKey($processId) -and
+      [double]::TryParse([string] $process.CPU, [ref] $cpuSecondsAfter)
+    ) {
+      $cpuDelta = [math]::Max([double] 0, $cpuSecondsAfter - [double] $processCpuBeforeById[$processId])
+      $processCpuPercentById[$processId] = [math]::Min(
+        [double] 100,
+        ($cpuDelta * 100000) / ($sampleMs * $processorCount)
+      )
+    }
+  }
+} catch {}
+if (-not $hasReportedCpuLoad -and $null -ne $processCpuBefore -and $null -ne $processCpuAfter) {
   try {
-    $processCpuAfter = [double] ((Get-Process -ErrorAction Stop | Measure-Object -Property CPU -Sum).Sum)
-    $processorCount = [math]::Max(1, [Environment]::ProcessorCount)
     $cpuPercent = [int] ([math]::Round(
       ([math]::Max([double] 0, $processCpuAfter - $processCpuBefore) * 100000) / ($sampleMs * $processorCount)
     ))
@@ -362,12 +424,16 @@ try {
 $processRows = @()
 try {
   if ((Get-Date) -ge $script:CollectionDeadline) { throw "Collection budget exhausted" }
-  Get-Process | Sort-Object -Property WorkingSet64 -Descending | Select-Object -First 80 | ForEach-Object {
+  $processSource = $processSnapshotAfter
+  if (-not $processSource -or $processSource.Count -eq 0) {
+    $processSource = @(Get-Process -ErrorAction Stop)
+  }
+  $processSource | Sort-Object -Property WorkingSet64 -Descending | Select-Object -First 80 | ForEach-Object {
     $elapsed = 0
     if ($_.StartTime) {
       $elapsed = [int] ((Get-Date) - $_.StartTime).TotalSeconds
     }
-    $cpu = if ($_.CPU) { [double] $_.CPU } else { 0 }
+    $cpu = if ($processCpuPercentById.ContainsKey([int] $_.Id)) { [double] $processCpuPercentById[[int] $_.Id] } else { 0 }
     $processRows += ("{0:N1}M|{1:N1}|{2}|{3}" -f ($_.WorkingSet64 / 1MB), $cpu, $elapsed, $_.ProcessName)
   }
 } catch {}
@@ -391,6 +457,7 @@ Write-Metric "IP" $ip
 Write-Metric "UPTIME" ""
 Write-Metric "UPTIME_SECONDS" $uptimeSeconds
 Write-Metric "LOAD" $systemLoad
+Write-Metric "LOAD_UNIT" "busy-logical-processors"
 Write-Metric "CPU" $cpuPercent
 Write-Metric "CPU_USAGE" ("0|{0}|0|{1}|0|0|0|0" -f $cpuPercent, $idlePercent)
 Write-Metric "MEM" ("{0}|{1}|{2}|0|0|0" -f [int]($memoryUsedBytes / 1MB), [int]($memoryTotalBytes / 1MB), $memoryPercent)

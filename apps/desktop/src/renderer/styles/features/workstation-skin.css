@@ -590,15 +590,11 @@ textarea:focus-visible,
 .process-row span {
   padding: 2px 6px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  text-align: center;
 }
 
 .process-row span:nth-child(2) {
   font-weight: 700;
-}
-
-.process-row span:nth-child(3) {
-  text-align: left;
 }
 
 .network-panel {

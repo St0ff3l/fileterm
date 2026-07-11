@@ -41,6 +41,8 @@ const zhCN = {
   uptimeMinuteUnit: '分钟',
   uptimeJustNow: '刚刚',
   load: '负载',
+  busyLogicalProcessorsUnit: '核',
+  busyLogicalProcessorsDescription: 'Windows 负载按当前 CPU 使用率折算为繁忙逻辑处理器数量。',
   cpu: 'CPU',
   memory: '内存',
   swap: '交换',
@@ -492,6 +494,9 @@ const enUS: typeof zhCN = {
   uptimeMinuteUnit: 'm',
   uptimeJustNow: 'just now',
   load: 'Load',
+  busyLogicalProcessorsUnit: ' cores',
+  busyLogicalProcessorsDescription:
+    'Windows load is normalized from current CPU utilization into the number of busy logical processors.',
   memory: 'Memory',
   swap: 'Swap',
   command: 'Command',

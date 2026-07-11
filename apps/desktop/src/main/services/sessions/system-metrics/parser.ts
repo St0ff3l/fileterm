@@ -23,6 +23,7 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
   }
 
   const platform = normalizePlatform(readLine('__PLATFORM__'), fallbackPlatform)
+  const loadUnit = readLine('__LOAD_UNIT__') === 'busy-logical-processors' ? 'busy-logical-processors' : undefined
   const [memUsed, memTotal, memPercent, memApp, memCache, memKernel] = readLine('__MEM__').split('|')
   const [memUsedBytes, memTotalBytes, memAvailableBytes, memRawPercent, memAppBytes, memCacheBytes, memKernelBytes] =
     readLine('__MEM_BYTES__').split('|')
@@ -177,6 +178,7 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
     uptime: readLine('__UPTIME__') || '-',
     uptimeSeconds: Number(readLine('__UPTIME_SECONDS__')) || undefined,
     load: readLine('__LOAD__') || '-',
+    loadUnit,
     identity: {
       osName: readLine('__OS__') || '-',
       kernelName: readLine('__KERNEL_NAME__') || '-',

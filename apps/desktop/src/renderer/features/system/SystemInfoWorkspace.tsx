@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { ConnectionProfile, SessionSnapshot } from '@fileterm/core'
 import { t } from '../../i18n'
+import { formatSystemLoad } from './system-metric-format'
 
 export function SystemInfoWorkspace({
   activeProfile,
@@ -31,7 +32,7 @@ export function SystemInfoWorkspace({
     { label: t.accessAddress, value: activeProfile?.host || activeSession.accessHost || '-' },
     { label: t.privateIp, value: metrics.ip || '-' },
     { label: t.running, value: formatUptime(metrics.uptimeSeconds, metrics.uptime) },
-    { label: t.load, value: metrics.load || '-' }
+    { label: t.load, value: formatSystemLoad(metrics, t).value }
   ]
 
   return (

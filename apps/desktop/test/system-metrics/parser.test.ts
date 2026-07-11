@@ -107,7 +107,8 @@ test('parses Windows metrics from PowerShell collector markers', () => {
       '__IP__10.0.0.20',
       '__UPTIME__',
       '__UPTIME_SECONDS__3600',
-      '__LOAD__-',
+      '__LOAD__1.25',
+      '__LOAD_UNIT__busy-logical-processors',
       '__CPU__33',
       '__CPU_USAGE__0|33|0|67|0|0|0|0',
       '__MEM__2048|8192|25|0|0|0',
@@ -140,6 +141,8 @@ test('parses Windows metrics from PowerShell collector markers', () => {
 
   assert.equal(metrics.platform, 'windows')
   assert.equal(metrics.identity.kernelName, 'Windows')
+  assert.equal(metrics.load, '1.25')
+  assert.equal(metrics.loadUnit, 'busy-logical-processors')
   assert.equal(metrics.swapRaw?.totalBytes, 0)
   assert.equal(metrics.networkRawByInterface?.Ethernet?.txBytes, 2000)
 })

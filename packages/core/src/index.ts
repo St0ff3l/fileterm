@@ -327,6 +327,7 @@ export interface SystemMetrics {
   uptime: string
   uptimeSeconds?: number
   load: string
+  loadUnit?: 'busy-logical-processors'
   identity: SystemIdentity
   cpuPercent: number
   cpuUsage: CpuUsageBreakdown

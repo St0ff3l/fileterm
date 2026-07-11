@@ -3,6 +3,7 @@ import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetr
 import { copyText, hasSelectedText } from '../../app/app-utils'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
+import { formatSystemLoad } from './system-metric-format'
 
 function parseMemory(memStr: string): number {
   if (!memStr) return 0
@@ -31,6 +32,7 @@ export function SystemSidebar({
   const internalIp = metrics?.ip || '-'
   const accessAddress = activeProfile?.host || activeSession?.accessHost || '-'
   const rows = activeSession?.systemMetrics?.diskRows ?? []
+  const systemLoad = formatSystemLoad(metrics, t)
 
   const sortedProcesses = useMemo(() => {
     const procs = [...(metrics?.topProcesses ?? [])]
@@ -93,7 +95,9 @@ export function SystemSidebar({
             </div>
             <div className="metric-line">
               <span>{t.load}</span>
-              <strong className="value">{metrics?.load ?? '-'}</strong>
+              <strong className="value" title={systemLoad.title}>
+                {systemLoad.value}
+              </strong>
             </div>
             <Meter
               label={t.cpu}
