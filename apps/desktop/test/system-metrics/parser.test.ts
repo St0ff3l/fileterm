@@ -51,6 +51,34 @@ test('parses normalized Linux metrics without localized uptime text', () => {
   assert.equal(metrics.memoryBreakdown.available, '3.0G')
   assert.equal(metrics.networkRawByInterface?.eth0?.rxBytesPerSecond, 1024)
   assert.equal(metrics.networkRatesByInterface?.eth0?.tx, '2K')
+  assert.equal(metrics.diskRows[0]?.usage, '80.0 GB/100.0 GB')
+  assert.equal(metrics.fileSystemRows[0]?.size, '100.0 GB')
+  assert.equal(metrics.fileSystemRows[0]?.available, '80.0 GB')
+})
+
+test('humanizes POSIX df -k storage values while preserving Windows values', () => {
+  const posixMetrics = parseSystemMetrics(
+    [
+      '__PLATFORM__linux',
+      '__DISK_START__',
+      '/dev|8153252K/8153252K',
+      '/|249799032K/292811652K',
+      '__DISK_END__',
+      '__FILESYSTEMS_START__',
+      '/dev/sda1|292811652K|43012620K|15%|249799032K|/',
+      '__FILESYSTEMS_END__'
+    ].join('\n')
+  )
+  const windowsMetrics = parseSystemMetrics(
+    ['__PLATFORM__windows', '__DISK_START__', 'C:|53.6 GB/400.1 GB', '__DISK_END__'].join('\n')
+  )
+
+  assert.equal(posixMetrics.diskRows[0]?.usage, '7.8 GB/7.8 GB')
+  assert.equal(posixMetrics.diskRows[1]?.usage, '238.2 GB/279.2 GB')
+  assert.equal(posixMetrics.fileSystemRows[0]?.size, '279.2 GB')
+  assert.equal(posixMetrics.fileSystemRows[0]?.used, '41.0 GB')
+  assert.equal(posixMetrics.fileSystemRows[0]?.available, '238.2 GB')
+  assert.equal(windowsMetrics.diskRows[0]?.usage, '53.6 GB/400.1 GB')
 })
 
 test('parses BusyBox metrics with missing optional collectors', () => {

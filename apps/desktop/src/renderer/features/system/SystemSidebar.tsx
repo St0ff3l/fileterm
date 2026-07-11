@@ -218,9 +218,8 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
   const cache = parseMemory(metrics?.memoryCacheUsage ?? '')
   const kernel = parseMemory(metrics?.memoryKernelUsage ?? '')
   const memoryTone = getMetricTone(metrics?.memoryPercent ?? 0)
-  // System meters intentionally use two color protocols:
-  // - tone-* for status/warning severity (cpu/swap and memory fallback)
-  // - app/cache/kernel for memory composition segments
+  // Detailed collectors use app/cache/kernel composition segments. Platforms
+  // without that breakdown fall back to the same severity tone as the status dot.
   const segments =
     total > 0
       ? [
@@ -265,7 +264,7 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
             />
           ))
         ) : (
-          <i className="meter-fill tone-warning" style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />
+          <i className={`meter-fill ${memoryTone}`} style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />
         )}
 
         {segments.length ? (

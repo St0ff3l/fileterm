@@ -184,13 +184,14 @@ load=$(awk '{printf "%s, %s, %s", $1, $2, $3}' /proc/loadavg 2>/dev/null)
 if [ -z "$load" ]; then
   load=$(uptime 2>/dev/null | sed -n 's/.*load averages\\{0,1\\}: *//p; s/.*load average: *//p' | awk -F',' 'NF>=3 {gsub(/^ +| +$/, "", $1); gsub(/^ +| +$/, "", $2); gsub(/^ +| +$/, "", $3); printf "%s, %s, %s", $1, $2, $3; exit}')
 fi
-mem_bytes=$(awk 'BEGIN { total=available=memfree=buffers=cached=shmem=sreclaimable=slab=kernelstack=pagetables=0 }
+mem_bytes=$(awk 'BEGIN { total=available=memfree=buffers=cached=shmem=anonpages=sreclaimable=slab=kernelstack=pagetables=0 }
   /^MemTotal:/ { total=$2 * 1024 }
   /^MemAvailable:/ { available=$2 * 1024 }
   /^MemFree:/ { memfree=$2 * 1024 }
   /^Buffers:/ { buffers=$2 * 1024 }
   /^Cached:/ { cached=$2 * 1024 }
   /^Shmem:/ { shmem=$2 * 1024 }
+  /^AnonPages:/ { anonpages=$2 * 1024 }
   /^SReclaimable:/ { sreclaimable=$2 * 1024 }
   /^Slab:/ { slab=$2 * 1024 }
   /^KernelStack:/ { kernelstack=$2 * 1024 }
@@ -202,18 +203,16 @@ mem_bytes=$(awk 'BEGIN { total=available=memfree=buffers=cached=shmem=sreclaimab
       used=total-available
       if (used < 0) used=0
       percent=int(used*100/total)
-      cache_total=buffers+cached+sreclaimable-shmem
-      if (cache_total < 0) cache_total=0
       kernel_total=slab-sreclaimable+kernelstack+pagetables
       if (kernel_total < 0) kernel_total=0
       kernel=kernel_total
       if (kernel > used) kernel=used
       remaining=used-kernel
-      cache=cache_total
-      if (cache > remaining) cache=remaining
-      if (cache < 0) cache=0
-      app=remaining-cache
+      app=anonpages+shmem
+      if (app > remaining) app=remaining
       if (app < 0) app=0
+      cache=remaining-app
+      if (cache < 0) cache=0
       printf "%.0f|%.0f|%.0f|%d|%.0f|%.0f|%.0f", used, total, available, percent, app, cache, kernel
     }
   }' /proc/meminfo 2>/dev/null)

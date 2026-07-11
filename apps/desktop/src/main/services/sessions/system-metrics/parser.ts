@@ -86,11 +86,18 @@ export function parseSystemMetrics(raw: string, fallbackPlatform: RemoteSystemPl
   )
   const diskRows = readBlock('__DISK_START__', '__DISK_END__').map((line) => {
     const [diskPath, usage] = line.split('|')
-    return { path: diskPath, usage }
+    return { path: diskPath, usage: formatStorageUsage(usage) }
   })
   const fileSystemRows = readBlock('__FILESYSTEMS_START__', '__FILESYSTEMS_END__').map((line) => {
     const [name, size, used, usagePercent, available, mountPoint] = line.split('|')
-    return { name, size, used, usagePercent, available, mountPoint }
+    return {
+      name,
+      size: formatStorageValue(size),
+      used: formatStorageValue(used),
+      usagePercent,
+      available: formatStorageValue(available),
+      mountPoint
+    }
   })
   const cpuInfoRows = readBlock('__CPUINFO_START__', '__CPUINFO_END__')
     .map((line) => {
@@ -335,6 +342,44 @@ function formatNetworkBytes(bytes: number) {
     return `${Math.round(bytes / 1024)} KB`
   }
   return `${bytes} B`
+}
+
+function formatStorageUsage(value?: string) {
+  if (!value) {
+    return '-'
+  }
+  const separatorIndex = value.indexOf('/')
+  if (separatorIndex === -1) {
+    return formatStorageValue(value)
+  }
+  return `${formatStorageValue(value.slice(0, separatorIndex))}/${formatStorageValue(value.slice(separatorIndex + 1))}`
+}
+
+function formatStorageValue(value?: string) {
+  const trimmed = value?.trim() || '-'
+  // Windows already emits localized, human-readable values such as "53.6 GB".
+  // POSIX df -kP emits compact KiB values such as "8153252K" which need normalization.
+  if (trimmed === '-' || /\s/.test(trimmed)) {
+    return trimmed
+  }
+  const match = /^(\d+(?:\.\d+)?)([KMGT])(?:I?B)?$/i.exec(trimmed)
+  if (!match) {
+    return trimmed
+  }
+  const unitPowers = { K: 1, M: 2, G: 3, T: 4 } as const
+  const unit = match[2].toUpperCase() as keyof typeof unitPowers
+  const bytes = Number(match[1]) * 1024 ** unitPowers[unit]
+  if (!Number.isFinite(bytes)) {
+    return trimmed
+  }
+  const displayUnits = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+  let displayValue = bytes
+  let displayUnitIndex = 0
+  while (displayValue >= 1024 && displayUnitIndex < displayUnits.length - 1) {
+    displayValue /= 1024
+    displayUnitIndex += 1
+  }
+  return `${displayValue.toFixed(displayUnitIndex === 0 ? 0 : 1)} ${displayUnits[displayUnitIndex]}`
 }
 
 function formatProcessMegabytes(value: number) {
