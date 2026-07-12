@@ -13,9 +13,9 @@
   </p>
   <p>
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
-    <a href="https://github.com/St0ff3l/termdock/releases/latest"><img alt="Status" src="https://img.shields.io/badge/status-Official%20Release-22C55E?style=for-the-badge"></a>
-    <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-6366F1?style=for-the-badge">
-    <a href="https://github.com/St0ff3l/termdock/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/termdock?style=for-the-badge&logo=github&label=stars"></a>
+  <a href="https://github.com/St0ff3l/fileterm/releases/latest"><img alt="Status" src="https://img.shields.io/badge/status-Prerelease-22C55E?style=for-the-badge"></a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-6366F1?style=for-the-badge">
+  <a href="https://github.com/St0ff3l/fileterm/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/fileterm?style=for-the-badge&logo=github&label=stars"></a>
   </p>
 </div>
 
