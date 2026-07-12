@@ -5,7 +5,7 @@
   <img alt="TermDock" src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=34&duration=2600&pause=900&color=38BDF8&center=true&vCenter=true&width=760&lines=TermDock;SSH+%2B+SFTP+%2B+FTP+Workspace;A+Modern+Remote+Desktop+Workbench" />
   <br />
   <br />
-  <p><strong>一个为开发者和运维场景打造的现代桌面远程工作台，正式版现已发布。</strong></p>
+<p><strong>一个为开发者和运维场景打造的现代桌面远程工作台。</strong></p>
   <p>SSH 终端、SFTP 与 FTP 文件、多标签工作区和传输任务中心，收束到一个顺手的桌面客户端里。</p>
   <p>
     <kbd>中文</kbd>
