@@ -208,9 +208,9 @@ You can also join the QQ group: `534418986`.
 
 ## Support the Project
 
-If TermDock helps you, please consider starring the project on [GitHub](https://github.com/St0ff3l/termdock):
+If TermDock helps you, please consider starring the project on [GitHub](https://github.com/St0ff3l/fileterm):
 
-<a href="https://github.com/St0ff3l/termdock/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/termdock?style=for-the-badge&logo=github&label=Star%20TermDock"></a>
+<a href="https://github.com/St0ff3l/fileterm/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/fileterm?style=for-the-badge&logo=github&label=Star%20TermDock"></a>
 
 > GitHub now restricts access to public star timestamp data, so the README intentionally does not embed a third-party Star History chart that can render blank.
 
