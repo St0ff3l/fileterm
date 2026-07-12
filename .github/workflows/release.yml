@@ -52,6 +52,7 @@ jobs:
     env:
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -79,8 +80,11 @@ jobs:
 
       - name: Package macOS universal
         run: |
+          if [[ -z "${CSC_LINK:-}" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+          fi
           cd apps/desktop
-          npx electron-builder --mac --universal
+          npx electron-builder --mac --universal --publish never
 
       - name: Validate macOS update metadata
         shell: bash
@@ -136,7 +140,7 @@ jobs:
       - name: Package Windows (${{ matrix.arch }})
         run: |
           cd apps/desktop
-          npx electron-builder --win --${{ matrix.arch }}
+          npx electron-builder --win --${{ matrix.arch }} --publish never
 
       - name: Validate Windows update metadata
         shell: bash
@@ -203,4 +207,4 @@ jobs:
           gh release create "${TAG}" -R "${REPO}" \
             "${release_flags[@]}" \
             --generate-notes \
-            **/*.dmg **/*.zip **/*.exe **/*.yml
+            **/*.dmg **/*.zip **/*.exe **/latest.yml **/latest-mac.yml

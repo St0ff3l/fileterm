@@ -1,6 +1,6 @@
 {
   "name": "@fileterm/desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/main.js",
@@ -38,9 +38,9 @@
     "release:win": "npm run build && npm run package:win"
   },
   "dependencies": {
-    "@fileterm/core": "1.0.0",
-    "@fileterm/shared": "1.0.0",
-    "@fileterm/storage": "1.0.0",
+    "@fileterm/core": "1.1.0",
+    "@fileterm/shared": "1.1.0",
+    "@fileterm/storage": "1.1.0",
     "@monaco-editor/react": "4.7.0",
     "@tanstack/react-virtual": "^3.14.3",
     "@xterm/addon-fit": "^0.11.0",
@@ -88,7 +88,8 @@
       "dist/**",
       "dist-electron/**",
       "build/**",
-      "package.json"
+      "package.json",
+      "!**/sshcrypto.node"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
