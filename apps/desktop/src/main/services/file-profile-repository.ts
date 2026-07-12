@@ -734,7 +734,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         encoding: input.encoding ?? 'UTF-8',
         backspaceKey: input.backspaceKey ?? 'ASCII',
         deleteKey: input.deleteKey ?? 'VT220',
-        enableExecChannel: input.enableExecChannel ?? true
+        enableExecChannel: input.enableExecChannel ?? true,
+        enableResourceMonitoring: input.enableResourceMonitoring ?? true
       }
     : {
         id,

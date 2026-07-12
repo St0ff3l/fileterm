@@ -52,6 +52,7 @@ export interface SshProfile extends BaseProfile {
   backspaceKey?: string
   deleteKey?: string
   enableExecChannel?: boolean
+  enableResourceMonitoring?: boolean
 }
 
 export interface FtpProfile extends BaseProfile {
@@ -445,6 +446,7 @@ export interface CreateProfileInput {
   backspaceKey?: string
   deleteKey?: string
   enableExecChannel?: boolean
+  enableResourceMonitoring?: boolean
 }
 
 export interface SshHostVerificationRequest {
@@ -549,6 +551,11 @@ export interface FileTermDesktopApi {
   appVersion: string
   appName: string
   isDesktop: boolean
+  getUpdateStatus(): Promise<AppUpdateStatus>
+  checkForUpdates(): Promise<AppUpdateStatus>
+  downloadUpdate(): Promise<void>
+  installUpdate(): Promise<void>
+  onUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
@@ -686,6 +693,17 @@ export interface FileTermDesktopApi {
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void
   confirmCloseWindow(action: 'quit' | 'hide' | 'cancel'): Promise<void>
+}
+
+export type AppUpdateState =
+  'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error' | 'unsupported'
+
+export interface AppUpdateStatus {
+  state: AppUpdateState
+  currentVersion: string
+  availableVersion?: string
+  progress?: number
+  message?: string
 }
 
 export interface SessionController {

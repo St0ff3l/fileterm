@@ -173,6 +173,63 @@
   gap: 4px;
 }
 
+.sidebar-update-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--text-main);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sidebar-update-hint:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 17%, transparent);
+}
+
+.sidebar-update-hint:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+
+.sidebar-update-hint:disabled {
+  cursor: default;
+}
+
+.sidebar-update-hint .material-symbols-outlined {
+  color: var(--accent-primary);
+  font-size: 17px;
+}
+
+.sidebar-update-hint.is-downloaded {
+  border-color: color-mix(in srgb, var(--success) 55%, transparent);
+  background: color-mix(in srgb, var(--success) 11%, transparent);
+}
+
+.sidebar-update-hint.is-downloaded .material-symbols-outlined {
+  color: var(--success);
+}
+
+.sidebar-update-hint.is-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.sidebar-update-hint.is-error .material-symbols-outlined {
+  color: var(--danger);
+}
+
 .home-sidebar.is-collapsed {
   width: var(--sidebar-width, 44px);
   min-width: var(--sidebar-width, 44px);
@@ -228,6 +285,18 @@
 .home-sidebar.is-collapsed .sidebar-nav-link span.material-symbols-outlined {
   flex: 0 0 auto;
   font-size: 19px;
+}
+
+.home-sidebar.is-collapsed .sidebar-update-hint {
+  justify-content: center;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.home-sidebar.is-collapsed .sidebar-update-hint span:not(.material-symbols-outlined) {
+  display: none;
 }
 
 /* Right Main Content Panel */

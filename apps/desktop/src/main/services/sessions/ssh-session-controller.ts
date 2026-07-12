@@ -383,7 +383,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     const profile = this.profile as SshProfile
-    if (profile.enableExecChannel === false) {
+    if (profile.enableExecChannel === false || profile.enableResourceMonitoring === false) {
       this.cwdSetupInjected = true
       this.shellPlatform = 'unknown'
       this.sshDebug.log('main', 'Exec Channel 已禁用，跳过平台探测与 shell CWD 注入')

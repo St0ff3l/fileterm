@@ -334,6 +334,60 @@
   justify-content: flex-start;
 }
 
+.saved-fingerprint-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.saved-fingerprint-card__icon {
+  color: var(--text-muted);
+  font-size: 20px;
+}
+
+.saved-fingerprint-card__content {
+  min-width: 0;
+}
+
+.saved-fingerprint-card__content strong {
+  display: block;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.saved-fingerprint-card__content p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.saved-fingerprint-card__action {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.saved-fingerprint-card__action .material-symbols-outlined {
+  font-size: 15px;
+}
+
+@media (max-width: 680px) {
+  .saved-fingerprint-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .saved-fingerprint-card__action {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 .ssh-field-hint {
   margin-top: 10px;
   margin-left: 82px;

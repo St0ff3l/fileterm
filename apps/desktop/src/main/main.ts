@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { registerIpcHandlers } from './ipc/index.js'
 import { appError, appLog, getAppLogDirectory, initAppLogger } from './services/app-logger.js'
 import { AppUiStateStore } from './services/app-ui-state-store.js'
+import { AppUpdateService } from './services/app-update-service.js'
 
 // 必须在所有 Electron API 调用之前设置，避免 package.json 的 @fileterm/desktop
 // 被用作 macOS 钥匙串服务名（"@fileterm/desktop Safe Storage"），导致每次启动弹出授权弹窗。
@@ -105,6 +106,9 @@ type UiPreferences = {
 let uiPreferences: UiPreferences = { ...DEFAULT_UI_PREFERENCES }
 let ipcServices: ReturnType<typeof registerIpcHandlers> | null = null
 let uiStateStore: AppUiStateStore | null = null
+const appUpdateService = new AppUpdateService(() => {
+  void quitApplication(true)
+})
 
 function isBrokenPipeError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'EPIPE'
@@ -379,7 +383,7 @@ function shutdownWorkspace() {
   })
 }
 
-function quitApplication(): Promise<void> {
+function quitApplication(applyUpdate = false): Promise<void> {
   if (quitPreparationPromise) {
     return quitPreparationPromise
   }
@@ -404,6 +408,10 @@ function quitApplication(): Promise<void> {
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.close()
+    }
+    if (applyUpdate) {
+      appUpdateService.quitAndInstall()
+      return
     }
     app.quit()
   }
@@ -1058,6 +1066,7 @@ app.whenReady().then(() => {
     confirmCloseFileEditorWindow,
     cancelCloseFileEditorWindow,
     openLogsDirectory,
+    appUpdateService,
     requestQuitApp: () => {
       requestQuitConfirmation()
     },
@@ -1070,6 +1079,7 @@ app.whenReady().then(() => {
     }
   })
   createMainWindow()
+  void appUpdateService.checkForUpdates()
 
   app.on('activate', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1090,6 +1100,9 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', (event) => {
+  if (appUpdateService.isInstallingUpdate()) {
+    return
+  }
   if (isQuitting) {
     return
   }

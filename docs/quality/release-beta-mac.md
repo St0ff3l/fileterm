@@ -22,7 +22,8 @@
 2. 运行桌面应用构建。
 3. 运行 mac 打包命令。
 4. 确认 `apps/desktop/release/` 里出现 `dmg` 和 `zip`。
-5. 确认版本号为 `0.1.0-beta.1`。
+5. 正式发布必须在 GitHub Actions 配置 `CSC_LINK` / `CSC_KEY_PASSWORD` 两个 repository secrets；release workflow 会将它们传给 electron-builder 用于 Apple Developer 签名。macOS 的应用内更新会验证签名，未签名或 ad-hoc 签名的 DMG/ZIP 只能手动安装，不能作为自动更新来源。
+6. 确认版本号为 `0.1.0-beta.1`。
 
 如需清理本地产物后再重打，可执行：
 

@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 import type { LocalFilesService } from '../services/local-files-service.js'
 import type { WorkspaceService } from '../services/workspace-service.js'
+import type { AppUpdateService } from '../services/app-update-service.js'
 
 export interface IpcWindowOptions {
   getMainWindow(): BrowserWindow | null
@@ -24,6 +25,7 @@ export interface IpcWindowOptions {
   confirmCloseFileEditorWindow(window: BrowserWindow): void
   cancelCloseFileEditorWindow(window: BrowserWindow): void
   openLogsDirectory(): Promise<void>
+  appUpdateService: AppUpdateService
   requestQuitApp(): void
   confirmCloseWindow(action: 'quit' | 'hide' | 'cancel'): void | Promise<void>
 }

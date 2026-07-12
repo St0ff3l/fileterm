@@ -13,6 +13,7 @@
     "prepackage:mac": "npm --prefix ../.. run sync:version",
     "prepackage:win": "npm --prefix ../.. run sync:version",
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:electron\"",
+    "dev:update-test": "FILETERM_LOCAL_UPDATE=1 npm run dev",
     "dev:renderer": "vite",
     "predev:main": "node ./scripts/clean-dist-electron.mjs",
     "dev:main": "tsc -p tsconfig.node.json --watch",
@@ -30,22 +31,25 @@
     "test:transfers:protocol": "npm --prefix ../.. run build -w @fileterm/core && npm run build:main && node --test test/protocol/*.test.mjs",
     "clean:release": "node ./scripts/clean-release.mjs",
     "package:mac": "electron-builder --mac --arm64",
+    "package:update-test:mac": "electron-builder --config electron-builder.update-test.yml --mac --arm64",
+    "package:update-test:win": "electron-builder --config electron-builder.update-test.yml --win --x64",
     "release:mac": "npm run build && npm run package:mac",
     "package:win": "electron-builder --win --x64",
     "release:win": "npm run build && npm run package:win"
   },
   "dependencies": {
-    "@monaco-editor/react": "4.7.0",
-    "@tanstack/react-virtual": "^3.14.3",
     "@fileterm/core": "1.0.0",
     "@fileterm/shared": "1.0.0",
     "@fileterm/storage": "1.0.0",
+    "@monaco-editor/react": "4.7.0",
+    "@tanstack/react-virtual": "^3.14.3",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
     "basic-ftp": "^6.0.1",
+    "electron-updater": "^6.8.3",
     "iconv-lite": "0.7.2",
     "monaco-editor": "0.55.1",
     "opencc-js": "1.3.1",
@@ -73,6 +77,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "St0ff3l",
+        "repo": "fileterm"
+      }
+    ],
     "files": [
       "dist/**",
       "dist-electron/**",
@@ -81,7 +92,6 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "identity": "-",
       "target": [
         "dmg",
         "zip"

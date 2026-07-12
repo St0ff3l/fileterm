@@ -164,6 +164,8 @@ platform probe
 - renderer 从 preload 暴露的平台信息同步到 `document.documentElement.dataset.platform`。
 - CSS 使用 `data-platform` 和稳定 class 做 macOS/Windows/Linux 差异化布局。
 - macOS 菜单栏托盘图标使用 `apps/desktop/build/trayTemplate*.png` template 资源，由 main process 设置为 `setTemplateImage(true)`。
+- 应用更新通过 `AppUpdateService` 统一管理，renderer 仅经 `main -> preload -> renderer` IPC 查询状态、触发检查、下载和重启安装；已打包的 Windows/macOS 客户端从 GitHub Release 读取 electron-builder 更新元数据。
+- 主题和语言属于主进程持久化的 UI preferences；资源监控是 SSH 连接配置，关闭后该连接不采集资源数据，工作区仅保留窄侧栏。
 - 产品更名后，main process 首次启动只迁移旧用户目录中的应用自有 JSON 数据；Chromium session、缓存与日志不迁移。
 
 ## 4.3 传输暂停与恢复边界

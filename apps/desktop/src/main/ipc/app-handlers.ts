@@ -3,6 +3,11 @@ import type { ConnectionFormMode, FileEditorWindowInput } from '@fileterm/core'
 import type { IpcWindowOptions } from './types.js'
 
 export function registerAppHandlers(options: IpcWindowOptions) {
+  ipcMain.handle('app:getUpdateStatus', () => options.appUpdateService.getStatus())
+  ipcMain.handle('app:checkForUpdates', () => options.appUpdateService.checkForUpdates())
+  ipcMain.handle('app:downloadUpdate', () => options.appUpdateService.downloadUpdate())
+  ipcMain.handle('app:installUpdate', () => options.appUpdateService.installUpdate())
+
   ipcMain.handle('app:getUiPreferences', () => options.getUiPreferences())
 
   ipcMain.handle(

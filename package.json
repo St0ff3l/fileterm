@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @fileterm/desktop",
+    "dev:update-test": "npm run dev:update-test -w @fileterm/desktop",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix --max-warnings=0",
     "format": "prettier --write .",

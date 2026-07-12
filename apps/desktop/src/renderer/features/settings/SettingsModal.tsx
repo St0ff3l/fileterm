@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { AppUpdateStatus } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 
@@ -25,8 +26,31 @@ export function SettingsModal({
   standalone?: boolean
   inline?: boolean
 }) {
-  const [activeTab, setActiveTab] = useState<'general' | 'tools' | 'system'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'tools' | 'updates' | 'system'>('general')
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const desktopApi = window.fileterm
+  const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
+
+  useEffect(() => {
+    if (updatePreviewState) {
+      setUpdateStatus({
+        currentVersion: desktopApi?.appVersion ?? '1.0.0',
+        state:
+          updatePreviewState === 'downloading' || updatePreviewState === 'downloaded' || updatePreviewState === 'error'
+            ? updatePreviewState
+            : 'available',
+        availableVersion: '1.1.0',
+        progress: updatePreviewState === 'downloading' ? 62 : updatePreviewState === 'downloaded' ? 100 : undefined,
+        message: updatePreviewState === 'error' ? '无法连接到更新服务器' : undefined
+      })
+      return
+    }
+    if (!desktopApi) {
+      return
+    }
+    void desktopApi.getUpdateStatus().then(setUpdateStatus)
+    return desktopApi.onUpdateStatus(setUpdateStatus)
+  }, [desktopApi, updatePreviewState])
 
   const platformLabel = (() => {
     const platform = desktopApi?.platform ?? 'unknown'
@@ -73,6 +97,16 @@ export function SettingsModal({
               <span className="material-symbols-outlined">tune</span>
             </span>
             <span className="connection-manager-sidebar-label">{t.generalSettings}</span>
+          </button>
+          <button
+            className={`connection-manager-sidebar-item ${activeTab === 'updates' ? 'active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab('updates')}
+          >
+            <span className="connection-manager-sidebar-icon">
+              <span className="material-symbols-outlined">system_update</span>
+            </span>
+            <span className="connection-manager-sidebar-label">{t.appUpdates}</span>
           </button>
           <button
             className={`connection-manager-sidebar-item ${activeTab === 'tools' ? 'active' : ''}`}
@@ -190,6 +224,56 @@ export function SettingsModal({
             </div>
           ) : null}
 
+          {activeTab === 'updates' ? (
+            <div className="settings-panel">
+              <section className="settings-section">
+                <h3>{t.appUpdates}</h3>
+                <div className="update-status-card" aria-live="polite">
+                  <div>
+                    <strong>{t.updateStatus}</strong>
+                    <p>{getUpdateStatusLabel(updateStatus, t)}</p>
+                  </div>
+                  <span className={`update-status-indicator ${updateStatus?.state ?? 'idle'}`} />
+                </div>
+                {updateStatus?.state === 'downloading' ? (
+                  <div className="update-progress" aria-label={t.updateDownloading}>
+                    <span style={{ width: `${updateStatus.progress ?? 0}%` }} />
+                  </div>
+                ) : null}
+                <div className="settings-update-actions">
+                  {updateStatus?.state === 'available' ? (
+                    <button
+                      className="primary-button compact"
+                      onClick={() => void desktopApi?.downloadUpdate()}
+                      type="button"
+                    >
+                      {t.downloadUpdate}
+                    </button>
+                  ) : null}
+                  {updateStatus?.state === 'downloaded' ? (
+                    <button
+                      className="primary-button compact"
+                      onClick={() => void desktopApi?.installUpdate()}
+                      type="button"
+                    >
+                      {t.restartToUpdate}
+                    </button>
+                  ) : null}
+                  {updateStatus?.state !== 'downloading' && updateStatus?.state !== 'downloaded' ? (
+                    <button
+                      className="flat-button compact"
+                      disabled={updateStatus?.state === 'checking' || updateStatus?.state === 'unsupported'}
+                      onClick={() => void desktopApi?.checkForUpdates()}
+                      type="button"
+                    >
+                      {updateStatus?.state === 'checking' ? t.checkingForUpdates : t.checkForUpdates}
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
           {activeTab === 'system' ? (
             <div className="settings-panel">
               <section className="settings-section">
@@ -245,4 +329,17 @@ export function SettingsModal({
       {content}
     </div>
   )
+}
+
+function getUpdateStatusLabel(status: AppUpdateStatus | null, labels: typeof t) {
+  if (!status) return labels.updateStatusIdle
+  if (status.state === 'available') return labels.updateAvailable.replace('{version}', status.availableVersion ?? '—')
+  if (status.state === 'downloaded') return labels.updateDownloaded.replace('{version}', status.availableVersion ?? '—')
+  if (status.state === 'downloading')
+    return labels.updateDownloading.replace('{progress}', String(status.progress ?? 0))
+  if (status.state === 'not-available') return labels.updateNotAvailable
+  if (status.state === 'checking') return labels.checkingForUpdates
+  if (status.state === 'error') return `${labels.updateFailed}: ${status.message ?? '—'}`
+  if (status.state === 'unsupported') return labels.updateUnsupported
+  return labels.updateStatusIdle
 }

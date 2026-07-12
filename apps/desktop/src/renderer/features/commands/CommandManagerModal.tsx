@@ -46,6 +46,7 @@ export function CommandManagerModal({
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [isActionsExpanded, setIsActionsExpanded] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null)
   const [editorState, setEditorState] = useState<{ mode: 'create' | 'edit'; commandId?: string } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<
     { kind: 'folder'; id: string; name: string } | { kind: 'command'; id: string; name: string } | null
@@ -66,6 +67,16 @@ export function CommandManagerModal({
       else next.add(folderId)
       return next
     })
+  }
+
+  const saveFolderRename = () => {
+    if (!editingFolder) return
+    const name = editingFolder.name.trim()
+    const current = commandFolders.find((folder) => folder.id === editingFolder.id)
+    if (name && name !== current?.name) {
+      onUpdateFolder(editingFolder.id, { name })
+    }
+    setEditingFolder(null)
   }
 
   const tree = useMemo(() => {
@@ -362,7 +373,23 @@ export function CommandManagerModal({
                 <AppIcon name="brand" size={14} />
               </span>
             )}
-            <span className="manager-node-name">{node.name}</span>
+            {isFolder && editingFolder?.id === node.id ? (
+              <input
+                autoFocus
+                className="manager-inline-input"
+                value={editingFolder.name}
+                onBlur={saveFolderRename}
+                onChange={(event) => setEditingFolder({ id: node.id, name: event.target.value })}
+                onClick={stopInteractiveEvent}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.key === 'Enter') saveFolderRename()
+                  if (event.key === 'Escape') setEditingFolder(null)
+                }}
+              />
+            ) : (
+              <span className="manager-node-name">{node.name}</span>
+            )}
           </span>
           <span>
             {isFolder ? (
@@ -395,6 +422,22 @@ export function CommandManagerModal({
                 onClick={(e) => {
                   e.stopPropagation()
                   openEditorWindow('edit', node.id)
+                }}
+              >
+                <AppIcon name="edit" size={14} />
+              </button>
+            )}
+            {isFolder && (
+              <button
+                aria-label={t.rename}
+                className="manager-icon-action"
+                title={t.rename}
+                type="button"
+                onMouseDown={stopInteractiveEvent}
+                onPointerDown={stopInteractiveEvent}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setEditingFolder({ id: node.id, name: node.name })
                 }}
               >
                 <AppIcon name="edit" size={14} />

@@ -26,6 +26,7 @@ import type {
   TerminalStatePayload,
   WorkspaceSnapshot
 } from '@fileterm/core'
+import type { AppUpdateStatus } from '@fileterm/core'
 
 const api: FileTermDesktopApi = {
   platform: typeof process !== 'undefined' ? process.platform : 'unknown',
@@ -33,6 +34,15 @@ const api: FileTermDesktopApi = {
   appVersion: process.env['FILETERM_APP_VERSION'] ?? '0.0.0',
   appName: 'FileTerm',
   isDesktop: true,
+  getUpdateStatus: () => ipcRenderer.invoke('app:getUpdateStatus'),
+  checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
+  downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
+  onUpdateStatus: (listener) => {
+    const wrapped = (_event: unknown, status: AppUpdateStatus) => listener(status)
+    ipcRenderer.on('app:update-status', wrapped)
+    return () => ipcRenderer.off('app:update-status', wrapped)
+  },
   readClipboardText: (): Promise<string> => ipcRenderer.invoke('app:readClipboardText'),
   writeClipboardText: (text: string): Promise<void> => ipcRenderer.invoke('app:writeClipboardText', text),
   getUiPreferences: () => ipcRenderer.invoke('app:getUiPreferences'),

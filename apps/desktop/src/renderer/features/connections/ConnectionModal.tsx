@@ -243,8 +243,22 @@ export function ConnectionModal({
                     </>
                   ) : null}
                   {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (
-                    <div className="span-2 ssh-inline-action">
-                      <button className="flat-button compact" onClick={onClearHostFingerprint} type="button">
+                    <div className="span-2 saved-fingerprint-card">
+                      <span aria-hidden="true" className="material-symbols-outlined saved-fingerprint-card__icon">
+                        fingerprint
+                      </span>
+                      <div className="saved-fingerprint-card__content">
+                        <strong>{t.savedHostFingerprint}</strong>
+                        <p>{t.clearSavedFingerprintHint}</p>
+                      </div>
+                      <button
+                        className="flat-button compact saved-fingerprint-card__action"
+                        onClick={onClearHostFingerprint}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          restart_alt
+                        </span>
                         {t.clearSavedFingerprint}
                       </button>
                     </div>
@@ -263,6 +277,17 @@ export function ConnectionModal({
                     <span>{t.enableExecChannel}</span>
                   </label>
                   <div className="ssh-field-hint">{t.enableExecChannelHint}</div>
+                  <label className="ssh-checkbox">
+                    <input
+                      checked={form.enableResourceMonitoring !== false}
+                      type="checkbox"
+                      onChange={(event) =>
+                        setForm((prev) => ({ ...prev, enableResourceMonitoring: event.target.checked }))
+                      }
+                    />
+                    <span>{t.resourceMonitoring}</span>
+                  </label>
+                  <div className="ssh-field-hint">{t.resourceMonitoringDescription}</div>
                 </fieldset>
               ) : null}
             </div>

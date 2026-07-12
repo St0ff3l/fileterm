@@ -146,6 +146,7 @@ export function App() {
     visibleActiveSessionTabId,
     activeTab,
     activeSession,
+    addHomeTab,
     isHomeWorkspaceVisible,
     showSidebar,
     effectiveActiveLocalTabId,
@@ -169,7 +170,6 @@ export function App() {
     endTabDrag,
     setIsSystemSidebarCollapsed,
     dismissShortcutCloseConfirm,
-    addHomeTab,
     activateHomeTab,
     closeHomeTab,
     closeSessionTab,
@@ -996,7 +996,12 @@ export function App() {
           <SystemSidebarShell
             activeProfile={activeProfile}
             activeSession={activeSession}
-            collapsed={isSystemSidebarCollapsed}
+            collapsed={
+              isSystemSidebarCollapsed ||
+              (activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring === false)
+            }
+            showResourceMeters={activeProfile?.type !== 'ssh' || activeProfile.enableResourceMonitoring !== false}
+            showToggle={activeProfile?.type !== 'ssh' || activeProfile.enableResourceMonitoring !== false}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
             onResizeStart={() => setIsResizingSidebar(true)}

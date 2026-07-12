@@ -6,6 +6,8 @@ export function SystemSidebarShell({
   activeProfile,
   activeSession,
   collapsed,
+  showResourceMeters,
+  showToggle,
   isResizing,
   onOpenSystemInfo,
   onResizeStart,
@@ -15,6 +17,8 @@ export function SystemSidebarShell({
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   collapsed: boolean
+  showResourceMeters: boolean
+  showToggle: boolean
   isResizing: boolean
   onOpenSystemInfo(): void
   onResizeStart(): void
@@ -27,6 +31,8 @@ export function SystemSidebarShell({
         activeProfile={activeProfile}
         activeSession={activeSession}
         collapsed={collapsed}
+        showResourceMeters={showResourceMeters}
+        showToggle={showToggle}
         onOpenSystemInfo={onOpenSystemInfo}
         onToggleCollapsed={() => {
           const nextCollapsed = !collapsed

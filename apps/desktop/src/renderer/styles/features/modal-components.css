@@ -987,6 +987,74 @@
   letter-spacing: 0.05em;
 }
 
+.update-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-card);
+}
+
+.update-status-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.update-status-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.update-status-indicator {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.update-status-indicator.available,
+.update-status-indicator.downloaded {
+  background: var(--accent-primary);
+}
+
+.update-status-indicator.error {
+  background: var(--danger, #dc2626);
+}
+
+.update-status-indicator.checking,
+.update-status-indicator.downloading {
+  background: var(--warning, #d97706);
+}
+
+.update-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+
+.update-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-primary);
+  transition: width 180ms ease;
+}
+
+.settings-update-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .theme-options-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

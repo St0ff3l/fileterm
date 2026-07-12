@@ -49,11 +49,9 @@ jobs:
   build-mac:
     needs: validate-release-tag
     runs-on: macos-14
-    strategy:
-      matrix:
-        arch: [arm64, x64]
-      fail-fast: false
-
+    env:
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -79,18 +77,27 @@ jobs:
       - name: Build renderer + main
         run: npm run build -w @fileterm/desktop
 
-      - name: Package macOS (${{ matrix.arch }})
+      - name: Package macOS universal
         run: |
           cd apps/desktop
-          npx electron-builder --mac --${{ matrix.arch }}
+          npx electron-builder --mac --universal
+
+      - name: Validate macOS update metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f apps/desktop/release/latest-mac.yml
+          compgen -G 'apps/desktop/release/*.dmg' >/dev/null
+          compgen -G 'apps/desktop/release/*.zip' >/dev/null
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: FileTerm-macOS-${{ matrix.arch }}
+          name: FileTerm-macOS-universal
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
+            apps/desktop/release/*.yml
           if-no-files-found: error
 
   build-win:
@@ -131,12 +138,20 @@ jobs:
           cd apps/desktop
           npx electron-builder --win --${{ matrix.arch }}
 
+      - name: Validate Windows update metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f apps/desktop/release/latest.yml
+          compgen -G 'apps/desktop/release/*.exe' >/dev/null
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
           name: FileTerm-Windows-${{ matrix.arch }}
           path: |
             apps/desktop/release/*.exe
+            apps/desktop/release/*.yml
           if-no-files-found: error
 
   release:
@@ -188,4 +203,4 @@ jobs:
           gh release create "${TAG}" -R "${REPO}" \
             "${release_flags[@]}" \
             --generate-notes \
-            **/*.dmg **/*.zip **/*.exe
+            **/*.dmg **/*.zip **/*.exe **/*.yml

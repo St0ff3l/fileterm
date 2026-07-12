@@ -3,9 +3,10 @@ import type {
   CommandTemplate,
   CommandTemplateInput,
   ConnectionFolder,
-  ConnectionProfile
+  ConnectionProfile,
+  AppUpdateStatus
 } from '@fileterm/core'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
 import { OverviewPage } from './OverviewPage'
 import { QuickLinksPage } from './QuickLinksPage'
@@ -96,6 +97,29 @@ export function HomeWorkspace({
 
   const desktopApi = window.fileterm
   const isWindows = desktopApi?.platform === 'win32'
+  const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
+
+  useEffect(() => {
+    if (updatePreviewState) {
+      const previewStatus: AppUpdateStatus = {
+        currentVersion: desktopApi?.appVersion ?? '1.0.0',
+        state:
+          updatePreviewState === 'downloading' || updatePreviewState === 'downloaded' || updatePreviewState === 'error'
+            ? updatePreviewState
+            : 'available',
+        availableVersion: '1.1.0',
+        progress: updatePreviewState === 'downloading' ? 62 : updatePreviewState === 'downloaded' ? 100 : undefined,
+        message: updatePreviewState === 'error' ? '无法连接到更新服务器' : undefined
+      }
+      setUpdateStatus(previewStatus)
+      return
+    }
+    if (!desktopApi) return
+    void desktopApi.getUpdateStatus().then(setUpdateStatus)
+    return desktopApi.onUpdateStatus(setUpdateStatus)
+  }, [desktopApi, updatePreviewState])
+
   const homeBrandContent = isWindows ? (
     <>
       <strong>{desktopApi?.appName ?? 'FileTerm'}</strong>
@@ -114,6 +138,35 @@ export function HomeWorkspace({
       void desktopApi.openExternalUrl('https://github.com/St0ff3l/fileterm')
     }
   }
+
+  const updateAction = () => {
+    if (updateStatus?.state === 'available') {
+      void desktopApi?.downloadUpdate()
+    } else if (updateStatus?.state === 'downloaded') {
+      void desktopApi?.installUpdate()
+    } else if (updateStatus?.state === 'error') {
+      void desktopApi?.checkForUpdates()
+    }
+  }
+
+  const updateHint =
+    updateStatus?.state === 'available'
+      ? {
+          icon: 'system_update',
+          label: t.updateAvailableShort.replace('{version}', updateStatus.availableVersion ?? '—'),
+          title: t.downloadUpdate
+        }
+      : updateStatus?.state === 'downloading'
+        ? {
+            icon: 'downloading',
+            label: t.updateDownloadingShort.replace('{progress}', String(updateStatus.progress ?? 0)),
+            title: t.updateDownloading.replace('{progress}', String(updateStatus.progress ?? 0))
+          }
+        : updateStatus?.state === 'downloaded'
+          ? { icon: 'restart_alt', label: t.restartToUpdate, title: t.restartToUpdate }
+          : updateStatus?.state === 'error'
+            ? { icon: 'error_outline', label: t.updateRetry, title: updateStatus.message ?? t.updateFailed }
+            : null
 
   return (
     <section className={`home-workspace ${isSidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
@@ -188,6 +241,21 @@ export function HomeWorkspace({
             <span className="material-symbols-outlined">star</span>
             <span>GitHub</span>
           </button>
+          {updateHint ? (
+            <button
+              aria-label={updateHint.title}
+              className={`sidebar-update-hint is-${updateStatus?.state}`}
+              disabled={updateStatus?.state === 'downloading'}
+              onClick={updateAction}
+              title={updateHint.title}
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined">
+                {updateHint.icon}
+              </span>
+              <span>{updateHint.label}</span>
+            </button>
+          ) : null}
         </div>
         <div
           aria-label={t.resizeSidebar}
