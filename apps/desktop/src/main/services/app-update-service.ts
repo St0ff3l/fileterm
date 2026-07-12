@@ -4,6 +4,7 @@ import type { AppUpdateStatus } from '@fileterm/core'
 import { appError, appLog } from './app-logger.js'
 
 const { autoUpdater } = electronUpdater
+// Keep macOS updates on the release page until Developer ID signing is available.
 const MAC_AUTO_UPDATE_ENABLED = false
 const RELEASE_BASE_URL = 'https://github.com/St0ff3l/fileterm/releases/tag'
 
