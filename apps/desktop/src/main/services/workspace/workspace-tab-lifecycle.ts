@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { WebContents } from 'electron'
-import type { ConnectionProfile, RemoteFileAccessOptions, SessionSnapshot, WorkspaceSnapshot } from '@fileterm/core'
+import {
+  getConnectionCapabilities,
+  type ConnectionProfile,
+  type RemoteFileAccessOptions,
+  type SessionSnapshot,
+  type WorkspaceSnapshot
+} from '@fileterm/core'
 import type { ProfileRepository } from '@fileterm/storage'
 import { appWarn } from '../app-logger.js'
 import type { LiveSessionController } from './workspace-session-runtime.js'
@@ -155,19 +161,23 @@ function createInitialSessionSnapshot(
   controller: LiveSessionController,
   overrides?: Partial<Pick<SessionSnapshot, 'remotePath' | 'shellCwd' | 'followShellCwd' | 'sudoUser'>>
 ): SessionSnapshot {
+  const isFileController = controller.type === 'ssh' || controller.type === 'ftp'
+  const isTerminalController = controller.type === 'ssh' || controller.type === 'telnet' || controller.type === 'serial'
   return {
     profileId: profile.id,
-    accessHost: profile.host,
+    accessHost: profile.type === 'serial' ? profile.devicePath : profile.host,
     summary: profile.type === 'ssh' ? '连接主机...' : controller.getSummary(),
-    terminalTranscript: controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
-    remotePath: overrides?.remotePath ?? controller.getRemotePath(),
+    terminalTranscript: isTerminalController ? controller.getTerminalTranscript() : undefined,
+    remotePath: overrides?.remotePath ?? (isFileController ? controller.getRemotePath() : ''),
     shellCwd: overrides?.shellCwd ?? (controller.type === 'ssh' ? controller.getShellCwd() : undefined),
     followShellCwd: overrides?.followShellCwd ?? profile.type === 'ssh',
     remoteFiles: [],
-    fileAccessMode: controller.getFileAccessMode(),
+    fileAccessMode: isFileController ? controller.getFileAccessMode() : undefined,
     sudoUser: overrides?.sudoUser ?? (profile.type === 'ssh' ? 'root' : undefined),
     hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
-    connected: false
+    connected: false,
+    capabilities: getConnectionCapabilities(profile),
+    reconnectMode: profile.type === 'ssh' ? (profile.reconnectMode ?? 'none') : undefined
   }
 }
 

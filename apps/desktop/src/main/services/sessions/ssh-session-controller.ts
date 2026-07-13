@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises'
 import type { ClientChannel, ConnectConfig, FileEntry, SFTPWrapper, Stats } from 'ssh2'
 import { Client } from 'ssh2'
 import type {
+  ConnectionProfile,
   PermissionChangeOptions,
   RemoteFileAccessOptions,
   RemoteFileItem,
@@ -16,6 +17,8 @@ import type {
   SshInteractionResponse,
   SystemMetrics,
   SshProfile,
+  SshForwardRule,
+  SshTunnelSnapshot,
   SshSessionController,
   TransferFileOptions,
   TransferProgress
@@ -34,6 +37,8 @@ import {
 import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug-logger.js'
 import { decodeBuffer, encodeText } from '../text-encoding.js'
 import { appLog, appWarn } from '../app-logger.js'
+import { createOutboundSocket } from '../network/proxy-socket-factory.js'
+import { SshTunnelService } from './ssh-tunnel-service.js'
 
 export interface SshSessionClientDependencies {
   main?: Client
@@ -107,18 +112,22 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private lastMetricsWarningAt = 0
   private connectionGeneration = 0
   private readonly acceptedHostFingerprints = new Set<string>()
+  private tunnelService?: SshTunnelService
+  private jumpSsh?: Client
+  private keyboardInteractiveChallengeSeen = false
 
   constructor(
     id: string,
     profile: SshProfile,
     private readonly requestInteraction: (request: SshInteractionDraft) => Promise<SshInteractionResponse>,
-    private readonly rememberTrustedHostFingerprint: (fingerprint: string) => Promise<void>,
+    private readonly rememberTrustedHostFingerprint: (profileId: string, fingerprint: string) => Promise<void>,
     private readonly onData: (chunk: string) => void,
     private readonly onShellCwdChange: (cwd: string) => void,
     private readonly onShellUserChange: (user: string) => void,
     private readonly onStateChange: (summary: string, transcript: string, connected: boolean) => void,
     initialTranscript?: string,
-    clients: SshSessionClientDependencies = {}
+    clients: SshSessionClientDependencies = {},
+    private readonly resolveProfile?: (profileId: string) => Promise<SshProfile | ConnectionProfile | null>
   ) {
     super(id, 'ssh', profile)
     this.createTransferClient = clients.createTransferClient ?? (() => new Client())
@@ -142,13 +151,18 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.shellSetupCanceled = false
     this.metricsPlatform = undefined
     this.lastInjectTime = 0
+    this.keyboardInteractiveChallengeSeen = false
     this.clearShellSetupSuppression()
 
     const profile = await this.resolveConnectionProfile(this.profile as SshProfile)
+    await this.connectJumpHost(profile)
     const authConfig = await resolveSshAuthConfig(profile)
-    const shouldTryKeyboard = profile.authType === 'password' && Boolean(profile.password)
+    // keyboard-interactive is a first-class auth mode. ssh2 does not request a
+    // challenge unless tryKeyboard is true, which previously caused it to fall
+    // through to agent/default-key auth and report "All configured… failed".
+    const shouldTryKeyboard = profile.authType === 'keyboard-interactive' || profile.authType === 'password'
     const username = profile.username || os.userInfo().username
-    const sshConfig: ConnectConfig = {
+    const baseSshConfig: ConnectConfig = {
       host: profile.host,
       port: profile.port,
       username,
@@ -157,6 +171,12 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       keepaliveInterval: 3000,
       keepaliveCountMax: 2,
       tryKeyboard: shouldTryKeyboard,
+      // Prefer a stored password, then request keyboard-interactive on the
+      // same SSH connection. This supports ordinary password servers as well
+      // as MFA bastions that ask for an OTP after the password exchange.
+      ...(profile.authType === 'keyboard-interactive'
+        ? { authHandler: profile.password ? ['password', 'keyboard-interactive'] : ['keyboard-interactive'] }
+        : {}),
       hostVerifier: (key: Buffer | string, verify: (accepted: boolean) => void) => {
         void this.verifyHostFingerprint(profile, key)
           .then(verify)
@@ -167,6 +187,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       },
       ...(this.sshDebug.enabled ? { debug: (message: string) => this.sshDebug.handle('main', message) } : {})
     }
+    const sshConfig = await this.withOutboundSocket(baseSshConfig, profile)
     this.sshConfig = sshConfig
     this.sshDebug.logConnectionStart('main', profile, username, authConfig, shouldTryKeyboard)
 
@@ -179,13 +200,22 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
       this.ssh.on('banner', (message) => {
         this.sshDebug.log('main', `服务端横幅: ${singleLine(message)}`)
       })
-      registerKeyboardInteractiveHandler(this.ssh, profile, (message) => {
+      this.registerKeyboardInteractiveHandler(this.ssh, profile, 'main', (message) => {
         this.sshDebug.logKeyboardInteractive('main', message)
       })
 
       this.ssh
         .on('ready', () => {
           this.connected = true
+          this.tunnelService = new SshTunnelService(this.ssh, (message) => this.appendSystemMessage(`${message}\r\n`))
+          for (const rule of profile.forwards ?? []) this.tunnelService.register(rule)
+          void Promise.all(
+            (profile.forwards ?? []).filter((rule) => rule.autoStart).map((rule) => this.tunnelService?.start(rule))
+          ).catch((error) =>
+            this.appendSystemMessage(
+              `Tunnel startup failed: ${error instanceof Error ? error.message : String(error)}\r\n`
+            )
+          )
           this.appendSystemMessage('连接主机成功\r\n')
           this.sshDebug.log('main', '认证完成，准备打开终端')
           this.onStateChange(this.getSummary(), this.transcript.toString(), true)
@@ -288,6 +318,15 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
           )
         })
         .on('error', (error: Error) => {
+          if (
+            profile.authType === 'keyboard-interactive' &&
+            !this.keyboardInteractiveChallengeSeen &&
+            /All configured authentication methods failed/i.test(error.message)
+          ) {
+            error = new Error(
+              '服务器没有提供 keyboard-interactive 认证挑战。请在服务端启用 KbdInteractiveAuthentication，并确认用户名正确；若服务器仅启用 PasswordAuthentication，请改用“密码”认证。'
+            )
+          }
           this.handlePrimaryDisconnect()
           if (connectionFailed) {
             this.sshDebug.log('main', `忽略重复连接错误: ${error.message}`)
@@ -314,6 +353,41 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
         })
         .connect(sshConfig)
     })
+  }
+
+  listTunnels(): SshTunnelSnapshot[] {
+    return this.tunnelService?.list() ?? []
+  }
+
+  async createTunnel(rule: SshForwardRule): Promise<SshTunnelSnapshot[]> {
+    const service = this.requireTunnelService()
+    service.register(rule, true)
+    return service.list()
+  }
+
+  async startTunnel(ruleId: string): Promise<SshTunnelSnapshot[]> {
+    const service = this.requireTunnelService()
+    const rule = service.list().find((item) => item.id === ruleId)
+    if (!rule) throw new Error('Tunnel was not found')
+    await service.start(rule)
+    return service.list()
+  }
+
+  async stopTunnel(ruleId: string): Promise<SshTunnelSnapshot[]> {
+    const service = this.requireTunnelService()
+    await service.stop(ruleId)
+    return service.list()
+  }
+
+  async deleteTunnel(ruleId: string): Promise<SshTunnelSnapshot[]> {
+    const service = this.requireTunnelService()
+    await service.remove(ruleId)
+    return service.list()
+  }
+
+  private requireTunnelService(): SshTunnelService {
+    if (!this.connected || !this.tunnelService) throw new Error('SSH tunnel service is unavailable while disconnected')
+    return this.tunnelService
   }
 
   private async resolveConnectionProfile(profile: SshProfile): Promise<SshProfile> {
@@ -369,6 +443,112 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     return profile
+  }
+
+  private async withOutboundSocket(config: ConnectConfig, profile: SshProfile): Promise<ConnectConfig> {
+    const { sock: _sock, ...base } = config as ConnectConfig & { sock?: unknown }
+    if (this.jumpSsh) {
+      const sock = await this.openJumpChannel(profile.host, profile.port)
+      return { ...base, sock } as ConnectConfig
+    }
+    if (!profile.proxy || profile.proxy.type === 'none') return base
+    const sock = await createOutboundSocket(profile.host, profile.port, profile.proxy, config.readyTimeout ?? 15_000)
+    return { ...base, sock } as ConnectConfig
+  }
+
+  private async connectJumpHost(profile: SshProfile) {
+    if (!profile.jumpProfileId) return
+    const jump = await this.resolveProfile?.(profile.jumpProfileId)
+    if (!jump || jump.type !== 'ssh' || jump.id === profile.id || jump.jumpProfileId) {
+      throw new Error('Jump Host must reference a different SSH profile without another Jump Host')
+    }
+    const client = new Client()
+    const resolvedJump = await this.resolveConnectionProfile(jump)
+    const auth = await resolveSshAuthConfig(resolvedJump)
+    const shouldTryKeyboard = resolvedJump.authType === 'keyboard-interactive' || resolvedJump.authType === 'password'
+    const baseConfig: ConnectConfig = {
+      host: resolvedJump.host,
+      port: resolvedJump.port,
+      username: resolvedJump.username || os.userInfo().username,
+      ...auth,
+      readyTimeout: 15_000,
+      keepaliveInterval: 3000,
+      keepaliveCountMax: 2,
+      tryKeyboard: shouldTryKeyboard,
+      ...(resolvedJump.authType === 'keyboard-interactive'
+        ? { authHandler: resolvedJump.password ? ['password', 'keyboard-interactive'] : ['keyboard-interactive'] }
+        : {}),
+      hostVerifier: (key: Buffer | string, verify: (accepted: boolean) => void) => {
+        void this.verifyHostFingerprint(resolvedJump, key)
+          .then(verify)
+          .catch(() => verify(false))
+      }
+    }
+    const jumpConfig = await this.withOutboundSocket(baseConfig, resolvedJump)
+    await new Promise<void>((resolve, reject) => {
+      this.registerKeyboardInteractiveHandler(client, resolvedJump, 'jump host', (message) =>
+        this.sshDebug.log('main', `[Jump Host] ${message}`)
+      )
+      client
+        .once('ready', resolve)
+        .once('error', (error) => reject(new Error(`Jump Host connection failed: ${error.message}`)))
+        .connect(jumpConfig)
+    })
+    this.jumpSsh = client
+  }
+
+  private openJumpChannel(host: string, port: number) {
+    if (!this.jumpSsh) throw new Error('Jump Host is disconnected')
+    return new Promise<ClientChannel>((resolve, reject) =>
+      this.jumpSsh?.forwardOut('127.0.0.1', 0, host, port, (error, stream) =>
+        error || !stream ? reject(error ?? new Error('Jump Host channel failed')) : resolve(stream)
+      )
+    )
+  }
+
+  private registerKeyboardInteractiveHandler(
+    client: Client,
+    profile: SshProfile,
+    scope: string,
+    onEvent: (message: string) => void
+  ) {
+    client.on('keyboard-interactive', (name, instructions, _instructionsLang, prompts, finish) => {
+      this.keyboardInteractiveChallengeSeen = true
+      onEvent(`收到 keyboard-interactive 认证请求，提示数 ${prompts.length}`)
+      void (async () => {
+        if (!prompts.length) return finish([])
+        const canReusePassword =
+          (profile.authType === 'password' || profile.authType === 'keyboard-interactive') &&
+          prompts.length === 1 &&
+          !prompts[0]?.echo &&
+          /password|密码/i.test(prompts[0]?.prompt ?? '') &&
+          Boolean(profile.password)
+        if (canReusePassword) {
+          onEvent('已自动回复首个 password 提示')
+          return finish([profile.password ?? ''])
+        }
+        const response = await this.requestInteraction({
+          kind: 'keyboard-interactive',
+          host: profile.host,
+          port: profile.port,
+          name: name ?? '',
+          instructions: instructions ?? '',
+          prompts: prompts.map((prompt) => ({ prompt: prompt.prompt, echo: prompt.echo === true }))
+        })
+        if (
+          response.kind !== 'keyboard-interactive' ||
+          response.canceled ||
+          response.answers.length !== prompts.length
+        ) {
+          throw new Error('Keyboard-interactive authentication canceled')
+        }
+        onEvent(`${scope} keyboard-interactive 已收到用户响应（${response.answers.length} 项）`)
+        finish(response.answers)
+      })().catch((error) => {
+        onEvent(`${scope} keyboard-interactive 已取消: ${error instanceof Error ? error.message : String(error)}`)
+        finish([])
+      })
+    })
   }
 
   private handleShellUserChange(user: string) {
@@ -617,7 +797,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     }
 
     if (response.decision === 'accept-and-save') {
-      await this.rememberTrustedHostFingerprint(fingerprint)
+      await this.rememberTrustedHostFingerprint(profile.id, fingerprint)
       profile.trustedHostFingerprint = fingerprint
       ;(this.profile as SshProfile).trustedHostFingerprint = fingerprint
       this.acceptedHostFingerprints.add(fingerprint)
@@ -647,6 +827,8 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.closeSftpSession()
     this.closeTransferSftpSession()
     this.ssh.end()
+    this.jumpSsh?.end()
+    this.jumpSsh = undefined
     this.resetPrivilegedFileAccess()
     this.connected = false
   }
@@ -1390,6 +1572,7 @@ fi
     }
 
     const sshConfig = this.sshConfig
+    const channelSshConfig = await this.withOutboundSocket(sshConfig, this.profile as SshProfile)
     this.registerSftpLifecycle()
     await new Promise<void>((resolve, reject) => {
       let settled = false
@@ -1399,7 +1582,7 @@ fi
       this.sftpSsh.on('banner', (message) => {
         this.sshDebug.log('sftp', `服务端横幅: ${singleLine(message)}`)
       })
-      registerKeyboardInteractiveHandler(this.sftpSsh, this.profile as SshProfile, (message) => {
+      this.registerKeyboardInteractiveHandler(this.sftpSsh, this.profile as SshProfile, 'sftp', (message) => {
         this.sshDebug.logKeyboardInteractive('sftp', message)
       })
       const onReady = () => {
@@ -1437,7 +1620,7 @@ fi
         .once('error', onError)
         .once('close', onClose)
         .connect({
-          ...sshConfig,
+          ...channelSshConfig,
           keepaliveInterval: 3000,
           keepaliveCountMax: 4,
           readyTimeout: Math.max(sshConfig.readyTimeout ?? 15000, 20000),
@@ -1474,6 +1657,7 @@ fi
     }
 
     const sshConfig = this.sshConfig
+    const channelSshConfig = await this.withOutboundSocket(sshConfig, this.profile as SshProfile)
     this.registerTransferLifecycle()
     await new Promise<void>((resolve, reject) => {
       let settled = false
@@ -1487,9 +1671,14 @@ fi
       this.transferSsh.on('banner', (message) => {
         this.sshDebug.log('transfer-sftp', `服务端横幅: ${singleLine(message)}`)
       })
-      registerKeyboardInteractiveHandler(this.transferSsh, this.profile as SshProfile, (message) => {
-        this.sshDebug.logKeyboardInteractive('transfer-sftp', message)
-      })
+      this.registerKeyboardInteractiveHandler(
+        this.transferSsh,
+        this.profile as SshProfile,
+        'transfer-sftp',
+        (message) => {
+          this.sshDebug.logKeyboardInteractive('transfer-sftp', message)
+        }
+      )
       const onReady = () => {
         cleanup()
         settled = true
@@ -1523,7 +1712,7 @@ fi
         .once('error', onError)
         .once('close', onClose)
         .connect({
-          ...sshConfig,
+          ...channelSshConfig,
           keepaliveInterval: 3000,
           keepaliveCountMax: 4,
           readyTimeout: Math.max(sshConfig.readyTimeout ?? 15000, 20000),
@@ -1562,6 +1751,8 @@ fi
     this.metricsRefreshPromise = undefined
     this.resetPrivilegedFileAccess()
     this.connected = false
+    void this.tunnelService?.stopAll()
+    this.tunnelService = undefined
     this.closeExecSession()
     this.closeSftpSession()
     this.closeTransferSftpSession()
@@ -1665,6 +1856,7 @@ fi
     }
 
     const sshConfig = this.sshConfig
+    const channelSshConfig = await this.withOutboundSocket(sshConfig, this.profile as SshProfile)
     this.registerExecLifecycle()
     this.execConnectPromise = new Promise<Client>((resolve, reject) => {
       let settled = false
@@ -1674,7 +1866,7 @@ fi
       this.execSsh.on('banner', (message) => {
         this.sshDebug.log('exec', `服务端横幅: ${singleLine(message)}`)
       })
-      registerKeyboardInteractiveHandler(this.execSsh, this.profile as SshProfile, (message) => {
+      this.registerKeyboardInteractiveHandler(this.execSsh, this.profile as SshProfile, 'exec', (message) => {
         this.sshDebug.logKeyboardInteractive('exec', message)
       })
       const onReady = () => {
@@ -1716,7 +1908,7 @@ fi
         .once('error', onError)
         .once('close', onClose)
         .connect({
-          ...sshConfig,
+          ...channelSshConfig,
           ...(this.sshDebug.enabled ? { debug: (message: string) => this.sshDebug.handle('exec', message) } : {})
         })
     })
@@ -3014,6 +3206,12 @@ async function resolveSshAuthConfig(
     return resolveSystemSshAuthConfig(profile)
   }
 
+  if (profile.authType === 'keyboard-interactive') {
+    // Never fall through to an agent/default key in this explicit mode, but
+    // retain a saved first-factor password when the server accepts it.
+    return profile.password ? { password: profile.password } : {}
+  }
+
   if (profile.authType === 'privateKey') {
     const privateKeyPath = expandHomePath(profile.privateKeyPath)
     if (!privateKeyPath) {
@@ -3054,23 +3252,6 @@ async function hasSystemSshAuthAvailable(): Promise<boolean> {
 
   const privateKey = await readDefaultPrivateKey()
   return Boolean(privateKey)
-}
-
-function registerKeyboardInteractiveHandler(client: Client, profile: SshProfile, onEvent: (message: string) => void) {
-  if (!profile.password) {
-    return
-  }
-
-  client.on('keyboard-interactive', (_name, _instructions, _instructionsLang, prompts, finish) => {
-    onEvent(`收到 keyboard-interactive 认证请求，提示数 ${prompts.length}`)
-    if (!prompts.length) {
-      finish([])
-      return
-    }
-
-    onEvent(`自动回复 keyboard-interactive 提示: ${prompts.map((prompt) => singleLine(prompt.prompt)).join(' | ')}`)
-    finish(prompts.map(() => profile.password ?? ''))
-  })
 }
 
 function expandHomePath(targetPath?: string): string | undefined {

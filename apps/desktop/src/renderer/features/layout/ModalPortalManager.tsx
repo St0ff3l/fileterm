@@ -5,6 +5,7 @@ import { ConnectionFormHost } from '../connections/ConnectionFormHost'
 import { ConnectionManagerModal } from '../connections/ConnectionManagerModal'
 import { SshCredentialsModal } from '../connections/SshCredentialsModal'
 import { SshHostVerificationModal } from '../connections/SshHostVerificationModal'
+import { SshKeyboardInteractiveModal } from '../connections/SshKeyboardInteractiveModal'
 import { FileActionModal } from '../files/FileActionModal'
 import { FilePermissionModal } from '../files/FilePermissionModal'
 import { RootAccessModal } from '../files/RootAccessModal'
@@ -28,6 +29,7 @@ export type FilePermissionModalBinding = ModalBinding<typeof FilePermissionModal
 export type RootAccessModalBinding = ModalBinding<typeof RootAccessModal>
 export type SshCredentialsModalBinding = ModalBinding<typeof SshCredentialsModal>
 export type SshHostVerificationModalBinding = ModalBinding<typeof SshHostVerificationModal>
+export type SshKeyboardInteractiveModalBinding = ModalBinding<typeof SshKeyboardInteractiveModal>
 export type ConfirmActionDialogBinding = ModalBinding<typeof ConfirmActionDialog>
 export type FileEditorModalBinding = NonStandaloneModalBinding<typeof FileEditorModal>
 export type TabContextMenuBinding = ModalBinding<typeof TabContextMenu>
@@ -56,6 +58,7 @@ export interface ModalPortalManagerProps {
   shortcutCloseConfirm: ConfirmActionDialogBinding
   sshCredentials: SshCredentialsModalBinding
   sshHostVerification: SshHostVerificationModalBinding
+  sshKeyboardInteractive: SshKeyboardInteractiveModalBinding
   tabContextMenu?: TabContextMenuBinding
   windowCloseConfirm: ConfirmActionDialogBinding
 }
@@ -73,6 +76,7 @@ export function ModalPortalManager({
   shortcutCloseConfirm,
   sshCredentials,
   sshHostVerification,
+  sshKeyboardInteractive,
   tabContextMenu,
   windowCloseConfirm
 }: ModalPortalManagerProps) {
@@ -97,6 +101,7 @@ export function ModalPortalManager({
       {rootAccess ? <RootAccessModal {...rootAccess} /> : null}
       {sshCredentials ? <SshCredentialsModal {...sshCredentials} /> : null}
       {sshHostVerification ? <SshHostVerificationModal {...sshHostVerification} /> : null}
+      {sshKeyboardInteractive ? <SshKeyboardInteractiveModal {...sshKeyboardInteractive} /> : null}
       {shortcutCloseConfirm ? <ConfirmActionDialog {...shortcutCloseConfirm} /> : null}
       {windowCloseConfirm ? <ConfirmActionDialog {...windowCloseConfirm} /> : null}
     </>

@@ -9,6 +9,14 @@ import type {
   ConnectionFormMode,
   ConnectionFolder,
   ConnectionLibrarySnapshot,
+  ConnectionExportFormat,
+  ConnectionImportResult,
+  ConnectionImportPlan,
+  ConnectionImportOptions,
+  SshForwardRule,
+  SshTunnelSnapshot,
+  WebDavSyncConfig,
+  WebDavSyncResult,
   CommandExecutionResult,
   CreateProfileInput,
   DirectorySnapshot,
@@ -92,6 +100,31 @@ const api: FileTermDesktopApi = {
   requestQuitApp: (): Promise<void> => ipcRenderer.invoke('app:requestQuitApp'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),
   getConnectionLibrary: (): Promise<ConnectionLibrarySnapshot> => ipcRenderer.invoke('workspace:getConnectionLibrary'),
+  importSshConfig: (): Promise<ConnectionImportResult> => ipcRenderer.invoke('workspace:importSshConfig'),
+  importConnectionJson: (): Promise<ConnectionImportResult> => ipcRenderer.invoke('workspace:importConnectionJson'),
+  previewConnectionJsonImport: (): Promise<ConnectionImportPlan | null> =>
+    ipcRenderer.invoke('workspace:previewConnectionJsonImport'),
+  commitConnectionJsonImport: (planId: string, options: ConnectionImportOptions): Promise<ConnectionImportResult> =>
+    ipcRenderer.invoke('workspace:commitConnectionJsonImport', planId, options),
+  exportConnections: (format: ConnectionExportFormat): Promise<boolean> =>
+    ipcRenderer.invoke('workspace:exportConnections', format),
+  exportConnectionsAsFiles: (format: ConnectionExportFormat): Promise<boolean> =>
+    ipcRenderer.invoke('workspace:exportConnectionsAsFiles', format),
+  listSshTunnels: (tabId: string): Promise<SshTunnelSnapshot[]> =>
+    ipcRenderer.invoke('workspace:listSshTunnels', tabId),
+  createSshTunnel: (tabId: string, rule: SshForwardRule): Promise<SshTunnelSnapshot[]> =>
+    ipcRenderer.invoke('workspace:createSshTunnel', tabId, rule),
+  startSshTunnel: (tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> =>
+    ipcRenderer.invoke('workspace:startSshTunnel', tabId, ruleId),
+  stopSshTunnel: (tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> =>
+    ipcRenderer.invoke('workspace:stopSshTunnel', tabId, ruleId),
+  deleteSshTunnel: (tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> =>
+    ipcRenderer.invoke('workspace:deleteSshTunnel', tabId, ruleId),
+  getWebDavSyncConfig: (): Promise<WebDavSyncConfig> => ipcRenderer.invoke('workspace:getWebDavSyncConfig'),
+  saveWebDavSyncConfig: (input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig> =>
+    ipcRenderer.invoke('workspace:saveWebDavSyncConfig', input),
+  uploadWebDavSync: (): Promise<WebDavSyncResult> => ipcRenderer.invoke('workspace:uploadWebDavSync'),
+  downloadWebDavSync: (): Promise<WebDavSyncResult> => ipcRenderer.invoke('workspace:downloadWebDavSync'),
   createProfile: (input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createProfile', input),
   updateProfile: (profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> =>

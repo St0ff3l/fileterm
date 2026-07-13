@@ -109,12 +109,14 @@ export const TerminalView = memo(function TerminalView({
   tabId,
   bootText,
   connected = false,
-  onStatus
+  onStatus,
+  onReconnect
 }: {
   tabId: string
   bootText: string
   connected?: boolean
   onStatus?(message: string | null): void
+  onReconnect?(): void
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -141,9 +143,12 @@ export const TerminalView = memo(function TerminalView({
   const pendingPromptResizeRef = useRef(false)
   const tabIdRef = useRef(tabId)
   const onStatusRef = useRef(onStatus)
+  const onReconnectRef = useRef(onReconnect)
+  const isReconnectingRef = useRef(false)
   const activeTerminalTabIdRef = useRef<string | null>(null)
   tabIdRef.current = tabId
   onStatusRef.current = onStatus
+  onReconnectRef.current = onReconnect
   const [hasSelection, setHasSelection] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [findOpen, setFindOpen] = useState(false)
@@ -716,6 +721,15 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const onDataDispose = terminal.onData((data) => {
+      // When disconnected, intercept Enter to trigger reconnect instead of
+      // forwarding to the (dead) PTY. Ignore while a reconnect is in flight.
+      if (!wasConnectedRef.current) {
+        if ((data === '\r' || data === '\n') && !isReconnectingRef.current) {
+          isReconnectingRef.current = true
+          onReconnectRef.current?.()
+        }
+        return
+      }
       if (data.includes('\r') || data.includes('\n')) {
         awaitingCommandCompletionRef.current = true
       }
@@ -774,12 +788,15 @@ export const TerminalView = memo(function TerminalView({
           terminal.write(buildExitAlternateScreenSequence(), () => {
             const visibleTranscript = snapshotTerminalBuffer(terminal)
             const disconnectedTranscript = visibleTranscript
-              ? `${visibleTranscript}\r\n${t.terminalConnectionClosed}\r\n`
-              : `${t.terminalConnectionClosed}\r\n`
+              ? `${visibleTranscript}\r\n${t.terminalConnectionClosed}\r\n${t.pressEnterToReconnect}\r\n`
+              : `${t.terminalConnectionClosed}\r\n${t.pressEnterToReconnect}\r\n`
             replaceTerminalWithTranscript(terminal, disconnectedTranscript)
           })
         }
         wasConnectedRef.current = connected
+        if (connected) {
+          isReconnectingRef.current = false
+        }
       }
     })
 

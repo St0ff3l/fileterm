@@ -84,6 +84,9 @@ export function WorkspaceStage({
   onDeleteConnectionFolder,
   onUpdateConnectionFolder,
   onUpdateConnectionOrder,
+  onImportSshConfig,
+  onImportConnectionJson,
+  onExportConnections,
   onCreateCommand,
   onUpdateCommand,
   onDeleteCommand,
@@ -167,6 +170,9 @@ export function WorkspaceStage({
   onDeleteConnectionFolder(folderId: string): void
   onUpdateConnectionFolder(folderId: string, updates: Partial<ConnectionFolder>): void
   onUpdateConnectionOrder(id: string, newParentId: string | undefined, newOrder: number): void
+  onImportSshConfig(): void
+  onImportConnectionJson(): void
+  onExportConnections(format: 'fileterm' | 'compatible'): void
   onCreateCommand(input: CommandTemplateInput): void
   onUpdateCommand(commandId: string, input: CommandTemplateInput): void
   onDeleteCommand(commandId: string): void
@@ -257,6 +263,9 @@ export function WorkspaceStage({
       onDeleteConnectionFolder={onDeleteConnectionFolder}
       onUpdateConnectionFolder={onUpdateConnectionFolder}
       onUpdateConnectionOrder={onUpdateConnectionOrder}
+      onImportSshConfig={onImportSshConfig}
+      onImportConnectionJson={onImportConnectionJson}
+      onExportConnections={onExportConnections}
       onCreateCommand={onCreateCommand}
       onUpdateCommand={onUpdateCommand}
       onDeleteCommand={onDeleteCommand}

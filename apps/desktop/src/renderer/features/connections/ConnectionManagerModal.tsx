@@ -22,7 +22,10 @@ export function ConnectionManagerModal({
   onUpdateOrder,
   standalone = false,
   inline = false,
-  onActiveFolderChange
+  onActiveFolderChange,
+  onImportSshConfig,
+  onImportConnectionJson,
+  onExportConnections
 }: {
   profiles: ConnectionProfile[]
   folders: ConnectionFolder[]
@@ -38,6 +41,9 @@ export function ConnectionManagerModal({
   standalone?: boolean
   inline?: boolean
   onActiveFolderChange?(name: string): void
+  onImportSshConfig?(): void
+  onImportConnectionJson?(): void
+  onExportConnections?(format: 'fileterm' | 'compatible'): void
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [activeFolderId, setActiveFolderId] = useState<'all' | string>('all')
@@ -568,6 +574,58 @@ export function ConnectionManagerModal({
           </div>
           <div className={`connection-manager-floating-drawer ${isActionsExpanded ? 'expanded' : ''}`}>
             <div className="drawer-options-wrapper">
+              {onImportSshConfig ? (
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    onImportSshConfig()
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <span className="material-symbols-outlined">upload_file</span>
+                  <span>导入 SSH 配置</span>
+                </button>
+              ) : null}
+              {onImportConnectionJson ? (
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    onImportConnectionJson()
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <span className="material-symbols-outlined">input</span>
+                  <span>导入连接 JSON</span>
+                </button>
+              ) : null}
+              {onExportConnections ? (
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    onExportConnections('fileterm')
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <span className="material-symbols-outlined">download</span>
+                  <span>导出连接</span>
+                </button>
+              ) : null}
+              {onExportConnections ? (
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    onExportConnections('compatible')
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <span className="material-symbols-outlined">ios_share</span>
+                  <span>导出兼容 JSON</span>
+                </button>
+              ) : null}
               <button
                 className="drawer-option-btn secondary-btn"
                 type="button"

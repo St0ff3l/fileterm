@@ -21,6 +21,7 @@ import type { SendScope, SessionSendTarget } from '../common/session-send-target
 import { AppIcon } from '../common/AppIcon'
 import { FileManager } from '../files/FileManager'
 import { TerminalDock } from '../terminal/TerminalDock'
+import { SshTunnelPanel } from './SshTunnelPanel'
 import { t } from '../../i18n'
 
 const DEFAULT_FILE_PANEL_HEIGHT = 218
@@ -129,8 +130,10 @@ export function SessionWorkspace({
   isWorkspaceFocusMode: boolean
 }) {
   const isFileOnly = activeTab.layout === 'file-only'
+  const isTerminalOnly = activeTab.layout === 'terminal-only'
   const setFilePanelHeight = onFilePanelHeightChange
   const [isFilePanelCollapsed, setIsFilePanelCollapsed] = useState(false)
+  const [panelMode, setPanelMode] = useState<'files' | 'tunnels'>('files')
   const [isFilePanelDragging, setIsFilePanelDragging] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const isResizingFilePanel = useRef(false)
@@ -140,6 +143,11 @@ export function SessionWorkspace({
   const appliedWorkspaceFocusMode = useRef<boolean | null>(null)
   const isFilePanelEffectivelyCollapsed = isFilePanelCollapsed && !isFileOnly
   const effectiveFilePanelHeight = isFilePanelEffectivelyCollapsed ? 0 : filePanelHeight
+  const canManageTunnels = activeSession.capabilities?.tunnels === true
+
+  useEffect(() => {
+    if (!canManageTunnels) setPanelMode('files')
+  }, [activeTab.id, canManageTunnels])
 
   const clampFilePanelHeight = (workspaceHeight: number, nextHeight: number) => {
     const minHeight = 25 // Allow it to shrink to just the tabs row height
@@ -339,7 +347,7 @@ export function SessionWorkspace({
 
   return (
     <section
-      className={`session-workspace ${isFileOnly ? 'file-only' : ''} ${isFilePanelEffectivelyCollapsed ? 'file-panel-collapsed' : ''} ${isFilePanelDragging ? 'is-file-panel-dragging' : ''}`}
+      className={`session-workspace ${isFileOnly ? 'file-only' : ''} ${isTerminalOnly ? 'terminal-only' : ''} ${isFilePanelEffectivelyCollapsed ? 'file-panel-collapsed' : ''} ${isFilePanelDragging ? 'is-file-panel-dragging' : ''}`}
       ref={workspaceRef}
       style={{ '--file-panel-height': `${effectiveFilePanelHeight}px` } as CSSProperties}
     >
@@ -349,6 +357,13 @@ export function SessionWorkspace({
             tabId={activeTab.id}
             bootText={activeSession.terminalTranscript ?? ''}
             connected={activeSession.connected === true}
+            onReconnect={
+              activeSession.reconnectMode === 'enter'
+                ? () => {
+                    void window.fileterm?.reconnectTab(activeTab.id)
+                  }
+                : undefined
+            }
           />
           <TerminalDock
             activeTab={activeTab}
@@ -362,7 +377,7 @@ export function SessionWorkspace({
           />
         </div>
       ) : null}
-      {!isFileOnly ? (
+      {!isFileOnly && !isTerminalOnly ? (
         <button
           aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
           aria-pressed={isFilePanelCollapsed}
@@ -374,7 +389,7 @@ export function SessionWorkspace({
           <AppIcon name={isFilePanelCollapsed ? 'chevron-up' : 'chevron-down'} size={15} />
         </button>
       ) : null}
-      {!isFileOnly && !isFilePanelCollapsed ? (
+      {!isFileOnly && !isTerminalOnly && !isFilePanelCollapsed ? (
         <div
           className="session-split-resizer"
           onMouseDown={(event) => {
@@ -398,46 +413,72 @@ export function SessionWorkspace({
           role="separator"
         />
       ) : null}
-      <FileManager
-        activeSession={activeSession}
-        activeTab={activeTab}
-        sendTargets={sendTargets}
-        commandFolders={commandFolders}
-        commandTemplates={commandTemplates}
-        isBusy={isBusy}
-        localItems={localItems}
-        localPath={localPath}
-        canPasteToLocal={canPasteToLocal}
-        canPasteToRemote={canPasteToRemote}
-        clipboardStatusText={clipboardStatusText}
-        localCutPaths={localCutPaths}
-        remoteCutPaths={remoteCutPaths}
-        onCopyItems={onCopyItems}
-        onCutItems={onCutItems}
-        onClearCutState={onClearCutState}
-        onExecuteCommand={onExecuteCommand}
-        onOpenCommandManager={onOpenCommandManager}
-        onOpenLocalItem={onOpenLocalItem}
-        onOpenLocalPath={onOpenLocalPath}
-        onOpenRemoteItem={onOpenRemoteItem}
-        onOpenRemotePath={onOpenRemotePath}
-        onPasteIntoPane={onPasteIntoPane}
-        onRequestChangePermissions={onRequestChangePermissions}
-        onRequestDelete={onRequestDelete}
-        onRequestNewFile={onRequestNewFile}
-        onRequestNewFolder={onRequestNewFolder}
-        onRequestQuickDelete={onRequestQuickDelete}
-        onRequestRename={onRequestRename}
-        onToggleFollowShellCwd={onToggleFollowShellCwd}
-        onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
-        remoteFileAccessMode={remoteFileAccessMode}
-        isRemoteDirectoryLoading={isRemoteDirectoryLoading}
-        onRefresh={onRefresh}
-        onUploadFiles={onUploadFiles}
-        onChooseUploadFiles={onChooseUploadFiles}
-        onDownloadFiles={onDownloadFiles}
-        onDropUpload={onDropUpload}
-      />
+      {!isTerminalOnly ? (
+        <div className="session-bottom-panel">
+          {canManageTunnels ? (
+            <nav className="file-panel-mode-tabs" aria-label="SSH workspace panel">
+              <button
+                className={panelMode === 'files' ? 'is-active' : ''}
+                type="button"
+                onClick={() => setPanelMode('files')}
+              >
+                文件
+              </button>
+              <button
+                className={panelMode === 'tunnels' ? 'is-active' : ''}
+                type="button"
+                onClick={() => setPanelMode('tunnels')}
+              >
+                隧道
+              </button>
+            </nav>
+          ) : null}
+          {panelMode === 'tunnels' && canManageTunnels ? (
+            <SshTunnelPanel tabId={activeTab.id} />
+          ) : (
+            <FileManager
+              activeSession={activeSession}
+              activeTab={activeTab}
+              sendTargets={sendTargets}
+              commandFolders={commandFolders}
+              commandTemplates={commandTemplates}
+              isBusy={isBusy}
+              localItems={localItems}
+              localPath={localPath}
+              canPasteToLocal={canPasteToLocal}
+              canPasteToRemote={canPasteToRemote}
+              clipboardStatusText={clipboardStatusText}
+              localCutPaths={localCutPaths}
+              remoteCutPaths={remoteCutPaths}
+              onCopyItems={onCopyItems}
+              onCutItems={onCutItems}
+              onClearCutState={onClearCutState}
+              onExecuteCommand={onExecuteCommand}
+              onOpenCommandManager={onOpenCommandManager}
+              onOpenLocalItem={onOpenLocalItem}
+              onOpenLocalPath={onOpenLocalPath}
+              onOpenRemoteItem={onOpenRemoteItem}
+              onOpenRemotePath={onOpenRemotePath}
+              onPasteIntoPane={onPasteIntoPane}
+              onRequestChangePermissions={onRequestChangePermissions}
+              onRequestDelete={onRequestDelete}
+              onRequestNewFile={onRequestNewFile}
+              onRequestNewFolder={onRequestNewFolder}
+              onRequestQuickDelete={onRequestQuickDelete}
+              onRequestRename={onRequestRename}
+              onToggleFollowShellCwd={onToggleFollowShellCwd}
+              onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
+              remoteFileAccessMode={remoteFileAccessMode}
+              isRemoteDirectoryLoading={isRemoteDirectoryLoading}
+              onRefresh={onRefresh}
+              onUploadFiles={onUploadFiles}
+              onChooseUploadFiles={onChooseUploadFiles}
+              onDownloadFiles={onDownloadFiles}
+              onDropUpload={onDropUpload}
+            />
+          )}
+        </div>
+      ) : null}
     </section>
   )
 }

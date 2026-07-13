@@ -1217,7 +1217,9 @@
 .command-form-standalone-page {
   min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
+  /* Mirror the focus-ring clearance around the scrollable form. */
+  padding-inline: 8px;
+  scrollbar-gutter: stable both-edges;
 }
 
 .command-form-standalone-page label:not(.command-editor-checkbox-row) {
@@ -1365,6 +1367,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 0 4px;
 }
 
 .command-editor-grid {

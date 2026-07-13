@@ -47,7 +47,7 @@ interface TransferTabs {
 
 interface TransferSessionRuntime {
   requireController(tabId: string): FileSessionController
-  getController(tabId: string): FileSessionController | undefined
+  getFileController(tabId: string): FileSessionController | undefined
   get(tabId: string): SessionSnapshot | undefined
   refreshRemoteFiles(tabId: string): Promise<void>
   emitToSender(sender: WebContents, channel: string, payload: unknown): void
@@ -1274,7 +1274,7 @@ export class TransferService {
       .find(
         (candidate) =>
           candidate.profileId === profileId &&
-          Boolean(this.options.sessionRuntime.getController(candidate.id)) &&
+          Boolean(this.options.sessionRuntime.getFileController(candidate.id)) &&
           this.options.sessionRuntime.get(candidate.id)?.connected
       )
   }

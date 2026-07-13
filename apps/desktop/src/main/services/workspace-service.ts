@@ -6,14 +6,20 @@ import {
   type CommandTemplateInput,
   type CommandFolder,
   type ConnectionFolder,
+  type ConnectionImportResult,
+  type ConnectionImportOptions,
+  type ConnectionImportPreviewItem,
   type ConnectionLibrarySnapshot,
   type ConnectionProfile,
+  type FileSessionController,
   type CommandExecutionResult,
   type TerminalCommandHistoryEntry,
   type CreateProfileInput,
   type RemoteFileAccessOptions,
   type RemoteFileItem,
   type SshInteractionResponse,
+  type SshForwardRule,
+  type SshTunnelSnapshot,
   type SessionSnapshot,
   type PermissionChangeOptions,
   type TransferTargetOptions,
@@ -22,7 +28,7 @@ import {
 } from '@fileterm/core'
 import type { ProfileRepository } from '@fileterm/storage'
 import { seedCommandFolders, seedCommandTemplates, seedProfiles } from './workspace/seed-data.js'
-import { WorkspaceSessionRuntime, type LiveSessionController } from './workspace/workspace-session-runtime.js'
+import { WorkspaceSessionRuntime } from './workspace/workspace-session-runtime.js'
 import { WorkspaceTabLifecycleService } from './workspace/workspace-tab-lifecycle.js'
 import { WorkspaceTabsState } from './workspace/workspace-tabs.js'
 import type { TransferJournal } from './transfers/transfer-journal.js'
@@ -37,9 +43,14 @@ export class WorkspaceService {
   private readonly tabLifecycle: WorkspaceTabLifecycleService
   private shutdownPromise?: Promise<void>
   private readonly privilegedAccess = new Map<string, RemoteFileAccessOptions>()
+  private readonly autoReconnectingTabs = new Set<string>()
   private readonly handleSessionTabEvent = (event: WorkspaceSessionTabEvent) => {
     if (event.type === 'status-changed') {
       this.tabs.updateStatus(event.tabId, event.status)
+      // Clear the auto-reconnect guard when a reconnect succeeds
+      if (event.status === 'connected') {
+        this.autoReconnectingTabs.delete(event.tabId)
+      }
       return
     }
     if (event.type === 'disconnected') {
@@ -49,6 +60,30 @@ export class WorkspaceService {
         .catch((error) => {
           appWarn(`[FileTerm][Workspace] Failed to finalize transfers for disconnected tab ${event.tabId}`, error)
         })
+
+      // Auto-reconnect: check profile setting and fire after a short delay
+      const session = this.sessionRuntime.get(event.tabId)
+      if (session?.reconnectMode === 'auto' && !this.autoReconnectingTabs.has(event.tabId)) {
+        this.autoReconnectingTabs.add(event.tabId)
+        setTimeout(() => {
+          // Re-check: tab may have been closed or already reconnected by the user
+          const tab = this.tabs.getById(event.tabId)
+          const current = this.sessionRuntime.get(event.tabId)
+          if (!tab || current?.connected) {
+            this.autoReconnectingTabs.delete(event.tabId)
+            return
+          }
+          const sender = this.sessionRuntime.getSender(event.tabId)
+          if (!sender || sender.isDestroyed()) {
+            this.autoReconnectingTabs.delete(event.tabId)
+            return
+          }
+          void this.tabLifecycle.reconnectTab(event.tabId, sender).catch((error) => {
+            this.autoReconnectingTabs.delete(event.tabId)
+            appWarn(`[FileTerm][Workspace] Auto-reconnect failed for tab ${event.tabId}`, error)
+          })
+        }, 2000)
+      }
     }
   }
 
@@ -63,6 +98,7 @@ export class WorkspaceService {
     this.sessionRuntime = new WorkspaceSessionRuntime({
       getSnapshot: () => this.getSnapshot(),
       getTabStatus: (tabId) => this.tabs.getById(tabId)?.status,
+      resolveProfile: (profileId) => this.profileRepository.getById(profileId),
       rememberTrustedHostFingerprint: (profileId, fingerprint) =>
         this.rememberTrustedHostFingerprint(profileId, fingerprint)
     })
@@ -138,6 +174,64 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
+  async importProfiles(
+    items: ConnectionImportPreviewItem[],
+    options: ConnectionImportOptions = {}
+  ): Promise<ConnectionImportResult> {
+    let imported = 0
+    let overwritten = 0
+    let failed = 0
+    const existing = await this.profileRepository.list()
+    const existingByEndpoint = new Map(existing.map((profile) => [connectionEndpointKey(profile), profile]))
+    const endpointKeys = new Set(existingByEndpoint.keys())
+    const selected = options.selectedItemIds ? new Set(options.selectedItemIds) : undefined
+    const conflictStrategy = options.conflictStrategy ?? 'skip'
+    const completed: ConnectionImportPreviewItem[] = []
+    for (const item of items) {
+      if (selected && (!item.id || !selected.has(item.id))) {
+        completed.push({ ...item, status: 'skipped', reason: '未在导入预览中选择' })
+        continue
+      }
+      if (item.status !== 'ready' || !item.input) {
+        completed.push(item)
+        continue
+      }
+      const key = connectionEndpointKey(item.input)
+      const matched = existingByEndpoint.get(key)
+      if (matched && conflictStrategy === 'overwrite') {
+        try {
+          await this.profileRepository.update(matched.id, preserveImportSecrets(item.input, matched))
+          overwritten += 1
+          completed.push(item)
+        } catch (error) {
+          failed += 1
+          completed.push({ ...item, status: 'invalid', reason: error instanceof Error ? error.message : String(error) })
+        }
+        continue
+      }
+      if (endpointKeys.has(key) && conflictStrategy !== 'create') {
+        completed.push({ ...item, status: 'skipped', reason: '已存在相同的连接端点（类型、主机、端口和用户名）' })
+        continue
+      }
+      try {
+        await this.profileRepository.create(item.input)
+        endpointKeys.add(key)
+        imported += 1
+        completed.push(item)
+      } catch (error) {
+        failed += 1
+        completed.push({ ...item, status: 'invalid', reason: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    return {
+      imported,
+      overwritten,
+      failed,
+      skipped: completed.filter((item) => item.status === 'skipped').length,
+      items: completed
+    }
+  }
+
   async updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> {
     await this.profileRepository.update(profileId, input)
     return this.getSnapshot()
@@ -209,8 +303,8 @@ export class WorkspaceService {
     args: string[] = [],
     options?: CommandExecutionOptions
   ): Promise<CommandExecutionResult> {
-    const controller = this.sessionRuntime.requireController(tabId)
-    if (controller.type !== 'ssh') {
+    const controller = this.sessionRuntime.getController(tabId)
+    if (!controller || controller.type !== 'ssh') {
       throw new Error('只有 SSH 会话支持快捷命令')
     }
 
@@ -408,7 +502,7 @@ export class WorkspaceService {
 
   async writeToTerminal(tabId: string, data: string): Promise<void> {
     const controller = this.sessionRuntime.getController(tabId)
-    if (!controller || controller.type !== 'ssh') {
+    if (!controller || (controller.type !== 'ssh' && controller.type !== 'telnet' && controller.type !== 'serial')) {
       return
     }
     await controller.write(data)
@@ -416,7 +510,7 @@ export class WorkspaceService {
 
   async resizeTerminal(tabId: string, cols: number, rows: number, width: number, height: number): Promise<void> {
     const controller = this.sessionRuntime.getController(tabId)
-    if (!controller || controller.type !== 'ssh') {
+    if (!controller || (controller.type !== 'ssh' && controller.type !== 'telnet' && controller.type !== 'serial')) {
       return
     }
     await controller.resize(cols, rows, width, height)
@@ -447,6 +541,26 @@ export class WorkspaceService {
     return this.getSnapshot()
   }
 
+  listSshTunnels(tabId: string): SshTunnelSnapshot[] {
+    return this.sessionRuntime.listSshTunnels(tabId)
+  }
+
+  createSshTunnel(tabId: string, rule: SshForwardRule): Promise<SshTunnelSnapshot[]> {
+    return this.sessionRuntime.createSshTunnel(tabId, rule)
+  }
+
+  startSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> {
+    return this.sessionRuntime.startSshTunnel(tabId, ruleId)
+  }
+
+  stopSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> {
+    return this.sessionRuntime.stopSshTunnel(tabId, ruleId)
+  }
+
+  deleteSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> {
+    return this.sessionRuntime.deleteSshTunnel(tabId, ruleId)
+  }
+
   private createController(tabId: string, profile: ConnectionProfile, initialTranscript?: string) {
     return this.sessionRuntime.createController(tabId, profile, initialTranscript)
   }
@@ -469,7 +583,7 @@ export class WorkspaceService {
 
   private async runRemoteFileMutation(
     tabId: string,
-    action: (controller: LiveSessionController) => Promise<RemoteFileItem[]>
+    action: (controller: FileSessionController) => Promise<RemoteFileItem[]>
   ): Promise<WorkspaceSnapshot> {
     return this.sessionRuntime.runRemoteFileOperation(tabId, async (controller, current) => {
       const remoteFiles = await action(controller)
@@ -483,6 +597,27 @@ export class WorkspaceService {
       })
       return this.getSnapshot()
     })
+  }
+}
+
+function connectionEndpointKey(profile: Pick<ConnectionProfile, 'type' | 'host' | 'port' | 'username'>) {
+  return [profile.type, profile.host.trim().toLowerCase(), profile.port, profile.username.trim().toLowerCase()].join(
+    '\u0000'
+  )
+}
+
+function preserveImportSecrets(input: CreateProfileInput, previous: ConnectionProfile): CreateProfileInput {
+  const previousProxy = previous.type === 'ssh' || previous.type === 'telnet' ? previous.proxy : undefined
+  return {
+    ...input,
+    ...(input.password === undefined && 'password' in previous ? { password: previous.password } : {}),
+    ...(input.privateKeyPath === undefined && previous.type === 'ssh'
+      ? { privateKeyPath: previous.privateKeyPath }
+      : {}),
+    ...(input.passphrase === undefined && previous.type === 'ssh' ? { passphrase: previous.passphrase } : {}),
+    ...(input.proxyPassword === undefined && !input.proxy?.password && previousProxy?.password
+      ? { proxyPassword: previousProxy.password }
+      : {})
   }
 }
 

@@ -165,3 +165,20 @@ test('list heals inconsistent group and parentId values and persists the healed 
     )
   })
 })
+
+test('keeps proxy credentials out of profiles.json while returning them to the main process', async () => {
+  await withRepository(async (repository, directory) => {
+    const profile = await repository.create({
+      ...createSshProfileInput('默认', 'Proxied server'),
+      proxy: { type: 'socks5', host: 'proxy.internal', port: 1080, username: 'proxy-user', password: 'proxy-secret' }
+    })
+
+    const publicProfiles = await readStoredProfiles(directory)
+    const persisted = findProfile(publicProfiles, profile.id)
+    assert.equal('proxy' in persisted && persisted.proxy?.password, undefined)
+    assert.equal(
+      ((await repository.getById(profile.id)) as ConnectionProfile & { proxy?: { password?: string } }).proxy?.password,
+      'proxy-secret'
+    )
+  })
+})

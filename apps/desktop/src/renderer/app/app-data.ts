@@ -37,7 +37,16 @@ export const defaultForm: CreateProfileInput = {
   enableExecChannel: true,
   enableResourceMonitoring: true,
   secure: false,
-  securityMode: 'none'
+  securityMode: 'none',
+  proxy: { type: 'none', host: '', port: 1080, username: '' },
+  proxyPassword: '',
+  forwards: [],
+  devicePath: '',
+  baudRate: 115200,
+  dataBits: 8,
+  stopBits: 1,
+  parity: 'none',
+  flowControl: 'none'
 }
 
 export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
@@ -50,7 +59,7 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     group: profile.group,
     remotePath: profile.remotePath,
     note: profile.note ?? '',
-    password: profile.password ?? '',
+    password: profile.type === 'ssh' || profile.type === 'ftp' ? (profile.password ?? '') : '',
     trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',
     authType: profile.type === 'ssh' ? (profile.authType === 'system' ? 'password' : profile.authType) : 'password',
     privateKeyPath: profile.type === 'ssh' ? (profile.privateKeyPath ?? '') : '',
@@ -61,6 +70,20 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     enableExecChannel: profile.type === 'ssh' ? (profile.enableExecChannel ?? true) : true,
     enableResourceMonitoring: profile.type === 'ssh' ? (profile.enableResourceMonitoring ?? true) : true,
     secure: profile.type === 'ftp' ? profile.secure : false,
-    securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none'
+    securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
+    proxy:
+      profile.type === 'ssh' || profile.type === 'telnet'
+        ? (profile.proxy ?? { type: 'none', host: '', port: 1080 })
+        : { type: 'none', host: '', port: 1080 },
+    proxyPassword: profile.type === 'ssh' || profile.type === 'telnet' ? (profile.proxy?.password ?? '') : '',
+    jumpProfileId: profile.type === 'ssh' ? profile.jumpProfileId : undefined,
+    forwards: profile.type === 'ssh' ? (profile.forwards ?? []) : [],
+    disableShellIntegration: profile.type === 'ssh' ? profile.disableShellIntegration : false,
+    devicePath: profile.type === 'serial' ? profile.devicePath : '',
+    baudRate: profile.type === 'serial' ? profile.baudRate : 115200,
+    dataBits: profile.type === 'serial' ? profile.dataBits : 8,
+    stopBits: profile.type === 'serial' ? profile.stopBits : 1,
+    parity: profile.type === 'serial' ? profile.parity : 'none',
+    flowControl: profile.type === 'serial' ? profile.flowControl : 'none'
   }
 }

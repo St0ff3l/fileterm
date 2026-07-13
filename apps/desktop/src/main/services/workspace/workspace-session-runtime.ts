@@ -4,6 +4,7 @@ import type { WebContents } from 'electron'
 import {
   mergeSystemMetricsHistory,
   type ConnectionProfile,
+  type FileSessionController,
   type RemoteFileAccessOptions,
   type SessionSnapshot,
   type SystemMetrics,
@@ -11,16 +12,24 @@ import {
   type SshInteractionDraft,
   type SshInteractionRequest,
   type SshInteractionResponse,
+  type SshForwardRule,
+  type SshTunnelSnapshot,
   type WorkspaceSnapshot,
   type WorkspaceSessionTabEvent,
   type WorkspaceTab
 } from '@fileterm/core'
-import { LiveFtpSessionController, LiveSshSessionController } from '../session-controllers.js'
+import {
+  LiveFtpSessionController,
+  LiveSerialSessionController,
+  LiveSshSessionController,
+  LiveTelnetSessionController
+} from '../session-controllers.js'
 import { appWarn } from '../app-logger.js'
 import { resolveShellFileAccess } from '../sessions/shell-cwd-integration.js'
 import { TerminalOutputBatcher } from './terminal-output-batcher.js'
 
-export type LiveSessionController = LiveSshSessionController | LiveFtpSessionController
+export type LiveSessionController =
+  LiveSshSessionController | LiveFtpSessionController | LiveTelnetSessionController | LiveSerialSessionController
 
 export const REMOTE_SESSION_DISCONNECTED_MESSAGE = '会话已断开，请先重连。'
 
@@ -63,6 +72,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
     private readonly options: {
       getSnapshot(): Promise<WorkspaceSnapshot>
       getTabStatus(tabId: string): WorkspaceTab['status'] | undefined
+      resolveProfile(profileId: string): Promise<ConnectionProfile | null>
       rememberTrustedHostFingerprint(profileId: string, fingerprint: string): Promise<void>
     }
   ) {
@@ -127,7 +137,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
     await controller?.disconnect()
     this.terminalOutputBatcher.flush(tabId)
     const current = this.sessions.get(tabId)
-    if (current && controller?.type === 'ssh') {
+    if (current && isTerminalController(controller)) {
       this.sessions.set(tabId, {
         ...current,
         terminalTranscript: controller.getTerminalTranscript()
@@ -166,10 +176,10 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
     this.shellLoginUsers.clear()
   }
 
-  requireController(tabId: string) {
+  requireController(tabId: string): FileSessionController {
     const controller = this.liveControllers.get(tabId)
     const session = this.sessions.get(tabId)
-    if (!controller || !session?.connected) {
+    if (!isFileController(controller) || !session?.connected) {
       throw new Error(REMOTE_SESSION_DISCONNECTED_MESSAGE)
     }
     return controller
@@ -177,6 +187,31 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
 
   getController(tabId: string) {
     return this.liveControllers.get(tabId)
+  }
+
+  getFileController(tabId: string): FileSessionController | undefined {
+    const controller = this.liveControllers.get(tabId)
+    return isFileController(controller) ? controller : undefined
+  }
+
+  listSshTunnels(tabId: string): SshTunnelSnapshot[] {
+    return this.requireSshController(tabId).listTunnels()
+  }
+
+  async createSshTunnel(tabId: string, rule: SshForwardRule): Promise<SshTunnelSnapshot[]> {
+    return this.requireSshController(tabId).createTunnel(rule)
+  }
+
+  async startSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> {
+    return this.requireSshController(tabId).startTunnel(ruleId)
+  }
+
+  async stopSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> {
+    return this.requireSshController(tabId).stopTunnel(ruleId)
+  }
+
+  async deleteSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]> {
+    return this.requireSshController(tabId).deleteTunnel(ruleId)
   }
 
   hasRemoteFileOperation(tabId: string) {
@@ -189,7 +224,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
 
   async runRemoteFileOperation<T>(
     tabId: string,
-    operation: (controller: LiveSessionController, current: SessionSnapshot) => Promise<T>,
+    operation: (controller: FileSessionController, current: SessionSnapshot) => Promise<T>,
     options?: { pauseMetrics?: boolean }
   ): Promise<T> {
     const previous = this.remoteFileOperations.get(tabId) ?? Promise.resolve()
@@ -209,7 +244,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
     try {
       const controller = this.liveControllers.get(tabId)
       const current = this.sessions.get(tabId)
-      if (!controller || !current?.connected) {
+      if (!isFileController(controller) || !current?.connected) {
         throw new Error(REMOTE_SESSION_DISCONNECTED_MESSAGE)
       }
       if (options?.pauseMetrics) {
@@ -249,7 +284,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
         tabId,
         profile,
         (request) => this.requestSshInteraction(tabId, profile, request),
-        (fingerprint) => this.options.rememberTrustedHostFingerprint(profile.id, fingerprint),
+        (profileId, fingerprint) => this.options.rememberTrustedHostFingerprint(profileId, fingerprint),
         (chunk) => {
           this.terminalOutputBatcher.queue(tabId, chunk)
         },
@@ -302,12 +337,53 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
           }
           void this.emitSnapshotForTab(tabId)
         },
-        initialTranscript
+        initialTranscript,
+        {},
+        (profileId) => this.options.resolveProfile(profileId)
       )
       return sshController
     }
 
+    if (profile.type === 'telnet') {
+      return new LiveTelnetSessionController(
+        tabId,
+        profile,
+        (chunk) => this.terminalOutputBatcher.queue(tabId, chunk),
+        (summary, transcript, connected) => this.handleTerminalOnlyState(tabId, summary, transcript, connected),
+        initialTranscript
+      )
+    }
+    if (profile.type === 'serial') {
+      return new LiveSerialSessionController(
+        tabId,
+        profile,
+        (chunk) => this.terminalOutputBatcher.queue(tabId, chunk),
+        (summary, transcript, connected) => this.handleTerminalOnlyState(tabId, summary, transcript, connected),
+        initialTranscript
+      )
+    }
     return new LiveFtpSessionController(tabId, profile)
+  }
+
+  private handleTerminalOnlyState(tabId: string, summary: string, transcript: string, connected: boolean) {
+    this.terminalOutputBatcher.flush(tabId)
+    const current = this.sessions.get(tabId)
+    if (!current) return
+    this.sessions.set(tabId, { ...current, summary, terminalTranscript: transcript, connected })
+    const status = statusFromTerminalState(summary, connected, this.options.getTabStatus(tabId))
+    this.emit('tab-event', { type: 'status-changed', tabId, status, summary, connected })
+    this.sendToTab(tabId, 'terminal:state', { tabId, summary, transcript, connected })
+    if (!connected) this.emit('tab-event', { type: 'disconnected', tabId, summary })
+    void this.emitSnapshotForTab(tabId)
+  }
+
+  private requireSshController(tabId: string): LiveSshSessionController {
+    const controller = this.liveControllers.get(tabId)
+    const session = this.sessions.get(tabId)
+    if (!controller || controller.type !== 'ssh' || !session?.connected) {
+      throw new Error(REMOTE_SESSION_DISCONNECTED_MESSAGE)
+    }
+    return controller
   }
 
   async connect(tabId: string, controller: LiveSessionController) {
@@ -328,11 +404,11 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
       this.sessions.set(tabId, {
         ...current,
         summary: controller.getSummary(),
-        terminalTranscript: controller.type === 'ssh' ? controller.getTerminalTranscript() : undefined,
-        remotePath: controller.getRemotePath(),
+        terminalTranscript: isTerminalController(controller) ? controller.getTerminalTranscript() : undefined,
+        remotePath: isFileController(controller) ? controller.getRemotePath() : current.remotePath,
         shellCwd: controller.type === 'ssh' ? controller.getShellCwd() : undefined,
         followShellCwd: current.followShellCwd,
-        fileAccessMode: controller.getFileAccessMode(),
+        fileAccessMode: isFileController(controller) ? controller.getFileAccessMode() : undefined,
         hasReusableSudoAuth: controller.type === 'ssh' ? controller.hasReusableSudoAuth() : false,
         connected: true,
         remoteFiles: current.remoteFiles,
@@ -356,6 +432,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
       }
 
       let remoteFilesError: string | null = null
+      if (!isFileController(controller)) return
       try {
         const files = await controller.listRemoteFiles()
         const latest = this.sessions.get(tabId)
@@ -1064,13 +1141,25 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
 
   private withLiveTerminalTranscript(tabId: string, snapshot: SessionSnapshot) {
     const controller = this.liveControllers.get(tabId)
-    if (controller?.type !== 'ssh') {
+    if (!isTerminalController(controller)) {
       return snapshot
     }
 
     const terminalTranscript = controller.getTerminalTranscript()
     return terminalTranscript === snapshot.terminalTranscript ? snapshot : { ...snapshot, terminalTranscript }
   }
+}
+
+function isTerminalController(
+  controller: LiveSessionController | undefined
+): controller is LiveSshSessionController | LiveTelnetSessionController | LiveSerialSessionController {
+  return controller?.type === 'ssh' || controller?.type === 'telnet' || controller?.type === 'serial'
+}
+
+function isFileController(
+  controller: LiveSessionController | undefined
+): controller is LiveSshSessionController | LiveFtpSessionController {
+  return controller?.type === 'ssh' || controller?.type === 'ftp'
 }
 
 function shouldFallbackRootFileAccess(error: unknown) {
