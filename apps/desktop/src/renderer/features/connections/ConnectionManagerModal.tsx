@@ -22,7 +22,9 @@ export function ConnectionManagerModal({
   onUpdateOrder,
   standalone = false,
   inline = false,
-  onActiveFolderChange
+  onActiveFolderChange,
+  onImportConnections,
+  onExportConnections
 }: {
   profiles: ConnectionProfile[]
   folders: ConnectionFolder[]
@@ -38,6 +40,8 @@ export function ConnectionManagerModal({
   standalone?: boolean
   inline?: boolean
   onActiveFolderChange?(name: string): void
+  onImportConnections?(): void
+  onExportConnections?(): void
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [activeFolderId, setActiveFolderId] = useState<'all' | string>('all')
@@ -568,6 +572,32 @@ export function ConnectionManagerModal({
           </div>
           <div className={`connection-manager-floating-drawer ${isActionsExpanded ? 'expanded' : ''}`}>
             <div className="drawer-options-wrapper">
+              {onImportConnections ? (
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    onImportConnections()
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <span className="material-symbols-outlined">upload_file</span>
+                  <span>导入连接</span>
+                </button>
+              ) : null}
+              {onExportConnections ? (
+                <button
+                  className="drawer-option-btn secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    onExportConnections()
+                    setIsActionsExpanded(false)
+                  }}
+                >
+                  <span className="material-symbols-outlined">download</span>
+                  <span>导出连接</span>
+                </button>
+              ) : null}
               <button
                 className="drawer-option-btn secondary-btn"
                 type="button"

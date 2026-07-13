@@ -32,7 +32,9 @@ import {
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
+import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { CommandCenter } from '../commands/CommandCenter'
+import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
 import { getDisplayFileTypeSortKey } from './file-kind'
 import { FileTable, LocalFileTable, PanePathBar, type RemoteFileSortState } from './FileTables'
@@ -225,8 +227,9 @@ export function FileManager({
   const defaultRemoteSort = { field: 'name', direction: 'asc' } satisfies RemoteFileSortState
   const isRemoteConnected = activeSession.connected === true
   const isSshSession = activeTab?.sessionType === 'ssh'
+  const canManageTunnels = activeSession.capabilities?.tunnels === true
   const showRemoteDirectoryLoading = isRemoteDirectoryLoading || activeSession.remoteFilesLoading === true
-  const [activeView, setActiveView] = useState<'file' | 'command'>('file')
+  const [activeView, setActiveView] = useState<'file' | 'command' | 'tunnel'>('file')
   const [localPaneWidth, setLocalPaneWidth] = useState(214)
   const [localPathInput, setLocalPathInput] = useState(localPath)
   const [remotePathInput, setRemotePathInput] = useState(activeSession.remotePath)
@@ -284,6 +287,12 @@ export function FileManager({
   useEffect(() => {
     setRemoteSort(defaultRemoteSort)
   }, [activeTab?.id])
+
+  useEffect(() => {
+    if (!canManageTunnels && activeView === 'tunnel') {
+      setActiveView('file')
+    }
+  }, [activeView, canManageTunnels])
 
   const sortedRemoteRows = useMemo(() => {
     if (!isRemoteConnected) {
@@ -602,11 +611,22 @@ export function FileManager({
               {t.command}
             </button>
           ) : null}
+          {canManageTunnels ? (
+            <button
+              className={activeView === 'tunnel' ? 'active' : ''}
+              type="button"
+              onClick={() => setActiveView('tunnel')}
+            >
+              {t.tunnel}
+            </button>
+          ) : null}
         </div>
         <span className={`file-current-path ${clipboardStatusText ? 'is-status-hint' : ''}`}>
           {activeView === 'file'
             ? clipboardStatusText || activeSession.remotePath
-            : `${t.commandQuickLaunch} (${isSshSession ? t.send : t.commandSshOnly})`}
+            : activeView === 'command'
+              ? `${t.commandQuickLaunch} (${isSshSession ? t.send : t.commandSshOnly})`
+              : '当前 SSH 工作区的运行时隧道'}
         </span>
         {activeView === 'file' ? (
           <div className="file-tab-actions">
@@ -645,15 +665,17 @@ export function FileManager({
               <AppIcon name="upload" />
             </button>
           </div>
-        ) : (
+        ) : activeView === 'command' ? (
           <div className="file-tab-actions">
             <button className="flat-button compact command-manager-launch" type="button" onClick={onOpenCommandManager}>
               {t.commandManager}
             </button>
           </div>
-        )}
+        ) : null}
       </div>
-      {activeView === 'command' && isSshSession ? (
+      {activeView === 'tunnel' && canManageTunnels && activeTab ? (
+        <SshTunnelPanel tabId={activeTab.id} />
+      ) : activeView === 'command' && isSshSession ? (
         <CommandCenter
           activeTab={activeTab}
           commandFolders={commandFolders}
@@ -690,62 +712,29 @@ export function FileManager({
               onChange={setLocalPathInput}
               onSubmit={submitLocalPath}
             />
-            <div
-              className="file-table-shell local-file-table-shell"
-              ref={localScrollRef}
-              onContextMenu={(event) => {
-                if (event.target !== event.currentTarget) return
-                event.preventDefault()
-                event.stopPropagation()
-                setSelectedLocalPaths([])
-                setLocalAnchorPath(null)
-                setContextMenu({ pane: 'local', x: event.clientX, y: event.clientY, path: null })
-              }}
-              onMouseDown={(event) => {
-                if (event.target !== event.currentTarget || event.button !== 0) return
-                isSelectingLocal.current = true
-                didDragSelect.current = false
-                localDragSelection.current = {
-                  basePaths: event.metaKey || event.ctrlKey ? selectedLocalPaths : [],
-                  startPath: null
-                }
-              }}
-              onClick={(event) => {
-                if (event.target !== event.currentTarget) return
-                if (suppressNextClearClick.current) {
-                  suppressNextClearClick.current = false
-                  return
-                }
-                setSelectedLocalPaths([])
-                setLocalAnchorPath(null)
-              }}
-            >
-              <LocalFileTable
-                scrollRef={localScrollRef}
-                cutPaths={localCutPaths}
-                rows={localItems}
-                selectedPaths={selectedLocalPaths}
-                onDragItem={(event, item) => {
-                  event.dataTransfer.effectAllowed = 'copy'
-                  const payload = selectedLocalPaths.includes(item.path) ? selectedLocalPaths : [item.path]
-                  const previewItems = localItems.filter((row) => payload.includes(row.path) && row.name !== '..')
-                  event.dataTransfer.setData(localFileDragType, JSON.stringify(payload))
-                  setFileDragPreview(
-                    event,
-                    previewItems.map((row) => row.name)
-                  )
-                }}
-                onOpenItem={onOpenLocalItem}
-                onContextItem={(event, item) => {
+            <div className="file-table-scroll-region">
+              <div
+                className="file-table-shell local-file-table-shell"
+                ref={localScrollRef}
+                onContextMenu={(event) => {
+                  if (event.target !== event.currentTarget) return
                   event.preventDefault()
                   event.stopPropagation()
-                  if (!selectedLocalPaths.includes(item.path)) {
-                    setSelectedLocalPaths([item.path])
-                    setLocalAnchorPath(item.path)
-                  }
-                  setContextMenu({ pane: 'local', x: event.clientX, y: event.clientY, path: item.path })
+                  setSelectedLocalPaths([])
+                  setLocalAnchorPath(null)
+                  setContextMenu({ pane: 'local', x: event.clientX, y: event.clientY, path: null })
                 }}
-                onClearSelection={() => {
+                onMouseDown={(event) => {
+                  if (event.target !== event.currentTarget || event.button !== 0) return
+                  isSelectingLocal.current = true
+                  didDragSelect.current = false
+                  localDragSelection.current = {
+                    basePaths: event.metaKey || event.ctrlKey ? selectedLocalPaths : [],
+                    startPath: null
+                  }
+                }}
+                onClick={(event) => {
+                  if (event.target !== event.currentTarget) return
                   if (suppressNextClearClick.current) {
                     suppressNextClearClick.current = false
                     return
@@ -753,28 +742,64 @@ export function FileManager({
                   setSelectedLocalPaths([])
                   setLocalAnchorPath(null)
                 }}
-                onSelectItem={selectLocalItem}
-                onSelectionDragStart={(event, item) => {
-                  setKeyboardPane('local')
-                  isSelectingLocal.current = true
-                  didDragSelect.current = false
-                  const startPath = event.shiftKey && localAnchorPath ? localAnchorPath : item.path
-                  const basePaths = event.metaKey || event.ctrlKey ? selectedLocalPaths : []
-                  localDragSelection.current = { basePaths, startPath }
-                  suppressNextSelectionClick.current = true
-                  setSelectedLocalPaths(
-                    nextSelection({
-                      anchorPath: localAnchorPath,
-                      currentSelection: selectedLocalPaths,
+              >
+                <LocalFileTable
+                  scrollRef={localScrollRef}
+                  cutPaths={localCutPaths}
+                  rows={localItems}
+                  selectedPaths={selectedLocalPaths}
+                  onDragItem={(event, item) => {
+                    event.dataTransfer.effectAllowed = 'copy'
+                    const payload = selectedLocalPaths.includes(item.path) ? selectedLocalPaths : [item.path]
+                    const previewItems = localItems.filter((row) => payload.includes(row.path) && row.name !== '..')
+                    event.dataTransfer.setData(localFileDragType, JSON.stringify(payload))
+                    setFileDragPreview(
                       event,
-                      itemPath: item.path,
-                      rows: localItems
-                    })
-                  )
-                  setLocalAnchorPath(startPath)
-                }}
-                onSelectionDragEnter={extendLocalDragSelection}
-              />
+                      previewItems.map((row) => row.name)
+                    )
+                  }}
+                  onOpenItem={onOpenLocalItem}
+                  onContextItem={(event, item) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (!selectedLocalPaths.includes(item.path)) {
+                      setSelectedLocalPaths([item.path])
+                      setLocalAnchorPath(item.path)
+                    }
+                    setContextMenu({ pane: 'local', x: event.clientX, y: event.clientY, path: item.path })
+                  }}
+                  onClearSelection={() => {
+                    if (suppressNextClearClick.current) {
+                      suppressNextClearClick.current = false
+                      return
+                    }
+                    setSelectedLocalPaths([])
+                    setLocalAnchorPath(null)
+                  }}
+                  onSelectItem={selectLocalItem}
+                  onSelectionDragStart={(event, item) => {
+                    setKeyboardPane('local')
+                    isSelectingLocal.current = true
+                    didDragSelect.current = false
+                    const startPath = event.shiftKey && localAnchorPath ? localAnchorPath : item.path
+                    const basePaths = event.metaKey || event.ctrlKey ? selectedLocalPaths : []
+                    localDragSelection.current = { basePaths, startPath }
+                    suppressNextSelectionClick.current = true
+                    setSelectedLocalPaths(
+                      nextSelection({
+                        anchorPath: localAnchorPath,
+                        currentSelection: selectedLocalPaths,
+                        event,
+                        itemPath: item.path,
+                        rows: localItems
+                      })
+                    )
+                    setLocalAnchorPath(startPath)
+                  }}
+                  onSelectionDragEnter={extendLocalDragSelection}
+                />
+              </div>
+              <VerticalScrollbar ariaLabel="滚动本地文件列表" scrollRef={localScrollRef} topInset={24} />
             </div>
           </div>
           <div
@@ -947,6 +972,7 @@ export function FileManager({
                     }}
                   />
                 </div>
+                <VerticalScrollbar ariaLabel="滚动远程文件列表" scrollRef={remoteScrollRef} topInset={24} />
               </div>
               {showRemoteDirectoryLoading ? (
                 <div

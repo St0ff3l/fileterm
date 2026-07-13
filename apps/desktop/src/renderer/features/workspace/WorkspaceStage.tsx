@@ -84,6 +84,8 @@ export function WorkspaceStage({
   onDeleteConnectionFolder,
   onUpdateConnectionFolder,
   onUpdateConnectionOrder,
+  onImportConnections,
+  onExportConnections,
   onCreateCommand,
   onUpdateCommand,
   onDeleteCommand,
@@ -167,6 +169,8 @@ export function WorkspaceStage({
   onDeleteConnectionFolder(folderId: string): void
   onUpdateConnectionFolder(folderId: string, updates: Partial<ConnectionFolder>): void
   onUpdateConnectionOrder(id: string, newParentId: string | undefined, newOrder: number): void
+  onImportConnections(): void
+  onExportConnections(): void
   onCreateCommand(input: CommandTemplateInput): void
   onUpdateCommand(commandId: string, input: CommandTemplateInput): void
   onDeleteCommand(commandId: string): void
@@ -257,6 +261,8 @@ export function WorkspaceStage({
       onDeleteConnectionFolder={onDeleteConnectionFolder}
       onUpdateConnectionFolder={onUpdateConnectionFolder}
       onUpdateConnectionOrder={onUpdateConnectionOrder}
+      onImportConnections={onImportConnections}
+      onExportConnections={onExportConnections}
       onCreateCommand={onCreateCommand}
       onUpdateCommand={onUpdateCommand}
       onDeleteCommand={onDeleteCommand}

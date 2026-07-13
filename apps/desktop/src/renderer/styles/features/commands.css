@@ -73,6 +73,7 @@
 }
 
 .command-pane,
+.command-template-list-region,
 .command-template-list,
 .command-runner,
 .command-manager-sidebar,
@@ -97,6 +98,7 @@
 
 .command-pane,
 .command-folder-tabs,
+.command-template-list-region,
 .command-template-list,
 .command-manager-sidebar,
 .command-manager-list,
@@ -157,7 +159,7 @@
   max-width: 160px;
   height: 22px;
   padding: 0 10px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-light);
   border-bottom: 0;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
   font-size: 11px;
@@ -236,11 +238,30 @@
   font-size: 10px;
 }
 
+.command-template-list-region {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .command-template-list,
 .command-manager-list-shell {
   overflow: auto;
   padding-right: 0;
   gap: 0;
+}
+
+.command-template-list {
+  height: 100%;
+  flex: 1;
+  scrollbar-width: none;
+}
+
+.command-template-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .command-list-toolbar {
@@ -273,6 +294,8 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  background-color: var(--bg-main);
+  box-shadow: 0 1px 0 var(--border-light);
 }
 
 .command-table td {
@@ -1217,7 +1240,9 @@
 .command-form-standalone-page {
   min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
+  /* Mirror the focus-ring clearance around the scrollable form. */
+  padding-inline: 8px;
+  scrollbar-gutter: stable both-edges;
 }
 
 .command-form-standalone-page label:not(.command-editor-checkbox-row) {
@@ -1365,6 +1390,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 0 4px;
 }
 
 .command-editor-grid {

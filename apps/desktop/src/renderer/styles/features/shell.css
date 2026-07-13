@@ -596,9 +596,30 @@
 }
 
 .disk-table {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: auto;
   min-width: 0;
+  overflow: hidden;
+}
+
+.disk-scroll-region {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.disk-body {
+  height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.disk-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .disk-head {

@@ -270,6 +270,26 @@ function preserveProfileMetadata(profile: ConnectionProfile, previous: Connectio
 }
 
 function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
+  if (input.type === 'serial') {
+    return {
+      id,
+      type: 'serial',
+      name: input.name,
+      host: '',
+      port: 0,
+      username: '',
+      remotePath: '',
+      group: input.group,
+      devicePath: input.devicePath ?? '',
+      baudRate: input.baudRate ?? 115200,
+      dataBits: input.dataBits ?? 8,
+      stopBits: input.stopBits ?? 1,
+      parity: input.parity ?? 'none',
+      flowControl: input.flowControl ?? 'none',
+      encoding: input.encoding ?? 'UTF-8',
+      note: input.note
+    }
+  }
   return input.type === 'ssh'
     ? {
         id,
@@ -290,22 +310,41 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         encoding: input.encoding ?? 'UTF-8',
         backspaceKey: input.backspaceKey ?? 'ASCII',
         deleteKey: input.deleteKey ?? 'VT220',
-        enableExecChannel: input.enableExecChannel ?? true
+        enableExecChannel: input.enableExecChannel ?? true,
+        enableResourceMonitoring: input.enableResourceMonitoring ?? true,
+        proxy: input.proxy ? { ...input.proxy, password: input.proxyPassword ?? input.proxy.password } : undefined,
+        jumpProfileId: input.jumpProfileId,
+        forwards: input.forwards ?? [],
+        disableShellIntegration: input.disableShellIntegration ?? false
       }
-    : {
-        id,
-        type: 'ftp',
-        name: input.name,
-        host: input.host,
-        port: input.port,
-        username: input.username,
-        note: input.note,
-        password: input.password,
-        secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
-        securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
-        group: input.group,
-        remotePath: input.remotePath
-      }
+    : input.type === 'telnet'
+      ? {
+          id,
+          type: 'telnet',
+          name: input.name,
+          host: input.host,
+          port: input.port || 23,
+          username: '',
+          remotePath: '',
+          group: input.group,
+          note: input.note,
+          encoding: input.encoding ?? 'UTF-8',
+          proxy: input.proxy ? { ...input.proxy, password: input.proxyPassword ?? input.proxy.password } : undefined
+        }
+      : {
+          id,
+          type: 'ftp',
+          name: input.name,
+          host: input.host,
+          port: input.port,
+          username: input.username,
+          note: input.note,
+          password: input.password,
+          secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
+          securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
+          group: input.group,
+          remotePath: input.remotePath
+        }
 }
 
 function toCommandTemplate(id: string, input: CommandTemplateInput): CommandTemplate {

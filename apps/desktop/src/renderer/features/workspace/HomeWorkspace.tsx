@@ -30,6 +30,8 @@ export function HomeWorkspace({
   onDeleteConnectionFolder,
   onUpdateConnectionFolder,
   onUpdateConnectionOrder,
+  onImportConnections,
+  onExportConnections,
   onCreateCommand,
   onUpdateCommand,
   onDeleteCommand,
@@ -59,6 +61,8 @@ export function HomeWorkspace({
   onDeleteConnectionFolder(folderId: string): void
   onUpdateConnectionFolder(folderId: string, updates: Partial<ConnectionFolder>): void
   onUpdateConnectionOrder(id: string, newParentId: string | undefined, newOrder: number): void
+  onImportConnections(): void
+  onExportConnections(): void
   onCreateCommand(input: CommandTemplateInput): void
   onUpdateCommand(commandId: string, input: CommandTemplateInput): void
   onDeleteCommand(commandId: string): void
@@ -309,6 +313,8 @@ export function HomeWorkspace({
                 onDeleteFolder={onDeleteConnectionFolder}
                 onUpdateFolder={onUpdateConnectionFolder}
                 onUpdateOrder={onUpdateConnectionOrder}
+                onImportConnections={onImportConnections}
+                onExportConnections={onExportConnections}
                 inline={true}
                 onActiveFolderChange={setActiveConnectionFolderName}
               />

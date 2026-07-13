@@ -165,3 +165,41 @@ test('list heals inconsistent group and parentId values and persists the healed 
     )
   })
 })
+
+test('keeps proxy credentials out of profiles.json while returning them to the main process', async () => {
+  await withRepository(async (repository, directory) => {
+    const profile = await repository.create({
+      ...createSshProfileInput('默认', 'Proxied server'),
+      proxy: { type: 'socks5', host: 'proxy.internal', port: 1080, username: 'proxy-user', password: 'proxy-secret' }
+    })
+
+    const publicProfiles = await readStoredProfiles(directory)
+    const persisted = findProfile(publicProfiles, profile.id)
+    assert.equal('proxy' in persisted && persisted.proxy?.password, undefined)
+    assert.equal(
+      ((await repository.getById(profile.id)) as ConnectionProfile & { proxy?: { password?: string } }).proxy?.password,
+      'proxy-secret'
+    )
+  })
+})
+
+test('persists SSH reconnect mode across an update and reload', async () => {
+  await withRepository(async (repository, directory) => {
+    const created = await repository.create(createSshProfileInput('默认', 'Reconnect server'))
+    const input = { ...createSshProfileInput('默认', 'Reconnect server'), reconnectMode: 'enter' as const }
+
+    const updated = await repository.update(created.id, input)
+    assert.equal(updated.type, 'ssh')
+    assert.equal(updated.reconnectMode, 'enter')
+    assert.equal(findProfile(await readStoredProfiles(directory), created.id).type, 'ssh')
+    assert.equal(
+      (findProfile(await readStoredProfiles(directory), created.id) as ConnectionProfile).reconnectMode,
+      'enter'
+    )
+
+    const reloaded = new FileProfileRepository(directory, [])
+    const profile = findProfile(await reloaded.list(), created.id)
+    assert.equal(profile.type, 'ssh')
+    assert.equal(profile.reconnectMode, 'enter')
+  })
+})

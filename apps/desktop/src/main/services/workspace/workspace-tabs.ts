@@ -1,7 +1,7 @@
 import type { ConnectionProfile, TabLayout, WorkspaceTab } from '@fileterm/core'
 
 function createTabLayout(profile: ConnectionProfile): TabLayout {
-  return profile.type === 'ssh' ? 'terminal-file' : 'file-only'
+  return profile.type === 'ssh' ? 'terminal-file' : profile.type === 'ftp' ? 'file-only' : 'terminal-only'
 }
 
 export class WorkspaceTabsState {
