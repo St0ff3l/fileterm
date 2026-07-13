@@ -1055,6 +1055,15 @@
   gap: 10px;
 }
 
+/* WebDAV actions live inline with secondary upload/download controls. Keep the
+ * primary save affordance visible without giving it dialog-footer weight. */
+.settings-update-actions .primary-button.compact {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .theme-options-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

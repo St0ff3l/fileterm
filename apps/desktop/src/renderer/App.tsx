@@ -128,11 +128,11 @@ export function App() {
   const desktopApi = window.fileterm
   const isWindowsDesktop = desktopApi?.platform === 'win32'
 
-  const openConnectionJsonPreview = () => {
+  const openConnectionImportPreview = () => {
     void desktopApi
-      ?.previewConnectionJsonImport()
+      ?.previewConnectionImport()
       .then((plan) => plan && setConnectionImportPlan(plan))
-      .catch((cause) => reportError(setError, '读取连接 JSON', cause))
+      .catch((cause) => reportError(setError, '读取连接配置', cause))
   }
 
   const commitConnectionJsonPreview = async (
@@ -147,10 +147,10 @@ export function App() {
       })
       setConnectionImportPlan(null)
       setError(
-        `连接 JSON 导入：新增 ${result.imported}，覆盖 ${result.overwritten ?? 0}，跳过 ${result.skipped}，失败 ${result.failed}`
+        `连接导入：新增 ${result.imported}，覆盖 ${result.overwritten ?? 0}，跳过 ${result.skipped}，失败 ${result.failed}`
       )
     } catch (cause) {
-      reportError(setError, '导入连接 JSON', cause)
+      reportError(setError, '导入连接', cause)
     }
   }
 
@@ -322,6 +322,7 @@ export function App() {
     folders: workspace.folders || [],
     formWindowMode,
     formWindowProfileId,
+    hasLoadedInitialSnapshot,
     isConnectionFormWindow,
     profiles: workspace.profiles || []
   })
@@ -867,20 +868,9 @@ export function App() {
             onDeleteFolder={(id) => desktopApi?.deleteFolder(id)}
             onUpdateFolder={(id, updates) => desktopApi?.updateFolder(id, updates)}
             onUpdateOrder={(id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order)}
-            onImportSshConfig={() => {
-              void desktopApi
-                ?.importSshConfig()
-                .then((result) => setError(`SSH 配置导入：${result.imported} 个成功，${result.failed} 个失败`))
-                .catch((error) => reportError(setError, '导入 SSH 配置', error))
-            }}
-            onImportConnectionJson={() => {
-              openConnectionJsonPreview()
-            }}
-            onExportConnections={(format) => {
-              const request =
-                format === 'compatible'
-                  ? desktopApi?.exportConnectionsAsFiles(format)
-                  : desktopApi?.exportConnections(format)
+            onImportConnections={openConnectionImportPreview}
+            onExportConnections={() => {
+              const request = desktopApi?.exportConnections('fileterm')
               void request?.catch((error) => reportError(setError, '导出连接', error))
             }}
           />
@@ -1233,17 +1223,9 @@ export function App() {
                 onDeleteConnectionFolder={deleteConnectionFolder}
                 onUpdateConnectionFolder={updateConnectionFolder}
                 onUpdateConnectionOrder={updateConnectionOrder}
-                onImportSshConfig={() => {
-                  void desktopApi?.importSshConfig().then(() => undefined)
-                }}
-                onImportConnectionJson={() => {
-                  openConnectionJsonPreview()
-                }}
-                onExportConnections={(format) => {
-                  const request =
-                    format === 'compatible'
-                      ? desktopApi?.exportConnectionsAsFiles(format)
-                      : desktopApi?.exportConnections(format)
+                onImportConnections={openConnectionImportPreview}
+                onExportConnections={() => {
+                  const request = desktopApi?.exportConnections('fileterm')
                   void request?.then(() => undefined)
                 }}
                 onCreateCommand={(input) => {
@@ -1365,20 +1347,9 @@ export function App() {
                 onDeleteFolder: (id) => desktopApi?.deleteFolder(id),
                 onUpdateFolder: (id, updates) => desktopApi?.updateFolder(id, updates),
                 onUpdateOrder: (id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order),
-                onImportSshConfig: () => {
-                  void desktopApi
-                    ?.importSshConfig()
-                    .then((result) => setError(`SSH 配置导入：${result.imported} 个成功，${result.failed} 个失败`))
-                    .catch((error) => reportError(setError, '导入 SSH 配置', error))
-                },
-                onImportConnectionJson: () => {
-                  openConnectionJsonPreview()
-                },
-                onExportConnections: (format) => {
-                  const request =
-                    format === 'compatible'
-                      ? desktopApi?.exportConnectionsAsFiles(format)
-                      : desktopApi?.exportConnections(format)
+                onImportConnections: openConnectionImportPreview,
+                onExportConnections: () => {
+                  const request = desktopApi?.exportConnections('fileterm')
                   void request?.catch((error) => reportError(setError, '导出连接', error))
                 }
               }

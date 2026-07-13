@@ -47,6 +47,26 @@
   border: 0;
 }
 
+.session-split-resizer::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  content: '';
+  background: var(--border-light);
+  transform: translateY(-50%);
+  transition:
+    height 0.16s ease,
+    background 0.16s ease;
+}
+
+.session-split-resizer:hover::after,
+.session-workspace.is-file-panel-dragging .session-split-resizer::after {
+  height: 2px;
+  background: var(--accent-primary);
+}
+
 .terminal-view {
   position: relative;
   height: 100%;
@@ -692,8 +712,24 @@
   }
 }
 
-.file-manager {
+.session-bottom-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-workspace:not(.file-only) .session-bottom-panel {
   grid-row: 2;
+}
+
+.session-workspace.file-only .session-bottom-panel {
+  grid-row: 1;
+}
+
+.session-bottom-panel .file-manager {
+  height: 100%;
+}
+
+.file-manager {
   display: grid;
   grid-template-rows: 25px minmax(0, 1fr);
   min-height: 0;
@@ -702,10 +738,6 @@
   transition:
     opacity 0.18s ease,
     transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.session-workspace.file-only .file-manager {
-  grid-row: 1;
 }
 
 .session-workspace.file-panel-collapsed .file-manager {
@@ -934,14 +966,64 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  scrollbar-width: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
+.file-table-shell::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.file-table-scroll-region,
 .remote-file-table-region {
+  position: relative;
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.vertical-scrollbar {
+  position: absolute;
+  top: calc(2px + var(--vertical-scrollbar-inset-top, 0px));
+  right: 2px;
+  bottom: 2px;
+  z-index: 12;
+  width: 8px;
+  cursor: default;
+  outline: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.vertical-scrollbar.is-visible,
+.vertical-scrollbar:focus-visible {
+  opacity: 1;
+}
+
+.vertical-scrollbar:focus-visible .vertical-scrollbar__thumb {
+  box-shadow: 0 0 0 2px var(--input-focus-ring);
+}
+
+.vertical-scrollbar__thumb {
+  width: 8px;
+  border-radius: 999px;
+  background: var(--border, var(--border-light));
+  cursor: grab;
+}
+
+.vertical-scrollbar__thumb:hover,
+.vertical-scrollbar__thumb:active {
+  background: var(--muted-foreground, var(--text-muted));
+}
+
+.remote-file-table-region {
+  min-width: 0;
+}
+
+.local-file-table-shell {
+  height: 100%;
 }
 
 .remote-file-table-shell {
@@ -2529,34 +2611,10 @@
   color: var(--text-main) !important;
 }
 
-.file-panel-mode-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 7px 10px 0;
-  background: var(--surface-panel, var(--bg-secondary));
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.file-panel-mode-tabs button {
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  border-bottom: 2px solid transparent;
-  padding: 6px 10px 7px;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.file-panel-mode-tabs button.is-active {
-  color: var(--text-main);
-  border-bottom-color: var(--accent-primary);
-}
-
 .ssh-tunnel-panel {
   height: 100%;
   overflow: auto;
-  padding: 18px 20px 24px;
+  padding: 12px 18px 16px;
   background: var(--surface-panel, var(--bg-secondary));
 }
 
@@ -2564,19 +2622,19 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: start;
-  padding-bottom: 16px;
+  align-items: center;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .ssh-tunnel-panel h2 {
-  margin: 2px 0 4px;
-  font-size: 18px;
+  margin: 1px 0 3px;
+  font-size: 14px;
 }
 .ssh-tunnel-panel p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 .ssh-tunnel-kicker {
   color: var(--accent-primary);
@@ -2594,7 +2652,8 @@
 
 .tunnel-icon-button,
 .ssh-tunnel-actions button,
-.ssh-tunnel-form-actions button {
+.ssh-tunnel-form-actions button,
+.ssh-tunnel-secondary-action {
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   color: var(--text-main);
@@ -2605,25 +2664,73 @@
   cursor: pointer;
 }
 
-.tunnel-add-button {
-  border: 0;
-  border-radius: 6px;
-  background: var(--accent-primary);
-  color: var(--button-primary-text);
-  padding: 7px 10px;
-  font: inherit;
+.ssh-tunnel-header-actions .ssh-tunnel-create-button {
+  height: 32px;
+  padding: 0 12px;
   font-size: 12px;
-  cursor: pointer;
+  gap: 6px;
+  border-radius: 6px;
 }
 .ssh-tunnel-actions .danger {
   color: var(--danger-text, #d86666);
 }
+.ssh-tunnel-purpose {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-primary);
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+  color: var(--text-muted);
+}
+.ssh-tunnel-purpose > .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-primary);
+}
+.ssh-tunnel-purpose p {
+  display: grid;
+  gap: 2px;
+  line-height: 1.4;
+}
+.ssh-tunnel-purpose strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.ssh-tunnel-purpose code {
+  color: var(--text-main);
+  font-family: var(--font-mono, monospace);
+}
+.ssh-tunnel-dialog {
+  width: min(560px, calc(100vw - 40px));
+  padding: 0;
+}
+.ssh-tunnel-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+.ssh-tunnel-dialog-header span {
+  display: block;
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 600;
+}
+.ssh-tunnel-dialog-header p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .ssh-tunnel-form {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 18px 20px 20px;
 }
 .ssh-tunnel-form label {
   display: grid;
@@ -2633,18 +2740,52 @@
 }
 .ssh-tunnel-form input,
 .ssh-tunnel-form select {
+  box-sizing: border-box;
+  min-height: 34px;
   min-width: 0;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-dark);
   border-radius: 5px;
   padding: 7px 8px;
   color: var(--text-main);
-  background: var(--bg-primary);
+  background: var(--surface-inset, var(--bg-main));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-main) 4%, transparent);
   font: inherit;
   font-size: 12px;
 }
+.ssh-tunnel-form input:hover,
+.ssh-tunnel-form select:hover {
+  border-color: var(--text-muted);
+}
+.ssh-tunnel-form input:focus,
+.ssh-tunnel-form select:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+.ssh-tunnel-kind-hint {
+  grid-column: 1 / -1;
+  margin: -3px 0 0 !important;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-primary);
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  line-height: 1.5;
+}
 .ssh-tunnel-form-actions {
+  grid-column: 1 / -1;
   align-self: end;
   justify-content: end;
+}
+.ssh-tunnel-form-actions .flat-button {
+  min-width: 76px;
+  height: 38px;
+  padding: 0 14px;
+}
+.ssh-tunnel-form-actions .primary-button {
+  min-width: 116px;
+  height: 38px;
+  padding: 0 14px;
 }
 .ssh-tunnel-error {
   margin-top: 12px !important;
@@ -2708,17 +2849,38 @@
   text-transform: uppercase;
 }
 .ssh-tunnel-empty {
-  padding: 30px 12px;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 16px 12px;
   color: var(--text-muted);
   text-align: center;
   font-size: 12px;
   border: 1px dashed var(--border-subtle);
   border-radius: 8px;
 }
+.ssh-tunnel-empty > .app-icon {
+  color: var(--accent-primary);
+}
+.ssh-tunnel-empty strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.ssh-tunnel-empty span {
+  max-width: 560px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.ssh-tunnel-secondary-action {
+  margin-top: 3px;
+}
 
-@media (max-width: 760px) {
+@media (max-width: 560px) {
   .ssh-tunnel-form {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    grid-template-columns: 1fr;
+  }
+  .ssh-tunnel-form-actions {
+    grid-column: auto;
   }
   .ssh-tunnel-row {
     grid-template-columns: 8px minmax(0, 1fr) auto;

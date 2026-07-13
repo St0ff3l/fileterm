@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import { EventEmitter } from 'node:events'
 import net from 'node:net'
+import { PassThrough } from 'node:stream'
 import test from 'node:test'
 import { createOutboundSocket } from '../../dist-electron/main/services/network/proxy-socket-factory.js'
 import { LiveTelnetSessionController } from '../../dist-electron/main/services/sessions/telnet-session-controller.js'
@@ -123,6 +124,95 @@ test('SSH tunnel service tracks remote tunnel start and cleanup lifecycle', asyn
     ['stop', '127.0.0.1', 15432]
   ])
 })
+
+test('SSH tunnel service destroys active local clients before closing its listener', async () => {
+  class FakeSsh extends EventEmitter {}
+  const client = new FakeSsh()
+  client.forwardOut = (_sourceHost, _sourcePort, _targetHost, _targetPort, callback) => {
+    const channel = new PassThrough()
+    channel.close = () => channel.destroy()
+    callback(undefined, channel)
+  }
+  const service = new SshTunnelService(client, () => {})
+  const port = await reservePort()
+  const rule = {
+    id: 'local-active-client',
+    kind: 'local',
+    bindHost: '127.0.0.1',
+    bindPort: port,
+    targetHost: '127.0.0.1',
+    targetPort: 5432,
+    autoStart: false
+  }
+  service.register(rule)
+  await service.start(rule)
+  const socket = net.connect(port, '127.0.0.1')
+  await once(socket, 'connect')
+  await Promise.race([
+    service.stop(rule.id),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('tunnel stop timed out')), 500))
+  ])
+  assert.equal(service.list()[0].status, 'stopped')
+  socket.destroy()
+})
+
+test('SSH tunnel service keeps a failed remote forward visible for retry', async () => {
+  class FakeSsh extends EventEmitter {}
+  const client = new FakeSsh()
+  let failStop = true
+  client.forwardIn = (_host, _port, callback) => callback()
+  client.unforwardIn = (_host, _port, callback) =>
+    callback(failStop ? new Error('remote denied cancellation') : undefined)
+  const service = new SshTunnelService(client, () => {})
+  const rule = {
+    id: 'remote-retry',
+    kind: 'remote',
+    bindHost: '127.0.0.1',
+    bindPort: 15433,
+    targetHost: '127.0.0.1',
+    targetPort: 5432,
+    autoStart: false
+  }
+  service.register(rule)
+  await service.start(rule)
+  await assert.rejects(() => service.stop(rule.id), /remote denied cancellation/)
+  assert.equal(service.list()[0].status, 'error')
+  failStop = false
+  await service.stop(rule.id)
+  assert.equal(service.list()[0].status, 'stopped')
+})
+
+test('SSH tunnel service rejects duplicate listener endpoints before startup', () => {
+  class FakeSsh extends EventEmitter {}
+  const service = new SshTunnelService(new FakeSsh(), () => {})
+  service.register({
+    id: 'local-one',
+    kind: 'local',
+    bindHost: '127.0.0.1',
+    bindPort: 15434,
+    targetHost: '127.0.0.1',
+    targetPort: 5432,
+    autoStart: false
+  })
+  assert.throws(
+    () =>
+      service.register({
+        id: 'dynamic-conflict',
+        kind: 'dynamic',
+        bindHost: '127.0.0.1',
+        bindPort: 15434,
+        autoStart: false
+      }),
+    /already configured/
+  )
+})
+
+async function reservePort() {
+  const server = net.createServer()
+  const port = await listen(server)
+  await close(server)
+  return port
+}
 
 test('Serial controller configures and releases a mock device without a physical port', async () => {
   class FakeSerialPort extends EventEmitter {

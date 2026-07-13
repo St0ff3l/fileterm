@@ -7,6 +7,8 @@ export class SshTunnelService {
   private readonly listeners = new Map<string, Server>()
   private readonly remoteRules = new Map<string, SshForwardRule>()
   private readonly rules = new Map<string, SshTunnelSnapshot>()
+  /** Sockets must be closed before Server.close(), otherwise Node waits forever. */
+  private readonly activeSockets = new Map<string, Set<Socket>>()
 
   constructor(
     private readonly client: Client,
@@ -14,11 +16,18 @@ export class SshTunnelService {
     private readonly onChange: (tunnels: SshTunnelSnapshot[]) => void = () => undefined
   ) {
     client.on('tcp connection', (details, accept, reject) => {
-      const rule = [...this.remoteRules.values()].find((item) => item.bindPort === details.destPort)
+      const rule = [...this.remoteRules.values()].find(
+        (item) => item.bindPort === details.destPort && matchesRemoteBindHost(item.bindHost, details.destIP)
+      )
       if (!rule?.targetHost || !rule.targetPort) return reject()
       const channel = accept()
+      if (!channel) return reject()
       const target = net.connect({ host: rule.targetHost, port: rule.targetPort })
+      this.trackSocket(rule.id, target)
       target.once('error', () => channel.close())
+      target.once('close', () => channel.close())
+      channel.once('error', () => target.destroy())
+      channel.once('close', () => target.destroy())
       channel.pipe(target).pipe(channel)
     })
   }
@@ -33,6 +42,7 @@ export class SshTunnelService {
     if (previous && (this.listeners.has(rule.id) || this.remoteRules.has(rule.id))) {
       throw new Error(`Tunnel ${rule.id} is already running`)
     }
+    this.assertEndpointAvailable(rule)
     this.rules.set(rule.id, { ...rule, status: previous?.status === 'running' ? 'running' : 'stopped', runtimeOnly })
     this.emitChange()
   }
@@ -52,11 +62,17 @@ export class SshTunnelService {
         return
       }
       const server = net.createServer((socket) => {
+        this.trackSocket(rule.id, socket)
         if (rule.kind === 'dynamic') void this.handleDynamicSocket(socket)
-        else if (rule.targetHost && rule.targetPort) void this.pipeForward(socket, rule.targetHost, rule.targetPort)
-        else socket.destroy()
+        else if (rule.targetHost && rule.targetPort) {
+          void this.pipeForward(socket, rule.targetHost, rule.targetPort)
+        } else socket.destroy()
       })
-      server.on('error', (error) => this.setStatus(rule.id, 'error', error.message))
+      server.on('error', (error) => {
+        if (this.listeners.get(rule.id) === server) this.listeners.delete(rule.id)
+        this.closeActiveSockets(rule.id)
+        this.setStatus(rule.id, 'error', error.message)
+      })
       await new Promise<void>((resolve, reject) =>
         server.once('error', reject).listen(rule.bindPort, rule.bindHost, () => {
           server.off('error', reject)
@@ -77,17 +93,26 @@ export class SshTunnelService {
   async stop(ruleId: string): Promise<void> {
     if (!this.rules.has(ruleId)) throw new Error(`Tunnel ${ruleId} was not found`)
     this.setStatus(ruleId, 'stopping')
-    const listener = this.listeners.get(ruleId)
-    if (listener) {
-      this.listeners.delete(ruleId)
-      await new Promise<void>((resolve) => listener.close(() => resolve()))
+    try {
+      const listener = this.listeners.get(ruleId)
+      if (listener) {
+        this.listeners.delete(ruleId)
+        this.closeActiveSockets(ruleId)
+        await closeServer(listener)
+      }
+      const remote = this.remoteRules.get(ruleId)
+      if (remote) {
+        this.closeActiveSockets(ruleId)
+        await new Promise<void>((resolve, reject) =>
+          this.client.unforwardIn(remote.bindHost, remote.bindPort, (error) => (error ? reject(error) : resolve()))
+        )
+        this.remoteRules.delete(ruleId)
+      }
+      this.setStatus(ruleId, 'stopped')
+    } catch (error) {
+      this.setStatus(ruleId, 'error', error instanceof Error ? error.message : String(error))
+      throw error
     }
-    const remote = this.remoteRules.get(ruleId)
-    if (remote) {
-      this.remoteRules.delete(ruleId)
-      await new Promise<void>((resolve) => this.client.unforwardIn(remote.bindHost, remote.bindPort, () => resolve()))
-    }
-    this.setStatus(ruleId, 'stopped')
   }
 
   async remove(ruleId: string): Promise<void> {
@@ -105,7 +130,9 @@ export class SshTunnelService {
   private setStatus(ruleId: string, status: SshTunnelSnapshot['status'], error?: string) {
     const rule = this.rules.get(ruleId)
     if (!rule) return
-    this.rules.set(ruleId, { ...rule, status, ...(error ? { error } : {}) })
+    const { error: previousError, ...withoutError } = rule
+    void previousError
+    this.rules.set(ruleId, { ...withoutError, status, ...(error ? { error } : {}) })
     this.emitChange()
   }
 
@@ -126,7 +153,9 @@ export class SshTunnelService {
       )
       socket.pipe(channel).pipe(socket)
       socket.once('error', () => channel.close())
+      socket.once('close', () => channel.close())
       channel.once('error', () => socket.destroy())
+      channel.once('close', () => socket.destroy())
     } catch (error) {
       this.onState(`Tunnel connection failed: ${error instanceof Error ? error.message : String(error)}`)
       socket.destroy()
@@ -154,11 +183,55 @@ export class SshTunnelService {
       )
       socket.write(Buffer.from([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]))
       socket.pipe(channel).pipe(socket)
+      socket.once('error', () => channel.close())
+      socket.once('close', () => channel.close())
+      channel.once('error', () => socket.destroy())
+      channel.once('close', () => socket.destroy())
     } catch {
       socket.write(Buffer.from([5, 1, 0, 1, 0, 0, 0, 0, 0, 0]))
       socket.destroy()
     }
   }
+
+  private assertEndpointAvailable(rule: SshForwardRule) {
+    const conflict = [...this.rules.values()].find(
+      (existing) =>
+        existing.id !== rule.id &&
+        (existing.kind === 'remote') === (rule.kind === 'remote') &&
+        existing.bindHost === rule.bindHost &&
+        existing.bindPort === rule.bindPort
+    )
+    if (conflict) {
+      throw new Error(`Tunnel ${rule.bindHost}:${rule.bindPort} is already configured (${conflict.id})`)
+    }
+  }
+
+  private trackSocket(ruleId: string, socket: Socket) {
+    const sockets = this.activeSockets.get(ruleId) ?? new Set<Socket>()
+    sockets.add(socket)
+    this.activeSockets.set(ruleId, sockets)
+    socket.once('close', () => {
+      sockets.delete(socket)
+      if (!sockets.size) this.activeSockets.delete(ruleId)
+    })
+  }
+
+  private closeActiveSockets(ruleId: string) {
+    const sockets = this.activeSockets.get(ruleId)
+    if (!sockets) return
+    for (const socket of sockets) socket.destroy()
+    this.activeSockets.delete(ruleId)
+  }
+}
+
+function matchesRemoteBindHost(bindHost: string, destinationIp: string) {
+  return bindHost === destinationIp || bindHost === '0.0.0.0' || bindHost === '::' || bindHost === '*'
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()))
+  })
 }
 
 function validateRule(rule: SshForwardRule) {

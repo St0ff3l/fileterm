@@ -38,27 +38,7 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     return workspaceService.getConnectionLibrary()
   })
 
-  ipcMain.handle('workspace:importSshConfig', async (event) => {
-    const selected = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'SSH config', extensions: ['config', 'txt'] }]
-    })
-    if (selected.canceled || !selected.filePaths[0]) return { imported: 0, skipped: 0, failed: 0, items: [] }
-    const items = previewSshConfig(await readFile(selected.filePaths[0], 'utf8'))
-    const result = await workspaceService.importProfiles(items)
-    if (result.imported) broadcastSnapshot(await workspaceService.getSnapshot())
-    return result
-  })
-
-  ipcMain.handle('workspace:importConnectionJson', async (event) => {
-    const items = await selectConnectionImportItems()
-    if (!items) return { imported: 0, skipped: 0, failed: 0, items: [] }
-    const result = await workspaceService.importProfiles(items)
-    if (result.imported) broadcastSnapshot(await workspaceService.getSnapshot())
-    return result
-  })
-
-  ipcMain.handle('workspace:previewConnectionJsonImport', async () => {
+  ipcMain.handle('workspace:previewConnectionImport', async () => {
     const items = await selectConnectionImportItems()
     if (!items) return null
     const profiles = (await workspaceService.getConnectionLibrary()).profiles
@@ -95,7 +75,7 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     })
     if (target.canceled || !target.filePath) return false
     const library = await workspaceService.getConnectionLibrary()
-    await writeFile(target.filePath, JSON.stringify(exportProfiles(library.profiles, format), null, 2), 'utf8')
+    await writeFile(target.filePath, JSON.stringify(exportProfiles(library.profiles, format, true), null, 2), 'utf8')
     return true
   })
 
@@ -110,7 +90,7 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
     await Promise.all(
       library.profiles.map(async (profile) => {
         const baseName = safeExportFilename(profile.name, profile.id, usedNames)
-        const exported = exportProfiles([profile], format)
+        const exported = exportProfiles([profile], format, true)
         const payload = Array.isArray(exported) ? exported[0] : exported
         await writeFile(path.join(target.filePaths[0], `${baseName}.json`), JSON.stringify(payload, null, 2), 'utf8')
       })
@@ -297,15 +277,15 @@ export function registerWorkspaceHandlers(services: IpcServices, options: IpcWin
   })
 }
 
-async function listJsonFiles(inputPath: string): Promise<string[]> {
+async function listConnectionImportFiles(inputPath: string): Promise<string[]> {
   const info = await stat(inputPath)
-  if (info.isFile()) return path.extname(inputPath).toLowerCase() === '.json' ? [inputPath] : []
+  if (info.isFile()) return isSupportedConnectionImportFile(inputPath) ? [inputPath] : []
   if (!info.isDirectory()) return []
   const entries = await readdir(inputPath, { withFileTypes: true })
   const nested = await Promise.all(
     entries
       .filter((entry) => !entry.name.startsWith('.'))
-      .map((entry) => listJsonFiles(path.join(inputPath, entry.name)))
+      .map((entry) => listConnectionImportFiles(path.join(inputPath, entry.name)))
   )
   return nested.flat().slice(0, 500)
 }
@@ -313,10 +293,13 @@ async function listJsonFiles(inputPath: string): Promise<string[]> {
 async function selectConnectionImportItems(): Promise<ConnectionImportPreviewItem[] | null> {
   const selected = await dialog.showOpenDialog({
     properties: ['openFile', 'openDirectory', 'multiSelections'],
-    filters: [{ name: 'Connection JSON', extensions: ['json'] }]
+    filters: [
+      { name: '连接配置', extensions: ['json', 'config', 'txt'] },
+      { name: '所有文件', extensions: ['*'] }
+    ]
   })
   if (selected.canceled) return null
-  const files = (await Promise.all(selected.filePaths.map(listJsonFiles))).flat()
+  const files = (await Promise.all(selected.filePaths.map(listConnectionImportFiles))).flat()
   return (
     await Promise.all(
       files.map(async (filePath) => {
@@ -334,10 +317,12 @@ async function selectConnectionImportItems(): Promise<ConnectionImportPreviewIte
               }
             ]
           }
-          return previewExternalConnectionJson(
-            await readFile(filePath, 'utf8'),
-            path.basename(filePath, path.extname(filePath))
-          ).map((item) => ({ ...item, sourceLabel }))
+          const contents = await readFile(filePath, 'utf8')
+          const isJson = path.extname(filePath).toLowerCase() === '.json'
+          const items = isJson
+            ? previewExternalConnectionJson(contents, path.basename(filePath, path.extname(filePath)))
+            : previewSshConfig(contents)
+          return items.map((item) => ({ ...item, sourceLabel }))
         } catch (error) {
           return [
             {
@@ -352,6 +337,13 @@ async function selectConnectionImportItems(): Promise<ConnectionImportPreviewIte
       })
     )
   ).flat()
+}
+
+function isSupportedConnectionImportFile(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase()
+  return (
+    extension === '.json' || extension === '.config' || extension === '.txt' || path.basename(filePath) === 'config'
+  )
 }
 
 function connectionEndpointKey(

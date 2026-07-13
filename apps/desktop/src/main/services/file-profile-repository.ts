@@ -782,6 +782,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         deleteKey: input.deleteKey ?? 'VT220',
         enableExecChannel: input.enableExecChannel ?? true,
         enableResourceMonitoring: input.enableResourceMonitoring ?? true,
+        reconnectMode: input.reconnectMode ?? 'none',
         proxy,
         jumpProfileId: input.jumpProfileId || undefined,
         forwards: normalizeForwards(input.forwards),

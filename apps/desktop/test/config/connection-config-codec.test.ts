@@ -28,7 +28,7 @@ test('external connection JSON maps an SSH connection without exposing its passw
   assert.equal(item?.unsupportedFields?.includes('password'), false)
 })
 
-test('native exports strip nested proxy passwords as well as SSH credentials', () => {
+test('interactive exports preserve credentials while background exports remain scrubbed', () => {
   const profile: ConnectionProfile = {
     id: 'ssh-1',
     name: 'Proxied',
@@ -45,10 +45,20 @@ test('native exports strip nested proxy passwords as well as SSH credentials', (
     sftpEnabled: true,
     proxy: { type: 'http', host: 'proxy.example.test', port: 8080, username: 'proxy-user', password: 'proxy-secret' }
   }
-  const exported = JSON.stringify(exportProfiles([profile], 'fileterm'))
+  const backgroundExport = JSON.stringify(exportProfiles([profile], 'fileterm'))
   for (const secret of ['login-secret', 'key-secret', 'proxy-secret', 'id_ed25519'])
-    assert.equal(exported.includes(secret), false)
-  assert.equal(exported.includes('proxy.example.test'), true)
+    assert.equal(backgroundExport.includes(secret), false)
+  assert.equal(backgroundExport.includes('proxy.example.test'), true)
+
+  const exported = exportProfiles([profile], 'fileterm', true)
+  const imported = previewExternalConnectionJson(JSON.stringify(exported), 'backup')
+  assert.equal(imported[0]?.input?.username, 'operator')
+  assert.equal(imported[0]?.input?.password, 'login-secret')
+  assert.equal(imported[0]?.input?.privateKeyPath, '/home/operator/.ssh/id_ed25519')
+  assert.equal(imported[0]?.input?.passphrase, 'key-secret')
+
+  const compatible = JSON.stringify(exportProfiles([profile], 'compatible', true))
+  for (const secret of ['login-secret', 'key-secret', 'id_ed25519']) assert.equal(compatible.includes(secret), true)
 })
 
 test('SSH config parser reports wildcard entries as skipped and retains valid identities', () => {

@@ -100,10 +100,8 @@ const api: FileTermDesktopApi = {
   requestQuitApp: (): Promise<void> => ipcRenderer.invoke('app:requestQuitApp'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),
   getConnectionLibrary: (): Promise<ConnectionLibrarySnapshot> => ipcRenderer.invoke('workspace:getConnectionLibrary'),
-  importSshConfig: (): Promise<ConnectionImportResult> => ipcRenderer.invoke('workspace:importSshConfig'),
-  importConnectionJson: (): Promise<ConnectionImportResult> => ipcRenderer.invoke('workspace:importConnectionJson'),
-  previewConnectionJsonImport: (): Promise<ConnectionImportPlan | null> =>
-    ipcRenderer.invoke('workspace:previewConnectionJsonImport'),
+  previewConnectionImport: (): Promise<ConnectionImportPlan | null> =>
+    ipcRenderer.invoke('workspace:previewConnectionImport'),
   commitConnectionJsonImport: (planId: string, options: ConnectionImportOptions): Promise<ConnectionImportResult> =>
     ipcRenderer.invoke('workspace:commitConnectionJsonImport', planId, options),
   exportConnections: (format: ConnectionExportFormat): Promise<boolean> =>

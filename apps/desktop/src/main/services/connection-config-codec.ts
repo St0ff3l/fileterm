@@ -112,12 +112,14 @@ export function previewExternalConnectionJson(
     name,
     host,
     port,
-    username: String(raw.user_name ?? ''),
+    username: String(raw.user_name ?? raw.username ?? ''),
     group,
-    remotePath: '/',
-    note: typeof raw.description === 'string' ? raw.description : undefined,
+    remotePath: String(raw.remote_path ?? raw.remotePath ?? '/'),
+    note: typeof raw.description === 'string' ? raw.description : typeof raw.note === 'string' ? raw.note : undefined,
     password: typeof raw.password === 'string' ? raw.password : undefined,
-    authType: mapAuth(raw.authentication_type),
+    privateKeyPath: stringValue(raw.private_key_path ?? raw.privateKeyPath),
+    passphrase: stringValue(raw.passphrase),
+    authType: mapAuth(raw.authentication_type ?? raw.authType),
     encoding: typeof raw.terminal_encoding === 'string' ? raw.terminal_encoding : 'UTF-8',
     enableExecChannel: raw.exec_channel_enable !== false,
     enableResourceMonitoring: true
@@ -125,9 +127,17 @@ export function previewExternalConnectionJson(
   return [{ name, type, host, port, username: input.username, status: 'ready', unsupportedFields, input }]
 }
 
-export function exportProfiles(profiles: ConnectionProfile[], format: 'fileterm' | 'compatible') {
+export function exportProfiles(
+  profiles: ConnectionProfile[],
+  format: 'fileterm' | 'compatible',
+  includeCredentials = false
+) {
   if (format === 'fileterm')
-    return { schemaVersion: 1, generatedAt: new Date().toISOString(), profiles: profiles.map(stripSecrets) }
+    return {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      profiles: profiles.map((profile) => serializeProfile(profile, includeCredentials))
+    }
   return profiles.map((profile) => ({
     id: profile.id,
     name: profile.name,
@@ -138,6 +148,9 @@ export function exportProfiles(profiles: ConnectionProfile[], format: 'fileterm'
     user_name: profile.username,
     terminal_encoding: 'encoding' in profile ? profile.encoding : undefined,
     authentication_type: profile.type === 'ssh' ? profile.authType : undefined,
+    password: includeCredentials && (profile.type === 'ssh' || profile.type === 'ftp') ? profile.password : undefined,
+    private_key_path: includeCredentials && profile.type === 'ssh' ? profile.privateKeyPath : undefined,
+    passphrase: includeCredentials && profile.type === 'ssh' ? profile.passphrase : undefined,
     exec_channel_enable: profile.type === 'ssh' ? profile.enableExecChannel : undefined,
     port_forwarding_list: profile.type === 'ssh' ? profile.forwards : undefined,
     unsupported_fields: profile.type === 'ssh' && profile.jumpProfileId ? ['jumpProfileId'] : []
@@ -154,10 +167,16 @@ function mapAuth(value: unknown): CreateProfileInput['authType'] {
         ? 'system'
         : 'password'
 }
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' ? value : undefined
+}
+
 function expandHome(value: string | undefined) {
   return value?.startsWith('~/') ? path.join(process.env.HOME ?? '', value.slice(2)) : value
 }
-function stripSecrets(profile: ConnectionProfile) {
+function serializeProfile(profile: ConnectionProfile, includeCredentials: boolean) {
+  if (includeCredentials) return profile
   const {
     password: _password,
     privateKeyPath: _key,

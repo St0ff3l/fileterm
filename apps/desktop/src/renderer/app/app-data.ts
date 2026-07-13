@@ -36,6 +36,7 @@ export const defaultForm: CreateProfileInput = {
   deleteKey: 'VT220',
   enableExecChannel: true,
   enableResourceMonitoring: true,
+  reconnectMode: 'none',
   secure: false,
   securityMode: 'none',
   proxy: { type: 'none', host: '', port: 1080, username: '' },
@@ -69,6 +70,7 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     deleteKey: profile.type === 'ssh' ? (profile.deleteKey ?? 'VT220') : 'VT220',
     enableExecChannel: profile.type === 'ssh' ? (profile.enableExecChannel ?? true) : true,
     enableResourceMonitoring: profile.type === 'ssh' ? (profile.enableResourceMonitoring ?? true) : true,
+    reconnectMode: profile.type === 'ssh' ? (profile.reconnectMode ?? 'none') : 'none',
     secure: profile.type === 'ftp' ? profile.secure : false,
     securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
     proxy:

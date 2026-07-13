@@ -778,9 +778,7 @@ export interface FileTermDesktopApi {
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   getConnectionLibrary(): Promise<ConnectionLibrarySnapshot>
-  importSshConfig(): Promise<ConnectionImportResult>
-  importConnectionJson(): Promise<ConnectionImportResult>
-  previewConnectionJsonImport(): Promise<ConnectionImportPlan | null>
+  previewConnectionImport(): Promise<ConnectionImportPlan | null>
   commitConnectionJsonImport(planId: string, options: ConnectionImportOptions): Promise<ConnectionImportResult>
   exportConnections(format: ConnectionExportFormat): Promise<boolean>
   exportConnectionsAsFiles(format: ConnectionExportFormat): Promise<boolean>

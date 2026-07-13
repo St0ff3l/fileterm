@@ -2196,17 +2196,17 @@
   background: #1e1e1e;
 }
 
-/* disk-row: odd=light(浅), even=dark(深) */
+/* disk-row: odd=dark(深), even=light(浅) */
 :root:not([data-theme]) .disk-row:nth-child(odd),
 :root[data-theme='default-dark'] .disk-row:nth-child(odd),
 :root[data-theme='default'] .disk-row:nth-child(odd) {
-  background: #242424;
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) .disk-row:nth-child(even),
 :root[data-theme='default-dark'] .disk-row:nth-child(even),
 :root[data-theme='default'] .disk-row:nth-child(even) {
-  background: #1e1e1e;
+  background: #242424;
 }
 
 :root:not([data-theme]) .quick-row:hover,
