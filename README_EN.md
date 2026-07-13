@@ -46,28 +46,28 @@ The official release focuses on the most frequent `SSH / SFTP / FTP / FTPS` work
 
 ## Core Capabilities
 
-| Capability | Description |
-| --- | --- |
-| SSH profile management | Create, edit, delete, and group SSH profiles with JSON persistence. |
-| FTP/FTPS profile management | Uses a connection model kept separate from SSH and supports secure FTP transfers. |
-| SSH terminal | Powered by xterm.js with input/output, resize, search, clipboard support, and a floating command bar. |
-| SFTP file management | Browse remote directories; read, write, create, delete, rename, and change permissions. |
-| FTP/FTPS file management | FTP/FTPS sessions with remote browsing, file operations, and resumable transfers. |
-| File editor | A Monaco Editor-based two-pane file tree and editor with syntax highlighting, find/replace, encoding, and language controls. |
-| Terminal directory sync | Keeps the active SSH working directory and file manager in sync. |
-| Root privilege sync | Detects `sudo` / `su` in the terminal and synchronizes the file-manager permission context. |
-| Virtualized file list | Uses virtual scrolling for efficient browsing of large remote directories. |
-| Transfer center | Centralized uploads, downloads, resume support, progress, speed, cancellation, and recursive folder transfers. |
-| Workspace tabs | Parallel connections, disconnect/reconnect, persisted state, and animated tab transitions. |
-| Command templates | Grouped quick commands, parameter placeholders, and one-click sending. |
-| Theme system | Dark and light themes through tokens, CSS variables, and component skins. |
-| Remote status monitoring | Connection status and system-resource summaries. |
-| Theme and desktop shell | Dark and light themes, sidebars, file drawer, focus mode, and dedicated management windows. |
+| Capability                  | Description                                                                                                                  |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| SSH profile management      | Create, edit, delete, and group SSH profiles with JSON persistence.                                                          |
+| FTP/FTPS profile management | Uses a connection model kept separate from SSH and supports secure FTP transfers.                                            |
+| SSH terminal                | Powered by xterm.js with input/output, resize, search, clipboard support, and a floating command bar.                        |
+| SFTP file management        | Browse remote directories; read, write, create, delete, rename, and change permissions.                                      |
+| FTP/FTPS file management    | FTP/FTPS sessions with remote browsing, file operations, and resumable transfers.                                            |
+| File editor                 | A Monaco Editor-based two-pane file tree and editor with syntax highlighting, find/replace, encoding, and language controls. |
+| Terminal directory sync     | Keeps the active SSH working directory and file manager in sync.                                                             |
+| Root privilege sync         | Detects `sudo` / `su` in the terminal and synchronizes the file-manager permission context.                                  |
+| Virtualized file list       | Uses virtual scrolling for efficient browsing of large remote directories.                                                   |
+| Transfer center             | Centralized uploads, downloads, resume support, progress, speed, cancellation, and recursive folder transfers.               |
+| Workspace tabs              | Parallel connections, disconnect/reconnect, persisted state, and animated tab transitions.                                   |
+| Command templates           | Grouped quick commands, parameter placeholders, and one-click sending.                                                       |
+| Theme system                | Dark and light themes through tokens, CSS variables, and component skins.                                                    |
+| Remote status monitoring    | Connection status and system-resource summaries.                                                                             |
+| Theme and desktop shell     | Dark and light themes, sidebars, file drawer, focus mode, and dedicated management windows.                                  |
 
 ## Technology Stack
 
-| Desktop | Renderer | Language | Terminal | Editor | Protocols | Tooling |
-| --- | --- | --- | --- | --- | --- | --- |
+| Desktop  | Renderer     | Language   | Terminal | Editor        | Protocols        | Tooling        |
+| -------- | ------------ | ---------- | -------- | ------------- | ---------------- | -------------- |
 | Electron | React + Vite | TypeScript | xterm.js | Monaco Editor | ssh2 + basic-ftp | npm workspaces |
 
 ```txt
