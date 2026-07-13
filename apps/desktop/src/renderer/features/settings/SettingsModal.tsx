@@ -286,7 +286,7 @@ export function SettingsModal({
                       onChange={(event) => setSyncPassword(event.target.value)}
                     />
                   </label>
-                  <label className="webdav-checkbox">
+                  <label className="webdav-checkbox ssh-checkbox">
                     <input
                       type="checkbox"
                       checked={syncConfig.enabled}
@@ -294,7 +294,7 @@ export function SettingsModal({
                     />
                     启用 WebDAV 配置同步
                   </label>
-                  <label className="webdav-checkbox">
+                  <label className="webdav-checkbox ssh-checkbox">
                     <input
                       type="checkbox"
                       checked={syncConfig.allowInsecureTls === true}

@@ -1342,6 +1342,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
   color: var(--text-main);
 }
 @media (max-width: 640px) {
