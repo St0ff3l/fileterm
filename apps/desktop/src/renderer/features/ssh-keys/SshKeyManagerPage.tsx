@@ -1,6 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import type { SshKeyMetadata } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
+import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { SshKeyNoteDialog } from './SshKeyNoteDialog'
 import { t } from '../../i18n'
@@ -15,7 +16,16 @@ type SshKeyFolder = {
 type SshKeyManagerUiState = {
   folders: SshKeyFolder[]
   assignments: Record<string, string>
+  itemOrder?: Record<string, number>
+  keyOrder?: Record<string, number>
 }
+
+type DeleteTarget = { kind: 'folder' | 'key'; id: string; name: string }
+type DragItem = { kind: 'folder' | 'key'; id: string }
+type DragPosition = 'top' | 'bottom' | 'inside'
+type SortableItem = { kind: DragItem['kind']; id: string; fallbackOrder: number }
+
+const ROOT_DROP_TARGET_ID = '__ssh-key-root__'
 
 export function SshKeyManagerPage({
   onActiveFolderChange,
@@ -33,8 +43,13 @@ export function SshKeyManagerPage({
   >(null)
   const [folders, setFolders] = useState<SshKeyFolder[]>([])
   const [assignments, setAssignments] = useState<Record<string, string>>({})
+  const [itemOrder, setItemOrder] = useState<Record<string, number>>({})
   const [activeFolderId, setActiveFolderId] = useState<'all' | string>('all')
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set())
+  const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null)
+  const [dragging, setDragging] = useState<DragItem | null>(null)
+  const [dragOver, setDragOver] = useState<{ id: string; kind: DragItem['kind']; position: DragPosition } | null>(null)
   const [isActionsExpanded, setIsActionsExpanded] = useState(false)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -45,8 +60,11 @@ export function SshKeyManagerPage({
       if (disposed || !raw) return
       try {
         const parsed = JSON.parse(raw) as Partial<SshKeyManagerUiState>
-        setFolders(Array.isArray(parsed.folders) ? parsed.folders.filter(isSshKeyFolder) : [])
+        const nextFolders = Array.isArray(parsed.folders) ? parsed.folders.filter(isSshKeyFolder) : []
+        const nextItemOrder = parsed.itemOrder ?? parsed.keyOrder ?? {}
+        setFolders(nextFolders)
         setAssignments(parsed.assignments && typeof parsed.assignments === 'object' ? parsed.assignments : {})
+        setItemOrder(nextItemOrder && typeof nextItemOrder === 'object' ? nextItemOrder : {})
       } catch {
         // Ignore an invalid UI state item and use the empty library layout.
       }
@@ -57,16 +75,23 @@ export function SshKeyManagerPage({
   }, [desktopApi])
 
   const persistUiState = useCallback(
-    (nextFolders: SshKeyFolder[], nextAssignments: Record<string, string>) => {
+    (nextFolders: SshKeyFolder[], nextAssignments: Record<string, string>, nextItemOrder = itemOrder) => {
       setFolders(nextFolders)
       setAssignments(nextAssignments)
+      setItemOrder(nextItemOrder)
       void desktopApi?.setUiStateItem(
         SSH_KEY_MANAGER_UI_STATE,
-        JSON.stringify({ folders: nextFolders, assignments: nextAssignments } satisfies SshKeyManagerUiState)
+        JSON.stringify({
+          folders: nextFolders,
+          assignments: nextAssignments,
+          itemOrder: nextItemOrder
+        } satisfies SshKeyManagerUiState)
       )
     },
-    [desktopApi]
+    [desktopApi, itemOrder]
   )
+
+  const orderOf = useCallback((id: string, fallbackOrder: number) => itemOrder[id] ?? fallbackOrder, [itemOrder])
 
   const folderKeyCount = useCallback(
     (folderId: string) => keys.filter((key) => assignments[key.id] === folderId).length,
@@ -80,20 +105,49 @@ export function SshKeyManagerPage({
   )
   const visibleKeys = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
-    if (!normalized) return selectedKeys
-    return selectedKeys.filter((key) =>
-      [key.name, key.note, key.algorithm, key.fingerprint].some((value) =>
-        value?.toLocaleLowerCase().includes(normalized)
-      )
-    )
-  }, [query, selectedKeys])
+    const filtered = !normalized
+      ? selectedKeys
+      : selectedKeys.filter((key) =>
+          [key.name, key.note, key.algorithm, key.fingerprint].some((value) =>
+            value?.toLocaleLowerCase().includes(normalized)
+          )
+        )
+    return [...filtered].sort((left, right) => {
+      const leftOrder = orderOf(left.id, left.importedAt)
+      const rightOrder = orderOf(right.id, right.importedAt)
+      return leftOrder - rightOrder
+    })
+  }, [orderOf, query, selectedKeys])
+  const orderedFolders = useMemo(
+    () =>
+      [...folders].sort((left, right) => {
+        const leftIndex = folders.findIndex((folder) => folder.id === left.id)
+        const rightIndex = folders.findIndex((folder) => folder.id === right.id)
+        return orderOf(left.id, (leftIndex + 1) * 1000) - orderOf(right.id, (rightIndex + 1) * 1000)
+      }),
+    [folders, orderOf]
+  )
   const visibleFolders = useMemo(() => {
     if (activeFolderId !== 'all') return []
     const normalized = query.trim().toLocaleLowerCase()
-    return normalized ? folders.filter((folder) => folder.name.toLocaleLowerCase().includes(normalized)) : folders
-  }, [activeFolderId, folders, query])
+    return normalized
+      ? orderedFolders.filter((folder) => folder.name.toLocaleLowerCase().includes(normalized))
+      : orderedFolders
+  }, [activeFolderId, orderedFolders, query])
+  const rootItems = useMemo<SortableItem[]>(() => {
+    const rootKeys = visibleKeys.filter((key) => !folders.some((folder) => assignments[key.id] === folder.id))
+    return [
+      ...visibleFolders.map((folder, index) => ({
+        kind: 'folder' as const,
+        id: folder.id,
+        fallbackOrder: (index + 1) * 1000
+      })),
+      ...rootKeys.map((key) => ({ kind: 'key' as const, id: key.id, fallbackOrder: key.importedAt }))
+    ].sort((left, right) => orderOf(left.id, left.fallbackOrder) - orderOf(right.id, right.fallbackOrder))
+  }, [assignments, folders, orderOf, visibleFolders, visibleKeys])
   const hasVisibleRows =
     visibleFolders.length > 0 || visibleKeys.length > 0 || (isCreatingFolder && activeFolderId === 'all')
+  const suppressRowClickRef = useRef(false)
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolderIds((current) => {
@@ -119,43 +173,236 @@ export function SshKeyManagerPage({
     if (!name || folders.some((folder) => folder.name === name)) return
 
     const folder = { id: createId('ssh-folder'), name }
-    persistUiState([...folders, folder], assignments)
+    const rootOrders = [
+      ...folders.map((item, index) => orderOf(item.id, (index + 1) * 1000)),
+      ...keys
+        .filter((key) => !folders.some((item) => assignments[key.id] === item.id))
+        .map((key) => orderOf(key.id, key.importedAt))
+    ]
+    persistUiState([...folders, folder], assignments, {
+      ...itemOrder,
+      [folder.id]: Math.max(0, ...rootOrders) + 1000
+    })
   }
 
-  const renameFolder = (folder: SshKeyFolder) => {
-    const name = window.prompt('重命名文件夹', folder.name)?.trim()
-    if (!name || name === folder.name || folders.some((item) => item.id !== folder.id && item.name === name)) return
-    persistUiState(
-      folders.map((item) => (item.id === folder.id ? { ...item, name } : item)),
-      assignments
+  const saveFolderRename = () => {
+    if (!editingFolder) return
+    const name = editingFolder.name.trim()
+    const current = folders.find((folder) => folder.id === editingFolder.id)
+    if (
+      name &&
+      name !== current?.name &&
+      !folders.some((folder) => folder.id !== editingFolder.id && folder.name === name)
+    ) {
+      persistUiState(
+        folders.map((folder) => (folder.id === editingFolder.id ? { ...folder, name } : folder)),
+        assignments
+      )
+    }
+    setEditingFolder(null)
+  }
+
+  const requestDelete = (kind: DeleteTarget['kind'], id: string, name: string) => {
+    setPendingDelete({ kind, id, name })
+  }
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    setBusy(true)
+    try {
+      if (pendingDelete.kind === 'key') {
+        await deleteKey(pendingDelete.id)
+        if (assignments[pendingDelete.id]) {
+          const nextAssignments = { ...assignments }
+          delete nextAssignments[pendingDelete.id]
+          persistUiState(folders, nextAssignments)
+        }
+      } else {
+        const nextAssignments = { ...assignments }
+        Object.keys(nextAssignments).forEach((keyId) => {
+          if (nextAssignments[keyId] === pendingDelete.id) delete nextAssignments[keyId]
+        })
+        persistUiState(
+          folders.filter((folder) => folder.id !== pendingDelete.id),
+          nextAssignments
+        )
+        setExpandedFolderIds((current) => {
+          const next = new Set(current)
+          next.delete(pendingDelete.id)
+          return next
+        })
+        if (activeFolderId === pendingDelete.id) setActiveFolderId('all')
+      }
+      setPendingDelete(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDragStart = (event: DragEvent, item: DragItem) => {
+    event.stopPropagation()
+    suppressRowClickRef.current = true
+    setDragging(item)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', item.id)
+  }
+
+  const handleDragOver = (event: DragEvent, target: DragItem) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!dragging || dragging.id === target.id) return
+
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    const y = event.clientY - rect.top
+    const height = rect.height
+    let position: DragPosition = y < height * 0.5 ? 'top' : 'bottom'
+    if (target.kind === 'folder' && dragging.kind === 'key' && y >= height * 0.25 && y <= height * 0.75) {
+      position = 'inside'
+    }
+    setDragOver({ ...target, position })
+  }
+
+  const handleRootDragOver = (event: DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (dragging?.kind === 'key') {
+      setDragOver({ id: ROOT_DROP_TARGET_ID, kind: 'folder', position: 'inside' })
+    }
+  }
+
+  const handleRootDragLeave = (event: DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (dragOver?.id === ROOT_DROP_TARGET_ID) setDragOver(null)
+  }
+
+  const clearDragState = () => {
+    setDragging(null)
+    setDragOver(null)
+  }
+
+  const sortableItemsForParent = (parentId?: string): SortableItem[] => {
+    if (parentId) {
+      return keys
+        .filter((key) => assignments[key.id] === parentId)
+        .map((key) => ({ kind: 'key' as const, id: key.id, fallbackOrder: key.importedAt }))
+    }
+    return [
+      ...folders.map((folder, index) => ({
+        kind: 'folder' as const,
+        id: folder.id,
+        fallbackOrder: (index + 1) * 1000
+      })),
+      ...keys
+        .filter((key) => !folders.some((folder) => assignments[key.id] === folder.id))
+        .map((key) => ({ kind: 'key' as const, id: key.id, fallbackOrder: key.importedAt }))
+    ]
+  }
+
+  const reorderItems = (
+    dragItem: DragItem,
+    targetItem: DragItem,
+    parentId: string | undefined,
+    position: DragPosition
+  ) => {
+    const siblings = sortableItemsForParent(parentId).sort(
+      (left, right) => orderOf(left.id, left.fallbackOrder) - orderOf(right.id, right.fallbackOrder)
     )
-  }
+    const sourceIndex = siblings.findIndex((item) => item.id === dragItem.id && item.kind === dragItem.kind)
+    const targetIndex = siblings.findIndex((item) => item.id === targetItem.id && item.kind === targetItem.kind)
+    if (targetIndex < 0) return
 
-  const removeFolder = (folder: SshKeyFolder) => {
-    if (!window.confirm(`确定删除文件夹“${folder.name}”吗？文件夹里的密钥不会被删除。`)) return
+    const source =
+      sourceIndex >= 0
+        ? siblings.splice(sourceIndex, 1)[0]
+        : {
+            kind: dragItem.kind,
+            id: dragItem.id,
+            fallbackOrder: keys.find((key) => key.id === dragItem.id)?.importedAt ?? Date.now()
+          }
+    const nextTargetIndex = siblings.findIndex((item) => item.id === targetItem.id && item.kind === targetItem.kind)
+    if (!source || nextTargetIndex < 0) return
+    siblings.splice(nextTargetIndex + (position === 'bottom' ? 1 : 0), 0, source)
+
     const nextAssignments = { ...assignments }
-    Object.keys(nextAssignments).forEach((keyId) => {
-      if (nextAssignments[keyId] === folder.id) delete nextAssignments[keyId]
+    if (dragItem.kind === 'key') {
+      if (parentId) nextAssignments[dragItem.id] = parentId
+      else delete nextAssignments[dragItem.id]
+    }
+    const nextItemOrder = { ...itemOrder }
+    siblings.forEach((item, index) => {
+      nextItemOrder[item.id] = (index + 1) * 1000
     })
-    persistUiState(
-      folders.filter((item) => item.id !== folder.id),
-      nextAssignments
-    )
-    setExpandedFolderIds((current) => {
-      const next = new Set(current)
-      next.delete(folder.id)
-      return next
-    })
-    if (activeFolderId === folder.id) setActiveFolderId('all')
+    persistUiState(folders, nextAssignments, nextItemOrder)
   }
 
-  const handleImport = async (note: string, sourcePath?: string) => {
+  const moveKeyToRoot = (keyId: string) => {
+    const rootItems = sortableItemsForParent()
+      .filter((item) => item.id !== keyId)
+      .sort((left, right) => orderOf(left.id, left.fallbackOrder) - orderOf(right.id, right.fallbackOrder))
+    const nextAssignments = { ...assignments }
+    delete nextAssignments[keyId]
+    const nextItemOrder = { ...itemOrder }
+    rootItems.forEach((item, index) => {
+      nextItemOrder[item.id] = (index + 1) * 1000
+    })
+    nextItemOrder[keyId] = (rootItems.length + 1) * 1000
+    persistUiState(folders, nextAssignments, nextItemOrder)
+  }
+
+  const handleRootDrop = (event: DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (dragging?.kind === 'key') moveKeyToRoot(dragging.id)
+    clearDragState()
+  }
+
+  const handleDrop = (event: DragEvent, target: DragItem) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!dragging || dragging.id === target.id || !dragOver) {
+      clearDragState()
+      return
+    }
+
+    if (dragging.kind === 'key') {
+      const draggedKey = keys.find((key) => key.id === dragging.id)
+      if (draggedKey && target.kind === 'folder' && dragOver.position === 'inside') {
+        const siblingOrders = keys
+          .filter((key) => key.id !== dragging.id && assignments[key.id] === target.id)
+          .map((key) => orderOf(key.id, key.importedAt))
+        const nextAssignments = { ...assignments, [dragging.id]: target.id }
+        const nextItemOrder = { ...itemOrder, [dragging.id]: Math.max(0, ...siblingOrders, 0) + 1000 }
+        persistUiState(folders, nextAssignments, nextItemOrder)
+        setExpandedFolderIds((current) => new Set(current).add(target.id))
+      } else if (draggedKey && (target.kind === 'key' || target.kind === 'folder')) {
+        const parentId = target.kind === 'key' ? assignments[target.id] : undefined
+        reorderItems(dragging, target, parentId, dragOver.position)
+      }
+    } else if (dragging.kind === 'folder' && dragOver.position !== 'inside') {
+      const targetParentId = target.kind === 'key' ? assignments[target.id] : undefined
+      if (!targetParentId) reorderItems(dragging, target, undefined, dragOver.position)
+    }
+    clearDragState()
+  }
+
+  const handleDragEnd = () => {
+    clearDragState()
+    window.setTimeout(() => {
+      suppressRowClickRef.current = false
+    }, 0)
+  }
+
+  const handleImport = async (note: string, sourcePath?: string, folderId?: string) => {
     if (!sourcePath) return
     setBusy(true)
     try {
       const result = await importKey(note, sourcePath)
-      if (result && activeFolderId !== 'all') {
-        persistUiState(folders, { ...assignments, [result.key.id]: activeFolderId })
+      if (result) {
+        const nextAssignments = { ...assignments }
+        if (folderId) nextAssignments[result.key.id] = folderId
+        else delete nextAssignments[result.key.id]
+        persistUiState(folders, nextAssignments)
       }
       setNoteDialog(null)
     } catch {
@@ -165,10 +412,14 @@ export function SshKeyManagerPage({
     }
   }
 
-  const handleEditNote = async (keyId: string, note: string) => {
+  const handleEditNote = async (keyId: string, note: string, folderId?: string) => {
     setBusy(true)
     try {
       await updateNote(keyId, note)
+      const nextAssignments = { ...assignments }
+      if (folderId) nextAssignments[keyId] = folderId
+      else delete nextAssignments[keyId]
+      persistUiState(folders, nextAssignments)
       setNoteDialog(null)
     } catch {
       // useSshKeyLibrary 已将可展示错误写入 error 状态。
@@ -177,14 +428,20 @@ export function SshKeyManagerPage({
     }
   }
 
-  const handleDelete = async (keyId: string, name: string) => {
-    if (!window.confirm(`确定删除密钥“${name}”吗？此操作不会删除原始文件。`)) return
-    await deleteKey(keyId)
-    if (assignments[keyId]) {
-      const nextAssignments = { ...assignments }
-      delete nextAssignments[keyId]
-      persistUiState(folders, nextAssignments)
-    }
+  const handleDelete = (keyId: string, name: string) => {
+    requestDelete('key', keyId, name)
+  }
+
+  const folderForKey = (keyId: string) => assignments[keyId] ?? ''
+
+  const isFolderDragOver = (folderId: string) => {
+    if (!dragOver || dragOver.id !== folderId) return ''
+    return `drop-${dragOver.position}`
+  }
+
+  const isKeyDragOver = (keyId: string) => {
+    if (!dragOver || dragOver.id !== keyId) return ''
+    return `drop-${dragOver.position}`
   }
 
   const openNewKeyDialog = () => {
@@ -193,6 +450,28 @@ export function SshKeyManagerPage({
     setIsActionsExpanded(false)
   }
 
+  const renderKeyRow = (key: SshKeyMetadata, className = '') => (
+    <SshKeyRow
+      key={key.id}
+      className={`${className} ${isKeyDragOver(key.id)}`.trim()}
+      draggable
+      item={key}
+      onDragStart={(event) => handleDragStart(event, { kind: 'key', id: key.id })}
+      onDragOver={(event) => handleDragOver(event, { kind: 'key', id: key.id })}
+      onDragLeave={(event) => {
+        event.preventDefault()
+        setDragOver(null)
+      }}
+      onDrop={(event) => handleDrop(event, { kind: 'key', id: key.id })}
+      onDragEnd={handleDragEnd}
+      onDelete={() => handleDelete(key.id, key.name)}
+      onEdit={() => {
+        clearError()
+        setNoteDialog({ mode: 'edit', keyId: key.id, initialNote: key.note ?? '' })
+      }}
+    />
+  )
+
   return (
     <section className="ssh-key-manager-page manager-inline connection-manager-modal">
       <header className="connection-manager-header ssh-key-manager-header">
@@ -200,7 +479,7 @@ export function SshKeyManagerPage({
           <span aria-hidden="true" className="material-symbols-outlined">
             key
           </span>
-          <span>密钥管理</span>
+          <span>密钥管理器</span>
         </span>
         <label className="connection-manager-search ssh-key-manager-search">
           <AppIcon name="search" size={14} />
@@ -217,9 +496,14 @@ export function SshKeyManagerPage({
       <div className="connection-manager-layout ssh-key-manager-layout">
         <aside className="connection-manager-sidebar" aria-label="密钥文件夹">
           <button
-            className={`connection-manager-sidebar-item ${activeFolderId === 'all' ? 'active' : ''}`}
+            className={`connection-manager-sidebar-item ssh-key-root-drop-target ${activeFolderId === 'all' ? 'active' : ''} ${
+              dragOver?.id === ROOT_DROP_TARGET_ID ? 'drag-over' : ''
+            }`}
             type="button"
             onClick={() => setActiveFolderId('all')}
+            onDragOver={handleRootDragOver}
+            onDragLeave={handleRootDragLeave}
+            onDrop={handleRootDrop}
           >
             <span className="connection-manager-sidebar-icon">
               <AppIcon name="brand" size={14} />
@@ -228,7 +512,7 @@ export function SshKeyManagerPage({
             <span className="connection-manager-sidebar-count">{keys.length}</span>
           </button>
 
-          {folders.map((folder) => (
+          {orderedFolders.map((folder) => (
             <button
               key={folder.id}
               className={`connection-manager-sidebar-item ${activeFolderId === folder.id ? 'active' : ''}`}
@@ -288,16 +572,36 @@ export function SshKeyManagerPage({
                 </div>
               ) : null}
               {activeFolderId === 'all'
-                ? visibleFolders.map((folder) => {
+                ? rootItems.map((rootItem) => {
+                    if (rootItem.kind === 'key') {
+                      const key = keys.find((item) => item.id === rootItem.id)
+                      return key ? renderKeyRow(key) : null
+                    }
+                    const folder = folders.find((item) => item.id === rootItem.id)
+                    if (!folder) return null
                     const folderKeys = visibleKeys.filter((key) => assignments[key.id] === folder.id)
                     const isExpanded = expandedFolderIds.has(folder.id)
+                    const folderDragClass =
+                      `${isFolderDragOver(folder.id)} ${dragging?.id === folder.id ? 'dragging' : ''}`.trim()
                     return (
                       <Fragment key={folder.id}>
                         <div
                           role="button"
                           tabIndex={0}
-                          className="manager-row folder-row ssh-key-folder-row"
-                          onClick={() => toggleFolder(folder.id)}
+                          className={`manager-row folder-row ssh-key-folder-row ${folderDragClass}`.trim()}
+                          draggable
+                          onDragStart={(event) => handleDragStart(event, { kind: 'folder', id: folder.id })}
+                          onDragOver={(event) => handleDragOver(event, { kind: 'folder', id: folder.id })}
+                          onDragLeave={(event) => {
+                            event.preventDefault()
+                            setDragOver(null)
+                          }}
+                          onDrop={(event) => handleDrop(event, { kind: 'folder', id: folder.id })}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => {
+                            if (suppressRowClickRef.current) return
+                            toggleFolder(folder.id)
+                          }}
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
                               event.preventDefault()
@@ -313,7 +617,23 @@ export function SshKeyManagerPage({
                               <AppIcon name="chevron-right" size={12} />
                             </span>
                             <AppIcon name="folder" size={14} />
-                            <strong>{folder.name}</strong>
+                            {editingFolder?.id === folder.id ? (
+                              <input
+                                autoFocus
+                                className="manager-inline-input"
+                                value={editingFolder.name}
+                                onBlur={saveFolderRename}
+                                onChange={(event) => setEditingFolder({ id: folder.id, name: event.target.value })}
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => {
+                                  event.stopPropagation()
+                                  if (event.key === 'Enter') saveFolderRename()
+                                  if (event.key === 'Escape') setEditingFolder(null)
+                                }}
+                              />
+                            ) : (
+                              <strong>{folder.name}</strong>
+                            )}
                           </span>
                           <span>--</span>
                           <span>--</span>
@@ -329,7 +649,7 @@ export function SshKeyManagerPage({
                               onPointerDown={(event) => event.stopPropagation()}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                renameFolder(folder)
+                                setEditingFolder({ id: folder.id, name: folder.name })
                               }}
                             >
                               <AppIcon name="edit" size={14} />
@@ -343,7 +663,7 @@ export function SshKeyManagerPage({
                               onPointerDown={(event) => event.stopPropagation()}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                removeFolder(folder)
+                                requestDelete('folder', folder.id, folder.name)
                               }}
                             >
                               <AppIcon name="trash" size={14} />
@@ -355,38 +675,12 @@ export function SshKeyManagerPage({
                             <span>{t.emptyFolder}</span>
                           </div>
                         ) : null}
-                        {isExpanded
-                          ? folderKeys.map((key) => (
-                              <SshKeyRow
-                                key={key.id}
-                                className="ssh-key-nested-row"
-                                item={key}
-                                onDelete={() => void handleDelete(key.id, key.name)}
-                                onEdit={() => {
-                                  clearError()
-                                  setNoteDialog({ mode: 'edit', keyId: key.id, initialNote: key.note ?? '' })
-                                }}
-                              />
-                            ))
-                          : null}
+                        {isExpanded ? folderKeys.map((key) => renderKeyRow(key, 'ssh-key-nested-row')) : null}
                       </Fragment>
                     )
                   })
                 : null}
-              {(activeFolderId === 'all'
-                ? visibleKeys.filter((key) => !folders.some((folder) => assignments[key.id] === folder.id))
-                : visibleKeys
-              ).map((key) => (
-                <SshKeyRow
-                  key={key.id}
-                  item={key}
-                  onDelete={() => void handleDelete(key.id, key.name)}
-                  onEdit={() => {
-                    clearError()
-                    setNoteDialog({ mode: 'edit', keyId: key.id, initialNote: key.note ?? '' })
-                  }}
-                />
-              ))}
+              {activeFolderId !== 'all' ? visibleKeys.map((key) => renderKeyRow(key)) : null}
               {!loading && !hasVisibleRows ? (
                 <div className="connection-manager-empty ssh-key-manager-empty">
                   <span aria-hidden="true" className="material-symbols-outlined">
@@ -435,6 +729,10 @@ export function SshKeyManagerPage({
       {noteDialog ? (
         <SshKeyNoteDialog
           errorMessage={error}
+          folders={folders}
+          initialFolderId={
+            noteDialog.mode === 'edit' ? folderForKey(noteDialog.keyId) : activeFolderId === 'all' ? '' : activeFolderId
+          }
           initialNote={noteDialog.mode === 'edit' ? noteDialog.initialNote : ''}
           isSubmitting={busy}
           mode={noteDialog.mode}
@@ -442,13 +740,29 @@ export function SshKeyManagerPage({
             if (!busy) setNoteDialog(null)
           }}
           onSelectFile={selectKeyFile}
-          onSubmit={(note, sourcePath) => {
+          onSubmit={(note, sourcePath, folderId) => {
             if (noteDialog.mode === 'import') {
-              void handleImport(note, sourcePath)
+              void handleImport(note, sourcePath, folderId)
               return
             }
-            void handleEditNote(noteDialog.keyId, note)
+            void handleEditNote(noteDialog.keyId, note, folderId)
           }}
+        />
+      ) : null}
+      {pendingDelete ? (
+        <ConfirmActionDialog
+          confirmLabel={t.delete}
+          description={
+            pendingDelete.kind === 'folder'
+              ? `${t.deleteConfirmPrefix}${pendingDelete.name}${t.deleteConfirmSuffix}`
+              : `确定删除 ${pendingDelete.name} 吗？此操作不会删除原始文件。`
+          }
+          isSubmitting={busy}
+          onClose={() => {
+            if (!busy) setPendingDelete(null)
+          }}
+          onConfirm={() => void confirmDelete()}
+          title={t.delete}
         />
       ) : null}
     </section>
@@ -458,16 +772,36 @@ export function SshKeyManagerPage({
 function SshKeyRow({
   item,
   className,
+  draggable = false,
   onDelete,
-  onEdit
+  onEdit,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd
 }: {
   item: SshKeyMetadata
   className?: string
+  draggable?: boolean
   onDelete(): void
   onEdit(): void
+  onDragStart?(event: DragEvent): void
+  onDragOver?(event: DragEvent): void
+  onDragLeave?(event: DragEvent): void
+  onDrop?(event: DragEvent): void
+  onDragEnd?(): void
 }) {
   return (
-    <div className={`manager-row ssh-key-manager-row${className ? ` ${className}` : ''}`}>
+    <div
+      className={`manager-row ssh-key-manager-row${className ? ` ${className}` : ''}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
       <span className="ssh-key-name-cell">
         <strong>{item.name}</strong>
         <small>{item.encrypted ? '已加密' : '未加密'}</small>
@@ -482,7 +816,18 @@ function SshKeyRow({
       </span>
       <span>{item.usageCount}</span>
       <span className="manager-actions ssh-key-actions">
-        <button aria-label="修改备注" className="manager-icon-action" title="修改备注" type="button" onClick={onEdit}>
+        <button
+          aria-label="修改备注"
+          className="manager-icon-action"
+          title="修改备注"
+          type="button"
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onEdit()
+          }}
+        >
           <AppIcon name="edit" size={14} />
         </button>
         <button
@@ -491,7 +836,12 @@ function SshKeyRow({
           disabled={item.usageCount > 0}
           title={item.usageCount > 0 ? '该密钥仍被连接引用，无法删除' : '删除密钥'}
           type="button"
-          onClick={onDelete}
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete()
+          }}
         >
           <AppIcon name="trash" size={14} />
         </button>

@@ -3164,6 +3164,9 @@
 :root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field input,
 :root[data-theme='default-dark'] .ssh-key-import-dialog .ssh-key-note-dialog__field input,
 :root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field input,
+:root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field select,
+:root[data-theme='default-dark'] .ssh-key-import-dialog .ssh-key-note-dialog__field select,
+:root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field select,
 :root:not([data-theme]) .ssh-key-import-dialog .ssh-key-import-dialog__file-name,
 :root[data-theme='default-dark'] .ssh-key-import-dialog .ssh-key-import-dialog__file-name,
 :root[data-theme='default'] .ssh-key-import-dialog .ssh-key-import-dialog__file-name {

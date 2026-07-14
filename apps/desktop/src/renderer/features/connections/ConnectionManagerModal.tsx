@@ -222,6 +222,37 @@ export function ConnectionManagerModal({
     setDragPosition(pos)
   }
 
+  const handleRootDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (draggingId) {
+      setDragOverId('all')
+      setDragPosition('inside')
+    }
+  }
+
+  const handleRootDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (dragOverId === 'all') {
+      setDragOverId(null)
+      setDragPosition(null)
+    }
+  }
+
+  const handleRootDrop = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (draggingId) {
+      const rootSiblings = tree.roots.filter((node) => node.id !== draggingId)
+      const lastRoot = rootSiblings[rootSiblings.length - 1]
+      onUpdateOrder(draggingId, undefined, (lastRoot?.order ?? 0) + 1000)
+    }
+    setDraggingId(null)
+    setDragOverId(null)
+    setDragPosition(null)
+  }
+
   const handleDragLeave = (e: DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -505,9 +536,14 @@ export function ConnectionManagerModal({
           {folderNavItems.map((item) => (
             <button
               key={item.id}
-              className={`connection-manager-sidebar-item ${item.id === resolvedActiveFolderId ? 'active' : ''}`}
+              className={`connection-manager-sidebar-item ${item.id === resolvedActiveFolderId ? 'active' : ''} ${
+                item.id === 'all' ? 'root-drop-target' : ''
+              } ${item.id === 'all' && dragOverId === 'all' ? 'drag-over' : ''}`}
               type="button"
               onClick={() => setActiveFolderId(item.id)}
+              onDragOver={item.id === 'all' ? handleRootDragOver : undefined}
+              onDragLeave={item.id === 'all' ? handleRootDragLeave : undefined}
+              onDrop={item.id === 'all' ? handleRootDrop : undefined}
             >
               <span className="connection-manager-sidebar-icon" style={{ paddingLeft: `${item.depth * 12}px` }}>
                 <AppIcon name={item.id === 'all' ? 'connections' : 'folder'} size={14} />

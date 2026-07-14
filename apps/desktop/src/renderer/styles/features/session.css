@@ -2020,6 +2020,11 @@
   font-weight: 500;
 }
 
+.connection-manager-sidebar-item.root-drop-target.drag-over {
+  background: var(--selection-bg) !important;
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
 .connection-manager-sidebar-item:focus-visible {
   outline: none;
   color: var(--text-main) !important;

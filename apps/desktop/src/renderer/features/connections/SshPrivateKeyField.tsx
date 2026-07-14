@@ -50,7 +50,7 @@ export function SshPrivateKeyField({
   }
 
   return (
-    <div className="full ssh-private-key-field">
+    <div className="span-2 ssh-private-key-field">
       <label>
         私钥:
         <span className="ft-select-shell">
@@ -67,19 +67,24 @@ export function SshPrivateKeyField({
           </span>
         </span>
       </label>
-      <button className="flat-button compact" disabled={busy} onClick={() => requestImport()} type="button">
+      <button
+        className="primary-button compact ssh-private-key-action-button"
+        disabled={busy}
+        onClick={() => requestImport()}
+        type="button"
+      >
         {busy ? '正在导入…' : '导入新密钥'}
       </button>
       {form.privateKeyPath && !form.privateKeyId ? (
         <div className="ssh-private-key-legacy">
           <span>旧私钥路径：{form.privateKeyPath}</span>
           <button
-            className="flat-button compact"
+            className="flat-button compact ssh-private-key-action-button"
             disabled={busy}
             onClick={() => requestImport(form.privateKeyPath)}
             type="button"
           >
-            导入到密钥管理
+            导入到密钥管理器
           </button>
         </div>
       ) : null}

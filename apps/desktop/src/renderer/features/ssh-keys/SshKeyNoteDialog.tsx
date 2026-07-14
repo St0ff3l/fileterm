@@ -4,6 +4,8 @@ import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 
 export function SshKeyNoteDialog({
   errorMessage,
+  folders = [],
+  initialFolderId,
   initialNote = '',
   initialSourcePath,
   isSubmitting,
@@ -13,15 +15,18 @@ export function SshKeyNoteDialog({
   onSubmit
 }: {
   errorMessage?: string | null
+  folders?: Array<{ id: string; name: string }>
+  initialFolderId?: string
   initialNote?: string
   initialSourcePath?: string
   isSubmitting: boolean
   mode: 'import' | 'edit'
   onClose(): void
   onSelectFile?(): Promise<SshKeyFileSelection | null>
-  onSubmit(note: string, sourcePath?: string): void
+  onSubmit(note: string, sourcePath?: string, folderId?: string): void
 }) {
   const [note, setNote] = useState(initialNote)
+  const [folderId, setFolderId] = useState(initialFolderId ?? '')
   const [selectedFile, setSelectedFile] = useState<SshKeyFileSelection | null>(() =>
     initialSourcePath ? selectionFromPath(initialSourcePath) : null
   )
@@ -31,8 +36,9 @@ export function SshKeyNoteDialog({
 
   useEffect(() => {
     setNote(initialNote)
+    setFolderId(initialFolderId ?? '')
     setSelectedFile(initialSourcePath ? selectionFromPath(initialSourcePath) : null)
-  }, [initialNote, initialSourcePath, mode])
+  }, [initialFolderId, initialNote, initialSourcePath, mode])
 
   const selectFile = async () => {
     if (!onSelectFile) return
@@ -48,7 +54,7 @@ export function SshKeyNoteDialog({
   }
 
   const submit = () => {
-    if (canSubmit) onSubmit(normalizedNote, selectedFile?.sourcePath)
+    if (canSubmit) onSubmit(normalizedNote, selectedFile?.sourcePath, folderId || undefined)
   }
 
   return (
@@ -73,6 +79,25 @@ export function SshKeyNoteDialog({
             />
             <small>备注用于在连接表单中优先识别密钥，不能为空。</small>
           </label>
+          {folders.length > 0 ? (
+            <label className="ssh-key-note-dialog__field">
+              <span>分类文件夹</span>
+              <span className="ft-select-shell ssh-key-select-shell">
+                <select value={folderId} onChange={(event) => setFolderId(event.target.value)}>
+                  <option value="">全部密钥</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+                <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
+                  expand_more
+                </span>
+              </span>
+              <small>可将密钥归入文件夹，也可以保留在全部密钥中。</small>
+            </label>
+          ) : null}
           {mode === 'import' ? (
             <div className="ssh-key-note-dialog__field">
               <span>选择密钥文件</span>

@@ -230,12 +230,12 @@ export function HomeWorkspace({
           <button
             className={`sidebar-nav-link ${activeTab === 'ssh-key-manager' ? 'active' : ''}`}
             onClick={() => selectTab('ssh-key-manager')}
-            aria-label="密钥管理"
-            title="密钥管理"
+            aria-label="密钥管理器"
+            title="密钥管理器"
             type="button"
           >
             <span className="material-symbols-outlined">key</span>
-            <span>密钥管理</span>
+            <span>密钥管理器</span>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}

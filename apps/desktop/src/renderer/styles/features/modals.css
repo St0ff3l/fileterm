@@ -542,6 +542,10 @@
 }
 
 .saved-fingerprint-card__action {
+  min-width: 112px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 8px;
   gap: 5px;
   white-space: nowrap;
 }

@@ -24,6 +24,11 @@
   margin-left: 24px;
 }
 
+.ssh-key-root-drop-target.drag-over {
+  background: var(--selection-bg);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
 .ssh-key-manager-layout {
   flex: 1 1 auto;
   min-height: 0;
@@ -156,6 +161,11 @@
   font-weight: 500;
 }
 
+.ssh-key-folder-row.drop-inside {
+  background: var(--selection-bg) !important;
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
 .ssh-key-nested-row {
   background: color-mix(in srgb, var(--bg-hover) 42%, transparent) !important;
 }
@@ -195,6 +205,7 @@
 
 .ssh-private-key-field {
   display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: minmax(0, 1fr) max-content;
   align-items: start;
   gap: 10px;
@@ -206,9 +217,22 @@
   grid-template-columns: 72px minmax(0, 1fr);
 }
 
-.ssh-private-key-field > .flat-button {
+.ssh-private-key-action-button {
+  min-width: 112px;
+  height: 38px;
+  padding: 0 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ssh-private-key-field > .ssh-private-key-action-button {
   align-self: end;
   white-space: nowrap;
+}
+
+.ssh-private-key-legacy .ssh-private-key-action-button {
+  min-width: auto;
 }
 
 .ssh-private-key-legacy,
@@ -259,7 +283,8 @@
   font-weight: 600;
 }
 
-.ssh-key-note-dialog__field input {
+.ssh-key-note-dialog__field input,
+.ssh-key-note-dialog__field select {
   width: 100%;
   min-height: 40px;
   padding: 8px 10px;
@@ -270,7 +295,8 @@
   box-sizing: border-box;
 }
 
-.ssh-key-note-dialog__field input:focus-visible {
+.ssh-key-note-dialog__field input:focus-visible,
+.ssh-key-note-dialog__field select:focus-visible {
   outline: none;
   border-color: var(--copy-link);
   box-shadow: 0 0 0 3px var(--input-focus-ring);
