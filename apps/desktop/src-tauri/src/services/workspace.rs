@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::{oneshot, Mutex, RwLock};
+use tokio_util::sync::CancellationToken;
 use crate::sessions::WorkerCmd;
+use crate::services::transfers::TransferTask;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +47,12 @@ pub struct RemoteForwardTarget {
     pub target_port: u16,
 }
 
+#[derive(Clone, Debug)]
+pub struct ConnectionImportPlanEntry {
+    pub preview: serde_json::Value,
+    pub input: Option<serde_json::Value>,
+}
+
 pub struct WorkspaceState {
     pub tabs: Arc<RwLock<Vec<WorkspaceTab>>>,
     pub active_tab_id: Arc<RwLock<Option<String>>>,
@@ -55,6 +63,16 @@ pub struct WorkspaceState {
     pub pending_interactions:
         Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
+    /// Transfer snapshots are durable domain state. Cancellation tokens are
+    /// runtime-only and never serialized to the renderer or journal.
+    pub transfers: Arc<RwLock<Vec<TransferTask>>>,
+    pub transfer_controls: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    pub transfer_journal_loaded: Arc<Mutex<bool>>,
+    pub transfer_last_event: Arc<Mutex<HashMap<String, std::time::Instant>>>,
+    /// Import plans retain sanitized source data in main process until the
+    /// renderer confirms a selected subset and conflict strategy.
+    pub connection_import_plans: Arc<RwLock<HashMap<String, Vec<ConnectionImportPlanEntry>>>>,
+    pub update_status: Arc<RwLock<Option<serde_json::Value>>>,
 }
 
 impl Default for WorkspaceState {
@@ -66,6 +84,12 @@ impl Default for WorkspaceState {
             workers: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
+            transfers: Arc::new(RwLock::new(Vec::new())),
+            transfer_controls: Arc::new(RwLock::new(HashMap::new())),
+            transfer_journal_loaded: Arc::new(Mutex::new(false)),
+            transfer_last_event: Arc::new(Mutex::new(HashMap::new())),
+            connection_import_plans: Arc::new(RwLock::new(HashMap::new())),
+            update_status: Arc::new(RwLock::new(None)),
         }
     }
 }

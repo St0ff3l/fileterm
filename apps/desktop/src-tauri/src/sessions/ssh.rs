@@ -19,14 +19,15 @@ use russh::client::{Handle, Handler};
 use russh::keys::PrivateKeyWithHashAlg;
 use russh::{Channel, ChannelMsg};
 use russh_sftp::client::SftpSession;
+use russh_sftp::protocol::OpenFlags;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tokio_socks::tcp::Socks5Stream;
 
-use super::WorkerCmd;
+use super::{TransferFileStat, WorkerCmd};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public entry point
@@ -107,6 +108,7 @@ pub fn start_ssh_worker(
 ) {
     tokio::spawn(async move {
         let tid = tab_id.clone();
+        crate::services::logging::ssh_debug(&app, &tid, "SSH worker started");
         // The initial "连接主机...\r\n" notice is already in the session
         // snapshot's `terminal_transcript` (set by `app_open_profile`), so
         // the renderer hydrates it via `bootText` — no need to emit it here.
@@ -118,6 +120,7 @@ pub fn start_ssh_worker(
             }
             Err(e) => {
                 eprintln!("[SSH Worker] error for tab {}: {}", tid, e);
+                crate::services::logging::ssh_debug(&app, &tid, format!("SSH worker failed: {e}"));
                 emit_terminal_data(&app, &tid, &format!("连接失败: {}\r\n", e)).await;
             }
         }
@@ -2116,6 +2119,108 @@ async fn handle_worker_cmd(
             let _ = respond_to.send(tunnel_manager.delete(&rule_id).await);
             Ok(false)
         }
+        WorkerCmd::StatRemoteFile { path, respond_to } => {
+            let result = if file_access_mode == "root" {
+                stat_root_remote_file(handle, &path, sudo_user, sudo_password).await
+            } else {
+                let sftp = sftp.read().await;
+                match sftp.metadata(&path).await {
+                    Ok(metadata) if metadata.is_dir() => Ok(None),
+                    Ok(metadata) => Ok(Some(TransferFileStat {
+                        size: metadata.size.unwrap_or(0),
+                        modified_at: metadata.mtime.map(|value| value as u64 * 1000),
+                    })),
+                    Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(None),
+                    Err(error) => Err(error.to_string()),
+                }
+            };
+            let _ = respond_to.send(result);
+            Ok(false)
+        }
+        WorkerCmd::UploadLocalFile {
+            local_path,
+            remote_path,
+            resume_offset,
+            transfer_id,
+            cancel,
+            respond_to,
+        } => {
+            let result = if file_access_mode == "root" {
+                // The journal's partial path is deliberately a user-owned /tmp
+                // staging file in root mode. SFTP can resume it safely; the
+                // privileged atomic commit happens in ReplaceRemoteFile.
+                let sftp = sftp.read().await;
+                upload_local_file(&sftp, &local_path, &remote_path, resume_offset, &transfer_id, cancel, app).await
+            } else {
+                let sftp = sftp.read().await;
+                upload_local_file(&sftp, &local_path, &remote_path, resume_offset, &transfer_id, cancel, app).await
+            };
+            let _ = respond_to.send(result);
+            Ok(false)
+        }
+        WorkerCmd::DownloadRemoteFile {
+            remote_path,
+            local_path,
+            resume_offset,
+            transfer_id,
+            cancel,
+            respond_to,
+        } => {
+            let result = if file_access_mode == "root" {
+                download_root_remote_file(
+                    handle,
+                    &remote_path,
+                    &local_path,
+                    resume_offset,
+                    &transfer_id,
+                    cancel,
+                    app,
+                    sudo_user,
+                    sudo_password,
+                )
+                .await
+            } else {
+                let sftp = sftp.read().await;
+                download_remote_file(&sftp, &remote_path, &local_path, resume_offset, &transfer_id, cancel, app).await
+            };
+            let _ = respond_to.send(result);
+            Ok(false)
+        }
+        WorkerCmd::ReplaceRemoteFile {
+            partial_path,
+            destination_path,
+            respond_to,
+        } => {
+            let result = if file_access_mode == "root" {
+                replace_root_remote_file(handle, &partial_path, &destination_path, sudo_user, sudo_password).await
+            } else {
+                let sftp = sftp.read().await;
+                replace_remote_file(&sftp, &partial_path, &destination_path).await
+            };
+            let _ = respond_to.send(result);
+            Ok(false)
+        }
+        WorkerCmd::RemoveRemoteFile { path, respond_to } => {
+            let result = if file_access_mode == "root" {
+                exec_shell_file_command(
+                    handle,
+                    &format!("rm -f -- {}", shell_quote(&path)),
+                    sudo_user,
+                    sudo_password,
+                )
+                .await
+                .map(|_| ())
+            } else {
+                let sftp = sftp.read().await;
+                match sftp.remove_file(&path).await {
+                    Ok(()) => Ok(()),
+                    Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(()),
+                    Err(error) => Err(error.to_string()),
+                }
+            };
+            let _ = respond_to.send(result);
+            Ok(false)
+        }
         WorkerCmd::ListRemoteFiles { path, respond_to } => {
             let res = if file_access_mode == "root" {
                 exec_list_dir_via_shell(handle, &path, sudo_user, sudo_password).await
@@ -2459,15 +2564,356 @@ async fn write_file(sftp: &SftpSession, path: &str, content: &str, encoding: &st
 }
 
 async fn create_dir(sftp: &SftpSession, path: &str) -> Result<(), String> {
+    match sftp.metadata(path).await {
+        Ok(metadata) if metadata.is_dir() => return Ok(()),
+        Ok(_) => return Err(format!("远端路径不是目录: {path}")),
+        Err(_) => {}
+    }
     sftp.create_dir(path)
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
+const TRANSFER_CANCELED: &str = "transfer canceled";
+
+async fn ensure_transfer_parent_dir(sftp: &SftpSession, path: &str) -> Result<(), String> {
+    let parent = parent_remote_path(path).unwrap_or_else(|| "/".to_string());
+    if parent == "/" {
+        return Ok(());
+    }
+    let mut current = String::new();
+    for segment in parent.split('/').filter(|segment| !segment.is_empty()) {
+        current.push('/');
+        current.push_str(segment);
+        match sftp.metadata(&current).await {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => return Err(format!("传输目标父路径不是目录: {current}")),
+            Err(_) => {
+                sftp.create_dir(&current)
+                    .await
+                    .map_err(|error| format!("无法创建远端传输目录 {current}: {error}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn read_local_transfer_chunk(
+    file: &mut tokio::fs::File,
+    buffer: &mut [u8],
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<usize, String> {
+    tokio::select! {
+        _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
+        result = file.read(buffer) => result.map_err(|error| error.to_string()),
+    }
+}
+
+async fn read_remote_transfer_chunk(
+    file: &mut russh_sftp::client::fs::File,
+    buffer: &mut [u8],
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<usize, String> {
+    tokio::select! {
+        _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
+        result = file.read(buffer) => result.map_err(|error| error.to_string()),
+    }
+}
+
+async fn write_remote_transfer_chunk(
+    file: &mut russh_sftp::client::fs::File,
+    bytes: &[u8],
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<(), String> {
+    tokio::select! {
+        _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
+        result = file.write_all(bytes) => result.map_err(|error| error.to_string()),
+    }
+}
+
+async fn write_local_transfer_chunk(
+    file: &mut tokio::fs::File,
+    bytes: &[u8],
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<(), String> {
+    tokio::select! {
+        _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
+        result = file.write_all(bytes) => result.map_err(|error| error.to_string()),
+    }
+}
+
+async fn upload_local_file(
+    sftp: &SftpSession,
+    local_path: &str,
+    remote_path: &str,
+    resume_offset: u64,
+    transfer_id: &str,
+    cancel: tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+) -> Result<(), String> {
+    let metadata = tokio::fs::metadata(local_path).await.map_err(|error| error.to_string())?;
+    let total = metadata.len();
+    if resume_offset > total {
+        return Err("上传断点大于源文件".to_string());
+    }
+    ensure_transfer_parent_dir(sftp, remote_path).await?;
+    let mut source = tokio::fs::File::open(local_path).await.map_err(|error| error.to_string())?;
+    source
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+    let flags = if resume_offset == 0 {
+        OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE
+    } else {
+        OpenFlags::WRITE | OpenFlags::CREATE
+    };
+    let mut destination = sftp
+        .open_with_flags(remote_path, flags)
+        .await
+        .map_err(|error| error.to_string())?;
+    destination
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+    let mut transferred = resume_offset;
+    let mut buffer = vec![0_u8; 64 * 1024];
+    crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    loop {
+        let read = read_local_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
+        if read == 0 {
+            break;
+        }
+        write_remote_transfer_chunk(&mut destination, &buffer[..read], &cancel).await?;
+        transferred += read as u64;
+        crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    }
+    destination.flush().await.map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+async fn download_remote_file(
+    sftp: &SftpSession,
+    remote_path: &str,
+    local_path: &str,
+    resume_offset: u64,
+    transfer_id: &str,
+    cancel: tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+) -> Result<(), String> {
+    let metadata = sftp.metadata(remote_path).await.map_err(|error| error.to_string())?;
+    let total = metadata.size.unwrap_or(0);
+    if resume_offset > total {
+        return Err("下载断点大于源文件".to_string());
+    }
+    let mut source = sftp.open(remote_path).await.map_err(|error| error.to_string())?;
+    source
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Some(parent) = std::path::Path::new(local_path).parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|error| error.to_string())?;
+    }
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true).create(true);
+    if resume_offset == 0 {
+        options.truncate(true);
+    }
+    let mut destination = options.open(local_path).await.map_err(|error| error.to_string())?;
+    destination
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+    let mut transferred = resume_offset;
+    let mut buffer = vec![0_u8; 64 * 1024];
+    crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    loop {
+        let read = read_remote_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
+        if read == 0 {
+            break;
+        }
+        write_local_transfer_chunk(&mut destination, &buffer[..read], &cancel).await?;
+        transferred += read as u64;
+        crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    }
+    destination.flush().await.map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+async fn replace_remote_file(sftp: &SftpSession, partial_path: &str, destination_path: &str) -> Result<(), String> {
+    let backup_path = format!("{destination_path}.fileterm-backup-{}", uuid::Uuid::new_v4());
+    let moved_destination = match sftp.metadata(destination_path).await {
+        Ok(_) => {
+            sftp.rename(destination_path, &backup_path)
+                .await
+                .map_err(|error| format!("无法备份远端目标文件: {error}"))?;
+            true
+        }
+        Err(_) => false,
+    };
+    if let Err(error) = sftp.rename(partial_path, destination_path).await {
+        if moved_destination {
+            let _ = sftp.rename(&backup_path, destination_path).await;
+        }
+        return Err(error.to_string());
+    }
+    if moved_destination {
+        let _ = sftp.remove_file(&backup_path).await;
+    }
+    Ok(())
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // sudo / root-mode helpers (exec channel + `sudo -S` / `sudo -n`)
 // ─────────────────────────────────────────────────────────────────────────────
+
+async fn stat_root_remote_file(
+    handle: &Handle<ClientHandler>,
+    path: &str,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<Option<TransferFileStat>, String> {
+    let output = exec_shell_file_command(
+        handle,
+        &format!("stat -c '%s|%Y' -- {}", shell_quote(path)),
+        sudo_user,
+        sudo_password,
+    )
+    .await?;
+    let Some((size, modified_at)) = output.trim().lines().next().and_then(|line| line.split_once('|')) else {
+        return Ok(None);
+    };
+    let size = size.trim().parse::<u64>().map_err(|_| "无法解析 root 文件大小".to_string())?;
+    let modified_at = modified_at.trim().parse::<u64>().ok().map(|value| value * 1000);
+    Ok(Some(TransferFileStat { size, modified_at }))
+}
+
+async fn replace_root_remote_file(
+    handle: &Handle<ClientHandler>,
+    partial_path: &str,
+    destination_path: &str,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<(), String> {
+    let parent = std::path::Path::new(destination_path)
+        .parent()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "/".to_string());
+    let command = format!(
+        "set -e\nmkdir -p {}\nif [ -L {} ]; then\n  cat -- {} > {}\n  rm -f -- {}\nelse\n  if [ -e {} ]; then\n    chown --reference={} -- {} 2>/dev/null || true\n    chmod --reference={} -- {} 2>/dev/null || true\n  fi\n  mv -f -- {} {}\nfi",
+        shell_quote(&parent),
+        shell_quote(destination_path),
+        shell_quote(partial_path),
+        shell_quote(destination_path),
+        shell_quote(partial_path),
+        shell_quote(destination_path),
+        shell_quote(destination_path),
+        shell_quote(partial_path),
+        shell_quote(destination_path),
+        shell_quote(partial_path),
+        shell_quote(partial_path),
+        shell_quote(destination_path),
+    );
+    exec_shell_file_command(handle, &command, sudo_user, sudo_password)
+        .await
+        .map(|_| ())
+}
+
+async fn download_root_remote_file(
+    handle: &Handle<ClientHandler>,
+    remote_path: &str,
+    local_path: &str,
+    resume_offset: u64,
+    transfer_id: &str,
+    cancel: tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<(), String> {
+    let source = stat_root_remote_file(handle, remote_path, sudo_user, sudo_password)
+        .await?
+        .ok_or_else(|| "root 下载源文件不存在或无法读取".to_string())?;
+    if resume_offset > source.size {
+        return Err("root 下载断点大于源文件".to_string());
+    }
+    if let Some(parent) = std::path::Path::new(local_path).parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|error| error.to_string())?;
+    }
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true).create(true);
+    if resume_offset == 0 {
+        options.truncate(true);
+    }
+    let mut local = options.open(local_path).await.map_err(|error| error.to_string())?;
+    local
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let shell_command = if resume_offset == 0 {
+        format!("cat -- {}", shell_quote(remote_path))
+    } else {
+        format!("tail -c +{} -- {}", resume_offset + 1, shell_quote(remote_path))
+    };
+    let user = sudo_user.as_deref().unwrap_or("root");
+    let command = if sudo_password.is_some() {
+        format!("sudo -S -p '' -u {} sh -lc {}", shell_quote(user), shell_quote(&shell_command))
+    } else {
+        format!("sudo -n -u {} sh -lc {}", shell_quote(user), shell_quote(&shell_command))
+    };
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    channel
+        .exec(true, command.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Some(password) = sudo_password {
+        channel
+            .data(format!("{password}\n").as_bytes())
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+
+    let mut transferred = resume_offset;
+    let mut stderr = String::new();
+    crate::services::transfers::report_progress(app, transfer_id, transferred, source.size).await;
+    loop {
+        let next = tokio::select! {
+            _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+            message = channel.wait() => message,
+        };
+        match next {
+            Some(ChannelMsg::Data { data }) => {
+                let bytes = data.as_ref();
+                tokio::select! {
+                    _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+                    result = local.write_all(bytes) => result.map_err(|error| error.to_string())?,
+                }
+                transferred += bytes.len() as u64;
+                crate::services::transfers::report_progress(app, transfer_id, transferred, source.size).await;
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                if stderr.len() < 4096 {
+                    stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
+                }
+            }
+            Some(ChannelMsg::ExitStatus { .. }) | None => break,
+            _ => {}
+        }
+    }
+    local.flush().await.map_err(|error| error.to_string())?;
+    if transferred != source.size {
+        let suffix = if stderr.trim().is_empty() {
+            String::new()
+        } else {
+            format!("：{}", stderr.trim())
+        };
+        return Err(format!("root 下载未完成（{transferred}/{} bytes）{suffix}", source.size));
+    }
+    Ok(())
+}
 
 /// POSIX shell quoting: wrap in single quotes, escape embedded single quotes.
 fn shell_quote(s: &str) -> String {

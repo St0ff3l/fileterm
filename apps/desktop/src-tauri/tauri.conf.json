@@ -28,12 +28,12 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' asset: data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost http://localhost:5188 ws://localhost:5188; frame-src 'none'"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["../public/icon.png"]
+    "icon": ["../build/icon.icns", "../build/icon.ico", "../build/icon.png"]
   }
 }

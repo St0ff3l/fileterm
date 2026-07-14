@@ -1,6 +1,10 @@
 pub mod ssh;
 pub mod system_metrics;
 pub mod local_files;
+pub mod serial;
+pub mod telnet;
+pub mod terminal;
+pub mod ftp;
 
 pub enum WorkerCmd {
     WriteTerminal(String),
@@ -88,5 +92,40 @@ pub enum WorkerCmd {
         rule_id: String,
         respond_to: tokio::sync::oneshot::Sender<Result<Vec<serde_json::Value>, String>>,
     },
+    StatRemoteFile {
+        path: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<Option<TransferFileStat>, String>>,
+    },
+    UploadLocalFile {
+        local_path: String,
+        remote_path: String,
+        resume_offset: u64,
+        transfer_id: String,
+        cancel: tokio_util::sync::CancellationToken,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
+    DownloadRemoteFile {
+        remote_path: String,
+        local_path: String,
+        resume_offset: u64,
+        transfer_id: String,
+        cancel: tokio_util::sync::CancellationToken,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
+    ReplaceRemoteFile {
+        partial_path: String,
+        destination_path: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
+    RemoveRemoteFile {
+        path: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     Disconnect,
+}
+
+#[derive(Clone, Debug)]
+pub struct TransferFileStat {
+    pub size: u64,
+    pub modified_at: Option<u64>,
 }

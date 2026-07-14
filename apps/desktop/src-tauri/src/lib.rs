@@ -114,7 +114,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         _ => return Ok(()),
     };
 
-    WebviewWindowBuilder::new(app, &label, window_url(&input))
+    let window = WebviewWindowBuilder::new(app, &label, window_url(&input))
         .title(title)
         .inner_size(width, height)
         .min_inner_size(min_width, min_height)
@@ -123,6 +123,15 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         .transparent(!decorations)
         .build()
         .map_err(|error| AppError::Window(error.to_string()))?;
+    if input.kind == "file-editor" {
+        let editor_window = window.clone();
+        window.on_window_event(move |event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = editor_window.emit("app:file-editor-close-request", ());
+            }
+        });
+    }
     Ok(())
 }
 
@@ -163,9 +172,20 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| {
-                if let WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    request_main_close(&app_handle);
+                match event {
+                    WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        request_main_close(&app_handle);
+                    }
+                    WindowEvent::Resized(_) => {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = app_handle.emit(
+                                "app:window-maximized-change",
+                                window.is_maximized().unwrap_or(false),
+                            );
+                        }
+                    }
+                    _ => {}
                 }
             });
 
@@ -331,15 +351,30 @@ pub fn run() {
             crate::commands::app_read_clipboard_text,
             crate::commands::app_write_clipboard_text,
             crate::commands::app_open_external_url,
+            crate::commands::app_get_update_status,
+            crate::commands::app_check_for_updates,
+            crate::commands::app_download_update,
+            crate::commands::app_install_update,
+            crate::commands::app_open_logs_directory,
             crate::commands::app_get_ui_preferences,
             crate::commands::app_set_ui_preferences,
             crate::commands::app_get_ui_state_item,
             crate::commands::app_set_ui_state_item,
             crate::commands::app_remove_ui_state_item,
+            crate::commands::app_get_terminal_command_history,
+            crate::commands::app_set_terminal_command_history,
+            crate::commands::app_get_command_send_preferences,
+            crate::commands::app_set_command_send_preferences,
             crate::commands::app_get_snapshot,
             crate::commands::app_get_connection_library,
+            crate::commands::app_preview_connection_import,
+            crate::commands::app_commit_connection_json_import,
+            crate::commands::app_export_connections,
+            crate::commands::app_export_connections_as_files,
             crate::commands::app_get_webdav_sync_config,
             crate::commands::app_set_webdav_sync_config,
+            crate::commands::app_upload_webdav_sync,
+            crate::commands::app_download_webdav_sync,
             crate::commands::app_workspace_mutation,
             crate::commands::app_open_window,
             crate::commands::app_window_action,
@@ -365,6 +400,15 @@ pub fn run() {
             crate::commands::app_delete_remote_path,
             crate::commands::app_change_remote_permissions,
             crate::commands::app_set_remote_file_access_mode,
+            crate::commands::app_queue_upload,
+            crate::commands::app_upload_file,
+            crate::commands::app_download_file,
+            crate::commands::app_download_remote_path,
+            crate::commands::app_cancel_transfer,
+            crate::commands::app_pause_transfer,
+            crate::commands::app_resume_transfer,
+            crate::commands::app_discard_transfer,
+            crate::commands::app_clear_transfers,
             crate::commands::app_resolve_ssh_interaction,
             crate::commands::app_list_ssh_tunnels,
             crate::commands::app_create_ssh_tunnel,

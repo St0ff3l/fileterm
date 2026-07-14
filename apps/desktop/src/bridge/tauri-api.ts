@@ -2,12 +2,20 @@ import { invoke } from '@tauri-apps/api/core'
 import type {
   AppUpdateStatus,
   FileTermDesktopApi,
+  WebDavSyncConfig,
+  WebDavSyncResult,
+  ConnectionImportPlan,
+  ConnectionImportOptions,
+  ConnectionImportResult,
+  ConnectionExportFormat,
   WorkspaceSnapshot,
   PermissionChangeOptions,
   SshInteractionResponse,
   RemoteFileAccessOptions,
   TerminalDataPayload,
   TerminalStatePayload,
+  TerminalCommandHistoryEntry,
+  CommandSendPreferences,
   TransferTask,
   SessionMetricsUpdate,
   SshInteractionRequest,
@@ -16,12 +24,6 @@ import type {
 
 const unsupported = (name: string, ..._args: unknown[]) =>
   Promise.reject(new Error(`Tauri command not implemented yet: ${name}`))
-
-const unsupportedUpdate: AppUpdateStatus = {
-  state: 'unsupported',
-  currentVersion: '0.0.0',
-  message: 'Tauri updater is not implemented yet'
-}
 
 function subscribe<T>(eventName: string, listener: (payload: T) => void) {
   // Tauri's `listen()` is async — under React strict mode (dev double-mount)
@@ -109,11 +111,11 @@ export function createTauriApi(): FileTermDesktopApi {
     appVersion: '0.0.0',
     appName: 'FileTerm',
     isDesktop: true,
-    getUpdateStatus: async () => unsupportedUpdate,
-    checkForUpdates: async () => unsupportedUpdate,
-    downloadUpdate: async () => undefined,
-    installUpdate: async () => undefined,
-    onUpdateStatus: () => () => undefined,
+    getUpdateStatus: () => invoke<AppUpdateStatus>('app_get_update_status'),
+    checkForUpdates: () => invoke<AppUpdateStatus>('app_check_for_updates'),
+    downloadUpdate: () => invoke<void>('app_download_update'),
+    installUpdate: () => invoke<void>('app_install_update'),
+    onUpdateStatus: (listener: (status: AppUpdateStatus) => void) => subscribe('app:update-status', listener),
     readClipboardText: () => invoke<string>('app_read_clipboard_text'),
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () =>
@@ -149,7 +151,7 @@ export function createTauriApi(): FileTermDesktopApi {
         }
       }),
     openExternalUrl: (url: string) => invoke<void>('app_open_external_url', { url }),
-    openLogsDirectory: async () => undefined,
+    openLogsDirectory: () => invoke<void>('app_open_logs_directory'),
     minimizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'minimize' }),
     isCurrentWindowMaximized: () => invoke<boolean>('app_is_window_maximized'),
     toggleMaximizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'toggle-maximize' }),
@@ -157,7 +159,7 @@ export function createTauriApi(): FileTermDesktopApi {
     confirmCloseCurrentFileEditor: () => invoke<void>('app_window_action', { action: 'close' }),
     cancelCloseCurrentFileEditor: async () => undefined,
     showWindowMenu: async () => undefined,
-    requestQuitApp: () => invoke<void>('app_window_action', { action: 'close' }),
+    requestQuitApp: () => invoke<void>('app_window_action', { action: 'quit' }),
     listLocalDirectory: (dirPath?: string) =>
       invoke<{ path: string; items: LocalFileItem[] }>('app_list_local_directory', {
         dirPath: dirPath ?? null
@@ -182,12 +184,49 @@ export function createTauriApi(): FileTermDesktopApi {
       invoke<string[]>('app_select_local_files', { defaultPath: defaultPath ?? null }),
     selectLocalDirectory: (defaultPath?: string) =>
       invoke<string | null>('app_select_local_directory', { defaultPath: defaultPath ?? null }),
+    queueUpload: (fileNames: string[]) => invoke<WorkspaceSnapshot>('app_queue_upload', { fileNames }),
+    cancelTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_cancel_transfer', { transferId }),
+    pauseTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_pause_transfer', { transferId }),
+    resumeTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_resume_transfer', { transferId }),
+    discardTransfer: (transferId: string) => invoke<WorkspaceSnapshot>('app_discard_transfer', { transferId }),
+    clearTransfers: (transferIds: string[]) => invoke<WorkspaceSnapshot>('app_clear_transfers', { transferIds }),
+    getTerminalCommandHistory: (profileId: string) =>
+      invoke<TerminalCommandHistoryEntry[]>('app_get_terminal_command_history', { profileId }),
+    setTerminalCommandHistory: (profileId: string, entries: TerminalCommandHistoryEntry[]) =>
+      invoke<void>('app_set_terminal_command_history', { profileId, entries }),
+    getCommandSendPreferences: () => invoke<CommandSendPreferences>('app_get_command_send_preferences'),
+    setCommandSendPreferences: (preferences: CommandSendPreferences) =>
+      invoke<void>('app_set_command_send_preferences', { preferences }),
+    uploadFile: (tabId: string, localPath: string, remoteDirectory: string, options?: { targetName?: string }) =>
+      invoke<WorkspaceSnapshot>('app_upload_file', { tabId, localPath, remoteDirectory, options: options ?? null }),
+    downloadFile: (tabId: string, remotePath: string, localDirectory: string, options?: { targetName?: string }) =>
+      invoke<WorkspaceSnapshot>('app_download_file', { tabId, remotePath, localDirectory, options: options ?? null }),
+    downloadRemotePath: (
+      tabId: string,
+      remotePath: string,
+      targetType: 'file' | 'folder',
+      localDirectory: string,
+      options?: { targetName?: string }
+    ) =>
+      invoke<WorkspaceSnapshot>('app_download_remote_path', {
+        tabId,
+        remotePath,
+        targetType,
+        localDirectory,
+        options: options ?? null
+      }),
     getSnapshot: () => invoke<WorkspaceSnapshot>('app_get_snapshot'),
     getConnectionLibrary: () =>
       invoke<{ profiles: WorkspaceSnapshot['profiles']; folders: WorkspaceSnapshot['folders'] }>(
         'app_get_connection_library'
       ),
-    getWebDavSyncConfig: () => invoke('app_get_webdav_sync_config'),
+    previewConnectionImport: () => invoke<ConnectionImportPlan | null>('app_preview_connection_import'),
+    commitConnectionJsonImport: (planId: string, options: ConnectionImportOptions) =>
+      invoke<ConnectionImportResult>('app_commit_connection_json_import', { planId, options }),
+    exportConnections: (format: ConnectionExportFormat) => invoke<boolean>('app_export_connections', { format }),
+    exportConnectionsAsFiles: (format: ConnectionExportFormat) =>
+      invoke<boolean>('app_export_connections_as_files', { format }),
+    getWebDavSyncConfig: () => invoke<WebDavSyncConfig>('app_get_webdav_sync_config'),
     saveWebDavSyncConfig: (input: {
       enabled: boolean
       url: string
@@ -195,9 +234,9 @@ export function createTauriApi(): FileTermDesktopApi {
       remotePath: string
       allowInsecureTls?: boolean
       password?: string
-    }) => invoke('app_set_webdav_sync_config', { input }),
-    uploadWebDavSync: async () => ({ action: 'upload' as const, message: 'Tauri WebDAV 同步尚未接入。' }),
-    downloadWebDavSync: async () => ({ action: 'download' as const, message: 'Tauri WebDAV 同步尚未接入。' }),
+    }) => invoke<WebDavSyncConfig>('app_set_webdav_sync_config', { input }),
+    uploadWebDavSync: () => invoke<WebDavSyncResult>('app_upload_webdav_sync'),
+    downloadWebDavSync: () => invoke<WebDavSyncResult>('app_download_webdav_sync'),
     createProfile: (input: unknown) => invoke<WorkspaceSnapshot>('app_create_profile', { input }),
     createFolder: (name: string, parentId?: string) =>
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-folder', payload: { name, parentId } }),
@@ -281,7 +320,7 @@ export function createTauriApi(): FileTermDesktopApi {
     ) => subscribe('app:ui-preferences-changed', listener),
     onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) =>
       subscribe('app:window-maximized-change', listener),
-    onFileEditorCloseRequest: () => () => undefined,
+    onFileEditorCloseRequest: (listener: () => void) => subscribe('app:file-editor-close-request', listener),
     onTerminalData: (listener: (payload: TerminalDataPayload) => void) => subscribe('terminal:data', listener),
     onTerminalState: (listener: (payload: TerminalStatePayload) => void) => subscribe('terminal:state', listener),
     onTransferUpdate: (listener: (transfer: TransferTask) => void) => subscribe('transfer:update', listener),

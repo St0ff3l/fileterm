@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
@@ -16,6 +16,40 @@ pub struct UiPreferences {
 pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalCommandHistoryEntry {
+    pub command: String,
+    pub created_at: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandSendPreferences {
+    pub remember_selection: bool,
+    pub send_scope: String,
+    pub selected_tab_ids: Vec<String>,
+}
+
+impl Default for CommandSendPreferences {
+    fn default() -> Self {
+        Self {
+            remember_selection: false,
+            send_scope: "current".to_string(),
+            selected_tab_ids: Vec::new(),
+        }
+    }
+}
+
+fn write_json_object(app: &AppHandle, name: &str, value: &Value) -> Result<(), AppError> {
+    let path = crate::storage::workspace_file(app, name)?;
+    let temporary = path.with_file_name(format!("{name}.tmp"));
+    let content = serde_json::to_vec_pretty(value)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    std::fs::write(&temporary, content).map_err(|error| AppError::Storage(error.to_string()))?;
+    std::fs::rename(temporary, path).map_err(|error| AppError::Storage(error.to_string()))
 }
 
 #[tauri::command]
@@ -52,6 +86,35 @@ pub fn app_open_external_url(url: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+pub async fn app_get_update_status(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    Ok(crate::services::updates::get_status(&app).await)
+}
+
+#[tauri::command]
+pub async fn app_check_for_updates(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::updates::check(&app).await
+}
+
+#[tauri::command]
+pub async fn app_download_update(app: AppHandle) -> Result<(), AppError> {
+    crate::services::updates::open_release_page(&app).await
+}
+
+#[tauri::command]
+pub async fn app_install_update(app: AppHandle) -> Result<(), AppError> {
+    crate::services::updates::open_release_page(&app).await
+}
+
+#[tauri::command]
+pub fn app_open_logs_directory(app: AppHandle) -> Result<(), AppError> {
+    let log_directory = crate::storage::state_path(&app)?
+        .with_file_name("logs");
+    std::fs::create_dir_all(&log_directory)
+        .map_err(|error| AppError::Storage(error.to_string()))?;
+    open::that(log_directory).map_err(|error| AppError::Command(error.to_string()))
+}
+
+#[tauri::command]
 pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError> {
     let path = crate::storage::state_path(&app)?;
     if path.exists() {
@@ -71,7 +134,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
 #[tauri::command]
 pub fn app_set_ui_preferences(app: AppHandle, input: UiPreferencesInput) -> Result<(), AppError> {
     let path = crate::storage::state_path(&app)?;
-    let mut preferences = app_get_ui_preferences(app)?;
+    let mut preferences = app_get_ui_preferences(app.clone())?;
     if let Some(theme) = input.theme {
         preferences.theme = theme;
     }
@@ -80,7 +143,9 @@ pub fn app_set_ui_preferences(app: AppHandle, input: UiPreferencesInput) -> Resu
     }
     let content = serde_json::to_string_pretty(&preferences)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
-    std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))
+    std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
+    let _ = app.emit("app:ui-preferences-changed", &preferences);
+    Ok(())
 }
 
 #[tauri::command]
@@ -124,6 +189,83 @@ pub fn app_remove_ui_state_item(app: AppHandle, key: String) -> Result<(), AppEr
 }
 
 #[tauri::command]
+pub fn app_get_terminal_command_history(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<Vec<TerminalCommandHistoryEntry>, AppError> {
+    let value = crate::storage::read_json_object(&app, "command-history.json")?;
+    Ok(value
+        .get(&profile_id)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|entry| serde_json::from_value::<TerminalCommandHistoryEntry>(entry).ok())
+        .filter(|entry| !entry.command.trim().is_empty())
+        .collect())
+}
+
+#[tauri::command]
+pub fn app_set_terminal_command_history(
+    app: AppHandle,
+    profile_id: String,
+    entries: Vec<TerminalCommandHistoryEntry>,
+) -> Result<(), AppError> {
+    let mut value = crate::storage::read_json_object(&app, "command-history.json")?;
+    let sanitized = entries
+        .into_iter()
+        .filter(|entry| !entry.command.trim().is_empty())
+        .take(500)
+        .collect::<Vec<_>>();
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| AppError::Serialization("命令历史文件格式无效".to_string()))?;
+    object.insert(
+        profile_id,
+        serde_json::to_value(sanitized).map_err(|error| AppError::Serialization(error.to_string()))?,
+    );
+    write_json_object(&app, "command-history.json", &value)
+}
+
+#[tauri::command]
+pub fn app_get_command_send_preferences(app: AppHandle) -> Result<CommandSendPreferences, AppError> {
+    let value = crate::storage::read_json_object(&app, "command-send-preferences.json")?;
+    let preferences = serde_json::from_value::<CommandSendPreferences>(value).unwrap_or_default();
+    Ok(CommandSendPreferences {
+        send_scope: match preferences.send_scope.as_str() {
+            "current" | "all-ssh" | "selected-ssh" => preferences.send_scope,
+            _ => "current".to_string(),
+        },
+        ..preferences
+    })
+}
+
+#[tauri::command]
+pub fn app_set_command_send_preferences(
+    app: AppHandle,
+    preferences: CommandSendPreferences,
+) -> Result<(), AppError> {
+    if !matches!(preferences.send_scope.as_str(), "current" | "all-ssh" | "selected-ssh") {
+        return Err(AppError::Command("命令发送范围无效".to_string()));
+    }
+    let selected_tab_ids = preferences
+        .selected_tab_ids
+        .into_iter()
+        .filter(|id| !id.trim().is_empty())
+        .take(200)
+        .collect::<Vec<_>>();
+    write_json_object(
+        &app,
+        "command-send-preferences.json",
+        &serde_json::to_value(CommandSendPreferences {
+            selected_tab_ids,
+            ..preferences
+        })
+        .map_err(|error| AppError::Serialization(error.to_string()))?,
+    )
+}
+
+#[tauri::command]
 pub async fn app_get_snapshot(app: AppHandle) -> Result<serde_json::Value, AppError> {
     get_workspace_snapshot(app).await
 }
@@ -137,25 +279,128 @@ pub fn app_get_connection_library(app: AppHandle) -> Result<serde_json::Value, A
 }
 
 #[tauri::command]
-pub fn app_get_webdav_sync_config(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    let path = crate::storage::workspace_file(&app, "webdav-sync.json")?;
-    if path.exists() {
-        let content = std::fs::read_to_string(path)
-            .map_err(|error| AppError::Storage(error.to_string()))?;
-        let config: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|error| AppError::Serialization(error.to_string()))?;
-        Ok(config)
-    } else {
-        Ok(serde_json::json!({ "enabled": false, "url": "", "remotePath": "" }))
-    }
+pub async fn app_preview_connection_import(app: AppHandle) -> Result<Option<serde_json::Value>, AppError> {
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .add_filter("Connection files", &["json", "config", "txt"])
+        .pick_file()
+        .await
+    else {
+        return Ok(None);
+    };
+    let path = file.path();
+    let content = tokio::fs::read_to_string(path)
+        .await
+        .map_err(|error| AppError::Storage(format!("无法读取导入文件: {error}")))?;
+    crate::services::connections::create_import_plan(
+        &app,
+        &content,
+        &path.file_name().and_then(|name| name.to_str()).unwrap_or("连接文件"),
+    )
+    .await
+    .map(Some)
 }
 
 #[tauri::command]
-pub fn app_set_webdav_sync_config(app: AppHandle, input: serde_json::Value) -> Result<(), AppError> {
-    let path = crate::storage::workspace_file(&app, "webdav-sync.json")?;
-    let content = serde_json::to_string_pretty(&input)
-        .map_err(|error| AppError::Serialization(error.to_string()))?;
-    std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))
+pub async fn app_commit_connection_json_import(
+    app: AppHandle,
+    plan_id: String,
+    options: serde_json::Value,
+) -> Result<serde_json::Value, AppError> {
+    let selected_ids = options
+        .get("selectedItemIds")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let strategy = options
+        .get("conflictStrategy")
+        .and_then(Value::as_str)
+        .unwrap_or("skip");
+    crate::services::connections::commit_import_plan(&app, &plan_id, &selected_ids, strategy).await
+}
+
+#[tauri::command]
+pub async fn app_export_connections(app: AppHandle, format: String) -> Result<bool, AppError> {
+    let extension = if format == "compatible" { "json" } else { "fileterm.json" };
+    let Some(target) = rfd::AsyncFileDialog::new()
+        .set_file_name(format!("fileterm-connections.{extension}"))
+        .add_filter("JSON", &["json"])
+        .save_file()
+        .await
+    else {
+        return Ok(false);
+    };
+    let bytes = crate::services::connections::export_bundle(&app, &format)?;
+    tokio::fs::write(target.path(), bytes)
+        .await
+        .map_err(|error| AppError::Storage(format!("无法写入导出文件: {error}")))?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn app_export_connections_as_files(app: AppHandle, format: String) -> Result<bool, AppError> {
+    let Some(target) = rfd::AsyncFileDialog::new().pick_folder().await else {
+        return Ok(false);
+    };
+    let (profiles, _) = crate::services::profile_ops::read_and_heal_profiles(&app)?;
+    for profile in profiles {
+        let id = profile.get("id").and_then(Value::as_str).unwrap_or("connection");
+        let name = profile.get("name").and_then(Value::as_str).unwrap_or(id);
+        let filename = format!("{}.json", crate::services::connections::export_filename(name, id));
+        let payload = if format == "compatible" {
+            serde_json::json!({
+                "id": profile.get("id"), "name": profile.get("name"),
+                "description": profile.get("note"), "conection_type": profile.get("type"),
+                "host": profile.get("host"), "port": profile.get("port"),
+                "user_name": profile.get("username"), "terminal_encoding": profile.get("encoding"),
+                "authentication_type": profile.get("authType"), "password": profile.get("password"),
+                "private_key_path": profile.get("privateKeyPath"), "passphrase": profile.get("passphrase"),
+            })
+        } else {
+            serde_json::json!({
+                "schemaVersion": 1,
+                "generatedAt": crate::services::webdav::export_timestamp(),
+                "profiles": [profile],
+            })
+        };
+        let bytes = serde_json::to_vec_pretty(&payload)
+            .map_err(|error| AppError::Serialization(error.to_string()))?;
+        tokio::fs::write(target.path().join(filename), bytes)
+            .await
+            .map_err(|error| AppError::Storage(format!("无法写入单连接导出: {error}")))?;
+    }
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn app_get_webdav_sync_config(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::get_config(&app)
+}
+
+#[tauri::command]
+pub fn app_set_webdav_sync_config(app: AppHandle, input: serde_json::Value) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::save_config(&app, input)
+}
+
+#[tauri::command]
+pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::upload(&app).await
+}
+
+#[tauri::command]
+pub async fn app_download_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    let result = crate::services::webdav::download(&app).await?;
+    if result.get("imported").and_then(Value::as_u64).unwrap_or(0) > 0 {
+        if let Ok(snapshot) = get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -243,7 +488,11 @@ pub fn app_open_window(
 }
 
 #[tauri::command]
-pub fn app_window_action(app: AppHandle, window: WebviewWindow, action: String) -> Result<(), AppError> {
+pub async fn app_window_action(
+    app: AppHandle,
+    window: WebviewWindow,
+    action: String,
+) -> Result<(), AppError> {
     match action.as_str() {
         "minimize" => {
             let _ = window.minimize();
@@ -254,6 +503,10 @@ pub fn app_window_action(app: AppHandle, window: WebviewWindow, action: String) 
             } else {
                 let _ = window.maximize();
             }
+            let _ = app.emit(
+                "app:window-maximized-change",
+                window.is_maximized().unwrap_or(false),
+            );
         }
         "close" => {
             // User confirmed close in the renderer — bypass the
@@ -265,7 +518,11 @@ pub fn app_window_action(app: AppHandle, window: WebviewWindow, action: String) 
         }
         "quit" => {
             // Quit the entire app. Used by the renderer when the user
-            // confirms a Cmd+Q / tray-quit request.
+            // confirms a Cmd+Q / tray-quit request. Persist paused transfer
+            // checkpoints before exiting so a restart never silently loses a
+            // resumable file.
+            crate::services::transfers::shutdown(&app).await?;
+            shutdown_session_workers(&app).await;
             app.exit(0);
         }
         _ => {}
@@ -283,11 +540,13 @@ pub fn app_is_window_maximized(window: WebviewWindow) -> bool {
 // ==========================================
 
 pub async fn get_workspace_snapshot(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::ensure_loaded(&app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
 
     let tabs = state.tabs.read().await.clone();
     let active_tab_id = state.active_tab_id.read().await.clone();
     let sessions = state.sessions.read().await.clone();
+    let transfers = state.transfers.read().await.clone();
 
     // Read + heal profiles, then strip secrets before exposing in snapshot.
     let (profiles_with_secrets, folders) = crate::services::profile_ops::read_and_heal_profiles(&app)?;
@@ -305,7 +564,7 @@ pub async fn get_workspace_snapshot(app: AppHandle) -> Result<serde_json::Value,
         "commandTemplates": commands,
         "tabs": tabs,
         "activeTabId": active_tab_id,
-        "transfers": [],
+        "transfers": transfers,
         "sessions": sessions,
     }))
 }
@@ -349,6 +608,44 @@ fn create_tab_layout(profile_type: &str) -> String {
     }
 }
 
+fn start_session_worker(
+    tab_id: String,
+    profile: serde_json::Value,
+    receiver: mpsc::Receiver<WorkerCmd>,
+    app: AppHandle,
+) {
+    match profile.get("type").and_then(Value::as_str).unwrap_or("ssh") {
+        "ftp" => crate::sessions::ftp::start_ftp_worker(tab_id, profile, receiver, app),
+        "telnet" => crate::sessions::telnet::start_telnet_worker(tab_id, profile, receiver, app),
+        "serial" => crate::sessions::serial::start_serial_worker(tab_id, profile, receiver, app),
+        _ => crate::sessions::ssh::start_ssh_worker(tab_id, profile, receiver, app),
+    }
+}
+
+async fn stop_session_worker(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+) {
+    let sender = state.workers.write().await.remove(tab_id);
+    if let Some(sender) = sender {
+        let _ = sender.send(WorkerCmd::Disconnect).await;
+    }
+}
+
+pub async fn shutdown_session_workers(app: &AppHandle) {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let senders = state
+        .workers
+        .write()
+        .await
+        .drain()
+        .map(|(_, sender)| sender)
+        .collect::<Vec<_>>();
+    for sender in senders {
+        let _ = sender.send(WorkerCmd::Disconnect).await;
+    }
+}
+
 #[tauri::command]
 pub async fn app_open_profile(
     app: AppHandle,
@@ -371,7 +668,12 @@ pub async fn app_open_profile(
         status: "connecting".to_string(),
     };
 
-    let host = profile.get("host").and_then(|h| h.as_str()).unwrap_or("127.0.0.1");
+    let host = profile
+        .get("host")
+        .and_then(|h| h.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| profile.get("devicePath").and_then(Value::as_str))
+        .unwrap_or("127.0.0.1");
     let port = profile.get("port").and_then(|p| p.as_i64()).unwrap_or(22) as u16;
     let username = profile.get("username").and_then(|u| u.as_str()).unwrap_or("root");
 
@@ -407,7 +709,7 @@ pub async fn app_open_profile(
         workers.insert(tab_id.clone(), tx);
     }
 
-    crate::sessions::ssh::start_ssh_worker(tab_id, profile.clone(), rx, app.clone());
+    start_session_worker(tab_id, profile.clone(), rx, app.clone());
 
     get_workspace_snapshot(app).await
 }
@@ -440,10 +742,7 @@ pub async fn app_reconnect_tab(
         let profiles = read_json_array(&app, "profiles.json")?;
         if let Some(profile) = profiles.iter().find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&pid)) {
             // Terminate existing worker
-            {
-                let mut workers = state.workers.write().await;
-                workers.remove(&tab_id);
-            }
+            stop_session_worker(&state, &tab_id).await;
             
             // Set connecting status. Preserve the existing transcript so the
             // renderer can re-hydrate the terminal with prior history on
@@ -465,7 +764,12 @@ pub async fn app_reconnect_tab(
                     session.terminal_transcript.push_str("连接主机...\r\n");
                     // Cap to 200k chars (matches Electron's BoundedTextBuffer).
                     if session.terminal_transcript.len() > 200_000 {
-                        let cut = session.terminal_transcript.len() - 180_000;
+                        let mut cut = session.terminal_transcript.len() - 180_000;
+                        while cut < session.terminal_transcript.len()
+                            && !session.terminal_transcript.is_char_boundary(cut)
+                        {
+                            cut += 1;
+                        }
                         session.terminal_transcript = session.terminal_transcript[cut..].to_string();
                     }
                     session.remote_files = Vec::new();
@@ -479,7 +783,7 @@ pub async fn app_reconnect_tab(
                 workers.insert(tab_id.clone(), tx);
             }
 
-            crate::sessions::ssh::start_ssh_worker(tab_id, profile.clone(), rx, app.clone());
+            start_session_worker(tab_id, profile.clone(), rx, app.clone());
         }
     }
 
@@ -491,11 +795,9 @@ pub async fn app_disconnect_tab(
     app: AppHandle,
     tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::pause_for_tab(&app, &tab_id, "连接断开，可在重连后继续传输").await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    {
-        let mut workers = state.workers.write().await;
-        workers.remove(&tab_id);
-    }
+    stop_session_worker(&state, &tab_id).await;
     {
         let mut tabs = state.tabs.write().await;
         if let Some(tab) = tabs.iter_mut().find(|t| t.id == tab_id) {
@@ -514,11 +816,9 @@ pub async fn app_close_tab(
     app: AppHandle,
     tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::pause_for_tab(&app, &tab_id, "标签关闭后已暂停，可在重连后继续传输").await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    {
-        let mut workers = state.workers.write().await;
-        workers.remove(&tab_id);
-    }
+    stop_session_worker(&state, &tab_id).await;
     {
         let mut tabs = state.tabs.write().await;
         tabs.retain(|t| t.id != tab_id);
@@ -819,6 +1119,113 @@ pub async fn app_set_remote_file_access_mode(
         respond_to: tx,
     }).await?;
 
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_queue_upload(
+    app: AppHandle,
+    file_names: Vec<String>,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::queue_upload(&app, file_names).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_upload_file(
+    app: AppHandle,
+    tab_id: String,
+    local_path: String,
+    remote_directory: String,
+    options: Option<serde_json::Value>,
+) -> Result<serde_json::Value, AppError> {
+    let target_name = options
+        .as_ref()
+        .and_then(|value| value.get("targetName"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned);
+    crate::services::transfers::create_upload(&app, tab_id, local_path, remote_directory, target_name).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_download_file(
+    app: AppHandle,
+    tab_id: String,
+    remote_path: String,
+    local_directory: String,
+    options: Option<serde_json::Value>,
+) -> Result<serde_json::Value, AppError> {
+    let target_name = options
+        .as_ref()
+        .and_then(|value| value.get("targetName"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned);
+    crate::services::transfers::create_download(&app, tab_id, remote_path, local_directory, target_name).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_download_remote_path(
+    app: AppHandle,
+    tab_id: String,
+    remote_path: String,
+    target_type: String,
+    local_directory: String,
+    options: Option<serde_json::Value>,
+) -> Result<serde_json::Value, AppError> {
+    let target_name = options
+        .as_ref()
+        .and_then(|value| value.get("targetName"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned);
+    match target_type.as_str() {
+        "file" => app_download_file(app, tab_id, remote_path, local_directory, options).await,
+        "folder" => {
+            crate::services::transfers::create_download_directory(
+                &app,
+                tab_id,
+                remote_path,
+                local_directory,
+                target_name,
+            )
+            .await?;
+            get_workspace_snapshot(app).await
+        }
+        _ => Err(AppError::Command("远端传输目标类型无效".to_string())),
+    }
+}
+
+#[tauri::command]
+pub async fn app_cancel_transfer(app: AppHandle, transfer_id: String) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::discard(&app, transfer_id).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_pause_transfer(app: AppHandle, transfer_id: String) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::pause(&app, transfer_id).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_resume_transfer(app: AppHandle, transfer_id: String) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::resume(&app, transfer_id).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_discard_transfer(app: AppHandle, transfer_id: String) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::discard(&app, transfer_id).await?;
+    get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_clear_transfers(app: AppHandle, transfer_ids: Vec<String>) -> Result<serde_json::Value, AppError> {
+    crate::services::transfers::clear(&app, transfer_ids).await?;
     get_workspace_snapshot(app).await
 }
 
