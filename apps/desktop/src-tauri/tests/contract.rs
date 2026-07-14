@@ -203,6 +203,7 @@ fn contract_commands_use_app_prefix() {
         "app_update_command_order",
         "app_update_command_template",
         "app_delete_command_template",
+        "app_execute_command_template",
         "app_list_local_directory",
         "app_read_local_file",
         "app_write_local_file",

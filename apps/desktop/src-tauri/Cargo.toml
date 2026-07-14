@@ -35,3 +35,6 @@ tokio-socks = "0.5"
 tokio-serial = "5.5"
 suppaftp = { version = "10", default-features = false, features = ["tokio-async-native-tls", "deprecated"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[dev-dependencies]
+rand = "0.10"

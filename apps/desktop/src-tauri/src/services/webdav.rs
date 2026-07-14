@@ -400,9 +400,29 @@ pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
 
 pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
     let mut config = configured(app)?;
-    let remote = remote_url(&config)?;
     let client = client()?;
-    let head = authenticated(client.head(remote.clone()), &config)
+    let (payload, content_hash) = export_bundle(app)?;
+    let next_etag = upload_payload(&client, &config, payload).await?;
+    config.last_etag = next_etag;
+    config.last_synced_at = Some(export_timestamp());
+    config.content_hash = Some(content_hash);
+    write_config(app, &config)?;
+    Ok(serde_json::json!({ "action": "upload", "message": "连接配置已上传到 WebDAV。" }))
+}
+
+/// Upload a prepared profile bundle with optimistic-concurrency protection.
+///
+/// This boundary intentionally takes the HTTP client and serialized payload as
+/// arguments so the protocol exchange can be exercised against a real WebDAV
+/// endpoint without a Tauri application data directory.  The caller remains
+/// responsible for persisting the returned ETag only after the PUT succeeds.
+async fn upload_payload(
+    client: &Client,
+    config: &StoredConfig,
+    payload: Vec<u8>,
+) -> Result<Option<String>, AppError> {
+    let remote = remote_url(config)?;
+    let head = authenticated(client.head(remote.clone()), config)
         .send()
         .await
         .map_err(|error| command_error(format!("WebDAV 预检失败: {error}")))?;
@@ -423,13 +443,12 @@ pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
             ));
         }
     }
-    let (payload, content_hash) = export_bundle(app)?;
     let mut request = authenticated(
         client
             .put(remote)
             .header("content-type", "application/json; charset=utf-8")
             .body(payload),
-        &config,
+        config,
     );
     request = match remote_etag.as_deref() {
         Some(value) => request.header(IF_MATCH, value),
@@ -445,11 +464,7 @@ pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
     if !response.status().is_success() {
         return Err(response_error("上传", response.status()));
     }
-    config.last_etag = etag(response.headers()).or(remote_etag);
-    config.last_synced_at = Some(export_timestamp());
-    config.content_hash = Some(content_hash);
-    write_config(app, &config)?;
-    Ok(serde_json::json!({ "action": "upload", "message": "连接配置已上传到 WebDAV。" }))
+    Ok(etag(response.headers()).or(remote_etag))
 }
 
 pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
@@ -517,8 +532,23 @@ pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_remote_path, parse_bundle, sha256_hex};
+    use super::{
+        client, normalize_remote_path, parse_bundle, sha256_hex, upload_payload, StoredConfig,
+    };
     use serde_json::json;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn read_request(socket: &mut tokio::net::TcpStream) -> String {
+        let mut request = Vec::new();
+        let mut buffer = [0_u8; 1024];
+        while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+            let count = socket.read(&mut buffer).await.unwrap();
+            assert!(count > 0, "client closed before completing HTTP headers");
+            request.extend_from_slice(&buffer[..count]);
+        }
+        String::from_utf8(request).unwrap()
+    }
 
     #[test]
     fn rejects_traversal_remote_paths() {
@@ -542,5 +572,48 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn real_webdav_server_rejects_stale_etag_with_if_match() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut head, _) = listener.accept().await.unwrap();
+            let head_request = read_request(&mut head).await;
+            assert!(head_request.starts_with("HEAD /profiles.json HTTP/1.1\r\n"));
+            head.write_all(
+                b"HTTP/1.1 200 OK\r\nETag: \"etag-before-write\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+
+            let (mut put, _) = listener.accept().await.unwrap();
+            let put_request = read_request(&mut put).await;
+            assert!(put_request.starts_with("PUT /profiles.json HTTP/1.1\r\n"));
+            assert!(put_request.contains("if-match: \"etag-before-write\"\r\n"));
+            put.write_all(
+                b"HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        });
+
+        let config = StoredConfig {
+            enabled: true,
+            url: format!("http://{address}"),
+            username: None,
+            remote_path: "profiles.json".to_string(),
+            allow_insecure_tls: Some(true),
+            password: None,
+            last_synced_at: None,
+            last_etag: Some("\"etag-before-write\"".to_string()),
+            content_hash: None,
+        };
+        let error = upload_payload(&client().unwrap(), &config, b"{}".to_vec())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("ETag 冲突"));
+        server.await.unwrap();
     }
 }

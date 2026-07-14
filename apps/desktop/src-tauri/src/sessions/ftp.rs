@@ -245,6 +245,27 @@ async fn run_ftp_worker(
 }
 
 async fn connect_ftp(profile: &Value, host: &str, port: u16) -> Result<FtpClient, String> {
+    connect_ftp_with_tls_connector(
+        profile,
+        host,
+        port,
+        AsyncNativeTlsConnector::from(suppaftp::async_native_tls::TlsConnector::new()),
+    )
+    .await
+}
+
+/// Connect an FTP client with an injected TLS connector.
+///
+/// Production always supplies the platform-default validating connector above.
+/// Keeping the connector at this boundary lets the real FTPS fixture exercise
+/// explicit and implicit data channels with a test-only self-signed identity,
+/// without weakening the application's certificate verification policy.
+async fn connect_ftp_with_tls_connector(
+    profile: &Value,
+    host: &str,
+    port: u16,
+    tls_connector: AsyncNativeTlsConnector,
+) -> Result<FtpClient, String> {
     let username = profile
         .get("username")
         .and_then(Value::as_str)
@@ -286,10 +307,7 @@ async fn connect_ftp(profile: &Value, host: &str, port: u16) -> Result<FtpClient
                 .await
                 .map_err(|error| error.to_string())?;
             let mut client = client
-                .into_secure(
-                    AsyncNativeTlsConnector::from(suppaftp::async_native_tls::TlsConnector::new()),
-                    host,
-                )
+                .into_secure(tls_connector, host)
                 .await
                 .map_err(|error| error.to_string())?;
             client
@@ -301,7 +319,7 @@ async fn connect_ftp(profile: &Value, host: &str, port: u16) -> Result<FtpClient
         "implicit" => {
             let mut client = AsyncNativeTlsFtpStream::connect_secure_implicit(
                 address,
-                AsyncNativeTlsConnector::from(suppaftp::async_native_tls::TlsConnector::new()),
+                tls_connector,
                 host,
             )
             .await
@@ -820,11 +838,199 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        client_quit, client_read, client_write, connect_ftp, join_remote_path, parent_remote_path,
+        client_quit, client_read, client_write, connect_ftp, connect_ftp_with_tls_connector,
+        join_remote_path, parent_remote_path,
     };
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
     use tokio::net::TcpListener;
     use tokio::sync::Mutex;
+
+    #[cfg(unix)]
+    async fn run_secured_ftps_session<S>(
+        stream: S,
+        acceptor: &suppaftp::async_native_tls::TlsAcceptor,
+        stored: Arc<Mutex<Vec<u8>>>,
+        send_greeting: bool,
+    ) where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    {
+        let mut control = BufReader::new(stream);
+        let mut data_listener = None;
+        if send_greeting {
+            control
+                .get_mut()
+                .write_all(b"220 FileTerm real FTPS fixture\r\n")
+                .await
+                .unwrap();
+        }
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if control.read_line(&mut line).await.unwrap() == 0 {
+                return;
+            }
+            let command = line.trim_end_matches(['\r', '\n']);
+            let (verb, argument) = command.split_once(' ').unwrap_or((command, ""));
+            match verb.to_ascii_uppercase().as_str() {
+                "USER" => control
+                    .get_mut()
+                    .write_all(b"331 Password required\r\n")
+                    .await
+                    .unwrap(),
+                "PASS" => control
+                    .get_mut()
+                    .write_all(b"230 Logged in\r\n")
+                    .await
+                    .unwrap(),
+                "PBSZ" | "PROT" | "TYPE" | "OPTS" => control
+                    .get_mut()
+                    .write_all(b"200 OK\r\n")
+                    .await
+                    .unwrap(),
+                "PASV" | "EPSV" => {
+                    let data = TcpListener::bind("127.0.0.1:0").await.unwrap();
+                    let port = data.local_addr().unwrap().port();
+                    data_listener = Some(data);
+                    let response = if verb.eq_ignore_ascii_case("EPSV") {
+                        format!("229 Entering Extended Passive Mode (|||{port}|)\r\n")
+                    } else {
+                        format!(
+                            "227 Entering Passive Mode (127,0,0,1,{},{})\r\n",
+                            port / 256,
+                            port % 256
+                        )
+                    };
+                    control.get_mut().write_all(response.as_bytes()).await.unwrap();
+                }
+                "STOR" => {
+                    assert_eq!(argument, "/roundtrip.txt");
+                    control
+                        .get_mut()
+                        .write_all(b"150 Opening protected data connection\r\n")
+                        .await
+                        .unwrap();
+                    let (data, _) = data_listener.take().unwrap().accept().await.unwrap();
+                    let mut data = acceptor.accept(data).await.unwrap();
+                    let mut bytes = Vec::new();
+                    data.read_to_end(&mut bytes).await.unwrap();
+                    *stored.lock().await = bytes;
+                    control
+                        .get_mut()
+                        .write_all(b"226 Transfer complete\r\n")
+                        .await
+                        .unwrap();
+                }
+                "RETR" => {
+                    assert_eq!(argument, "/roundtrip.txt");
+                    control
+                        .get_mut()
+                        .write_all(b"150 Opening protected data connection\r\n")
+                        .await
+                        .unwrap();
+                    let (data, _) = data_listener.take().unwrap().accept().await.unwrap();
+                    let mut data = acceptor.accept(data).await.unwrap();
+                    let bytes = stored.lock().await.clone();
+                    data.write_all(&bytes).await.unwrap();
+                    data.shutdown().await.unwrap();
+                    control
+                        .get_mut()
+                        .write_all(b"226 Transfer complete\r\n")
+                        .await
+                        .unwrap();
+                }
+                "QUIT" => {
+                    control.get_mut().write_all(b"221 Goodbye\r\n").await.unwrap();
+                    return;
+                }
+                _ => control.get_mut().write_all(b"200 OK\r\n").await.unwrap(),
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    async fn run_explicit_ftps_server(
+        listener: TcpListener,
+        acceptor: suppaftp::async_native_tls::TlsAcceptor,
+        stored: Arc<Mutex<Vec<u8>>>,
+    ) {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut control = BufReader::new(stream);
+        control
+            .get_mut()
+            .write_all(b"220 FileTerm explicit FTPS fixture\r\n")
+            .await
+            .unwrap();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            assert!(control.read_line(&mut line).await.unwrap() > 0);
+            let command = line.trim_end_matches(['\r', '\n']);
+            if command.eq_ignore_ascii_case("AUTH TLS") {
+                control
+                    .get_mut()
+                    .write_all(b"234 Begin TLS negotiation\r\n")
+                    .await
+                    .unwrap();
+                let secured = acceptor.accept(control.into_inner()).await.unwrap();
+                run_secured_ftps_session(secured, &acceptor, stored, false).await;
+                return;
+            }
+            control.get_mut().write_all(b"500 Send AUTH TLS first\r\n").await.unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    async fn run_implicit_ftps_server(
+        listener: TcpListener,
+        acceptor: suppaftp::async_native_tls::TlsAcceptor,
+        stored: Arc<Mutex<Vec<u8>>>,
+    ) {
+        let (stream, _) = listener.accept().await.unwrap();
+        let secured = acceptor.accept(stream).await.unwrap();
+        run_secured_ftps_session(secured, &acceptor, stored, true).await;
+    }
+
+    #[cfg(unix)]
+    fn create_ftps_identity() -> (std::path::PathBuf, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("fileterm-ftps-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let key = root.join("key.pem");
+        let cert = root.join("cert.pem");
+        let identity = root.join("identity.p12");
+        let openssl = "/usr/bin/openssl";
+        assert!(std::path::Path::new(openssl).exists(), "real FTPS fixture requires {openssl}");
+        let certificate = std::process::Command::new(openssl)
+            .args([
+                "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout",
+            ])
+            .arg(&key)
+            .args(["-out"])
+            .arg(&cert)
+            .args(["-subj", "/CN=localhost", "-days", "1"])
+            .output()
+            .unwrap();
+        assert!(
+            certificate.status.success(),
+            "openssl certificate generation failed: {}",
+            String::from_utf8_lossy(&certificate.stderr)
+        );
+        let package = std::process::Command::new(openssl)
+            .args(["pkcs12", "-export", "-out"])
+            .arg(&identity)
+            .args(["-inkey"])
+            .arg(&key)
+            .args(["-in"])
+            .arg(&cert)
+            .args(["-passout", "pass:fileterm-test"])
+            .output()
+            .unwrap();
+        assert!(
+            package.status.success(),
+            "openssl PKCS#12 generation failed: {}",
+            String::from_utf8_lossy(&package.stderr)
+        );
+        (root, identity)
+    }
 
     #[test]
     fn keeps_ftp_paths_posix_normalized() {
@@ -854,6 +1060,57 @@ mod tests {
         client_quit(&mut client).await.unwrap();
         server.await.unwrap();
         assert_eq!(&*stored.lock().await, b"Tauri FTP");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn explicit_and_implicit_ftps_round_trip_over_real_tls_control_and_data_channels() {
+        let (root, identity) = create_ftps_identity();
+        for security_mode in ["explicit", "implicit"] {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let acceptor = suppaftp::async_native_tls::TlsAcceptor::new(
+                tokio::fs::File::open(&identity).await.unwrap(),
+                "fileterm-test",
+            )
+            .await
+            .unwrap();
+            let stored = Arc::new(Mutex::new(Vec::new()));
+            let server = if security_mode == "explicit" {
+                tokio::spawn(run_explicit_ftps_server(listener, acceptor, stored.clone()))
+            } else {
+                tokio::spawn(run_implicit_ftps_server(listener, acceptor, stored.clone()))
+            };
+            let insecure_connector = suppaftp::async_native_tls::TlsConnector::new()
+                .danger_accept_invalid_certs(true)
+                .danger_accept_invalid_hostnames(true);
+            let profile = serde_json::json!({
+                "securityMode": security_mode,
+                "username": "fileterm",
+                "password": "test",
+            });
+            let mut client = connect_ftp_with_tls_connector(
+                &profile,
+                "localhost",
+                port,
+                suppaftp::tokio::AsyncNativeTlsConnector::from(insecure_connector),
+            )
+            .await
+            .unwrap();
+            client_write(&mut client, "/roundtrip.txt", "Tauri FTPS", "utf-8")
+                .await
+                .unwrap();
+            assert_eq!(
+                client_read(&mut client, "/roundtrip.txt", "utf-8")
+                    .await
+                    .unwrap(),
+                "Tauri FTPS"
+            );
+            client_quit(&mut client).await.unwrap();
+            server.await.unwrap();
+            assert_eq!(&*stored.lock().await, b"Tauri FTPS");
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     async fn run_minimal_ftp_server(listener: TcpListener, stored: Arc<Mutex<Vec<u8>>>) {

@@ -383,9 +383,20 @@ pub(crate) fn reject_unsupported(command: WorkerCmd, message: &str) {
 #[cfg(test)]
 mod tests {
     use super::{connect_transport, TelnetParser, DO, IAC, NAWS, SB, SE, WILL};
-    use tokio::io::AsyncReadExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::time::{timeout, Duration};
+
+    async fn read_http_headers(socket: &mut tokio::net::TcpStream) -> String {
+        let mut headers = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !headers.windows(4).any(|window| window == b"\r\n\r\n") {
+            let count = socket.read(&mut byte).await.unwrap();
+            assert_eq!(count, 1, "client closed before completing CONNECT headers");
+            headers.push(byte[0]);
+        }
+        String::from_utf8(headers).unwrap()
+    }
 
     #[test]
     fn negotiates_naws_and_hides_iac_control_bytes() {
@@ -417,5 +428,59 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn http_connect_proxy_reaches_a_real_telnet_peer_and_relays_bytes() {
+        let target_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target_address = target_listener.local_addr().unwrap();
+        let target = tokio::spawn(async move {
+            let (mut socket, _) = target_listener.accept().await.unwrap();
+            let mut request = [0_u8; 4];
+            socket.read_exact(&mut request).await.unwrap();
+            assert_eq!(&request, b"ping");
+            socket.write_all(b"pong").await.unwrap();
+        });
+
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_address = proxy_listener.local_addr().unwrap();
+        let proxy = tokio::spawn(async move {
+            let (mut client, _) = proxy_listener.accept().await.unwrap();
+            let request = read_http_headers(&mut client).await;
+            assert!(request.starts_with(&format!(
+                "CONNECT 127.0.0.1:{} HTTP/1.1\r\n",
+                target_address.port()
+            )));
+            assert!(request.contains("Proxy-Authorization: Basic cHJveHktdXNlcjpwcm94eS1wYXNz\r\n"));
+            client
+                .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                .await
+                .unwrap();
+            let mut target = tokio::net::TcpStream::connect(target_address).await.unwrap();
+            tokio::io::copy_bidirectional(&mut client, &mut target)
+                .await
+                .unwrap();
+        });
+
+        let profile = serde_json::json!({
+            "proxy": {
+                "type": "http",
+                "host": "127.0.0.1",
+                "port": proxy_address.port(),
+                "username": "proxy-user",
+                "password": "proxy-pass"
+            }
+        });
+        let mut transport = connect_transport(&profile, "127.0.0.1", target_address.port())
+            .await
+            .unwrap();
+        transport.write_all(b"ping").await.unwrap();
+        let mut response = [0_u8; 4];
+        transport.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response, b"pong");
+        drop(transport);
+
+        target.await.unwrap();
+        proxy.await.unwrap();
     }
 }

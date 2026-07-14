@@ -428,6 +428,7 @@ pub fn run() {
             crate::commands::app_update_command_order,
             crate::commands::app_update_command_template,
             crate::commands::app_delete_command_template,
+            crate::commands::app_execute_command_template,
 
             // Local files
             crate::sessions::local_files::app_list_local_directory,

@@ -1320,6 +1320,7 @@ dependencies = [
  "base64 0.22.1",
  "encoding_rs",
  "open",
+ "rand",
  "regex",
  "reqwest 0.12.28",
  "rfd",

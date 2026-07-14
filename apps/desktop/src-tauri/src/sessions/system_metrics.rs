@@ -6,11 +6,10 @@
 
 use std::collections::HashMap;
 
+use russh::client::{Handle, Handler};
 use russh::ChannelMsg;
 
-use crate::sessions::ssh::ClientHandle;
-
-pub async fn probe_remote_platform(handle: &ClientHandle) -> String {
+pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
     // 1. Try POSIX probe
     let posix_cmd = "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'";
 
@@ -66,7 +65,7 @@ pub async fn probe_remote_platform(handle: &ClientHandle) -> String {
 }
 
 /// Run a command via the exec channel and collect its combined stdout/stderr.
-pub async fn exec_command(handle: &ClientHandle, cmd: &str) -> Result<String, String> {
+pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<String, String> {
     let mut channel = handle
         .channel_open_session()
         .await
@@ -91,8 +90,8 @@ pub async fn exec_command(handle: &ClientHandle, cmd: &str) -> Result<String, St
 
 /// Run a command via the exec channel, write `stdin` to the channel, then
 /// collect the combined stdout/stderr.
-pub async fn exec_command_with_stdin(
-    handle: &ClientHandle,
+pub async fn exec_command_with_stdin<H: Handler>(
+    handle: &Handle<H>,
     cmd: &str,
     stdin: &str,
 ) -> Result<String, String> {

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
+use regex::Regex;
 use tokio::sync::{mpsc, oneshot};
 use crate::AppError;
 use crate::storage::{read_json_array, write_json_array, new_id};
@@ -1409,4 +1410,98 @@ pub async fn app_delete_command_template(
 ) -> Result<serde_json::Value, AppError> {
     crate::services::profile_ops::delete_command_template(&app, &command_id)?;
     get_workspace_snapshot(app).await
+}
+
+/// Render and send a command template to an active SSH session.
+///
+/// This intentionally performs the rendering in the main process: the command
+/// source is durable storage, while the renderer only supplies positional
+/// arguments and whether the final carriage return is desired. It mirrors the
+/// Electron workspace service and keeps arbitrary command text out of the IPC
+/// surface.
+#[tauri::command]
+pub async fn app_execute_command_template(
+    app: AppHandle,
+    tab_id: String,
+    command_id: String,
+    args: Option<Vec<String>>,
+    options: Option<Value>,
+) -> Result<Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let session_type = {
+        let tabs = state.tabs.read().await;
+        tabs.iter()
+            .find(|tab| tab.id == tab_id)
+            .map(|tab| tab.session_type.clone())
+    };
+    if session_type.as_deref() != Some("ssh") {
+        return Err(AppError::Command("只有 SSH 会话支持快捷命令".to_string()));
+    }
+
+    let commands = read_json_array(&app, "commands.json")?;
+    let command = commands
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(command_id.as_str()))
+        .ok_or_else(|| AppError::Storage(format!("Command not found: {command_id}")))?;
+    let template = command
+        .get("command")
+        .and_then(Value::as_str)
+        .ok_or_else(|| AppError::Storage(format!("Command is invalid: {command_id}")))?;
+    let rendered_command = render_command_template(template, args.as_deref().unwrap_or_default());
+    let append_carriage_return = options
+        .as_ref()
+        .and_then(|value| value.get("appendCarriageReturn"))
+        .and_then(Value::as_bool)
+        .or_else(|| command.get("appendCarriageReturn").and_then(Value::as_bool))
+        .unwrap_or(true);
+
+    let payload = if append_carriage_return {
+        format!("{rendered_command}\r")
+    } else {
+        rendered_command.clone()
+    };
+    let workers = state.workers.read().await;
+    let sender = workers
+        .get(&tab_id)
+        .ok_or_else(|| AppError::Storage("Session not found".to_string()))?;
+    sender
+        .send(WorkerCmd::WriteTerminal(payload))
+        .await
+        .map_err(|error| AppError::Storage(error.to_string()))?;
+
+    Ok(serde_json::json!({ "renderedCommand": rendered_command }))
+}
+
+fn render_command_template(template: &str, args: &[String]) -> String {
+    // `[p#1]` is the durable command-template placeholder format shared with
+    // Electron. Invalid/out-of-range references deliberately render as an
+    // empty string so existing command libraries retain their behavior.
+    let placeholder = Regex::new(r"\[p#(\d+)\]").expect("constant placeholder regex must compile");
+    placeholder
+        .replace_all(template, |captures: &regex::Captures<'_>| {
+            captures
+                .get(1)
+                .and_then(|index| index.as_str().parse::<usize>().ok())
+                .and_then(|index| index.checked_sub(1))
+                .and_then(|index| args.get(index))
+                .cloned()
+                .unwrap_or_default()
+        })
+        .into_owned()
+}
+
+#[cfg(test)]
+mod command_template_tests {
+    use super::render_command_template;
+
+    #[test]
+    fn renders_positional_command_template_arguments() {
+        assert_eq!(
+            render_command_template("deploy [p#1] --region [p#2] --empty=[p#3]", &[
+                "api".to_string(),
+                "cn-north".to_string(),
+            ]),
+            "deploy api --region cn-north --empty="
+        );
+    }
 }

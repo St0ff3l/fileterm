@@ -1,4 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
+import { getName, getVersion } from '@tauri-apps/api/app'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppUpdateStatus,
   FileTermDesktopApi,
@@ -24,6 +26,40 @@ import type {
 
 const unsupported = (name: string, ..._args: unknown[]) =>
   Promise.reject(new Error(`Tauri command not implemented yet: ${name}`))
+
+let latestNativeDropPaths: string[] = []
+let latestNativeDropAt = 0
+
+// Browser File objects in a Tauri webview intentionally do not expose their
+// native filesystem path. Keep the path list from Tauri's drag-drop event so
+// the existing DOM drop handler can hand main-process code real local paths.
+// The list is single-use to prevent a stale native drop from being paired with
+// a later browser-only drop of the same number of files.
+void getCurrentWindow()
+  .onDragDropEvent((event) => {
+    if (event.payload.type === 'drop') {
+      latestNativeDropPaths = [...event.payload.paths]
+      latestNativeDropAt = Date.now()
+    }
+  })
+  .catch(() => undefined)
+
+function takeNativeDropPaths(files: File[]) {
+  const isFresh = Date.now() - latestNativeDropAt < 5_000
+  if (isFresh && latestNativeDropPaths.length === files.length) {
+    const paths = latestNativeDropPaths
+    latestNativeDropPaths = []
+    latestNativeDropAt = 0
+    return paths
+  }
+  return files.map((file) => file.name)
+}
+
+function normalizePlatform(value: string) {
+  if (value === 'macos' || value === 'darwin') return 'darwin'
+  if (value === 'windows' || value === 'win32') return 'win32'
+  return 'linux'
+}
 
 function subscribe<T>(eventName: string, listener: (payload: T) => void) {
   // Tauri's `listen()` is async — under React strict mode (dev double-mount)
@@ -272,6 +308,12 @@ export function createTauriApi(): FileTermDesktopApi {
       invoke<WorkspaceSnapshot>('app_update_command_template', { commandId, input }),
     deleteCommandTemplate: (commandId: string) =>
       invoke<WorkspaceSnapshot>('app_delete_command_template', { commandId }),
+    executeCommandTemplate: (
+      tabId: string,
+      commandId: string,
+      args: string[] = [],
+      options?: { appendCarriageReturn?: boolean }
+    ) => invoke('app_execute_command_template', { tabId, commandId, args, options: options ?? null }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
@@ -314,7 +356,7 @@ export function createTauriApi(): FileTermDesktopApi {
     stopSshTunnel: (tabId: string, ruleId: string) => invoke('app_stop_ssh_tunnel', { tabId, ruleId }),
     deleteSshTunnel: (tabId: string, ruleId: string) => invoke('app_delete_ssh_tunnel', { tabId, ruleId }),
 
-    getDroppedFilePaths: (files: File[]) => files.map((file) => file.name),
+    getDroppedFilePaths: (files: File[]) => takeNativeDropPaths(files),
     onUiPreferencesChanged: (
       listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
     ) => subscribe('app:ui-preferences-changed', listener),
@@ -343,6 +385,20 @@ export function createTauriApi(): FileTermDesktopApi {
       return invoke<void>('app_window_action', { action: 'minimize' })
     }
   } as unknown as FileTermDesktopApi
+
+  // The core API exposes these as synchronous fields for Electron parity.
+  // Tauri resolves app metadata asynchronously, so start with safe values and
+  // hydrate them from the Rust runtime as soon as IPC is available.
+  void Promise.all([invoke<string>('app_get_platform'), invoke<string>('app_get_arch'), getVersion(), getName()])
+    .then(([nativePlatform, nativeArch, appVersion, appName]) => {
+      Object.assign(api, {
+        platform: normalizePlatform(nativePlatform),
+        arch: nativeArch,
+        appVersion,
+        appName
+      })
+    })
+    .catch(() => undefined)
 
   return new Proxy(api as FileTermDesktopApi, {
     get(target, property, receiver) {

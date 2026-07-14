@@ -6,12 +6,12 @@
 
 ## 当前重构进度（2026-07-14）
 
-仓库当前处于 **Rust + Tauri 迁移 Phase 4：实现完成、进入跨平台 CI 与发行验收**。
+仓库当前处于 **Rust + Tauri 迁移：功能实现接近收口，真实协议与发行候选验收进行中**。
 
-- Phase 0–2 已完成：Tauri bridge/contract test、桌面壳、Rust JSON 存储、Workspace snapshot 与旧 Electron 用户数据兼容已经落地。
+- Phase 0–2 的主体代码已落地：Tauri bridge/contract test、桌面壳、Rust JSON 存储、Workspace snapshot 与旧 Electron 用户数据兼容已经落地；Phase 0 已补原生 metadata 回填和拖放路径 bridge，但仍需实际 Tauri UI 手测；Phase 1 仍有窗口菜单 bridge no-op，不能按“全量功能验收完成”表述。
 - Phase 3 的 russh SSH 主链路已实现：shell、SFTP、MFA、host verification、系统指标、CWD/远端用户跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 出站代理及运行时 SSH `-L/-R/-D` 隧道均已接入 `apps/desktop/src-tauri`。
-- Phase 3 SSH 主链路已由 Phase 4 的 OpenSSH/协议回归共同覆盖；代理与真实远端手工验收仍随发行候选执行。
-- Phase 4 已完成：Transfer journal/断点、FTP/FTPS、Telnet、Serial、WebDAV 真实同步、连接导入导出、偏好/窗口事件、CSP 和本地日志均已接入 Rust backend。
+- Phase 3 已有本地 OpenSSH 的认证、exec、SFTP、HTTP 代理和 local direct-tcpip 回归；MFA 使用真实 SSH 协议夹具验证。真实 sshd 的跳板、动态/远程转发、sudo/root、CWD 事件和完整指标流仍是发行候选手测门禁。
+- Phase 4 的 Transfer journal/断点、FTP/FTPS、Telnet、Serial、WebDAV、连接导入导出、偏好/窗口事件、CSP 和本地日志均已接入 Rust backend。显式/隐式 FTPS、WebDAV ETag、Telnet HTTP 代理已经有本地真实协议夹具；实体/虚拟串口、真实 Telnet 设备、真实 WebDAV 服务和三平台结果仍未全部取得。
 - Phase 5 进行中：macOS Tauri 生产 DMG 已可打包；签名 in-app updater、公证、Windows/Linux CI 结果、迁移工具和正式切换仍是发行前置。
 
 更细的差距和里程碑以 [`docs/plans/active/tauri-migration-progress.md`](plans/active/tauri-migration-progress.md) 为准；Rust 后端的模块级拆分以 [`rust-backend-migration-plan.md`](plans/active/rust-backend-migration-plan.md) 为准。

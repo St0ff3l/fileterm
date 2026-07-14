@@ -78,3 +78,43 @@ jobs:
       - name: Verify direct Telnet socket release
         working-directory: apps/desktop/src-tauri
         run: cargo test sessions::telnet::tests::direct_transport_drop_releases_socket_on_every_desktop_platform
+
+  tauri-serial-virtual:
+    name: Tauri virtual serial (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux Tauri link dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Exercise a kernel PTY through tokio-serial
+        working-directory: apps/desktop/src-tauri
+        run: cargo test sessions::serial::tests::virtual_pty_round_trip_exercises_the_real_serial_stack
+
+  tauri-real-protocols:
+    name: Tauri real protocol fixtures (ubuntu-latest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protocol fixtures and Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-server openssl python3 libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Exercise Tauri protocol services
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib

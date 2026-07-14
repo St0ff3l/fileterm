@@ -11,6 +11,7 @@
 //     tokio task per session.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -589,9 +590,9 @@ fn tunnel_bind_address(host: &str, port: u16) -> Result<String, String> {
     })
 }
 
-async fn forward_local_connection(
+async fn forward_local_connection<H: Handler>(
     mut socket: TcpStream,
-    handle: Arc<Handle<ClientHandler>>,
+    handle: Arc<Handle<H>>,
     rule: &SshTunnelRule,
 ) -> Result<(), String> {
     let origin = socket.local_addr().ok();
@@ -613,7 +614,10 @@ async fn forward_local_connection(
     Ok(())
 }
 
-async fn forward_socks5_connection(mut socket: TcpStream, handle: Arc<Handle<ClientHandler>>) -> Result<(), String> {
+async fn forward_socks5_connection<H: Handler>(
+    mut socket: TcpStream,
+    handle: Arc<Handle<H>>,
+) -> Result<(), String> {
     let mut greeting = [0_u8; 2];
     socket.read_exact(&mut greeting).await.map_err(|error| error.to_string())?;
     if greeting[0] != 5 {
@@ -1063,6 +1067,40 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> SshTransport for T {}
 
 type BoxedSshTransport = Box<dyn SshTransport>;
 
+fn new_client_handler(
+    app: &AppHandle,
+    tab_id: &str,
+    profile_id: &str,
+    host: &str,
+    port: u16,
+    trusted_fingerprint: Option<String>,
+) -> ClientHandler {
+    ClientHandler {
+        app: app.clone(),
+        tab_id: tab_id.to_string(),
+        profile_id: profile_id.to_string(),
+        host: host.to_string(),
+        port,
+        trusted_fingerprint,
+    }
+}
+
+async fn connect_target_through_jump(
+    jump_handle: &Handle<ClientHandler>,
+    config: Arc<russh::client::Config>,
+    handler: ClientHandler,
+    host: &str,
+    port: u16,
+) -> Result<Handle<ClientHandler>, String> {
+    let channel = jump_handle
+        .channel_open_direct_tcpip(host, port as u32, "127.0.0.1", 0)
+        .await
+        .map_err(|error| format!("Jump Host direct-tcpip failed: {error}"))?;
+    russh::client::connect_stream(config, channel.into_stream(), handler)
+        .await
+        .map_err(|error| format!("SSH connect via jump host failed: {error}"))
+}
+
 /// Creates the raw transport used by russh. Profiles with a SOCKS5 or HTTP
 /// CONNECT proxy must reach the target through that proxy before SSH begins
 /// its handshake; passing the profile directly to `russh::connect` bypasses
@@ -1145,7 +1183,10 @@ async fn connect_http_proxy(
         .map_err(|error| format!("HTTP proxy CONNECT write failed: {error}"))?;
 
     let mut response = Vec::with_capacity(1024);
-    let mut chunk = [0_u8; 1024];
+    // Do not consume bytes beyond the HTTP boundary: a proxy may coalesce
+    // its 200 response with the first SSH identification bytes, and a raw
+    // TcpStream has no way to put those bytes back for russh.
+    let mut chunk = [0_u8; 1];
     while !response.windows(4).any(|window| window == b"\r\n\r\n") {
         if response.len() >= 32 * 1024 {
             return Err("HTTP proxy response headers are too large".to_string());
@@ -1234,15 +1275,6 @@ async fn open_session(
         .and_then(|id| id.as_str())
         .unwrap_or("")
         .to_string();
-    let handler = ClientHandler {
-        app: app.clone(),
-        tab_id: tab_id.to_string(),
-        profile_id: profile_id.clone(),
-        host: host.clone(),
-        port,
-        trusted_fingerprint: trusted.clone(),
-    };
-
     let mut config = russh::client::Config::default();
     config.inactivity_timeout = Some(Duration::from_secs(300));
     let config = Arc::new(config);
@@ -1292,50 +1324,110 @@ async fn open_session(
         let jump_handle = Box::pin(open_session(&jump_profile, app, tab_id)).await?;
         eprintln!("[SSH jump] tab={} — jump host connected, opening direct-tcpip to target", tab_id);
 
-        // Open a direct-tcpip channel through the jump host to the target
-        let jump_target_host = host.clone();
-        let jump_target_port = port;
-        let jump_channel = jump_handle
-            .channel_open_direct_tcpip(jump_target_host, jump_target_port as u32, "127.0.0.1", 0)
-            .await
-            .map_err(|e| format!("Jump Host direct-tcpip failed: {}", e))?;
-
-        // Build the main handler for the target connection
-        let target_handler = ClientHandler {
-            app: app.clone(),
-            tab_id: tab_id.to_string(),
-            profile_id: profile_id.clone(),
-            host: host.clone(),
+        let mut target_handle = connect_target_through_jump(
+            &jump_handle,
+            config.clone(),
+            new_client_handler(app, tab_id, &profile_id, &host, port, trusted.clone()),
+            &host,
             port,
-            trusted_fingerprint: trusted,
-        };
-
-        // Connect to the target through the jump channel.
-        // russh's `connect_stream` takes a config + a stream (the channel).
-        // The channel implements AsyncRead + AsyncWrite so it can serve as
-        // the underlying TCP socket.
-        let stream = jump_channel.into_stream();
-        let mut target_handle = russh::client::connect_stream(config, stream, target_handler)
-            .await
-            .map_err(|e| format!("SSH connect via jump host failed: {}", e))?;
-
-        let authed = try_authenticate(&mut target_handle, &username, &auth_type, profile, app, tab_id).await?;
-        if !authed {
-            return Err("SSH Authentication failed (via jump host)".to_string());
+        )
+        .await?;
+        match try_authenticate(&mut target_handle, &username, &auth_type, profile, app, tab_id).await? {
+            AuthenticationResult::Authenticated => return Ok(target_handle),
+            AuthenticationResult::NeedsFreshKeyboardInteractive => {
+                // russh cannot switch from a rejected password/public-key
+                // exchange to keyboard-interactive on the same handle. Open a
+                // new channel through the already-authenticated jump host.
+                let mut retry_handle = connect_target_through_jump(
+                    &jump_handle,
+                    config,
+                    new_client_handler(app, tab_id, &profile_id, &host, port, trusted),
+                    &host,
+                    port,
+                )
+                .await?;
+                if try_keyboard_interactive(
+                    &mut retry_handle,
+                    &username,
+                    profile.get("password").and_then(Value::as_str).unwrap_or(""),
+                    app,
+                    tab_id,
+                    &profile_id,
+                    &host,
+                    port,
+                )
+                .await?
+                {
+                    return Ok(retry_handle);
+                }
+            }
+            AuthenticationResult::Rejected => {}
         }
-        return Ok(target_handle);
+        return Err("SSH Authentication failed (via jump host)".to_string());
     }
 
     let stream = connect_ssh_transport(profile, &host, port).await?;
-    let mut handle = russh::client::connect_stream(config, stream, handler)
+    let mut handle = russh::client::connect_stream(
+        config.clone(),
+        stream,
+        new_client_handler(app, tab_id, &profile_id, &host, port, trusted.clone()),
+    )
         .await
         .map_err(|e| format!("SSH connect failed: {}", e))?;
-
-    let authed = try_authenticate(&mut handle, &username, &auth_type, profile, app, tab_id).await?;
-    if !authed {
-        return Err("SSH Authentication failed".to_string());
+    match try_authenticate(&mut handle, &username, &auth_type, profile, app, tab_id).await? {
+        AuthenticationResult::Authenticated => Ok(handle),
+        AuthenticationResult::NeedsFreshKeyboardInteractive => {
+            // See the equivalent jump-host path above: reconnect before
+            // keyboard-interactive fallback so russh never stalls on a
+            // rejected authentication handle.
+            let stream = connect_ssh_transport(profile, &host, port).await?;
+            let mut retry_handle = russh::client::connect_stream(
+                config,
+                stream,
+                new_client_handler(app, tab_id, &profile_id, &host, port, trusted),
+            )
+            .await
+            .map_err(|error| format!("SSH reconnect for keyboard-interactive failed: {error}"))?;
+            if try_keyboard_interactive(
+                &mut retry_handle,
+                &username,
+                profile.get("password").and_then(Value::as_str).unwrap_or(""),
+                app,
+                tab_id,
+                &profile_id,
+                &host,
+                port,
+            )
+            .await?
+            {
+                Ok(retry_handle)
+            } else {
+                Err("SSH Authentication failed".to_string())
+            }
+        }
+        AuthenticationResult::Rejected => Err("SSH Authentication failed".to_string()),
     }
-    Ok(handle)
+}
+
+enum AuthenticationResult {
+    Authenticated,
+    /// Password/public-key authentication was rejected. A caller that owns
+    /// the transport must reconnect before starting keyboard-interactive.
+    NeedsFreshKeyboardInteractive,
+    Rejected,
+}
+
+#[derive(Clone, Debug)]
+struct KeyboardInteractivePrompt {
+    prompt: String,
+    echo: bool,
+}
+
+#[derive(Clone, Debug)]
+struct KeyboardInteractiveRequest {
+    name: String,
+    instructions: String,
+    prompts: Vec<KeyboardInteractivePrompt>,
 }
 
 async fn try_authenticate(
@@ -1345,7 +1437,7 @@ async fn try_authenticate(
     profile: &Value,
     app: &AppHandle,
     tab_id: &str,
-) -> Result<bool, String> {
+) -> Result<AuthenticationResult, String> {
     let host = profile
         .get("host")
         .and_then(|h| h.as_str())
@@ -1364,22 +1456,11 @@ async fn try_authenticate(
                 .authenticate_password(username, password)
                 .await
                 .map_err(|e| e.to_string())?;
-            if res.success() {
-                return Ok(true);
-            }
-            // Fallback: keyboard-interactive with the same password.
-            let password_owned = password.to_string();
-            try_keyboard_interactive(
-                handle,
-                username,
-                &password_owned,
-                app,
-                tab_id,
-                &profile_id,
-                &host,
-                port,
-            )
-            .await
+            Ok(if res.success() {
+                AuthenticationResult::Authenticated
+            } else {
+                AuthenticationResult::NeedsFreshKeyboardInteractive
+            })
         }
         "privateKey" => {
             let private_key_path = profile
@@ -1415,24 +1496,32 @@ async fn try_authenticate(
                 .authenticate_publickey(username, key_with_hash)
                 .await
                 .map_err(|e| e.to_string())?;
-            if res.success() {
-                return Ok(true);
-            }
-            // Fallback to keyboard-interactive if a password is present.
-            if let Some(password) = profile.get("password").and_then(|p| p.as_str()) {
-                return try_keyboard_interactive(
-                    handle,
-                    username,
-                    password,
-                    app,
-                    tab_id,
-                    &profile_id,
-                    &host,
-                    port,
-                )
-                .await;
-            }
-            Ok(false)
+            Ok(if res.success() {
+                AuthenticationResult::Authenticated
+            } else if profile.get("password").and_then(Value::as_str).is_some() {
+                AuthenticationResult::NeedsFreshKeyboardInteractive
+            } else {
+                AuthenticationResult::Rejected
+            })
+        }
+        "keyboard-interactive" => {
+            let password = profile.get("password").and_then(Value::as_str).unwrap_or("");
+            Ok(if try_keyboard_interactive(
+                handle,
+                username,
+                password,
+                app,
+                tab_id,
+                &profile_id,
+                &host,
+                port,
+            )
+            .await?
+            {
+                AuthenticationResult::Authenticated
+            } else {
+                AuthenticationResult::Rejected
+            })
         }
         _ => {
             // agent
@@ -1450,10 +1539,10 @@ async fn try_authenticate(
                     .await
                     .map_err(|e| e.to_string())?;
                 if res.success() {
-                    return Ok(true);
+                    return Ok(AuthenticationResult::Authenticated);
                 }
             }
-            Ok(false)
+            Ok(AuthenticationResult::Rejected)
         }
     }
 }
@@ -1468,40 +1557,20 @@ async fn try_keyboard_interactive(
     host: &str,
     port: u16,
 ) -> Result<bool, String> {
-    let password_owned = password.to_string();
-    let res = handle
-        .authenticate_keyboard_interactive_start(username, None)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut current = match res {
-        russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(true),
-        russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => return Ok(false),
-        russh::client::KeyboardInteractiveAuthResponse::InfoRequest {
-            name,
-            instructions,
-            prompts,
-        } => (name, instructions, prompts),
-    };
-
-    // Multi-round OTP loop: keep answering prompts until success/failure or a
-    // user-initiated cancel from the renderer. The first round answers every
-    // prompt with the configured password. Subsequent rounds emit
-    // `ssh:interaction` events with `kind: "keyboard-interactive"` and await
-    // the user. The payload matches `SshKeyboardInteractiveRequest` in
-    // packages/core so the renderer's `useSshInteractions` hook shows the
-    // MFA prompt dialog.
-    let mut first_round = true;
-    loop {
-        let answers: Vec<String> = if first_round {
-            first_round = false;
-            current.2.iter().map(|_| password_owned.clone()).collect()
-        } else {
+    let app = app.clone();
+    let tab_id = tab_id.to_string();
+    let profile_id = profile_id.to_string();
+    let host = host.to_string();
+    try_keyboard_interactive_with_responder(handle, username, password, move |request| {
+        let app = app.clone();
+        let tab_id = tab_id.clone();
+        let profile_id = profile_id.clone();
+        let host = host.clone();
+        async move {
             let request_id = uuid::Uuid::new_v4().to_string();
             let (tx, rx) = oneshot::channel::<Value>();
             {
-                let state = app
-                    .state::<crate::services::workspace::WorkspaceState>();
+                let state = app.state::<crate::services::workspace::WorkspaceState>();
                 let mut pending = state.pending_interactions.write().await;
                 pending.insert(request_id.clone(), tx);
             }
@@ -1514,35 +1583,111 @@ async fn try_keyboard_interactive(
                     "profileId": profile_id,
                     "host": host,
                     "port": port,
-                    "name": current.0,
-                    "instructions": current.1,
-                    "prompts": current.2.iter().map(|p| {
-                        serde_json::json!({ "prompt": p.prompt, "echo": p.echo })
-                    }).collect::<Vec<_>>(),
+                    "name": request.name,
+                    "instructions": request.instructions,
+                    "prompts": request.prompts.into_iter().map(|prompt| serde_json::json!({
+                        "prompt": prompt.prompt,
+                        "echo": prompt.echo,
+                    })).collect::<Vec<_>>(),
                 }),
             );
             match rx.await {
-                Ok(response) => {
-                    if response
+                Ok(response)
+                    if !response
                         .get("canceled")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false)
-                    {
-                        return Ok(false);
-                    }
-                    response
-                        .get("answers")
-                        .and_then(|a| a.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .map(|v| v.as_str().unwrap_or("").to_string())
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false) => response.get("answers").and_then(|answers| {
+                        answers.as_array().map(|answers| {
+                            answers
+                                .iter()
+                                .map(|answer| answer.as_str().unwrap_or("").to_string())
                                 .collect()
                         })
-                        .unwrap_or_default()
-                }
-                Err(_) => return Ok(false),
+                    }),
+                _ => None,
             }
-        };
+        }
+    })
+    .await
+}
+
+/// Run SSH keyboard-interactive authentication and ask a caller to supply
+/// only prompts that cannot safely use the profile password. Keeping this
+/// protocol loop separate from Tauri events makes its MFA behaviour directly
+/// testable against a real SSH server implementation.
+async fn try_keyboard_interactive_with_responder<H, F, Fut>(
+    handle: &mut Handle<H>,
+    username: &str,
+    password: &str,
+    mut request_answers: F,
+) -> Result<bool, String>
+where
+    H: Handler,
+    F: FnMut(KeyboardInteractiveRequest) -> Fut,
+    Fut: Future<Output = Option<Vec<String>>>,
+{
+    let res = handle
+        .authenticate_keyboard_interactive_start(username, None)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut current = match res {
+        russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(true),
+        russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => return Ok(false),
+        russh::client::KeyboardInteractiveAuthResponse::InfoRequest {
+            name,
+            instructions,
+            prompts,
+        } => KeyboardInteractiveRequest {
+            name,
+            instructions,
+            prompts: prompts
+                .into_iter()
+                .map(|prompt| KeyboardInteractivePrompt {
+                    prompt: prompt.prompt,
+                    echo: prompt.echo,
+                })
+                .collect(),
+        },
+    };
+
+    // Multi-round OTP loop: a stored password is reused only for a
+    // password-like prompt. MFA/OTP prompts are surfaced immediately, even
+    // when a server sends password and second-factor prompts in one round.
+    // This matches the operational behavior proven in meatshell and avoids
+    // silently submitting the account password as an OTP.
+    let mut password_used = false;
+    for _ in 0..16 {
+        let mut answers = vec![String::new(); current.prompts.len()];
+        let mut pending_indexes = Vec::new();
+        let mut pending_prompts = Vec::new();
+        for (index, prompt) in current.prompts.iter().enumerate() {
+            if !password_used && !password.is_empty() && is_password_prompt(&prompt.prompt) {
+                answers[index] = password.to_string();
+                password_used = true;
+            } else {
+                pending_indexes.push(index);
+                pending_prompts.push(prompt.clone());
+            }
+        }
+
+        if !pending_prompts.is_empty() {
+            let Some(supplied_answers) = request_answers(KeyboardInteractiveRequest {
+                name: current.name.clone(),
+                instructions: current.instructions.clone(),
+                prompts: pending_prompts,
+            })
+            .await
+            else {
+                return Ok(false);
+            };
+            if supplied_answers.len() != pending_indexes.len() {
+                return Ok(false);
+            }
+            for (index, answer) in pending_indexes.into_iter().zip(supplied_answers) {
+                answers[index] = answer;
+            }
+        }
 
         let res = handle
             .authenticate_keyboard_interactive_respond(answers)
@@ -1555,9 +1700,49 @@ async fn try_keyboard_interactive(
                 name,
                 instructions,
                 prompts,
-            } => (name, instructions, prompts),
+            } => KeyboardInteractiveRequest {
+                name,
+                instructions,
+                prompts: prompts
+                    .into_iter()
+                    .map(|prompt| KeyboardInteractivePrompt {
+                        prompt: prompt.prompt,
+                        echo: prompt.echo,
+                    })
+                    .collect(),
+            },
         };
     }
+    Ok(false)
+}
+
+fn is_password_prompt(prompt: &str) -> bool {
+    let normalized = prompt.to_lowercase();
+    !looks_like_mfa_prompt(&normalized)
+        && (normalized.contains("password") || normalized.contains("密码"))
+}
+
+fn looks_like_mfa_prompt(prompt: &str) -> bool {
+    [
+        "code",
+        "otp",
+        "mfa",
+        "2fa",
+        "factor",
+        "duo",
+        "verification",
+        "verify",
+        "token",
+        "authenticator",
+        "passcode",
+        "one-time",
+        "one time",
+        "验证码",
+        "动态",
+        "令牌",
+    ]
+    .iter()
+    .any(|needle| prompt.contains(needle))
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -3189,9 +3374,227 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_http_connect_request, parent_remote_path, remote_bind_host_matches, suppress_shell_setup_echo,
-        tunnel_bind_address, validate_tunnel_rule, SshTunnelRule,
+        build_http_connect_request, is_password_prompt, looks_like_mfa_prompt, parent_remote_path,
+        forward_local_connection, remote_bind_host_matches, suppress_shell_setup_echo,
+        try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
+        KeyboardInteractiveRequest, SshTunnelRule,
     };
+    use std::borrow::Cow;
+    use std::sync::{Arc, Mutex};
+
+    use russh::keys::PrivateKey;
+    use russh::{client, server};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::time::{timeout, Duration};
+
+    #[cfg(unix)]
+    struct OpenSshFixture {
+        root: std::path::PathBuf,
+        remote_dir: std::path::PathBuf,
+        client_key: std::path::PathBuf,
+        port: u16,
+        process: std::process::Child,
+    }
+
+    #[cfg(unix)]
+    impl Drop for OpenSshFixture {
+        fn drop(&mut self) {
+            let _ = self.process.kill();
+            let _ = self.process.wait();
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[cfg(unix)]
+    fn current_test_username() -> String {
+        std::env::var("USER")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| {
+                String::from_utf8(
+                    std::process::Command::new("id")
+                        .arg("-un")
+                        .output()
+                        .expect("could not determine the current test user")
+                        .stdout,
+                )
+                .expect("current test user was not UTF-8")
+                .trim()
+                .to_string()
+            })
+    }
+
+    #[cfg(unix)]
+    fn start_openssh_fixture() -> OpenSshFixture {
+        const SSHD: &str = "/usr/sbin/sshd";
+        const SSH_KEYGEN: &str = "/usr/bin/ssh-keygen";
+        assert!(
+            std::path::Path::new(SSHD).exists() && std::path::Path::new(SSH_KEYGEN).exists(),
+            "real OpenSSH verification requires {SSHD} and {SSH_KEYGEN}"
+        );
+
+        let root = std::env::temp_dir().join(format!("fileterm-tauri-sshd-{}", uuid::Uuid::new_v4()));
+        let remote_dir = root.join("remote");
+        std::fs::create_dir_all(&remote_dir).unwrap();
+        let host_key = root.join("host-key");
+        let client_key = root.join("client-key");
+        let authorized_keys = root.join("authorized_keys");
+        for key in [&host_key, &client_key] {
+            let result = std::process::Command::new(SSH_KEYGEN)
+                .args(["-q", "-t", "ed25519", "-N", "", "-f"])
+                .arg(key)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "ssh-keygen failed: {}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+        std::fs::copy(client_key.with_extension("pub"), &authorized_keys).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&authorized_keys, std::fs::Permissions::from_mode(0o600))
+                .unwrap();
+        }
+
+        let port_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = port_listener.local_addr().unwrap().port();
+        drop(port_listener);
+        let config = root.join("sshd_config");
+        std::fs::write(
+            &config,
+            format!(
+                "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nPidFile {}\nAuthorizedKeysFile {}\nStrictModes no\nPasswordAuthentication no\nKbdInteractiveAuthentication no\nChallengeResponseAuthentication no\nPubkeyAuthentication yes\nAllowTcpForwarding yes\nUsePAM no\nUseDNS no\nLogLevel ERROR\nSubsystem sftp internal-sftp\n",
+                host_key.display(),
+                root.join("sshd.pid").display(),
+                authorized_keys.display(),
+            ),
+        )
+        .unwrap();
+        let process = std::process::Command::new(SSHD)
+            .args(["-D", "-e", "-f"])
+            .arg(&config)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        OpenSshFixture {
+            root,
+            remote_dir,
+            client_key,
+            port,
+            process,
+        }
+    }
+
+    #[cfg(unix)]
+    async fn wait_for_openssh(port: u16) {
+        for _ in 0..40 {
+            if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_ok()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("local OpenSSH fixture did not begin listening");
+    }
+
+    #[cfg(unix)]
+    async fn read_http_headers(socket: &mut tokio::net::TcpStream) -> String {
+        let mut headers = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !headers.windows(4).any(|window| window == b"\r\n\r\n") {
+            let count = socket.read(&mut byte).await.unwrap();
+            assert_eq!(count, 1, "proxy client closed before completing CONNECT headers");
+            headers.push(byte[0]);
+        }
+        String::from_utf8(headers).unwrap()
+    }
+
+    #[cfg(unix)]
+    async fn authenticate_openssh_fixture(
+        fixture: &OpenSshFixture,
+        profile: &serde_json::Value,
+    ) -> client::Handle<AcceptTestServerKey> {
+        let stream = super::connect_ssh_transport(profile, "127.0.0.1", fixture.port)
+            .await
+            .unwrap();
+        let mut handle = client::connect_stream(
+            Arc::new(client::Config::default()),
+            stream,
+            AcceptTestServerKey,
+        )
+        .await
+        .unwrap();
+        let key = russh::keys::decode_secret_key(
+            &std::fs::read_to_string(&fixture.client_key).unwrap(),
+            None,
+        )
+        .unwrap();
+        let authenticated = handle
+            .authenticate_publickey(
+                current_test_username(),
+                russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), None),
+            )
+            .await
+            .unwrap();
+        assert!(authenticated.success());
+        handle
+    }
+
+    struct AcceptTestServerKey;
+
+    impl client::Handler for AcceptTestServerKey {
+        type Error = russh::Error;
+
+        async fn check_server_key(
+            &mut self,
+            _server_public_key: &russh::keys::PublicKey,
+        ) -> Result<bool, Self::Error> {
+            Ok(true)
+        }
+    }
+
+    struct KeyboardInteractiveMfaServer {
+        responses: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl server::Handler for KeyboardInteractiveMfaServer {
+        type Error = russh::Error;
+
+        async fn auth_keyboard_interactive<'a>(
+            &'a mut self,
+            _user: &str,
+            _submethods: &str,
+            response: Option<server::Response<'a>>,
+        ) -> Result<server::Auth, Self::Error> {
+            if let Some(response) = response {
+                let received = response
+                    .map(|answer| String::from_utf8_lossy(&answer).into_owned())
+                    .collect::<Vec<_>>();
+                *self.responses.lock().unwrap() = received.clone();
+                return Ok(if received == ["saved-password", "246810"] {
+                    server::Auth::Accept
+                } else {
+                    server::Auth::reject()
+                });
+            }
+            Ok(server::Auth::Partial {
+                name: Cow::Borrowed("FileTerm MFA fixture"),
+                instructions: Cow::Borrowed("Enter password and second factor"),
+                prompts: Cow::Owned(vec![
+                    (Cow::Borrowed("Password: "), false),
+                    (Cow::Borrowed("OTP code: "), false),
+                ]),
+            })
+        }
+    }
 
     #[test]
     fn suppresses_only_the_echoed_cwd_setup_command() {
@@ -3239,6 +3642,211 @@ mod tests {
     #[test]
     fn rejects_http_connect_header_injection() {
         assert!(build_http_connect_request("host\r\nInjected: x", 22, "", "").is_err());
+    }
+
+    #[test]
+    fn only_reuses_saved_password_for_password_prompts() {
+        assert!(is_password_prompt("Password: "));
+        assert!(looks_like_mfa_prompt("Verification code: "));
+        assert!(!is_password_prompt("Verification code: "));
+        assert!(!is_password_prompt("OTP token: "));
+    }
+
+    #[tokio::test]
+    async fn real_ssh_mfa_server_keeps_saved_password_out_of_otp_answer() {
+        let responses = Arc::new(Mutex::new(Vec::new()));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut server_config = server::Config::default();
+        server_config.inactivity_timeout = None;
+        server_config.auth_rejection_time = Duration::from_millis(1);
+        server_config.keys.push(
+            PrivateKey::random(
+                &mut rand::rng(),
+                russh::keys::ssh_key::Algorithm::Ed25519,
+            )
+            .unwrap(),
+        );
+        let server_responses = responses.clone();
+        let server_task = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let running = server::run_stream(
+                Arc::new(server_config),
+                socket,
+                KeyboardInteractiveMfaServer {
+                    responses: server_responses,
+                },
+            )
+            .await
+            .unwrap();
+            // Dropping the test client ends the SSH stream with EOF; that is
+            // the expected lifecycle outcome after successful authentication.
+            let _ = running.await;
+        });
+
+        let mut handle = client::connect(
+            Arc::new(client::Config::default()),
+            address,
+            AcceptTestServerKey,
+        )
+        .await
+        .unwrap();
+        let requests = Arc::new(Mutex::new(Vec::<KeyboardInteractiveRequest>::new()));
+        let requested_prompts = requests.clone();
+        let authenticated = try_keyboard_interactive_with_responder(
+            &mut handle,
+            "alice",
+            "saved-password",
+            move |request| {
+                let requested_prompts = requested_prompts.clone();
+                async move {
+                    requested_prompts.lock().unwrap().push(request);
+                    Some(vec!["246810".to_string()])
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(authenticated);
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].prompts.len(), 1);
+        assert_eq!(requests[0].prompts[0].prompt, "OTP code: ");
+        drop(requests);
+        assert_eq!(responses.lock().unwrap().as_slice(), ["saved-password", "246810"]);
+
+        drop(handle);
+        timeout(Duration::from_secs(2), server_task)
+            .await
+            .expect("MFA fixture did not release its SSH socket")
+            .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn real_openssh_sshd_accepts_tauri_auth_exec_sftp_and_platform_probe() {
+        let fixture = start_openssh_fixture();
+        wait_for_openssh(fixture.port).await;
+
+        let profile = serde_json::json!({ "proxy": { "type": "none" } });
+        let handle = authenticate_openssh_fixture(&fixture, &profile).await;
+
+        let command = crate::sessions::system_metrics::exec_command(
+            &handle,
+            "printf 'tauri-openssh-exec'",
+        )
+        .await
+        .unwrap();
+        assert_eq!(command, "tauri-openssh-exec");
+
+        let platform = crate::sessions::system_metrics::probe_remote_platform(&handle).await;
+        #[cfg(target_os = "linux")]
+        assert_eq!(platform, "linux");
+        #[cfg(target_os = "macos")]
+        assert_eq!(platform, "unknown", "macOS metrics collection is not implemented yet");
+
+        let channel = handle.channel_open_session().await.unwrap();
+        channel.request_subsystem(true, "sftp").await.unwrap();
+        let sftp = russh_sftp::client::SftpSession::new(channel.into_stream())
+            .await
+            .unwrap();
+        let remote_file = fixture.remote_dir.join("tauri-sftp.txt");
+        let remote_file = remote_file.to_string_lossy().into_owned();
+        sftp.create(&remote_file).await.unwrap();
+        sftp.write(&remote_file, b"tauri-openssh-sftp").await.unwrap();
+        assert_eq!(sftp.read(&remote_file).await.unwrap(), b"tauri-openssh-sftp");
+        sftp.close().await.unwrap();
+
+        let target_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let target_address = target_listener.local_addr().unwrap();
+        let target = tokio::spawn(async move {
+            let (mut socket, _) = target_listener.accept().await.unwrap();
+            let mut request = [0_u8; 4];
+            socket.read_exact(&mut request).await.unwrap();
+            assert_eq!(&request, b"ping");
+            socket.write_all(b"pong").await.unwrap();
+        });
+        let local_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let local_address = local_listener.local_addr().unwrap();
+        let mut local_client = tokio::net::TcpStream::connect(local_address).await.unwrap();
+        let (local_socket, _) = local_listener.accept().await.unwrap();
+        let tunnel_handle = Arc::new(handle);
+        let tunnel_rule = SshTunnelRule {
+            id: "real-openssh-local".to_string(),
+            name: "real-openssh-local".to_string(),
+            kind: "local".to_string(),
+            bind_host: "127.0.0.1".to_string(),
+            bind_port: local_address.port(),
+            target_host: Some("127.0.0.1".to_string()),
+            target_port: Some(target_address.port()),
+            auto_start: false,
+        };
+        let bridge = tokio::spawn({
+            let tunnel_handle = tunnel_handle.clone();
+            async move { forward_local_connection(local_socket, tunnel_handle, &tunnel_rule).await }
+        });
+        local_client.write_all(b"ping").await.unwrap();
+        let mut response = [0_u8; 4];
+        local_client.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response, b"pong");
+        drop(local_client);
+        timeout(Duration::from_secs(2), target).await.unwrap().unwrap();
+        timeout(Duration::from_secs(2), bridge)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn real_openssh_sshd_authenticates_through_tauri_http_proxy_transport() {
+        let fixture = start_openssh_fixture();
+        wait_for_openssh(fixture.port).await;
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_address = proxy_listener.local_addr().unwrap();
+        let target_port = fixture.port;
+        let proxy = tokio::spawn(async move {
+            let (mut client, _) = proxy_listener.accept().await.unwrap();
+            let request = read_http_headers(&mut client).await;
+            assert!(request.starts_with(&format!(
+                "CONNECT 127.0.0.1:{target_port} HTTP/1.1\r\n"
+            )));
+            assert!(request.contains("Proxy-Authorization: Basic cHJveHktdXNlcjpwcm94eS1wYXNz\r\n"));
+            client
+                .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                .await
+                .unwrap();
+            let mut target = tokio::net::TcpStream::connect(("127.0.0.1", target_port))
+                .await
+                .unwrap();
+            tokio::io::copy_bidirectional(&mut client, &mut target)
+                .await
+                .unwrap();
+        });
+        let profile = serde_json::json!({
+            "proxy": {
+                "type": "http",
+                "host": "127.0.0.1",
+                "port": proxy_address.port(),
+                "username": "proxy-user",
+                "password": "proxy-pass"
+            }
+        });
+        let handle = authenticate_openssh_fixture(&fixture, &profile).await;
+        let output = crate::sessions::system_metrics::exec_command(
+            &handle,
+            "printf 'tauri-openssh-http-proxy'",
+        )
+        .await
+        .unwrap();
+        assert_eq!(output, "tauri-openssh-http-proxy");
+        drop(handle);
+        timeout(Duration::from_secs(2), proxy)
+            .await
+            .expect("HTTP proxy transport did not release")
+            .unwrap();
     }
 
     #[test]
