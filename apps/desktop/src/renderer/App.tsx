@@ -216,7 +216,8 @@ export function App() {
   const shouldAlignFilePanelOnMount = activeTab
     ? !Object.prototype.hasOwnProperty.call(filePanelHeights, activeTab.id)
     : false
-  const isWorkspaceFocusMode = activeTab ? (workspaceFocusModes[activeTab.id] ?? false) : false
+  const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
+  const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
   const activeTabId = activeTab?.id ?? null
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {
@@ -247,13 +248,13 @@ export function App() {
   }, [activeWorkspaceOrderKey])
 
   useEffect(() => {
-    const openTabIds = new Set(visibleWorkspaceTabs.map((tab) => tab.id))
+    const openTabIds = new Set([...visibleWorkspaceTabs.map((tab) => tab.id), ...localTabs.map((tab) => tab.id)])
     setFilePanelHeights((currentHeights) => retainOpenTabUiState(currentHeights, openTabIds))
     setWorkspaceFocusModes((currentModes) => retainOpenTabUiState(currentModes, openTabIds))
-  }, [visibleWorkspaceTabs])
+  }, [localTabs, visibleWorkspaceTabs])
 
   useEffect(() => {
-    if (!activeTabId || isHomeWorkspaceVisible) {
+    if (!activeWorkspaceFocusKey || isHomeWorkspaceVisible) {
       return
     }
 
@@ -261,7 +262,7 @@ export function App() {
     if (!isWorkspaceFocusMode) {
       setSidebarWidth(214)
     }
-  }, [activeTabId, isHomeWorkspaceVisible, isWorkspaceFocusMode, setIsSystemSidebarCollapsed])
+  }, [activeWorkspaceFocusKey, isHomeWorkspaceVisible, isWorkspaceFocusMode, setIsSystemSidebarCollapsed])
 
   // 3. Workspace Modals Hook
   const {
@@ -465,9 +466,12 @@ export function App() {
   const {
     credentialsRequest,
     hostVerificationRequest,
+    keyPassphraseRequest,
     errorMessage: sshInteractionError,
     cancelCredentials,
     submitCredentials,
+    cancelKeyPassphrase,
+    submitKeyPassphrase,
     rejectHost,
     acceptHostOnce,
     acceptHostAndSave
@@ -614,7 +618,7 @@ export function App() {
       return
     }
 
-    if (form.type === 'ssh' && form.authType === 'privateKey' && !form.privateKeyPath) {
+    if (form.type === 'ssh' && form.authType === 'privateKey' && !form.privateKeyId && !form.privateKeyPath) {
       setFormError(t.missingPrivateKeyPath)
       return
     }
@@ -1041,10 +1045,14 @@ export function App() {
       openTabContextMenu(event, target)
     },
     onToggleWorkspaceFocus: () => {
-      const nextFocusMode = !isWorkspaceFocusMode
-      if (activeTab) {
-        setWorkspaceFocusModes((currentModes) => ({ ...currentModes, [activeTab.id]: nextFocusMode }))
+      if (!activeWorkspaceFocusKey) {
+        return
       }
+      const nextFocusMode = !isWorkspaceFocusMode
+      setWorkspaceFocusModes((currentModes) => ({
+        ...currentModes,
+        [activeWorkspaceFocusKey]: nextFocusMode
+      }))
       setIsSystemSidebarCollapsed(nextFocusMode)
       if (!nextFocusMode) {
         setSidebarWidth(214)
@@ -1390,6 +1398,16 @@ export function App() {
                 onReject: rejectHost,
                 onAcceptOnce: acceptHostOnce,
                 onAcceptAndSave: acceptHostAndSave
+              }
+            : null
+        }
+        sshKeyPassphrase={
+          keyPassphraseRequest
+            ? {
+                errorMessage: sshInteractionError,
+                request: keyPassphraseRequest,
+                onCancel: cancelKeyPassphrase,
+                onSubmit: submitKeyPassphrase
               }
             : null
         }

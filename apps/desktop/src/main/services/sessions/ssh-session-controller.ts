@@ -6,7 +6,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { Readable, type Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ClientChannel, ConnectConfig, FileEntry, SFTPWrapper, Stats } from 'ssh2'
-import { Client } from 'ssh2'
+import ssh2 from 'ssh2'
 import type {
   PermissionChangeOptions,
   RemoteFileAccessOptions,
@@ -35,12 +35,21 @@ import { createSshDebugLogger, isSshDebugEnabled, singleLine } from './ssh-debug
 import { decodeBuffer, encodeText } from '../text-encoding.js'
 import { appLog, appWarn } from '../app-logger.js'
 
+const { Client, utils } = ssh2
+type Client = InstanceType<typeof Client>
+
 export interface SshSessionClientDependencies {
   main?: Client
   exec?: Client
   sftp?: Client
   transfer?: Client
   createTransferClient?: () => Client
+  resolveManagedKey?(keyId: string): Promise<{
+    key: { id: string; name: string; encrypted: boolean }
+    privateKey: Buffer
+    savedPassphrase?: string
+  }>
+  setManagedKeyPassphrase?(keyId: string, passphrase: string | undefined): Promise<void>
 }
 
 export class LiveSshSessionController extends BaseFileSessionController implements SshSessionController {
@@ -57,6 +66,8 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   private readonly sftpSsh: Client
   private transferSsh: Client
   private readonly createTransferClient: () => Client
+  private readonly resolveManagedKey?: SshSessionClientDependencies['resolveManagedKey']
+  private readonly setManagedKeyPassphrase?: SshSessionClientDependencies['setManagedKeyPassphrase']
   private readonly sshDebug = createSshDebugLogger(isSshDebugEnabled(), (message) => {
     this.appendSystemMessage(message)
   })
@@ -122,6 +133,8 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
   ) {
     super(id, 'ssh', profile)
     this.createTransferClient = clients.createTransferClient ?? (() => new Client())
+    this.resolveManagedKey = clients.resolveManagedKey
+    this.setManagedKeyPassphrase = clients.setManagedKeyPassphrase
     this.ssh = clients.main ?? new Client()
     this.execSsh = clients.exec ?? new Client()
     this.sftpSsh = clients.sftp ?? new Client()
@@ -129,6 +142,53 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.currentRemotePath = profile.remotePath || '.'
     this.transcript = new BoundedTextBuffer(LiveSshSessionController.TRANSCRIPT_LIMIT, initialTranscript)
     this.appendSystemMessage('连接主机...\r\n')
+  }
+
+  private async resolveSshAuthConfig(
+    profile: SshProfile
+  ): Promise<Pick<ConnectConfig, 'password' | 'privateKey' | 'passphrase' | 'agent'>> {
+    if (profile.authType !== 'privateKey' || !profile.privateKeyId) {
+      return resolveSshAuthConfig(profile)
+    }
+    if (!this.resolveManagedKey) {
+      throw new Error('SSH key service unavailable')
+    }
+
+    const resolved = await this.resolveManagedKey(profile.privateKeyId)
+    if (!resolved.key.encrypted) {
+      return { privateKey: resolved.privateKey }
+    }
+
+    let passphrase = resolved.savedPassphrase
+    let reason: 'required' | 'invalid-saved' = 'required'
+    if (passphrase) {
+      const parsed = utils.parseKey(resolved.privateKey, passphrase)
+      if (!(parsed instanceof Error) && parsed.isPrivateKey()) {
+        return { privateKey: resolved.privateKey, passphrase }
+      }
+      reason = 'invalid-saved'
+      passphrase = undefined
+      await this.setManagedKeyPassphrase?.(resolved.key.id, undefined)
+    }
+
+    const response = await this.requestInteraction({
+      kind: 'key-passphrase',
+      keyId: resolved.key.id,
+      keyName: resolved.key.name,
+      reason
+    })
+    if (response.kind !== 'key-passphrase' || response.canceled) {
+      throw new Error('SSH key passphrase request canceled')
+    }
+
+    const parsed = utils.parseKey(resolved.privateKey, response.passphrase)
+    if (parsed instanceof Error || !parsed.isPrivateKey()) {
+      throw new Error('私钥口令不正确。')
+    }
+    if (response.savePassphrase) {
+      await this.setManagedKeyPassphrase?.(resolved.key.id, response.passphrase)
+    }
+    return { privateKey: resolved.privateKey, passphrase: response.passphrase }
   }
 
   override async connect(): Promise<void> {
@@ -145,7 +205,7 @@ export class LiveSshSessionController extends BaseFileSessionController implemen
     this.clearShellSetupSuppression()
 
     const profile = await this.resolveConnectionProfile(this.profile as SshProfile)
-    const authConfig = await resolveSshAuthConfig(profile)
+    const authConfig = await this.resolveSshAuthConfig(profile)
     const shouldTryKeyboard = profile.authType === 'password' && Boolean(profile.password)
     const username = profile.username || os.userInfo().username
     const sshConfig: ConnectConfig = {

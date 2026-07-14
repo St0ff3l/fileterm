@@ -13,12 +13,15 @@ import type {
   CreateProfileInput,
   DirectorySnapshot,
   FileEditorWindowInput,
+  ImportSshKeyInput,
   LocalFileItem,
   PermissionChangeOptions,
   RemoteFileAccessOptions,
   SessionMetricsUpdate,
   SshInteractionRequest,
   SshInteractionResponse,
+  SshKeyImportResult,
+  SshKeyMetadata,
   TransferTask,
   TransferTargetOptions,
   FileTermDesktopApi,
@@ -92,6 +95,17 @@ const api: FileTermDesktopApi = {
   requestQuitApp: (): Promise<void> => ipcRenderer.invoke('app:requestQuitApp'),
   getSnapshot: (): Promise<WorkspaceSnapshot> => ipcRenderer.invoke('workspace:getSnapshot'),
   getConnectionLibrary: (): Promise<ConnectionLibrarySnapshot> => ipcRenderer.invoke('workspace:getConnectionLibrary'),
+  listSshKeys: (): Promise<SshKeyMetadata[]> => ipcRenderer.invoke('sshKeys:list'),
+  importSshKey: (input?: ImportSshKeyInput): Promise<SshKeyImportResult | null> =>
+    ipcRenderer.invoke('sshKeys:import', input),
+  updateSshKeyNote: (keyId: string, note: string): Promise<SshKeyMetadata> =>
+    ipcRenderer.invoke('sshKeys:updateNote', keyId, note),
+  deleteSshKey: (keyId: string): Promise<void> => ipcRenderer.invoke('sshKeys:delete', keyId),
+  onSshKeysChanged: (listener: (keys: SshKeyMetadata[]) => void) => {
+    const wrapped = (_event: unknown, keys: SshKeyMetadata[]) => listener(keys)
+    ipcRenderer.on('sshKeys:changed', wrapped)
+    return () => ipcRenderer.off('sshKeys:changed', wrapped)
+  },
   createProfile: (input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
     ipcRenderer.invoke('workspace:createProfile', input),
   updateProfile: (profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot> =>
