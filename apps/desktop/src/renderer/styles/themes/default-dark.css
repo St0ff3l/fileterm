@@ -3153,3 +3153,19 @@
   -webkit-appearance: none !important;
   appearance: none !important;
 }
+
+/* SSH key import dialog follows the connection form's dark neutral surfaces. */
+:root:not([data-theme]) .confirm-action-dialog.ssh-key-import-dialog,
+:root[data-theme='default-dark'] .confirm-action-dialog.ssh-key-import-dialog,
+:root[data-theme='default'] .confirm-action-dialog.ssh-key-import-dialog {
+  background: #1b1b1b !important;
+}
+
+:root:not([data-theme]) .ssh-key-import-dialog .ssh-key-note-dialog__field input,
+:root[data-theme='default-dark'] .ssh-key-import-dialog .ssh-key-note-dialog__field input,
+:root[data-theme='default'] .ssh-key-import-dialog .ssh-key-note-dialog__field input,
+:root:not([data-theme]) .ssh-key-import-dialog .ssh-key-import-dialog__file-name,
+:root[data-theme='default-dark'] .ssh-key-import-dialog .ssh-key-import-dialog__file-name,
+:root[data-theme='default'] .ssh-key-import-dialog .ssh-key-import-dialog__file-name {
+  background: #1a1a1a !important;
+}

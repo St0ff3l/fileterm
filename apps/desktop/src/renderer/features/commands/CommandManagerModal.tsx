@@ -468,7 +468,7 @@ export function CommandManagerModal({
             {node.children.map((child) => renderNode(child, depth + 1, options))}
             {node.children.length === 0 && (
               <div className="manager-row empty-folder" style={{ paddingLeft: `${(depth + 1) * 18 + 18}px` }}>
-                <span>{t.commandEmpty}</span>
+                <span>{t.emptyFolder}</span>
               </div>
             )}
           </div>

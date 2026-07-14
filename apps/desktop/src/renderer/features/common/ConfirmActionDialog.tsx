@@ -7,6 +7,7 @@ export function ConfirmActionDialog({
   confirmLabel,
   confirmDisabled = false,
   confirmVariant = 'danger',
+  className,
   description,
   errorMessage,
   extraActions = null,
@@ -19,6 +20,7 @@ export function ConfirmActionDialog({
   confirmLabel: string
   confirmDisabled?: boolean
   confirmVariant?: 'danger' | 'primary'
+  className?: string
   description: ReactNode
   errorMessage?: string | null
   extraActions?: ReactNode
@@ -35,7 +37,10 @@ export function ConfirmActionDialog({
 
   const dialog = (
     <div className="modal-backdrop">
-      <div className="modal-card confirm-action-dialog" onClick={(event) => event.stopPropagation()}>
+      <div
+        className={`modal-card confirm-action-dialog${className ? ` ${className}` : ''}`}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="confirm-action-dialog__header">
           <div className="confirm-action-dialog__title">{title}</div>
           <div className="confirm-action-dialog__description">{description}</div>

@@ -85,6 +85,8 @@ export function HomeWorkspace({
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
+  const [activeSshKeyFolderName, setActiveSshKeyFolderName] = useState('全部密钥')
+  const [sshKeyStats, setSshKeyStats] = useState({ keyCount: 0, folderCount: 0 })
 
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
   const tabOrder: Record<string, number> = {
@@ -352,7 +354,7 @@ export function HomeWorkspace({
           )}
           {activeTab === 'ssh-key-manager' && (
             <div key="ssh-key-manager" className="page-transition" data-nav-direction={navDirection}>
-              <SshKeyManagerPage />
+              <SshKeyManagerPage onActiveFolderChange={setActiveSshKeyFolderName} onStatsChange={setSshKeyStats} />
             </div>
           )}
           {activeTab === 'settings' && (
@@ -410,6 +412,16 @@ export function HomeWorkspace({
                     <span>{activeCommandFolderName}</span>
                   </>
                 )}
+              </>
+            )}
+            {activeTab === 'ssh-key-manager' && (
+              <>
+                <span className="footer-meta-separator">|</span>
+                <span>{sshKeyStats.keyCount} 个密钥</span>
+                <span className="footer-meta-separator">|</span>
+                <span>{sshKeyStats.folderCount} 个分组</span>
+                <span className="footer-meta-spacer"></span>
+                <span>{activeSshKeyFolderName}</span>
               </>
             )}
           </div>

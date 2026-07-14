@@ -805,6 +805,10 @@
   opacity: 0.6;
 }
 
+.footer-meta-spacer {
+  flex: 1;
+}
+
 .footer-nav {
   display: flex;
   align-items: center;

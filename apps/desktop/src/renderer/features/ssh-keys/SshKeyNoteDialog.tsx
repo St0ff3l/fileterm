@@ -53,6 +53,7 @@ export function SshKeyNoteDialog({
 
   return (
     <ConfirmActionDialog
+      className="ssh-key-import-dialog"
       confirmDisabled={!canSubmit || isSelectingFile}
       confirmLabel={mode === 'import' ? '保存' : '保存备注'}
       confirmVariant="primary"
