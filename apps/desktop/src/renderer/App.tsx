@@ -13,6 +13,7 @@ import {
 import {
   type CommandExecutionOptions,
   type ConnectionFormMode,
+  type ConnectionImportPlan,
   type ConnectionProfile,
   type CreateProfileInput,
   type FileContentSnapshot,
@@ -25,6 +26,7 @@ import { CommandManagerModal } from './features/commands/CommandManagerModal'
 import { ConnectionManagerModal } from './features/connections/ConnectionManagerModal'
 import { ConnectionFormHost } from './features/connections/ConnectionFormHost'
 import { ConnectionModal } from './features/connections/ConnectionModal'
+import { ConnectionImportPreviewModal } from './features/connections/ConnectionImportPreviewModal'
 
 const FileEditorModal = lazy(() =>
   import('./features/files/FileEditorModal').then((m) => ({ default: m.FileEditorModal }))
@@ -116,6 +118,7 @@ export function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams))
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams))
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
+  const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
@@ -124,6 +127,32 @@ export function App() {
 
   const desktopApi = window.fileterm
   const isWindowsDesktop = desktopApi?.platform === 'win32'
+
+  const openConnectionImportPreview = () => {
+    void desktopApi
+      ?.previewConnectionImport()
+      .then((plan) => plan && setConnectionImportPlan(plan))
+      .catch((cause) => reportError(setError, '读取连接配置', cause))
+  }
+
+  const commitConnectionJsonPreview = async (
+    selectedItemIds: string[],
+    conflictStrategy: 'skip' | 'overwrite' | 'create'
+  ) => {
+    if (!connectionImportPlan || !desktopApi) return
+    try {
+      const result = await desktopApi.commitConnectionJsonImport(connectionImportPlan.id, {
+        selectedItemIds,
+        conflictStrategy
+      })
+      setConnectionImportPlan(null)
+      setError(
+        `连接导入：新增 ${result.imported}，覆盖 ${result.overwritten ?? 0}，跳过 ${result.skipped}，失败 ${result.failed}`
+      )
+    } catch (cause) {
+      reportError(setError, '导入连接', cause)
+    }
+  }
 
   useThemeMode(themeMode)
 
@@ -294,6 +323,7 @@ export function App() {
     folders: workspace.folders || [],
     formWindowMode,
     formWindowProfileId,
+    hasLoadedInitialSnapshot,
     isConnectionFormWindow,
     profiles: workspace.profiles || []
   })
@@ -465,6 +495,7 @@ export function App() {
   // 6. SSH Interactions Hook
   const {
     credentialsRequest,
+    keyboardInteractiveRequest,
     hostVerificationRequest,
     keyPassphraseRequest,
     errorMessage: sshInteractionError,
@@ -472,6 +503,8 @@ export function App() {
     submitCredentials,
     cancelKeyPassphrase,
     submitKeyPassphrase,
+    cancelKeyboardInteractive,
+    submitKeyboardInteractive,
     rejectHost,
     acceptHostOnce,
     acceptHostAndSave
@@ -607,13 +640,21 @@ export function App() {
     event.preventDefault()
 
     const normalizedHost = normalizeConnectionHost(form.host)
+    const requiresHost = form.type !== 'serial'
+    const requiresRemotePath = form.type === 'ssh' || form.type === 'ftp'
 
-    if (!form.name || !normalizedHost || !form.group || !form.remotePath) {
+    if (
+      !form.name ||
+      !form.group ||
+      (requiresHost && !normalizedHost) ||
+      (requiresRemotePath && !form.remotePath) ||
+      (form.type === 'serial' && !form.devicePath?.trim())
+    ) {
       setFormError(t.fillRequired)
       return
     }
 
-    if (!validateConnectionHost(normalizedHost).valid) {
+    if (requiresHost && !validateConnectionHost(normalizedHost).valid) {
       setFormError(t.invalidHost)
       return
     }
@@ -630,7 +671,7 @@ export function App() {
 
     try {
       setIsBusy(true)
-      const defaultPort = form.type === 'ftp' ? 21 : 22
+      const defaultPort = form.type === 'ftp' ? 21 : form.type === 'telnet' ? 23 : form.type === 'serial' ? 0 : 22
       const finalPort = Number(form.port) || defaultPort
       const payload = { ...form, host: normalizedHost, port: finalPort }
       const snapshot = editingProfileId
@@ -803,55 +844,69 @@ export function App() {
 
   if (isConnectionManagerWindow) {
     return (
-      <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={t.connectionManager}>
-        <ConnectionManagerModal
-          profiles={workspace.profiles}
-          folders={workspace.folders || []}
-          standalone
-          onClose={closeCurrentWindow}
-          onCreate={openCreateConnection}
-          onDeleteProfile={handleDeleteProfile}
-          onEditProfile={openEditConnection}
-          onOpenProfile={(profileId) => {
-            if (desktopApi) {
-              void desktopApi
-                .openProfileFromManager(profileId)
-                .then(() => {
-                  closeCurrentWindow()
-                })
-                .catch((err: Error) => {
-                  reportError(setError, '从管理器打开连接', err)
-                })
-              return
-            }
-            void openProfile(profileId)
-          }}
-          onCreateFolder={(name) => desktopApi?.createFolder(name)}
-          onDeleteFolder={(id) => desktopApi?.deleteFolder(id)}
-          onUpdateFolder={(id, updates) => desktopApi?.updateFolder(id, updates)}
-          onUpdateOrder={(id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order)}
-        />
-        {showConnectionForm ? (
-          <ConnectionModal
-            errorMessage={formError}
-            groupOptions={connectionGroupOptions}
-            mode={editingProfileId ? 'edit' : 'create'}
-            form={form}
-            setForm={updateForm}
-            onClearHostFingerprint={() => {
-              const editingProfile = editingProfileId
-                ? (workspace.profiles.find((profile) => profile.id === editingProfileId) ?? null)
-                : null
-              if (editingProfile) {
-                void handleClearHostFingerprint(editingProfile)
-                setForm((prev) => ({ ...prev, trustedHostFingerprint: '' }))
+      <>
+        <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={t.connectionManager}>
+          <ConnectionManagerModal
+            profiles={workspace.profiles}
+            folders={workspace.folders || []}
+            standalone
+            onClose={closeCurrentWindow}
+            onCreate={openCreateConnection}
+            onDeleteProfile={handleDeleteProfile}
+            onEditProfile={openEditConnection}
+            onOpenProfile={(profileId) => {
+              if (desktopApi) {
+                void desktopApi
+                  .openProfileFromManager(profileId)
+                  .then(() => {
+                    closeCurrentWindow()
+                  })
+                  .catch((err: Error) => {
+                    reportError(setError, '从管理器打开连接', err)
+                  })
+                return
               }
+              void openProfile(profileId)
             }}
-            onSubmit={handleSaveProfile}
-            onClose={closeConnectionForm}
+            onCreateFolder={(name) => desktopApi?.createFolder(name)}
+            onDeleteFolder={(id) => desktopApi?.deleteFolder(id)}
+            onUpdateFolder={(id, updates) => desktopApi?.updateFolder(id, updates)}
+            onUpdateOrder={(id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order)}
+            onImportConnections={openConnectionImportPreview}
+            onExportConnections={() => {
+              const request = desktopApi?.exportConnections('fileterm')
+              void request?.catch((error) => reportError(setError, '导出连接', error))
+            }}
+          />
+          {showConnectionForm ? (
+            <ConnectionModal
+              errorMessage={formError}
+              groupOptions={connectionGroupOptions}
+              mode={editingProfileId ? 'edit' : 'create'}
+              form={form}
+              setForm={updateForm}
+              onClearHostFingerprint={() => {
+                const editingProfile = editingProfileId
+                  ? (workspace.profiles.find((profile) => profile.id === editingProfileId) ?? null)
+                  : null
+                if (editingProfile) {
+                  void handleClearHostFingerprint(editingProfile)
+                  setForm((prev) => ({ ...prev, trustedHostFingerprint: '' }))
+                }
+              }}
+              onSubmit={handleSaveProfile}
+              onClose={closeConnectionForm}
+            />
+          ) : null}
+        </StandaloneWindowFrame>
+        {connectionImportPlan ? (
+          <ConnectionImportPreviewModal
+            plan={connectionImportPlan}
+            onClose={() => setConnectionImportPlan(null)}
+            onCommit={commitConnectionJsonPreview}
           />
         ) : null}
-      </StandaloneWindowFrame>
+      </>
     )
   }
 
@@ -1176,6 +1231,11 @@ export function App() {
                 onDeleteConnectionFolder={deleteConnectionFolder}
                 onUpdateConnectionFolder={updateConnectionFolder}
                 onUpdateConnectionOrder={updateConnectionOrder}
+                onImportConnections={openConnectionImportPreview}
+                onExportConnections={() => {
+                  const request = desktopApi?.exportConnections('fileterm')
+                  void request?.then(() => undefined)
+                }}
                 onCreateCommand={(input) => {
                   void saveCommandTemplate(null, input)
                 }}
@@ -1214,6 +1274,14 @@ export function App() {
           visible={!isHomeWorkspaceVisible}
         />
       </div>
+
+      {connectionImportPlan ? (
+        <ConnectionImportPreviewModal
+          plan={connectionImportPlan}
+          onClose={() => setConnectionImportPlan(null)}
+          onCommit={commitConnectionJsonPreview}
+        />
+      ) : null}
 
       <ModalPortalManager
         commandManager={
@@ -1286,7 +1354,12 @@ export function App() {
                 onCreateFolder: (name) => desktopApi?.createFolder(name),
                 onDeleteFolder: (id) => desktopApi?.deleteFolder(id),
                 onUpdateFolder: (id, updates) => desktopApi?.updateFolder(id, updates),
-                onUpdateOrder: (id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order)
+                onUpdateOrder: (id, parentId, order) => desktopApi?.updateEntityOrder(id, parentId, order),
+                onImportConnections: openConnectionImportPreview,
+                onExportConnections: () => {
+                  const request = desktopApi?.exportConnections('fileterm')
+                  void request?.catch((error) => reportError(setError, '导出连接', error))
+                }
               }
             : null
         }
@@ -1408,6 +1481,20 @@ export function App() {
                 request: keyPassphraseRequest,
                 onCancel: cancelKeyPassphrase,
                 onSubmit: submitKeyPassphrase
+              }
+            : null
+        }
+        sshKeyboardInteractive={
+          keyboardInteractiveRequest
+            ? {
+                request: keyboardInteractiveRequest,
+                errorMessage: sshInteractionError,
+                onCancel: () => {
+                  void cancelKeyboardInteractive()
+                },
+                onSubmit: (answers) => {
+                  void submitKeyboardInteractive(answers)
+                }
               }
             : null
         }

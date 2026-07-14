@@ -295,6 +295,43 @@ test('SSH controller owns shell lifecycle, pending resize, input, output and dis
   assert.equal(controller.getSummary(), 'Ready to connect example.test:22')
 })
 
+test('SSH keyboard-interactive mode tries a saved password before a challenge without agent auth', async () => {
+  const main = new FakeSshClient()
+  const controller = createController(createProfile({ authType: 'keyboard-interactive' }), {
+    main,
+    exec: new FakeSshClient(),
+    sftp: new FakeSshClient(),
+    transfer: new FakeSshClient()
+  })
+
+  await controller.connect()
+  assert.equal(main.connectCalls[0].tryKeyboard, true)
+  assert.deepEqual(main.connectCalls[0].authHandler, ['password', 'keyboard-interactive'])
+  assert.equal('agent' in main.connectCalls[0], false)
+  assert.equal('privateKey' in main.connectCalls[0], false)
+  await controller.disconnect()
+})
+
+test('SSH controller rejects chained Jump Hosts before opening any network connection', async () => {
+  const main = new FakeSshClient()
+  const controller = new LiveSshSessionController(
+    'ssh-tab',
+    createProfile({ jumpProfileId: 'jump-profile' }),
+    async () => ({ kind: 'host-verification', decision: 'accept-once' }),
+    async () => {},
+    () => {},
+    () => {},
+    () => {},
+    () => {},
+    undefined,
+    { main, exec: new FakeSshClient(), sftp: new FakeSshClient(), transfer: new FakeSshClient() },
+    async () => createProfile({ id: 'jump-profile', jumpProfileId: 'another-jump' })
+  )
+
+  await assert.rejects(controller.connect(), /Jump Host must reference/)
+  assert.equal(main.connectCalls.length, 0)
+})
+
 test('SSH controller does not inject POSIX setup after Windows platform detection', async () => {
   const main = new FakeSshClient()
   const exec = new FakeSshClient((command) => {

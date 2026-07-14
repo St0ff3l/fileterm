@@ -43,7 +43,8 @@ export function TerminalDock({
   sendTargets,
   onSendCommand,
   onSendScopeChange,
-  onSelectedTabIdsChange
+  onSelectedTabIdsChange,
+  onReconnect
 }: {
   activeTab: WorkspaceTab
   connected: boolean
@@ -53,6 +54,7 @@ export function TerminalDock({
   onSendCommand(command: string): Promise<void>
   onSendScopeChange(scope: SendScope, rememberSelection: boolean): void
   onSelectedTabIdsChange(tabIds: string[], rememberSelection: boolean): void
+  onReconnect?(): void | Promise<void>
 }) {
   const [command, setCommand] = useState('')
   const [panel, setPanel] = useState<DockPanel>(null)
@@ -60,6 +62,7 @@ export function TerminalDock({
   const [preferences, setPreferences] = useState<DockPreferences>(DEFAULT_PREFERENCES)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const rootRef = useRef<HTMLElement | null>(null)
+  const isReconnectingRef = useRef(false)
 
   const persistHistory = async (entries: TerminalCommandHistoryEntry[]) => {
     if (!window.fileterm?.setTerminalCommandHistory) {
@@ -366,6 +369,13 @@ export function TerminalDock({
         return
       }
       event.preventDefault()
+      if (!connected && onReconnect && !isReconnectingRef.current) {
+        isReconnectingRef.current = true
+        void Promise.resolve(onReconnect()).finally(() => {
+          isReconnectingRef.current = false
+        })
+        return
+      }
       if (canSend) {
         void sendCommand(command)
       }

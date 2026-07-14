@@ -19,6 +19,7 @@ type UseWorkspaceModalsOptions = {
   folders: ConnectionFolder[]
   formWindowMode: ConnectionFormMode
   formWindowProfileId: string | null
+  hasLoadedInitialSnapshot: boolean
   isConnectionFormWindow: boolean
   profiles: ConnectionProfile[]
 }
@@ -52,6 +53,7 @@ export function useWorkspaceModals({
   folders,
   formWindowMode,
   formWindowProfileId,
+  hasLoadedInitialSnapshot,
   isConnectionFormWindow,
   profiles
 }: UseWorkspaceModalsOptions) {
@@ -82,7 +84,11 @@ export function useWorkspaceModals({
     if (formWindowMode === 'edit') {
       const profile = profiles.find((item) => item.id === formWindowProfileId)
       if (!profile) {
-        setFormError(t.profileNotFound)
+        // A standalone edit window renders once before its workspace snapshot
+        // arrives. Do not briefly show a false "profile not found" error.
+        if (hasLoadedInitialSnapshot) {
+          setFormError(t.profileNotFound)
+        }
         return
       }
 
@@ -95,7 +101,7 @@ export function useWorkspaceModals({
     setEditingProfileId(null)
     setForm(defaultForm)
     setFormError(null)
-  }, [formWindowMode, formWindowProfileId, isConnectionFormWindow, profiles])
+  }, [formWindowMode, formWindowProfileId, hasLoadedInitialSnapshot, isConnectionFormWindow, profiles])
 
   const updateForm = (updater: CreateProfileInput | ((current: CreateProfileInput) => CreateProfileInput)) => {
     setForm((current) => (typeof updater === 'function' ? updater(current) : updater))

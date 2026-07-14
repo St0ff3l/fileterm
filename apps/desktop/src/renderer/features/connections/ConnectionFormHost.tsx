@@ -44,6 +44,7 @@ export function ConnectionFormHost({
       groupOptions={groupOptions}
       mode={mode}
       form={form}
+      profiles={profiles}
       setForm={setForm}
       onClearHostFingerprint={clearHostFingerprint}
       standalone={standalone}

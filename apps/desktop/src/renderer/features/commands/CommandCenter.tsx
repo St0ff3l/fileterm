@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
+import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { extractCommandParams, groupCommands, sortByOrder } from './command-utils'
 
 export function CommandCenter({
@@ -47,6 +48,7 @@ export function CommandCenter({
   const [selectedTabIds, setSelectedTabIds] = useState<string[]>([])
 
   const splitRef = useRef<HTMLDivElement | null>(null)
+  const templateListScrollRef = useRef<HTMLDivElement | null>(null)
   const isResizingCommandSplit = useRef(false)
 
   const visibleTemplates = useMemo(() => {
@@ -225,33 +227,36 @@ export function CommandCenter({
             </div>
           </div>
 
-          <div className="command-template-list scrollbar-scroll">
-            <table className="fs-file-table compact command-table">
-              <colgroup>
-                <col style={{ width: '100%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>{t.name}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTemplates.map((template) => (
-                  <tr
-                    key={template.id}
-                    className={selectedTemplate?.id === template.id ? 'is-selected' : ''}
-                    onClick={() => setSelectedCommandId(template.id)}
-                  >
-                    <td>
-                      <div className="col-name-wrapper">
-                        <strong>{template.name}</strong>
-                      </div>
-                    </td>
+          <div className="command-template-list-region">
+            <div className="command-template-list scrollbar-scroll" ref={templateListScrollRef}>
+              <table className="fs-file-table compact command-table">
+                <colgroup>
+                  <col style={{ width: '100%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>{t.name}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {!visibleTemplates.length ? <div className="command-empty-state">{t.commandEmpty}</div> : null}
+                </thead>
+                <tbody>
+                  {visibleTemplates.map((template) => (
+                    <tr
+                      key={template.id}
+                      className={selectedTemplate?.id === template.id ? 'is-selected' : ''}
+                      onClick={() => setSelectedCommandId(template.id)}
+                    >
+                      <td>
+                        <div className="col-name-wrapper">
+                          <strong>{template.name}</strong>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!visibleTemplates.length ? <div className="command-empty-state">{t.commandEmpty}</div> : null}
+            </div>
+            <VerticalScrollbar ariaLabel="滚动命令列表" scrollRef={templateListScrollRef} topInset={24} />
           </div>
         </section>
 

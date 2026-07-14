@@ -203,18 +203,19 @@
 
 .modal-card.ssh-modal.standalone .ssh-modal-body {
   min-height: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .modal-card.ssh-modal.standalone .ssh-form-shell {
   min-height: 0;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .modal-card.ssh-modal.standalone .ssh-form-page {
   min-height: 0;
   overflow-y: auto;
   padding-right: 8px;
+  padding-left: 4px;
 }
 
 .ssh-fieldset {
@@ -228,10 +229,181 @@
   font-weight: 600;
 }
 
+.tunnel-fieldset {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.tunnel-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--border-light) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-hover) 62%, transparent);
+  color: var(--text-secondary);
+}
+
+.tunnel-intro .material-symbols-outlined {
+  color: var(--primary);
+  font-size: 19px;
+}
+.tunnel-intro p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tunnel-rule-list {
+  display: grid;
+  gap: 10px;
+}
+.tunnel-rule-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-hover));
+}
+.tunnel-rule-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.tunnel-rule-card header > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.tunnel-rule-card strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+.tunnel-rule-index {
+  color: var(--primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+.tunnel-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.tunnel-rule-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.tunnel-rule-grid input,
+.tunnel-rule-grid select {
+  min-width: 0;
+  height: 32px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-dark);
+  border-radius: 5px;
+  background: var(--bg-main);
+  color: var(--text-main);
+}
+.tunnel-autostart {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.tunnel-socks-note {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+  border-left: 2px solid var(--primary);
+}
+.tunnel-socks-note .material-symbols-outlined {
+  font-size: 16px;
+}
+.tunnel-remove-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.tunnel-remove-button:hover {
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
+  color: var(--danger-text);
+}
+.tunnel-remove-button .material-symbols-outlined {
+  font-size: 17px;
+}
+.tunnel-add-button {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px dashed color-mix(in srgb, var(--primary) 65%, var(--border-light));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tunnel-add-button:hover {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.tunnel-add-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.jump-host-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-hover));
+}
+.jump-host-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 600;
+}
+.jump-host-card__title .material-symbols-outlined {
+  color: var(--primary);
+  font-size: 17px;
+}
+.jump-host-card__hint {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.jump-host-card .ft-select-shell {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
 .ssh-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 24px;
+  padding: 0 4px;
 }
 
 .ssh-grid.single {
@@ -266,7 +438,8 @@
 
 .ssh-grid input,
 .ssh-grid select,
-.ssh-grid textarea {
+.ssh-grid textarea,
+.jump-host-card select {
   width: 100%;
   min-height: 32px;
   padding: 5px 10px;
@@ -401,6 +574,69 @@
   margin-left: 24px;
 }
 
+/* Advanced section toggle list */
+.advanced-toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-dark);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.advanced-toggle-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  transition: background 0.15s ease;
+}
+
+.advanced-toggle-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-dark);
+}
+
+.advanced-toggle-row:hover {
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+}
+
+.advanced-toggle-label {
+  cursor: pointer;
+}
+
+.advanced-toggle-name {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+.advanced-toggle-hint {
+  margin: 0;
+  margin-left: 22px;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+}
+
+/* Reconnect mode: labelled group wrapping the three-way radio list */
+.reconnect-mode-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.reconnect-mode-group__label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding-left: 2px;
+}
+
 .ssh-placeholder {
   display: grid;
   place-items: center;
@@ -474,7 +710,8 @@
 
 .ssh-grid input,
 .ssh-grid select,
-.ssh-grid textarea {
+.ssh-grid textarea,
+.jump-host-card select {
   width: 100%;
   min-height: 38px;
   padding: 8px 12px;
@@ -488,7 +725,8 @@
 
 .ssh-grid input:focus,
 .ssh-grid select:focus,
-.ssh-grid textarea:focus {
+.ssh-grid textarea:focus,
+.jump-host-card select:focus {
   outline: none;
   border-color: var(--text-muted);
   box-shadow: 0 0 0 3px var(--input-focus-ring);

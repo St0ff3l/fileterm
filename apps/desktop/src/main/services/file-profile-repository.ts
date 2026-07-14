@@ -20,7 +20,7 @@ const legacyDemoCommandFolderIds = new Set(['cmd-folder-default', 'cmd-folder-de
 
 const legacyDemoCommandTemplateIds = new Set(['cmd-docker-ps', 'cmd-tail-log', 'cmd-restart-service'])
 
-type ProfileSecretField = 'password' | 'privateKeyPath' | 'passphrase'
+type ProfileSecretField = 'password' | 'privateKeyPath' | 'passphrase' | 'proxyPassword'
 
 type StoredProfileSecret = {
   storage: 'plain-text-fallback'
@@ -455,7 +455,7 @@ export class FileProfileRepository implements ProfileRepository {
   private async readProfiles(): Promise<ConnectionProfile[]> {
     await this.ready
     const content = await readFile(this.filePath, 'utf8')
-    const profiles = JSON.parse(content) as ConnectionProfile[]
+    const profiles = (JSON.parse(content) as ConnectionProfile[]).map(normalizeStoredProfile)
     const secrets = await this.readProfileSecrets()
     const mergedProfiles = profiles.map((profile) => mergeProfileSecrets(profile, secrets.profiles[profile.id]))
 
@@ -602,7 +602,11 @@ function preserveProfileMetadata(profile: ConnectionProfile, previous: Connectio
 }
 
 function hasInlineProfileSecret(profile: ConnectionProfile) {
-  return Boolean(profile.password || (profile.type === 'ssh' && (profile.privateKeyPath || profile.passphrase)))
+  return Boolean(
+    ('password' in profile && profile.password) ||
+    (profile.type === 'ssh' && (profile.privateKeyPath || profile.passphrase)) ||
+    ((profile.type === 'ssh' || profile.type === 'telnet') && profile.proxy?.password)
+  )
 }
 
 function splitProfileSecrets(profiles: ConnectionProfile[]) {
@@ -630,12 +634,17 @@ function extractProfileSecrets(profile: ConnectionProfile): Partial<Record<Profi
 }
 
 function getProfileSecretFields(profile: ConnectionProfile): ProfileSecretField[] {
-  return profile.type === 'ssh' ? ['password', 'privateKeyPath', 'passphrase'] : ['password']
+  const fields: ProfileSecretField[] = profile.type === 'ssh' ? ['password', 'privateKeyPath', 'passphrase'] : []
+  if (profile.type === 'ftp') fields.push('password')
+  if ((profile.type === 'ssh' || profile.type === 'telnet') && profile.proxy) fields.push('proxyPassword')
+  return fields
 }
 
 function getProfileSecretValue(profile: ConnectionProfile, field: ProfileSecretField) {
+  if (field === 'proxyPassword')
+    return profile.type === 'ssh' || profile.type === 'telnet' ? profile.proxy?.password : undefined
   if (field === 'password') {
-    return profile.password
+    return 'password' in profile ? profile.password : undefined
   }
   if (profile.type !== 'ssh') {
     return undefined
@@ -660,11 +669,21 @@ function decodeProfileSecret(secret: StoredProfileSecret | undefined) {
 function stripProfileSecrets(profile: ConnectionProfile): ConnectionProfile {
   if (profile.type === 'ssh') {
     const { password, privateKeyPath, passphrase, ...publicProfile } = profile
+    if (publicProfile.proxy?.password) {
+      const { password: _proxyPassword, ...proxy } = publicProfile.proxy
+      return { ...publicProfile, proxy }
+    }
     return publicProfile
   }
-
-  const { password, ...publicProfile } = profile
-  return publicProfile
+  if (profile.type === 'telnet' && profile.proxy?.password) {
+    const { password: _proxyPassword, ...proxy } = profile.proxy
+    return { ...profile, proxy }
+  }
+  if (profile.type === 'ftp') {
+    const { password: _password, ...publicProfile } = profile
+    return publicProfile
+  }
+  return profile
 }
 
 function mergeProfileSecrets(
@@ -691,7 +710,12 @@ function withProfileSecretValue(
   field: ProfileSecretField,
   value: string
 ): ConnectionProfile {
+  if (field === 'proxyPassword') {
+    if (profile.type !== 'ssh' && profile.type !== 'telnet') return profile
+    return { ...profile, proxy: profile.proxy ? { ...profile.proxy, password: value } : profile.proxy }
+  }
   if (field === 'password') {
+    if (profile.type !== 'ssh' && profile.type !== 'ftp') return profile
     return { ...profile, password: value }
   }
   if (profile.type !== 'ssh') {
@@ -709,10 +733,32 @@ async function lockDownFile(filePath: string) {
 }
 
 function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
-  const host = normalizeConnectionHost(input.host)
-  if (!validateConnectionHost(host).valid) {
-    throw new Error('Invalid host')
+  if (input.type === 'serial') {
+    const devicePath = input.devicePath?.trim()
+    if (!devicePath) throw new Error('Serial device path is required')
+    return {
+      id,
+      type: 'serial',
+      name: input.name,
+      host: '',
+      port: 0,
+      username: '',
+      remotePath: '',
+      group: input.group,
+      devicePath,
+      baudRate: input.baudRate ?? 115200,
+      dataBits: input.dataBits ?? 8,
+      stopBits: input.stopBits ?? 1,
+      parity: input.parity ?? 'none',
+      flowControl: input.flowControl ?? 'none',
+      encoding: input.encoding ?? 'UTF-8',
+      note: input.note
+    }
   }
+  const host = normalizeConnectionHost(input.host)
+  if (!validateConnectionHost(host).valid) throw new Error('Invalid host')
+  if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535) throw new Error('Invalid port')
+  const proxy = normalizeProxy(input.proxy, input.proxyPassword)
 
   return input.type === 'ssh'
     ? {
@@ -736,22 +782,122 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         backspaceKey: input.backspaceKey ?? 'ASCII',
         deleteKey: input.deleteKey ?? 'VT220',
         enableExecChannel: input.enableExecChannel ?? true,
-        enableResourceMonitoring: input.enableResourceMonitoring ?? true
+        enableResourceMonitoring: input.enableResourceMonitoring ?? true,
+        reconnectMode: input.reconnectMode ?? 'none',
+        proxy,
+        jumpProfileId: input.jumpProfileId || undefined,
+        forwards: normalizeForwards(input.forwards),
+        disableShellIntegration: input.disableShellIntegration ?? false
       }
-    : {
-        id,
-        type: 'ftp',
-        name: input.name,
-        host,
-        port: input.port,
-        username: input.username,
-        note: input.note,
-        password: input.password,
-        secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
-        securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
-        group: input.group,
-        remotePath: input.remotePath
-      }
+    : input.type === 'telnet'
+      ? {
+          id,
+          type: 'telnet',
+          name: input.name,
+          host,
+          port: input.port || 23,
+          username: '',
+          remotePath: '',
+          group: input.group,
+          note: input.note,
+          encoding: input.encoding ?? 'UTF-8',
+          proxy
+        }
+      : {
+          id,
+          type: 'ftp',
+          name: input.name,
+          host,
+          port: input.port,
+          username: input.username,
+          note: input.note,
+          password: input.password,
+          secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
+          securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),
+          group: input.group,
+          remotePath: input.remotePath
+        }
+}
+
+function normalizeProxy(proxy: CreateProfileInput['proxy'], password?: string) {
+  if (!proxy || proxy.type === 'none') return undefined
+  const host = normalizeConnectionHost(proxy.host)
+  if (!validateConnectionHost(host).valid || !Number.isInteger(proxy.port) || proxy.port < 1 || proxy.port > 65535) {
+    throw new Error('Invalid proxy configuration')
+  }
+  return { ...proxy, host, password: password ?? proxy.password }
+}
+
+function normalizeForwards(forwards: CreateProfileInput['forwards']) {
+  if (!forwards?.length) return []
+  const ids = new Set<string>()
+  return forwards.map((rule) => {
+    if (ids.has(rule.id)) throw new Error('Duplicate SSH forward rule')
+    ids.add(rule.id)
+    if (!Number.isInteger(rule.bindPort) || rule.bindPort < 1 || rule.bindPort > 65535)
+      throw new Error('Invalid tunnel port')
+    if (
+      rule.kind !== 'dynamic' &&
+      (!rule.targetHost || !rule.targetPort || rule.targetPort < 1 || rule.targetPort > 65535)
+    ) {
+      throw new Error('Tunnel target is required')
+    }
+    return {
+      ...rule,
+      targetHost: rule.kind === 'dynamic' ? undefined : rule.targetHost,
+      targetPort: rule.kind === 'dynamic' ? undefined : rule.targetPort
+    }
+  })
+}
+
+function normalizeStoredProfile(profile: ConnectionProfile): ConnectionProfile {
+  const legacy = profile as unknown as Record<string, unknown>
+  if (!legacy.type) {
+    return {
+      ...legacy,
+      type: 'ssh',
+      authType: legacy.authType ?? 'system',
+      sftpEnabled: true,
+      remotePath: legacy.remotePath ?? '/'
+    } as ConnectionProfile
+  }
+  if (legacy.type === 'ssh')
+    return {
+      ...legacy,
+      authType: legacy.authType ?? 'system',
+      sftpEnabled: legacy.sftpEnabled ?? true,
+      remotePath: legacy.remotePath ?? '/',
+      forwards: legacy.forwards ?? []
+    } as ConnectionProfile
+  if (legacy.type === 'ftp')
+    return {
+      ...legacy,
+      remotePath: legacy.remotePath ?? '/',
+      securityMode: legacy.securityMode ?? (legacy.secure ? 'explicit' : 'none')
+    } as ConnectionProfile
+  if (legacy.type === 'telnet')
+    return {
+      ...legacy,
+      port: legacy.port ?? 23,
+      username: legacy.username ?? '',
+      remotePath: legacy.remotePath ?? '',
+      encoding: legacy.encoding ?? 'UTF-8'
+    } as ConnectionProfile
+  if (legacy.type === 'serial')
+    return {
+      ...legacy,
+      host: legacy.host ?? '',
+      port: legacy.port ?? 0,
+      username: legacy.username ?? '',
+      remotePath: legacy.remotePath ?? '',
+      baudRate: legacy.baudRate ?? 115200,
+      dataBits: legacy.dataBits ?? 8,
+      stopBits: legacy.stopBits ?? 1,
+      parity: legacy.parity ?? 'none',
+      flowControl: legacy.flowControl ?? 'none',
+      encoding: legacy.encoding ?? 'UTF-8'
+    } as ConnectionProfile
+  throw new Error(`Unsupported connection profile type: ${String(legacy.type)}`)
 }
 
 function toCommandTemplate(id: string, input: CommandTemplateInput): CommandTemplate {

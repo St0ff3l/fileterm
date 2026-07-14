@@ -190,6 +190,11 @@ textarea:focus-visible,
   font-size: 12px;
 }
 
+/* The home workspace can place this banner in the hidden-inset titlebar. */
+:root[data-platform='darwin'] .status-message {
+  padding-left: 92px;
+}
+
 .status-message-close {
   width: 20px;
   height: 20px;
@@ -1168,7 +1173,9 @@ textarea:focus-visible,
 }
 
 .fs-file-table th {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .col-resizer {

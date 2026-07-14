@@ -1,8 +1,8 @@
-export type SessionType = 'ssh' | 'ftp'
+export type SessionType = 'ssh' | 'ftp' | 'telnet' | 'serial'
 
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 
-export type TabLayout = 'terminal-file' | 'file-only'
+export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
 
 export type TabStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'closed'
 
@@ -31,16 +31,59 @@ export interface CommandTemplate extends BaseEntity {
 
 export interface BaseProfile extends BaseEntity {
   type: SessionType
+  /** Serial profiles keep these inert placeholders; devicePath remains their only endpoint. */
   host: string
   port: number
+  username: string
+  remotePath: string
   group: string
   lastUsedAt?: number
 }
 
-export interface SshProfile extends BaseProfile {
+export type NetworkProfile = BaseProfile
+
+export interface ProxyConfig {
+  type: 'none' | 'socks5' | 'http'
+  host: string
+  port: number
+  username?: string
+  /** Secret: persisted only by the main-process profile repository. */
+  password?: string
+}
+
+export interface SshForwardRule {
+  id: string
+  name?: string
+  kind: 'local' | 'remote' | 'dynamic'
+  bindHost: string
+  bindPort: number
+  targetHost?: string
+  targetPort?: number
+  autoStart: boolean
+}
+
+/** A forward rule plus its state in one live SSH workspace tab. */
+export interface SshTunnelSnapshot extends SshForwardRule {
+  status: 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
+  error?: string
+  runtimeOnly?: boolean
+}
+
+export interface ConnectionCapabilities {
+  terminal: boolean
+  files: boolean
+  resourceMonitoring: boolean
+  shellIntegration: boolean
+  fileAccess: boolean
+  tunnels: boolean
+}
+
+export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive'
+
+export interface SshProfile extends NetworkProfile {
   type: 'ssh'
   username: string
-  authType: 'password' | 'privateKey' | 'system'
+  authType: SshAuthType
   note?: string
   password?: string
   privateKeyId?: string
@@ -54,9 +97,14 @@ export interface SshProfile extends BaseProfile {
   deleteKey?: string
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
+  reconnectMode?: 'none' | 'enter' | 'auto'
+  proxy?: ProxyConfig
+  jumpProfileId?: string
+  forwards?: SshForwardRule[]
+  disableShellIntegration?: boolean
 }
 
-export interface FtpProfile extends BaseProfile {
+export interface FtpProfile extends NetworkProfile {
   type: 'ftp'
   username: string
   note?: string
@@ -66,7 +114,57 @@ export interface FtpProfile extends BaseProfile {
   remotePath: string
 }
 
-export type ConnectionProfile = SshProfile | FtpProfile
+export interface TelnetProfile extends NetworkProfile {
+  type: 'telnet'
+  note?: string
+  encoding?: string
+  proxy?: ProxyConfig
+}
+
+export interface SerialProfile extends BaseProfile {
+  type: 'serial'
+  devicePath: string
+  baudRate: number
+  dataBits: 5 | 6 | 7 | 8
+  stopBits: 1 | 2
+  parity: 'none' | 'odd' | 'even' | 'mark' | 'space'
+  flowControl: 'none' | 'hardware' | 'software'
+  encoding?: string
+  note?: string
+}
+
+export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
+
+export const getConnectionCapabilities = (profile: Pick<ConnectionProfile, 'type'>): ConnectionCapabilities => {
+  if (profile.type === 'ssh') {
+    return {
+      terminal: true,
+      files: true,
+      resourceMonitoring: true,
+      shellIntegration: true,
+      fileAccess: true,
+      tunnels: true
+    }
+  }
+  if (profile.type === 'ftp') {
+    return {
+      terminal: false,
+      files: true,
+      resourceMonitoring: false,
+      shellIntegration: false,
+      fileAccess: false,
+      tunnels: false
+    }
+  }
+  return {
+    terminal: true,
+    files: false,
+    resourceMonitoring: false,
+    shellIntegration: false,
+    fileAccess: false,
+    tunnels: false
+  }
+}
 
 export interface WorkspaceTab {
   id: string
@@ -403,6 +501,8 @@ export interface SessionSnapshot {
   hasReusableSudoAuth?: boolean
   connected?: boolean
   systemMetrics?: SystemMetrics
+  capabilities?: ConnectionCapabilities
+  reconnectMode?: 'none' | 'enter' | 'auto'
 }
 
 export interface WorkspaceSnapshot {
@@ -454,6 +554,60 @@ export interface SshKeyImportResult {
   duplicate: boolean
 }
 
+export interface ConnectionImportPreviewItem {
+  id?: string
+  sourceLabel?: string
+  name: string
+  type: SessionType
+  host?: string
+  port?: number
+  username?: string
+  status: 'ready' | 'skipped' | 'invalid'
+  reason?: string
+  unsupportedFields?: string[]
+  conflictProfileId?: string
+  input?: CreateProfileInput
+}
+
+export interface ConnectionImportResult {
+  imported: number
+  overwritten?: number
+  skipped: number
+  failed: number
+  items: ConnectionImportPreviewItem[]
+}
+
+export type ConnectionImportConflictStrategy = 'skip' | 'overwrite' | 'create'
+
+export interface ConnectionImportPlan {
+  id: string
+  items: ConnectionImportPreviewItem[]
+}
+
+export interface ConnectionImportOptions {
+  selectedItemIds?: string[]
+  conflictStrategy?: ConnectionImportConflictStrategy
+}
+
+export type ConnectionExportFormat = 'fileterm' | 'compatible'
+
+export interface WebDavSyncConfig {
+  enabled: boolean
+  url: string
+  username?: string
+  remotePath: string
+  allowInsecureTls?: boolean
+  lastSyncedAt?: string
+  lastEtag?: string
+}
+
+export interface WebDavSyncResult {
+  action: 'upload' | 'download'
+  message: string
+  imported?: number
+  skipped?: number
+}
+
 export interface CreateProfileInput {
   type: SessionType
   name: string
@@ -467,7 +621,7 @@ export interface CreateProfileInput {
   privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
-  authType?: 'password' | 'privateKey' | 'system'
+  authType?: SshAuthType
   trustedHostFingerprint?: string
   secure?: boolean
   securityMode?: FtpSecurityMode
@@ -476,6 +630,18 @@ export interface CreateProfileInput {
   deleteKey?: string
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
+  reconnectMode?: 'none' | 'enter' | 'auto'
+  proxy?: ProxyConfig
+  proxyPassword?: string
+  jumpProfileId?: string
+  forwards?: SshForwardRule[]
+  disableShellIntegration?: boolean
+  devicePath?: string
+  baudRate?: number
+  dataBits?: 5 | 6 | 7 | 8
+  stopBits?: 1 | 2
+  parity?: SerialProfile['parity']
+  flowControl?: SerialProfile['flowControl']
 }
 
 export interface SshHostVerificationRequest {
@@ -511,12 +677,33 @@ export interface SshKeyPassphrasePromptRequest {
   reason: 'required' | 'invalid-saved'
 }
 
+export interface SshKeyboardInteractivePrompt {
+  prompt: string
+  echo: boolean
+}
+
+export interface SshKeyboardInteractiveRequest {
+  requestId: string
+  tabId: string
+  kind: 'keyboard-interactive'
+  profileId: string
+  host: string
+  port: number
+  name: string
+  instructions: string
+  prompts: SshKeyboardInteractivePrompt[]
+}
+
 export type SshInteractionRequest =
-  SshHostVerificationRequest | SshCredentialsPromptRequest | SshKeyPassphrasePromptRequest
+  | SshHostVerificationRequest
+  | SshCredentialsPromptRequest
+  | SshKeyPassphrasePromptRequest
+  | SshKeyboardInteractiveRequest
 export type SshInteractionDraft =
   | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshKeyPassphrasePromptRequest, 'requestId' | 'tabId' | 'profileId'>
+  | Omit<SshKeyboardInteractiveRequest, 'requestId' | 'tabId' | 'profileId'>
 
 export type SshHostVerificationResponse = {
   kind: 'host-verification'
@@ -547,8 +734,15 @@ export type SshKeyPassphrasePromptResponse =
       savePassphrase: boolean
     }
 
+export type SshKeyboardInteractiveResponse =
+  | { kind: 'keyboard-interactive'; canceled: true }
+  | { kind: 'keyboard-interactive'; canceled: false; answers: string[] }
+
 export type SshInteractionResponse =
-  SshHostVerificationResponse | SshCredentialsPromptResponse | SshKeyPassphrasePromptResponse
+  | SshHostVerificationResponse
+  | SshCredentialsPromptResponse
+  | SshKeyPassphrasePromptResponse
+  | SshKeyboardInteractiveResponse
 
 export interface CommandTemplateInput {
   name: string
@@ -648,6 +842,19 @@ export interface FileTermDesktopApi {
   updateSshKeyNote(keyId: string, note: string): Promise<SshKeyMetadata>
   deleteSshKey(keyId: string): Promise<void>
   onSshKeysChanged(listener: (keys: SshKeyMetadata[]) => void): () => void
+  previewConnectionImport(): Promise<ConnectionImportPlan | null>
+  commitConnectionJsonImport(planId: string, options: ConnectionImportOptions): Promise<ConnectionImportResult>
+  exportConnections(format: ConnectionExportFormat): Promise<boolean>
+  exportConnectionsAsFiles(format: ConnectionExportFormat): Promise<boolean>
+  listSshTunnels(tabId: string): Promise<SshTunnelSnapshot[]>
+  createSshTunnel(tabId: string, rule: SshForwardRule): Promise<SshTunnelSnapshot[]>
+  startSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]>
+  stopSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]>
+  deleteSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]>
+  getWebDavSyncConfig(): Promise<WebDavSyncConfig>
+  saveWebDavSyncConfig(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig>
+  uploadWebDavSync(): Promise<WebDavSyncResult>
+  downloadWebDavSync(): Promise<WebDavSyncResult>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>
   updateFolder(folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot>
   deleteFolder(folderId: string): Promise<WorkspaceSnapshot>
@@ -778,12 +985,16 @@ export interface SessionController {
   getSummary(): string
 }
 
-export interface ShellSessionController extends SessionController {
-  readonly type: 'ssh'
+export interface TerminalSessionController extends SessionController {
+  readonly type: 'ssh' | 'telnet' | 'serial'
   getTerminalTranscript(): string
-  getShellCwd(): string | undefined
   write(data: string): Promise<void>
   resize(cols: number, rows: number, width: number, height: number): Promise<void>
+}
+
+export interface ShellSessionController extends TerminalSessionController {
+  readonly type: 'ssh'
+  getShellCwd(): string | undefined
 }
 
 export interface FileSessionController extends SessionController {
@@ -828,5 +1039,5 @@ export interface FtpSessionController extends FileSessionController {
 }
 
 export const createTabLayout = (profile: ConnectionProfile): TabLayout => {
-  return profile.type === 'ssh' ? 'terminal-file' : 'file-only'
+  return profile.type === 'ssh' ? 'terminal-file' : profile.type === 'ftp' ? 'file-only' : 'terminal-only'
 }

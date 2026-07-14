@@ -3,6 +3,7 @@ import type {
   FileTermDesktopApi,
   SshCredentialsPromptRequest,
   SshHostVerificationRequest,
+  SshKeyboardInteractiveRequest,
   SshInteractionRequest,
   SshInteractionResponse,
   SshKeyPassphrasePromptRequest
@@ -22,6 +23,7 @@ export type UseSshInteractionsOptions = {
 export type UseSshInteractionsResult = {
   request: SshInteractionRequest | null
   credentialsRequest: SshCredentialsPromptRequest | null
+  keyboardInteractiveRequest: SshKeyboardInteractiveRequest | null
   hostVerificationRequest: SshHostVerificationRequest | null
   keyPassphraseRequest: SshKeyPassphrasePromptRequest | null
   errorMessage: string | null
@@ -30,6 +32,8 @@ export type UseSshInteractionsResult = {
   submitCredentials(input: SshCredentialsInput): Promise<void>
   cancelKeyPassphrase(): Promise<void>
   submitKeyPassphrase(input: { passphrase: string; savePassphrase: boolean }): Promise<void>
+  cancelKeyboardInteractive(): Promise<void>
+  submitKeyboardInteractive(answers: string[]): Promise<void>
   rejectHost(): Promise<void>
   acceptHostOnce(): Promise<void>
   acceptHostAndSave(): Promise<void>
@@ -87,6 +91,7 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
 
   const request = requests[0] ?? null
   const credentialsRequest = request?.kind === 'credentials' ? request : null
+  const keyboardInteractiveRequest = request?.kind === 'keyboard-interactive' ? request : null
   const hostVerificationRequest = request?.kind === 'host-verification' ? request : null
   const keyPassphraseRequest = request?.kind === 'key-passphrase' ? request : null
 
@@ -159,6 +164,19 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
     [hostVerificationRequest, resolve]
   )
 
+  const cancelKeyboardInteractive = useCallback(async () => {
+    if (keyboardInteractiveRequest)
+      await resolve(keyboardInteractiveRequest.requestId, { kind: 'keyboard-interactive', canceled: true })
+  }, [keyboardInteractiveRequest, resolve])
+
+  const submitKeyboardInteractive = useCallback(
+    async (answers: string[]) => {
+      if (keyboardInteractiveRequest)
+        await resolve(keyboardInteractiveRequest.requestId, { kind: 'keyboard-interactive', canceled: false, answers })
+    },
+    [keyboardInteractiveRequest, resolve]
+  )
+
   const rejectHost = useCallback(async () => {
     await resolveHostVerification('cancel')
   }, [resolveHostVerification])
@@ -174,6 +192,7 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
   return {
     request,
     credentialsRequest,
+    keyboardInteractiveRequest,
     hostVerificationRequest,
     keyPassphraseRequest,
     errorMessage,
@@ -182,6 +201,8 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
     submitCredentials,
     cancelKeyPassphrase,
     submitKeyPassphrase,
+    cancelKeyboardInteractive,
+    submitKeyboardInteractive,
     rejectHost,
     acceptHostOnce,
     acceptHostAndSave

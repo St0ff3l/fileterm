@@ -8,7 +8,8 @@
   transition: grid-template-rows 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.session-workspace.file-only {
+.session-workspace.file-only,
+.session-workspace.terminal-only {
   grid-template-rows: 1fr;
 }
 
@@ -44,6 +45,26 @@
   transform: translateY(50%);
   cursor: row-resize;
   border: 0;
+}
+
+.session-split-resizer::after {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  content: '';
+  background: var(--border-light);
+  transform: translateY(-50%);
+  transition:
+    height 0.16s ease,
+    background 0.16s ease;
+}
+
+.session-split-resizer:hover::after,
+.session-workspace.is-file-panel-dragging .session-split-resizer::after {
+  height: 2px;
+  background: var(--accent-primary);
 }
 
 .terminal-view {
@@ -691,20 +712,33 @@
   }
 }
 
-.file-manager {
+.session-bottom-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-workspace:not(.file-only) .session-bottom-panel {
   grid-row: 2;
+}
+
+.session-workspace.file-only .session-bottom-panel {
+  grid-row: 1;
+}
+
+.session-bottom-panel .file-manager {
+  height: 100%;
+}
+
+.file-manager {
   display: grid;
   grid-template-rows: 25px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+  outline: none;
   transform-origin: bottom;
   transition:
     opacity 0.18s ease,
     transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.session-workspace.file-only .file-manager {
-  grid-row: 1;
 }
 
 .session-workspace.file-panel-collapsed .file-manager {
@@ -933,14 +967,64 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  scrollbar-width: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
+.file-table-shell::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.file-table-scroll-region,
 .remote-file-table-region {
+  position: relative;
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+
+.vertical-scrollbar {
+  position: absolute;
+  top: calc(2px + var(--vertical-scrollbar-inset-top, 0px));
+  right: 2px;
+  bottom: 2px;
+  z-index: 12;
+  width: 8px;
+  cursor: default;
+  outline: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.vertical-scrollbar.is-visible,
+.vertical-scrollbar:focus-visible {
+  opacity: 1;
+}
+
+.vertical-scrollbar:focus-visible .vertical-scrollbar__thumb {
+  box-shadow: 0 0 0 2px var(--input-focus-ring);
+}
+
+.vertical-scrollbar__thumb {
+  width: 8px;
+  border-radius: 999px;
+  background: var(--border, var(--border-light));
+  cursor: grab;
+}
+
+.vertical-scrollbar__thumb:hover,
+.vertical-scrollbar__thumb:active {
+  background: var(--muted-foreground, var(--text-muted));
+}
+
+.remote-file-table-region {
+  min-width: 0;
+}
+
+.local-file-table-shell {
+  height: 100%;
 }
 
 .remote-file-table-shell {
@@ -2335,10 +2419,10 @@
   z-index: 20;
   display: flex;
   align-items: center;
-  background: var(--button-primary-bg) !important; /* In closed state, matches button background (brand blue) */
+  background-color: transparent !important; /* In closed state, parent background is transparent */
   border: none;
   border-radius: 21px; /* Circular plus button when closed, matches capsule */
-  box-shadow: var(--floating-drawer-shadow);
+  box-shadow: none; /* No shadow on parent when closed to avoid ghost shadow */
   overflow: hidden;
   height: 42px;
   width: 42px; /* Compact width when closed */
@@ -2355,8 +2439,10 @@
 }
 
 .connection-manager-floating-drawer.expanded {
-  width: 290px; /* Expanded width to fit options */
-  background: var(--floating-drawer-expanded-bg) !important;
+  gap: 8px;
+  width: fit-content;
+  max-width: calc(100% - 40px);
+  background-color: var(--floating-drawer-expanded-bg) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--floating-drawer-expanded-border);
@@ -2368,6 +2454,7 @@
 .drawer-options-wrapper {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   height: 100%;
   padding-left: 0; /* No padding when collapsed to avoid shifting the trigger button */
@@ -2388,7 +2475,8 @@
 }
 
 .connection-manager-floating-drawer.expanded .drawer-options-wrapper {
-  max-width: 240px;
+  flex: 0 1 auto;
+  max-width: min(710px, calc(100vw - 180px));
   padding-left: 12px; /* Add padding only when expanded */
   opacity: 1;
   transform: translateX(0);
@@ -2400,11 +2488,11 @@
 .drawer-option-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 15px; /* Pill shaped option buttons */
-  font-size: 12px;
+  gap: 3px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 13px;
+  font-size: 10px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
@@ -2413,6 +2501,10 @@
     border-color 0.2s ease,
     color 0.2s ease;
   white-space: nowrap;
+}
+.drawer-option-btn .material-symbols-outlined {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .drawer-option-btn.secondary-btn {
@@ -2460,13 +2552,15 @@
   width: 42px;
   height: 42px;
   border: none;
-  background: transparent !important; /* Let parent background show (brand-blue square closed, glass capsule open) */
+  background-color: var(--button-primary-bg) !important; /* Button itself has the blue background in closed state */
+  box-shadow: var(--floating-drawer-shadow); /* Button itself casts the shadow in closed state */
   color: var(--button-primary-text) !important;
   cursor: pointer;
   transition:
     transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
     color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
     background-color 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+    box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
     width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
     height 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
     margin 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
@@ -2483,6 +2577,10 @@
   color: var(--button-primary-text) !important;
 }
 
+.drawer-trigger-btn:hover:not(:disabled) {
+  background-color: var(--button-primary-hover) !important;
+}
+
 .drawer-trigger-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-focus-ring);
@@ -2490,13 +2588,15 @@
 
 /* Rotate plus to X and turn to circular button when expanded */
 .connection-manager-floating-drawer.expanded .drawer-trigger-btn {
+  margin-left: 0 !important;
   transform: rotate(45deg);
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  background-color: transparent !important; /* Button transitions to transparent when open */
+  box-shadow: none !important; /* Button transitions to no shadow when open */
   color: var(--text-muted) !important;
-  margin-right: 4px !important; /* Centered padding gap on the right edge */
-  margin-left: auto !important;
+  margin-right: 5px !important; /* Centered padding gap on the right edge */
 }
 
 .connection-manager-floating-drawer.expanded .drawer-trigger-btn * {
@@ -2504,10 +2604,289 @@
 }
 
 .connection-manager-floating-drawer.expanded .drawer-trigger-btn:hover {
-  background: var(--floating-drawer-trigger-hover-bg) !important;
+  background-color: var(--floating-drawer-trigger-hover-bg) !important;
   color: var(--text-main) !important;
 }
 
 .connection-manager-floating-drawer.expanded .drawer-trigger-btn:hover * {
   color: var(--text-main) !important;
+}
+
+.ssh-tunnel-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 12px 18px 16px;
+  background: var(--surface-panel, var(--bg-secondary));
+}
+
+.ssh-tunnel-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ssh-tunnel-panel h2 {
+  margin: 1px 0 3px;
+  font-size: 14px;
+}
+.ssh-tunnel-panel p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ssh-tunnel-kicker {
+  color: var(--accent-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.ssh-tunnel-header-actions,
+.ssh-tunnel-actions,
+.ssh-tunnel-form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tunnel-icon-button,
+.ssh-tunnel-actions button,
+.ssh-tunnel-form-actions button,
+.ssh-tunnel-secondary-action {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-main);
+  background: transparent;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ssh-tunnel-header-actions .ssh-tunnel-create-button {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  gap: 6px;
+  border-radius: 6px;
+}
+.ssh-tunnel-actions .danger {
+  color: var(--danger-text, #d86666);
+}
+.ssh-tunnel-purpose {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-primary);
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+  color: var(--text-muted);
+}
+.ssh-tunnel-purpose > .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-primary);
+}
+.ssh-tunnel-purpose p {
+  display: grid;
+  gap: 2px;
+  line-height: 1.4;
+}
+.ssh-tunnel-purpose strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.ssh-tunnel-purpose code {
+  color: var(--text-main);
+  font-family: var(--font-mono, monospace);
+}
+.ssh-tunnel-dialog {
+  width: min(560px, calc(100vw - 40px));
+  padding: 0;
+}
+.ssh-tunnel-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+.ssh-tunnel-dialog-header span {
+  display: block;
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 600;
+}
+.ssh-tunnel-dialog-header p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ssh-tunnel-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 20px 20px;
+}
+.ssh-tunnel-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ssh-tunnel-form input,
+.ssh-tunnel-form select {
+  box-sizing: border-box;
+  min-height: 34px;
+  min-width: 0;
+  border: 1px solid var(--border-dark);
+  border-radius: 5px;
+  padding: 7px 8px;
+  color: var(--text-main);
+  background: var(--surface-inset, var(--bg-main));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-main) 4%, transparent);
+  font: inherit;
+  font-size: 12px;
+}
+.ssh-tunnel-form input:hover,
+.ssh-tunnel-form select:hover {
+  border-color: var(--text-muted);
+}
+.ssh-tunnel-form input:focus,
+.ssh-tunnel-form select:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+.ssh-tunnel-kind-hint {
+  grid-column: 1 / -1;
+  margin: -3px 0 0 !important;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-primary);
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+  line-height: 1.5;
+}
+.ssh-tunnel-form-actions {
+  grid-column: 1 / -1;
+  align-self: end;
+  justify-content: end;
+}
+.ssh-tunnel-form-actions .flat-button {
+  min-width: 76px;
+  height: 38px;
+  padding: 0 14px;
+}
+.ssh-tunnel-form-actions .primary-button {
+  min-width: 116px;
+  height: 38px;
+  padding: 0 14px;
+}
+.ssh-tunnel-error {
+  margin-top: 12px !important;
+  color: var(--danger-text, #d86666) !important;
+}
+.ssh-tunnel-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 14px;
+}
+.ssh-tunnel-row {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
+}
+.ssh-tunnel-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.ssh-tunnel-status.is-running {
+  background: #43be7b;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #43be7b 18%, transparent);
+}
+.ssh-tunnel-status.is-error {
+  background: #de6b6b;
+}
+.ssh-tunnel-status.is-starting,
+.ssh-tunnel-status.is-stopping {
+  background: #e7af54;
+}
+.ssh-tunnel-description {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.ssh-tunnel-description strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.ssh-tunnel-description span,
+.ssh-tunnel-description em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+.ssh-tunnel-description em {
+  color: var(--danger-text, #d86666);
+}
+.ssh-tunnel-state {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.ssh-tunnel-empty {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 16px 12px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 8px;
+}
+.ssh-tunnel-empty > .app-icon {
+  color: var(--accent-primary);
+}
+.ssh-tunnel-empty strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.ssh-tunnel-empty span {
+  max-width: 560px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.ssh-tunnel-secondary-action {
+  margin-top: 3px;
+}
+
+@media (max-width: 560px) {
+  .ssh-tunnel-form {
+    grid-template-columns: 1fr;
+  }
+  .ssh-tunnel-form-actions {
+    grid-column: auto;
+  }
+  .ssh-tunnel-row {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+  }
+  .ssh-tunnel-state {
+    display: none;
+  }
 }

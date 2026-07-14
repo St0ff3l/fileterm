@@ -3,6 +3,7 @@ import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetr
 import { copyText, hasSelectedText } from '../../app/app-utils'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
+import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { formatSystemLoad } from './system-metric-format'
 
 function parseMemory(memStr: string): number {
@@ -36,6 +37,7 @@ export function SystemSidebar({
   const internalIp = metrics?.ip || '-'
   const accessAddress = activeProfile?.host || activeSession?.accessHost || '-'
   const rows = activeSession?.systemMetrics?.diskRows ?? []
+  const diskScrollRef = useRef<HTMLDivElement>(null)
   const systemLoad = formatSystemLoad(metrics, t)
 
   const sortedProcesses = useMemo(() => {
@@ -140,19 +142,24 @@ export function SystemSidebar({
               <span>{t.path}</span>
               <span>{t.availableSize}</span>
             </div>
-            {rows.length
-              ? rows.map((row) => (
-                  <div className="disk-row" key={row.path}>
-                    <span>{row.path}</span>
-                    <span>{row.usage}</span>
-                  </div>
-                ))
-              : Array.from({ length: 8 }).map((_, i) => (
-                  <div className="disk-row" key={`empty-${i}`}>
-                    <span></span>
-                    <span></span>
-                  </div>
-                ))}
+            <div className="disk-scroll-region">
+              <div className="disk-body" ref={diskScrollRef}>
+                {rows.length
+                  ? rows.map((row) => (
+                      <div className="disk-row" key={row.path}>
+                        <span>{row.path}</span>
+                        <span>{row.usage}</span>
+                      </div>
+                    ))
+                  : Array.from({ length: 8 }).map((_, i) => (
+                      <div className="disk-row" key={`empty-${i}`}>
+                        <span></span>
+                        <span></span>
+                      </div>
+                    ))}
+              </div>
+              <VerticalScrollbar ariaLabel="滚动磁盘列表" scrollRef={diskScrollRef} />
+            </div>
           </section>
         </>
       ) : showResourceMeters ? (

@@ -1449,10 +1449,22 @@
 :root[data-theme='default'] .connection-form input:focus,
 :root:not([data-theme]) .connection-form select:focus,
 :root[data-theme='default-dark'] .connection-form select:focus,
-:root[data-theme='default'] .connection-form select:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  background: var(--bg-card);
+:root[data-theme='default'] .connection-form select:focus,
+:root:not([data-theme]) .ssh-grid input:focus,
+:root[data-theme='default-dark'] .ssh-grid input:focus,
+:root[data-theme='default'] .ssh-grid input:focus,
+:root:not([data-theme]) .ssh-grid select:focus,
+:root[data-theme='default-dark'] .ssh-grid select:focus,
+:root[data-theme='default'] .ssh-grid select:focus,
+:root:not([data-theme]) .ssh-grid textarea:focus,
+:root[data-theme='default-dark'] .ssh-grid textarea:focus,
+:root[data-theme='default'] .ssh-grid textarea:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
+  background: var(--input-bg) !important;
+  outline: none !important;
+  position: relative !important;
+  z-index: 1 !important;
 }
 
 :root:not([data-theme]) .primary-button,
@@ -2184,17 +2196,17 @@
   background: #1e1e1e;
 }
 
-/* disk-row: odd=light(浅), even=dark(深) */
+/* disk-row: odd=dark(深), even=light(浅) */
 :root:not([data-theme]) .disk-row:nth-child(odd),
 :root[data-theme='default-dark'] .disk-row:nth-child(odd),
 :root[data-theme='default'] .disk-row:nth-child(odd) {
-  background: #242424;
+  background: #1e1e1e;
 }
 
 :root:not([data-theme]) .disk-row:nth-child(even),
 :root[data-theme='default-dark'] .disk-row:nth-child(even),
 :root[data-theme='default'] .disk-row:nth-child(even) {
-  background: #1e1e1e;
+  background: #242424;
 }
 
 :root:not([data-theme]) .quick-row:hover,
@@ -2655,7 +2667,9 @@
 :root:not([data-theme]) .command-dialog-body,
 :root[data-theme='default-dark'] .command-dialog-body,
 :root[data-theme='default'] .command-dialog-body {
+  /* Keep the form centered whether a native scrollbar is present or not. */
   padding: 20px 24px 0 !important;
+  scrollbar-gutter: stable both-edges;
 }
 
 /* Labels */
