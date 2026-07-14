@@ -33,6 +33,12 @@ pub struct SessionSnapshot {
     pub file_access_mode: String, // "user" | "root"
     pub sudo_user: Option<String>,
     pub has_reusable_sudo_auth: bool,
+    /// 登录用户（首次 OSC 1337 RemoteUser= 观察到的用户，或 profile.username）。
+    /// 用于判断 shell 用户是否变化以自动切 root 视角。
+    pub login_user: Option<String>,
+    /// 当前 shell 观察到的用户（OSC 1337 RemoteUser=）。与 sudo_user 分开：
+    /// sudo_user 是用户显式配置的 sudo 目标，shell_user 是终端实际运行用户。
+    pub shell_user: Option<String>,
     pub connected: bool,
     pub system_metrics: Option<serde_json::Value>,
 }
@@ -59,6 +65,10 @@ pub struct WorkspaceState {
     pub active_tab_id: Arc<RwLock<Option<String>>>,
     pub sessions: Arc<RwLock<HashMap<String, SessionSnapshot>>>,
     pub workers: Arc<RwLock<HashMap<String, tokio::sync::mpsc::Sender<WorkerCmd>>>>,
+    /// Cancels the runtime owned by each worker. Dropping the command sender
+    /// alone cannot interrupt a worker that is currently parsing a large
+    /// remote metrics payload or waiting on an SSH operation.
+    pub worker_controls: Arc<RwLock<HashMap<String, CancellationToken>>>,
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions:
@@ -83,6 +93,7 @@ impl Default for WorkspaceState {
             active_tab_id: Arc::new(RwLock::new(None)),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             workers: Arc::new(RwLock::new(HashMap::new())),
+            worker_controls: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
             transfers: Arc::new(RwLock::new(Vec::new())),

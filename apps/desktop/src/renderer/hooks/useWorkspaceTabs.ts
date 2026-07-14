@@ -652,9 +652,12 @@ export function useWorkspaceTabs({
 
     try {
       const terminalCommand = command.replace(/\r\n|\r|\n/g, '\r')
-      for (const tabId of targetIds) {
-        await desktopApi.writeTerminal(tabId, `${terminalCommand}\r`)
-      }
+      // 并行发送，对照 Electron 原版的 fire-and-forget 行为。
+      // 顺序 await 会让一个卡住的 tab 阻塞后续所有 tab；后端已为每个
+      // invoke 加了 send 超时，但并行化能进一步保证单个慢 tab 不影响
+      // 其他 tab 的投递时序。allSettled 确保一个失败不影响其余。
+      const payload = `${terminalCommand}\r`
+      await Promise.allSettled(targetIds.map((tabId) => desktopApi.writeTerminal(tabId, payload)))
     } catch (error) {
       onError('发送终端命令', error)
       throw error

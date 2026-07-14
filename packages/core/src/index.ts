@@ -505,6 +505,8 @@ export interface SessionSnapshot {
   fileAccessMode?: 'user' | 'root'
   sudoUser?: string
   hasReusableSudoAuth?: boolean
+  /** 登录用户（首次 OSC 1337 RemoteUser= 观察值或 profile.username） */
+  loginUser?: string
   connected?: boolean
   systemMetrics?: SystemMetrics
   capabilities?: ConnectionCapabilities

@@ -26,6 +26,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 use tokio_socks::tcp::Socks5Stream;
 
 use super::{TransferFileStat, WorkerCmd};
@@ -106,6 +108,7 @@ pub fn start_ssh_worker(
     profile: Value,
     mut cmd_rx: mpsc::Receiver<WorkerCmd>,
     app: AppHandle,
+    cancellation: CancellationToken,
 ) {
     tokio::spawn(async move {
         let tid = tab_id.clone();
@@ -114,7 +117,11 @@ pub fn start_ssh_worker(
         // snapshot's `terminal_transcript` (set by `app_open_profile`), so
         // the renderer hydrates it via `bootText` — no need to emit it here.
         // Emitting here would race the renderer's listener registration.
-        let run_result = run_worker_loop(&tab_id, &profile, &mut cmd_rx, &app).await;
+        let run_result = run_worker_loop(&tab_id, &profile, &mut cmd_rx, &app, cancellation.clone()).await;
+        if cancellation.is_cancelled() {
+            crate::services::logging::ssh_debug(&app, &tid, "SSH worker cancelled");
+            return;
+        }
         match run_result {
             Ok(()) => {
                 emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
@@ -748,6 +755,10 @@ async fn follow_shell_cwd(
     tab_id: String,
     cwd: String,
     sftp: Arc<RwLock<SftpSession>>,
+    handle: Arc<Handle<ClientHandler>>,
+    file_access_mode: String,
+    sudo_user: Option<String>,
+    sudo_password: Option<String>,
 ) {
     {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
@@ -764,9 +775,17 @@ async fn follow_shell_cwd(
         let _ = app.emit("workspace:snapshot", snapshot);
     }
 
-    let files = {
-        let sftp = sftp.read().await;
-        list_dir(&sftp, &cwd).await
+    // The SFTP session belongs to the login user. Once `sudo -i` has started
+    // a root shell, following CWD through that channel silently remains in
+    // the old user's view. Electron switches to its sudo shell path here.
+    let files = if file_access_mode == "root" {
+        exec_list_dir_via_shell(&handle, &cwd, &sudo_user, &sudo_password).await
+    } else {
+        // russh-sftp's client is one request stream. Serialise access to it:
+        // concurrent read locks let multiple list/delete/upload requests
+        // interleave and eventually time out after app focus is restored.
+        let mut sftp = sftp.write().await;
+        list_dir(&mut sftp, &cwd).await
     };
 
     let state = app.state::<crate::services::workspace::WorkspaceState>();
@@ -845,6 +864,93 @@ fn track_cwd_and_user(chunk: &str, buffer: &mut String) -> (Option<String>, Opti
         user = Some(cap[1].to_string());
     }
     (cwd, user)
+}
+
+/// Remove CSI/OSC control sequences before inspecting a prompt. This mirrors
+/// Electron's root-prompt heuristic without feeding visual escape codes into
+/// the comparison.
+fn visible_shell_text(value: &str) -> String {
+    let csi = regex::Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]").expect("constant CSI regex");
+    let osc = regex::Regex::new(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)").expect("constant OSC regex");
+    osc.replace_all(&csi.replace_all(value, ""), "").into_owned()
+}
+
+fn looks_like_root_prompt(value: &str) -> bool {
+    visible_shell_text(value).trim_end().ends_with('#')
+}
+
+/// Track the interactive sudo exchange on the terminal channel. The password
+/// stays worker-local and is never copied into a snapshot or emitted event.
+fn capture_sudo_password_input(
+    input: &str,
+    awaiting_password: &mut bool,
+    pending_password: &mut String,
+    recent_input: &mut String,
+    sudo_password: &mut Option<String>,
+) -> bool {
+    let mut changed = false;
+    for ch in input.chars() {
+        recent_input.push(ch);
+        if recent_input.len() > 512 {
+            let keep_from = recent_input.len() - 256;
+            *recent_input = recent_input[keep_from..].to_string();
+        }
+        if !*awaiting_password {
+            continue;
+        }
+        match ch {
+            '\r' | '\n' => {
+                if !pending_password.is_empty() {
+                    changed = sudo_password.as_deref() != Some(pending_password.as_str());
+                    *sudo_password = Some(std::mem::take(pending_password));
+                }
+                *awaiting_password = false;
+            }
+            '\u{3}' => {
+                changed = sudo_password.take().is_some();
+                pending_password.clear();
+                *awaiting_password = false;
+            }
+            '\u{8}' | '\u{7f}' => {
+                pending_password.pop();
+            }
+            _ if !ch.is_control() => pending_password.push(ch),
+            _ => {}
+        }
+    }
+    changed
+}
+
+fn track_sudo_prompt_from_terminal(
+    output: &str,
+    prompt_buffer: &mut String,
+    awaiting_password: &mut bool,
+    pending_password: &mut String,
+    sudo_password: &mut Option<String>,
+) -> bool {
+    prompt_buffer.push_str(&visible_shell_text(output));
+    if prompt_buffer.len() > 2048 {
+        let keep_from = prompt_buffer.len() - 1024;
+        *prompt_buffer = prompt_buffer[keep_from..].to_string();
+    }
+    let lower = prompt_buffer.to_ascii_lowercase();
+    let auth_failed = lower.contains("sorry, try again")
+        || lower.contains("incorrect password")
+        || lower.contains("authentication failure");
+    if auth_failed {
+        *awaiting_password = false;
+        pending_password.clear();
+        prompt_buffer.clear();
+        return sudo_password.take().is_some();
+    }
+    if lower.contains("password") || prompt_buffer.contains("密码") {
+        *awaiting_password = true;
+        pending_password.clear();
+        // Consume this prompt; otherwise the historical word "password"
+        // would mark every later terminal keystroke as a sudo password.
+        prompt_buffer.clear();
+    }
+    false
 }
 
 /// Removes the one command line echoed by an interactive POSIX shell while we
@@ -1765,17 +1871,44 @@ const SFTP_UNAVAILABLE_FALLBACK: &str =
 /// `russh-sftp` deliberately does not send the subsystem request itself, so
 /// this boundary is also where we can distinguish a file-channel failure from
 /// a terminal-session failure.
+/// SFTP 初始化每一步的最大等待时间。
+///
+/// 这非常关键：`open_sftp_session` 在 worker 主 select! 循环之前调用，
+/// 任何一步阻塞都会让整个 worker 启动不了——cmd_rx 队列堆满后所有
+/// `app_write_terminal` 调用全部永久阻塞，表现为终端无法输入、多窗口
+/// 发送整体卡死、Cmd+Q 退出也退不掉。服务器拒绝 sftp subsystem 时
+/// russh-sftp 内部超时往往很长（30s+），这里强制收口到 8 秒。
+const SFTP_INIT_STEP_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// sudo 凭据验证超时。`exec_shell_file_command` 用 PTY 模式 exec，sudo
+/// 密码错误时会重新 prompt 等待输入且不会自然退出，channel.wait() 永久
+/// 阻塞。这里强制 10 秒收口，让前端 RootAccessModal 的 loading 状态能
+/// 在合理时间内解除。
+const SUDO_VERIFY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// SFTP / exec 文件操作超时。
+///
+/// 这非常关键：worker 主循环是单 task 顺序处理 cmd 的，一个 ListRemoteFiles
+/// / ReadRemoteFile 卡住会阻塞整个 select! 循环，cmd_rx.recv() 不被 poll，
+/// 新来的 WriteTerminal 命令堆积直到 channel 满（100），之后所有
+/// app_write_terminal 超时丢弃——终端和悬浮窗都无法输入。
+///
+/// SFTP read_dir / open 在网络抖动或服务器 SFTP subsystem 失效时可能
+/// 长时间不返回，必须强制收口。
+const FILE_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
+
 async fn open_sftp_session(handle: &Handle<ClientHandler>) -> Result<SftpSession, String> {
-    let sftp_channel = handle
-        .channel_open_session()
+    let sftp_channel = timeout(SFTP_INIT_STEP_TIMEOUT, handle.channel_open_session())
         .await
+        .map_err(|_| "SFTP init failed: 打开 channel 超时".to_string())?
         .map_err(|error| format!("无法打开 SFTP channel: {error}"))?;
-    sftp_channel
-        .request_subsystem(true, "sftp")
+    timeout(SFTP_INIT_STEP_TIMEOUT, sftp_channel.request_subsystem(true, "sftp"))
         .await
+        .map_err(|_| "SFTP init failed: 请求 subsystem 超时".to_string())?
         .map_err(|error| format!("SFTP subsystem request failed: {error}"))?;
-    SftpSession::new(sftp_channel.into_stream())
+    timeout(SFTP_INIT_STEP_TIMEOUT, SftpSession::new(sftp_channel.into_stream()))
         .await
+        .map_err(|_| "SFTP init failed: 协议握手超时".to_string())?
         .map_err(|error| format!("SFTP init failed: {error}"))
 }
 
@@ -1804,6 +1937,7 @@ async fn run_worker_loop(
     profile: &Value,
     cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
     app: &AppHandle,
+    cancellation: CancellationToken,
 ) -> Result<(), String> {
     let host = profile
         .get("host")
@@ -1921,6 +2055,11 @@ async fn run_worker_loop(
                 file_access_mode: "user".to_string(),
                 sudo_user: None,
                 has_reusable_sudo_auth: false,
+                login_user: profile
+                    .get("username")
+                    .and_then(Value::as_str)
+                    .map(|s| s.to_string()),
+                shell_user: None,
                 connected: true,
                 system_metrics: None,
             },
@@ -1936,7 +2075,7 @@ async fn run_worker_loop(
         Ok(sftp) => {
             let sftp_arc = Arc::new(RwLock::new(sftp));
             let initial_files = {
-                let sftp = sftp_arc.read().await;
+                let sftp = sftp_arc.write().await;
                 list_dir(&sftp, "/").await
             };
             match initial_files {
@@ -1991,6 +2130,7 @@ async fn run_worker_loop(
         let metrics_app = app.clone();
         let metrics_tid = tab_id.to_string();
         let metrics_plat = platform.clone();
+        let metrics_cancellation = cancellation.clone();
         tokio::spawn(async move {
             eprintln!(
                 "[SSH metrics] task spawned tab={} plat='{}' — starting streaming collector",
@@ -2075,12 +2215,24 @@ while ($true) {{
                         let _ = channel.close().await;
                         break;
                     }
+                    _ = metrics_cancellation.cancelled() => {
+                        let _ = channel.close().await;
+                        break;
+                    }
                     msg = channel.wait() => {
                         match msg {
                             Some(ChannelMsg::Data { data }) => {
                                 buffer.extend_from_slice(data.as_ref());
                                 // Drain all complete blocks from the buffer.
                                 while let Some(idx) = find_subsequence(&buffer, marker_bytes) {
+                                    // A malformed or unexpectedly large process list must not
+                                    // monopolize the Tokio worker and freeze the native webview.
+                                    // Keep one bounded metrics sample; the next marker resumes
+                                    // normal streaming collection.
+                                    if idx > 256 * 1024 {
+                                        buffer.drain(..idx + marker_bytes.len());
+                                        continue;
+                                    }
                                     let block = String::from_utf8_lossy(&buffer[..idx]).into_owned();
                                     buffer.drain(..idx + marker_bytes.len());
                                     // Parse and emit this block
@@ -2152,6 +2304,14 @@ while ($true) {{
     let mut file_access_mode = "user".to_string();
     let mut sudo_user: Option<String> = None;
     let mut sudo_password: Option<String> = None;
+    let mut sudo_prompt_buffer = String::new();
+    let mut awaiting_sudo_password = false;
+    let mut pending_sudo_password = String::new();
+    let mut recent_terminal_input = String::new();
+    // A new `sudo -i` shell discards the login shell's PROMPT_COMMAND.  Keep
+    // Electron's two-second guard so a root prompt causes one safe reinject
+    // of the OSC CWD/RemoteUser hook, not an injection loop.
+    let mut last_shell_setup_injection = Instant::now() - Duration::from_secs(3);
 
     let mut tunnel_manager = TunnelManager::new(tab_id, app, Arc::clone(&handle));
     if let Some(rules) = profile.get("forwards").and_then(Value::as_array) {
@@ -2179,6 +2339,12 @@ while ($true) {{
 
         tokio::select! {
             biased;
+            _ = cancellation.cancelled() => {
+                flush_batch(&mut batch_buffer, app, tab_id).await;
+                metrics_shutdown.notify_waiters();
+                tunnel_manager.stop_all().await;
+                return Ok(());
+            }
             // 1. Drain pending IPC commands first so user input never waits
             //    on the network. When the sender is dropped (reconnect /
             //    disconnect / close), `recv()` returns None and we must
@@ -2189,6 +2355,20 @@ while ($true) {{
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(cmd) => {
+                        if let WorkerCmd::WriteTerminal(data) = &cmd {
+                            if capture_sudo_password_input(
+                                data,
+                                &mut awaiting_sudo_password,
+                                &mut pending_sudo_password,
+                                &mut recent_terminal_input,
+                                &mut sudo_password,
+                            ) {
+                                let mut sessions = state.sessions.write().await;
+                                if let Some(session) = sessions.get_mut(tab_id) {
+                                    session.has_reusable_sudo_auth = sudo_password.is_some();
+                                }
+                            }
+                        }
                         let result = if let Some(sftp) = sftp_arc.as_ref() {
                             handle_worker_cmd(
                                 cmd,
@@ -2206,9 +2386,14 @@ while ($true) {{
                         } else {
                             handle_worker_cmd_without_sftp(
                                 cmd,
+                                &handle,
                                 &shell_channel,
+                                &mut file_access_mode,
+                                &mut sudo_user,
+                                &mut sudo_password,
                                 tab_id,
                                 app,
+                                &state,
                                 &mut tunnel_manager,
                                 sftp_unavailable_reason.as_deref().unwrap_or(SFTP_UNAVAILABLE_FALLBACK),
                             ).await
@@ -2242,9 +2427,22 @@ while ($true) {{
                     Some(ChannelMsg::Data { data }) => {
                         let bytes = data.as_ref();
                         let text = String::from_utf8_lossy(bytes);
+                        if track_sudo_prompt_from_terminal(
+                            &text,
+                            &mut sudo_prompt_buffer,
+                            &mut awaiting_sudo_password,
+                            &mut pending_sudo_password,
+                            &mut sudo_password,
+                        ) {
+                            let mut sessions = state.sessions.write().await;
+                            if let Some(session) = sessions.get_mut(tab_id) {
+                                session.has_reusable_sudo_auth = false;
+                            }
+                        }
                         let (new_cwd, new_user) = track_cwd_and_user(&text, &mut cwd_buffer);
                         let hook_marker_seen = new_cwd.is_some() || new_user.is_some();
                         let mut cwd_to_follow = None;
+                        let mut file_mode_switch: Option<(String, Option<String>)> = None;
                         if hook_marker_seen {
                             let mut sessions = state.sessions.write().await;
                             if let Some(s) = sessions.get_mut(tab_id) {
@@ -2256,15 +2454,60 @@ while ($true) {{
                                         }
                                     }
                                 }
-                                if let Some(user) = new_user { s.sudo_user = Some(user); }
+                                if let Some(user) = &new_user {
+                                    // 首次观察到 RemoteUser 时记录为 login_user
+                                    // （若 profile.username 不可用则用观察值）。
+                                    if s.login_user.is_none() {
+                                        s.login_user = Some(user.clone());
+                                    }
+                                    // shell_user 始终更新为最新观察值
+                                    if s.shell_user.as_deref() != Some(user.as_str()) {
+                                        s.shell_user = Some(user.clone());
+                                        // 对照 Electron resolveShellFileAccess：
+                                        // shell user != login user ⇒ 自动切 root 视角
+                                        // shell user == login user ⇒ 切回 user 视角
+                                        let login = s.login_user.clone();
+                                        if let Some(login_user) = login {
+                                            if user.as_str() != login_user.as_str() {
+                                                // sudo -i / su 切到其他用户：自动启用 root 视角
+                                                if s.file_access_mode != "root" {
+                                                    s.file_access_mode = "root".to_string();
+                                                    // sudo_user 用观察到的 shell user（如 "root"）
+                                                    s.sudo_user = Some(user.clone());
+                                                    s.has_reusable_sudo_auth = sudo_password.is_some();
+                                                    file_mode_switch = Some(("root".to_string(), Some(user.clone())));
+                                                    // `sudo -i` normally keeps the same CWD. Refresh
+                                                    // anyway so the file pane switches its access model
+                                                    // instead of waiting for a subsequent `cd`.
+                                                    cwd_to_follow = s.shell_cwd.clone();
+                                                }
+                                            } else if s.file_access_mode == "root" && !s.has_reusable_sudo_auth {
+                                                // 切回登录用户：若没有用户显式配置的 sudo 凭据，
+                                                // 自动切回 user 视角
+                                                s.file_access_mode = "user".to_string();
+                                                file_mode_switch = Some(("user".to_string(), None));
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             drop(sessions);
+                            // Keep worker-local auth/access state in lockstep
+                            // before dispatching the follow task below.
+                            if let Some((mode, su_user)) = file_mode_switch {
+                                file_access_mode = mode;
+                                sudo_user = su_user;
+                            }
                             if let (Some(cwd), Some(sftp)) = (cwd_to_follow, sftp_arc.as_ref()) {
                                 tokio::spawn(follow_shell_cwd(
                                     app.clone(),
                                     tab_id.to_string(),
                                     cwd,
                                     Arc::clone(sftp),
+                                    Arc::clone(&handle),
+                                    file_access_mode.clone(),
+                                    sudo_user.clone(),
+                                    sudo_password.clone(),
                                 ));
                             } else if let Ok(snap) = crate::commands::get_workspace_snapshot(app.clone()).await {
                                 let _ = app.emit("workspace:snapshot", snap);
@@ -2285,6 +2528,28 @@ while ($true) {{
                         };
                         if !visible.is_empty() {
                             batch_buffer.extend_from_slice(visible.as_bytes());
+                        }
+
+                        if pending_shell_setup_echo.is_none()
+                            && shell_cwd_setup_for_platform(&platform).is_some()
+                            && looks_like_root_prompt(&text)
+                            && last_shell_setup_injection.elapsed() > Duration::from_secs(2)
+                        {
+                            let shell_is_root = state
+                                .sessions
+                                .read()
+                                .await
+                                .get(tab_id)
+                                .and_then(|session| session.shell_user.as_deref())
+                                == Some("root");
+                            if !shell_is_root {
+                                if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
+                                    last_shell_setup_injection = Instant::now();
+                                    if shell_channel.data(format!(" {setup}\r").as_bytes()).await.is_ok() {
+                                        pending_shell_setup_echo = Some(String::new());
+                                    }
+                                }
+                            }
                         }
                     }
                     Some(ChannelMsg::ExtendedData { data, .. }) => {
@@ -2322,9 +2587,14 @@ while ($true) {{
 /// to shell commands or leaving the caller waiting on a nonexistent channel.
 async fn handle_worker_cmd_without_sftp(
     cmd: WorkerCmd,
+    handle: &Handle<ClientHandler>,
     shell_channel: &Channel<russh::client::Msg>,
+    file_access_mode: &mut String,
+    sudo_user: &mut Option<String>,
+    sudo_password: &mut Option<String>,
     tab_id: &str,
     app: &AppHandle,
+    state: &crate::services::workspace::WorkspaceState,
     tunnel_manager: &mut TunnelManager,
     unavailable_reason: &str,
 ) -> Result<bool, String> {
@@ -2394,8 +2664,50 @@ async fn handle_worker_cmd_without_sftp(
             let _ = respond_to.send(sftp_unavailable_result(unavailable_reason));
             Ok(false)
         }
-        WorkerCmd::SetRemoteFileAccessMode { respond_to, .. } => {
-            let _ = respond_to.send(sftp_unavailable_result(unavailable_reason));
+        WorkerCmd::SetRemoteFileAccessMode {
+            mode,
+            sudo_user: new_sudo_user,
+            sudo_password: new_sudo_password,
+            respond_to,
+        } => {
+            // root 模式走 exec channel（handle.channel_open_session().exec()），
+            // 不依赖 SFTP subsystem。即使用户的服务器拒绝 SFTP（Timeout /
+            // disabled），root 视角的文件操作仍可通过 sudo + exec 完成。
+            // 对照 Electron verifyRootFileAccess 先验证凭据。
+            let prev_sudo_user = sudo_user.clone();
+            let prev_sudo_password = sudo_password.clone();
+            let prev_mode = file_access_mode.clone();
+
+            *sudo_user = new_sudo_user.clone();
+            if let Some(pwd) = new_sudo_password {
+                if !pwd.is_empty() {
+                    *sudo_password = Some(pwd);
+                }
+            } else {
+                *sudo_password = None;
+            }
+
+            if mode == "root" {
+                let verify = exec_shell_file_command(handle, "true", sudo_user, sudo_password).await;
+                if let Err(err) = verify {
+                    *file_access_mode = prev_mode;
+                    *sudo_user = prev_sudo_user;
+                    *sudo_password = prev_sudo_password;
+                    let _ = respond_to.send(Err(err));
+                    return Ok(false);
+                }
+            }
+
+            *file_access_mode = mode.clone();
+            let has_reusable = sudo_password.is_some();
+            let su_user = sudo_user.clone();
+            let mut sessions = state.sessions.write().await;
+            if let Some(s) = sessions.get_mut(tab_id) {
+                s.file_access_mode = mode;
+                s.sudo_user = su_user;
+                s.has_reusable_sudo_auth = has_reusable;
+            }
+            let _ = respond_to.send(Ok(()));
             Ok(false)
         }
         WorkerCmd::Disconnect => {
@@ -2413,10 +2725,15 @@ async fn handle_worker_cmd_without_sftp(
 
 /// Returns `Ok(true)` when the worker should exit (Disconnect requested),
 /// `Ok(false)` otherwise.
+///
+/// 文件操作（List/Read/Write/Upload/Download/...）通过 `tokio::spawn` 分发到
+/// 独立任务执行，主循环立即返回继续处理终端输入。这样单个慢速 SFTP 操作
+/// 不会阻塞 `cmd_rx` 接收新的 `WriteTerminal` 命令——这是用户反馈"点上传
+/// 后终端和文件都卡住"问题的根本修复。
 #[allow(clippy::too_many_arguments)]
 async fn handle_worker_cmd(
     cmd: WorkerCmd,
-    handle: &Handle<ClientHandler>,
+    handle: &Arc<Handle<ClientHandler>>,
     shell_channel: &Channel<russh::client::Msg>,
     sftp: &Arc<RwLock<SftpSession>>,
     file_access_mode: &mut String,
@@ -2468,21 +2785,29 @@ async fn handle_worker_cmd(
             Ok(false)
         }
         WorkerCmd::StatRemoteFile { path, respond_to } => {
-            let result = if file_access_mode == "root" {
-                stat_root_remote_file(handle, &path, sudo_user, sudo_password).await
-            } else {
-                let sftp = sftp.read().await;
-                match sftp.metadata(&path).await {
-                    Ok(metadata) if metadata.is_dir() => Ok(None),
-                    Ok(metadata) => Ok(Some(TransferFileStat {
-                        size: metadata.size.unwrap_or(0),
-                        modified_at: metadata.mtime.map(|value| value as u64 * 1000),
-                    })),
-                    Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(None),
-                    Err(error) => Err(error.to_string()),
-                }
-            };
-            let _ = respond_to.send(result);
+            // stat 也可能因 SFTP 卡住而阻塞，spawn 避免影响主循环。
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    stat_root_remote_file(&handle, &path, &su, &sp).await
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match sftp_guard.metadata(&path).await {
+                        Ok(metadata) if metadata.is_dir() => Ok(None),
+                        Ok(metadata) => Ok(Some(TransferFileStat {
+                            size: metadata.size.unwrap_or(0),
+                            modified_at: metadata.mtime.map(|value| value as u64 * 1000),
+                        })),
+                        Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(None),
+                        Err(error) => Err(error.to_string()),
+                    }
+                };
+                let _ = respond_to.send(result);
+            });
             Ok(false)
         }
         WorkerCmd::UploadLocalFile {
@@ -2493,17 +2818,26 @@ async fn handle_worker_cmd(
             cancel,
             respond_to,
         } => {
-            let result = if file_access_mode == "root" {
-                // The journal's partial path is deliberately a user-owned /tmp
-                // staging file in root mode. SFTP can resume it safely; the
-                // privileged atomic commit happens in ReplaceRemoteFile.
-                let sftp = sftp.read().await;
-                upload_local_file(&sftp, &local_path, &remote_path, resume_offset, &transfer_id, cancel, app).await
-            } else {
-                let sftp = sftp.read().await;
-                upload_local_file(&sftp, &local_path, &remote_path, resume_offset, &transfer_id, cancel, app).await
-            };
-            let _ = respond_to.send(result);
+            // 上传可能持续数分钟，必须 spawn 到独立任务否则会阻塞整个 worker
+            // 主循环，导致终端输入和文件浏览全部卡住。
+            let sftp = Arc::clone(sftp);
+            let app = app.clone();
+            tokio::spawn(async move {
+                // root 与 user 模式走相同的 SFTP 上传路径（root 模式的 atomic
+                // commit 由后续 ReplaceRemoteFile 完成）。
+                let sftp_guard = sftp.write().await;
+                let result = upload_local_file(
+                    &sftp_guard,
+                    &local_path,
+                    &remote_path,
+                    resume_offset,
+                    &transfer_id,
+                    cancel,
+                    &app,
+                ).await;
+                drop(sftp_guard);
+                let _ = respond_to.send(result);
+            });
             Ok(false)
         }
         WorkerCmd::DownloadRemoteFile {
@@ -2514,24 +2848,40 @@ async fn handle_worker_cmd(
             cancel,
             respond_to,
         } => {
-            let result = if file_access_mode == "root" {
-                download_root_remote_file(
-                    handle,
-                    &remote_path,
-                    &local_path,
-                    resume_offset,
-                    &transfer_id,
-                    cancel,
-                    app,
-                    sudo_user,
-                    sudo_password,
-                )
-                .await
-            } else {
-                let sftp = sftp.read().await;
-                download_remote_file(&sftp, &remote_path, &local_path, resume_offset, &transfer_id, cancel, app).await
-            };
-            let _ = respond_to.send(result);
+            // 下载同样可能持续数分钟，必须 spawn。
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let app = app.clone();
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    download_root_remote_file(
+                        &handle,
+                        &remote_path,
+                        &local_path,
+                        resume_offset,
+                        &transfer_id,
+                        cancel,
+                        &app,
+                        &su,
+                        &sp,
+                    ).await
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    download_remote_file(
+                        &sftp_guard,
+                        &remote_path,
+                        &local_path,
+                        resume_offset,
+                        &transfer_id,
+                        cancel,
+                        &app,
+                    ).await
+                };
+                let _ = respond_to.send(result);
+            });
             Ok(false)
         }
         WorkerCmd::ReplaceRemoteFile {
@@ -2539,186 +2889,301 @@ async fn handle_worker_cmd(
             destination_path,
             respond_to,
         } => {
-            let result = if file_access_mode == "root" {
-                replace_root_remote_file(handle, &partial_path, &destination_path, sudo_user, sudo_password).await
-            } else {
-                let sftp = sftp.read().await;
-                replace_remote_file(&sftp, &partial_path, &destination_path).await
-            };
-            let _ = respond_to.send(result);
+            // root 模式下需要 exec sudo mv，可能因 sudo 验证或大文件 rename 慢，
+            // spawn 避免阻塞主循环。
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    replace_root_remote_file(&handle, &partial_path, &destination_path, &su, &sp).await
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    replace_remote_file(&sftp_guard, &partial_path, &destination_path).await
+                };
+                let _ = respond_to.send(result);
+            });
             Ok(false)
         }
         WorkerCmd::RemoveRemoteFile { path, respond_to } => {
-            let result = if file_access_mode == "root" {
-                exec_shell_file_command(
-                    handle,
-                    &format!("rm -f -- {}", shell_quote(&path)),
-                    sudo_user,
-                    sudo_password,
-                )
-                .await
-                .map(|_| ())
-            } else {
-                let sftp = sftp.read().await;
-                match sftp.remove_file(&path).await {
-                    Ok(()) => Ok(()),
-                    Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(()),
-                    Err(error) => Err(error.to_string()),
-                }
-            };
-            let _ = respond_to.send(result);
+            // 单文件删除通常很快，但 SFTP 通道可能因前序操作卡住，spawn 避免
+            // 阻塞主循环。
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(
+                        &handle,
+                        &format!("rm -f -- {}", shell_quote(&path)),
+                        &su,
+                        &sp,
+                    )).await {
+                        Ok(inner) => inner.map(|_| ()),
+                        Err(_) => Err(format!("删除{}超时", path)),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, async {
+                        match sftp_guard.remove_file(&path).await {
+                            Ok(()) => Ok(()),
+                            Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(()),
+                            Err(error) => Err(error.to_string()),
+                        }
+                    }).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("删除{}超时", path)),
+                    }
+                };
+                let _ = respond_to.send(result);
+            });
             Ok(false)
         }
         WorkerCmd::ListRemoteFiles { path, respond_to } => {
-            let res = if file_access_mode == "root" {
-                exec_list_dir_via_shell(handle, &path, sudo_user, sudo_password).await
-            } else {
-                let sftp = sftp.read().await;
-                list_dir(&sftp, &path).await
-            };
-            let _ = respond_to.send(res);
+            // spawn 避免阻塞主循环；timeout 防止 SFTP 卡住时任务永久挂起。
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_list_dir_via_shell(&handle, &path, &su, &sp)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("打开远程文件夹{}超时", path)),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, list_dir(&sftp_guard, &path)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("打开远程目录{}超时", path)),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::ReadRemoteFile { path, encoding, respond_to } => {
-            let res = if file_access_mode == "root" {
-                exec_read_file_via_shell(handle, &path, &encoding, sudo_user, sudo_password).await
-            } else {
-                let sftp = sftp.read().await;
-                read_file(&sftp, &path, &encoding).await
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_read_file_via_shell(&handle, &path, &encoding, &su, &sp)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("读取文件{}超时", path)),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, read_file(&sftp_guard, &path, &encoding)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("读取文件{}超时", path)),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::WriteRemoteFile { path, content, encoding, respond_to } => {
-            let res = if file_access_mode == "root" {
-                exec_write_file_via_shell(handle, &path, &content, &encoding, sudo_user, sudo_password).await
-            } else {
-                let sftp = sftp.read().await;
-                write_file(&sftp, &path, &content, &encoding).await
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_write_file_via_shell(&handle, &path, &content, &encoding, &su, &sp)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("写入文件{}超时", path)),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, write_file(&sftp_guard, &path, &content, &encoding)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("写入文件{}超时", path)),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::CreateRemoteDirectory { parent_path, name, respond_to } => {
-            let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), name);
-            let res = if file_access_mode == "root" {
-                exec_shell_file_command(
-                    handle,
-                    &format!("mkdir -p {}", shell_quote(&full_path)),
-                    sudo_user,
-                    sudo_password,
-                )
-                .await
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-            } else {
-                let sftp = sftp.read().await;
-                create_dir(&sftp, &full_path).await
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), name);
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(
+                        &handle,
+                        &format!("mkdir -p {}", shell_quote(&full_path)),
+                        &su,
+                        &sp,
+                    )).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err(format!("创建目录{}超时", full_path)),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, create_dir(&sftp_guard, &full_path)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("创建目录{}超时", full_path)),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::CreateRemoteFile { parent_path, name, respond_to } => {
-            let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), name);
-            let res = if file_access_mode == "root" {
-                exec_write_file_via_shell(handle, &full_path, "", "utf-8", sudo_user, sudo_password).await
-            } else {
-                let sftp = sftp.read().await;
-                write_file(&sftp, &full_path, "", "utf-8").await
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let full_path = format!("{}/{}", parent_path.trim_end_matches('/'), name);
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_write_file_via_shell(&handle, &full_path, "", "utf-8", &su, &sp)).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("创建文件{}超时", full_path)),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, write_file(&sftp_guard, &full_path, "", "utf-8")).await {
+                        Ok(inner) => inner,
+                        Err(_) => Err(format!("创建文件{}超时", full_path)),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::CopyRemotePath { target_path, destination_path, target_type, respond_to } => {
-            let dest_dir = std::path::Path::new(&destination_path)
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "/".to_string());
-            let cp_cmd = if target_type == "folder" { "cp -R" } else { "cp" };
-            let cmd_str = format!(
-                "mkdir -p {} && {} {} {}",
-                shell_quote(&dest_dir),
-                cp_cmd,
-                shell_quote(&target_path),
-                shell_quote(&destination_path)
-            );
-            let res = if file_access_mode == "root" {
-                exec_shell_file_command(handle, &cmd_str, sudo_user, sudo_password)
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
-            } else {
-                super::system_metrics::exec_command(handle, &cmd_str)
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let dest_dir = std::path::Path::new(&destination_path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "/".to_string());
+                let cp_cmd = if target_type == "folder" { "cp -R" } else { "cp" };
+                let cmd_str = format!(
+                    "mkdir -p {} && {} {} {}",
+                    shell_quote(&dest_dir),
+                    cp_cmd,
+                    shell_quote(&target_path),
+                    shell_quote(&destination_path)
+                );
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(&handle, &cmd_str, &su, &sp)).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("复制超时".to_string()),
+                    }
+                } else {
+                    match timeout(FILE_OPERATION_TIMEOUT, super::system_metrics::exec_command(&handle, &cmd_str)).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("复制超时".to_string()),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::MoveRemotePath { target_path, destination_path, respond_to } => {
-            let res = if file_access_mode == "root" {
-                exec_shell_file_command(
-                    handle,
-                    &format!("mv {} {}", shell_quote(&target_path), shell_quote(&destination_path)),
-                    sudo_user,
-                    sudo_password,
-                )
-                .await
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-            } else {
-                let sftp = sftp.read().await;
-                sftp.rename(&target_path, &destination_path)
-                    .await
-                    .map_err(|e| e.to_string())
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(
+                        &handle,
+                        &format!("mv {} {}", shell_quote(&target_path), shell_quote(&destination_path)),
+                        &su,
+                        &sp,
+                    )).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("移动超时".to_string()),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, sftp_guard.rename(&target_path, &destination_path)).await {
+                        Ok(inner) => inner.map_err(|e| e.to_string()),
+                        Err(_) => Err("移动超时".to_string()),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::RenameRemotePath { target_path, new_name, respond_to } => {
-            let parent = std::path::Path::new(&target_path)
-                .parent()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|| "/".to_string());
-            let dest = format!("{}/{}", parent.trim_end_matches('/'), new_name);
-            let res = if file_access_mode == "root" {
-                exec_shell_file_command(
-                    handle,
-                    &format!("mv {} {}", shell_quote(&target_path), shell_quote(&dest)),
-                    sudo_user,
-                    sudo_password,
-                )
-                .await
-                .map(|_| ())
-                .map_err(|e| e.to_string())
-            } else {
-                let sftp = sftp.read().await;
-                sftp.rename(&target_path, &dest)
-                    .await
-                    .map_err(|e| e.to_string())
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let parent = std::path::Path::new(&target_path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "/".to_string());
+                let dest = format!("{}/{}", parent.trim_end_matches('/'), new_name);
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(
+                        &handle,
+                        &format!("mv {} {}", shell_quote(&target_path), shell_quote(&dest)),
+                        &su,
+                        &sp,
+                    )).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("重命名超时".to_string()),
+                    }
+                } else {
+                    let sftp_guard = sftp.write().await;
+                    match timeout(FILE_OPERATION_TIMEOUT, sftp_guard.rename(&target_path, &dest)).await {
+                        Ok(inner) => inner.map_err(|e| e.to_string()),
+                        Err(_) => Err("重命名超时".to_string()),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::DeleteRemotePath { target_path, target_type, respond_to } => {
-            let cmd_str = if target_type == "folder" {
-                format!("rm -rf {}", shell_quote(&target_path))
-            } else {
-                format!("rm -f {}", shell_quote(&target_path))
-            };
-            let res = if file_access_mode == "root" {
-                exec_shell_file_command(handle, &cmd_str, sudo_user, sudo_password)
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
-            } else {
-                super::system_metrics::exec_command(handle, &cmd_str)
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let cmd_str = if target_type == "folder" {
+                    format!("rm -rf {}", shell_quote(&target_path))
+                } else {
+                    format!("rm -f {}", shell_quote(&target_path))
+                };
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(&handle, &cmd_str, &su, &sp)).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("删除超时".to_string()),
+                    }
+                } else {
+                    match timeout(FILE_OPERATION_TIMEOUT, super::system_metrics::exec_command(&handle, &cmd_str)).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("删除超时".to_string()),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::ChangeRemotePermissions { target_path, permissions, recursive, apply_to, respond_to } => {
@@ -2726,37 +3191,43 @@ async fn handle_worker_cmd(
             // - `apply_to='all'` → `chmod -R` for recursive, plain `chmod` otherwise
             // - `apply_to='files'` → `chmod <mode> <path>` + `find <path> -type f -exec chmod <mode> {} +`
             // - `apply_to='directories'` → `chmod <mode> <path>` + `find <path> -type d -exec chmod <mode> {} +`
-            let mode_str = format!("{:o}", permissions);
-            let cmd_str = if !recursive {
-                format!("chmod {} {}", mode_str, shell_quote(&target_path))
-            } else {
-                match apply_to.as_str() {
-                    "files" => format!(
-                        "chmod {} {} && find {} -type f -exec chmod {} {} +",
-                        mode_str, shell_quote(&target_path),
-                        shell_quote(&target_path), mode_str, "{}"
-                    ),
-                    "directories" => format!(
-                        "chmod {} {} && find {} -type d -exec chmod {} {} +",
-                        mode_str, shell_quote(&target_path),
-                        shell_quote(&target_path), mode_str, "{}"
-                    ),
-                    _ => format!("chmod -R {} {}", mode_str, shell_quote(&target_path)),
-                }
-            };
-            let res = if file_access_mode == "root" {
-                exec_shell_file_command(handle, &cmd_str, sudo_user, sudo_password)
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
-            } else {
-                let wrapped = format!("sh -lc {}", shell_quote(&cmd_str));
-                super::system_metrics::exec_command(handle, &wrapped)
-                    .await
-                    .map(|_| ())
-                    .map_err(|e| e.to_string())
-            };
-            let _ = respond_to.send(res);
+            let handle = Arc::clone(handle);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let mode_str = format!("{:o}", permissions);
+                let cmd_str = if !recursive {
+                    format!("chmod {} {}", mode_str, shell_quote(&target_path))
+                } else {
+                    match apply_to.as_str() {
+                        "files" => format!(
+                            "chmod {} {} && find {} -type f -exec chmod {} {} +",
+                            mode_str, shell_quote(&target_path),
+                            shell_quote(&target_path), mode_str, "{}"
+                        ),
+                        "directories" => format!(
+                            "chmod {} {} && find {} -type d -exec chmod {} {} +",
+                            mode_str, shell_quote(&target_path),
+                            shell_quote(&target_path), mode_str, "{}"
+                        ),
+                        _ => format!("chmod -R {} {}", mode_str, shell_quote(&target_path)),
+                    }
+                };
+                let res = if fam == "root" {
+                    match timeout(FILE_OPERATION_TIMEOUT, exec_shell_file_command(&handle, &cmd_str, &su, &sp)).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("修改权限超时".to_string()),
+                    }
+                } else {
+                    let wrapped = format!("sh -lc {}", shell_quote(&cmd_str));
+                    match timeout(FILE_OPERATION_TIMEOUT, super::system_metrics::exec_command(&handle, &wrapped)).await {
+                        Ok(inner) => inner.map(|_| ()).map_err(|e| e.to_string()),
+                        Err(_) => Err("修改权限超时".to_string()),
+                    }
+                };
+                let _ = respond_to.send(res);
+            });
             Ok(false)
         }
         WorkerCmd::SetRemoteFileAccessMode {
@@ -2765,7 +3236,13 @@ async fn handle_worker_cmd(
             sudo_password: new_sudo_password,
             respond_to,
         } => {
-            *file_access_mode = mode.clone();
+            // 对照 Electron verifyRootFileAccess：切到 root 前先验证 sudo 凭据
+            // 可用，失败则回滚状态并返回错误，让用户在弹窗里立即看到反馈，
+            // 而不是等到第一次文件操作才失败（用户会以为"root 切换没接入"）。
+            let prev_sudo_user = sudo_user.clone();
+            let prev_sudo_password = sudo_password.clone();
+            let prev_mode = file_access_mode.clone();
+
             *sudo_user = new_sudo_user.clone();
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
@@ -2776,6 +3253,21 @@ async fn handle_worker_cmd(
                 // No password provided — fall back to `sudo -n`.
                 *sudo_password = None;
             }
+
+            if mode == "root" {
+                // 先验证 sudo 凭据，失败则回滚
+                let verify = exec_shell_file_command(handle, "true", sudo_user, sudo_password).await;
+                if let Err(err) = verify {
+                    // 回滚到切换前的状态
+                    *file_access_mode = prev_mode;
+                    *sudo_user = prev_sudo_user;
+                    *sudo_password = prev_sudo_password;
+                    let _ = respond_to.send(Err(err));
+                    return Ok(false);
+                }
+            }
+
+            *file_access_mode = mode.clone();
             let has_reusable = sudo_password.is_some();
             let su_user = sudo_user.clone();
             let mut sessions = state.sessions.write().await;
@@ -3278,6 +3770,10 @@ async fn exec_shell_file_command(
     sudo_password: &Option<String>,
 ) -> Result<String, String> {
     let user = sudo_user.as_deref().unwrap_or("root");
+    // Electron only uses `-n` when no password is available. `sudo -n -S`
+    // rejects stdin authentication on several sudo versions, making a valid
+    // password look like a timeout. With a password, `-S -p ''` consumes one
+    // line from stdin; the outer timeout still bounds a retrying sudo prompt.
     let full_cmd = if sudo_password.is_some() {
         format!(
             "sudo -S -p '' -u {} sh -lc {}",
@@ -3292,21 +3788,31 @@ async fn exec_shell_file_command(
         )
     };
 
+    // 整个 exec 包超时：PTY 模式下 sudo 错误密码可能 retry 多次，channel
+    // 不会自然退出。超时后返回错误，前端 loading 能在 10 秒内解除。
     let output = if let Some(pwd) = sudo_password {
         let stdin = format!("{}\n", pwd);
-        super::system_metrics::exec_command_with_stdin(handle, &full_cmd, &stdin).await?
+        match timeout(SUDO_VERIFY_TIMEOUT, super::system_metrics::exec_command_with_stdin(handle, &full_cmd, &stdin)).await {
+            Ok(inner) => inner?,
+            Err(_) => return Err("sudo 验证超时：服务器未在 10 秒内响应，可能密码错误或网络中断".to_string()),
+        }
     } else {
-        super::system_metrics::exec_command(handle, &full_cmd).await?
+        match timeout(SUDO_VERIFY_TIMEOUT, super::system_metrics::exec_command(handle, &full_cmd)).await {
+            Ok(inner) => inner?,
+            Err(_) => return Err("sudo 验证超时：服务器未在 10 秒内响应".to_string()),
+        }
     };
 
     let lower = output.to_lowercase();
     if lower.contains("incorrect password")
         || lower.contains("authentication failure")
         || lower.contains("a password is required")
+        || lower.contains("no password was provided")
         || lower.contains("sudo: permission denied")
+        || lower.contains("sorry, try again")
     {
         return Err(
-            "sudo authentication failed — password incorrect or sudo not granted".to_string(),
+            "sudo 认证失败：密码错误或未授予 sudo 权限".to_string(),
         );
     }
     Ok(output)
@@ -3539,7 +4045,8 @@ mod tests {
     use super::{
         build_http_connect_request, format_sftp_unavailable_reason, is_password_prompt,
         looks_like_mfa_prompt, parent_remote_path, forward_local_connection, forward_socks5_connection,
-        remote_bind_host_matches, suppress_shell_setup_echo,
+        capture_sudo_password_input, looks_like_root_prompt, remote_bind_host_matches,
+        suppress_shell_setup_echo, track_sudo_prompt_from_terminal,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
         KeyboardInteractiveRequest, SshTunnelRule,
     };
@@ -3815,6 +4322,47 @@ mod tests {
             "Debian GNU/Linux\r\n\u{1b}]7;file:///home/user\u{7}user@host:~$ "
         );
         assert!(pending.is_none());
+    }
+
+    #[test]
+    fn detects_root_prompt_after_terminal_colours_are_removed() {
+        assert!(looks_like_root_prompt("\u{1b}[01;31mroot@host\u{1b}[0m:# "));
+        assert!(!looks_like_root_prompt("user@host:$ "));
+    }
+
+    #[test]
+    fn terminal_sudo_password_cache_is_cleared_after_auth_failure() {
+        let mut prompt_buffer = String::new();
+        let mut awaiting = false;
+        let mut pending = String::new();
+        let mut recent = String::new();
+        let mut cached = None;
+
+        assert!(!track_sudo_prompt_from_terminal(
+            "[sudo] user 的密码：",
+            &mut prompt_buffer,
+            &mut awaiting,
+            &mut pending,
+            &mut cached,
+        ));
+        assert!(awaiting);
+        assert!(capture_sudo_password_input(
+            "wrong\r",
+            &mut awaiting,
+            &mut pending,
+            &mut recent,
+            &mut cached,
+        ));
+        assert_eq!(cached.as_deref(), Some("wrong"));
+        assert!(track_sudo_prompt_from_terminal(
+            "Sorry, try again.\r\n",
+            &mut prompt_buffer,
+            &mut awaiting,
+            &mut pending,
+            &mut cached,
+        ));
+        assert!(cached.is_none());
+        assert!(!awaiting);
     }
 
     #[test]

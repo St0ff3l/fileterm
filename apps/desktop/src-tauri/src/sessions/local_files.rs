@@ -404,8 +404,10 @@ pub async fn app_select_local_files(
     if let Some(p) = default_path {
         dialog = dialog.set_directory(p);
     }
+    // 不加 "All files" filter（&["*"] 在某些平台不匹配任何文件，导致
+    // 对话框里所有文件灰显不可选——用户报告"点上传选不到任何文件"）。
+    // 不加 filter 默认显示所有文件。
     let result = dialog
-        .add_filter("All files", &["*"])
         .pick_files()
         .await
         .unwrap_or_default();

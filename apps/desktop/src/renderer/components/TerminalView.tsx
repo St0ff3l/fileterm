@@ -75,6 +75,11 @@ const TERMINAL_FIT_GUARD_ROWS = 0
 const TERMINAL_RESIZE_PIXEL_EPSILON = 2
 const TERMINAL_RESIZE_SETTLE_MS = 140
 const TERMINAL_RESIZE_OUTPUT_QUIET_MS = 260
+// Chromium pauses requestAnimationFrame for an unfocused desktop window. When
+// it resumes, several seconds of SSH output may be queued. Keep one xterm
+// write small enough that returning to the app does not monopolize the shared
+// renderer thread and freeze the file pane with the terminal.
+const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
 function trimTranscript(transcript: string) {
   if (transcript.length <= TERMINAL_TRANSCRIPT_LIMIT) {
     return transcript
@@ -135,6 +140,10 @@ export const TerminalView = memo(function TerminalView({
   const preserveVisibleBufferRef = useRef(false)
   const bootedTabs = useRef(new Set<string>())
   const wasConnectedRef = useRef(false)
+  // `onData` is registered once for the xterm instance.  Reading the prop
+  // through a ref prevents a stale terminal-state event from a background
+  // tab from swallowing keystrokes after this tab is brought back.
+  const connectedRef = useRef(Boolean(connected))
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{ width: number; height: number } | null>(null)
   const isHorizontalResizeActiveRef = useRef(false)
@@ -147,6 +156,7 @@ export const TerminalView = memo(function TerminalView({
   const isReconnectingRef = useRef(false)
   const activeTerminalTabIdRef = useRef<string | null>(null)
   tabIdRef.current = tabId
+  connectedRef.current = Boolean(connected)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
   const [hasSelection, setHasSelection] = useState(false)
@@ -358,8 +368,8 @@ export const TerminalView = memo(function TerminalView({
       return
     }
 
-    const nextChunk = pendingWriteRef.current
-    pendingWriteRef.current = ''
+    const nextChunk = pendingWriteRef.current.slice(0, TERMINAL_WRITE_FRAME_BUDGET)
+    pendingWriteRef.current = pendingWriteRef.current.slice(nextChunk.length)
     isWritingRef.current = true
     terminal.write(nextChunk, () => {
       isWritingRef.current = false
@@ -752,7 +762,7 @@ export const TerminalView = memo(function TerminalView({
     const onDataDispose = terminal.onData((data) => {
       // When disconnected, intercept Enter to trigger reconnect instead of
       // forwarding to the (dead) PTY. Ignore while a reconnect is in flight.
-      if (!wasConnectedRef.current) {
+      if (!connectedRef.current) {
         if (data.includes('\r') || data.includes('\n')) requestReconnect()
         return
       }
@@ -996,6 +1006,25 @@ export const TerminalView = memo(function TerminalView({
 
   useEffect(() => {
     bootTextRef.current = bootText
+
+    // connected 提升必须放在提前 return 之前。
+    //
+    // 切 tab 流程：tab A(connected) → tab B(未连接) → 切回 tab A。
+    //   1. 切到 B 时 onTerminalState 的 connected=false 会把 wasConnectedRef 写成 false
+    //   2. 切回 A 时，React 中间态 connected 可能短暂为 false，第 1017 行不触发
+    //   3. snapshot apply 完成后 connected 变 true，effect 因 connected dep 再次触发
+    //   4. 但 activeTerminalTabIdRef.current === tabId（都是 A），提前 return，
+    //      wasConnectedRef.current = true 永远不执行
+    //   5. A 已连接，main 不再发 terminal:state，wasConnectedRef 永久卡 false
+    //   6. onData 走 !wasConnectedRef 分支吞掉所有输入——"切回来无法输入"
+    //
+    // 把提升逻辑提到 return 之前：只要 connected 为 true，无论是否切换 tab，
+    // 都把 wasConnectedRef 从 false 提升到 true。真正的断开仍由 onTerminalState
+    // (line 823) 权威设置，这里只做单向提升，不会反向覆盖。
+    if (connected) {
+      wasConnectedRef.current = true
+    }
+
     if (activeTerminalTabIdRef.current === tabId) {
       return
     }
@@ -1007,7 +1036,6 @@ export const TerminalView = memo(function TerminalView({
       return
     }
 
-    wasConnectedRef.current = connected
     preserveVisibleBufferRef.current = false
     awaitingCommandCompletionRef.current = false
     pendingPromptResizeRef.current = false

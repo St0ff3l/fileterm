@@ -206,7 +206,7 @@ export function normalizeRemoteErrorMessage(error: unknown) {
 
 export function shouldPromptForRootAccess(error: unknown) {
   const message = normalizeRemoteErrorMessage(error)
-  return /未检测到可复用的 sudo 授权|sudo 密码错误|sudo 密码无效|sudo credentials|incorrect password|authentication failure/i.test(
+  return /未检测到可复用的 sudo 授权|sudo 密码错误|sudo 密码无效|sudo 认证失败|sudo 验证超时|sudo credentials|incorrect password|authentication failure/i.test(
     message
   )
 }
@@ -956,6 +956,9 @@ export function useFileOperations({
     if (nextMode === 'root') {
       if (!activeSession.hasReusableSudoAuth) {
         setRootAccessDialogError(null)
+        // 打开弹窗前重置 submitting，避免上一次提交卡死后残留的 loading
+        // 状态污染新弹窗（用户报告"关闭重开连接还是卡 loading"正是此因）。
+        setIsRootAccessSubmitting(false)
         setRootAccessDialog({
           tabId: activeTab.id,
           sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
@@ -1054,6 +1057,10 @@ export function useFileOperations({
   const dismissRootAccessDialog = () => {
     setRootAccessDialog(null)
     setRootAccessDialogError(null)
+    // 必须重置 submitting：后端 sudo 验证可能因网络/超时未 reject
+    // Promise，finally 不执行，loading 残留导致重开弹窗仍卡 spinner。
+    // 即便后端已修复超时，dismiss 时也应主动清理，保证状态自愈。
+    setIsRootAccessSubmitting(false)
   }
 
   return {

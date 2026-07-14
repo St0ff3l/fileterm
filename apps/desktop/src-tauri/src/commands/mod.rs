@@ -2,10 +2,34 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use regex::Regex;
+use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 use crate::AppError;
 use crate::storage::{read_json_array, write_json_array, new_id};
 use crate::sessions::WorkerCmd;
+
+/// 等待 worker 接收命令的最大时间。worker 主循环被 SFTP init / shell
+/// channel 写阻塞 时，mpsc 一旦满，send 会永久 await，导致前端 invoke
+/// 链路整体卡死（多窗口发送后续 tab 全部排队、Cmd+Q 退出无法完成）。
+/// 超时后丢弃这条命令，让 IPC 调用尽快返回，由前端兜底。
+const WORKER_CMD_SEND_TIMEOUT: Duration = Duration::from_millis(500);
+
+/// 文件/会话级操作（list/read/write/重连等）容忍更长延迟，但同样不能
+/// 永久阻塞——一旦 worker 卡死，应当让前端拿到明确错误。
+const WORKER_FILE_CMD_SEND_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Worker 已接收命令后也必须在有限时间内答复。之前仅限制了 mpsc send，
+/// 但某个后台 SFTP/exec task 丢失 reply 时，oneshot 会一直 await，导致
+/// 删除、打开目录和 Root 弹窗永久 loading。
+const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// 退出时给 worker 的 Disconnect 命令留 1 秒，超时直接放弃发送：worker
+/// 主循环卡死时 channel 满，send 不进去；强行 await 会让 Cmd+Q 整个
+/// 退出链路 hang 住，用户只能强制杀进程。drop sender 后 worker 的
+/// `cmd_rx.recv()` 会返回 None，自然走清理路径。
+const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UiPreferences {
@@ -595,13 +619,23 @@ async fn send_worker_cmd<T>(
 ) -> Result<T, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let workers = state.workers.read().await;
-    let sender = workers.get(tab_id).ok_or_else(|| AppError::Storage("Session not found".to_string()))?;
-    
+    let sender = workers.get(tab_id).ok_or_else(|| AppError::Storage("Session not found".to_string()))?.clone();
+    drop(workers);
+
     let (tx, rx) = oneshot::channel();
     let cmd = make_cmd(tx);
-    sender.send(cmd).await.map_err(|e| AppError::Storage(e.to_string()))?;
-    
-    let res = rx.await.map_err(|e| AppError::Storage(e.to_string()))?.map_err(|e| AppError::Storage(e))?;
+    // 不持有 workers 读锁跨 await：clone sender 后立即释放，避免后续写锁死锁。
+    // send 必须超时，worker 卡死时前端能拿到明确错误而不是永久 hang。
+    timeout(WORKER_FILE_CMD_SEND_TIMEOUT, sender.send(cmd))
+        .await
+        .map_err(|_| AppError::Storage("Worker busy: command send timeout".to_string()))?
+        .map_err(|e| AppError::Storage(e.to_string()))?;
+
+    let res = timeout(WORKER_FILE_RESPONSE_TIMEOUT, rx)
+        .await
+        .map_err(|_| AppError::Storage("远程文件操作超时，请检查连接后重试".to_string()))?
+        .map_err(|e| AppError::Storage(e.to_string()))?
+        .map_err(|e| AppError::Storage(e))?;
     Ok(res)
 }
 
@@ -632,12 +666,13 @@ fn start_session_worker(
     profile: serde_json::Value,
     receiver: mpsc::Receiver<WorkerCmd>,
     app: AppHandle,
+    cancellation: CancellationToken,
 ) {
     match profile.get("type").and_then(Value::as_str).unwrap_or("ssh") {
         "ftp" => crate::sessions::ftp::start_ftp_worker(tab_id, profile, receiver, app),
         "telnet" => crate::sessions::telnet::start_telnet_worker(tab_id, profile, receiver, app),
         "serial" => crate::sessions::serial::start_serial_worker(tab_id, profile, receiver, app),
-        _ => crate::sessions::ssh::start_ssh_worker(tab_id, profile, receiver, app),
+        _ => crate::sessions::ssh::start_ssh_worker(tab_id, profile, receiver, app, cancellation),
     }
 }
 
@@ -645,14 +680,33 @@ async fn stop_session_worker(
     state: &crate::services::workspace::WorkspaceState,
     tab_id: &str,
 ) {
+    if let Some(control) = state.worker_controls.write().await.remove(tab_id) {
+        // Cancel first: a command sender cannot wake a worker which is inside
+        // an SSH read/metrics parse. This also prevents a stale worker from
+        // emitting state over a replacement connection after reconnect.
+        control.cancel();
+    }
     let sender = state.workers.write().await.remove(tab_id);
     if let Some(sender) = sender {
-        let _ = sender.send(WorkerCmd::Disconnect).await;
+        // 超时即放弃：worker 主循环卡死时 channel 已满，send 不进去；
+        // 但 sender 已经从 workers map 移除并即将 drop，worker 的
+        // `cmd_rx.recv()` 会返回 None 走清理路径，无需依赖这条 Disconnect。
+        let _ = timeout(WORKER_DISCONNECT_TIMEOUT, sender.send(WorkerCmd::Disconnect)).await;
     }
 }
 
 pub async fn shutdown_session_workers(app: &AppHandle) {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let controls = state
+        .worker_controls
+        .write()
+        .await
+        .drain()
+        .map(|(_, control)| control)
+        .collect::<Vec<_>>();
+    for control in controls {
+        control.cancel();
+    }
     let senders = state
         .workers
         .write()
@@ -661,7 +715,9 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
         .map(|(_, sender)| sender)
         .collect::<Vec<_>>();
     for sender in senders {
-        let _ = sender.send(WorkerCmd::Disconnect).await;
+        // Cmd+Q 退出链路：任何单个卡死 worker 都不能阻塞整体退出。
+        // 超时后直接 drop sender，worker 收到 recv()==None 自动清理。
+        let _ = timeout(WORKER_DISCONNECT_TIMEOUT, sender.send(WorkerCmd::Disconnect)).await;
     }
 }
 
@@ -718,18 +774,26 @@ pub async fn app_open_profile(
             file_access_mode: "user".to_string(),
             sudo_user: None,
             has_reusable_sudo_auth: false,
+            login_user: None,
+            shell_user: None,
             connected: false,
             system_metrics: None,
         });
     }
 
     let (tx, rx) = mpsc::channel(100);
+    let worker_control = CancellationToken::new();
     {
         let mut workers = state.workers.write().await;
         workers.insert(tab_id.clone(), tx);
     }
+    state
+        .worker_controls
+        .write()
+        .await
+        .insert(tab_id.clone(), worker_control.clone());
 
-    start_session_worker(tab_id, profile.clone(), rx, app.clone());
+    start_session_worker(tab_id, profile.clone(), rx, app.clone(), worker_control);
 
     get_workspace_snapshot(app).await
 }
@@ -798,12 +862,18 @@ pub async fn app_reconnect_tab(
             }
 
             let (tx, rx) = mpsc::channel(100);
+            let worker_control = CancellationToken::new();
             {
                 let mut workers = state.workers.write().await;
                 workers.insert(tab_id.clone(), tx);
             }
+            state
+                .worker_controls
+                .write()
+                .await
+                .insert(tab_id.clone(), worker_control.clone());
 
-            start_session_worker(tab_id, profile.clone(), rx, app.clone());
+            start_session_worker(tab_id, profile.clone(), rx, app.clone(), worker_control);
         }
     }
 
@@ -863,7 +933,10 @@ pub async fn app_write_terminal(
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let workers = state.workers.read().await;
     if let Some(sender) = workers.get(&tab_id) {
-        let _ = sender.send(WorkerCmd::WriteTerminal(data)).await;
+        // 关键：必须超时。worker 主循环若被 SFTP init / shell 写阻塞，
+        // mpsc 满后 send 永久 await，会让前端多窗口发送整体卡死。
+        // 超时丢弃这条输入，保持 IPC 调用及时返回。
+        let _ = timeout(WORKER_CMD_SEND_TIMEOUT, sender.send(WorkerCmd::WriteTerminal(data))).await;
     }
     Ok(())
 }
@@ -880,7 +953,7 @@ pub async fn app_resize_terminal(
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let workers = state.workers.read().await;
     if let Some(sender) = workers.get(&tab_id) {
-        let _ = sender.send(WorkerCmd::ResizeTerminal { cols, rows, width, height }).await;
+        let _ = timeout(WORKER_CMD_SEND_TIMEOUT, sender.send(WorkerCmd::ResizeTerminal { cols, rows, width, height })).await;
     }
     Ok(())
 }
@@ -1482,10 +1555,14 @@ pub async fn app_execute_command_template(
     let workers = state.workers.read().await;
     let sender = workers
         .get(&tab_id)
-        .ok_or_else(|| AppError::Storage("Session not found".to_string()))?;
-    sender
-        .send(WorkerCmd::WriteTerminal(payload))
+        .ok_or_else(|| AppError::Storage("Session not found".to_string()))?
+        .clone();
+    drop(workers);
+    // 多窗口发送时 renderer 会顺序 invoke 多个 tab；任一 worker 卡住都
+    // 不能让本次调用永久 hang。超时返回错误，前端可以继续后续 tab。
+    timeout(WORKER_CMD_SEND_TIMEOUT, sender.send(WorkerCmd::WriteTerminal(payload)))
         .await
+        .map_err(|_| AppError::Storage("Worker busy: command send timeout".to_string()))?
         .map_err(|error| AppError::Storage(error.to_string()))?;
 
     Ok(serde_json::json!({ "renderedCommand": rendered_command }))

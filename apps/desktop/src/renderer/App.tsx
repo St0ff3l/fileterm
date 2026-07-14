@@ -740,9 +740,12 @@ export function App() {
       const targetIds = resolveSelectedTabIds(scope, activeTab, selectedTabIds, sessionSendTargets)
       const targetTabs = visibleWorkspaceTabs.filter((tab) => targetIds.includes(tab.id))
 
-      for (const tab of targetTabs) {
-        await desktopApi.executeCommandTemplate(tab.id, commandId, args, options)
-      }
+      // 并行发送，对照 Electron 原版的 fire-and-forget 行为。
+      // 顺序 await 会让一个卡住的 tab 阻塞后续所有 tab；allSettled 确保
+      // 单个失败不影响其余，后端 send 超时保证 invoke 不会永久 hang。
+      await Promise.allSettled(
+        targetTabs.map((tab) => desktopApi.executeCommandTemplate(tab.id, commandId, args, options))
+      )
     } catch (err) {
       reportError(setError, '执行命令模板', err)
     } finally {

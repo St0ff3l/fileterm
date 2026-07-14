@@ -5,9 +5,17 @@
 // below are pure functions and unchanged from the ssh2 era.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use russh::client::{Handle, Handler};
 use russh::ChannelMsg;
+use tokio::time::timeout;
+
+// A few SSH servers emit EOF/CLOSE before the final stdout packet is drained.
+// Keep a very short grace window after that marker: it preserves output while
+// still guaranteeing that servers which omit ExitStatus cannot hold a caller
+// until its much longer command watchdog fires.
+const EXEC_CHANNEL_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
 
 pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
     // 1. Try POSIX probe
@@ -73,8 +81,17 @@ pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<S
     channel.exec(true, cmd).await.map_err(|e| e.to_string())?;
 
     let mut output: Vec<u8> = Vec::new();
+    let mut draining_after_close = false;
     loop {
-        match channel.wait().await {
+        let message = if draining_after_close {
+            match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
+                Ok(message) => message,
+                Err(_) => break,
+            }
+        } else {
+            channel.wait().await
+        };
+        match message {
             Some(ChannelMsg::Data { data }) => {
                 output.extend_from_slice(data.as_ref());
             }
@@ -82,6 +99,9 @@ pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<S
                 output.extend_from_slice(data.as_ref());
             }
             Some(ChannelMsg::ExitStatus { .. }) | None => break,
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                draining_after_close = true;
+            }
             _ => {}
         }
     }
@@ -105,8 +125,17 @@ pub async fn exec_command_with_stdin<H: Handler>(
     channel.eof().await.map_err(|e| e.to_string())?;
 
     let mut output: Vec<u8> = Vec::new();
+    let mut draining_after_close = false;
     loop {
-        match channel.wait().await {
+        let message = if draining_after_close {
+            match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
+                Ok(message) => message,
+                Err(_) => break,
+            }
+        } else {
+            channel.wait().await
+        };
+        match message {
             Some(ChannelMsg::Data { data }) => {
                 output.extend_from_slice(data.as_ref());
             }
@@ -114,6 +143,9 @@ pub async fn exec_command_with_stdin<H: Handler>(
                 output.extend_from_slice(data.as_ref());
             }
             Some(ChannelMsg::ExitStatus { .. }) | None => break,
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                draining_after_close = true;
+            }
             _ => {}
         }
     }
@@ -464,8 +496,15 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
             }
         }
     }
-    let mut top_processes: Vec<serde_json::Value> = grouped_processes
+    // Sort numeric values before formatting them. The old implementation
+    // formatted all values, then compiled a Regex for every comparison while
+    // sorting. On hosts with large process tables that consumed multiple CPU
+    // cores continuously and starved Tauri's window/event loop.
+    let mut grouped_processes: Vec<(String, (f64, f64, f64))> = grouped_processes.into_iter().collect();
+    grouped_processes.sort_by(|a, b| b.1.0.total_cmp(&a.1.0));
+    let top_processes: Vec<serde_json::Value> = grouped_processes
         .into_iter()
+        .take(128)
         .map(|(command, (memory_mb, cpu, elapsed))| {
             serde_json::json!({
                 "memory": format_process_megabytes(memory_mb),
@@ -475,25 +514,6 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
             })
         })
         .collect();
-
-    // Sort processes desc by memory
-    let get_mem_value = |val: &serde_json::Value| -> f64 {
-        let s = val.get("memory").and_then(|v| v.as_str()).unwrap_or("0");
-        let re = regex::Regex::new(r"(\d+(?:\.\d+)?)([MG])").unwrap();
-        if let Some(caps) = re.captures(s) {
-            let num: f64 = caps[1].parse().unwrap_or(0.0);
-            if &caps[2] == "G" {
-                return num * 1024.0;
-            }
-            return num;
-        }
-        0.0
-    };
-    top_processes.sort_by(|a, b| {
-        let ma = get_mem_value(a);
-        let mb = get_mem_value(b);
-        mb.partial_cmp(&ma).unwrap_or(std::cmp::Ordering::Equal)
-    });
 
     let mem_used_bytes_num = mem_used_bytes
         .parse::<f64>()
@@ -1025,11 +1045,11 @@ fi
 disk=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK/%sK\n", $6, $4, $2}}' | head -n 12)
 filesystems=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK|%sK|%s|%sK|%s\n", $1, $2, $3, $5, $4, $6}}' | head -n 20)
 if has_bounded_runner; then
-  procs=$(run_bounded 1 ps -eo rss=,pcpu=,etimes=,comm= 2>/dev/null | awk 'NF >= 4 {{printf "%.1fM|%s|%s|%s\n", $1/1024, $2, $3, $4}}')
-  [ -z "$procs" ] && procs=$(run_bounded 1 ps 2>/dev/null | awk 'NR>1 && NF >= 5 {{proc_name=$5; sub(/^.*\//, "", proc_name); printf "%.1fM|0|0|%s\n", $3/1024, proc_name}}')
+  procs=$(run_bounded 1 ps -eo rss=,pcpu=,etimes=,comm= 2>/dev/null | head -n 128 | awk 'NF >= 4 {{printf "%.1fM|%s|%s|%s\n", $1/1024, $2, $3, $4}}')
+  [ -z "$procs" ] && procs=$(run_bounded 1 ps 2>/dev/null | head -n 128 | awk 'NR>1 && NF >= 5 {{proc_name=$5; sub(/^.*\//, "", proc_name); printf "%.1fM|0|0|%s\n", $3/1024, proc_name}}')
 else
-  procs=$(ps -eo rss=,pcpu=,etimes=,comm= 2>/dev/null | awk 'NF >= 4 {{printf "%.1fM|%s|%s|%s\n", $1/1024, $2, $3, $4}}')
-  [ -z "$procs" ] && procs=$(ps 2>/dev/null | awk 'NR>1 && NF >= 5 {{proc_name=$5; sub(/^.*\//, "", proc_name); printf "%.1fM|0|0|%s\n", $3/1024, proc_name}}')
+  procs=$(ps -eo rss=,pcpu=,etimes=,comm= 2>/dev/null | head -n 128 | awk 'NF >= 4 {{printf "%.1fM|%s|%s|%s\n", $1/1024, $2, $3, $4}}')
+  [ -z "$procs" ] && procs=$(ps 2>/dev/null | head -n 128 | awk 'NR>1 && NF >= 5 {{proc_name=$5; sub(/^.*\//, "", proc_name); printf "%.1fM|0|0|%s\n", $3/1024, proc_name}}')
 fi
 echo "__PLATFORM__{}"
 echo "__OS__$os_name"

@@ -46,13 +46,20 @@ void getCurrentWindow()
 
 function takeNativeDropPaths(files: File[]) {
   const isFresh = Date.now() - latestNativeDropAt < 5_000
-  if (isFresh && latestNativeDropPaths.length === files.length) {
+  // WRY may expose an empty DOM FileList for an OS-level drop even though the
+  // native Tauri event contains every absolute path. Accept that case too;
+  // requiring equal counts made external macOS Finder drops look like no-op.
+  if (isFresh && (files.length === 0 || latestNativeDropPaths.length === files.length)) {
     const paths = latestNativeDropPaths
     latestNativeDropPaths = []
     latestNativeDropAt = 0
     return paths
   }
-  return files.map((file) => file.name)
+  // 拿不到原生路径时返回空数组，而不是返回 file.name（仅文件名非完整路径，
+  // 会导致后端 tokio::fs::metadata 失败，用户看到"拖拽什么都没发生"）。
+  // 上层 extractDroppedLocalPaths 会 filter 掉空值，handleRemotePaneDrop
+  // 拿到空数组后不会有任何动作，比用无效路径尝试上传更清晰。
+  return []
 }
 
 function normalizePlatform(value: string) {
