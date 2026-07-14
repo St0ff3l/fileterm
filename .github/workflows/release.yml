@@ -78,26 +78,28 @@ jobs:
       - name: Build renderer + main
         run: npm run build -w @fileterm/desktop
 
-      - name: Package macOS universal
+      - name: Package macOS arm64 and x64
         run: |
           if [[ -z "${CSC_LINK:-}" ]]; then
             unset CSC_LINK CSC_KEY_PASSWORD
           fi
           cd apps/desktop
-          npx electron-builder --mac --universal --publish never
+          npx electron-builder --mac --arm64 --x64 --publish never
 
       - name: Validate macOS update metadata
         shell: bash
         run: |
           set -euo pipefail
           test -f apps/desktop/release/latest-mac.yml
-          compgen -G 'apps/desktop/release/*.dmg' >/dev/null
-          compgen -G 'apps/desktop/release/*.zip' >/dev/null
+          compgen -G 'apps/desktop/release/*macos-arm64.dmg' >/dev/null
+          compgen -G 'apps/desktop/release/*macos-arm64.zip' >/dev/null
+          compgen -G 'apps/desktop/release/*macos-x64.dmg' >/dev/null
+          compgen -G 'apps/desktop/release/*macos-x64.zip' >/dev/null
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: FileTerm-macOS-universal
+          name: FileTerm-macOS-arch-split
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
@@ -204,7 +206,12 @@ jobs:
           if [[ "${TAG}" == *-* ]]; then
             release_flags+=(--prerelease)
           fi
+          notes_file="docs/quality/release-notes-${TAG#v}.md"
+          notes_flags=(--generate-notes)
+          if [[ -f "${notes_file}" ]]; then
+            notes_flags=(--notes-file "${notes_file}")
+          fi
           gh release create "${TAG}" -R "${REPO}" \
             "${release_flags[@]}" \
-            --generate-notes \
+            "${notes_flags[@]}" \
             **/*.dmg **/*.zip **/*.exe **/latest.yml **/latest-mac.yml
