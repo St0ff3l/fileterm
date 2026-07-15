@@ -13,7 +13,7 @@ use crate::sessions::WorkerCmd;
 /// 等待 worker 接收命令的最大时间。worker 主循环被 SFTP init / shell
 /// channel 写阻塞 时，mpsc 一旦满，send 会永久 await，导致前端 invoke
 /// 链路整体卡死（多窗口发送后续 tab 全部排队、Cmd+Q 退出无法完成）。
-/// 超时后丢弃这条命令，让 IPC 调用尽快返回，由前端兜底。
+/// 超时后返回显式 busy 错误，由 renderer 保序重试，绝不静默吞掉输入。
 const WORKER_CMD_SEND_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// 文件/会话级操作（list/read/write/重连等）容忍更长延迟，但同样不能
@@ -984,13 +984,19 @@ pub async fn app_write_terminal(
 ) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let workers = state.workers.read().await;
-    if let Some(sender) = workers.get(&tab_id) {
-        // 关键：必须超时。worker 主循环若被 SFTP init / shell 写阻塞，
-        // mpsc 满后 send 永久 await，会让前端多窗口发送整体卡死。
-        // 超时丢弃这条输入，保持 IPC 调用及时返回。
-        let _ = timeout(WORKER_CMD_SEND_TIMEOUT, sender.send(WorkerCmd::WriteTerminal(data))).await;
-    }
-    Ok(())
+    let sender = workers
+        .get(&tab_id)
+        .cloned()
+        .ok_or_else(|| AppError::Storage("Terminal session not found".to_string()))?;
+    drop(workers);
+
+    // Do not silently discard keystrokes when the shared worker queue is
+    // congested. The renderer batches normal input and retries an explicit
+    // busy response, which keeps Enter presses ordered and recoverable.
+    timeout(WORKER_CMD_SEND_TIMEOUT, sender.send(WorkerCmd::WriteTerminal(data)))
+        .await
+        .map_err(|_| AppError::Storage("Terminal worker busy".to_string()))?
+        .map_err(|error| AppError::Storage(error.to_string()))
 }
 
 #[tauri::command]

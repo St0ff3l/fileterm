@@ -75,11 +75,15 @@ const TERMINAL_FIT_GUARD_ROWS = 0
 const TERMINAL_RESIZE_PIXEL_EPSILON = 2
 const TERMINAL_RESIZE_SETTLE_MS = 140
 const TERMINAL_RESIZE_OUTPUT_QUIET_MS = 260
-// Chromium pauses requestAnimationFrame for an unfocused desktop window. When
-// it resumes, several seconds of SSH output may be queued. Keep one xterm
-// write small enough that returning to the app does not monopolize the shared
-// renderer thread and freeze the file pane with the terminal.
-const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
+const TERMINAL_INPUT_BATCH_DELAY_MS = 8
+const TERMINAL_INPUT_RETRY_DELAY_MS = 80
+
+type PendingTerminalInput = {
+  tabId: string
+  data: string
+  attempts: number
+}
+
 function trimTranscript(transcript: string) {
   if (transcript.length <= TERMINAL_TRANSCRIPT_LIMIT) {
     return transcript
@@ -131,6 +135,9 @@ export const TerminalView = memo(function TerminalView({
   const renderedTranscriptRef = useRef('')
   const pendingWriteRef = useRef('')
   const writeFrameRef = useRef<number | null>(null)
+  const pendingInputRef = useRef<PendingTerminalInput[]>([])
+  const inputFlushTimerRef = useRef<number | null>(null)
+  const inputWriteInFlightRef = useRef(false)
   const resizeTimerRef = useRef<number | null>(null)
   const resizeSettleTimerRef = useRef<number | null>(null)
   const pendingResizeForceRef = useRef(false)
@@ -368,8 +375,8 @@ export const TerminalView = memo(function TerminalView({
       return
     }
 
-    const nextChunk = pendingWriteRef.current.slice(0, TERMINAL_WRITE_FRAME_BUDGET)
-    pendingWriteRef.current = pendingWriteRef.current.slice(nextChunk.length)
+    const nextChunk = pendingWriteRef.current
+    pendingWriteRef.current = ''
     isWritingRef.current = true
     terminal.write(nextChunk, () => {
       isWritingRef.current = false
@@ -388,6 +395,59 @@ export const TerminalView = memo(function TerminalView({
     if (writeFrameRef.current === null) {
       writeFrameRef.current = window.requestAnimationFrame(flushPendingWrite)
     }
+  }
+
+  const scheduleTerminalInputFlush = (delay = TERMINAL_INPUT_BATCH_DELAY_MS) => {
+    if (inputFlushTimerRef.current !== null) {
+      return
+    }
+
+    inputFlushTimerRef.current = window.setTimeout(() => {
+      inputFlushTimerRef.current = null
+      flushTerminalInput()
+    }, delay)
+  }
+
+  const flushTerminalInput = () => {
+    if (inputWriteInFlightRef.current) {
+      return
+    }
+
+    const next = pendingInputRef.current.shift()
+    if (!next) {
+      return
+    }
+
+    inputWriteInFlightRef.current = true
+    void window.fileterm
+      ?.writeTerminal(next.tabId, next.data)
+      .catch(() => {
+        // The backend only rejects when the command was not queued. Keep the
+        // input ordered and retry transient worker congestion instead of
+        // silently losing Enter/key presses.
+        if (connectedRef.current) {
+          pendingInputRef.current.unshift({ ...next, attempts: next.attempts + 1 })
+        }
+      })
+      .finally(() => {
+        inputWriteInFlightRef.current = false
+        if (pendingInputRef.current.length > 0) {
+          const first = pendingInputRef.current[0]
+          scheduleTerminalInputFlush(first?.attempts ? TERMINAL_INPUT_RETRY_DELAY_MS : undefined)
+        }
+      })
+  }
+
+  const queueTerminalInput = (data: string) => {
+    const tabId = tabIdRef.current
+    const queued = pendingInputRef.current
+    const tail = queued[queued.length - 1]
+    if (tail && tail.tabId === tabId && tail.attempts === 0) {
+      tail.data += data
+    } else {
+      queued.push({ tabId, data, attempts: 0 })
+    }
+    scheduleTerminalInputFlush()
   }
 
   const buildExitAlternateScreenSequence = () => '\x1b[?1049l\x1b[?1047l\x1b[?47l\x1b[?25h'
@@ -771,7 +831,7 @@ export const TerminalView = memo(function TerminalView({
       }
       clearEphemeralHighlight()
       setContextMenu(null)
-      void window.fileterm?.writeTerminal(tabIdRef.current, data)
+      queueTerminalInput(data)
     })
 
     const onSelectionDispose = terminal.onSelectionChange(() => {
@@ -968,6 +1028,9 @@ export const TerminalView = memo(function TerminalView({
       if (writeFrameRef.current !== null) {
         window.cancelAnimationFrame(writeFrameRef.current)
       }
+      if (inputFlushTimerRef.current !== null) {
+        window.clearTimeout(inputFlushTimerRef.current)
+      }
       if (resizeTimerRef.current !== null) {
         window.cancelAnimationFrame(resizeTimerRef.current)
       }
@@ -975,12 +1038,15 @@ export const TerminalView = memo(function TerminalView({
         window.clearTimeout(resizeSettleTimerRef.current)
       }
       writeFrameRef.current = null
+      inputFlushTimerRef.current = null
       resizeTimerRef.current = null
       resizeSettleTimerRef.current = null
       pendingResizeForceRef.current = false
       pendingResizeFreezeColsRef.current = false
       isWritingRef.current = false
       pendingWriteRef.current = ''
+      pendingInputRef.current = []
+      inputWriteInFlightRef.current = false
       renderedTranscriptRef.current = ''
       suppressHydratedChunksUntilRef.current = 0
       preserveVisibleBufferRef.current = false

@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -840,6 +840,12 @@ fn percent_decode(s: &str) -> String {
 }
 
 fn track_cwd_and_user(chunk: &str, buffer: &mut String) -> (Option<String>, Option<String>) {
+    static CWD_OSC_PATTERN: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\x1b\]7;file://([^\x07\x1b]*)(?:\x07|\x1b\\)").unwrap());
+    static USER_OSC_PATTERN: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"\x1b\]1337;RemoteUser=([^\x07\x1b]*)(?:\x07|\x1b\\)").unwrap()
+    });
+
     buffer.push_str(chunk);
     if buffer.len() > 8192 {
         *buffer = buffer[buffer.len() - 4096..].to_string();
@@ -848,19 +854,14 @@ fn track_cwd_and_user(chunk: &str, buffer: &mut String) -> (Option<String>, Opti
     let mut cwd = None;
     let mut user = None;
 
-    let re_cwd =
-        regex::Regex::new(r"\x1b\]7;file://([^\x07\x1b]*)(?:\x07|\x1b\\)").unwrap();
-    let re_user =
-        regex::Regex::new(r"\x1b\]1337;RemoteUser=([^\x07\x1b]*)(?:\x07|\x1b\\)").unwrap();
-
-    for cap in re_cwd.captures_iter(buffer) {
+    for cap in CWD_OSC_PATTERN.captures_iter(buffer) {
         let raw_path = &cap[1];
         if let Some(slash_idx) = raw_path.find('/') {
             let path_part = &raw_path[slash_idx..];
             cwd = Some(percent_decode(path_part));
         }
     }
-    for cap in re_user.captures_iter(buffer) {
+    for cap in USER_OSC_PATTERN.captures_iter(buffer) {
         user = Some(cap[1].to_string());
     }
     (cwd, user)
