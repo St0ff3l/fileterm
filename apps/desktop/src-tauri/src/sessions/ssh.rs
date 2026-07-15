@@ -964,15 +964,17 @@ struct ShellSetupEchoSuppression {
     started_at: Instant,
     visible_prefix_length: Option<usize>,
     marker_seen_at: Option<Instant>,
+    preserve_visible_prefix: bool,
 }
 
 impl ShellSetupEchoSuppression {
-    fn new() -> Self {
+    fn new(preserve_visible_prefix: bool) -> Self {
         Self {
             buffer: String::new(),
             started_at: Instant::now(),
             visible_prefix_length: None,
             marker_seen_at: None,
+            preserve_visible_prefix,
         }
     }
 }
@@ -981,6 +983,28 @@ const SHELL_SETUP_SETTLE_DELAY: Duration = Duration::from_millis(200);
 const SHELL_SETUP_TIMEOUT: Duration = Duration::from_millis(1200);
 const MAX_SHELL_SETUP_BUFFER_BYTES: usize = 16 * 1024;
 
+fn shell_setup_release_deadline(pending: &Option<ShellSetupEchoSuppression>) -> Option<Instant> {
+    pending.as_ref().map(|state| {
+        state
+            .marker_seen_at
+            .map(|seen_at| seen_at + SHELL_SETUP_SETTLE_DELAY)
+            .unwrap_or(state.started_at + SHELL_SETUP_TIMEOUT)
+    })
+}
+
+fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression>) -> String {
+    let Some(state) = pending.take() else {
+        return String::new();
+    };
+    if !state.preserve_visible_prefix {
+        return String::new();
+    }
+    state
+        .visible_prefix_length
+        .map(|length| state.buffer[..length].to_string())
+        .unwrap_or_default()
+}
+
 /// Suppresses the echo and replacement prompt from an internal CWD-hook
 /// injection. The bounded timeout fails closed: a malformed shell must not
 /// expose the hidden command in the user's terminal transcript.
@@ -988,23 +1012,16 @@ fn suppress_shell_setup_echo(
     pending: &mut Option<ShellSetupEchoSuppression>,
     chunk: &str,
 ) -> String {
-    let Some(state) = pending.as_mut() else {
+    if pending.is_none() {
         return chunk.to_string();
-    };
+    }
 
     let now = Instant::now();
-    if state
-        .marker_seen_at
-        .is_some_and(|seen_at| now.duration_since(seen_at) >= SHELL_SETUP_SETTLE_DELAY)
-        || now.duration_since(state.started_at) >= SHELL_SETUP_TIMEOUT
-    {
-        let visible = state
-            .visible_prefix_length
-            .map(|length| state.buffer[..length].to_string())
-            .unwrap_or_default();
-        *pending = None;
-        return format!("{visible}{chunk}");
+    if shell_setup_release_deadline(pending).is_some_and(|deadline| now >= deadline) {
+        return format!("{}{chunk}", finish_shell_setup_suppression(pending));
     }
+
+    let state = pending.as_mut().expect("pending CWD hook suppression exists");
 
     state.buffer.push_str(chunk);
     const HOOK_MARKER: &str = "__tdcwd";
@@ -1017,25 +1034,16 @@ fn suppress_shell_setup_echo(
             state.visible_prefix_length = Some(
                 state
                     .buffer
-                    .find(HOOK_MARKER)
-                    .map(|marker_index| {
-                        state.buffer[..marker_index]
-                            .rfind(['\r', '\n'])
-                            .map(|index| index + 1)
-                            .unwrap_or(0)
-                    })
+                    .find("test -z \"${FISH_VERSION-}\"")
+                    .or_else(|| state.buffer.find("__tdcwd(){"))
+                    .or_else(|| state.buffer.find(HOOK_MARKER))
                     .unwrap_or(0),
             );
         }
     }
 
     if state.buffer.len() > MAX_SHELL_SETUP_BUFFER_BYTES {
-        let visible = state
-            .visible_prefix_length
-            .map(|length| state.buffer[..length].to_string())
-            .unwrap_or_default();
-        *pending = None;
-        return visible;
+        return finish_shell_setup_suppression(pending);
     }
 
     String::new()
@@ -2144,7 +2152,7 @@ async fn run_worker_loop(
                 tab_id, e
             );
         } else {
-            pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new());
+            pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new(true));
         }
         // The setup script's trailing `__tdcwd` call emits an OSC7 + RemoteUser
         // pair immediately; the main loop's `track_cwd_and_user` will pick it
@@ -2556,6 +2564,18 @@ while ($true) {{
                     }
                 }
             }
+            _ = async {
+                if let Some(deadline) = shell_setup_release_deadline(&pending_shell_setup_echo) {
+                    tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            }, if pending_shell_setup_echo.is_some() => {
+                let visible = finish_shell_setup_suppression(&mut pending_shell_setup_echo);
+                if !visible.is_empty() {
+                    batch_buffer.extend_from_slice(visible.as_bytes());
+                }
+            }
             // 2. Drain shell channel output.
             msg = shell_channel.wait() => {
                 match msg {
@@ -2669,7 +2689,7 @@ while ($true) {{
                                 if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
                                     last_shell_setup_injection = Instant::now();
                                     if shell_channel.data(format!(" {setup}\r").as_bytes()).await.is_ok() {
-                                        pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new());
+                                        pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new(false));
                                     }
                                 }
                             }
@@ -4427,12 +4447,12 @@ mod tests {
 
     #[test]
     fn suppresses_fragmented_cwd_setup_echo_after_its_marker_settles() {
-        let mut pending = Some(ShellSetupEchoSuppression::new());
+        let mut pending = Some(ShellSetupEchoSuppression::new(true));
 
         assert_eq!(
             suppress_shell_setup_echo(
                 &mut pending,
-                "Debian GNU/Linux\r\nuser@host:~$ __tdcwd(){ printf"
+                "Debian GNU/Linux\r\nuser@host:~$ test -z \"${FISH_VERSION-}\" && eval '__tdcwd(){ printf"
             ),
             ""
         );
@@ -4451,7 +4471,7 @@ mod tests {
             "root@host:~# ",
         );
 
-        assert_eq!(visible, "Debian GNU/Linux\r\nroot@host:~# ");
+        assert_eq!(visible, "Debian GNU/Linux\r\nuser@host:~$ root@host:~# ");
         assert!(pending.is_none());
     }
 
