@@ -163,6 +163,7 @@ export function TransferPopover({
         {visibleTransfers.length ? (
           visibleTransfers.map((transfer) => {
             const transferSizeText = getTransferSizeText(transfer)
+            const progress = Math.round(Math.max(0, Math.min(100, Number(transfer.progress) || 0)))
             return (
               <div className={`transfer-row transfer-${transfer.status}`} key={transfer.id}>
                 <div className="transfer-row-head">
@@ -230,14 +231,14 @@ export function TransferPopover({
                       transfer.direction === 'upload' ? t.upload : t.download,
                       transferSizeText,
                       transfer.speed,
-                      `${transfer.progress}%`
+                      `${progress}%`
                     ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>
                 </div>
                 <i className="transfer-progress">
-                  <b style={{ width: `${transfer.progress}%` }} />
+                  <b style={{ width: `${progress}%` }} />
                 </i>
                 {transfer.message ? <small title={transfer.message}>{transfer.message}</small> : null}
               </div>

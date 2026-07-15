@@ -383,8 +383,10 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
     }
 
     let (title, width, height, min_width, min_height, decorations) = match input.kind.as_str() {
-        "connection-manager" => ("连接管理器", 860.0, 680.0, 760.0, 520.0, true),
-        "command-manager" => ("命令管理器", 860.0, 680.0, 760.0, 620.0, true),
+        // Manager windows render their own title bar. Keep the native frame
+        // disabled so macOS does not add a second traffic-light row above it.
+        "connection-manager" => ("连接管理器", 860.0, 680.0, 760.0, 520.0, false),
+        "command-manager" => ("命令管理器", 860.0, 680.0, 760.0, 620.0, false),
         "connection-form" => ("连接", 860.0, 680.0, 760.0, 620.0, false),
         "command-form" => ("命令", 860.0, 680.0, 760.0, 620.0, false),
         "file-editor" => ("编辑文件", 1220.0, 780.0, 1040.0, 620.0, false),

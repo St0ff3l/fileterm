@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type DragEvent, type SetStateAction } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from 'react'
 import type {
   ConnectionProfile,
   FileTermDesktopApi,
@@ -260,6 +260,34 @@ export function useFileOperations({
   const [rootAccessDialog, setRootAccessDialog] = useState<RootAccessDialogState | null>(null)
   const [rootAccessDialogError, setRootAccessDialogError] = useState<string | null>(null)
   const [isRootAccessSubmitting, setIsRootAccessSubmitting] = useState(false)
+  const nativeRemoteDropTargetAtRef = useRef(0)
+  const nativeDropConsumedAtRef = useRef(0)
+
+  useEffect(() => {
+    const markRemoteDropTarget = () => {
+      nativeRemoteDropTargetAtRef.current = Date.now()
+    }
+
+    const markNativeRemoteDropTarget = (event: Event) => {
+      const position = (event as CustomEvent<{ position?: { x?: number; y?: number } }>).detail?.position
+      if (typeof position?.x !== 'number' || typeof position.y !== 'number') return
+      const ratio = window.devicePixelRatio || 1
+      const targets = [
+        document.elementFromPoint(position.x, position.y),
+        document.elementFromPoint(position.x / ratio, position.y / ratio)
+      ]
+      if (targets.some((target) => target?.closest('.remote-pane'))) {
+        nativeRemoteDropTargetAtRef.current = Date.now()
+      }
+    }
+
+    window.addEventListener('fileterm:tauri-remote-dragover', markRemoteDropTarget)
+    window.addEventListener('fileterm:tauri-native-drag-over', markNativeRemoteDropTarget)
+    return () => {
+      window.removeEventListener('fileterm:tauri-remote-dragover', markRemoteDropTarget)
+      window.removeEventListener('fileterm:tauri-native-drag-over', markNativeRemoteDropTarget)
+    }
+  }, [])
 
   useEffect(() => {
     if (!fileClipboard) {
@@ -822,11 +850,62 @@ export function useFileOperations({
     }
   }
 
+  useEffect(() => {
+    const handleNativeDrop = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        paths?: unknown
+        position?: { x?: unknown; y?: unknown } | null
+      }
+      const paths = Array.isArray(detail?.paths)
+        ? detail.paths.filter((path): path is string => typeof path === 'string' && path.length > 0)
+        : []
+      const position = detail?.position
+      if (!paths.length || !position || typeof position.x !== 'number' || typeof position.y !== 'number') {
+        return
+      }
+
+      // Finder dragover marks the remote pane explicitly. Keep both raw and
+      // high-DPI-adjusted coordinate probes as a fallback: Tauri's macOS
+      // position unit differs between WebKit/runtime versions.
+      const targetMarkedByDragOver = Date.now() - nativeRemoteDropTargetAtRef.current < 1_500
+      const ratio = window.devicePixelRatio || 1
+      const targets = [
+        document.elementFromPoint(position.x, position.y),
+        document.elementFromPoint(position.x / ratio, position.y / ratio)
+      ]
+      if (!targetMarkedByDragOver && !targets.some((target) => target?.closest('.remote-pane'))) {
+        return
+      }
+      nativeRemoteDropTargetAtRef.current = 0
+      nativeDropConsumedAtRef.current = Date.now()
+
+      void (async () => {
+        try {
+          onBusyChange(true)
+          await uploadLocalPaths(paths)
+        } catch (error) {
+          reportStatusError('上传文件', error)
+        } finally {
+          onBusyChange(false)
+        }
+      })()
+    }
+
+    window.addEventListener('fileterm:tauri-native-drop', handleNativeDrop)
+    return () => window.removeEventListener('fileterm:tauri-native-drop', handleNativeDrop)
+  }, [activeSession, activeTab, desktopApi, onBusyChange, reportStatusError, uploadLocalPaths])
+
   const handleDropUpload = async (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     const localPaths = extractDroppedLocalPaths(event, desktopApi)
 
     if (!localPaths.length || !desktopApi || !activeTab || !activeSession) {
+      // The native event may have already started this Finder upload. Do not
+      // overwrite that success path with a misleading "desktop only" notice
+      // when WebKit follows it with an empty DOM FileList.
+      if (Date.now() - nativeDropConsumedAtRef.current < 1_500) {
+        return
+      }
       onStatusMessage(t.desktopOnlyUpload)
       return
     }

@@ -924,9 +924,7 @@ export function App() {
           onCreateFolder={(name) => {
             void createCommandFolder(name)
           }}
-          onDeleteFolder={(folderId) => {
-            void deleteCommandFolder(folderId)
-          }}
+          onDeleteFolder={(folderId) => deleteCommandFolder(folderId)}
           onUpdateFolder={(folderId, updates) => {
             void updateCommandFolder(folderId, updates)
           }}
@@ -939,9 +937,7 @@ export function App() {
           onUpdateCommand={(commandId, input) => {
             void saveCommandTemplate(commandId, input)
           }}
-          onDeleteCommand={(commandId) => {
-            void deleteCommandTemplate(commandId)
-          }}
+          onDeleteCommand={(commandId) => deleteCommandTemplate(commandId)}
         />
       </StandaloneWindowFrame>
     )
@@ -1050,7 +1046,7 @@ export function App() {
           <div
             className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}
           >
-            <div className="modal-header">
+            <div className="modal-header" data-tauri-drag-region="deep">
               <div className="file-editor-title">
                 <span>{fileEditorWindowSource === 'remote' ? t.editRemoteFile : t.editLocalFile}</span>
                 <strong>{fileEditorWindowName ?? ''}</strong>

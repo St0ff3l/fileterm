@@ -52,6 +52,16 @@ function useLatestRef<T>(value: T) {
   return ref
 }
 
+function isUploadPermissionFailure(transfer: TransferTask) {
+  if (transfer.direction !== 'upload' || !['failed', 'paused', 'interrupted'].includes(transfer.status)) {
+    return false
+  }
+
+  return /permission[\s_-]*denied|access[\s_-]*denied|operation[\s_-]*not[\s_-]*permitted|not[\s_-]*permitted|authorization[\s_-]*failed|\b(?:eacces|eperm)\b|权限不足|没有权限|无权|拒绝访问/i.test(
+    transfer.message ?? ''
+  )
+}
+
 export function useWorkspaceIpcSync({
   desktopApi,
   isMainWorkspaceWindow,
@@ -77,6 +87,7 @@ export function useWorkspaceIpcSync({
   const onErrorRef = useLatestRef(onError)
   const onStatusMessageRef = useLatestRef(onStatusMessage)
   const nextWindowCloseRequestIdRef = useRef(0)
+  const notifiedTransferFailuresRef = useRef(new Map<string, string>())
 
   const applySnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
     setWorkspace(snapshot)
@@ -256,12 +267,26 @@ export function useWorkspaceIpcSync({
     const pendingMetrics: SessionMetricsUpdate[] = []
     const pendingTransfers: TransferTask[] = []
 
+    const processTransferUpdate = (transfer: TransferTask) => {
+      if (isMainWorkspaceWindow && isUploadPermissionFailure(transfer)) {
+        const notificationKey = `${transfer.status}:${transfer.updatedAt ?? ''}:${transfer.message ?? ''}`
+        if (notifiedTransferFailuresRef.current.get(transfer.id) !== notificationKey) {
+          notifiedTransferFailuresRef.current.set(transfer.id, notificationKey)
+          onStatusMessageRef.current(t.uploadPermissionDenied)
+        }
+      } else if (!['failed', 'paused', 'interrupted'].includes(transfer.status)) {
+        notifiedTransferFailuresRef.current.delete(transfer.id)
+      }
+
+      applyTransferUpdate(transfer)
+    }
+
     const flushPendingUpdates = () => {
       for (const payload of pendingMetrics.splice(0)) {
         applySessionMetrics(payload)
       }
       for (const transfer of pendingTransfers.splice(0)) {
-        applyTransferUpdate(transfer)
+        processTransferUpdate(transfer)
       }
     }
 
@@ -300,7 +325,7 @@ export function useWorkspaceIpcSync({
         pendingTransfers.push(transfer)
         return
       }
-      applyTransferUpdate(transfer)
+      processTransferUpdate(transfer)
     })
 
     const hydrateWorkspace = async () => {

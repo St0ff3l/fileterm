@@ -826,6 +826,10 @@ export function FileManager({
             }}
             onDragOver={(event) => {
               event.preventDefault()
+              // Native Tauri drop events do not reliably share DOM coordinates
+              // with WKWebView. Record the pane that the Finder drag is over so
+              // the bridge can route its absolute paths to the correct target.
+              window.dispatchEvent(new Event('fileterm:tauri-remote-dragover'))
               if (canUseRemoteFiles) {
                 event.dataTransfer.dropEffect = 'copy'
               }

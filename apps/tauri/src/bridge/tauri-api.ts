@@ -73,9 +73,39 @@ function subscribeTerminalData(listener: (payload: TerminalDataPayload) => void)
 // a later browser-only drop of the same number of files.
 void getCurrentWindow()
   .onDragDropEvent((event) => {
+    if (event.payload.type === 'enter' || event.payload.type === 'over') {
+      window.dispatchEvent(
+        new CustomEvent('fileterm:tauri-native-drag-over', {
+          detail: { position: event.payload.position }
+        })
+      )
+      return
+    }
+
     if (event.payload.type === 'drop') {
-      latestNativeDropPaths = [...event.payload.paths]
+      const paths = [...event.payload.paths]
+      latestNativeDropPaths = paths
       latestNativeDropAt = Date.now()
+
+      // WRY's DOM drop event often exposes File objects without native paths.
+      // Publish the native event directly so the renderer can upload the
+      // absolute paths without depending on the browser FileList timing.
+      window.dispatchEvent(
+        new CustomEvent('fileterm:tauri-native-drop', {
+          detail: {
+            paths,
+            position: {
+              x: event.payload.position.x,
+              y: event.payload.position.y
+            }
+          }
+        })
+      )
+
+      // The custom event is the primary path. Clear the fallback immediately
+      // so a second DOM drop callback cannot enqueue the same files twice.
+      latestNativeDropPaths = []
+      latestNativeDropAt = 0
     }
   })
   .catch(() => undefined)

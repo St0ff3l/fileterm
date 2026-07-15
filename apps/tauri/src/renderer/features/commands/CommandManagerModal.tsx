@@ -5,6 +5,7 @@ import { t } from '../../i18n'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './CommandEditorModal'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 
 type CommandTreeNode = (CommandFolder & { children: CommandTreeNode[] }) | (CommandTemplate & { children?: never })
 
@@ -27,12 +28,12 @@ export function CommandManagerModal({
   commandTemplates: CommandTemplate[]
   onClose(): void
   onCreateFolder(name: string): void
-  onDeleteFolder(folderId: string): void
+  onDeleteFolder(folderId: string): Promise<unknown> | void
   onUpdateFolder(folderId: string, updates: Partial<CommandFolder>): void
   onUpdateOrder(id: string, newParentId: string | undefined, newOrder: number): void
   onCreateCommand(input: CommandTemplateInput): void
   onUpdateCommand(commandId: string, input: CommandTemplateInput): void
-  onDeleteCommand(commandId: string): void
+  onDeleteCommand(commandId: string): Promise<unknown> | void
   standalone?: boolean
   inline?: boolean
   onActiveFolderChange?(name: string): void
@@ -51,7 +52,14 @@ export function CommandManagerModal({
   const [pendingDelete, setPendingDelete] = useState<
     { kind: 'folder'; id: string; name: string } | { kind: 'command'; id: string; name: string } | null
   >(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const suppressRowClickRef = useRef(false)
+  const dragStateRef = useRef<{
+    draggingId: string | null
+    targetId: string | null
+    position: 'top' | 'bottom' | 'inside' | null
+  }>({ draggingId: null, targetId: null, position: null })
 
   const desktopApi = window.fileterm
 
@@ -185,139 +193,170 @@ export function CommandManagerModal({
     return matches
   }, [activeBaseNodes, searchQuery])
 
-  const handleDragStart = (e: DragEvent, id: string) => {
-    e.stopPropagation()
-    suppressRowClickRef.current = true
-    setDraggingId(id)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', id)
-  }
-
-  const handleDragOver = (e: DragEvent, targetId: string, type: 'command-folder' | 'command-template') => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (draggingId === targetId) return
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const y = e.clientY - rect.top
-    const height = rect.height
-
-    let pos: 'top' | 'bottom' | 'inside' = 'bottom'
-    if (type === 'command-folder') {
-      if (y < height * 0.25) pos = 'top'
-      else if (y > height * 0.75) pos = 'bottom'
-      else pos = 'inside'
-    } else {
-      if (y < height * 0.5) pos = 'top'
-      else pos = 'bottom'
-    }
-
-    setDragOverId(targetId)
-    setDragPosition(pos)
-  }
-
-  const handleRootDragOver = (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (draggingId) {
-      setDragOverId('all')
-      setDragPosition('inside')
-    }
-  }
-
-  const handleRootDragLeave = (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (dragOverId === 'all') {
-      setDragOverId(null)
-      setDragPosition(null)
-    }
-  }
-
-  const handleRootDrop = (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (draggingId) {
-      const rootSiblings = tree.roots.filter((node) => node.id !== draggingId)
-      const lastRoot = rootSiblings[rootSiblings.length - 1]
-      onUpdateOrder(draggingId, undefined, (lastRoot?.order ?? 0) + 1000)
-    }
-    setDraggingId(null)
-    setDragOverId(null)
-    setDragPosition(null)
-  }
-
-  const handleDragLeave = (e: DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragOverId(null)
-    setDragPosition(null)
-  }
-
-  const handleDrop = (e: DragEvent, targetId: string) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!draggingId || draggingId === targetId) {
-      setDraggingId(null)
-      setDragOverId(null)
-      return
-    }
-
-    const draggedNode = tree.map.get(draggingId)
-    const targetNode = tree.map.get(targetId)
-    if (!draggedNode || !targetNode) return
-
-    // Prevent dropping a folder into its own descendant
-    let current: CommandTreeNode | undefined = targetNode
-    let invalid = false
-    while (current?.parentId) {
-      if (current.parentId === draggingId) {
-        invalid = true
-        break
-      }
-      current = tree.map.get(current.parentId)
-    }
-    if (invalid) {
-      setDraggingId(null)
-      setDragOverId(null)
-      return
-    }
-
-    const targetParent = targetNode.parentId ? tree.map.get(targetNode.parentId) : undefined
-    let newParentId = targetParent?.type === 'command-folder' ? targetParent.id : undefined
-    const siblings = targetParent?.type === 'command-folder' ? targetParent.children : tree.roots
-
-    let newOrder = targetNode.order ?? 0
-
-    if (dragPosition === 'inside' && targetNode.type === 'command-folder') {
-      newParentId = targetNode.id
-      const children = targetNode.children || []
-      newOrder = children.length > 0 ? (children[children.length - 1].order ?? 0) + 1000 : 1000
-      setExpandedFolders((prev) => new Set(prev).add(targetNode.id))
-    } else {
-      const targetIndex = siblings.findIndex((s) => s.id === targetId)
-      if (dragPosition === 'top') {
-        const prev = siblings[targetIndex - 1]
-        newOrder = prev ? ((prev.order ?? 0) + (targetNode.order ?? 0)) / 2 : (targetNode.order ?? 0) - 1000
-      } else if (dragPosition === 'bottom') {
-        const next = siblings[targetIndex + 1]
-        newOrder = next ? ((next.order ?? 0) + (targetNode.order ?? 0)) / 2 : (targetNode.order ?? 0) + 1000
-      }
-    }
-
-    onUpdateOrder(draggingId, newParentId, newOrder)
-    setDraggingId(null)
-    setDragOverId(null)
-    setDragPosition(null)
-  }
-
-  const handleDragEnd = () => {
+  const clearDragState = () => {
+    dragStateRef.current = { draggingId: null, targetId: null, position: null }
     setDraggingId(null)
     setDragOverId(null)
     setDragPosition(null)
     window.setTimeout(() => {
       suppressRowClickRef.current = false
     }, 0)
+  }
+
+  const setDropTarget = (targetId: string, position: 'top' | 'bottom' | 'inside') => {
+    dragStateRef.current.targetId = targetId
+    dragStateRef.current.position = position
+    setDragOverId(targetId)
+    setDragPosition(position)
+  }
+
+  const positionForTarget = (targetId: string, element: HTMLElement, clientY: number) => {
+    if (targetId === 'all') return 'inside' as const
+    if (element.closest('.connection-manager-sidebar')) return 'inside' as const
+    const targetNode = tree.map.get(targetId)
+    if (!targetNode) return null
+    const rect = element.getBoundingClientRect()
+    const y = clientY - rect.top
+    if (targetNode.type === 'command-folder') {
+      if (y < rect.height * 0.25) return 'top' as const
+      if (y > rect.height * 0.75) return 'bottom' as const
+      return 'inside' as const
+    }
+    return y < rect.height * 0.5 ? ('top' as const) : ('bottom' as const)
+  }
+
+  const moveToRoot = (id: string) => {
+    const rootSiblings = tree.roots.filter((node) => node.id !== id)
+    const lastRoot = rootSiblings[rootSiblings.length - 1]
+    onUpdateOrder(id, undefined, (lastRoot?.order ?? 0) + 1000)
+  }
+
+  const applyDrop = (activeDraggingId: string, targetId: string, activePosition: 'top' | 'bottom' | 'inside') => {
+    if (targetId === 'all') {
+      moveToRoot(activeDraggingId)
+      return
+    }
+    if (activeDraggingId === targetId) return
+    const draggedNode = tree.map.get(activeDraggingId)
+    const targetNode = tree.map.get(targetId)
+    if (!draggedNode || !targetNode) return
+
+    let current: CommandTreeNode | undefined = targetNode
+    while (current?.parentId) {
+      if (current.parentId === activeDraggingId) return
+      current = tree.map.get(current.parentId)
+    }
+
+    const targetParent = targetNode.parentId ? tree.map.get(targetNode.parentId) : undefined
+    let newParentId = targetParent?.type === 'command-folder' ? targetParent.id : undefined
+    const siblings = targetParent?.type === 'command-folder' ? targetParent.children : tree.roots
+    let newOrder = targetNode.order ?? 0
+    if (activePosition === 'inside' && targetNode.type === 'command-folder') {
+      newParentId = targetNode.id
+      const children = targetNode.children || []
+      newOrder = children.length > 0 ? (children[children.length - 1].order ?? 0) + 1000 : 1000
+      setExpandedFolders((prev) => new Set(prev).add(targetNode.id))
+    } else {
+      const targetIndex = siblings.findIndex((sibling) => sibling.id === targetId)
+      if (activePosition === 'top') {
+        const previous = siblings[targetIndex - 1]
+        newOrder = previous ? ((previous.order ?? 0) + (targetNode.order ?? 0)) / 2 : (targetNode.order ?? 0) - 1000
+      } else {
+        const next = siblings[targetIndex + 1]
+        newOrder = next ? ((next.order ?? 0) + (targetNode.order ?? 0)) / 2 : (targetNode.order ?? 0) + 1000
+      }
+    }
+    onUpdateOrder(activeDraggingId, newParentId, newOrder)
+  }
+
+  const handlePointerDown = usePointerSortFallback<string>({
+    onStart: (id) => {
+      suppressRowClickRef.current = true
+      dragStateRef.current = { draggingId: id, targetId: null, position: null }
+      setDraggingId(id)
+    },
+    onTarget: (id, target: PointerSortTarget, clientY) => {
+      if (id === target.id) return
+      const position = positionForTarget(target.id, target.element, clientY)
+      if (position) setDropTarget(target.id, position)
+    },
+    onDrop: (id, target, clientY) => {
+      if (target && id !== target.id) {
+        const position = positionForTarget(target.id, target.element, clientY)
+        if (position) applyDrop(id, target.id, position)
+      }
+      clearDragState()
+    },
+    onCancel: clearDragState
+  })
+
+  const handleDragStart = (e: DragEvent, id: string) => {
+    e.stopPropagation()
+    suppressRowClickRef.current = true
+    dragStateRef.current = { draggingId: id, targetId: null, position: null }
+    setDraggingId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+
+  const handleDragOver = (e: DragEvent, targetId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (dragStateRef.current.draggingId === targetId) return
+
+    const position = positionForTarget(targetId, e.currentTarget as HTMLElement, e.clientY)
+    if (position) setDropTarget(targetId, position)
+  }
+
+  const handleRootDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (dragStateRef.current.draggingId) {
+      setDropTarget('all', 'inside')
+    }
+  }
+
+  const handleRootDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // WebKit can emit dragleave while moving over a child span. Keep the
+    // logical target in the ref until the next dragover/drop event.
+  }
+
+  const handleRootDrop = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const activeDraggingId = dragStateRef.current.draggingId
+    if (activeDraggingId) moveToRoot(activeDraggingId)
+    clearDragState()
+  }
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // See handleRootDragLeave: Tauri WRY emits nested dragleave events before
+    // the drop callback, so React state is only cleared when the drag ends.
+  }
+
+  const handleDrop = (e: DragEvent, targetId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const activeDraggingId = dragStateRef.current.draggingId || e.dataTransfer.getData('text/plain') || null
+    let activePosition = dragStateRef.current.targetId === targetId ? dragStateRef.current.position : dragPosition
+    if (!activeDraggingId || activeDraggingId === targetId) {
+      clearDragState()
+      return
+    }
+
+    if (!activePosition) {
+      activePosition = positionForTarget(targetId, e.currentTarget as HTMLElement, e.clientY)
+    }
+    if (activePosition) applyDrop(activeDraggingId, targetId, activePosition)
+    clearDragState()
+  }
+
+  const handleDragEnd = () => {
+    clearDragState()
   }
 
   const openEditorWindow = (mode: 'create' | 'edit', commandId?: string) => {
@@ -352,9 +391,12 @@ export function CommandManagerModal({
       <div key={node.id}>
         <div
           className={`manager-row ${isFolder ? 'folder-row' : ''} ${dropClass} ${isDragging ? 'dragging' : ''}`}
-          draggable
+          data-fileterm-sort-id={node.id}
+          data-fileterm-sort-kind={isFolder ? 'folder' : 'command'}
+          draggable={false}
+          onPointerDown={(event) => handlePointerDown(event, node.id)}
           onDragStart={(e) => handleDragStart(e, node.id)}
-          onDragOver={(e) => handleDragOver(e, node.id, isFolder ? 'command-folder' : 'command-template')}
+          onDragOver={(e) => handleDragOver(e, node.id)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, node.id)}
           onDragEnd={handleDragEnd}
@@ -545,6 +587,8 @@ export function CommandManagerModal({
                 item.id === 'all' ? 'root-drop-target' : ''
               } ${item.id === 'all' && dragOverId === 'all' ? 'drag-over' : ''}`}
               type="button"
+              data-fileterm-sort-id={item.id}
+              data-fileterm-sort-kind={item.id === 'all' ? 'root' : 'folder'}
               onClick={() => setActiveFolderId(item.id)}
               onDragOver={item.id === 'all' ? handleRootDragOver : undefined}
               onDragLeave={item.id === 'all' ? handleRootDragLeave : undefined}
@@ -688,14 +732,25 @@ export function CommandManagerModal({
         <ConfirmActionDialog
           confirmLabel={t.delete}
           description={`${t.deleteConfirmPrefix}${pendingDelete.name}${t.deleteConfirmSuffix}`}
-          onClose={() => setPendingDelete(null)}
-          onConfirm={() => {
-            if (pendingDelete.kind === 'folder') {
-              onDeleteFolder(pendingDelete.id)
-            } else {
-              onDeleteCommand(pendingDelete.id)
+          errorMessage={deleteError}
+          isSubmitting={isDeleting}
+          onClose={() => {
+            if (!isDeleting) {
+              setPendingDelete(null)
+              setDeleteError(null)
             }
-            setPendingDelete(null)
+          }}
+          onConfirm={() => {
+            const target = pendingDelete
+            setIsDeleting(true)
+            setDeleteError(null)
+            void Promise.resolve()
+              .then(() => (target.kind === 'folder' ? onDeleteFolder(target.id) : onDeleteCommand(target.id)))
+              .then(() => setPendingDelete(null))
+              .catch((error: unknown) => {
+                setDeleteError(error instanceof Error ? error.message : String(error))
+              })
+              .finally(() => setIsDeleting(false))
           }}
           title={t.delete}
         />

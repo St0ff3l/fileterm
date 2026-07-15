@@ -724,6 +724,13 @@
   background-color: var(--text-main);
 }
 
+/* Pointer-sort previews replace Chromium's native drag image in Tauri. The
+   target row's hover rail must not show through the semi-transparent preview. */
+:root.fileterm-pointer-sorting .manager-row:hover::before,
+.fileterm-pointer-sort-ghost::before {
+  background-color: transparent !important;
+}
+
 .manager-row:hover {
   background-color: var(--bg-hover);
 }

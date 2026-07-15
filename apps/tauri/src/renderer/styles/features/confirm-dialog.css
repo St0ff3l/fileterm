@@ -59,6 +59,13 @@
     color 0.18s ease;
 }
 
+.confirm-action-dialog__button .button-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
 .confirm-action-dialog__button--secondary {
   border: 1px solid var(--dialog-button-secondary-border);
   background: var(--dialog-button-secondary-bg);

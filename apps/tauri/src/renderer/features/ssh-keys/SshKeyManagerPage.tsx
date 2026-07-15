@@ -1,10 +1,20 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent
+} from 'react'
 import type { SshKeyMetadata } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { SshKeyNoteDialog } from './SshKeyNoteDialog'
 import { t } from '../../i18n'
+import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 
 const SSH_KEY_MANAGER_UI_STATE = 'ssh-key-manager-ui'
 
@@ -26,6 +36,11 @@ type DragPosition = 'top' | 'bottom' | 'inside'
 type SortableItem = { kind: DragItem['kind']; id: string; fallbackOrder: number }
 
 const ROOT_DROP_TARGET_ID = '__ssh-key-root__'
+
+function readDraggedItem(value: string): DragItem | null {
+  const match = /^fileterm-ssh-key:(folder|key):(.+)$/.exec(value)
+  return match ? { kind: match[1] as DragItem['kind'], id: match[2] } : null
+}
 
 export function SshKeyManagerPage({
   onActiveFolderChange,
@@ -50,6 +65,10 @@ export function SshKeyManagerPage({
   const [pendingDelete, setPendingDelete] = useState<DeleteTarget | null>(null)
   const [dragging, setDragging] = useState<DragItem | null>(null)
   const [dragOver, setDragOver] = useState<{ id: string; kind: DragItem['kind']; position: DragPosition } | null>(null)
+  const dragStateRef = useRef<{
+    dragging: DragItem | null
+    dragOver: { id: string; kind: DragItem['kind']; position: DragPosition } | null
+  }>({ dragging: null, dragOver: null })
   const [isActionsExpanded, setIsActionsExpanded] = useState(false)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -242,31 +261,31 @@ export function SshKeyManagerPage({
   const handleDragStart = (event: DragEvent, item: DragItem) => {
     event.stopPropagation()
     suppressRowClickRef.current = true
+    dragStateRef.current = { dragging: item, dragOver: null }
     setDragging(item)
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', item.id)
+    event.dataTransfer.setData('text/plain', `fileterm-ssh-key:${item.kind}:${item.id}`)
   }
 
   const handleDragOver = (event: DragEvent, target: DragItem) => {
     event.preventDefault()
     event.stopPropagation()
-    if (!dragging || dragging.id === target.id) return
+    const activeDragging = dragStateRef.current.dragging
+    if (!activeDragging || activeDragging.id === target.id) return
 
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-    const y = event.clientY - rect.top
-    const height = rect.height
-    let position: DragPosition = y < height * 0.5 ? 'top' : 'bottom'
-    if (target.kind === 'folder' && dragging.kind === 'key' && y >= height * 0.25 && y <= height * 0.75) {
-      position = 'inside'
-    }
-    setDragOver({ ...target, position })
+    const position = positionForTarget(activeDragging, target, event.currentTarget as HTMLElement, event.clientY)
+    const nextDragOver = { ...target, position }
+    dragStateRef.current.dragOver = nextDragOver
+    setDragOver(nextDragOver)
   }
 
   const handleRootDragOver = (event: DragEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    if (dragging?.kind === 'key') {
-      setDragOver({ id: ROOT_DROP_TARGET_ID, kind: 'folder', position: 'inside' })
+    if (dragStateRef.current.dragging?.kind === 'key') {
+      const nextDragOver = { id: ROOT_DROP_TARGET_ID, kind: 'folder' as const, position: 'inside' as const }
+      dragStateRef.current.dragOver = nextDragOver
+      setDragOver(nextDragOver)
     }
   }
 
@@ -277,6 +296,7 @@ export function SshKeyManagerPage({
   }
 
   const clearDragState = () => {
+    dragStateRef.current = { dragging: null, dragOver: null }
     setDragging(null)
     setDragOver(null)
   }
@@ -350,39 +370,110 @@ export function SshKeyManagerPage({
     persistUiState(folders, nextAssignments, nextItemOrder)
   }
 
+  const positionForTarget = (
+    dragItem: DragItem,
+    target: DragItem,
+    element: HTMLElement,
+    clientY: number
+  ): DragPosition => {
+    if (element.closest('.connection-manager-sidebar')) return 'inside'
+    const rect = element.getBoundingClientRect()
+    const y = clientY - rect.top
+    if (target.kind === 'folder' && dragItem.kind === 'key' && y >= rect.height * 0.25 && y <= rect.height * 0.75) {
+      return 'inside'
+    }
+    return y < rect.height * 0.5 ? 'top' : 'bottom'
+  }
+
+  const applyDrop = (activeDragging: DragItem, target: DragItem, position: DragPosition) => {
+    if (activeDragging.id === target.id) return
+    if (activeDragging.kind === 'key') {
+      const draggedKey = keys.find((key) => key.id === activeDragging.id)
+      if (draggedKey && target.kind === 'folder' && position === 'inside') {
+        const siblingOrders = keys
+          .filter((key) => key.id !== activeDragging.id && assignments[key.id] === target.id)
+          .map((key) => orderOf(key.id, key.importedAt))
+        const nextAssignments = { ...assignments, [activeDragging.id]: target.id }
+        const nextItemOrder = { ...itemOrder, [activeDragging.id]: Math.max(0, ...siblingOrders, 0) + 1000 }
+        persistUiState(folders, nextAssignments, nextItemOrder)
+        setExpandedFolderIds((current) => new Set(current).add(target.id))
+      } else if (draggedKey) {
+        const parentId = target.kind === 'key' ? assignments[target.id] : undefined
+        reorderItems(activeDragging, target, parentId, position)
+      }
+    } else if (activeDragging.kind === 'folder' && position !== 'inside') {
+      const targetParentId = target.kind === 'key' ? assignments[target.id] : undefined
+      if (!targetParentId) reorderItems(activeDragging, target, undefined, position)
+    }
+  }
+
+  const handlePointerDown = usePointerSortFallback<DragItem>({
+    onStart: (item) => {
+      suppressRowClickRef.current = true
+      dragStateRef.current = { dragging: item, dragOver: null }
+      setDragging(item)
+    },
+    onTarget: (item, target: PointerSortTarget, clientY) => {
+      if (target.id === ROOT_DROP_TARGET_ID) {
+        if (item.kind === 'key') {
+          const rootTarget = { id: ROOT_DROP_TARGET_ID, kind: 'folder' as const, position: 'inside' as const }
+          dragStateRef.current.dragOver = rootTarget
+          setDragOver(rootTarget)
+        }
+        return
+      }
+      if (target.kind !== 'folder' && target.kind !== 'key') return
+      const targetItem: DragItem = { id: target.id, kind: target.kind }
+      if (item.id === targetItem.id) return
+      const position = positionForTarget(item, targetItem, target.element, clientY)
+      const nextDragOver = { ...targetItem, position }
+      dragStateRef.current.dragOver = nextDragOver
+      setDragOver(nextDragOver)
+    },
+    onDrop: (item, target, clientY) => {
+      if (target?.id === ROOT_DROP_TARGET_ID) {
+        if (item.kind === 'key') moveKeyToRoot(item.id)
+      } else if (target && (target.kind === 'folder' || target.kind === 'key')) {
+        const targetItem: DragItem = { id: target.id, kind: target.kind }
+        const position = positionForTarget(item, targetItem, target.element, clientY)
+        applyDrop(item, targetItem, position)
+      }
+      clearDragState()
+    },
+    onCancel: clearDragState
+  })
+
   const handleRootDrop = (event: DragEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    if (dragging?.kind === 'key') moveKeyToRoot(dragging.id)
+    const activeDragging = dragStateRef.current.dragging ?? readDraggedItem(event.dataTransfer.getData('text/plain'))
+    if (activeDragging?.kind === 'key') moveKeyToRoot(activeDragging.id)
     clearDragState()
   }
 
   const handleDrop = (event: DragEvent, target: DragItem) => {
     event.preventDefault()
     event.stopPropagation()
-    if (!dragging || dragging.id === target.id || !dragOver) {
+    const activeDragging = dragStateRef.current.dragging ?? readDraggedItem(event.dataTransfer.getData('text/plain'))
+    if (!activeDragging || activeDragging.id === target.id) {
       clearDragState()
       return
     }
 
-    if (dragging.kind === 'key') {
-      const draggedKey = keys.find((key) => key.id === dragging.id)
-      if (draggedKey && target.kind === 'folder' && dragOver.position === 'inside') {
-        const siblingOrders = keys
-          .filter((key) => key.id !== dragging.id && assignments[key.id] === target.id)
-          .map((key) => orderOf(key.id, key.importedAt))
-        const nextAssignments = { ...assignments, [dragging.id]: target.id }
-        const nextItemOrder = { ...itemOrder, [dragging.id]: Math.max(0, ...siblingOrders, 0) + 1000 }
-        persistUiState(folders, nextAssignments, nextItemOrder)
-        setExpandedFolderIds((current) => new Set(current).add(target.id))
-      } else if (draggedKey && (target.kind === 'key' || target.kind === 'folder')) {
-        const parentId = target.kind === 'key' ? assignments[target.id] : undefined
-        reorderItems(dragging, target, parentId, dragOver.position)
-      }
-    } else if (dragging.kind === 'folder' && dragOver.position !== 'inside') {
-      const targetParentId = target.kind === 'key' ? assignments[target.id] : undefined
-      if (!targetParentId) reorderItems(dragging, target, undefined, dragOver.position)
+    let activeDragOver = dragStateRef.current.dragOver
+    if (!activeDragOver || activeDragOver.id !== target.id) {
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+      const y = event.clientY - rect.top
+      const position: DragPosition =
+        target.kind === 'folder' && activeDragging.kind === 'key' && y >= rect.height * 0.25 && y <= rect.height * 0.75
+          ? 'inside'
+          : y < rect.height * 0.5
+            ? 'top'
+            : 'bottom'
+      activeDragOver = { ...target, position }
     }
+
+    applyDrop(activeDragging, target, activeDragOver.position)
     clearDragState()
   }
 
@@ -454,7 +545,8 @@ export function SshKeyManagerPage({
     <SshKeyRow
       key={key.id}
       className={`${className} ${isKeyDragOver(key.id)}`.trim()}
-      draggable
+      draggable={false}
+      onPointerDown={(event) => handlePointerDown(event, { kind: 'key', id: key.id })}
       item={key}
       onDragStart={(event) => handleDragStart(event, { kind: 'key', id: key.id })}
       onDragOver={(event) => handleDragOver(event, { kind: 'key', id: key.id })}
@@ -500,6 +592,8 @@ export function SshKeyManagerPage({
               dragOver?.id === ROOT_DROP_TARGET_ID ? 'drag-over' : ''
             }`}
             type="button"
+            data-fileterm-sort-id={ROOT_DROP_TARGET_ID}
+            data-fileterm-sort-kind="root"
             onClick={() => setActiveFolderId('all')}
             onDragOver={handleRootDragOver}
             onDragLeave={handleRootDragLeave}
@@ -517,6 +611,8 @@ export function SshKeyManagerPage({
               key={folder.id}
               className={`connection-manager-sidebar-item ${activeFolderId === folder.id ? 'active' : ''}`}
               type="button"
+              data-fileterm-sort-id={folder.id}
+              data-fileterm-sort-kind="folder"
               onClick={() => setActiveFolderId(folder.id)}
             >
               <span className="connection-manager-sidebar-icon">
@@ -589,7 +685,10 @@ export function SshKeyManagerPage({
                           role="button"
                           tabIndex={0}
                           className={`manager-row folder-row ssh-key-folder-row ${folderDragClass}`.trim()}
-                          draggable
+                          data-fileterm-sort-id={folder.id}
+                          data-fileterm-sort-kind="folder"
+                          draggable={false}
+                          onPointerDown={(event) => handlePointerDown(event, { kind: 'folder', id: folder.id })}
                           onDragStart={(event) => handleDragStart(event, { kind: 'folder', id: folder.id })}
                           onDragOver={(event) => handleDragOver(event, { kind: 'folder', id: folder.id })}
                           onDragLeave={(event) => {
@@ -779,7 +878,8 @@ function SshKeyRow({
   onDragOver,
   onDragLeave,
   onDrop,
-  onDragEnd
+  onDragEnd,
+  onPointerDown
 }: {
   item: SshKeyMetadata
   className?: string
@@ -791,11 +891,15 @@ function SshKeyRow({
   onDragLeave?(event: DragEvent): void
   onDrop?(event: DragEvent): void
   onDragEnd?(): void
+  onPointerDown?(event: ReactPointerEvent): void
 }) {
   return (
     <div
       className={`manager-row ssh-key-manager-row${className ? ` ${className}` : ''}`}
       draggable={draggable}
+      data-fileterm-sort-id={item.id}
+      data-fileterm-sort-kind="key"
+      onPointerDown={onPointerDown}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

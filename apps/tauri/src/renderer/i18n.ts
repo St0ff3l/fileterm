@@ -281,6 +281,8 @@ const zhCN = {
   transferFinalizing: '正在替换目标文件',
   noTransferTasks: '暂无传输任务',
   uploadFailed: '上传失败',
+  uploadPermissionDenied:
+    '上传失败：当前账号没有向目标目录写入的权限。请切换到有写入权限的目录，或使用 root 文件访问模式后重试。',
   downloadFailed: '下载失败',
   uploadCanceled: '上传已终止',
   downloadCanceled: '下载已终止',
@@ -766,6 +768,8 @@ const enUS: typeof zhCN = {
   transferFinalizing: 'Replacing target file',
   noTransferTasks: 'No transfer tasks',
   uploadFailed: 'Upload Failed',
+  uploadPermissionDenied:
+    'Upload failed: the current account does not have write permission for the target directory. Choose a writable directory or retry with root file access.',
   downloadFailed: 'Download Failed',
   uploadCanceled: 'Upload Canceled',
   downloadCanceled: 'Download Canceled',
