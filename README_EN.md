@@ -40,7 +40,7 @@ FileTerm is built for daily remote work by developers and operations teams. It b
 - Uploads, downloads, progress, and errors are managed in one transfer center.
 - Connection profiles, workspace state, and themes are designed for long-term daily use.
 
-<p align="center"><img width="900" alt="FileTerm workspace preview" src="https://github.com/user-attachments/assets/06f14b5d-d722-456f-ac90-342a19b6915c" /></p>
+<p align="center"><img width="900" alt="FileTerm workspace preview" src="./docs/assets/fileterm-dark-light-35deg.png" /></p>
 
 The official release focuses on the most frequent `SSH / SFTP / FTP / FTPS` workflows: reliable remote terminals, file operations, and transfers.
 
