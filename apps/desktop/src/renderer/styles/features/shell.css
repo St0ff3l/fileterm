@@ -764,13 +764,13 @@
 }
 
 :root[data-runtime='tauri'][data-platform='darwin'] .titlebar-brand strong {
-  /* Tauri Overlay leaves AppKit's traffic-light center at 16pt from the
-     window top, while this renderer tab bar is 48px tall. The Tauri/Tao
-     trafficLightPosition y value only changes the control-container height;
-     it does not move the buttons vertically. Keep this correction scoped to
-     Tauri so Electron hiddenInset retains its own native baseline. */
+  /* In Tauri Overlay, trafficLightPosition y shifts the title-bar container
+     rather than each button's frame. With y: 26 the traffic lights share the
+     48px renderer tab bar's visual center, so compensate the brand glyph for
+     its optical (not line-box) center. Scope this to Tauri: Electron
+     hiddenInset uses a different native geometry. */
   position: relative;
-  top: -8px;
+  top: -1px;
 }
 
 .titlebar-tabarea {
