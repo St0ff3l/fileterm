@@ -6,8 +6,23 @@ import type {
   ConnectionFolder,
   ConnectionProfile,
   CreateProfileInput,
+  SshKeyMetadata,
   TerminalCommandHistoryEntry
 } from '@fileterm/core'
+
+export type StoredSshKey = Omit<SshKeyMetadata, 'usageCount'>
+
+export interface SshKeyRepository {
+  list(): Promise<StoredSshKey[]>
+  getById(id: string): Promise<StoredSshKey | null>
+  getByFingerprint(fingerprint: string): Promise<StoredSshKey | null>
+  create(key: StoredSshKey, privateKey: Uint8Array): Promise<StoredSshKey>
+  updateNote(id: string, note: string): Promise<StoredSshKey>
+  delete(id: string): Promise<void>
+  readPrivateKey(id: string): Promise<Uint8Array>
+  getPassphrase(id: string): Promise<string | undefined>
+  setPassphrase(id: string, passphrase: string | undefined): Promise<void>
+}
 
 export interface ProfileRepository {
   list(): Promise<ConnectionProfile[]>
@@ -301,6 +316,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         authType: input.authType ?? 'system',
         note: input.note,
         password: input.password,
+        privateKeyId: input.privateKeyId,
         privateKeyPath: input.privateKeyPath,
         passphrase: input.passphrase,
         trustedHostFingerprint: input.trustedHostFingerprint,

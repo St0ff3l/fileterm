@@ -5,7 +5,8 @@ import type {
   SshHostVerificationRequest,
   SshKeyboardInteractiveRequest,
   SshInteractionRequest,
-  SshInteractionResponse
+  SshInteractionResponse,
+  SshKeyPassphrasePromptRequest
 } from '@fileterm/core'
 import { t } from '../i18n'
 
@@ -24,12 +25,15 @@ export type UseSshInteractionsResult = {
   credentialsRequest: SshCredentialsPromptRequest | null
   keyboardInteractiveRequest: SshKeyboardInteractiveRequest | null
   hostVerificationRequest: SshHostVerificationRequest | null
+  keyPassphraseRequest: SshKeyPassphrasePromptRequest | null
   errorMessage: string | null
   resolve(requestId: string, response: SshInteractionResponse): Promise<void>
   cancelCredentials(): Promise<void>
   submitCredentials(input: SshCredentialsInput): Promise<void>
   cancelKeyboardInteractive(): Promise<void>
   submitKeyboardInteractive(answers: string[]): Promise<void>
+  cancelKeyPassphrase(): Promise<void>
+  submitKeyPassphrase(input: { passphrase: string; savePassphrase: boolean }): Promise<void>
   rejectHost(): Promise<void>
   acceptHostOnce(): Promise<void>
   acceptHostAndSave(): Promise<void>
@@ -89,6 +93,7 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
   const credentialsRequest = request?.kind === 'credentials' ? request : null
   const keyboardInteractiveRequest = request?.kind === 'keyboard-interactive' ? request : null
   const hostVerificationRequest = request?.kind === 'host-verification' ? request : null
+  const keyPassphraseRequest = request?.kind === 'key-passphrase' ? request : null
 
   const cancelCredentials = useCallback(async () => {
     if (!credentialsRequest) {
@@ -121,6 +126,28 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
       })
     },
     [credentialsRequest, resolve]
+  )
+
+  const cancelKeyPassphrase = useCallback(async () => {
+    if (!keyPassphraseRequest) return
+    await resolve(keyPassphraseRequest.requestId, { kind: 'key-passphrase', canceled: true })
+  }, [keyPassphraseRequest, resolve])
+
+  const submitKeyPassphrase = useCallback(
+    async ({ passphrase, savePassphrase }: { passphrase: string; savePassphrase: boolean }) => {
+      if (!keyPassphraseRequest) return
+      if (!passphrase) {
+        setErrorMessage('请输入私钥口令。')
+        return
+      }
+      await resolve(keyPassphraseRequest.requestId, {
+        kind: 'key-passphrase',
+        canceled: false,
+        passphrase,
+        savePassphrase
+      })
+    },
+    [keyPassphraseRequest, resolve]
   )
 
   const resolveHostVerification = useCallback(
@@ -167,12 +194,15 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
     credentialsRequest,
     keyboardInteractiveRequest,
     hostVerificationRequest,
+    keyPassphraseRequest,
     errorMessage,
     resolve,
     cancelCredentials,
     submitCredentials,
-    cancelKeyboardInteractive,
-    submitKeyboardInteractive,
+  cancelKeyboardInteractive,
+  submitKeyboardInteractive,
+  cancelKeyPassphrase,
+  submitKeyPassphrase,
     rejectHost,
     acceptHostOnce,
     acceptHostAndSave

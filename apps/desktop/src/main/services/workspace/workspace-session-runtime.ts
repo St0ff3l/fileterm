@@ -26,6 +26,7 @@ import {
 } from '../session-controllers.js'
 import { appWarn } from '../app-logger.js'
 import { resolveShellFileAccess } from '../sessions/shell-cwd-integration.js'
+import type { ResolvedSshKey } from '../ssh-keys/ssh-key-service.js'
 import { TerminalOutputBatcher } from './terminal-output-batcher.js'
 
 export type LiveSessionController =
@@ -74,6 +75,8 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
       getTabStatus(tabId: string): WorkspaceTab['status'] | undefined
       resolveProfile(profileId: string): Promise<ConnectionProfile | null>
       rememberTrustedHostFingerprint(profileId: string, fingerprint: string): Promise<void>
+      resolveSshKey(keyId: string): Promise<ResolvedSshKey>
+      setSshKeyPassphrase(keyId: string, passphrase: string | undefined): Promise<void>
     }
   ) {
     super()
@@ -338,7 +341,11 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
           void this.emitSnapshotForTab(tabId)
         },
         initialTranscript,
-        {},
+        {
+          resolveManagedKey: (keyId) => this.options.resolveSshKey(keyId),
+          setManagedKeyPassphrase: (keyId, passphrase) => this.options.setSshKeyPassphrase(keyId, passphrase)
+        }
+        ,
         (profileId) => this.options.resolveProfile(profileId)
       )
       return sshController

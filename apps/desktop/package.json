@@ -19,7 +19,7 @@
     "build:main": "tauri build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "npm run test:unit && npm run test:controllers",
-    "test:unit": "node --test --experimental-strip-types test/transfers/*.test.ts test/system-metrics/*.test.ts test/profiles/*.test.ts test/workspace/*.test.ts test/config/*.test.ts",
+    "test:unit": "node --test --experimental-strip-types test/transfers/*.test.ts test/system-metrics/*.test.ts test/profiles/*.test.ts test/ssh-keys/*.test.ts test/workspace/*.test.ts test/config/*.test.ts",
     "pretest:controllers": "npm --prefix ../.. run build -w @fileterm/core",
     "test:controllers": "node --test test/controllers/*.test.mjs",
     "test:transfers": "node --test --experimental-strip-types test/transfers/*.test.ts",

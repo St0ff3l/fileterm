@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { generateKeyPairSync } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import { LiveSshSessionController } from '../../dist-electron/main/services/sessions/ssh-session-controller.js'
@@ -92,7 +93,7 @@ function createController(profile, clients, callbacks = {}) {
   return new LiveSshSessionController(
     'ssh-tab',
     profile,
-    async () => ({ kind: 'host-verification', decision: 'accept-once' }),
+    callbacks.requestInteraction ?? (async () => ({ kind: 'host-verification', decision: 'accept-once' })),
     async () => {},
     callbacks.onData ?? (() => {}),
     callbacks.onCwd ?? (() => {}),
@@ -112,6 +113,147 @@ async function waitFor(predicate, timeoutMs = 500) {
     await new Promise((resolve) => setTimeout(resolve, 2))
   }
 }
+
+function createManagedPrivateKey(passphrase) {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: passphrase
+      ? { type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase }
+      : { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' }
+  })
+  return Buffer.from(privateKey)
+}
+
+function managedKeyProfile() {
+  return createProfile({
+    authType: 'privateKey',
+    password: undefined,
+    privateKeyId: 'managed-key-id'
+  })
+}
+
+test('SSH controller resolves an unencrypted managed key before connecting', async () => {
+  const main = new FakeSshClient()
+  const privateKey = createManagedPrivateKey()
+  const controller = createController(managedKeyProfile(), {
+    main,
+    exec: new FakeSshClient(),
+    sftp: new FakeSshClient(),
+    transfer: new FakeSshClient(),
+    resolveManagedKey: async (keyId) => ({
+      key: { id: keyId, name: 'managed.pem', encrypted: false },
+      privateKey
+    })
+  })
+
+  await controller.connect()
+  assert.deepEqual(main.connectCalls[0].privateKey, privateKey)
+  assert.equal(main.connectCalls[0].passphrase, undefined)
+  await controller.disconnect()
+})
+
+test('SSH controller uses an encrypted managed key for one connection without saving its passphrase', async () => {
+  const main = new FakeSshClient()
+  const privateKey = createManagedPrivateKey('correct-passphrase')
+  const savedPassphrases = []
+  const requests = []
+  const controller = createController(
+    managedKeyProfile(),
+    {
+      main,
+      exec: new FakeSshClient(),
+      sftp: new FakeSshClient(),
+      transfer: new FakeSshClient(),
+      resolveManagedKey: async (keyId) => ({
+        key: { id: keyId, name: 'encrypted.pem', encrypted: true },
+        privateKey
+      }),
+      setManagedKeyPassphrase: async (keyId, passphrase) => savedPassphrases.push({ keyId, passphrase })
+    },
+    {
+      requestInteraction: async (request) => {
+        requests.push(request)
+        return request.kind === 'key-passphrase'
+          ? { kind: 'key-passphrase', passphrase: 'correct-passphrase', savePassphrase: false }
+          : { kind: 'host-verification', decision: 'accept-once' }
+      }
+    }
+  )
+
+  await controller.connect()
+  assert.equal(requests[0].kind, 'key-passphrase')
+  assert.equal(requests[0].reason, 'required')
+  assert.equal(main.connectCalls[0].passphrase, 'correct-passphrase')
+  assert.deepEqual(savedPassphrases, [])
+  await controller.disconnect()
+})
+
+test('SSH controller saves a validated passphrase only when requested', async () => {
+  const main = new FakeSshClient()
+  const privateKey = createManagedPrivateKey('correct-passphrase')
+  const savedPassphrases = []
+  const controller = createController(
+    managedKeyProfile(),
+    {
+      main,
+      exec: new FakeSshClient(),
+      sftp: new FakeSshClient(),
+      transfer: new FakeSshClient(),
+      resolveManagedKey: async (keyId) => ({
+        key: { id: keyId, name: 'encrypted.pem', encrypted: true },
+        privateKey
+      }),
+      setManagedKeyPassphrase: async (keyId, passphrase) => savedPassphrases.push({ keyId, passphrase })
+    },
+    {
+      requestInteraction: async (request) =>
+        request.kind === 'key-passphrase'
+          ? { kind: 'key-passphrase', passphrase: 'correct-passphrase', savePassphrase: true }
+          : { kind: 'host-verification', decision: 'accept-once' }
+    }
+  )
+
+  await controller.connect()
+  assert.deepEqual(savedPassphrases, [{ keyId: 'managed-key-id', passphrase: 'correct-passphrase' }])
+  await controller.disconnect()
+})
+
+test('SSH controller clears an invalid saved passphrase and requests a replacement', async () => {
+  const main = new FakeSshClient()
+  const privateKey = createManagedPrivateKey('correct-passphrase')
+  const savedPassphrases = []
+  const requests = []
+  const controller = createController(
+    managedKeyProfile(),
+    {
+      main,
+      exec: new FakeSshClient(),
+      sftp: new FakeSshClient(),
+      transfer: new FakeSshClient(),
+      resolveManagedKey: async (keyId) => ({
+        key: { id: keyId, name: 'encrypted.pem', encrypted: true },
+        privateKey,
+        savedPassphrase: 'stale-passphrase'
+      }),
+      setManagedKeyPassphrase: async (keyId, passphrase) => savedPassphrases.push({ keyId, passphrase })
+    },
+    {
+      requestInteraction: async (request) => {
+        requests.push(request)
+        return request.kind === 'key-passphrase'
+          ? { kind: 'key-passphrase', passphrase: 'correct-passphrase', savePassphrase: false }
+          : { kind: 'host-verification', decision: 'accept-once' }
+      }
+    }
+  )
+
+  await controller.connect()
+  assert.deepEqual(savedPassphrases, [{ keyId: 'managed-key-id', passphrase: undefined }])
+  assert.equal(requests[0].kind, 'key-passphrase')
+  assert.equal(requests[0].reason, 'invalid-saved')
+  await controller.disconnect()
+})
 
 test('SSH controller owns shell lifecycle, pending resize, input, output and disconnect', async () => {
   const main = new FakeSshClient()

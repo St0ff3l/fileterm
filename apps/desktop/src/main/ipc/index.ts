@@ -1,5 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { FileProfileRepository } from '../services/file-profile-repository.js'
+import { FileSshKeyRepository } from '../services/ssh-keys/file-ssh-key-repository.js'
+import { SshKeyService } from '../services/ssh-keys/ssh-key-service.js'
 import { LocalFilesService } from '../services/local-files-service.js'
 import {
   WorkspaceService,
@@ -12,21 +14,28 @@ import { registerAppHandlers } from './app-handlers.js'
 import { registerLocalFilesHandlers } from './local-files-handlers.js'
 import { registerRemoteFilesHandlers } from './remote-files-handlers.js'
 import { registerSshInteractionHandlers } from './ssh-interaction-handlers.js'
+import { registerSshKeyHandlers } from './ssh-key-handlers.js'
 import { registerTerminalHandlers } from './terminal-handlers.js'
 import { registerTransferHandlers } from './transfer-handlers.js'
 import type { IpcServices, IpcWindowOptions } from './types.js'
 import { registerWorkspaceHandlers } from './workspace-handlers.js'
 
 export function registerIpcHandlers(userDataPath: string, options: IpcWindowOptions) {
-  const workspaceService = new WorkspaceService(
-    new FileProfileRepository(userDataPath, seedProfiles, seedCommandTemplates, seedCommandFolders),
-    {
-      getLocale: () => options.getUiPreferences().locale,
-      transferJournal: new TransferJournal(userDataPath)
-    }
+  const profileRepository = new FileProfileRepository(
+    userDataPath,
+    seedProfiles,
+    seedCommandTemplates,
+    seedCommandFolders
   )
+  const sshKeyService = new SshKeyService(new FileSshKeyRepository(userDataPath), profileRepository)
+  const workspaceService = new WorkspaceService(profileRepository, {
+    getLocale: () => options.getUiPreferences().locale,
+    transferJournal: new TransferJournal(userDataPath),
+    sshKeyService
+  })
   const services: IpcServices = {
     workspaceService,
+    sshKeyService,
     localFilesService: new LocalFilesService(),
     broadcastSnapshot(snapshot) {
       for (const window of BrowserWindow.getAllWindows()) {
@@ -50,6 +59,7 @@ export function registerIpcHandlers(userDataPath: string, options: IpcWindowOpti
   registerTerminalHandlers(services)
   registerRemoteFilesHandlers(services)
   registerSshInteractionHandlers(services)
+  registerSshKeyHandlers(services, options)
 
   return services
 }

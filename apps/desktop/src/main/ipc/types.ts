@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import type { WebContents } from 'electron'
 import type { LocalFilesService } from '../services/local-files-service.js'
+import type { SshKeyService } from '../services/ssh-keys/ssh-key-service.js'
 import type { WorkspaceService } from '../services/workspace-service.js'
 import type { AppUpdateService } from '../services/app-update-service.js'
 
@@ -32,6 +33,7 @@ export interface IpcWindowOptions {
 
 export interface IpcServices {
   workspaceService: WorkspaceService
+  sshKeyService: SshKeyService
   localFilesService: LocalFilesService
   broadcastSnapshot(snapshot: Awaited<ReturnType<WorkspaceService['getSnapshot']>>): void
 }

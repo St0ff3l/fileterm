@@ -86,6 +86,7 @@ export interface SshProfile extends NetworkProfile {
   authType: SshAuthType
   note?: string
   password?: string
+  privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
   trustedHostFingerprint?: string
@@ -589,6 +590,27 @@ export interface WebDavSyncResult {
   skipped?: number
 }
 
+export interface SshKeyMetadata {
+  id: string
+  name: string
+  note?: string
+  algorithm: string
+  fingerprint: string
+  encrypted: boolean
+  importedAt: number
+  usageCount: number
+}
+
+export interface ImportSshKeyInput {
+  sourcePath?: string
+  note?: string
+}
+
+export interface SshKeyImportResult {
+  key: SshKeyMetadata
+  duplicate: boolean
+}
+
 export interface CreateProfileInput {
   type: SessionType
   name: string
@@ -599,6 +621,7 @@ export interface CreateProfileInput {
   remotePath: string
   note?: string
   password?: string
+  privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
   authType?: SshAuthType
@@ -671,6 +694,28 @@ export type SshInteractionDraft =
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshKeyboardInteractiveRequest, 'requestId' | 'tabId' | 'profileId'>
 
+export interface SshKeyPassphrasePromptRequest {
+  requestId: string
+  tabId: string
+  kind: 'key-passphrase'
+  profileId: string
+  keyId: string
+  keyName: string
+  reason: 'required' | 'invalid-saved'
+}
+
+
+export type SshInteractionRequest =
+  | SshHostVerificationRequest
+  | SshCredentialsPromptRequest
+  | SshKeyPassphrasePromptRequest
+  | SshKeyboardInteractiveRequest
+export type SshInteractionDraft =
+  | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
+  | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
+  | Omit<SshKeyPassphrasePromptRequest, 'requestId' | 'tabId' | 'profileId'>
+  | Omit<SshKeyboardInteractiveRequest, 'requestId' | 'tabId' | 'profileId'>
+
 export type SshHostVerificationResponse = {
   kind: 'host-verification'
   decision: 'accept-once' | 'accept-and-save' | 'cancel'
@@ -692,8 +737,23 @@ export type SshKeyboardInteractiveResponse =
   | { kind: 'keyboard-interactive'; canceled: true }
   | { kind: 'keyboard-interactive'; canceled: false; answers: string[] }
 
+export type SshKeyPassphrasePromptResponse =
+  | {
+      kind: 'key-passphrase'
+      canceled: true
+    }
+  | {
+      kind: 'key-passphrase'
+      canceled: false
+      passphrase: string
+      savePassphrase: boolean
+    }
+
 export type SshInteractionResponse =
-  SshHostVerificationResponse | SshCredentialsPromptResponse | SshKeyboardInteractiveResponse
+  | SshHostVerificationResponse
+  | SshCredentialsPromptResponse
+  | SshKeyPassphrasePromptResponse
+  | SshKeyboardInteractiveResponse
 
 export interface CommandTemplateInput {
   name: string
@@ -787,6 +847,11 @@ export interface FileTermDesktopApi {
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   getConnectionLibrary(): Promise<ConnectionLibrarySnapshot>
+  listSshKeys(): Promise<SshKeyMetadata[]>
+  importSshKey(input?: ImportSshKeyInput): Promise<SshKeyImportResult | null>
+  updateSshKeyNote(keyId: string, note: string): Promise<SshKeyMetadata>
+  deleteSshKey(keyId: string): Promise<void>
+  onSshKeysChanged(listener: (keys: SshKeyMetadata[]) => void): () => void
   previewConnectionImport(): Promise<ConnectionImportPlan | null>
   commitConnectionJsonImport(planId: string, options: ConnectionImportOptions): Promise<ConnectionImportResult>
   exportConnections(format: ConnectionExportFormat): Promise<boolean>

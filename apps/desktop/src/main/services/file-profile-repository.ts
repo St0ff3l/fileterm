@@ -771,6 +771,7 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         authType: input.authType ?? 'system',
         note: input.note,
         password: input.password,
+        privateKeyId: input.privateKeyId,
         privateKeyPath: input.privateKeyPath,
         passphrase: input.passphrase,
         trustedHostFingerprint: input.trustedHostFingerprint,

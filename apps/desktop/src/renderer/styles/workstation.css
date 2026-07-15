@@ -8,6 +8,7 @@
 @import './features/modals.css';
 @import './features/modal-components.css';
 @import './features/commands.css';
+@import './features/ssh-keys.css';
 @import './features/legacy-responsive.css';
 @import './features/workstation-skin.css';
 @import './features/close-button.css';

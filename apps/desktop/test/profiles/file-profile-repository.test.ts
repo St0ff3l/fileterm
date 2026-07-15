@@ -45,6 +45,27 @@ function findProfile(profiles: ConnectionProfile[], id: string): ConnectionProfi
   return profile
 }
 
+test('privateKeyId persists independently from the legacy privateKeyPath', async () => {
+  await withRepository(async (repository, directory) => {
+    const profile = await repository.create({
+      ...createSshProfileInput('默认', 'Managed key server'),
+      authType: 'privateKey',
+      privateKeyId: '11111111-1111-4111-8111-111111111111'
+    })
+
+    assert.equal(profile.type, 'ssh')
+    if (profile.type !== 'ssh') return
+    assert.equal(profile.privateKeyId, '11111111-1111-4111-8111-111111111111')
+    assert.equal(profile.privateKeyPath, undefined)
+
+    const storedProfile = findProfile(await readStoredProfiles(directory), profile.id)
+    assert.equal(storedProfile.type, 'ssh')
+    if (storedProfile.type !== 'ssh') return
+    assert.equal(storedProfile.privateKeyId, '11111111-1111-4111-8111-111111111111')
+    assert.equal(storedProfile.privateKeyPath, undefined)
+  })
+})
+
 test('create resolves parentId from the selected group name', async () => {
   await withRepository(async (repository, directory) => {
     const folder = await repository.createFolder('Production')

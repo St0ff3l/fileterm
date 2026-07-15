@@ -31,6 +31,7 @@ import { seedCommandFolders, seedCommandTemplates, seedProfiles } from './worksp
 import { WorkspaceSessionRuntime } from './workspace/workspace-session-runtime.js'
 import { WorkspaceTabLifecycleService } from './workspace/workspace-tab-lifecycle.js'
 import { WorkspaceTabsState } from './workspace/workspace-tabs.js'
+import type { SshKeyService } from './ssh-keys/ssh-key-service.js'
 import type { TransferJournal } from './transfers/transfer-journal.js'
 import { TransferService } from './transfers/transfer-service.js'
 import { appWarn } from './app-logger.js'
@@ -92,6 +93,7 @@ export class WorkspaceService {
     options?: {
       getLocale?(): 'zhCN' | 'enUS'
       transferJournal?: TransferJournal
+      sshKeyService?: SshKeyService
     }
   ) {
     this.profileRepository = profileRepository
@@ -100,7 +102,11 @@ export class WorkspaceService {
       getTabStatus: (tabId) => this.tabs.getById(tabId)?.status,
       resolveProfile: (profileId) => this.profileRepository.getById(profileId),
       rememberTrustedHostFingerprint: (profileId, fingerprint) =>
-        this.rememberTrustedHostFingerprint(profileId, fingerprint)
+        this.rememberTrustedHostFingerprint(profileId, fingerprint),
+      resolveSshKey: (keyId) =>
+        options?.sshKeyService?.resolve(keyId) ?? Promise.reject(new Error('SSH key service unavailable')),
+      setSshKeyPassphrase: (keyId, passphrase) =>
+        options?.sshKeyService?.setPassphrase(keyId, passphrase) ?? Promise.resolve()
     })
     this.transferService = new TransferService({
       tabs: this.tabs,

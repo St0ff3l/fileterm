@@ -12,6 +12,7 @@ import { OverviewPage } from './OverviewPage'
 import { QuickLinksPage } from './QuickLinksPage'
 import { ConnectionManagerModal } from '../connections/ConnectionManagerModal'
 import { CommandManagerModal } from '../commands/CommandManagerModal'
+import { SshKeyManagerPage } from '../ssh-keys/SshKeyManagerPage'
 import { SettingsModal } from '../settings/SettingsModal'
 import { TabBar, type TabBarProps } from '../layout/TabBar'
 
@@ -79,7 +80,7 @@ export function HomeWorkspace({
   onResizeStart(): void
 }) {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'settings'
+    'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'ssh-key-manager' | 'settings'
   >('overview')
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
@@ -90,8 +91,9 @@ export function HomeWorkspace({
     overview: 0,
     'connection-manager': 1,
     'command-manager': 2,
-    settings: 3,
-    'quick-links': 4
+    'ssh-key-manager': 3,
+    settings: 4,
+    'quick-links': 5
   }
   const selectTab = (tab: typeof activeTab) => {
     if (tab === activeTab) return
@@ -224,6 +226,16 @@ export function HomeWorkspace({
             <span>{t.commandManager}</span>
           </button>
           <button
+            className={`sidebar-nav-link ${activeTab === 'ssh-key-manager' ? 'active' : ''}`}
+            onClick={() => selectTab('ssh-key-manager')}
+            aria-label="密钥管理"
+            title="密钥管理"
+            type="button"
+          >
+            <span className="material-symbols-outlined">key</span>
+            <span>密钥管理</span>
+          </button>
+          <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => selectTab('settings')}
             aria-label={t.settings}
@@ -336,6 +348,11 @@ export function HomeWorkspace({
                 inline={true}
                 onActiveFolderChange={setActiveCommandFolderName}
               />
+            </div>
+          )}
+          {activeTab === 'ssh-key-manager' && (
+            <div key="ssh-key-manager" className="page-transition" data-nav-direction={navDirection}>
+              <SshKeyManagerPage />
             </div>
           )}
           {activeTab === 'settings' && (

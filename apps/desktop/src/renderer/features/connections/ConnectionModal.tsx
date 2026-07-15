@@ -9,6 +9,7 @@ import type {
 import { normalizeConnectionHost } from '@fileterm/shared'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
+import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 export function ConnectionModal({
   errorMessage,
@@ -307,13 +308,7 @@ export function ConnectionModal({
                     </label>
                   ) : null}
                   {form.type === 'ssh' && form.authType === 'privateKey' ? (
-                    <label className="full">
-                      {t.privateKey}:
-                      <input
-                        value={form.privateKeyPath ?? ''}
-                        onChange={(event) => setForm((prev) => ({ ...prev, privateKeyPath: event.target.value }))}
-                      />
-                    </label>
+                    <SshPrivateKeyField form={form} setForm={setForm} />
                   ) : null}
                   {form.type === 'ssh' && form.authType === 'password' ? (
                     <div className="span-2 ssh-auth-hint">{t.passwordAuthHint}</div>
