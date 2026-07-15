@@ -867,6 +867,63 @@ fn track_cwd_and_user(chunk: &str, buffer: &mut String) -> (Option<String>, Opti
     (cwd, user)
 }
 
+/// Keeps FileTerm's private OSC7 / iTerm RemoteUser markers out of the xterm
+/// display stream. They are parsed above for CWD and sudo-state tracking, but
+/// have no user-facing meaning. In Tauri's macOS WebKit webview, forwarding
+/// those control sequences under a busy prompt stream can advance xterm's
+/// cursor without painting the corresponding prompt rows.
+#[derive(Default)]
+struct TerminalMetadataFilter {
+    pending: String,
+}
+
+impl TerminalMetadataFilter {
+    const PREFIXES: [&'static str; 2] = ["\x1b]7;file://", "\x1b]1337;RemoteUser="];
+
+    fn filter(&mut self, chunk: &str) -> String {
+        let mut source = std::mem::take(&mut self.pending);
+        source.push_str(chunk);
+
+        let mut visible = String::with_capacity(source.len());
+        let mut offset = 0;
+        while offset < source.len() {
+            let remaining = &source[offset..];
+            if let Some(prefix) = Self::PREFIXES.iter().find(|prefix| remaining.starts_with(**prefix)) {
+                let payload = &remaining[prefix.len()..];
+                let terminator = payload
+                    .bytes()
+                    .enumerate()
+                    .find_map(|(index, byte)| match byte {
+                        b'\x07' => Some(index + 1),
+                        b'\x1b' if payload.as_bytes().get(index + 1) == Some(&b'\\') => Some(index + 2),
+                        _ => None,
+                    });
+                if let Some(length) = terminator {
+                    offset += prefix.len() + length;
+                    continue;
+                }
+
+                // The SSH channel may split a marker across packets. Retain
+                // it until the terminator arrives instead of forwarding half
+                // an OSC sequence to xterm.
+                self.pending = remaining.to_string();
+                break;
+            }
+
+            if Self::PREFIXES.iter().any(|prefix| prefix.starts_with(remaining)) {
+                self.pending = remaining.to_string();
+                break;
+            }
+
+            let character = remaining.chars().next().expect("remaining is non-empty");
+            visible.push(character);
+            offset += character.len_utf8();
+        }
+
+        visible
+    }
+}
+
 /// Remove CSI/OSC control sequences before inspecting a prompt. This mirrors
 /// Electron's root-prompt heuristic without feeding visual escape codes into
 /// the comparison.
@@ -2452,6 +2509,7 @@ while ($true) {{
     let mut awaiting_sudo_password = false;
     let mut pending_sudo_password = String::new();
     let mut recent_terminal_input = String::new();
+    let mut terminal_metadata_filter = TerminalMetadataFilter::default();
     // A new `sudo -i` shell discards the login shell's PROMPT_COMMAND.  Keep
     // Electron's two-second guard so a root prompt causes one safe reinject
     // of the OSC CWD/RemoteUser hook, not an injection loop.
@@ -2572,8 +2630,9 @@ while ($true) {{
                 }
             }, if pending_shell_setup_echo.is_some() => {
                 let visible = finish_shell_setup_suppression(&mut pending_shell_setup_echo);
-                if !visible.is_empty() {
-                    batch_buffer.extend_from_slice(visible.as_bytes());
+                let display = terminal_metadata_filter.filter(&visible);
+                if !display.is_empty() {
+                    batch_buffer.extend_from_slice(display.as_bytes());
                 }
             }
             // 2. Drain shell channel output.
@@ -2676,8 +2735,9 @@ while ($true) {{
                         }
 
                         let visible = suppress_shell_setup_echo(&mut pending_shell_setup_echo, &text);
-                        if !visible.is_empty() {
-                            batch_buffer.extend_from_slice(visible.as_bytes());
+                        let display = terminal_metadata_filter.filter(&visible);
+                        if !display.is_empty() {
+                            batch_buffer.extend_from_slice(display.as_bytes());
                         }
 
                         if pending_shell_setup_echo.is_none()
@@ -4197,6 +4257,7 @@ mod tests {
         looks_like_mfa_prompt, parent_remote_path, forward_local_connection, forward_socks5_connection,
         capture_sudo_password_input, looks_like_root_prompt, remote_bind_host_matches,
         suppress_shell_setup_echo, track_sudo_prompt_from_terminal, ShellSetupEchoSuppression,
+        TerminalMetadataFilter,
         SHELL_SETUP_SETTLE_DELAY,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
         KeyboardInteractiveRequest, SshTunnelRule,
@@ -4480,6 +4541,18 @@ mod tests {
 
         assert_eq!(visible, "Debian GNU/Linux\r\nuser@host:~$ root@host:~# ");
         assert!(pending.is_none());
+    }
+
+    #[test]
+    fn removes_fragmented_fileterm_osc_metadata_without_losing_visible_output() {
+        let mut filter = TerminalMetadataFilter::default();
+
+        assert_eq!(filter.filter("first\r\n\u{1b}]7;file:///home/"), "first\r\n");
+        assert_eq!(
+            filter.filter("user\u{7}\u{1b}]1337;RemoteUser=stoffel\u{7}stoffel@debian:~$ "),
+            "stoffel@debian:~$ "
+        );
+        assert_eq!(filter.filter("next\r\n"), "next\r\n");
     }
 
     #[test]
