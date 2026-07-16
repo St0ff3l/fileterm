@@ -42,9 +42,10 @@ pub fn start_ftp_worker(
     command_rx: mpsc::Receiver<WorkerCmd>,
     app: AppHandle,
 ) {
+    crate::services::logging::session(&app, "INFO", "ftp", &tab_id, "worker starting");
     tauri::async_runtime::spawn(async move {
         if let Err(error) = run_ftp_worker(&tab_id, &profile, command_rx, &app).await {
-            crate::services::logging::write(&app, "ERROR", "ftp", format!("tab={tab_id} {error}"));
+            crate::services::logging::session(&app, "ERROR", "ftp", &tab_id, &error);
             set_ftp_state(
                 &app,
                 &tab_id,
@@ -79,6 +80,13 @@ async fn run_ftp_worker(
     let mut client = connect_ftp(profile, host, port).await?;
     let mut listing_state = FtpListingState::default();
     let initial_files = client_list(&mut client, &remote_path, &mut listing_state).await?;
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ftp",
+        tab_id,
+        format!("connected host={host} port={port} entries={}", initial_files.len()),
+    );
     set_ftp_state(
         app,
         tab_id,
@@ -244,6 +252,7 @@ async fn run_ftp_worker(
             }
             Some(WorkerCmd::WriteTerminal(_)) | Some(WorkerCmd::ResizeTerminal { .. }) => {}
             Some(WorkerCmd::Disconnect) | None => {
+                crate::services::logging::session(app, "INFO", "ftp", tab_id, "disconnecting");
                 let _ = client_quit(&mut client).await;
                 set_ftp_state(
                     app,

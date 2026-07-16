@@ -61,6 +61,7 @@ fn is_newer(candidate: &str, current: &str) -> bool {
 }
 
 pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::logging::info(app, "update", "check started");
     set_status(
         app,
         serde_json::json!({ "state": "checking", "currentVersion": current_version(app), "updateMode": "release-page" }),
@@ -106,6 +107,15 @@ pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
             "message": format!("更新检查失败: {error}"),
         }),
     };
+    let state = status
+        .get("state")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    if state == "error" {
+        crate::services::logging::warn(app, "update", "check completed state=error");
+    } else {
+        crate::services::logging::info(app, "update", format!("check completed state={state}"));
+    }
     set_status(app, status.clone()).await;
     Ok(status)
 }
@@ -116,7 +126,12 @@ pub async fn open_release_page(app: &AppHandle) -> Result<(), AppError> {
         .get("releaseUrl")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("https://github.com/St0ff3l/fileterm/releases/latest");
-    open::that(url).map_err(|error| AppError::Command(error.to_string()))
+    let result = open::that(url).map_err(|error| AppError::Command(error.to_string()));
+    match &result {
+        Ok(()) => crate::services::logging::info(app, "update", "release page opened"),
+        Err(error) => crate::services::logging::error(app, "update", format!("open release page failed: {error}")),
+    }
+    result
 }
 
 #[cfg(test)]

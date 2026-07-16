@@ -11,6 +11,8 @@ import {
 import type { SshKeyMetadata } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
+import { ManagerInlineFolderRow } from '../common/ManagerInlineFolderRow'
+import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { SshKeyNoteDialog } from './SshKeyNoteDialog'
 import { t } from '../../i18n'
@@ -32,7 +34,7 @@ type SshKeyManagerUiState = {
 
 type DeleteTarget = { kind: 'folder' | 'key'; id: string; name: string }
 type DragItem = { kind: 'folder' | 'key'; id: string }
-type DragPosition = 'top' | 'bottom' | 'inside'
+type DragPosition = ManagerDropPosition
 type SortableItem = { kind: DragItem['kind']; id: string; fallbackOrder: number }
 
 const ROOT_DROP_TARGET_ID = '__ssh-key-root__'
@@ -53,6 +55,7 @@ export function SshKeyManagerPage({
   const { keys, loading, error, clearError, selectKeyFile, importKey, updateNote, deleteKey } = useSshKeyLibrary()
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
+  const [uiStateError, setUiStateError] = useState<string | null>(null)
   const [noteDialog, setNoteDialog] = useState<
     { mode: 'import' } | { mode: 'edit'; keyId: string; initialNote: string } | null
   >(null)
@@ -72,40 +75,52 @@ export function SshKeyManagerPage({
   const [isActionsExpanded, setIsActionsExpanded] = useState(false)
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const uiStateRevisionRef = useRef(0)
 
   useEffect(() => {
     let disposed = false
-    void desktopApi?.getUiStateItem(SSH_KEY_MANAGER_UI_STATE).then((raw) => {
-      if (disposed || !raw) return
-      try {
+    const revisionAtStart = uiStateRevisionRef.current
+    void desktopApi
+      ?.getUiStateItem(SSH_KEY_MANAGER_UI_STATE)
+      .then((raw) => {
+        if (disposed || !raw || revisionAtStart !== uiStateRevisionRef.current) return
         const parsed = JSON.parse(raw) as Partial<SshKeyManagerUiState>
         const nextFolders = Array.isArray(parsed.folders) ? parsed.folders.filter(isSshKeyFolder) : []
         const nextItemOrder = parsed.itemOrder ?? parsed.keyOrder ?? {}
         setFolders(nextFolders)
         setAssignments(parsed.assignments && typeof parsed.assignments === 'object' ? parsed.assignments : {})
         setItemOrder(nextItemOrder && typeof nextItemOrder === 'object' ? nextItemOrder : {})
-      } catch {
-        // Ignore an invalid UI state item and use the empty library layout.
-      }
-    })
+        setUiStateError(null)
+      })
+      .catch((cause: unknown) => {
+        if (!disposed) setUiStateError(cause instanceof Error ? cause.message : String(cause))
+      })
     return () => {
       disposed = true
     }
   }, [desktopApi])
 
   const persistUiState = useCallback(
-    (nextFolders: SshKeyFolder[], nextAssignments: Record<string, string>, nextItemOrder = itemOrder) => {
-      setFolders(nextFolders)
-      setAssignments(nextAssignments)
-      setItemOrder(nextItemOrder)
-      void desktopApi?.setUiStateItem(
-        SSH_KEY_MANAGER_UI_STATE,
-        JSON.stringify({
-          folders: nextFolders,
-          assignments: nextAssignments,
-          itemOrder: nextItemOrder
-        } satisfies SshKeyManagerUiState)
-      )
+    async (nextFolders: SshKeyFolder[], nextAssignments: Record<string, string>, nextItemOrder = itemOrder) => {
+      uiStateRevisionRef.current += 1
+      try {
+        await desktopApi?.setUiStateItem(
+          SSH_KEY_MANAGER_UI_STATE,
+          JSON.stringify({
+            folders: nextFolders,
+            assignments: nextAssignments,
+            itemOrder: nextItemOrder
+          } satisfies SshKeyManagerUiState)
+        )
+        setFolders(nextFolders)
+        setAssignments(nextAssignments)
+        setItemOrder(nextItemOrder)
+        setUiStateError(null)
+        return true
+      } catch (cause) {
+        setUiStateError(cause instanceof Error ? cause.message : String(cause))
+        return false
+      }
     },
     [desktopApi, itemOrder]
   )
@@ -185,11 +200,8 @@ export function SshKeyManagerPage({
     onStatsChange?.({ keyCount: keys.length, folderCount: folders.length })
   }, [folders.length, keys.length, onStatsChange])
 
-  const finishFolderCreation = () => {
-    const name = newFolderName.trim()
-    setIsCreatingFolder(false)
-    setNewFolderName('')
-    if (!name || folders.some((folder) => folder.name === name)) return
+  const finishFolderCreation = async (name: string) => {
+    if (folders.some((folder) => folder.name === name)) return false
 
     const folder = { id: createId('ssh-folder'), name }
     const rootOrders = [
@@ -198,7 +210,7 @@ export function SshKeyManagerPage({
         .filter((key) => !folders.some((item) => assignments[key.id] === item.id))
         .map((key) => orderOf(key.id, key.importedAt))
     ]
-    persistUiState([...folders, folder], assignments, {
+    return persistUiState([...folders, folder], assignments, {
       ...itemOrder,
       [folder.id]: Math.max(0, ...rootOrders) + 1000
     })
@@ -299,6 +311,12 @@ export function SshKeyManagerPage({
     dragStateRef.current = { dragging: null, dragOver: null }
     setDragging(null)
     setDragOver(null)
+    // Pointer-sort does not emit the native `dragend` event. Keep the click
+    // generated by this pointer-up suppressed, then restore normal folder
+    // expand/collapse clicks on the next event-loop turn.
+    window.setTimeout(() => {
+      suppressRowClickRef.current = false
+    }, 0)
   }
 
   const sortableItemsForParent = (parentId?: string): SortableItem[] => {
@@ -377,12 +395,7 @@ export function SshKeyManagerPage({
     clientY: number
   ): DragPosition => {
     if (element.closest('.connection-manager-sidebar')) return 'inside'
-    const rect = element.getBoundingClientRect()
-    const y = clientY - rect.top
-    if (target.kind === 'folder' && dragItem.kind === 'key' && y >= rect.height * 0.25 && y <= rect.height * 0.75) {
-      return 'inside'
-    }
-    return y < rect.height * 0.5 ? 'top' : 'bottom'
+    return resolveManagerDropPosition(element, clientY, target.kind === 'folder' && dragItem.kind === 'key')
   }
 
   const applyDrop = (activeDragging: DragItem, target: DragItem, position: DragPosition) => {
@@ -479,9 +492,6 @@ export function SshKeyManagerPage({
 
   const handleDragEnd = () => {
     clearDragState()
-    window.setTimeout(() => {
-      suppressRowClickRef.current = false
-    }, 0)
   }
 
   const handleImport = async (note: string, sourcePath?: string, folderId?: string) => {
@@ -526,13 +536,11 @@ export function SshKeyManagerPage({
   const folderForKey = (keyId: string) => assignments[keyId] ?? ''
 
   const isFolderDragOver = (folderId: string) => {
-    if (!dragOver || dragOver.id !== folderId) return ''
-    return `drop-${dragOver.position}`
+    return managerDropClass(dragOver?.id === folderId, dragOver?.position ?? null)
   }
 
   const isKeyDragOver = (keyId: string) => {
-    if (!dragOver || dragOver.id !== keyId) return ''
-    return `drop-${dragOver.position}`
+    return managerDropClass(dragOver?.id === keyId, dragOver?.position ?? null)
   }
 
   const openNewKeyDialog = () => {
@@ -635,37 +643,22 @@ export function SshKeyManagerPage({
               <span>操作</span>
             </div>
             <div className="manager-body connection-manager-body">
-              {error && !noteDialog ? <div className="ssh-key-manager-error">{error}</div> : null}
+              {(error || uiStateError) && !noteDialog ? (
+                <div className="ssh-key-manager-error">{error || uiStateError}</div>
+              ) : null}
               {isCreatingFolder && activeFolderId === 'all' ? (
-                <div className="manager-row folder-row ssh-key-folder-create-row">
-                  <span className="ssh-key-folder-name-cell">
-                    <span className="folder-icon manager-folder-toggle">
-                      <AppIcon name="chevron-right" size={12} />
-                    </span>
-                    <input
-                      autoFocus
-                      aria-label="文件夹名称"
-                      className="manager-inline-input"
-                      placeholder="文件夹名称"
-                      type="text"
-                      value={newFolderName}
-                      onChange={(event) => setNewFolderName(event.target.value)}
-                      onBlur={finishFolderCreation}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') finishFolderCreation()
-                        if (event.key === 'Escape') {
-                          setIsCreatingFolder(false)
-                          setNewFolderName('')
-                        }
-                      }}
-                    />
-                  </span>
-                  <span>--</span>
-                  <span>--</span>
-                  <span>--</span>
-                  <span>--</span>
-                  <span />
-                </div>
+                <ManagerInlineFolderRow
+                  afterNameCells={['--', '--', '--', '--', null]}
+                  className="ssh-key-folder-create-row"
+                  placeholder={t.folderName}
+                  value={newFolderName}
+                  onChange={setNewFolderName}
+                  onCommit={finishFolderCreation}
+                  onDismiss={() => {
+                    setIsCreatingFolder(false)
+                    setNewFolderName('')
+                  }}
+                />
               ) : null}
               {activeFolderId === 'all'
                 ? rootItems.map((rootItem) => {

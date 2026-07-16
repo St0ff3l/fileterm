@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { SshForwardRule, SshTunnelSnapshot } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 
 const initialDraft = (): SshForwardRule => ({
   id: globalThis.crypto.randomUUID(),
@@ -215,9 +216,9 @@ function TunnelEditorDialog({ children, onClose }: { children: ReactNode; onClos
         role="dialog"
       >
         <header className="ssh-tunnel-dialog-header">
-          <div>
+          <div className="ssh-tunnel-dialog-title">
+            <AppIcon name="connections" size={16} />
             <span id="ssh-tunnel-dialog-title">新增运行时隧道</span>
-            <p>只在当前 SSH 工作区生效，关闭连接后自动停止。</p>
           </div>
           <CloseButton aria-label="关闭新增隧道窗口" onClick={onClose} size="compact" />
         </header>
@@ -242,6 +243,8 @@ function TunnelRow({
 }) {
   const running = tunnel.status === 'running' || tunnel.status === 'starting'
   const target = tunnel.kind === 'dynamic' ? 'SOCKS5' : `${tunnel.targetHost}:${tunnel.targetPort}`
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const update = async (action: () => Promise<SshTunnelSnapshot[]>) => {
     try {
       onChange(await action())
@@ -250,40 +253,64 @@ function TunnelRow({
       onError(cause instanceof Error ? cause.message : String(cause))
     }
   }
+
+  const deleteTunnel = async () => {
+    setIsDeleting(true)
+    try {
+      onChange(await window.fileterm!.deleteSshTunnel(tabId, tunnel.id))
+      onError(null)
+      setIsDeleteConfirmOpen(false)
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
-    <article className="ssh-tunnel-row">
-      <span className={`ssh-tunnel-status is-${tunnel.status}`} aria-label={tunnel.status} />
-      <div className="ssh-tunnel-description">
-        <strong>{tunnel.name || `${tunnel.kind.toUpperCase()} ${tunnel.bindPort}`}</strong>
-        <span>
-          {tunnel.kind.toUpperCase()} · {tunnel.bindHost}:{tunnel.bindPort} → {target}
-        </span>
-        {tunnel.error ? <em>{tunnel.error}</em> : null}
-      </div>
-      <span className="ssh-tunnel-state">{tunnel.status}</span>
-      <div className="ssh-tunnel-actions">
-        <button
-          type="button"
-          onClick={() =>
-            void update(() =>
-              running
-                ? window.fileterm!.stopSshTunnel(tabId, tunnel.id)
-                : window.fileterm!.startSshTunnel(tabId, tunnel.id)
-            )
-          }
-        >
-          {running ? '停止' : '启动'}
-        </button>
-        {tunnel.runtimeOnly ? (
+    <>
+      <article className="ssh-tunnel-row">
+        <span className={`ssh-tunnel-status is-${tunnel.status}`} aria-label={tunnel.status} />
+        <div className="ssh-tunnel-description">
+          <strong>{tunnel.name || `${tunnel.kind.toUpperCase()} ${tunnel.bindPort}`}</strong>
+          <span>
+            {tunnel.kind.toUpperCase()} · {tunnel.bindHost}:{tunnel.bindPort} → {target}
+          </span>
+          {tunnel.error ? <em>{tunnel.error}</em> : null}
+        </div>
+        <span className="ssh-tunnel-state">{tunnel.status}</span>
+        <div className="ssh-tunnel-actions">
           <button
             type="button"
-            className="danger"
-            onClick={() => void update(() => window.fileterm!.deleteSshTunnel(tabId, tunnel.id))}
+            onClick={() =>
+              void update(() =>
+                running
+                  ? window.fileterm!.stopSshTunnel(tabId, tunnel.id)
+                  : window.fileterm!.startSshTunnel(tabId, tunnel.id)
+              )
+            }
           >
-            删除
+            {running ? '停止' : '启动'}
           </button>
-        ) : null}
-      </div>
-    </article>
+          {tunnel.runtimeOnly ? (
+            <button type="button" className="danger" onClick={() => setIsDeleteConfirmOpen(true)}>
+              删除
+            </button>
+          ) : null}
+        </div>
+      </article>
+      {isDeleteConfirmOpen ? (
+        <ConfirmActionDialog
+          confirmLabel="删除"
+          description={`确定删除隧道“${tunnel.name || `${tunnel.kind.toUpperCase()} ${tunnel.bindPort}`}”吗？删除后 ${tunnel.bindHost}:${tunnel.bindPort} 的监听会立即停止，且无法恢复。`}
+          isSubmitting={isDeleting}
+          onClose={() => {
+            if (!isDeleting) setIsDeleteConfirmOpen(false)
+          }}
+          onConfirm={() => void deleteTunnel()}
+          title="删除隧道"
+        />
+      ) : null}
+    </>
   )
 }

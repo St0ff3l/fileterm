@@ -897,6 +897,11 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
   private startMetricsPolling(tabId: string, controller: LiveSshSessionController) {
     if (!this.shouldPollMetrics(controller)) {
       this.stopMetricsPolling(tabId)
+      const current = this.sessions.get(tabId)
+      if (current?.systemMetrics) {
+        this.sessions.set(tabId, { ...current, systemMetrics: undefined })
+        this.emitMetricsForTab(tabId)
+      }
       return
     }
     const existing = this.metricsPollers.get(tabId)
@@ -922,7 +927,7 @@ export class WorkspaceSessionRuntime extends EventEmitter<WorkspaceSessionRuntim
 
   private shouldPollMetrics(controller: LiveSshSessionController) {
     const profile = controller['profile']
-    return profile.type !== 'ssh' || (profile.enableExecChannel !== false && profile.enableResourceMonitoring !== false)
+    return profile.type === 'ssh' && profile.enableExecChannel !== false && profile.enableResourceMonitoring !== false
   }
 
   private async refreshMetricsForTab(tabId: string, controller: LiveSshSessionController) {

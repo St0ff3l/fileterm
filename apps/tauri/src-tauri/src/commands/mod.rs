@@ -116,9 +116,50 @@ pub fn app_get_platform() -> String {
     std::env::consts::OS.to_string()
 }
 
+fn canonical_arch(arch: &str) -> String {
+    match arch {
+        "aarch64" => "arm64".to_string(),
+        "x86_64" => "x64".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn resolve_native_arch(platform: &str, process_arch: &str, macos_arm64_capable: bool) -> String {
+    if platform == "macos" && macos_arm64_capable {
+        return "arm64".to_string();
+    }
+
+    canonical_arch(process_arch)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_arm64_capable() -> bool {
+    std::process::Command::new("/usr/sbin/sysctl")
+        .args(["-n", "hw.optional.arm64"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .is_some_and(|value| value.trim() == "1")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn macos_arm64_capable() -> bool {
+    false
+}
+
 #[tauri::command]
 pub fn app_get_arch() -> String {
-    std::env::consts::ARCH.to_string()
+    resolve_native_arch(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        macos_arm64_capable(),
+    )
+}
+
+#[tauri::command]
+pub fn app_get_runtime_version() -> String {
+    tauri::VERSION.to_string()
 }
 
 #[tauri::command]
@@ -207,44 +248,57 @@ pub fn app_set_ui_preferences(app: AppHandle, input: UiPreferencesInput) -> Resu
     Ok(())
 }
 
+fn normalize_ui_state(value: Value) -> Result<serde_json::Map<String, Value>, AppError> {
+    match value {
+        Value::Object(mut object) => {
+            let mut states = object
+                .remove("values")
+                .and_then(|value| value.as_object().cloned())
+                .unwrap_or_default();
+            object.remove("version");
+            states.extend(object);
+            Ok(states)
+        }
+        Value::Array(items) => Ok(items
+            .into_iter()
+            .filter_map(|item| {
+                let key = item.get("key")?.as_str()?.to_string();
+                let value = item.get("value")?.clone();
+                Some((key, value))
+            })
+            .collect()),
+        _ => Err(AppError::Serialization("UI 状态文件格式无效".to_string())),
+    }
+}
+
+fn read_ui_state(app: &AppHandle) -> Result<serde_json::Map<String, Value>, AppError> {
+    normalize_ui_state(crate::storage::read_json_object(app, "ui-state.json")?)
+}
+
+fn write_ui_state(app: &AppHandle, states: serde_json::Map<String, Value>) -> Result<(), AppError> {
+    write_json_object(app, "ui-state.json", &Value::Object(states))
+}
+
 #[tauri::command]
 pub fn app_get_ui_state_item(app: AppHandle, key: String) -> Result<Option<String>, AppError> {
-    let states = read_json_array(&app, "ui-state.json")?;
-    for state in states {
-        if state.get("key").and_then(|k| k.as_str()) == Some(&key) {
-            return Ok(state.get("value").and_then(|v| v.as_str()).map(ToString::to_string));
-        }
-    }
-    Ok(None)
+    Ok(read_ui_state(&app)?
+        .get(&key)
+        .and_then(Value::as_str)
+        .map(ToString::to_string))
 }
 
 #[tauri::command]
 pub fn app_set_ui_state_item(app: AppHandle, key: String, value: String) -> Result<(), AppError> {
-    let mut states = read_json_array(&app, "ui-state.json")?;
-    let mut found = false;
-    for state in &mut states {
-        if state.get("key").and_then(|k| k.as_str()) == Some(&key) {
-            if let Some(obj) = state.as_object_mut() {
-                obj.insert("value".to_string(), Value::String(value.clone()));
-                found = true;
-                break;
-            }
-        }
-    }
-    if !found {
-        states.push(serde_json::json!({ "key": key, "value": value }));
-    }
-    write_json_array(&app, "ui-state.json", &states)
+    let mut states = read_ui_state(&app)?;
+    states.insert(key, Value::String(value));
+    write_ui_state(&app, states)
 }
 
 #[tauri::command]
 pub fn app_remove_ui_state_item(app: AppHandle, key: String) -> Result<(), AppError> {
-    let states = read_json_array(&app, "ui-state.json")?;
-    let next_states: Vec<Value> = states
-        .into_iter()
-        .filter(|state| state.get("key").and_then(|k| k.as_str()) != Some(&key))
-        .collect();
-    write_json_array(&app, "ui-state.json", &next_states)
+    let mut states = read_ui_state(&app)?;
+    states.remove(&key);
+    write_ui_state(&app, states)
 }
 
 #[tauri::command]
@@ -586,6 +640,10 @@ pub fn app_open_window(
     crate::open_child_window(&app, input)
 }
 
+fn renderer_approved_close_should_destroy(window_label: &str) -> bool {
+    window_label != "main"
+}
+
 #[tauri::command]
 pub async fn app_window_action(
     app: AppHandle,
@@ -616,13 +674,23 @@ pub async fn app_window_action(
             );
         }
         "close" => {
-            // User confirmed close in the renderer — bypass the
-            // `CloseRequested` guard (which would re-emit
-            // `app:window-close-request` and loop forever) by destroying the
-            // window directly via the raw handle. `window.close()` re-fires
-            // `CloseRequested`, so we use `window.destroy()` instead.
-            crate::resolve_file_editor_close(&app, &window);
-            let _ = window.destroy();
+            if !renderer_approved_close_should_destroy(window.label()) {
+                // Match Electron: closing the last workspace item requests a
+                // normal main-window close. The CloseRequested guard decides
+                // whether to hide to tray, quit, or cancel.
+                let _ = window.close();
+            } else {
+                // A child renderer has already approved this close. Destroy it
+                // directly so file-editor CloseRequested does not ask twice.
+                crate::resolve_file_editor_close(&app, &window);
+                let _ = window.destroy();
+            }
+        }
+        "hide" => {
+            crate::hide_main_window_and_children(&app);
+        }
+        "request-quit" => {
+            crate::request_main_window_close(&app, true);
         }
         "quit" => {
             // Quit the entire app. Used by the renderer when the user
@@ -874,6 +942,9 @@ pub async fn app_open_profile(
             shell_user: None,
             connected: false,
             system_metrics: None,
+            capabilities: crate::services::workspace::ConnectionCapabilities::for_session_type(
+                profile_type,
+            ),
         });
     }
 
@@ -1754,6 +1825,68 @@ mod command_template_tests {
                 "cn-north".to_string(),
             ]),
             "deploy api --region cn-north --empty="
+        );
+    }
+}
+
+#[cfg(test)]
+mod architecture_tests {
+    use super::resolve_native_arch;
+
+    #[test]
+    fn reports_apple_silicon_when_x64_process_runs_under_rosetta() {
+        assert_eq!(resolve_native_arch("macos", "x86_64", true), "arm64");
+    }
+
+    #[test]
+    fn canonicalizes_native_rust_architecture_names() {
+        assert_eq!(resolve_native_arch("macos", "aarch64", true), "arm64");
+        assert_eq!(resolve_native_arch("macos", "x86_64", false), "x64");
+        assert_eq!(resolve_native_arch("linux", "x86_64", false), "x64");
+    }
+}
+
+#[cfg(test)]
+mod window_lifecycle_tests {
+    use super::renderer_approved_close_should_destroy;
+
+    #[test]
+    fn main_window_close_keeps_the_lifecycle_guard() {
+        assert!(!renderer_approved_close_should_destroy("main"));
+        assert!(renderer_approved_close_should_destroy("file-editor-local-1"));
+        assert!(renderer_approved_close_should_destroy("connection-manager"));
+    }
+}
+
+#[cfg(test)]
+mod ui_state_tests {
+    use super::normalize_ui_state;
+
+    #[test]
+    fn reads_current_object_ui_state() {
+        let states = normalize_ui_state(serde_json::json!({ "main.tab-ui": "tabs" })).unwrap();
+        assert_eq!(states.get("main.tab-ui").and_then(|value| value.as_str()), Some("tabs"));
+    }
+
+    #[test]
+    fn migrates_electron_and_legacy_array_ui_state() {
+        let electron = normalize_ui_state(serde_json::json!({
+            "version": 1,
+            "values": { "ssh-key-manager-ui": "folders" }
+        }))
+        .unwrap();
+        assert_eq!(
+            electron.get("ssh-key-manager-ui").and_then(|value| value.as_str()),
+            Some("folders")
+        );
+
+        let legacy = normalize_ui_state(serde_json::json!([
+            { "key": "ssh-key-manager-ui", "value": "legacy-folders" }
+        ]))
+        .unwrap();
+        assert_eq!(
+            legacy.get("ssh-key-manager-ui").and_then(|value| value.as_str()),
+            Some("legacy-folders")
         );
     }
 }

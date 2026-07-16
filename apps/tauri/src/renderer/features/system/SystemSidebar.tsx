@@ -20,7 +20,6 @@ export function SystemSidebar({
   activeSession,
   collapsed,
   showResourceMeters,
-  showToggle,
   onOpenSystemInfo,
   onToggleCollapsed
 }: {
@@ -28,7 +27,6 @@ export function SystemSidebar({
   activeSession: SessionSnapshot | null
   collapsed: boolean
   showResourceMeters: boolean
-  showToggle: boolean
   onOpenSystemInfo(): void
   onToggleCollapsed(): void
 }) {
@@ -62,31 +60,29 @@ export function SystemSidebar({
 
   return (
     <div className={`system-sidebar-layout ${collapsed ? 'is-collapsed' : ''}`}>
-      {showToggle ? (
-        <button
-          aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
-          className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
-          onClick={onToggleCollapsed}
-          title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
-          type="button"
+      <button
+        aria-label={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+        className={`system-sidebar-toggle ${collapsed ? 'is-collapsed' : ''}`}
+        onClick={onToggleCollapsed}
+        title={collapsed ? t.showSystemSidebar : t.hideSystemSidebar}
+        type="button"
+      >
+        <svg
+          className="system-sidebar-toggle-icon"
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
         >
-          <svg
-            className="system-sidebar-toggle-icon"
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" />
-            <path d="M5.25 1.5V14.5" />
-          </svg>
-        </button>
-      ) : null}
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2.5" />
+          <path d="M5.25 1.5V14.5" />
+        </svg>
+      </button>
       {!collapsed ? (
         <>
           <section className="sys-card">

@@ -5,6 +5,8 @@ import { t } from '../../i18n'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './CommandEditorModal'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { ManagerInlineFolderRow } from '../common/ManagerInlineFolderRow'
+import { managerDropClass, resolveManagerDropPosition } from '../common/manager-drag'
 
 type CommandTreeNode = (CommandFolder & { children: CommandTreeNode[] }) | (CommandTemplate & { children?: never })
 
@@ -198,19 +200,7 @@ export function CommandManagerModal({
     e.stopPropagation()
     if (draggingId === targetId) return
 
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const y = e.clientY - rect.top
-    const height = rect.height
-
-    let pos: 'top' | 'bottom' | 'inside' = 'bottom'
-    if (type === 'command-folder') {
-      if (y < height * 0.25) pos = 'top'
-      else if (y > height * 0.75) pos = 'bottom'
-      else pos = 'inside'
-    } else {
-      if (y < height * 0.5) pos = 'top'
-      else pos = 'bottom'
-    }
+    const pos = resolveManagerDropPosition(e.currentTarget as HTMLElement, e.clientY, type === 'command-folder')
 
     setDragOverId(targetId)
     setDragPosition(pos)
@@ -343,10 +333,7 @@ export function CommandManagerModal({
     const isDragOver = dragOverId === node.id
     const isDragging = draggingId === node.id
 
-    let dropClass = ''
-    if (isDragOver && dragPosition) {
-      dropClass = `drop-${dragPosition}`
-    }
+    const dropClass = managerDropClass(isDragOver, dragPosition)
 
     return (
       <div key={node.id}>
@@ -568,36 +555,17 @@ export function CommandManagerModal({
             </div>
             <div className="manager-body connection-manager-body">
               {isCreatingFolder && resolvedActiveFolderId === 'all' && (
-                <div className="manager-row folder-row">
-                  <span className="manager-name-cell">
-                    <span className="folder-icon manager-folder-toggle">
-                      <AppIcon name="chevron-right" size={12} />
-                    </span>
-                    <input
-                      type="text"
-                      autoFocus
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newFolderName.trim()) {
-                          onCreateFolder(newFolderName.trim())
-                          setIsCreatingFolder(false)
-                        } else if (e.key === 'Escape') {
-                          setIsCreatingFolder(false)
-                        }
-                      }}
-                      onBlur={() => {
-                        if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
-                        setIsCreatingFolder(false)
-                      }}
-                      className="manager-inline-input"
-                      placeholder={t.folderName}
-                    />
-                  </span>
-                  <span>--</span>
-                  <span>--</span>
-                  <span></span>
-                </div>
+                <ManagerInlineFolderRow
+                  afterNameCells={['--', '--', null]}
+                  placeholder={t.folderName}
+                  value={newFolderName}
+                  onChange={setNewFolderName}
+                  onCommit={onCreateFolder}
+                  onDismiss={() => {
+                    setIsCreatingFolder(false)
+                    setNewFolderName('')
+                  }}
+                />
               )}
               {visibleNodes.map((node) => renderNode(node, 0, { includeChildren: !isSearching }))}
               {visibleNodes.length === 0 && !(isCreatingFolder && resolvedActiveFolderId === 'all') && (

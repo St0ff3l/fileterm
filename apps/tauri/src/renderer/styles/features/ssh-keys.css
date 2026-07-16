@@ -139,8 +139,8 @@
 }
 
 .ssh-key-folder-create-row {
-  min-height: 48px !important;
-  height: 48px !important;
+  min-height: 36px !important;
+  height: 36px !important;
   color: var(--text-main);
   box-sizing: border-box;
 }
@@ -149,7 +149,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .ssh-key-folder-row {
@@ -159,11 +159,6 @@
 
 .ssh-key-folder-row strong {
   font-weight: 500;
-}
-
-.ssh-key-folder-row.drop-inside {
-  background: var(--selection-bg) !important;
-  box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
 .ssh-key-nested-row {
@@ -182,25 +177,6 @@
 .ssh-key-empty-folder span {
   grid-column: 1 / -1;
   padding-left: 28px;
-}
-
-.ssh-key-folder-create-row input {
-  width: 100%;
-  min-width: 0;
-  max-width: 280px;
-  padding: 4px 8px;
-  border: 1px solid var(--accent-primary);
-  border-radius: 6px;
-  outline: 0;
-  background: var(--input-bg);
-  color: var(--text-main);
-  font: inherit;
-  font-size: 13px;
-  box-sizing: border-box;
-}
-
-.ssh-key-folder-create-row input:focus {
-  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .ssh-private-key-field {

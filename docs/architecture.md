@@ -181,12 +181,17 @@ platform probe
 平台差异的原则：
 
 - renderer 从 `tauri-api.ts` 暴露的平台信息同步到 `document.documentElement.dataset.platform`。
+- 设置页展示的 runtime 名称与版本来自共享桌面 API；Electron preload 返回 Electron 版本，Tauri bridge 通过 Rust command 返回 Tauri 版本，renderer 不写死运行时信息。
+- Tauri 的 renderer UI 状态通过 Rust command 持久化为 `ui-state.json` 键值对象；读取时兼容 Electron 的 `{ version, values }` 包装格式和早期 `{ key, value }[]` 数组格式，业务组件不得自行假设另一种文件结构。
 - CSS 使用 `data-platform` 和稳定 class 做 macOS/Windows/Linux 差异化布局。
+- Tauri 无边框子窗口仅在 macOS 使用透明原生表面，由 renderer 的 `standalone-window-frame` 统一裁切圆角；Windows/Linux 保持不透明表面，避免透明窗口启动闪烁和合成器差异。
 - macOS 菜单栏托盘图标使用 `apps/tauri/build/trayTemplate*.png` template 资源，由 Rust/Tauri backend 设置 template 属性。
+- Tauri 托盘由 Rust backend 显式创建：macOS 使用独立 template 图标，Windows/Linux 使用应用图标。主窗口与可见子窗口隐藏到托盘后会成组恢复；普通关闭请求与真正退出请求保持分离。
 - 应用更新通过 Rust/Tauri update service 统一管理，renderer 仅经 `Rust commands/events -> tauri-api.ts -> renderer` 查询状态和触发检查；当前使用 GitHub Release 版本检查与安全发布页交接，签名静默 updater 仍待 Phase 5 发布资产。
-- 原生关闭快捷键由 Rust/Tauri backend 统一收口：macOS 使用 `Cmd+Q` 请求应用退出确认、`Cmd+W` 请求关闭当前工作区项/子窗口；Windows/Linux 分别保持 `Alt+F4` 退出与 `Ctrl+W` 关闭窗口语义。托盘退出和窗口关闭必须走同一确认与 transfer journal 清理链路。
+- 原生关闭快捷键由 Rust/Tauri backend 统一收口：macOS 使用 `Cmd+Q` 请求应用退出确认、`Cmd+W` 请求关闭当前工作区项/子窗口；Windows/Linux 分别保持 `Alt+F4` 退出与 `Ctrl+W` 关闭窗口语义。最后一个工作区项只触发普通窗口关闭/隐藏，不得直接销毁主窗口；托盘退出和应用退出快捷键必须走同一确认与 transfer journal 清理链路。
 - 主题和语言属于 Rust backend 持久化的 UI preferences；资源监控是 SSH 连接配置，关闭后该连接不采集资源数据，工作区仅保留窄侧栏。
 - 产品更名后，Rust backend 首次启动只迁移旧 Electron 用户目录中的应用自有 JSON 数据；Chromium session、缓存与日志不迁移。
+- Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入日志。
 
 ## 4.3 传输暂停与恢复边界
 

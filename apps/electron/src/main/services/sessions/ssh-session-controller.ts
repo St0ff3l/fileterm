@@ -1563,8 +1563,9 @@ fi
 
   async refreshSystemMetrics(): Promise<SystemMetrics | undefined> {
     const profile = this.profile as SshProfile
-    if (profile.enableExecChannel === false) {
-      return this.metrics
+    if (profile.enableExecChannel === false || profile.enableResourceMonitoring === false) {
+      this.metrics = undefined
+      return undefined
     }
 
     if (this.metricsRefreshPromise) {

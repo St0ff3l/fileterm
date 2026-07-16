@@ -45,6 +45,8 @@ const api: FileTermDesktopApi = {
   arch: typeof process !== 'undefined' ? process.arch : 'unknown',
   appVersion: process.env['FILETERM_APP_VERSION'] ?? '0.0.0',
   appName: 'FileTerm',
+  runtimeName: 'Electron',
+  runtimeVersion: typeof process !== 'undefined' ? process.versions.electron : 'unknown',
   isDesktop: true,
   getUpdateStatus: () => ipcRenderer.invoke('app:getUpdateStatus'),
   checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),

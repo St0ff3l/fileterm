@@ -384,3 +384,17 @@ test('SSH controller injects shell setup only after a confirmed Linux probe', as
   )
   await controller.disconnect()
 })
+
+test('SSH controller does not collect metrics when resource monitoring is disabled', async () => {
+  const exec = new FakeSshClient()
+  const controller = createController(createProfile({ enableExecChannel: true, enableResourceMonitoring: false }), {
+    main: new FakeSshClient(),
+    exec,
+    sftp: new FakeSshClient(),
+    transfer: new FakeSshClient()
+  })
+
+  assert.equal(await controller.refreshSystemMetrics(), undefined)
+  assert.equal(exec.connectCalls.length, 0)
+  assert.equal(exec.execCommands.length, 0)
+})

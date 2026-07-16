@@ -14,14 +14,10 @@ pub fn start_serial_worker(
     command_rx: mpsc::Receiver<WorkerCmd>,
     app: AppHandle,
 ) {
+    crate::services::logging::session(&app, "INFO", "serial", &tab_id, "worker starting");
     tauri::async_runtime::spawn(async move {
         if let Err(error) = run_serial_worker(&tab_id, &profile, command_rx, &app).await {
-            crate::services::logging::write(
-                &app,
-                "ERROR",
-                "serial",
-                format!("tab={tab_id} {error}"),
-            );
+            crate::services::logging::session(&app, "ERROR", "serial", &tab_id, &error);
             emit_terminal_data(&app, &tab_id, &format!("\r\n[Serial] {error}\r\n")).await;
             set_terminal_state(&app, &tab_id, format!("Serial error: {error}"), false).await;
         }
@@ -70,6 +66,13 @@ async fn run_serial_worker(
         .open_native_async()
         .map_err(|error| serial_error(device_path, error))?;
     let (mut reader, mut writer) = tokio::io::split(stream);
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "serial",
+        tab_id,
+        format!("connected baud_rate={baud_rate}"),
+    );
     set_terminal_state(
         app,
         tab_id,
@@ -92,6 +95,7 @@ async fn run_serial_worker(
                         // Raw serial links have no terminal-size negotiation.
                     }
                     Some(WorkerCmd::Disconnect) | None => {
+                        crate::services::logging::session(app, "INFO", "serial", tab_id, "disconnecting");
                         let _ = writer.shutdown().await;
                         set_terminal_state(app, tab_id, "Serial disconnected".to_string(), false).await;
                         return Ok(());
@@ -102,6 +106,7 @@ async fn run_serial_worker(
             read = reader.read(&mut buffer) => {
                 let count = read.map_err(|error| serial_error(device_path, error))?;
                 if count == 0 {
+                    crate::services::logging::session(app, "WARN", "serial", tab_id, "device disconnected");
                     set_terminal_state(app, tab_id, "Serial device disconnected".to_string(), false).await;
                     return Ok(());
                 }

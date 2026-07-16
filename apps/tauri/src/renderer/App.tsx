@@ -260,6 +260,8 @@ export function App() {
     : false
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
+  const isResourceMonitoringAvailable =
+    activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring !== false
   const activeTabId = activeTab?.id ?? null
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {
@@ -300,11 +302,17 @@ export function App() {
       return
     }
 
-    setIsSystemSidebarCollapsed(isWorkspaceFocusMode)
+    setIsSystemSidebarCollapsed(isWorkspaceFocusMode || !isResourceMonitoringAvailable)
     if (!isWorkspaceFocusMode) {
       setSidebarWidth(214)
     }
-  }, [activeWorkspaceFocusKey, isHomeWorkspaceVisible, isWorkspaceFocusMode, setIsSystemSidebarCollapsed])
+  }, [
+    activeWorkspaceFocusKey,
+    isHomeWorkspaceVisible,
+    isResourceMonitoringAvailable,
+    isWorkspaceFocusMode,
+    setIsSystemSidebarCollapsed
+  ])
 
   // 3. Workspace Modals Hook
   const {
@@ -1146,12 +1154,8 @@ export function App() {
           <SystemSidebarShell
             activeProfile={activeProfile}
             activeSession={activeSession}
-            collapsed={
-              isSystemSidebarCollapsed ||
-              (activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring === false)
-            }
-            showResourceMeters={activeProfile?.type !== 'ssh' || activeProfile.enableResourceMonitoring !== false}
-            showToggle={activeProfile?.type !== 'ssh' || activeProfile.enableResourceMonitoring !== false}
+            collapsed={isSystemSidebarCollapsed}
+            showResourceMeters={isResourceMonitoringAvailable}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
             onResizeStart={() => setIsResizingSidebar(true)}

@@ -32,6 +32,13 @@ use tokio_socks::tcp::Socks5Stream;
 
 use super::{TransferFileStat, WorkerCmd};
 
+fn resource_monitoring_enabled(profile: &Value) -> bool {
+    profile
+        .get("enableResourceMonitoring")
+        .and_then(Value::as_bool)
+        != Some(false)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public entry point
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +120,7 @@ pub fn start_ssh_worker(
 ) {
     tokio::spawn(async move {
         let tid = tab_id.clone();
-        crate::services::logging::ssh_debug(&app, &tid, "SSH worker started");
+        crate::services::logging::session(&app, "INFO", "ssh", &tid, "worker started");
         // The initial "连接主机...\r\n" notice is already in the session
         // snapshot's `terminal_transcript` (set by `app_open_profile`), so
         // the renderer hydrates it via `bootText` — no need to emit it here.
@@ -128,7 +135,7 @@ pub fn start_ssh_worker(
         )
         .await;
         if cancellation.is_cancelled() {
-            crate::services::logging::ssh_debug(&app, &tid, "SSH worker cancelled");
+            crate::services::logging::session(&app, "INFO", "ssh", &tid, "worker cancelled");
             return;
         }
         match run_result {
@@ -136,8 +143,7 @@ pub fn start_ssh_worker(
                 emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
             }
             Err(e) => {
-                eprintln!("[SSH Worker] error for tab {}: {}", tid, e);
-                crate::services::logging::ssh_debug(&app, &tid, format!("SSH worker failed: {e}"));
+                crate::services::logging::session(&app, "ERROR", "ssh", &tid, format!("worker failed: {e}"));
                 emit_terminal_data(&app, &tid, &format!("连接失败: {}\r\n", e)).await;
             }
         }
@@ -153,10 +159,7 @@ pub fn start_ssh_worker(
             .and_then(|v| v.as_str())
             .unwrap_or("manual");
         if reconnect_mode == "auto" {
-            eprintln!(
-                "[SSH Worker] tab={} auto-reconnect scheduled (2000ms delay)",
-                tid
-            );
+            crate::services::logging::session(&app, "INFO", "ssh", &tid, "auto-reconnect scheduled delay_ms=2000");
             tokio::time::sleep(Duration::from_secs(2)).await;
 
             // Re-check: tab may have been closed or already reconnected by
@@ -174,14 +177,11 @@ pub fn start_ssh_worker(
             };
 
             if should_reconnect {
-                eprintln!("[SSH Worker] tab={} auto-reconnect firing", tid);
+                crate::services::logging::session(&app, "INFO", "ssh", &tid, "auto-reconnect firing");
                 // Trigger reconnect via the same path the renderer uses.
                 let _ = crate::commands::app_reconnect_tab(app.clone(), tid.clone()).await;
             } else {
-                eprintln!(
-                    "[SSH Worker] tab={} auto-reconnect cancelled (tab closed or already connected)",
-                    tid
-                );
+                crate::services::logging::session(&app, "DEBUG", "ssh", &tid, "auto-reconnect canceled");
             }
         }
     });
@@ -210,30 +210,22 @@ impl Handler for ClientHandler {
         server_public_key: &russh::keys::PublicKey,
     ) -> Result<bool, Self::Error> {
         let fp = fingerprint_sha256_base64(server_public_key);
-        eprintln!(
-            "[SSH host-key] tab={} profile={} host={} fp='{}' trusted={:?}",
-            self.tab_id, self.profile_id, self.host, fp, self.trusted_fingerprint
+        crate::services::logging::session(
+            &self.app,
+            "DEBUG",
+            "ssh",
+            &self.tab_id,
+            format!("host-key verification host={} port={}", self.host, self.port),
         );
         // Short-circuit: if the profile already trusts this exact
         // fingerprint, accept without prompting. This is the common path
         // after the user previously chose "accept-and-save".
         if let Some(known) = &self.trusted_fingerprint {
-            eprintln!(
-                "[SSH host-key] comparing known='{}' (len={}) vs fp='{}' (len={}) equal={}",
-                known,
-                known.len(),
-                fp,
-                fp.len(),
-                known == &fp
-            );
             if known == &fp {
+                crate::services::logging::session(&self.app, "INFO", "ssh", &self.tab_id, "host-key matched saved fingerprint");
                 return Ok(true);
             }
-            eprintln!(
-                "[SSH host-key] mismatch — byte diff: known_bytes={:?} fp_bytes={:?}",
-                known.as_bytes(),
-                fp.as_bytes()
-            );
+            crate::services::logging::session(&self.app, "WARN", "ssh", &self.tab_id, "host-key mismatch; requesting user verification");
         }
         let known = self.trusted_fingerprint.clone();
         let request_id = uuid::Uuid::new_v4().to_string();
@@ -320,6 +312,7 @@ impl Handler for ClientHandler {
 
         reply.accept().await;
         let tab_id = self.tab_id.clone();
+        let app = self.app.clone();
         tokio::spawn(async move {
             let result = async {
                 let mut local = TcpStream::connect((&*target.target_host, target.target_port)).await?;
@@ -329,7 +322,7 @@ impl Handler for ClientHandler {
             }
             .await;
             if let Err(error) = result {
-                eprintln!("[SSH tunnel] remote forward tab={tab_id} connection failed: {error}");
+                crate::services::logging::session(&app, "WARN", "tunnel", &tab_id, format!("remote forward connection failed: {error}"));
             }
         });
         Ok(())
@@ -455,10 +448,24 @@ impl TunnelManager {
         match start_result {
             Ok(()) => {
                 self.set_status(rule_id, "running", None);
+                crate::services::logging::session(
+                    &self.app,
+                    "INFO",
+                    "tunnel",
+                    &self.tab_id,
+                    format!("started id={rule_id} kind={}", rule.kind),
+                );
                 self.list()
             }
             Err(error) => {
                 self.set_status(rule_id, "error", Some(error.clone()));
+                crate::services::logging::session(
+                    &self.app,
+                    "ERROR",
+                    "tunnel",
+                    &self.tab_id,
+                    format!("start failed id={rule_id} error={error}"),
+                );
                 Err(error)
             }
         }
@@ -473,6 +480,7 @@ impl TunnelManager {
         let rule = rule.clone();
         let rule_id = rule.id.clone();
         let tab_id = self.tab_id.clone();
+        let app = self.app.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -482,6 +490,7 @@ impl TunnelManager {
                             let handle = Arc::clone(&handle);
                             let rule = rule.clone();
                             let connection_tab_id = tab_id.clone();
+                            let connection_app = app.clone();
                             tokio::spawn(async move {
                                 let result = if rule.kind == "dynamic" {
                                     forward_socks5_connection(socket, handle).await
@@ -489,12 +498,12 @@ impl TunnelManager {
                                     forward_local_connection(socket, handle, &rule).await
                                 };
                                 if let Err(error) = result {
-                                    eprintln!("[SSH tunnel] tab={connection_tab_id} {} connection failed: {error}", rule.id);
+                                    crate::services::logging::session(&connection_app, "WARN", "tunnel", &connection_tab_id, format!("connection failed id={} error={error}", rule.id));
                                 }
                             });
                         }
                         Err(error) => {
-                            eprintln!("[SSH tunnel] tab={tab_id} {} listener failed: {error}", rule.id);
+                            crate::services::logging::session(&app, "ERROR", "tunnel", &tab_id, format!("listener failed id={} error={error}", rule.id));
                             break;
                         }
                     }
@@ -554,12 +563,26 @@ impl TunnelManager {
             }
         }
         self.set_status(rule_id, "stopped", None);
+        crate::services::logging::session(
+            &self.app,
+            "INFO",
+            "tunnel",
+            &self.tab_id,
+            format!("stopped id={rule_id}"),
+        );
         self.list()
     }
 
     async fn delete(&mut self, rule_id: &str) -> Result<Vec<Value>, String> {
         self.stop(rule_id).await?;
         self.tunnels.remove(rule_id);
+        crate::services::logging::session(
+            &self.app,
+            "INFO",
+            "tunnel",
+            &self.tab_id,
+            format!("deleted id={rule_id}"),
+        );
         self.list()
     }
 
@@ -1459,11 +1482,15 @@ async fn open_session(
         .get("trustedHostFingerprint")
         .and_then(|f| f.as_str())
         .map(|s| s.to_string());
-    eprintln!(
-        "[SSH host-key] open_session tab={} profile_id='{}' trustedHostFingerprint_from_profile={:?}",
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
         tab_id,
-        profile.get("id").and_then(|v| v.as_str()).unwrap_or(""),
-        trusted
+        format!(
+            "opening session host={host} port={port} auth_type={auth_type} saved_host_key={}",
+            trusted.is_some()
+        ),
     );
 
     let profile_id = profile
@@ -1487,10 +1514,7 @@ async fn open_session(
         .map(|s| s.to_string());
 
     if let Some(jpid) = jump_profile_id {
-        eprintln!(
-            "[SSH jump] tab={} — resolving jump profile '{}'",
-            tab_id, jpid
-        );
+        crate::services::logging::session(app, "INFO", "ssh", tab_id, "resolving jump host");
         // Load the jump profile from disk (same directory as profiles.json)
         let jump_profile = load_jump_profile(app, &jpid)?;
 
@@ -1504,13 +1528,7 @@ async fn open_session(
             return Err("Jump Host cannot itself reference another Jump Host".to_string());
         }
 
-        eprintln!(
-            "[SSH jump] tab={} — connecting to jump host '{}@{}:{}'",
-            tab_id,
-            jump_profile.get("username").and_then(|v| v.as_str()).unwrap_or(""),
-            jump_profile.get("host").and_then(|v| v.as_str()).unwrap_or(""),
-            jump_profile.get("port").and_then(|v| v.as_i64()).unwrap_or(22)
-        );
+        crate::services::logging::session(app, "INFO", "ssh", tab_id, "connecting through jump host");
 
         // Connect + authenticate to the jump host.
         // Box::pin is required because `open_session` is recursive (the jump
@@ -1518,7 +1536,7 @@ async fn open_session(
         // Rust requires indirection for recursive async fns to avoid
         // infinitely-sized futures.
         let jump_handle = Box::pin(open_session(&jump_profile, app, tab_id)).await?;
-        eprintln!("[SSH jump] tab={} — jump host connected, opening direct-tcpip to target", tab_id);
+        crate::services::logging::session(app, "INFO", "ssh", tab_id, "jump host connected; opening target channel");
 
         let mut target_handle = connect_target_through_jump(
             &jump_handle,
@@ -2170,9 +2188,12 @@ async fn run_worker_loop(
 
     // ── Probe platform ─────────────────────────────────────────────────────
     let platform = super::system_metrics::probe_remote_platform(&handle).await;
-    eprintln!(
-        "[SSH metrics] tab={} platform='{}' — probe completed",
-        tab_id, platform
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "metrics",
+        tab_id,
+        format!("platform probe completed platform={platform}"),
     );
 
     // ── Inject shell CWD setup (POSIX only, fail-closed) ───────────────────
@@ -2184,17 +2205,9 @@ async fn run_worker_loop(
     let mut shell_setup_waiting_for_prompt = shell_cwd_setup_for_platform(&platform).is_some();
     let mut shell_prompt_buffer = String::new();
     if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
-        eprintln!(
-            "[SSH shell-setup] tab={} platform='{}' — waiting for first prompt before CWD hook injection ({} bytes)",
-            tab_id,
-            platform,
-            setup.len()
-        );
+        crate::services::logging::session(app, "DEBUG", "ssh", tab_id, format!("shell setup waiting for prompt platform={platform} bytes={}", setup.len()));
     } else {
-        eprintln!(
-            "[SSH shell-setup] tab={} platform='{}' — skipping setup (unsupported platform)",
-            tab_id, platform
-        );
+        crate::services::logging::session(app, "DEBUG", "ssh", tab_id, format!("shell setup skipped platform={platform}"));
     }
 
     update_tab_status_and_emit(app, tab_id, "connected").await;
@@ -2238,6 +2251,9 @@ async fn run_worker_loop(
                 shell_user: None,
                 connected: true,
                 system_metrics: None,
+                capabilities: crate::services::workspace::ConnectionCapabilities::for_session_type(
+                    "ssh",
+                ),
             },
         );
     }
@@ -2275,8 +2291,7 @@ async fn run_worker_loop(
         }
         Err(error) => {
             let reason = format_sftp_unavailable_reason(&error);
-            eprintln!("[SSH SFTP] tab={tab_id} unavailable: {reason}");
-            crate::services::logging::ssh_debug(app, tab_id, format!("SFTP unavailable: {reason}"));
+            crate::services::logging::session(app, "WARN", "sftp", tab_id, format!("unavailable: {reason}"));
             {
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(tab_id) {
@@ -2300,17 +2315,20 @@ async fn run_worker_loop(
     // The remote side controls the 1s cadence via `sleep 1`, so data arrives
     // at a rock-steady interval regardless of SSH RTT.
     let metrics_shutdown = Arc::new(tokio::sync::Notify::new());
-    let metrics_shutdown_clone = metrics_shutdown.clone();
-    {
+    if resource_monitoring_enabled(profile) {
+        let metrics_shutdown_clone = metrics_shutdown.clone();
         let metrics_handle = Arc::clone(&handle);
         let metrics_app = app.clone();
         let metrics_tid = tab_id.to_string();
         let metrics_plat = platform.clone();
         let metrics_cancellation = cancellation.clone();
         tokio::spawn(async move {
-            eprintln!(
-                "[SSH metrics] task spawned tab={} plat='{}' — starting streaming collector",
-                metrics_tid, metrics_plat
+            crate::services::logging::session(
+                &metrics_app,
+                "INFO",
+                "metrics",
+                &metrics_tid,
+                format!("collector starting platform={metrics_plat}"),
             );
 
             // Build the infinite-loop script. Each iteration emits a
@@ -2349,10 +2367,7 @@ async fn run_worker_loop(
             let mut channel = match metrics_handle.channel_open_session().await {
                 Ok(c) => c,
                 Err(e) => {
-                    eprintln!(
-                        "[SSH metrics] tab={} failed to open channel: {}",
-                        metrics_tid, e
-                    );
+                    crate::services::logging::session(&metrics_app, "ERROR", "metrics", &metrics_tid, format!("open channel failed: {e}"));
                     return;
                 }
             };
@@ -2367,32 +2382,24 @@ async fn run_worker_loop(
                 channel.request_shell(true).await
             };
             if let Err(e) = collector_start {
-                eprintln!(
-                    "[SSH metrics] tab={} failed to start collector shell: {}",
-                    metrics_tid, e
-                );
+                crate::services::logging::session(&metrics_app, "ERROR", "metrics", &metrics_tid, format!("start collector failed: {e}"));
                 return;
             }
 
             if let Some(script) = script_body.as_deref() {
                 if let Err(e) = channel.data(script.as_bytes()).await {
-                    eprintln!(
-                        "[SSH metrics] tab={} failed to write script: {}",
-                        metrics_tid, e
-                    );
+                    crate::services::logging::session(&metrics_app, "ERROR", "metrics", &metrics_tid, format!("write collector script failed: {e}"));
                     return;
                 }
             }
 
-            eprintln!(
-                "[SSH metrics] tab={} streaming collector started — waiting for first block",
-                metrics_tid
-            );
+            crate::services::logging::session(&metrics_app, "INFO", "metrics", &metrics_tid, "collector started; waiting for first sample");
 
             // Stream reader: accumulate data, split on the marker, parse
             // each complete block and emit it to the renderer.
             let mut buffer: Vec<u8> = Vec::new();
             let marker_bytes = marker.as_bytes();
+            let mut sample_count = 0_u64;
 
             loop {
                 tokio::select! {
@@ -2432,6 +2439,16 @@ async fn run_worker_loop(
                                         // Probably garbage / incomplete block
                                         continue;
                                     }
+                                    sample_count += 1;
+                                    if sample_count == 1 {
+                                        crate::services::logging::session(
+                                            &metrics_app,
+                                            "INFO",
+                                            "metrics",
+                                            &metrics_tid,
+                                            format!("first sample cpu_percent={cpu_pct:.1} memory_percent={mem_pct:.1}"),
+                                        );
+                                    }
                                     {
                                         let state = metrics_app
                                             .state::<crate::services::workspace::WorkspaceState>();
@@ -2460,10 +2477,7 @@ async fn run_worker_loop(
                                 buffer.extend_from_slice(data.as_ref());
                             }
                             Some(ChannelMsg::ExitStatus { .. }) | None => {
-                                eprintln!(
-                                    "[SSH metrics] tab={} channel closed",
-                                    metrics_tid
-                                );
+                                crate::services::logging::session(&metrics_app, "WARN", "metrics", &metrics_tid, "collector channel closed");
                                 break;
                             }
                             _ => {}
@@ -2473,11 +2487,14 @@ async fn run_worker_loop(
             }
 
             let _ = channel.close().await;
-            eprintln!(
-                "[SSH metrics] tab={} task ended",
-                metrics_tid
-            );
+            crate::services::logging::session(&metrics_app, "INFO", "metrics", &metrics_tid, "collector stopped");
         });
+    } else {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(tab_id) {
+            session.system_metrics = None;
+        }
+        crate::services::logging::session(app, "INFO", "metrics", tab_id, "collection disabled by profile");
     }
 
     // ── Main event loop: terminal reads + command dispatch ─────────────────
@@ -2617,7 +2634,7 @@ async fn run_worker_loop(
                             }
                             Ok(false) => {}
                             Err(e) => {
-                                eprintln!("[SSH Worker] cmd error for tab {}: {}", tab_id, e);
+                                crate::services::logging::session(app, "WARN", "ssh", tab_id, format!("command failed: {e}"));
                             }
                         }
                     }
@@ -2776,10 +2793,7 @@ async fn run_worker_loop(
                                             Some(ShellSetupEchoSuppression::new(false));
                                     }
                                     Err(error) => {
-                                        eprintln!(
-                                            "[SSH shell-setup] tab={} failed to write setup after first prompt: {}",
-                                            tab_id, error
-                                        );
+                                        crate::services::logging::session(app, "WARN", "ssh", tab_id, format!("shell setup write failed: {error}"));
                                     }
                                 }
                             }
@@ -4282,15 +4296,14 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_http_connect_request, format_sftp_unavailable_reason, is_password_prompt,
-        looks_like_mfa_prompt, parent_remote_path, forward_local_connection, forward_socks5_connection,
-        capture_sudo_password_input, looks_like_root_prompt, looks_like_shell_prompt,
-        remote_bind_host_matches, track_cwd_and_user,
-        coalesce_terminal_input,
-        suppress_shell_setup_echo, track_sudo_prompt_from_terminal, ShellSetupEchoSuppression,
-        SHELL_SETUP_SETTLE_DELAY,
+        build_http_connect_request, capture_sudo_password_input, coalesce_terminal_input,
+        format_sftp_unavailable_reason, forward_local_connection, forward_socks5_connection,
+        is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        parent_remote_path, remote_bind_host_matches, resource_monitoring_enabled,
+        suppress_shell_setup_echo, track_cwd_and_user, track_sudo_prompt_from_terminal,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
-        KeyboardInteractiveRequest, SshTunnelRule,
+        KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
+        SHELL_SETUP_SETTLE_DELAY,
     };
     use std::borrow::Cow;
     use std::sync::{Arc, Mutex};
@@ -4301,6 +4314,17 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::time::{timeout, Duration};
+
+    #[test]
+    fn resource_monitoring_respects_explicit_profile_disable() {
+        assert!(resource_monitoring_enabled(&serde_json::json!({})));
+        assert!(resource_monitoring_enabled(&serde_json::json!({
+            "enableResourceMonitoring": true
+        })));
+        assert!(!resource_monitoring_enabled(&serde_json::json!({
+            "enableResourceMonitoring": false
+        })));
+    }
 
     #[cfg(unix)]
     struct OpenSshFixture {

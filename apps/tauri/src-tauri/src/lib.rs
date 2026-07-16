@@ -3,8 +3,11 @@ pub mod services;
 pub mod sessions;
 pub mod storage;
 
+#[cfg(target_os = "macos")]
+use tauri::image::Image;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::Color, AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent, Wry,
 };
@@ -45,6 +48,14 @@ impl serde::Serialize for AppError {
 #[derive(Default)]
 pub(crate) struct FileEditorCloseRegistry {
     pending_labels: Mutex<HashSet<String>>,
+}
+
+/// Windows hidden together with the main window must be restored together as
+/// well. This mirrors Electron's `childWindowsHiddenWithMain` lifecycle and
+/// avoids losing standalone managers/editors after a tray hide/show cycle.
+#[derive(Default)]
+struct HiddenWithMainRegistry {
+    labels: Mutex<HashSet<String>>,
 }
 
 impl FileEditorCloseRegistry {
@@ -113,6 +124,10 @@ fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str)
     } else {
         ("Alt+F4", "Ctrl+W")
     }
+}
+
+fn tray_icon_should_be_template(platform: &str) -> bool {
+    platform == "macos"
 }
 
 fn focused_webview_window(app: &AppHandle<Wry>) -> Option<WebviewWindow<Wry>> {
@@ -370,6 +385,10 @@ fn window_url(input: &OpenWindowInput) -> WebviewUrl {
     WebviewUrl::App(format!("index.html?{}", window_query(input)).into())
 }
 
+fn child_window_should_be_transparent(platform: &str, decorations: bool) -> bool {
+    platform == "macos" && !decorations
+}
+
 pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
     let label = window_label(&input);
     if let Some(window) = app.get_webview_window(&label) {
@@ -382,6 +401,11 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
                 .destroy()
                 .map_err(|error| AppError::Window(error.to_string()))?;
         } else {
+            crate::services::logging::debug(
+                app,
+                "window",
+                format!("focus existing label={label} kind={}", input.kind),
+            );
             window
                 .show()
                 .map_err(|error| AppError::Window(error.to_string()))?;
@@ -403,6 +427,17 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         _ => return Ok(()),
     };
 
+    // Frameless macOS windows need a transparent native surface so the
+    // renderer's rounded standalone frame can clip the four corners. Keep
+    // Windows/Linux opaque: transparent Wry windows there can flash during
+    // startup and have different shadow/compositor behaviour.
+    let transparent = child_window_should_be_transparent(std::env::consts::OS, decorations);
+    let background_color = if transparent {
+        Color(0, 0, 0, 0)
+    } else {
+        Color(21, 21, 21, 255)
+    };
+
     let window = WebviewWindowBuilder::new(app, &label, window_url(&input))
         .title(title)
         .inner_size(width, height)
@@ -412,11 +447,24 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         // Match Electron's `show: false` + `ready-to-show` lifecycle. Wry
         // otherwise shows a transparent native frame before React and the
         // theme bootstrap have painted, which flashes twice on Windows.
-        .transparent(false)
-        .background_color(Color(21, 21, 21, 255))
+        .transparent(transparent)
+        .background_color(background_color)
+        .shadow(true)
         .visible(false)
         .build()
-        .map_err(|error| AppError::Window(error.to_string()))?;
+        .map_err(|error| {
+            crate::services::logging::error(
+                app,
+                "window",
+                format!("create failed label={label} kind={} error={error}", input.kind),
+            );
+            AppError::Window(error.to_string())
+        })?;
+    crate::services::logging::info(
+        app,
+        "window",
+        format!("created label={label} kind={}", input.kind),
+    );
     if input.kind == "file-editor" {
         let editor_window = window.clone();
         window.on_window_event(move |event| {
@@ -432,17 +480,63 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
 }
 
 fn show_main_window(app: &AppHandle<Wry>) {
+    let hidden_labels = {
+        let state = app.state::<HiddenWithMainRegistry>();
+        let mut labels = state
+            .labels
+            .lock()
+            .expect("hidden window registry lock poisoned");
+        labels.drain().collect::<Vec<_>>()
+    };
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
     }
+
+    for label in hidden_labels {
+        if label != "main" {
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.show();
+            }
+        }
+    }
 }
 
-fn request_main_close(app: &AppHandle<Wry>) {
+pub(crate) fn hide_main_window_and_children(app: &AppHandle<Wry>) {
+    let mut hidden_labels = HashSet::new();
+    for (label, window) in app.webview_windows() {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+            hidden_labels.insert(label);
+        }
+    }
+
+    let state = app.state::<HiddenWithMainRegistry>();
+    *state
+        .labels
+        .lock()
+        .expect("hidden window registry lock poisoned") = hidden_labels;
+}
+
+fn toggle_main_window_visibility(app: &AppHandle<Wry>) {
+    let should_hide = app
+        .get_webview_window("main")
+        .is_some_and(|window| {
+            window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false)
+        });
+    if should_hide {
+        hide_main_window_and_children(app);
+    } else {
+        show_main_window(app);
+    }
+}
+
+pub(crate) fn request_main_window_close(app: &AppHandle<Wry>, is_quit: bool) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit(
             "app:window-close-request",
-            serde_json::json!({ "isQuit": true }),
+            serde_json::json!({ "isQuit": is_quit }),
         );
     }
 }
@@ -451,8 +545,20 @@ fn request_main_close(app: &AppHandle<Wry>) {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            crate::services::logging::init(app.handle());
+            crate::services::logging::info(
+                app.handle(),
+                "app",
+                format!(
+                    "startup version={} platform={} arch={}",
+                    app.package_info().version,
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                ),
+            );
             app.manage(crate::services::WorkspaceState::default());
             app.manage(FileEditorCloseRegistry::default());
+            app.manage(HiddenWithMainRegistry::default());
             app.manage(WindowMenuState::default());
 
             let main_window = app.get_webview_window("main")
@@ -474,8 +580,13 @@ pub fn run() {
             main_window.on_window_event(move |event| {
                 match event {
                     WindowEvent::CloseRequested { api, .. } => {
+                        crate::services::logging::info(
+                            &app_handle,
+                            "window",
+                            "main close requested",
+                        );
                         api.prevent_close();
-                        request_main_close(&app_handle);
+                        request_main_window_close(&app_handle, false);
                     }
                     WindowEvent::Resized(_) => {
                         if let Some(window) = app_handle.get_webview_window("main") {
@@ -589,9 +700,25 @@ pub fn run() {
                 .build()
                 .map_err(|error| error.to_string())?;
 
-            if let Some(tray) = app.tray_by_id("main") {
-                let _ = tray.set_menu(Some(tray_menu));
-                let _ = tray.on_menu_event(|app, event| match event.id().as_ref() {
+            #[cfg(target_os = "macos")]
+            // tray-icon renders the source at 18 logical points on macOS.
+            // Feed it the 36px Retina representation so the status item has
+            // one physical source pixel per output pixel on @2x displays.
+            let tray_icon = Image::from_bytes(include_bytes!("../../build/trayTemplate@2x.png"))
+                .map_err(|error| error.to_string())?;
+            #[cfg(not(target_os = "macos"))]
+            let tray_icon = app
+                .default_window_icon()
+                .cloned()
+                .ok_or_else(|| "Failed to load the default tray icon".to_string())?;
+
+            TrayIconBuilder::with_id("main")
+                .icon(tray_icon)
+                .icon_as_template(tray_icon_should_be_template(std::env::consts::OS))
+                .tooltip("FileTerm")
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
                     "tray-connection-manager" => {
                         let _ = open_child_window(
                             app,
@@ -627,10 +754,23 @@ pub fn run() {
                         );
                     }
                     "tray-show-main" => show_main_window(app),
-                    "tray-quit" => request_main_close(app),
+                    "tray-quit" => request_main_window_close(app, true),
                     _ => {}
-                });
-            }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if matches!(
+                        event,
+                        TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        }
+                    ) {
+                        toggle_main_window_visibility(tray.app_handle());
+                    }
+                })
+                .build(app)
+                .map_err(|error| error.to_string())?;
 
             Ok(())
         })
@@ -727,12 +867,13 @@ pub fn run() {
             }
             "window-request-close" => request_close_focused_window(app),
             "show-main" => show_main_window(app),
-            "quit" => request_main_close(app),
+            "quit" => request_main_window_close(app, true),
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             crate::commands::app_get_platform,
             crate::commands::app_get_arch,
+            crate::commands::app_get_runtime_version,
             crate::commands::app_read_clipboard_text,
             crate::commands::app_write_clipboard_text,
             crate::commands::app_open_external_url,
@@ -853,13 +994,31 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{application_menu_accelerators, FileEditorCloseRegistry, WindowMenuKind};
+    use super::{
+        application_menu_accelerators, child_window_should_be_transparent, FileEditorCloseRegistry,
+        tray_icon_should_be_template, WindowMenuKind,
+    };
 
     #[test]
     fn keeps_mac_and_non_mac_window_shortcuts_distinct() {
         assert_eq!(application_menu_accelerators("macos"), ("Cmd+Q", "Cmd+W"));
         assert_eq!(application_menu_accelerators("windows"), ("Alt+F4", "Ctrl+W"));
         assert_eq!(application_menu_accelerators("linux"), ("Alt+F4", "Ctrl+W"));
+    }
+
+    #[test]
+    fn uses_template_tray_icons_on_macos_only() {
+        assert!(tray_icon_should_be_template("macos"));
+        assert!(!tray_icon_should_be_template("windows"));
+        assert!(!tray_icon_should_be_template("linux"));
+    }
+
+    #[test]
+    fn only_frameless_macos_child_windows_use_transparency() {
+        assert!(child_window_should_be_transparent("macos", false));
+        assert!(!child_window_should_be_transparent("macos", true));
+        assert!(!child_window_should_be_transparent("windows", false));
+        assert!(!child_window_should_be_transparent("linux", false));
     }
 
     #[test]

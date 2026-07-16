@@ -1335,6 +1335,7 @@
 :root[data-theme='default-dark'] .manager-row.drop-inside,
 :root[data-theme='default'] .manager-row.drop-inside {
   background: var(--selection-bg);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
 :root:not([data-theme]) .folder-row,
@@ -3170,5 +3171,36 @@
 :root:not([data-theme]) .ssh-key-import-dialog .ssh-key-import-dialog__file-name,
 :root[data-theme='default-dark'] .ssh-key-import-dialog .ssh-key-import-dialog__file-name,
 :root[data-theme='default'] .ssh-key-import-dialog .ssh-key-import-dialog__file-name {
+  background: #1a1a1a !important;
+}
+
+/* Runtime tunnel editor follows the command editor's neutral dark surface hierarchy. */
+:root:not([data-theme]) .ssh-tunnel-dialog,
+:root[data-theme='default-dark'] .ssh-tunnel-dialog,
+:root[data-theme='default'] .ssh-tunnel-dialog,
+:root:not([data-theme]) .ssh-tunnel-form,
+:root[data-theme='default-dark'] .ssh-tunnel-form,
+:root[data-theme='default'] .ssh-tunnel-form {
+  background: #1b1b1b !important;
+}
+
+:root:not([data-theme]) .ssh-tunnel-form-actions,
+:root[data-theme='default-dark'] .ssh-tunnel-form-actions,
+:root[data-theme='default'] .ssh-tunnel-form-actions {
+  background: #1b1b1b !important;
+}
+
+:root:not([data-theme]) .ssh-tunnel-dialog-header,
+:root[data-theme='default-dark'] .ssh-tunnel-dialog-header,
+:root[data-theme='default'] .ssh-tunnel-dialog-header {
+  background: #242424 !important;
+}
+
+:root:not([data-theme]) .ssh-tunnel-form input,
+:root[data-theme='default-dark'] .ssh-tunnel-form input,
+:root[data-theme='default'] .ssh-tunnel-form input,
+:root:not([data-theme]) .ssh-tunnel-form select,
+:root[data-theme='default-dark'] .ssh-tunnel-form select,
+:root[data-theme='default'] .ssh-tunnel-form select {
   background: #1a1a1a !important;
 }

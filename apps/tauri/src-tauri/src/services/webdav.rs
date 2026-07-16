@@ -395,10 +395,29 @@ pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
         content_hash: previous.content_hash,
     };
     write_config(app, &next)?;
+    crate::services::logging::info(
+        app,
+        "webdav",
+        format!(
+            "configuration saved enabled={} insecure_tls={}",
+            next.enabled,
+            next.allow_insecure_tls == Some(true)
+        ),
+    );
     Ok(public_config(&next))
 }
 
 pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
+    crate::services::logging::info(app, "webdav", "upload started");
+    let result = upload_inner(app).await;
+    match &result {
+        Ok(_) => crate::services::logging::info(app, "webdav", "upload completed"),
+        Err(error) => crate::services::logging::error(app, "webdav", format!("upload failed: {error}")),
+    }
+    result
+}
+
+async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
     let mut config = configured(app)?;
     let client = client()?;
     let (payload, content_hash) = export_bundle(app)?;
@@ -468,6 +487,24 @@ async fn upload_payload(
 }
 
 pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
+    crate::services::logging::info(app, "webdav", "download started");
+    let result = download_inner(app).await;
+    match &result {
+        Ok(value) => crate::services::logging::info(
+            app,
+            "webdav",
+            format!(
+                "download completed imported={} skipped={}",
+                value.get("imported").and_then(Value::as_u64).unwrap_or(0),
+                value.get("skipped").and_then(Value::as_u64).unwrap_or(0)
+            ),
+        ),
+        Err(error) => crate::services::logging::error(app, "webdav", format!("download failed: {error}")),
+    }
+    result
+}
+
+async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
     let mut config = configured(app)?;
     let client = client()?;
     let (bytes, remote_etag) = download_payload(&client, &config).await?;

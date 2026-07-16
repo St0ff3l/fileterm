@@ -2707,29 +2707,29 @@
   color: var(--text-main);
   font-family: var(--font-mono, monospace);
 }
-.ssh-tunnel-dialog {
+.modal-card.ssh-tunnel-dialog {
   width: min(560px, calc(100vw - 40px));
-  padding: 0;
+  padding: 0 !important;
+  overflow: hidden;
 }
 .ssh-tunnel-dialog-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px 14px;
+  min-height: 48px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border-light);
 }
-.ssh-tunnel-dialog-header span {
-  display: block;
+.ssh-tunnel-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-main);
-  font-size: 15px;
-  font-weight: 600;
 }
-.ssh-tunnel-dialog-header p {
-  margin: 4px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+.ssh-tunnel-dialog-title > span {
+  font-size: 13px;
+  font-weight: 500;
 }
 .ssh-tunnel-form {
   display: grid;
@@ -2781,6 +2781,9 @@
   grid-column: 1 / -1;
   align-self: end;
   justify-content: end;
+  margin: 6px -20px -20px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-light);
 }
 .ssh-tunnel-form-actions .flat-button {
   min-width: 76px;

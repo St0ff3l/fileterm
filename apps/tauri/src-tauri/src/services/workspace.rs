@@ -19,6 +19,48 @@ pub struct WorkspaceTab {
     pub status: String, // "connecting" | "connected" | "disconnected"
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionCapabilities {
+    pub terminal: bool,
+    pub files: bool,
+    pub resource_monitoring: bool,
+    pub shell_integration: bool,
+    pub file_access: bool,
+    pub tunnels: bool,
+}
+
+impl ConnectionCapabilities {
+    pub fn for_session_type(session_type: &str) -> Self {
+        match session_type {
+            "ssh" => Self {
+                terminal: true,
+                files: true,
+                resource_monitoring: true,
+                shell_integration: true,
+                file_access: true,
+                tunnels: true,
+            },
+            "ftp" => Self {
+                terminal: false,
+                files: true,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: false,
+            },
+            _ => Self {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: false,
+            },
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
@@ -43,6 +85,7 @@ pub struct SessionSnapshot {
     pub shell_user: Option<String>,
     pub connected: bool,
     pub system_metrics: Option<serde_json::Value>,
+    pub capabilities: ConnectionCapabilities,
 }
 
 /// The local endpoint to connect when an SSH server opens a `forwarded-tcpip`
@@ -137,9 +180,27 @@ impl WorkspaceState {
 
 #[cfg(test)]
 mod tests {
-    use super::WorkspaceState;
+    use super::{ConnectionCapabilities, WorkspaceState};
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
+
+    #[test]
+    fn ssh_is_the_only_session_type_with_tunnel_capability() {
+        assert!(ConnectionCapabilities::for_session_type("ssh").tunnels);
+        assert!(!ConnectionCapabilities::for_session_type("ftp").tunnels);
+        assert!(!ConnectionCapabilities::for_session_type("telnet").tunnels);
+        assert!(!ConnectionCapabilities::for_session_type("serial").tunnels);
+    }
+
+    #[test]
+    fn capabilities_serialize_with_the_core_camel_case_shape() {
+        let value = serde_json::to_value(ConnectionCapabilities::for_session_type("ssh")).unwrap();
+
+        assert_eq!(value["resourceMonitoring"], true);
+        assert_eq!(value["shellIntegration"], true);
+        assert_eq!(value["fileAccess"], true);
+        assert_eq!(value["tunnels"], true);
+    }
 
     #[test]
     fn terminal_output_channel_preserves_stream_order_under_load() {

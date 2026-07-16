@@ -219,6 +219,8 @@ export function createTauriApi(): FileTermDesktopApi {
     arch,
     appVersion: '0.0.0',
     appName: 'FileTerm',
+    runtimeName: 'Tauri',
+    runtimeVersion: '0.0.0',
     isDesktop: true,
     getUpdateStatus: () => invoke<AppUpdateStatus>('app_get_update_status'),
     checkForUpdates: () => invoke<AppUpdateStatus>('app_check_for_updates'),
@@ -274,7 +276,7 @@ export function createTauriApi(): FileTermDesktopApi {
     cancelCloseCurrentFileEditor: () => invoke<void>('app_cancel_file_editor_close'),
     showWindowMenu: (menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number) =>
       invoke<void>('app_show_window_menu', { menuType, x, y }),
-    requestQuitApp: () => invoke<void>('app_window_action', { action: 'quit' }),
+    requestQuitApp: () => invoke<void>('app_window_action', { action: 'request-quit' }),
     listLocalDirectory: (dirPath?: string) =>
       invoke<{ path: string; items: LocalFileItem[] }>('app_list_local_directory', {
         dirPath: dirPath ?? null
@@ -469,18 +471,25 @@ export function createTauriApi(): FileTermDesktopApi {
         // the app instead of looping back through the confirmation dialog.
         return invoke<void>('app_window_action', { action: 'quit' })
       }
-      return invoke<void>('app_window_action', { action: 'minimize' })
+      return invoke<void>('app_window_action', { action: 'hide' })
     }
   } as unknown as FileTermDesktopApi
 
   // The core API exposes these as synchronous fields for Electron parity.
   // Tauri resolves app metadata asynchronously, so start with safe values and
   // hydrate them from the Rust runtime as soon as IPC is available.
-  void Promise.all([invoke<string>('app_get_platform'), invoke<string>('app_get_arch'), getVersion(), getName()])
-    .then(([nativePlatform, nativeArch, appVersion, appName]) => {
+  void Promise.all([
+    invoke<string>('app_get_platform'),
+    invoke<string>('app_get_arch'),
+    invoke<string>('app_get_runtime_version'),
+    getVersion(),
+    getName()
+  ])
+    .then(([nativePlatform, nativeArch, runtimeVersion, appVersion, appName]) => {
       Object.assign(api, {
         platform: normalizePlatform(nativePlatform),
         arch: nativeArch,
+        runtimeVersion,
         appVersion,
         appName
       })

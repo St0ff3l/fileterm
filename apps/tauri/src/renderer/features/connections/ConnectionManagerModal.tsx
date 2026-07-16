@@ -4,6 +4,8 @@ import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { ManagerInlineFolderRow } from '../common/ManagerInlineFolderRow'
+import { managerDropClass, resolveManagerDropPosition } from '../common/manager-drag'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 
 type ConnectionTreeNode =
@@ -220,14 +222,7 @@ export function ConnectionManagerModal({
     if (element.closest('.connection-manager-sidebar')) return 'inside' as const
     const targetNode = tree.map.get(targetId)
     if (!targetNode) return null
-    const rect = element.getBoundingClientRect()
-    const y = clientY - rect.top
-    if (targetNode.type === 'folder') {
-      if (y < rect.height * 0.25) return 'top' as const
-      if (y > rect.height * 0.75) return 'bottom' as const
-      return 'inside' as const
-    }
-    return y < rect.height * 0.5 ? ('top' as const) : ('bottom' as const)
+    return resolveManagerDropPosition(element, clientY, targetNode.type === 'folder')
   }
 
   const moveToRoot = (id: string) => {
@@ -375,10 +370,7 @@ export function ConnectionManagerModal({
     const isDragOver = dragOverId === node.id
     const isDragging = draggingId === node.id
 
-    let dropClass = ''
-    if (isDragOver && dragPosition) {
-      dropClass = `drop-${dragPosition}`
-    }
+    const dropClass = managerDropClass(isDragOver, dragPosition)
 
     return (
       <div key={node.id}>
@@ -612,39 +604,26 @@ export function ConnectionManagerModal({
             </div>
             <div className="manager-body connection-manager-body">
               {isCreatingFolder && resolvedActiveFolderId === 'all' && (
-                <div className="manager-row folder-row">
-                  <span className="manager-name-cell">
-                    <span className="folder-icon manager-folder-toggle">
-                      <AppIcon name="chevron-right" size={12} />
-                    </span>
-                    <input
-                      type="text"
-                      autoFocus
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newFolderName.trim()) {
-                          onCreateFolder(newFolderName.trim())
-                          setIsCreatingFolder(false)
-                        } else if (e.key === 'Escape') {
-                          setIsCreatingFolder(false)
-                        }
-                      }}
-                      onBlur={() => {
-                        if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
-                        setIsCreatingFolder(false)
-                      }}
-                      className="manager-inline-input"
-                      placeholder={t.folderName}
-                    />
-                  </span>
-                  <span>--</span>
-                  <span>--</span>
-                  <span>--</span>
-                  <span className="manager-type-badge is-folder">{t.homeFolderType}</span>
-                  <span>--</span>
-                  <span></span>
-                </div>
+                <ManagerInlineFolderRow
+                  afterNameCells={[
+                    '--',
+                    '--',
+                    '--',
+                    <span className="manager-type-badge is-folder" key="type">
+                      {t.homeFolderType}
+                    </span>,
+                    '--',
+                    null
+                  ]}
+                  placeholder={t.folderName}
+                  value={newFolderName}
+                  onChange={setNewFolderName}
+                  onCommit={onCreateFolder}
+                  onDismiss={() => {
+                    setIsCreatingFolder(false)
+                    setNewFolderName('')
+                  }}
+                />
               )}
               {visibleNodes.map((node) => renderNode(node, 0, { includeChildren: !isSearching }))}
               {visibleNodes.length === 0 && !(isCreatingFolder && resolvedActiveFolderId === 'all') && (

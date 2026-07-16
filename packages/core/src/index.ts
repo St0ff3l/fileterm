@@ -844,6 +844,8 @@ export interface FileTermDesktopApi {
   arch: string
   appVersion: string
   appName: string
+  runtimeName: 'Electron' | 'Tauri'
+  runtimeVersion: string
   isDesktop: boolean
   getUpdateStatus(): Promise<AppUpdateStatus>
   checkForUpdates(): Promise<AppUpdateStatus>

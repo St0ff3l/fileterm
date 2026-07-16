@@ -2,7 +2,7 @@
 
 > 2026-07-13 实施更新：本计划的核心交付已落地。SSH MFA、SOCKS5/HTTP 代理、Telnet、Serial、SSH Config 导入、Jump Host、运行时 SSH 隧道、两阶段 JSON 导入/单文件兼容导出，以及 WebDAV 手动同步均已接通。当前文档保留为实现与验收记录；后续仅补真实设备和真实 WebDAV 服务的手工验收结果。
 
-> 范围说明（2026-07-14）：以上完成状态指 Electron 基线实现。Rust/Tauri 对齐进度以 `tauri-migration-progress.md` 为准；其中 SSH 隧道和代理尚未在 Tauri 中完成，FTP/FTPS、Telnet、Serial、Transfer 和 WebDAV 真实同步也仍待迁移。
+> 范围说明（2026-07-16）：Electron 是本计划的基线实现；Rust/Tauri 对齐进度以 `tauri-migration-progress.md` 为准。Tauri 已完成 SSH 代理、Jump Host 和运行时 `-L/-R/-D` 隧道，并补齐 workspace capability 快照，使 renderer 可显示并操作隧道面板；剩余工作以真实服务、实体设备和三平台发行验收为主。
 
 ## 实施完成摘要
 

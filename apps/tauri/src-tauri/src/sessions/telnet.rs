@@ -141,14 +141,10 @@ pub fn start_telnet_worker(
     command_rx: mpsc::Receiver<WorkerCmd>,
     app: AppHandle,
 ) {
+    crate::services::logging::session(&app, "INFO", "telnet", &tab_id, "worker starting");
     tauri::async_runtime::spawn(async move {
         if let Err(error) = run_telnet_worker(&tab_id, &profile, command_rx, &app).await {
-            crate::services::logging::write(
-                &app,
-                "ERROR",
-                "telnet",
-                format!("tab={tab_id} {error}"),
-            );
+            crate::services::logging::session(&app, "ERROR", "telnet", &tab_id, &error);
             emit_terminal_data(&app, &tab_id, &format!("\r\n[Telnet] {error}\r\n")).await;
             set_terminal_state(&app, &tab_id, format!("Telnet error: {error}"), false).await;
         }
@@ -172,6 +168,13 @@ async fn run_telnet_worker(
         .unwrap_or("utf-8")
         .to_string();
     let stream = connect_transport(profile, host, port).await?;
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "telnet",
+        tab_id,
+        format!("connected host={host} port={port}"),
+    );
     let (mut reader, mut writer) = tokio::io::split(stream);
     let mut parser = TelnetParser::new();
     set_terminal_state(app, tab_id, format!("Telnet {host}:{port}"), true).await;
@@ -195,6 +198,7 @@ async fn run_telnet_worker(
                         writer.write_all(&parser.set_size(cols, rows)).await.map_err(|error| error.to_string())?;
                     }
                     Some(WorkerCmd::Disconnect) | None => {
+                        crate::services::logging::session(app, "INFO", "telnet", tab_id, "disconnecting");
                         let _ = writer.shutdown().await;
                         set_terminal_state(app, tab_id, "Telnet disconnected".to_string(), false).await;
                         return Ok(());
@@ -205,6 +209,7 @@ async fn run_telnet_worker(
             read = reader.read(&mut buffer) => {
                 let count = read.map_err(|error| error.to_string())?;
                 if count == 0 {
+                    crate::services::logging::session(app, "WARN", "telnet", tab_id, "remote closed connection");
                     set_terminal_state(app, tab_id, "Telnet disconnected".to_string(), false).await;
                     return Ok(());
                 }

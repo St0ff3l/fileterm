@@ -910,6 +910,17 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
     if task.terminal() || task.status == "paused" {
         return Ok(());
     }
+    crate::services::logging::info(
+        &app,
+        &format!("transfer:{transfer_id}"),
+        format!(
+            "starting direction={} target_type={} name={} total_bytes={}",
+            task.direction,
+            task.target_type.as_deref().unwrap_or("file"),
+            task.name,
+            task.total_bytes.unwrap_or(0)
+        ),
+    );
     let resume_requested = task.message.as_deref() == Some("等待继续传输");
     let profile_id = task
         .profile_id
@@ -1174,6 +1185,20 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
         .await
     };
     state.transfer_controls.write().await.remove(&transfer_id);
+    if result.is_ok() {
+        if let Ok(current) = task_for(&app, &transfer_id).await {
+            crate::services::logging::info(
+                &app,
+                &format!("transfer:{transfer_id}"),
+                format!(
+                    "stopped status={} transferred_bytes={} total_bytes={}",
+                    current.status,
+                    current.transferred_bytes.unwrap_or(0),
+                    current.total_bytes.unwrap_or(0)
+                ),
+            );
+        }
+    }
     result
 }
 
@@ -1541,6 +1566,11 @@ async fn fail_if_running(
     transfer_id: &str,
     error: String,
 ) -> Result<(), AppError> {
+    crate::services::logging::error(
+        app,
+        &format!("transfer:{transfer_id}"),
+        format!("failed error={error}"),
+    );
     let task = task_for(app, transfer_id).await?;
     if matches!(task.status.as_str(), "paused" | "canceled") {
         return Ok(());
@@ -1684,6 +1714,11 @@ pub async fn pause(app: &AppHandle, transfer_id: String) -> Result<(), AppError>
         true,
     )
     .await?;
+    crate::services::logging::warn(
+        app,
+        &format!("transfer:{transfer_id}"),
+        "paused by user",
+    );
     Ok(())
 }
 
@@ -1747,6 +1782,11 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
         true,
     )
     .await?;
+    crate::services::logging::warn(
+        app,
+        &format!("transfer:{transfer_id}"),
+        "canceled by user; cleaning partial data",
+    );
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let cleanup = if let Some(manifest) = task.manifest {
@@ -1859,6 +1899,11 @@ pub async fn resume(app: &AppHandle, transfer_id: String) -> Result<(), AppError
         true,
     )
     .await?;
+    crate::services::logging::info(
+        app,
+        &format!("transfer:{transfer_id}"),
+        "resume queued",
+    );
     start(app.clone(), transfer_id);
     Ok(())
 }
@@ -1891,6 +1936,7 @@ pub async fn shutdown(app: &AppHandle) -> Result<(), AppError> {
         token.cancel();
     }
     let mut tasks = state.transfers.write().await;
+    let active_count = tasks.iter().filter(|task| task.active()).count();
     for task in tasks.iter_mut().filter(|task| task.active()) {
         task.status = if task.resumable { "paused" } else { "canceled" }.to_string();
         task.message = Some("应用退出时已暂停，可手动继续".to_string());
@@ -1898,6 +1944,11 @@ pub async fn shutdown(app: &AppHandle) -> Result<(), AppError> {
         task.updated_at = Some(now_ms());
     }
     drop(tasks);
+    crate::services::logging::info(
+        app,
+        "transfer",
+        format!("shutdown active_tasks={active_count}"),
+    );
     persist(app).await
 }
 

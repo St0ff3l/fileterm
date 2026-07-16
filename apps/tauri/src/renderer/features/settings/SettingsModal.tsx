@@ -67,7 +67,9 @@ export function SettingsModal({
     const platform = desktopApi?.platform ?? 'unknown'
     const arch = desktopApi?.arch ?? 'unknown'
     if (platform === 'darwin') {
-      return arch === 'arm64' ? 'macOS (Apple Silicon)' : 'macOS (Intel)'
+      if (arch === 'arm64') return 'macOS (Apple Silicon)'
+      if (arch === 'x64' || arch === 'x86_64') return 'macOS (Intel)'
+      return `macOS (${arch})`
     }
     if (platform === 'win32') {
       return arch === 'arm64' ? 'Windows (ARM)' : `Windows (${arch})`
@@ -429,8 +431,8 @@ export function SettingsModal({
                     <span className="info-value">v{desktopApi?.appVersion ?? '—'}</span>
                   </div>
                   <div className="about-info-item">
-                    <span className="info-label">Electron</span>
-                    <span className="info-value">v42.4.0</span>
+                    <span className="info-label">{desktopApi?.runtimeName ?? '—'}</span>
+                    <span className="info-value">v{desktopApi?.runtimeVersion ?? '—'}</span>
                   </div>
                   <div className="about-info-item">
                     <span className="info-label">{t.environmentInfo}</span>

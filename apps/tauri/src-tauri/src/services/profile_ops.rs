@@ -266,10 +266,7 @@ pub async fn update_trusted_host_fingerprint(
     profile_id: &str,
     fingerprint: &str,
 ) -> Result<(), AppError> {
-    eprintln!(
-        "[profile-ops] update_trusted_host_fingerprint profile_id='{}' fingerprint='{}'",
-        profile_id, fingerprint
-    );
+    crate::services::logging::info(app, "profile", "saving trusted host fingerprint");
     let app = app.clone();
     let profile_id = profile_id.to_string();
     let fingerprint = fingerprint.to_string();
@@ -288,9 +285,10 @@ pub async fn update_trusted_host_fingerprint(
                 found = true;
             }
         }
-        eprintln!(
-            "[profile-ops] update_trusted_host_fingerprint found_profile={} — writing profiles.json",
-            found
+        crate::services::logging::debug(
+            &app,
+            "profile",
+            format!("trusted host fingerprint profile_found={found}"),
         );
         let stripped: Vec<Value> = profiles.iter().map(strip_secret_fields).collect();
         write_json_array(&app, "profiles.json", &stripped)?;

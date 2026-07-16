@@ -153,6 +153,10 @@ pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySna
     let entries = match fs::read_dir(&root) {
         Ok(e) => e,
         Err(error) => {
+            crate::services::logging::error_global(
+                "local",
+                format!("list failed error={error}"),
+            );
             return Err(AppError::Storage(format!(
                 "Failed to read directory {}: {}",
                 root.display(),
@@ -188,6 +192,11 @@ pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySna
         bf.cmp(&af).then_with(|| a.name.cmp(&b.name))
     });
 
+    crate::services::logging::debug_global(
+        "local",
+        format!("listed directory entries={}", items.len()),
+    );
+
     Ok(DirectorySnapshot {
         path: root.to_string_lossy().to_string(),
         items,
@@ -200,7 +209,14 @@ pub fn app_read_local_file(
     encoding: Option<String>,
 ) -> Result<String, AppError> {
     let enc = encoding.unwrap_or_else(|| "utf-8".to_string());
-    let bytes = fs::read(&file_path).map_err(|e| AppError::Storage(e.to_string()))?;
+    let bytes = fs::read(&file_path).map_err(|error| {
+        crate::services::logging::error_global("local", format!("read failed error={error}"));
+        AppError::Storage(error.to_string())
+    })?;
+    crate::services::logging::debug_global(
+        "local",
+        format!("read file bytes={} encoding={enc}", bytes.len()),
+    );
     Ok(decode_bytes(&bytes, &enc))
 }
 
@@ -215,13 +231,18 @@ pub fn app_write_local_file(
     if let Some(parent) = Path::new(&file_path).parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
-    fs::write(&file_path, bytes).map_err(|e| AppError::Storage(e.to_string()))
+    let byte_count = bytes.len();
+    let result = fs::write(&file_path, bytes).map_err(|e| AppError::Storage(e.to_string()));
+    log_local_result("write file", &result, Some(byte_count));
+    result
 }
 
 #[tauri::command]
 pub fn app_create_local_directory(dir_path: String, name: String) -> Result<(), AppError> {
     let target = Path::new(&dir_path).join(&name);
-    fs::create_dir_all(&target).map_err(|e| AppError::Storage(e.to_string()))
+    let result = fs::create_dir_all(&target).map_err(|e| AppError::Storage(e.to_string()));
+    log_local_result("create directory", &result, None);
+    result
 }
 
 #[tauri::command]
@@ -230,7 +251,9 @@ pub fn app_create_local_file(dir_path: String, name: String) -> Result<(), AppEr
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
-    fs::write(&target, b"").map_err(|e| AppError::Storage(e.to_string()))
+    let result = fs::write(&target, b"").map_err(|e| AppError::Storage(e.to_string()));
+    log_local_result("create file", &result, Some(0));
+    result
 }
 
 #[tauri::command]
@@ -241,7 +264,9 @@ pub fn app_copy_local_path(source_path: String, destination_path: String) -> Res
     if let Some(parent) = Path::new(&destination_path).parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
-    copy_recursive(Path::new(&source_path), Path::new(&destination_path))
+    let result = copy_recursive(Path::new(&source_path), Path::new(&destination_path));
+    log_local_result("copy path", &result, None);
+    result
 }
 
 fn copy_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
@@ -279,7 +304,7 @@ pub fn app_move_local_path(source_path: String, destination_path: String) -> Res
     if let Some(parent) = Path::new(&destination_path).parent() {
         fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
     }
-    match fs::rename(&source_path, &destination_path) {
+    let result = match fs::rename(&source_path, &destination_path) {
         Ok(()) => Ok(()),
         Err(error) => {
             if error.raw_os_error() == Some(18) {
@@ -290,7 +315,9 @@ pub fn app_move_local_path(source_path: String, destination_path: String) -> Res
                 Err(AppError::Storage(error.to_string()))
             }
         }
-    }
+    };
+    log_local_result("move path", &result, None);
+    result
 }
 
 #[tauri::command]
@@ -299,12 +326,32 @@ pub fn app_rename_local_path(target_path: String, new_name: String) -> Result<()
         .parent()
         .ok_or_else(|| AppError::Storage("Cannot rename root".to_string()))?;
     let dest = parent.join(&new_name);
-    fs::rename(&target_path, &dest).map_err(|e| AppError::Storage(e.to_string()))
+    let result = fs::rename(&target_path, &dest).map_err(|e| AppError::Storage(e.to_string()));
+    log_local_result("rename path", &result, None);
+    result
 }
 
 #[tauri::command]
 pub fn app_delete_local_path(target_path: String) -> Result<(), AppError> {
-    remove_path(Path::new(&target_path))
+    let result = remove_path(Path::new(&target_path));
+    log_local_result("delete path", &result, None);
+    result
+}
+
+fn log_local_result(operation: &str, result: &Result<(), AppError>, bytes: Option<usize>) {
+    match result {
+        Ok(()) => crate::services::logging::info_global(
+            "local",
+            bytes.map_or_else(
+                || format!("{operation} completed"),
+                |count| format!("{operation} completed bytes={count}"),
+            ),
+        ),
+        Err(error) => crate::services::logging::error_global(
+            "local",
+            format!("{operation} failed error={error}"),
+        ),
+    }
 }
 
 fn remove_path(p: &Path) -> Result<(), AppError> {

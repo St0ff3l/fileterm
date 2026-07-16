@@ -134,8 +134,8 @@
 | **Profile import/export**  | `services/connection-config-codec.ts`                          | ✅ SSH config/JSON preview + commit、fileterm/compatible 导出。                                                                                                          |
 | **Command history**        | `services/file-profile-repository.ts`                          | ✅ 每 profile 历史与命令发送偏好已持久化。                                                                                                                               |
 | **openLogsDirectory**      | `apps/electron/src/main/main.ts`                               | ✅ Rust command 打开应用日志目录。                                                                                                                                       |
-| **App logger**             | `services/app-logger.ts`                                       | ✅ 轮转本地 app/SSH/协议错误日志，秘密字段脱敏。                                                                                                                         |
-| **SSH debug logger**       | `services/sessions/ssh-debug-logger.ts`                        | ✅ SSH worker 生命周期/错误写入本地日志；不暴露凭据。                                                                                                                    |
+| **App logger**             | `services/app-logger.ts`                                       | ✅ 统一 `DEBUG/INFO/WARN/ERROR`、scope、并发写入、2 MB 轮转和秘密字段脱敏；覆盖应用/窗口、本地文件、更新、WebDAV、profile 与传输状态机。                                 |
+| **SSH debug logger**       | `services/sessions/ssh-debug-logger.ts`                        | ✅ 覆盖 SSH/SFTP、平台探测、资源采集启停与首样本、自动重连、Jump Host、隧道，以及 FTP/Telnet/Serial 生命周期；不记录终端内容、凭据或完整主机指纹。                       |
 | **真实 sshd/FTP 集成测试** | `test/protocol/sftp-resume.test.mjs` 等                        | ⚠️ Electron 的 7 项真实协议测试已通过。Tauri 本地 OpenSSH、FTPS、WebDAV、Telnet 夹具已覆盖 HTTP/SOCKS5、`-L/-D`、ETag 与 hash；Windows/Linux CI 仅已配置，尚未产生结果。 |
 
 ### 2.2 部分实现（需补齐）

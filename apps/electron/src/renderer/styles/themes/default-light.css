@@ -941,7 +941,11 @@
   background: #eef2f7;
 }
 
-:root[data-theme='default-light'] .manager-row.drop-inside,
+:root[data-theme='default-light'] .manager-row.drop-inside {
+  background: var(--selection-bg);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
 :root[data-theme='default-light'] .folder-row {
   background: rgba(148, 163, 184, 0.08);
 }
