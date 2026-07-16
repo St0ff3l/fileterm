@@ -86,6 +86,24 @@ pub struct SessionSnapshot {
     pub connected: bool,
     pub system_metrics: Option<serde_json::Value>,
     pub capabilities: ConnectionCapabilities,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reconnect_mode: Option<String>,
+}
+
+/// Return the reconnect policy that belongs to a persisted connection
+/// profile. Non-SSH sessions do not expose terminal reconnect actions.
+pub fn reconnect_mode_for_profile(profile: &serde_json::Value) -> Option<String> {
+    if profile.get("type").and_then(serde_json::Value::as_str) != Some("ssh") {
+        return None;
+    }
+
+    Some(
+        profile
+            .get("reconnectMode")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("none")
+            .to_string(),
+    )
 }
 
 /// The local endpoint to connect when an SSH server opens a `forwarded-tcpip`
@@ -180,7 +198,7 @@ impl WorkspaceState {
 
 #[cfg(test)]
 mod tests {
-    use super::{ConnectionCapabilities, WorkspaceState};
+    use super::{reconnect_mode_for_profile, ConnectionCapabilities, WorkspaceState};
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
 
@@ -200,6 +218,25 @@ mod tests {
         assert_eq!(value["shellIntegration"], true);
         assert_eq!(value["fileAccess"], true);
         assert_eq!(value["tunnels"], true);
+    }
+
+    #[test]
+    fn reconnect_mode_is_present_only_for_ssh_profiles() {
+        assert_eq!(
+            reconnect_mode_for_profile(&serde_json::json!({
+                "type": "ssh",
+                "reconnectMode": "enter"
+            })),
+            Some("enter".to_string())
+        );
+        assert_eq!(
+            reconnect_mode_for_profile(&serde_json::json!({ "type": "ssh" })),
+            Some("none".to_string())
+        );
+        assert_eq!(
+            reconnect_mode_for_profile(&serde_json::json!({ "type": "ftp", "reconnectMode": "auto" })),
+            None
+        );
     }
 
     #[test]

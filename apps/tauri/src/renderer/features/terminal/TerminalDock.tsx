@@ -63,6 +63,16 @@ export function TerminalDock({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const rootRef = useRef<HTMLElement | null>(null)
   const isReconnectingRef = useRef(false)
+  const reconnectFeedbackTimerRef = useRef<number | null>(null)
+  const [reconnectFeedbackVisible, setReconnectFeedbackVisible] = useState(false)
+
+  useEffect(() => {
+    return () => {
+      if (reconnectFeedbackTimerRef.current !== null) {
+        window.clearTimeout(reconnectFeedbackTimerRef.current)
+      }
+    }
+  }, [])
 
   const persistHistory = async (entries: TerminalCommandHistoryEntry[]) => {
     if (!window.fileterm?.setTerminalCommandHistory) {
@@ -371,6 +381,14 @@ export function TerminalDock({
       event.preventDefault()
       if (!connected && onReconnect && !isReconnectingRef.current) {
         isReconnectingRef.current = true
+        setReconnectFeedbackVisible(true)
+        if (reconnectFeedbackTimerRef.current !== null) {
+          window.clearTimeout(reconnectFeedbackTimerRef.current)
+        }
+        reconnectFeedbackTimerRef.current = window.setTimeout(() => {
+          reconnectFeedbackTimerRef.current = null
+          setReconnectFeedbackVisible(false)
+        }, 1200)
         void Promise.resolve(onReconnect()).finally(() => {
           isReconnectingRef.current = false
         })
@@ -566,7 +584,7 @@ export function TerminalDock({
           <textarea
             ref={inputRef}
             disabled={activeTab.sessionType !== 'ssh'}
-            placeholder={placeholderText}
+            placeholder={reconnectFeedbackVisible ? t.terminalReconnecting : placeholderText}
             rows={1}
             wrap="off"
             value={command}

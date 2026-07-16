@@ -200,6 +200,7 @@ platform probe
 - 主动暂停、标签关闭、连接断开、应用退出和重启恢复都只保留断点并进入 `paused`，不会自动续传；继续传输只能由用户显式触发。
 - 单次传输取消通过 controller 调用参数中的 `AbortSignal` 传播。该信号只属于运行时，不进入 `TransferTask` 或传输日志。
 - 真正退出应用时，Rust backend 必须先等待活动任务停止并刷新 transfer journal，再放行窗口关闭和应用退出；macOS 隐藏窗口不触发 workspace shutdown。
+- Tauri SSH 在同一个已认证 russh transport 上拆分浏览 SFTP 与传输 SFTP channel；传输 channel 失效后按任务重建，服务端拒绝额外 channel 时才回退主 SFTP。FTP/FTPS 则保留一条控制/浏览连接，并为每条上传下载建立独立协议连接，避免大文件数据流阻塞目录操作。
 
 ## 4.4 SSH 终端与文件身份联动
 
@@ -502,10 +503,11 @@ interface WorkspaceTab {
 - 普通断线和暂停保留临时文件；只有显式丢弃才清理断点。
 - 本地最终替换采用可回滚的备份重命名。Windows 文件占用导致替换失败时保留 `.fileterm-part`，避免丢失已传数据。
 - 目录任务持久化逐文件 manifest：已完成文件经过目标大小复核后跳过，当前文件按真实 `.fileterm-part` 长度继续。
-- SFTP root 上传为每个任务持久化一个不可预测的 `/tmp` staging 路径；staging 始终保存源文件从 0 开始的连续前缀，暂停和重启后按实际长度续写，再由 sudo 只提交目标断点尚缺的后缀。普通 SFTP/FTP/FTPS 直接写目标同目录断点。
+- SFTP root 上传为每个任务同时持久化不可预测的 `/tmp` staging 路径和目标同目录 `.fileterm-part`：staging 始终保存源文件从 0 开始的连续前缀，完成校验后由 sudo 移到目标 partial，再校验并替换正式文件。失败恢复优先检查 staging，若 staging 已提交则改查目标 partial。普通 SFTP/FTP/FTPS 直接写目标同目录断点。
 - FTP 上传优先使用 `APPE`，服务器不支持时回退 `REST + STOR`；回退结果不安全时删除断点并从零重传，避免拼接出等长但错误的文件。
 - FTP 安全模式明确区分未加密 FTP、显式 FTPS 和隐式 FTPS。
 - SFTP 可恢复路径保持有序流式写入。并行绝对 offset 会让文件长度无法证明前缀连续，因此在没有持久化范围位图前不用于断点判断。
+- 传输数据通道不得占用目录浏览通道：SSH/SFTP 共享认证 transport 但使用不同 channel，FTP/FTPS 使用独立连接；session 断开时所有传输通道一并终止，由 transfer journal 保留可验证断点。
 
 ## 10. UI 结构
 

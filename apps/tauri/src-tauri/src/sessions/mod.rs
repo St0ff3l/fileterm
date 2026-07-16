@@ -117,6 +117,11 @@ pub enum WorkerCmd {
         destination_path: String,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
+    CommitRemoteStaging {
+        staging_path: String,
+        partial_path: String,
+        respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
+    },
     RemoveRemoteFile {
         path: String,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,

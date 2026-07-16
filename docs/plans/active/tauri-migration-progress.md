@@ -76,6 +76,7 @@
 - ✅ M3.6 host verification + MFA：in-handshake 异步弹窗 + 多轮 OTP
 - ✅ `app_resolve_ssh_interaction` 真实异步接通
 - ✅ 单 SSH session 复用 shell + SFTP + metrics（避免 MaxSessions 限制）
+- ✅ SSH 传输隔离：同一认证 transport 上独立 browse/transfer SFTP channel，传输 channel 故障按任务重建，额外 channel 被服务端拒绝时兼容回退。
 - ✅ echo 重复 bug 修复（worker recv None 退出 + StrictMode 双挂载防护）
 - ✅ Shell setup 注入：POSIX CWD 脚本双重门控（`shell_cwd_setup_for_platform` + `SHELL_CWD_SETUP`/`BUSYBOX_SHELL_CWD_SETUP`）
 - ✅ Transcript 水化：reconnect 保留终端历史（追加分隔符而非重置）
@@ -92,10 +93,11 @@
 
 ### Phase 4：其他协议与 Transfer ⚠️ 实现主体完成，真实服务与设备验收未完成
 
-- ✅ `suppaftp` FTP/FTPS：plain、显式 TLS 与隐式 TLS，文件 CRUD、REST 断点上传/下载、原子 rename 与取消；显式/隐式 TLS 控制与数据通道已由本地真实 TLS 夹具验证。
+- ✅ `suppaftp` FTP/FTPS：plain、显式 TLS 与隐式 TLS，文件 CRUD、APPE 优先并回退 REST+STOR 的断点上传、断点下载、可回滚 rename 与取消；浏览/控制连接和每条传输连接已隔离，显式/隐式 TLS 控制与数据通道已由本地真实 TLS 夹具验证。
 - ✅ Telnet：`tokio::net` transport、RFC 854 IAC/NAWS/TERMINAL-TYPE、SOCKS5/HTTP CONNECT、resize 与退出关闭 socket；直接 socket、HTTP CONNECT 与 SOCKS5 均由真实 TCP 夹具验证，真实设备/第三方代理服务待验收。
 - ✅ Serial：`tokio-serial` 的波特率/数据位/停止位/奇偶校验/硬件/软件流控映射和设备断开处理。`mark/space` parity 受 `serialport` 跨平台 API 限制，会返回明确错误而不静默降级；Linux PTY 已有自动验证，macOS/Windows 仍需要实体或可用虚拟串口。
 - ✅ 统一 TransferService：持久 journal、单文件/目录 manifest、上传/下载、hash/identity 校验、暂停/继续/取消/丢弃、tab 关闭与应用退出清理。
+- ✅ root SFTP 两阶段提交：`/tmp` 任务 staging → 目标同目录 `.fileterm-part` → 正式目标，逐阶段大小校验并兼容迁移旧 journal；正式目标不会直接参与 `/tmp` 跨文件系统移动。
 - ✅ WebDAV：HTTPS 默认、Basic Auth、ETag 前置条件冲突检测、SHA-256 bundle 校验、秘密字段剥离与 5 MB 输入上限；本地 HTTP fixture 已覆盖 HEAD、成功 PUT、GET、`If-Match` 412 和下载 hash 校验。
 - ✅ Electron parity：SSH Config/外部 JSON profile 导入导出、命令历史/发送偏好、文件编辑器关闭确认、跨窗口 UI/最大化事件、CSP、应用/SSH/协议错误本地日志。
 - ✅ 更新检查：GitHub Release 的版本检查与安全发布页交接。签名的应用内静默安装依赖未提供的 Tauri updater 公钥、更新清单与公证资产，保留在 Phase 5 发布前置，不能伪造为已启用。

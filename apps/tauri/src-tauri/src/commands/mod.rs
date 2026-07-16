@@ -945,6 +945,7 @@ pub async fn app_open_profile(
             capabilities: crate::services::workspace::ConnectionCapabilities::for_session_type(
                 profile_type,
             ),
+            reconnect_mode: crate::services::workspace::reconnect_mode_for_profile(profile),
         });
     }
 
@@ -1024,6 +1025,11 @@ pub async fn app_reconnect_tab(
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(&tab_id) {
                     session.connected = false;
+                    session.remote_files_loading = false;
+                    session.shell_user = None;
+                    session.file_access_mode = "user".to_string();
+                    session.has_reusable_sudo_auth = false;
+                    session.reconnect_mode = crate::services::workspace::reconnect_mode_for_profile(profile);
                     // Append a reconnect separator instead of wiping history.
                     if !session.terminal_transcript.is_empty() {
                         session.terminal_transcript.push_str("\r\n--- 重新连接 ---\r\n");
@@ -1042,6 +1048,14 @@ pub async fn app_reconnect_tab(
                     session.remote_files = Vec::new();
                     session.system_metrics = None;
                 }
+            }
+
+            // Renderer-triggered reconnects apply the returned snapshot, but
+            // auto-reconnect is initiated by the worker and has no renderer
+            // caller to apply it. Broadcast the connecting snapshot for both
+            // paths so the terminal/file panes cannot remain on stale state.
+            if let Ok(snapshot) = get_workspace_snapshot(app.clone()).await {
+                let _ = app.emit("workspace:snapshot", snapshot);
             }
 
             let (tx, rx) = mpsc::channel(100);
@@ -1087,6 +1101,13 @@ pub async fn app_disconnect_tab(
 ) -> Result<serde_json::Value, AppError> {
     crate::services::transfers::pause_for_tab(&app, &tab_id, "连接断开，可在重连后继续传输").await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let was_connected = state
+        .sessions
+        .read()
+        .await
+        .get(&tab_id)
+        .map(|session| session.connected)
+        .unwrap_or(false);
     stop_session_worker(&state, &tab_id).await;
     {
         let mut tabs = state.tabs.write().await;
@@ -1096,8 +1117,23 @@ pub async fn app_disconnect_tab(
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&tab_id) {
             session.connected = false;
+            session.remote_files_loading = false;
+            session.remote_files = Vec::new();
+            session.shell_user = None;
+            session.file_access_mode = "user".to_string();
+            session.has_reusable_sudo_auth = false;
+            session.system_metrics = None;
         }
     }
+
+    // Cancelling an SSH worker intentionally suppresses its normal worker
+    // shutdown callback. Emit the same terminal notice/state that a network
+    // disconnect would have emitted, otherwise the renderer only receives a
+    // workspace snapshot and keeps showing the last shell prompt forever.
+    if was_connected {
+        crate::sessions::terminal::emit_terminal_data(&app, &tab_id, "\r\n连接已断开\r\n").await;
+    }
+    crate::sessions::terminal::set_terminal_state(&app, &tab_id, "连接已断开".to_string(), false).await;
     get_workspace_snapshot(app).await
 }
 
@@ -1650,8 +1686,22 @@ pub async fn app_update_profile(
     profile_id: String,
     input: serde_json::Value,
 ) -> Result<serde_json::Value, AppError> {
-    crate::services::profile_ops::update_profile(&app, &profile_id, input)?;
-    get_workspace_snapshot(app).await
+    let profile = crate::services::profile_ops::update_profile(&app, &profile_id, input)?;
+    let reconnect_mode = crate::services::workspace::reconnect_mode_for_profile(&profile);
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let mut sessions = state.sessions.write().await;
+    for session in sessions.values_mut() {
+        if session.profile_id == profile_id {
+            session.reconnect_mode = reconnect_mode.clone();
+        }
+    }
+    drop(sessions);
+    let snapshot = get_workspace_snapshot(app.clone()).await?;
+    // The connection editor may be a separate Tauri window. Keep the main
+    // workspace's active session policy in sync immediately instead of only
+    // returning the snapshot to the window that submitted the form.
+    let _ = app.emit("workspace:snapshot", snapshot.clone());
+    Ok(snapshot)
 }
 
 #[tauri::command]

@@ -570,6 +570,10 @@ export const TerminalView = memo(function TerminalView({
       }
 
       isReconnectingRef.current = true
+      // Give immediate feedback before the IPC call starts. The connection
+      // result may arrive seconds later, so waiting for terminal:state makes
+      // a successful Enter look like a swallowed keypress.
+      terminal.write(`\r\n${t.terminalReconnecting}\r\n`)
       void Promise.resolve(reconnect())
         .catch((cause) => {
           const message = cause instanceof Error ? cause.message : String(cause)

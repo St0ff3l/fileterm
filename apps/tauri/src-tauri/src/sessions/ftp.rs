@@ -96,6 +96,7 @@ async fn run_ftp_worker(
         Some(initial_files),
     )
     .await;
+    let mut transfer_jobs = Vec::new();
 
     loop {
         match command_rx.recv().await {
@@ -200,17 +201,36 @@ async fn run_ftp_worker(
                 cancel,
                 respond_to,
             }) => {
-                let result = client_upload(
-                    &mut client,
-                    &local_path,
-                    &remote_path,
-                    resume_offset,
-                    &transfer_id,
-                    cancel,
-                    app,
-                )
-                .await;
-                let _ = respond_to.send(result);
+                let profile = profile.clone();
+                let host = host.to_string();
+                let app = app.clone();
+                let tab_id = tab_id.to_string();
+                transfer_jobs.push(tauri::async_runtime::spawn(async move {
+                    let result = async {
+                        let mut transfer_client = connect_ftp(&profile, &host, port).await?;
+                        crate::services::logging::session(
+                            &app,
+                            "INFO",
+                            "ftp",
+                            &tab_id,
+                            format!("dedicated upload connection opened transfer={transfer_id}"),
+                        );
+                        let result = client_upload(
+                            &mut transfer_client,
+                            &local_path,
+                            &remote_path,
+                            resume_offset,
+                            &transfer_id,
+                            cancel,
+                            &app,
+                        )
+                        .await;
+                        let _ = client_quit(&mut transfer_client).await;
+                        result
+                    }
+                    .await;
+                    let _ = respond_to.send(result);
+                }));
             }
             Some(WorkerCmd::DownloadRemoteFile {
                 remote_path,
@@ -220,17 +240,36 @@ async fn run_ftp_worker(
                 cancel,
                 respond_to,
             }) => {
-                let result = client_download(
-                    &mut client,
-                    &remote_path,
-                    &local_path,
-                    resume_offset,
-                    &transfer_id,
-                    cancel,
-                    app,
-                )
-                .await;
-                let _ = respond_to.send(result);
+                let profile = profile.clone();
+                let host = host.to_string();
+                let app = app.clone();
+                let tab_id = tab_id.to_string();
+                transfer_jobs.push(tauri::async_runtime::spawn(async move {
+                    let result = async {
+                        let mut transfer_client = connect_ftp(&profile, &host, port).await?;
+                        crate::services::logging::session(
+                            &app,
+                            "INFO",
+                            "ftp",
+                            &tab_id,
+                            format!("dedicated download connection opened transfer={transfer_id}"),
+                        );
+                        let result = client_download(
+                            &mut transfer_client,
+                            &remote_path,
+                            &local_path,
+                            resume_offset,
+                            &transfer_id,
+                            cancel,
+                            &app,
+                        )
+                        .await;
+                        let _ = client_quit(&mut transfer_client).await;
+                        result
+                    }
+                    .await;
+                    let _ = respond_to.send(result);
+                }));
             }
             Some(WorkerCmd::ReplaceRemoteFile {
                 partial_path,
@@ -239,6 +278,11 @@ async fn run_ftp_worker(
             }) => {
                 let _ = respond_to
                     .send(client_replace(&mut client, &partial_path, &destination_path).await);
+            }
+            Some(WorkerCmd::CommitRemoteStaging { respond_to, .. }) => {
+                let _ = respond_to.send(Err(
+                    "FTP 不使用 SSH root staging 提交链路".to_string(),
+                ));
             }
             Some(WorkerCmd::RemoveRemoteFile { path, respond_to }) => {
                 let _ = respond_to.send(client_remove(&mut client, &path).await);
@@ -253,6 +297,9 @@ async fn run_ftp_worker(
             Some(WorkerCmd::WriteTerminal(_)) | Some(WorkerCmd::ResizeTerminal { .. }) => {}
             Some(WorkerCmd::Disconnect) | None => {
                 crate::services::logging::session(app, "INFO", "ftp", tab_id, "disconnecting");
+                for job in transfer_jobs {
+                    job.abort();
+                }
                 let _ = client_quit(&mut client).await;
                 set_ftp_state(
                     app,
@@ -468,7 +515,7 @@ async fn client_upload(
     cancel: tokio_util::sync::CancellationToken,
     app: &AppHandle,
 ) -> Result<(), String> {
-    ftp_match!(client, ftp => upload_file(ftp, local_path, remote_path, resume_offset, transfer_id, cancel, app))
+    ftp_match!(client, ftp => upload_file(ftp, local_path, remote_path, resume_offset, transfer_id, cancel, Some(app)))
 }
 
 async fn client_download(
@@ -858,7 +905,7 @@ async fn upload_file<T: TokioTlsStream + Send + 'static>(
     resume_offset: u64,
     transfer_id: &str,
     cancel: tokio_util::sync::CancellationToken,
-    app: &AppHandle,
+    app: Option<&AppHandle>,
 ) -> Result<(), String> {
     let total = tokio::fs::metadata(local_path)
         .await
@@ -871,40 +918,82 @@ async fn upload_file<T: TokioTlsStream + Send + 'static>(
     let mut local = tokio::fs::File::open(local_path)
         .await
         .map_err(|error| error.to_string())?;
-    local
-        .seek(std::io::SeekFrom::Start(resume_offset))
-        .await
-        .map_err(|error| error.to_string())?;
-    if resume_offset > 0 {
-        ftp.resume_transfer(resume_offset as usize)
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut attempt_offset = resume_offset;
+    let mut rebuilt_from_zero = false;
+
+    loop {
+        local
+            .seek(std::io::SeekFrom::Start(attempt_offset))
             .await
             .map_err(|error| error.to_string())?;
-    }
-    let mut stream = ftp
-        .put_with_stream(remote_path)
-        .await
-        .map_err(|error| error.to_string())?;
-    let mut buffer = vec![0_u8; 64 * 1024];
-    let mut transferred = resume_offset;
-    crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
-    loop {
-        let count = tokio::select! {
-            _ = cancel.cancelled() => { let _ = ftp.abort(stream).await; return Err(TRANSFER_CANCELED.to_string()); }
-            result = local.read(&mut buffer) => result.map_err(|error| error.to_string())?,
+        let mut stream = if attempt_offset > 0 {
+            match ftp.append_with_stream(remote_path).await {
+                Ok(stream) => stream,
+                Err(append_error) => {
+                    ftp.resume_transfer(attempt_offset as usize)
+                        .await
+                        .map_err(|rest_error| {
+                            format!(
+                                "FTP 续传失败：APPE={append_error}；REST={rest_error}"
+                            )
+                        })?;
+                    ftp.put_with_stream(remote_path).await.map_err(|stor_error| {
+                        format!(
+                            "FTP 续传失败：APPE={append_error}；REST+STOR={stor_error}"
+                        )
+                    })?
+                }
+            }
+        } else {
+            ftp.put_with_stream(remote_path)
+                .await
+                .map_err(|error| error.to_string())?
         };
-        if count == 0 {
-            break;
+        let mut transferred = attempt_offset;
+        if let Some(app) = app {
+            crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
         }
-        tokio::select! {
-            _ = cancel.cancelled() => { let _ = ftp.abort(stream).await; return Err(TRANSFER_CANCELED.to_string()); }
-            result = stream.write_all(&buffer[..count]) => result.map_err(|error| error.to_string())?,
+        loop {
+            let count = tokio::select! {
+                _ = cancel.cancelled() => { let _ = ftp.abort(stream).await; return Err(TRANSFER_CANCELED.to_string()); }
+                result = local.read(&mut buffer) => result.map_err(|error| error.to_string())?,
+            };
+            if count == 0 {
+                break;
+            }
+            tokio::select! {
+                _ = cancel.cancelled() => { let _ = ftp.abort(stream).await; return Err(TRANSFER_CANCELED.to_string()); }
+                result = stream.write_all(&buffer[..count]) => result.map_err(|error| error.to_string())?,
+            }
+            transferred += count as u64;
+            if let Some(app) = app {
+                crate::services::transfers::report_progress(app, transfer_id, transferred, total)
+                    .await;
+            }
         }
-        transferred += count as u64;
-        crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+        ftp.finalize_put_stream(stream)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        let uploaded_size = ftp.size(remote_path).await.map_err(|error| {
+            format!("FTP 上传后无法校验断点大小: {error}")
+        })? as u64;
+        if uploaded_size == total {
+            return Ok(());
+        }
+        if attempt_offset == 0 || rebuilt_from_zero {
+            return Err(format!(
+                "FTP 上传校验失败：远端 {uploaded_size} bytes，期望 {total}"
+            ));
+        }
+
+        ftp.rm(remote_path)
+            .await
+            .map_err(|error| format!("FTP 续传结果不可信，且无法删除断点: {error}"))?;
+        attempt_offset = 0;
+        rebuilt_from_zero = true;
     }
-    ftp.finalize_put_stream(stream)
-        .await
-        .map_err(|error| error.to_string())
 }
 
 async fn download_file<T: TokioTlsStream + Send + 'static>(
@@ -979,20 +1068,26 @@ async fn replace_file<T: TokioTlsStream + Send>(
     destination: &str,
 ) -> Result<(), String> {
     let backup = format!("{destination}.fileterm-backup-{}", uuid::Uuid::new_v4());
-    let moved_destination = match ftp.size(destination).await {
-        Ok(_) => {
-            ftp.rename(destination, backup.as_str())
-                .await
-                .map_err(|error| error.to_string())?;
-            true
-        }
-        Err(_) => false,
+    let moved_destination = match ftp.rename(destination, backup.as_str()).await {
+        Ok(()) => true,
+        Err(rename_error) => match ftp.size(destination).await {
+            Ok(_) => {
+                return Err(format!(
+                    "FTP 无法备份现有目标文件，已保留断点：{rename_error}"
+                ));
+            }
+            Err(_) => false,
+        },
     };
     if let Err(error) = ftp.rename(partial, destination).await {
         if moved_destination {
-            let _ = ftp.rename(backup.as_str(), destination).await;
+            if let Err(rollback_error) = ftp.rename(backup.as_str(), destination).await {
+                return Err(format!(
+                    "FTP 文件替换失败，旧文件保留在 {backup}：{error}；回滚失败：{rollback_error}"
+                ));
+            }
         }
-        return Err(error.to_string());
+        return Err(format!("FTP 文件替换失败，断点已保留：{error}"));
     }
     if moved_destination {
         let _ = ftp.rm(backup).await;
@@ -1038,7 +1133,7 @@ mod tests {
     use super::{
         client_list, client_quit, client_read, client_write, connect_ftp,
         connect_ftp_with_tls_connector, ftp_listing_permission, join_remote_path,
-        parent_remote_path, parse_ftp_listing_line, FtpListingState,
+        parent_remote_path, parse_ftp_listing_line, upload_file, FtpClient, FtpListingState,
     };
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
     use tokio::net::TcpListener;
@@ -1162,6 +1257,163 @@ mod tests {
                 _ => writer.write_all(b"200 OK\r\n").await.unwrap(),
             }
         }
+    }
+
+    async fn run_resumable_upload_server(
+        listener: TcpListener,
+        supports_appe: bool,
+        stored: Arc<Mutex<Vec<u8>>>,
+        commands: Arc<Mutex<Vec<String>>>,
+    ) {
+        let (control, _) = listener.accept().await.unwrap();
+        let (reader, mut writer) = control.into_split();
+        let mut reader = BufReader::new(reader);
+        let mut data_listener = None;
+        let mut rest_offset = 0_usize;
+        writer
+            .write_all(b"220 FileTerm resumable upload fixture\r\n")
+            .await
+            .unwrap();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if reader.read_line(&mut line).await.unwrap() == 0 {
+                return;
+            }
+            let command = line.trim_end_matches(['\r', '\n']);
+            let (verb, argument) = command.split_once(' ').unwrap_or((command, ""));
+            let verb = verb.to_ascii_uppercase();
+            commands.lock().await.push(verb.clone());
+            match verb.as_str() {
+                "USER" => writer.write_all(b"331 Password required\r\n").await.unwrap(),
+                "PASS" => writer.write_all(b"230 Logged in\r\n").await.unwrap(),
+                "TYPE" | "OPTS" => writer.write_all(b"200 OK\r\n").await.unwrap(),
+                "EPSV" | "PASV" => {
+                    let data = TcpListener::bind("127.0.0.1:0").await.unwrap();
+                    let data_port = data.local_addr().unwrap().port();
+                    data_listener = Some(data);
+                    let response = if verb == "EPSV" {
+                        format!("229 Entering Extended Passive Mode (|||{data_port}|)\r\n")
+                    } else {
+                        format!(
+                            "227 Entering Passive Mode (127,0,0,1,{},{})\r\n",
+                            data_port / 256,
+                            data_port % 256
+                        )
+                    };
+                    writer.write_all(response.as_bytes()).await.unwrap();
+                }
+                "APPE" if supports_appe => {
+                    assert_eq!(argument, "/resume.bin");
+                    writer.write_all(b"150 Opening data connection\r\n").await.unwrap();
+                    let (mut data, _) = data_listener.take().unwrap().accept().await.unwrap();
+                    let mut suffix = Vec::new();
+                    data.read_to_end(&mut suffix).await.unwrap();
+                    stored.lock().await.extend_from_slice(&suffix);
+                    writer.write_all(b"226 Transfer complete\r\n").await.unwrap();
+                }
+                "APPE" => {
+                    let _ = data_listener.take().unwrap().accept().await.unwrap();
+                    writer.write_all(b"502 APPE unsupported\r\n").await.unwrap();
+                }
+                "REST" => {
+                    rest_offset = argument.parse().unwrap();
+                    writer.write_all(b"350 Restarting at offset\r\n").await.unwrap();
+                }
+                "STOR" => {
+                    assert_eq!(argument, "/resume.bin");
+                    writer.write_all(b"150 Opening data connection\r\n").await.unwrap();
+                    let (mut data, _) = data_listener.take().unwrap().accept().await.unwrap();
+                    let mut suffix = Vec::new();
+                    data.read_to_end(&mut suffix).await.unwrap();
+                    let mut bytes = stored.lock().await;
+                    bytes.truncate(rest_offset);
+                    bytes.extend_from_slice(&suffix);
+                    rest_offset = 0;
+                    writer.write_all(b"226 Transfer complete\r\n").await.unwrap();
+                }
+                "SIZE" => {
+                    let size = stored.lock().await.len();
+                    writer
+                        .write_all(format!("213 {size}\r\n").as_bytes())
+                        .await
+                        .unwrap();
+                }
+                "DELE" => {
+                    stored.lock().await.clear();
+                    writer.write_all(b"250 Deleted\r\n").await.unwrap();
+                }
+                "QUIT" => {
+                    writer.write_all(b"221 Goodbye\r\n").await.unwrap();
+                    return;
+                }
+                _ => writer.write_all(b"200 OK\r\n").await.unwrap(),
+            }
+        }
+    }
+
+    async fn assert_resumable_upload_strategy(supports_appe: bool) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let stored = Arc::new(Mutex::new(b"abc".to_vec()));
+        let commands = Arc::new(Mutex::new(Vec::new()));
+        let server = tokio::spawn(run_resumable_upload_server(
+            listener,
+            supports_appe,
+            stored.clone(),
+            commands.clone(),
+        ));
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-ftp-resume-{}",
+            uuid::Uuid::new_v4()
+        ));
+        tokio::fs::create_dir_all(&root).await.unwrap();
+        let source = root.join("resume.bin");
+        tokio::fs::write(&source, b"abcdef").await.unwrap();
+        let profile = serde_json::json!({
+            "type": "ftp", "username": "test", "password": "test", "securityMode": "none"
+        });
+        let mut client = connect_ftp(&profile, "127.0.0.1", port).await.unwrap();
+        match &mut client {
+            FtpClient::Plain(ftp) => upload_file(
+                ftp,
+                source.to_str().unwrap(),
+                "/resume.bin",
+                3,
+                "transfer-test",
+                tokio_util::sync::CancellationToken::new(),
+                None,
+            )
+            .await
+            .unwrap(),
+            FtpClient::Secure(_) => panic!("plain fixture returned a secure client"),
+        }
+        client_quit(&mut client).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(*stored.lock().await, b"abcdef");
+
+        let commands = commands.lock().await;
+        let appe = commands.iter().position(|command| command == "APPE").unwrap();
+        if supports_appe {
+            assert!(!commands.iter().any(|command| command == "REST"));
+            assert!(!commands.iter().any(|command| command == "STOR"));
+        } else {
+            let rest = commands.iter().position(|command| command == "REST").unwrap();
+            let stor = commands.iter().position(|command| command == "STOR").unwrap();
+            assert!(appe < rest && rest < stor);
+        }
+        assert!(commands.iter().any(|command| command == "SIZE"));
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn resumable_upload_prefers_appe_and_verifies_size() {
+        assert_resumable_upload_strategy(true).await;
+    }
+
+    #[tokio::test]
+    async fn resumable_upload_falls_back_to_rest_and_stor() {
+        assert_resumable_upload_strategy(false).await;
     }
 
     #[cfg(unix)]

@@ -28,6 +28,8 @@ pub struct TransferManifestEntry {
     pub source_path: String,
     pub destination_path: String,
     pub partial_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staging_path: Option<String>,
     pub source_identity: TransferFileIdentity,
     pub status: String,
     pub transferred_bytes: u64,
@@ -73,6 +75,8 @@ pub struct TransferTask {
     pub destination_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub partial_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staging_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_identity: Option<TransferFileIdentity>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -155,6 +159,40 @@ fn root_staging_path(name: &str) -> String {
     )
 }
 
+fn normalize_root_upload_staging(task: &mut TransferTask) {
+    if task.direction != "upload" || task.file_access_mode.as_deref() != Some("root") {
+        return;
+    }
+
+    if let (Some(destination), Some(current_partial)) =
+        (task.destination_path.as_deref(), task.partial_path.clone())
+    {
+        if task.staging_path.is_none() {
+            task.staging_path = Some(if current_partial.starts_with("/tmp/fileterm-root-upload-") {
+                current_partial
+            } else {
+                root_staging_path(&task.name)
+            });
+        }
+        task.partial_path = Some(partial_path(destination));
+    }
+
+    if let Some(manifest) = task.manifest.as_mut() {
+        for entry in &mut manifest.files {
+            if entry.staging_path.is_none() {
+                entry.staging_path = Some(
+                    if entry.partial_path.starts_with("/tmp/fileterm-root-upload-") {
+                        entry.partial_path.clone()
+                    } else {
+                        root_staging_path(&entry.relative_path)
+                    },
+                );
+            }
+            entry.partial_path = partial_path(&entry.destination_path);
+        }
+    }
+}
+
 fn journal_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), AppError> {
     let path = crate::storage::workspace_file(app, "transfer-journal.json")?;
     Ok((
@@ -204,6 +242,7 @@ fn read_journal(app: &AppHandle) -> Result<Vec<TransferTask>, AppError> {
             continue;
         }
         for task in &mut journal.transfers {
+            normalize_root_upload_staging(task);
             if task.active() {
                 task.status = if task.resumable { "paused" } else { "canceled" }.to_string();
                 task.message = Some(if task.resumable {
@@ -365,6 +404,160 @@ async fn worker_call<T>(
         .await
         .map_err(|_| transfer_error("传输会话未返回结果"))?
         .map_err(transfer_error)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct RemoteUploadPlan {
+    upload_path: String,
+    resume_offset: u64,
+    upload_needed: bool,
+    partial_ready: bool,
+}
+
+async fn stat_remote_transfer_size(
+    app: &AppHandle,
+    tab_id: &str,
+    path: &str,
+) -> Result<Option<u64>, AppError> {
+    worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
+        path: path.to_string(),
+        respond_to,
+    })
+    .await
+    .map(|stat| stat.map(|value| value.size))
+}
+
+async fn remove_remote_transfer_file(
+    app: &AppHandle,
+    tab_id: &str,
+    path: &str,
+) -> Result<(), AppError> {
+    worker_call(app, tab_id, |respond_to| WorkerCmd::RemoveRemoteFile {
+        path: path.to_string(),
+        respond_to,
+    })
+    .await
+}
+
+async fn stat_remote_upload_progress(
+    app: &AppHandle,
+    tab_id: &str,
+    partial_path: &str,
+    staging_path: Option<&str>,
+) -> Option<u64> {
+    if let Some(staging_path) = staging_path {
+        if let Some(size) = stat_remote_transfer_size(app, tab_id, staging_path)
+            .await
+            .ok()
+            .flatten()
+        {
+            return Some(size);
+        }
+    }
+    stat_remote_transfer_size(app, tab_id, partial_path)
+        .await
+        .ok()
+        .flatten()
+}
+
+async fn remove_remote_upload_artifacts(
+    app: &AppHandle,
+    tab_id: &str,
+    partial_path: &str,
+    staging_path: Option<&str>,
+) -> Result<(), AppError> {
+    remove_remote_transfer_file(app, tab_id, partial_path).await?;
+    if let Some(staging_path) = staging_path {
+        remove_remote_transfer_file(app, tab_id, staging_path).await?;
+    }
+    Ok(())
+}
+
+async fn prepare_remote_upload(
+    app: &AppHandle,
+    tab_id: &str,
+    partial_path: &str,
+    staging_path: Option<&str>,
+    source_size: u64,
+) -> Result<RemoteUploadPlan, AppError> {
+    if let Some(staging_path) = staging_path {
+        let partial_size = stat_remote_transfer_size(app, tab_id, partial_path).await?;
+        if partial_size == Some(source_size) {
+            return Ok(RemoteUploadPlan {
+                upload_path: staging_path.to_string(),
+                resume_offset: source_size,
+                upload_needed: false,
+                partial_ready: true,
+            });
+        }
+        if partial_size.is_some() {
+            remove_remote_transfer_file(app, tab_id, partial_path).await?;
+        }
+
+        let staging_size = stat_remote_transfer_size(app, tab_id, staging_path).await?;
+        let resume_offset = staging_size.unwrap_or(0);
+        if resume_offset > source_size {
+            return Err(transfer_error(
+                "root staging 大于源文件，请丢弃断点后重新传输",
+            ));
+        }
+        return Ok(RemoteUploadPlan {
+            upload_path: staging_path.to_string(),
+            resume_offset,
+            upload_needed: staging_size != Some(source_size),
+            partial_ready: false,
+        });
+    }
+
+    let partial_size = stat_remote_transfer_size(app, tab_id, partial_path).await?;
+    let resume_offset = partial_size.unwrap_or(0);
+    if resume_offset > source_size {
+        return Err(transfer_error(
+            "断点文件大于源文件，请丢弃断点后重新传输",
+        ));
+    }
+    Ok(RemoteUploadPlan {
+        upload_path: partial_path.to_string(),
+        resume_offset,
+        upload_needed: partial_size != Some(source_size),
+        partial_ready: partial_size == Some(source_size),
+    })
+}
+
+async fn finalize_remote_upload(
+    app: &AppHandle,
+    tab_id: &str,
+    partial_path: &str,
+    staging_path: Option<&str>,
+    destination_path: &str,
+    source_size: u64,
+    partial_ready: bool,
+) -> Result<(), AppError> {
+    if let Some(staging_path) = staging_path {
+        if !partial_ready {
+            worker_call(app, tab_id, |respond_to| WorkerCmd::CommitRemoteStaging {
+                staging_path: staging_path.to_string(),
+                partial_path: partial_path.to_string(),
+                respond_to,
+            })
+            .await?;
+        }
+        let committed_size = stat_remote_transfer_size(app, tab_id, partial_path)
+            .await?
+            .unwrap_or(0);
+        if committed_size != source_size {
+            return Err(transfer_error(format!(
+                "root 目标目录断点校验失败：{committed_size} bytes，期望 {source_size}"
+            )));
+        }
+    }
+
+    worker_call(app, tab_id, |respond_to| WorkerCmd::ReplaceRemoteFile {
+        partial_path: partial_path.to_string(),
+        destination_path: destination_path.to_string(),
+        respond_to,
+    })
+    .await
 }
 
 async fn find_connected_tab(app: &AppHandle, profile_id: &str) -> Option<String> {
@@ -636,16 +829,15 @@ pub async fn create_upload(
                     .to_string_lossy()
                     .replace('\\', "/");
                 let entry_destination = join_remote_path(&destination_path, &relative_path);
-                let entry_partial = if file_access_mode == "root" {
-                    root_staging_path(&task_id)
-                } else {
-                    partial_path(&entry_destination)
-                };
+                let entry_partial = partial_path(&entry_destination);
+                let entry_staging = (file_access_mode == "root")
+                    .then(|| root_staging_path(&relative_path));
                 TransferManifestEntry {
                     relative_path,
                     source_path: source.to_string_lossy().into_owned(),
                     destination_path: entry_destination,
                     partial_path: entry_partial,
+                    staging_path: entry_staging,
                     source_identity,
                     status: "pending".to_string(),
                     transferred_bytes: 0,
@@ -677,6 +869,7 @@ pub async fn create_upload(
             source_path: Some(local_path),
             destination_path: Some(destination_path),
             partial_path: None,
+            staging_path: None,
             source_identity: None,
             manifest: Some(manifest),
             resumable: true,
@@ -692,11 +885,8 @@ pub async fn create_upload(
     if !metadata.is_file() {
         return Err(transfer_error("仅支持上传普通文件或目录"));
     }
-    let partial = if file_access_mode == "root" {
-        root_staging_path(&name)
-    } else {
-        partial_path(&destination_path)
-    };
+    let partial = partial_path(&destination_path);
+    let staging = (file_access_mode == "root").then(|| root_staging_path(&name));
     let now = now_ms();
     let task = TransferTask {
         id: format!("transfer-{}", uuid::Uuid::new_v4()),
@@ -715,6 +905,7 @@ pub async fn create_upload(
         target_type: Some("file".to_string()),
         source_path: Some(local_path),
         partial_path: Some(partial),
+        staging_path: staging,
         destination_path: Some(destination_path),
         source_identity: Some(TransferFileIdentity {
             size: metadata.len(),
@@ -787,6 +978,7 @@ pub async fn create_download(
         target_type: Some("file".to_string()),
         source_path: Some(remote_path),
         partial_path: Some(partial_path(&destination_path)),
+        staging_path: None,
         destination_path: Some(destination_path),
         source_identity: Some(TransferFileIdentity {
             size: size.size,
@@ -852,6 +1044,7 @@ pub async fn create_download_directory(
                 relative_path,
                 source_path,
                 partial_path: partial_path(&destination_path),
+                staging_path: None,
                 destination_path,
                 source_identity,
                 status: "pending".to_string(),
@@ -884,6 +1077,7 @@ pub async fn create_download_directory(
         source_path: Some(remote_path),
         destination_path: Some(destination_root.to_string_lossy().into_owned()),
         partial_path: None,
+        staging_path: None,
         source_identity: None,
         manifest: Some(manifest),
         resumable: true,
@@ -933,15 +1127,24 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
             .ok_or_else(|| transfer_error("请先连接原传输使用的连接"))?,
     };
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    if !state
+    let (connected, current_file_access_mode) = state
         .sessions
         .read()
         .await
         .get(&tab_id)
-        .map(|session| session.connected)
-        .unwrap_or(false)
-    {
+        .map(|session| (session.connected, session.file_access_mode.clone()))
+        .unwrap_or_else(|| (false, "user".to_string()));
+    if !connected {
         return Err(transfer_error("连接已断开，可在重连后继续传输"));
+    }
+    if task
+        .file_access_mode
+        .as_deref()
+        .is_some_and(|expected| expected != current_file_access_mode)
+    {
+        return Err(transfer_error(
+            "文件访问权限模式已变化，请切换回创建任务时的视图后再传输",
+        ));
     }
     let cancel = CancellationToken::new();
     state
@@ -987,6 +1190,7 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
                 .partial_path
                 .clone()
                 .ok_or_else(|| transfer_error("传输任务缺少断点路径"))?;
+            let staging = task.staging_path.clone();
             let source_size = if task.direction == "upload" {
                 let metadata = tokio::fs::metadata(&source_path)
                     .await
@@ -1038,23 +1242,33 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
             };
             if !resume_requested {
                 if task.direction == "upload" {
-                    worker_call(&app, &tab_id, |respond_to| WorkerCmd::RemoveRemoteFile {
-                        path: partial.clone(),
-                        respond_to,
-                    })
+                    remove_remote_upload_artifacts(
+                        &app,
+                        &tab_id,
+                        &partial,
+                        staging.as_deref(),
+                    )
                     .await?;
                 } else {
                     let _ = tokio::fs::remove_file(&partial).await;
                 }
             }
-            let offset = if task.direction == "upload" {
-                worker_call(&app, &tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                    path: partial.clone(),
-                    respond_to,
-                })
-                .await?
-                .map(|stat| stat.size)
-                .unwrap_or(0)
+            let upload_plan = if task.direction == "upload" {
+                Some(
+                    prepare_remote_upload(
+                        &app,
+                        &tab_id,
+                        &partial,
+                        staging.as_deref(),
+                        source_size,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+            let offset = if let Some(plan) = upload_plan.as_ref() {
+                plan.resume_offset
             } else {
                 tokio::fs::metadata(&partial)
                     .await
@@ -1086,15 +1300,18 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
             )
             .await?;
             if task.direction == "upload" {
-                worker_call(&app, &tab_id, |respond_to| WorkerCmd::UploadLocalFile {
-                    local_path: source_path,
-                    remote_path: partial.clone(),
-                    resume_offset: offset,
-                    transfer_id: transfer_id.clone(),
-                    cancel: cancel.clone(),
-                    respond_to,
-                })
-                .await?;
+                let plan = upload_plan.as_ref().expect("upload plan exists");
+                if plan.upload_needed {
+                    worker_call(&app, &tab_id, |respond_to| WorkerCmd::UploadLocalFile {
+                        local_path: source_path,
+                        remote_path: plan.upload_path.clone(),
+                        resume_offset: offset,
+                        transfer_id: transfer_id.clone(),
+                        cancel: cancel.clone(),
+                        respond_to,
+                    })
+                    .await?;
+                }
             } else {
                 if let Some(parent) = Path::new(&partial).parent() {
                     tokio::fs::create_dir_all(parent)
@@ -1127,13 +1344,14 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
             )
             .await?;
             let completed_size = if task.direction == "upload" {
-                worker_call(&app, &tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                    path: partial.clone(),
-                    respond_to,
-                })
-                .await?
-                .map(|stat| stat.size)
-                .unwrap_or(0)
+                let plan = upload_plan.as_ref().expect("upload plan exists");
+                if plan.partial_ready {
+                    source_size
+                } else {
+                    stat_remote_transfer_size(&app, &tab_id, &plan.upload_path)
+                        .await?
+                        .unwrap_or(0)
+                }
             } else {
                 tokio::fs::metadata(&partial)
                     .await
@@ -1156,11 +1374,18 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
             )
             .await?;
             if task.direction == "upload" {
-                worker_call(&app, &tab_id, |respond_to| WorkerCmd::ReplaceRemoteFile {
-                    partial_path: partial,
-                    destination_path,
-                    respond_to,
-                })
+                finalize_remote_upload(
+                    &app,
+                    &tab_id,
+                    &partial,
+                    staging.as_deref(),
+                    &destination_path,
+                    source_size,
+                    upload_plan
+                        .as_ref()
+                        .expect("upload plan exists")
+                        .partial_ready,
+                )
                 .await?;
             } else {
                 replace_local_file(Path::new(&partial), Path::new(&destination_path)).await?;
@@ -1180,6 +1405,15 @@ async fn run(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
                 true,
             )
             .await?;
+            if task.direction == "upload" {
+                if let Err(error) = refresh_remote_listing(&app, &tab_id).await {
+                    crate::services::logging::warn(
+                        &app,
+                        &format!("transfer:{transfer_id}"),
+                        format!("upload completed but remote listing refresh failed: {error}"),
+                    );
+                }
+            }
             Ok(())
         }
         .await
@@ -1285,6 +1519,9 @@ async fn refresh_remote_listing(app: &AppHandle, tab_id: &str) -> Result<(), App
     {
         session.remote_files = files;
     }
+    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+        let _ = app.emit("workspace:snapshot", snapshot);
+    }
     Ok(())
 }
 
@@ -1305,10 +1542,12 @@ async fn run_directory_transfer(
     if !resume_requested {
         for entry in &mut manifest.files {
             if task.direction == "upload" {
-                worker_call(app, tab_id, |respond_to| WorkerCmd::RemoveRemoteFile {
-                    path: entry.partial_path.clone(),
-                    respond_to,
-                })
+                remove_remote_upload_artifacts(
+                    app,
+                    tab_id,
+                    &entry.partial_path,
+                    entry.staging_path.as_deref(),
+                )
                 .await?;
             } else {
                 let _ = tokio::fs::remove_file(&entry.partial_path).await;
@@ -1402,14 +1641,22 @@ async fn run_directory_transfer(
             }
         }
 
-        let offset = if task.direction == "upload" {
-            worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                path: entry.partial_path.clone(),
-                respond_to,
-            })
-            .await?
-            .map(|value| value.size)
-            .unwrap_or(0)
+        let upload_plan = if task.direction == "upload" {
+            Some(
+                prepare_remote_upload(
+                    app,
+                    tab_id,
+                    &entry.partial_path,
+                    entry.staging_path.as_deref(),
+                    entry.source_identity.size,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        let offset = if let Some(plan) = upload_plan.as_ref() {
+            plan.resume_offset
         } else {
             stat_local_transfer_file(&entry.partial_path)
                 .await
@@ -1440,15 +1687,18 @@ async fn run_directory_transfer(
         .await?;
 
         if task.direction == "upload" {
-            worker_call(app, tab_id, |respond_to| WorkerCmd::UploadLocalFile {
-                local_path: entry.source_path.clone(),
-                remote_path: entry.partial_path.clone(),
-                resume_offset: offset,
-                transfer_id: transfer_id.to_string(),
-                cancel: cancel.clone(),
-                respond_to,
-            })
-            .await?;
+            let plan = upload_plan.as_ref().expect("upload plan exists");
+            if plan.upload_needed {
+                worker_call(app, tab_id, |respond_to| WorkerCmd::UploadLocalFile {
+                    local_path: entry.source_path.clone(),
+                    remote_path: plan.upload_path.clone(),
+                    resume_offset: offset,
+                    transfer_id: transfer_id.to_string(),
+                    cancel: cancel.clone(),
+                    respond_to,
+                })
+                .await?;
+            }
         } else {
             if let Some(parent) = Path::new(&entry.partial_path).parent() {
                 tokio::fs::create_dir_all(parent)
@@ -1470,13 +1720,14 @@ async fn run_directory_transfer(
         }
 
         let completed_size = if task.direction == "upload" {
-            worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                path: entry.partial_path.clone(),
-                respond_to,
-            })
-            .await?
-            .map(|value| value.size)
-            .unwrap_or(0)
+            let plan = upload_plan.as_ref().expect("upload plan exists");
+            if plan.partial_ready {
+                entry.source_identity.size
+            } else {
+                stat_remote_transfer_size(app, tab_id, &plan.upload_path)
+                    .await?
+                    .unwrap_or(0)
+            }
         } else {
             stat_local_transfer_file(&entry.partial_path)
                 .await
@@ -1502,11 +1753,18 @@ async fn run_directory_transfer(
         )
         .await?;
         if task.direction == "upload" {
-            worker_call(app, tab_id, |respond_to| WorkerCmd::ReplaceRemoteFile {
-                partial_path: entry.partial_path.clone(),
-                destination_path: entry.destination_path.clone(),
-                respond_to,
-            })
+            finalize_remote_upload(
+                app,
+                tab_id,
+                &entry.partial_path,
+                entry.staging_path.as_deref(),
+                &entry.destination_path,
+                entry.source_identity.size,
+                upload_plan
+                    .as_ref()
+                    .expect("upload plan exists")
+                    .partial_ready,
+            )
             .await?;
         } else {
             replace_local_file(
@@ -1584,16 +1842,13 @@ async fn fail_if_running(
         {
             let partial_size = if task.direction == "upload" {
                 match task.tab_id.as_deref() {
-                    Some(tab_id) => {
-                        worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                            path: entry.partial_path.clone(),
-                            respond_to,
-                        })
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|stat| stat.size)
-                    }
+                    Some(tab_id) => stat_remote_upload_progress(
+                        app,
+                        tab_id,
+                        &entry.partial_path,
+                        entry.staging_path.as_deref(),
+                    )
+                    .await,
                     None => None,
                 }
             } else {
@@ -1638,15 +1893,15 @@ async fn fail_if_running(
         return Ok(());
     }
     let partial_size = if task.direction == "upload" {
-        if let (Some(tab_id), Some(partial)) = (task.tab_id.clone(), task.partial_path.clone()) {
-            worker_call(app, &tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                path: partial,
-                respond_to,
-            })
+        if let (Some(tab_id), Some(partial)) = (task.tab_id.as_deref(), task.partial_path.as_deref())
+        {
+            stat_remote_upload_progress(
+                app,
+                tab_id,
+                partial,
+                task.staging_path.as_deref(),
+            )
             .await
-            .ok()
-            .flatten()
-            .map(|stat| stat.size)
         } else {
             None
         }
@@ -1794,15 +2049,13 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
             for entry in manifest.files {
                 let result = if task.direction == "upload" {
                     match task.tab_id.as_deref() {
-                        Some(tab_id) => {
-                            worker_call(&app_handle, tab_id, |respond_to| {
-                                WorkerCmd::RemoveRemoteFile {
-                                    path: entry.partial_path,
-                                    respond_to,
-                                }
-                            })
-                            .await
-                        }
+                        Some(tab_id) => remove_remote_upload_artifacts(
+                            &app_handle,
+                            tab_id,
+                            &entry.partial_path,
+                            entry.staging_path.as_deref(),
+                        )
+                        .await,
                         None => Ok(()),
                     }
                 } else {
@@ -1826,12 +2079,13 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
             }
         } else if task.direction == "upload" {
             match (task.tab_id, task.partial_path) {
-                (Some(tab_id), Some(path)) => {
-                    worker_call(&app_handle, &tab_id, |respond_to| {
-                        WorkerCmd::RemoveRemoteFile { path, respond_to }
-                    })
-                    .await
-                }
+                (Some(tab_id), Some(path)) => remove_remote_upload_artifacts(
+                    &app_handle,
+                    &tab_id,
+                    &path,
+                    task.staging_path.as_deref(),
+                )
+                .await,
                 _ => Ok(()),
             }
         } else if let Some(path) = task.partial_path {
@@ -1955,8 +2209,8 @@ pub async fn shutdown(app: &AppHandle) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        join_remote_path, manifest_totals, partial_path, TransferFileIdentity, TransferManifest,
-        TransferManifestEntry,
+        join_remote_path, manifest_totals, normalize_root_upload_staging, partial_path,
+        TransferFileIdentity, TransferManifest, TransferManifestEntry, TransferTask,
     };
 
     #[test]
@@ -1973,6 +2227,74 @@ mod tests {
     }
 
     #[test]
+    fn migrates_legacy_root_uploads_to_two_stage_staging() {
+        let mut task: TransferTask = serde_json::from_value(serde_json::json!({
+            "id": "transfer-root",
+            "direction": "upload",
+            "name": "config.toml",
+            "progress": 42,
+            "status": "paused",
+            "fileAccessMode": "root",
+            "targetType": "file",
+            "destinationPath": "/etc/fileterm/config.toml",
+            "partialPath": "/tmp/fileterm-root-upload-legacy.part",
+            "resumable": true
+        }))
+        .unwrap();
+
+        normalize_root_upload_staging(&mut task);
+
+        assert_eq!(
+            task.staging_path.as_deref(),
+            Some("/tmp/fileterm-root-upload-legacy.part")
+        );
+        assert_eq!(
+            task.partial_path.as_deref(),
+            Some("/etc/fileterm/config.toml.fileterm-part")
+        );
+    }
+
+    #[test]
+    fn migrates_legacy_root_directory_entries_independently() {
+        let mut task: TransferTask = serde_json::from_value(serde_json::json!({
+            "id": "transfer-root-folder",
+            "direction": "upload",
+            "name": "configs",
+            "progress": 10,
+            "status": "paused",
+            "fileAccessMode": "root",
+            "targetType": "folder",
+            "manifest": {
+                "version": 1,
+                "directories": ["/etc/fileterm"],
+                "files": [{
+                    "relativePath": "app.toml",
+                    "sourcePath": "/local/app.toml",
+                    "destinationPath": "/etc/fileterm/app.toml",
+                    "partialPath": "/tmp/fileterm-root-upload-entry.part",
+                    "sourceIdentity": { "size": 12 },
+                    "status": "pending",
+                    "transferredBytes": 4
+                }]
+            },
+            "resumable": true
+        }))
+        .unwrap();
+
+        normalize_root_upload_staging(&mut task);
+        let entry = &task.manifest.as_ref().unwrap().files[0];
+
+        assert_eq!(
+            entry.staging_path.as_deref(),
+            Some("/tmp/fileterm-root-upload-entry.part")
+        );
+        assert_eq!(
+            entry.partial_path,
+            "/etc/fileterm/app.toml.fileterm-part"
+        );
+    }
+
+    #[test]
     fn manifest_totals_count_completed_and_partial_files_once() {
         let manifest = TransferManifest {
             version: 1,
@@ -1983,6 +2305,7 @@ mod tests {
                     source_path: "/remote/done.txt".to_string(),
                     destination_path: "/tmp/export/done.txt".to_string(),
                     partial_path: "/tmp/export/done.txt.fileterm-part".to_string(),
+                    staging_path: None,
                     source_identity: TransferFileIdentity {
                         size: 10,
                         modified_at: None,
@@ -1995,6 +2318,7 @@ mod tests {
                     source_path: "/remote/partial.txt".to_string(),
                     destination_path: "/tmp/export/partial.txt".to_string(),
                     partial_path: "/tmp/export/partial.txt.fileterm-part".to_string(),
+                    staging_path: None,
                     source_identity: TransferFileIdentity {
                         size: 20,
                         modified_at: None,

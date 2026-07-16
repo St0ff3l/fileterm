@@ -368,6 +368,7 @@ pub(crate) fn reject_unsupported(command: WorkerCmd, message: &str) {
         | WorkerCmd::UploadLocalFile { respond_to, .. }
         | WorkerCmd::DownloadRemoteFile { respond_to, .. }
         | WorkerCmd::ReplaceRemoteFile { respond_to, .. }
+        | WorkerCmd::CommitRemoteStaging { respond_to, .. }
         | WorkerCmd::RemoveRemoteFile { respond_to, .. } => {
             let _ = respond_to.send(Err(message.to_string()));
         }

@@ -19,13 +19,15 @@ use base64::Engine;
 use russh::client::{Handle, Handler};
 use russh::keys::PrivateKeyWithHashAlg;
 use russh::{Channel, ChannelMsg};
+use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::SftpSession;
-use russh_sftp::protocol::OpenFlags;
+use russh_sftp::client::fs::Metadata as SftpMetadata;
+use russh_sftp::protocol::{OpenFlags, StatusCode};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use tokio_socks::tcp::Socks5Stream;
@@ -154,10 +156,23 @@ pub fn start_ssh_worker(
         // if the profile's `reconnectMode === 'auto'`, schedule a reconnect
         // after 2 seconds. The guard set prevents re-entrant triggers while
         // a reconnect is already pending.
-        let reconnect_mode = profile
-            .get("reconnectMode")
-            .and_then(|v| v.as_str())
-            .unwrap_or("manual");
+        // Read the live session policy instead of the worker's startup copy.
+        // The connection editor can change reconnectMode while this worker is
+        // still alive, and the next disconnect must use that new policy.
+        let reconnect_mode = {
+            let state = app.state::<crate::services::workspace::WorkspaceState>();
+            let sessions = state
+                .sessions
+                .read()
+                .await;
+            let mode = sessions
+                .get(&tid)
+                .and_then(|session| session.reconnect_mode.clone())
+                .or_else(|| {
+                    crate::services::workspace::reconnect_mode_for_profile(&profile)
+                });
+            mode.unwrap_or_else(|| "none".to_string())
+        };
         if reconnect_mode == "auto" {
             crate::services::logging::session(&app, "INFO", "ssh", &tid, "auto-reconnect scheduled delay_ms=2000");
             tokio::time::sleep(Duration::from_secs(2)).await;
@@ -2118,6 +2133,70 @@ async fn open_sftp_session(handle: &Handle<ClientHandler>) -> Result<SftpSession
         .map_err(|error| format!("SFTP init failed: {error}"))
 }
 
+type SharedSftpSession = Arc<RwLock<SftpSession>>;
+type TransferSftpSlot = Arc<Mutex<Option<SharedSftpSession>>>;
+
+fn is_sftp_not_found(error: &SftpError) -> bool {
+    matches!(
+        error,
+        SftpError::Status(status) if status.status_code == StatusCode::NoSuchFile
+    ) || error.to_string().to_ascii_lowercase().contains("no such file")
+}
+
+async fn acquire_transfer_sftp(
+    handle: &Handle<ClientHandler>,
+    primary: &SharedSftpSession,
+    slot: &TransferSftpSlot,
+    app: &AppHandle,
+    tab_id: &str,
+) -> SharedSftpSession {
+    let mut slot_guard = slot.lock().await;
+    if let Some(session) = slot_guard.as_ref() {
+        return Arc::clone(session);
+    }
+    match open_sftp_session(handle).await {
+        Ok(session) => {
+            let session = Arc::new(RwLock::new(session));
+            *slot_guard = Some(Arc::clone(&session));
+            crate::services::logging::session(
+                app,
+                "INFO",
+                "sftp",
+                tab_id,
+                "dedicated transfer channel opened",
+            );
+            session
+        }
+        Err(error) => {
+            crate::services::logging::session(
+                app,
+                "WARN",
+                "sftp",
+                tab_id,
+                format!("dedicated transfer channel unavailable; using browse channel: {error}"),
+            );
+            Arc::clone(primary)
+        }
+    }
+}
+
+async fn invalidate_transfer_sftp(
+    session: &SharedSftpSession,
+    primary: &SharedSftpSession,
+    slot: &TransferSftpSlot,
+) {
+    if Arc::ptr_eq(session, primary) {
+        return;
+    }
+    let mut slot_guard = slot.lock().await;
+    if slot_guard
+        .as_ref()
+        .is_some_and(|current| Arc::ptr_eq(current, session))
+    {
+        *slot_guard = None;
+    }
+}
+
 /// Convert a russh SFTP handshake error into an actionable, non-ambiguous
 /// renderer message. A timeout here happens after the interactive shell is
 /// established, so it must not be presented as a failed SSH login.
@@ -2224,6 +2303,9 @@ async fn run_worker_loop(
             .get(tab_id)
             .map(|s| s.terminal_transcript.clone())
             .unwrap_or_default();
+        let existing_reconnect_mode = sessions
+            .get(tab_id)
+            .and_then(|session| session.reconnect_mode.clone());
         sessions.insert(
             tab_id.to_string(),
             crate::services::SessionSnapshot {
@@ -2254,6 +2336,9 @@ async fn run_worker_loop(
                 capabilities: crate::services::workspace::ConnectionCapabilities::for_session_type(
                     "ssh",
                 ),
+                reconnect_mode: existing_reconnect_mode.or_else(|| {
+                    crate::services::workspace::reconnect_mode_for_profile(profile)
+                }),
             },
         );
     }
@@ -2302,6 +2387,7 @@ async fn run_worker_loop(
             (None, Some(reason))
         }
     };
+    let transfer_sftp_slot: TransferSftpSlot = Arc::new(Mutex::new(None));
 
     // Push the full snapshot (with files) to the renderer
     if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
@@ -2602,6 +2688,7 @@ async fn run_worker_loop(
                                 &handle,
                                 &shell_channel,
                                 sftp,
+                                &transfer_sftp_slot,
                                 &mut file_access_mode,
                                 &mut sudo_user,
                                 &mut sudo_password,
@@ -2924,6 +3011,7 @@ async fn handle_worker_cmd_without_sftp(
         | WorkerCmd::UploadLocalFile { respond_to, .. }
         | WorkerCmd::DownloadRemoteFile { respond_to, .. }
         | WorkerCmd::ReplaceRemoteFile { respond_to, .. }
+        | WorkerCmd::CommitRemoteStaging { respond_to, .. }
         | WorkerCmd::RemoveRemoteFile { respond_to, .. } => {
             let _ = respond_to.send(sftp_unavailable_result(unavailable_reason));
             Ok(false)
@@ -2996,7 +3084,8 @@ async fn handle_worker_cmd(
     cmd: WorkerCmd,
     handle: &Arc<Handle<ClientHandler>>,
     shell_channel: &Channel<russh::client::Msg>,
-    sftp: &Arc<RwLock<SftpSession>>,
+    sftp: &SharedSftpSession,
+    transfer_sftp_slot: &TransferSftpSlot,
     file_access_mode: &mut String,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
@@ -3063,7 +3152,7 @@ async fn handle_worker_cmd(
                             size: metadata.size.unwrap_or(0),
                             modified_at: metadata.mtime.map(|value| value as u64 * 1000),
                         })),
-                        Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(None),
+                        Err(error) if is_sftp_not_found(&error) => Ok(None),
                         Err(error) => Err(error.to_string()),
                     }
                 };
@@ -3081,12 +3170,21 @@ async fn handle_worker_cmd(
         } => {
             // 上传可能持续数分钟，必须 spawn 到独立任务否则会阻塞整个 worker
             // 主循环，导致终端输入和文件浏览全部卡住。
+            let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
+            let transfer_sftp_slot = Arc::clone(transfer_sftp_slot);
             let app = app.clone();
+            let tab_id = tab_id.to_string();
             tokio::spawn(async move {
-                // root 与 user 模式走相同的 SFTP 上传路径（root 模式的 atomic
-                // commit 由后续 ReplaceRemoteFile 完成）。
-                let sftp_guard = sftp.write().await;
+                let transfer_sftp = acquire_transfer_sftp(
+                    &handle,
+                    &sftp,
+                    &transfer_sftp_slot,
+                    &app,
+                    &tab_id,
+                )
+                .await;
+                let sftp_guard = transfer_sftp.write().await;
                 let result = upload_local_file(
                     &sftp_guard,
                     &local_path,
@@ -3097,6 +3195,9 @@ async fn handle_worker_cmd(
                     &app,
                 ).await;
                 drop(sftp_guard);
+                if result.is_err() {
+                    invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
+                }
                 let _ = respond_to.send(result);
             });
             Ok(false)
@@ -3112,7 +3213,9 @@ async fn handle_worker_cmd(
             // 下载同样可能持续数分钟，必须 spawn。
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
+            let transfer_sftp_slot = Arc::clone(transfer_sftp_slot);
             let app = app.clone();
+            let tab_id = tab_id.to_string();
             let fam = file_access_mode.clone();
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
@@ -3130,8 +3233,16 @@ async fn handle_worker_cmd(
                         &sp,
                     ).await
                 } else {
-                    let sftp_guard = sftp.write().await;
-                    download_remote_file(
+                    let transfer_sftp = acquire_transfer_sftp(
+                        &handle,
+                        &sftp,
+                        &transfer_sftp_slot,
+                        &app,
+                        &tab_id,
+                    )
+                    .await;
+                    let sftp_guard = transfer_sftp.write().await;
+                    let result = download_remote_file(
                         &sftp_guard,
                         &remote_path,
                         &local_path,
@@ -3139,7 +3250,12 @@ async fn handle_worker_cmd(
                         &transfer_id,
                         cancel,
                         &app,
-                    ).await
+                    ).await;
+                    drop(sftp_guard);
+                    if result.is_err() {
+                        invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
+                    }
+                    result
                 };
                 let _ = respond_to.send(result);
             });
@@ -3154,6 +3270,9 @@ async fn handle_worker_cmd(
             // spawn 避免阻塞主循环。
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
+            let transfer_sftp_slot = Arc::clone(transfer_sftp_slot);
+            let app = app.clone();
+            let tab_id = tab_id.to_string();
             let fam = file_access_mode.clone();
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
@@ -3161,8 +3280,48 @@ async fn handle_worker_cmd(
                 let result = if fam == "root" {
                     replace_root_remote_file(&handle, &partial_path, &destination_path, &su, &sp).await
                 } else {
-                    let sftp_guard = sftp.write().await;
-                    replace_remote_file(&sftp_guard, &partial_path, &destination_path).await
+                    let transfer_sftp = acquire_transfer_sftp(
+                        &handle,
+                        &sftp,
+                        &transfer_sftp_slot,
+                        &app,
+                        &tab_id,
+                    )
+                    .await;
+                    let sftp_guard = transfer_sftp.write().await;
+                    let result =
+                        replace_remote_file(&sftp_guard, &partial_path, &destination_path).await;
+                    drop(sftp_guard);
+                    if result.is_err() {
+                        invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
+                    }
+                    result
+                };
+                let _ = respond_to.send(result);
+            });
+            Ok(false)
+        }
+        WorkerCmd::CommitRemoteStaging {
+            staging_path,
+            partial_path,
+            respond_to,
+        } => {
+            let handle = Arc::clone(handle);
+            let fam = file_access_mode.clone();
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    commit_root_staging_file(
+                        &handle,
+                        &staging_path,
+                        &partial_path,
+                        &su,
+                        &sp,
+                    )
+                    .await
+                } else {
+                    Err("root staging 只能在 SSH root 文件模式下提交".to_string())
                 };
                 let _ = respond_to.send(result);
             });
@@ -3192,7 +3351,7 @@ async fn handle_worker_cmd(
                     match timeout(FILE_OPERATION_TIMEOUT, async {
                         match sftp_guard.remove_file(&path).await {
                             Ok(()) => Ok(()),
-                            Err(error) if error.to_string().to_lowercase().contains("no such file") => Ok(()),
+                            Err(error) if is_sftp_not_found(&error) => Ok(()),
                             Err(error) => Err(error.to_string()),
                         }
                     }).await {
@@ -3834,21 +3993,83 @@ async fn download_remote_file(
 }
 
 async fn replace_remote_file(sftp: &SftpSession, partial_path: &str, destination_path: &str) -> Result<(), String> {
-    let backup_path = format!("{destination_path}.fileterm-backup-{}", uuid::Uuid::new_v4());
-    let moved_destination = match sftp.metadata(destination_path).await {
-        Ok(_) => {
-            sftp.rename(destination_path, &backup_path)
-                .await
-                .map_err(|error| format!("无法备份远端目标文件: {error}"))?;
-            true
+    let partial_metadata = sftp
+        .symlink_metadata(partial_path)
+        .await
+        .map_err(|error| format!("无法读取远端断点文件属性: {error}"))?;
+    let destination_metadata = match sftp.symlink_metadata(destination_path).await {
+        Ok(metadata) => Some(metadata),
+        Err(error) if is_sftp_not_found(&error) => None,
+        Err(error) => return Err(format!("无法读取远端目标文件属性: {error}")),
+    };
+
+    if destination_metadata.as_ref().is_some_and(|destination| {
+        destination.is_symlink()
+            || matches!((destination.uid, partial_metadata.uid), (Some(left), Some(right)) if left != right)
+    }) {
+        let mut source = sftp
+            .open(partial_path)
+            .await
+            .map_err(|error| format!("无法打开远端断点文件: {error}"))?;
+        let mut destination = sftp
+            .open_with_flags(
+                destination_path,
+                OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE,
+            )
+            .await
+            .map_err(|error| format!("无法写回远端目标文件: {error}"))?;
+        tokio::io::copy(&mut source, &mut destination)
+            .await
+            .map_err(|error| format!("写回远端目标文件失败: {error}"))?;
+        destination
+            .flush()
+            .await
+            .map_err(|error| format!("刷新远端目标文件失败: {error}"))?;
+        let committed_size = sftp
+            .metadata(destination_path)
+            .await
+            .map_err(|error| format!("无法校验远端目标文件: {error}"))?
+            .size
+            .unwrap_or(0);
+        if committed_size != partial_metadata.size.unwrap_or(0) {
+            return Err(format!(
+                "远端目标文件写回校验失败：{committed_size} bytes，期望 {}",
+                partial_metadata.size.unwrap_or(0)
+            ));
         }
-        Err(_) => false,
+        sftp.remove_file(partial_path)
+            .await
+            .map_err(|error| format!("无法清理远端断点文件: {error}"))?;
+        return Ok(());
+    }
+
+    if let Some(permissions) = destination_metadata
+        .as_ref()
+        .and_then(|metadata| metadata.permissions)
+    {
+        let mut metadata = SftpMetadata::empty();
+        metadata.permissions = Some(permissions);
+        let _ = sftp.set_metadata(partial_path, metadata).await;
+    }
+
+    let backup_path = format!("{destination_path}.fileterm-backup-{}", uuid::Uuid::new_v4());
+    let moved_destination = if destination_metadata.is_some() {
+        sftp.rename(destination_path, &backup_path)
+            .await
+            .map_err(|error| format!("无法备份远端目标文件: {error}"))?;
+        true
+    } else {
+        false
     };
     if let Err(error) = sftp.rename(partial_path, destination_path).await {
         if moved_destination {
-            let _ = sftp.rename(&backup_path, destination_path).await;
+            if let Err(rollback_error) = sftp.rename(&backup_path, destination_path).await {
+                return Err(format!(
+                    "远端文件替换失败，旧文件保留在 {backup_path}：{error}；回滚失败：{rollback_error}"
+                ));
+            }
         }
-        return Err(error.to_string());
+        return Err(format!("远端文件替换失败，断点已保留：{error}"));
     }
     if moved_destination {
         let _ = sftp.remove_file(&backup_path).await;
@@ -3906,6 +4127,29 @@ async fn replace_root_remote_file(
         shell_quote(partial_path),
         shell_quote(partial_path),
         shell_quote(destination_path),
+    );
+    exec_shell_file_command(handle, &command, sudo_user, sudo_password)
+        .await
+        .map(|_| ())
+}
+
+async fn commit_root_staging_file(
+    handle: &Handle<ClientHandler>,
+    staging_path: &str,
+    partial_path: &str,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<(), String> {
+    let parent = std::path::Path::new(partial_path)
+        .parent()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "/".to_string());
+    let command = format!(
+        "set -e\nmkdir -p {}\nrm -f -- {}\nmv -f -- {} {}",
+        shell_quote(&parent),
+        shell_quote(partial_path),
+        shell_quote(staging_path),
+        shell_quote(partial_path),
     );
     exec_shell_file_command(handle, &command, sudo_user, sudo_password)
         .await
