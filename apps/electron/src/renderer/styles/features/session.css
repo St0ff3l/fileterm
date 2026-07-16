@@ -769,7 +769,6 @@
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   transition:
-    bottom 0.24s cubic-bezier(0.22, 1, 0.36, 1),
     background 0.18s ease,
     border-color 0.18s ease,
     color 0.18s ease,

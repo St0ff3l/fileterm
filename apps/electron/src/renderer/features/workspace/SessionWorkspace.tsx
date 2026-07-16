@@ -137,6 +137,8 @@ export function SessionWorkspace({
   const isResizingFilePanel = useRef(false)
   const dragStateRef = useRef<{ bottom: number; height: number; snapHeight: number | null } | null>(null)
   const layoutFrameRef = useRef<number | null>(null)
+  const isFilePanelAlignedRef = useRef(false)
+  const alignmentInitializedTabRef = useRef<string | null>(null)
   const lastExpandedFilePanelHeight = useRef(filePanelHeight)
   const appliedWorkspaceFocusMode = useRef<boolean | null>(null)
   const isFilePanelEffectivelyCollapsed = isFilePanelCollapsed && !isFileOnly
@@ -238,9 +240,11 @@ export function SessionWorkspace({
       const { bottom, height, snapHeight } = dragStateRef.current
       let nextHeight = bottom - event.clientY
 
-      if (snapHeight !== null && Math.abs(nextHeight - snapHeight) <= 10) {
+      const isSnappedToSidebar = snapHeight !== null && Math.abs(nextHeight - snapHeight) <= 10
+      if (isSnappedToSidebar) {
         nextHeight = snapHeight
       }
+      isFilePanelAlignedRef.current = isSnappedToSidebar
 
       if (dragFrame) {
         window.cancelAnimationFrame(dragFrame)
@@ -278,12 +282,31 @@ export function SessionWorkspace({
   }, [isFileOnly, setFilePanelHeight])
 
   useEffect(() => {
-    if (!shouldAlignFilePanelOnMount || isFileOnly || isFilePanelCollapsed) {
+    if (isFileOnly || isFilePanelCollapsed) {
       return
     }
+    if (alignmentInitializedTabRef.current === activeTab.id) {
+      return
+    }
+    if (shouldAlignFilePanelOnMount) {
+      // Mark the default state synchronously. Updating the initial height can
+      // flip `shouldAlignFilePanelOnMount` before the animation frame runs;
+      // the follow state must survive that render.
+      isFilePanelAlignedRef.current = true
+    }
+    alignmentInitializedTabRef.current = activeTab.id
 
     const frame = window.requestAnimationFrame(() => {
-      syncFilePanelHeight('align')
+      if (shouldAlignFilePanelOnMount) {
+        syncFilePanelHeight('align')
+        return
+      }
+
+      const fileTabsRect = workspaceRef.current?.querySelector('.file-tabs')?.getBoundingClientRect()
+      const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
+      isFilePanelAlignedRef.current = Boolean(
+        fileTabsRect && diskHeadRect && Math.abs(fileTabsRect.top - diskHeadRect.top) <= 2
+      )
     })
 
     return () => window.cancelAnimationFrame(frame)
@@ -301,7 +324,7 @@ export function SessionWorkspace({
 
       layoutFrameRef.current = window.requestAnimationFrame(() => {
         layoutFrameRef.current = null
-        syncFilePanelHeight()
+        syncFilePanelHeight(isFilePanelAlignedRef.current ? 'align' : 'clamp')
       })
     }
 
