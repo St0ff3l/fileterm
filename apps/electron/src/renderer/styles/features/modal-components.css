@@ -165,14 +165,33 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-light) 76%, transparent);
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-sidebar);
 }
 
-.file-permission-dialog__eyebrow {
-  font-size: 14px;
-  font-weight: 700;
+.file-permission-dialog__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-main);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.file-permission-dialog__title .material-symbols-outlined {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 16px;
+  font-variation-settings:
+    'wght' 300,
+    'opsz' 16,
+    'GRAD' 0,
+    'FILL' 0;
 }
 
 .file-permission-dialog__close {

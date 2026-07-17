@@ -53,7 +53,12 @@ export function FilePermissionModal({
     <div className="modal-backdrop">
       <div className="modal-card file-permission-dialog">
         <div className="file-permission-dialog__header">
-          <span className="file-permission-dialog__eyebrow">{t.permissionDialogTitle}</span>
+          <span className="file-permission-dialog__title">
+            <span aria-hidden="true" className="material-symbols-outlined">
+              lock
+            </span>
+            <span>{t.permissionDialogTitle}</span>
+          </span>
           <CloseButton className="file-permission-dialog__close" onClick={onClose} />
         </div>
 

@@ -894,8 +894,8 @@ export function useFileOperations({
     }
 
     void (async () => {
-      const files = items.filter((row) => row.type === 'file')
-      if (!files.length) {
+      const downloadableItems = items.filter((row) => row.name !== '..')
+      if (!downloadableItems.length) {
         return
       }
 
@@ -909,13 +909,13 @@ export function useFileOperations({
 
         onBusyChange(true)
         markedBusy = true
-        for (const item of files) {
-          const snapshot = await desktopApi.downloadFile(activeTab.id, item.path, downloadDirectory)
+        for (const item of downloadableItems) {
+          const snapshot = await desktopApi.downloadRemotePath(activeTab.id, item.path, item.type, downloadDirectory)
           onApplySnapshot(snapshot)
         }
         await openLocalDirectory(downloadDirectory)
       } catch (error) {
-        reportStatusError('下载文件', error, { targetPath: downloadDirectory ?? undefined })
+        reportStatusError('下载文件或目录', error, { targetPath: downloadDirectory ?? undefined })
       } finally {
         if (markedBusy) {
           onBusyChange(false)

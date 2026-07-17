@@ -30,6 +30,7 @@ import {
   transferManifestProgress,
   updateTransferManifestEntry
 } from './transfer-manifest.js'
+import { relativeRemoteTransferPath } from './transfer-path-utils.js'
 import {
   createTransferSpeedTracker,
   directoryProgressPercent,
@@ -1116,7 +1117,7 @@ export class TransferService {
 
     for (const entry of entries) {
       this.ensureTransferActive(transferState)
-      const relativePath = path.posix.relative(rootPath, entry.path)
+      const relativePath = relativeRemoteTransferPath(rootPath, entry.path)
       if (entry.type === 'folder') {
         directories.push(relativePath)
         const nestedEntries = await this.collectRemoteDownloadEntries(controller, rootPath, transferState, entry.path)

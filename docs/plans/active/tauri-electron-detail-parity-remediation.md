@@ -127,6 +127,10 @@
       不再覆盖用户偏好或串扰新标签。
 - [x] SSH 私钥导入表头精确复用新建连接的 `48px / 13px / 500 / 16px icon` 规格，选择文件按钮补
       文件夹图标、选择中 spinner 与完整 hover/focus 状态；WebDAV 风险选项和操作区分组并拉开间距。
+- [x] 远端目录下载接入右键菜单、顶部下载按钮和拖入本地窗格；文件与目录统一进入既有传输清单，
+      保留进度、暂停、继续和取消，并校验清单相对路径不能逃逸用户选择的本地目标目录。
+- [x] 文件权限弹窗表头对齐新建连接的 `#242424 / 48px / 13px / 500 / 16px icon` 规格，
+      使用本地 lock 图标，并在 Electron/Tauri 保持一致。
 
 ## 验证门禁
 
@@ -150,10 +154,11 @@
 - [x] `npm run typecheck`
 - [x] `npm run lint -- --max-warnings=0`
 - [x] `npm run format:check`
-- [x] `npm run test:tauri`：107 unit tests + 18 contract tests 全绿（含托盘菜单双语标签回归）。
+- [x] `npm run test:tauri`：108 unit tests + 18 contract tests 全绿（含目录下载路径边界回归）。
 - [x] `cargo fmt --all -- --check`
 - [x] `cargo clippy --locked --all-targets --all-features -- -D warnings`
-- [x] `npm run test:electron`：63 unit tests + 21 controller tests 全绿。
+- [x] `npm run test:electron`：65 unit tests + 21 controller tests 全绿。
+- [x] `npm run build:renderer -w @fileterm/electron`：Vite production bundle 构建成功。
 - [x] `npm run build:renderer -w @fileterm/tauri`：Vite production bundle 构建成功。
 - [ ] macOS/Windows/Linux 打包态人工验收。
 

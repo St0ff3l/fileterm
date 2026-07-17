@@ -790,12 +790,29 @@ async fn collect_remote_tree(
 }
 
 fn relative_remote_path(root: &str, path: &str) -> Result<String, AppError> {
-    let root = root.trim_end_matches('/');
-    path.strip_prefix(root)
-        .and_then(|value| value.strip_prefix('/'))
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| transfer_error(format!("路径 {path} 不在根目录 {root} 内")))
+    fn normalized_segments(value: &str) -> Result<Vec<&str>, AppError> {
+        let mut segments = Vec::new();
+        for segment in value.split('/') {
+            match segment {
+                "" | "." => {}
+                ".." => {
+                    segments.pop().ok_or_else(|| {
+                        transfer_error(format!("远端路径包含越界父目录：{value}"))
+                    })?;
+                }
+                _ => segments.push(segment),
+            }
+        }
+        Ok(segments)
+    }
+
+    let root_segments = normalized_segments(root)?;
+    let path_segments = normalized_segments(path)?;
+    let relative = path_segments
+        .strip_prefix(root_segments.as_slice())
+        .filter(|segments| !segments.is_empty())
+        .ok_or_else(|| transfer_error(format!("路径 {path} 不在根目录 {root} 内")))?;
+    Ok(relative.join("/"))
 }
 
 fn manifest_totals(manifest: &TransferManifest) -> (u64, u64) {
@@ -2487,8 +2504,8 @@ pub async fn shutdown(app: &AppHandle) -> Result<(), AppError> {
 mod tests {
     use super::{
         join_remote_path, manifest_totals, normalize_root_upload_staging, partial_path,
-        progress_event_due, TransferFileIdentity, TransferManifest, TransferManifestEntry,
-        TransferTask, UPDATE_INTERVAL,
+        progress_event_due, relative_remote_path, TransferFileIdentity, TransferManifest,
+        TransferManifestEntry, TransferTask, UPDATE_INTERVAL,
     };
 
     #[test]
@@ -2502,6 +2519,21 @@ mod tests {
             partial_path("/var/tmp/file.txt"),
             "/var/tmp/file.txt.fileterm-part"
         );
+    }
+
+    #[test]
+    fn keeps_directory_download_entries_inside_the_selected_remote_root() {
+        assert_eq!(
+            relative_remote_path("/srv/releases", "/srv/releases/app/config.json").unwrap(),
+            "app/config.json"
+        );
+        assert_eq!(
+            relative_remote_path("/", "/var/log/app.log").unwrap(),
+            "var/log/app.log"
+        );
+        assert!(relative_remote_path("/srv/releases", "/srv/private/key").is_err());
+        assert!(relative_remote_path("/srv/releases", "/srv/releases/../../etc/passwd").is_err());
+        assert!(relative_remote_path("/srv/releases", "/srv/releases").is_err());
     }
 
     #[test]

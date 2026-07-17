@@ -304,7 +304,7 @@ export function FileManager({
   }, [activeSession.remoteFiles, canUseRemoteFiles, remoteSort])
 
   const selectedRemoteItems = activeSession.remoteFiles.filter((item) => selectedRemotePaths.includes(item.path))
-  const selectedRemoteFileItems = selectedRemoteItems.filter((item) => item.type === 'file')
+  const selectedRemoteDownloadItems = selectedRemoteItems.filter((item) => item.name !== '..')
   const contextLocalItem =
     contextMenu?.pane === 'local' ? (localItems.find((item) => item.path === contextMenu.path) ?? null) : null
   const contextRemoteItem =
@@ -338,7 +338,7 @@ export function FileManager({
   const canCopyContextItems = contextSelectionCount > 0
   const canCopyContextPath = Boolean(singleContextItem && !isMultiContextSelection)
   const canCutContextItems = contextSelectionCount > 0
-  const canDownloadContextItems = canUseRemoteFiles && contextRemoteSelection.some((item) => item.type === 'file')
+  const canDownloadContextItems = canUseRemoteFiles && contextRemoteSelection.length > 0
   const canPasteIntoContextPane =
     contextMenu?.pane === 'local' ? canPasteToLocal : canUseRemoteFiles && canPasteToRemote
   const canUploadContextItems =
@@ -413,7 +413,7 @@ export function FileManager({
     }
 
     const draggedPaths = parseDraggedPaths(draggedRemotePayload)
-    const items = activeSession.remoteFiles.filter((row) => draggedPaths.includes(row.path) && row.type === 'file')
+    const items = activeSession.remoteFiles.filter((row) => draggedPaths.includes(row.path) && row.name !== '..')
     if (items.length) {
       onDownloadFiles(items, localPath)
     }
@@ -657,8 +657,8 @@ export function FileManager({
             <button
               title={t.downloadTo}
               type="button"
-              disabled={!canUseRemoteFiles || !selectedRemoteFileItems.length}
-              onClick={() => onDownloadFiles(selectedRemoteFileItems)}
+              disabled={!canUseRemoteFiles || !selectedRemoteDownloadItems.length}
+              onClick={() => onDownloadFiles(selectedRemoteDownloadItems)}
             >
               <AppIcon name="download" />
             </button>
