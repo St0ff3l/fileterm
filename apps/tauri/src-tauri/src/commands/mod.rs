@@ -1168,6 +1168,18 @@ pub async fn app_reconnect_tab(
             .iter()
             .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&pid))
         {
+            // Claim the reconnect before awaiting worker shutdown. Tauri can
+            // dispatch Enter/button/auto-reconnect commands concurrently; a
+            // status check performed after an await lets each caller replace
+            // the worker and append another reconnect banner.
+            let should_start = {
+                let mut tabs = state.tabs.write().await;
+                claim_reconnect_tab(&mut tabs, &tab_id)
+            };
+            if !should_start {
+                return get_workspace_snapshot(app).await;
+            }
+
             // Terminate existing worker
             stop_session_worker(&state, &tab_id).await;
 
@@ -1177,10 +1189,6 @@ pub async fn app_reconnect_tab(
             // We only append a separator + "连接主机..." notice so the user
             // sees that a reconnect is in progress.
             {
-                let mut tabs = state.tabs.write().await;
-                if let Some(tab) = tabs.iter_mut().find(|t| t.id == tab_id) {
-                    tab.status = crate::services::WorkspaceTabStatus::Connecting;
-                }
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(&tab_id) {
                     session.connected = false;
@@ -1259,6 +1267,17 @@ pub async fn app_reconnect_tab(
     }
 
     get_workspace_snapshot(app).await
+}
+
+fn claim_reconnect_tab(tabs: &mut [crate::services::WorkspaceTab], tab_id: &str) -> bool {
+    let Some(tab) = tabs.iter_mut().find(|tab| tab.id == tab_id) else {
+        return false;
+    };
+    if tab.status == crate::services::WorkspaceTabStatus::Connecting {
+        return false;
+    }
+    tab.status = crate::services::WorkspaceTabStatus::Connecting;
+    true
 }
 
 #[tauri::command]
@@ -2160,6 +2179,40 @@ mod command_template_tests {
             ),
             "deploy api --region cn-north --empty="
         );
+    }
+}
+
+#[cfg(test)]
+mod reconnect_tests {
+    use super::claim_reconnect_tab;
+    use crate::services::{WorkspaceTab, WorkspaceTabStatus};
+
+    fn tab(status: WorkspaceTabStatus) -> WorkspaceTab {
+        WorkspaceTab {
+            id: "tab-1".to_string(),
+            profile_id: "profile-1".to_string(),
+            session_type: "ssh".to_string(),
+            title: "Server".to_string(),
+            layout: "terminal-file".to_string(),
+            status,
+        }
+    }
+
+    #[test]
+    fn reconnect_can_only_be_claimed_once_while_connecting() {
+        let mut tabs = vec![tab(WorkspaceTabStatus::Closed)];
+
+        assert!(claim_reconnect_tab(&mut tabs, "tab-1"));
+        assert_eq!(tabs[0].status, WorkspaceTabStatus::Connecting);
+        assert!(!claim_reconnect_tab(&mut tabs, "tab-1"));
+    }
+
+    #[test]
+    fn reconnect_does_not_claim_an_unknown_tab() {
+        let mut tabs = vec![tab(WorkspaceTabStatus::Closed)];
+
+        assert!(!claim_reconnect_tab(&mut tabs, "missing"));
+        assert_eq!(tabs[0].status, WorkspaceTabStatus::Closed);
     }
 }
 

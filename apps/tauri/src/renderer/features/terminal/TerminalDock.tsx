@@ -124,11 +124,16 @@ export function TerminalDock({
   }, [panel])
 
   const handleToggleConnection = async () => {
-    if (!window.fileterm) return
+    if (!window.fileterm || activeTab.status === 'connecting' || isReconnectingRef.current) return
     if (connected) {
       await window.fileterm.disconnectTab(activeTab.id)
     } else {
-      await window.fileterm.reconnectTab(activeTab.id)
+      isReconnectingRef.current = true
+      try {
+        await window.fileterm.reconnectTab(activeTab.id)
+      } finally {
+        isReconnectingRef.current = false
+      }
     }
   }
 
@@ -379,7 +384,7 @@ export function TerminalDock({
         return
       }
       event.preventDefault()
-      if (!connected && onReconnect && !isReconnectingRef.current) {
+      if (!connected && activeTab.status !== 'connecting' && onReconnect && !isReconnectingRef.current) {
         isReconnectingRef.current = true
         setReconnectFeedbackVisible(true)
         if (reconnectFeedbackTimerRef.current !== null) {
@@ -571,8 +576,8 @@ export function TerminalDock({
 
   const isMac = window.fileterm?.platform === 'darwin'
   const placeholderText = isMac ? t.terminalDockPlaceholderMac : t.terminalDockPlaceholderWin
-  const connectionStateClass =
-    activeTab.status === 'connecting' ? 'is-connecting' : connected ? 'is-connected' : 'is-disconnected'
+  const isConnecting = activeTab.status === 'connecting'
+  const connectionStateClass = isConnecting ? 'is-connecting' : connected ? 'is-connected' : 'is-disconnected'
 
   return (
     <section ref={rootRef} className="terminal-dock">
@@ -583,8 +588,8 @@ export function TerminalDock({
         <label className="terminal-dock-input-shell">
           <textarea
             ref={inputRef}
-            disabled={activeTab.sessionType !== 'ssh'}
-            placeholder={reconnectFeedbackVisible ? t.terminalReconnecting : placeholderText}
+            disabled={activeTab.sessionType !== 'ssh' || isConnecting}
+            placeholder={reconnectFeedbackVisible || isConnecting ? t.terminalReconnecting : placeholderText}
             rows={1}
             wrap="off"
             value={command}
@@ -611,6 +616,7 @@ export function TerminalDock({
           </button>
           <button
             className={`terminal-dock-icon-btn terminal-dock-connection ${connectionStateClass}`}
+            disabled={isConnecting}
             type="button"
             title={connected ? t.terminalDockDisconnect : t.terminalDockReconnect}
             onClick={handleToggleConnection}

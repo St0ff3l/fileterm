@@ -111,12 +111,14 @@ export const TerminalView = memo(function TerminalView({
   tabId,
   bootText,
   connected = false,
+  connecting = false,
   onStatus,
   onReconnect
 }: {
   tabId: string
   bootText: string
   connected?: boolean
+  connecting?: boolean
   onStatus?(message: string | null): void
   onReconnect?(): void | Promise<void>
 }) {
@@ -141,6 +143,7 @@ export const TerminalView = memo(function TerminalView({
   // through a ref prevents a stale terminal-state event from a background
   // tab from swallowing keystrokes after this tab is brought back.
   const connectedRef = useRef(Boolean(connected))
+  const connectingRef = useRef(Boolean(connecting))
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{ width: number; height: number } | null>(null)
   const isHorizontalResizeActiveRef = useRef(false)
@@ -154,6 +157,7 @@ export const TerminalView = memo(function TerminalView({
   const activeTerminalTabIdRef = useRef<string | null>(null)
   tabIdRef.current = tabId
   connectedRef.current = Boolean(connected)
+  connectingRef.current = Boolean(connecting)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
   const [hasSelection, setHasSelection] = useState(false)
@@ -573,7 +577,7 @@ export const TerminalView = memo(function TerminalView({
     terminal.unicode.activeVersion = '11'
     terminal.open(hostRef.current)
     const requestReconnect = () => {
-      if (wasConnectedRef.current || isReconnectingRef.current) {
+      if (wasConnectedRef.current || connectingRef.current || isReconnectingRef.current) {
         return false
       }
 

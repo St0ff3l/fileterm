@@ -379,6 +379,7 @@ export function SessionWorkspace({
             tabId={activeTab.id}
             bootText={activeSession.terminalTranscript ?? ''}
             connected={activeSession.connected === true}
+            connecting={activeTab.status === 'connecting'}
             onReconnect={reconnectOnEnter}
           />
           <TerminalDock
