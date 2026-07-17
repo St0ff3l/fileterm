@@ -21,6 +21,10 @@
 //! 4. **Event naming contract** — every event emitted via `app.emit(...)`
 //!    uses the `namespace:name` form (`terminal:data`, `workspace:snapshot`,
 //!    `app:window-close-request`, ...). No bare names.
+//!
+//! 5. **Renderer style CSP contract** — xterm and Monaco generate runtime
+//!    styles, so Tauri must not add a nonce to `style-src` that disables the
+//!    configured `unsafe-inline`; script CSP modification remains enabled.
 
 use fileterm_lib::commands::OpenWindowInput;
 use fileterm_lib::services::profile_ops::{heal_profiles, strip_secret_fields_public};
@@ -286,6 +290,39 @@ fn contract_events_use_namespace_colon_name() {
             "event `{name}` must not have an empty namespace or name"
         );
     }
+}
+
+#[test]
+fn renderer_csp_allows_runtime_styles_without_relaxing_scripts() {
+    let config: Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+        .expect("tauri.conf.json must remain valid JSON");
+    let security = config
+        .pointer("/app/security")
+        .and_then(Value::as_object)
+        .expect("Tauri security configuration must exist");
+    let csp = security
+        .get("csp")
+        .and_then(Value::as_str)
+        .expect("production CSP must be configured");
+
+    assert!(
+        csp.contains("style-src 'self' 'unsafe-inline'"),
+        "xterm and Monaco runtime style elements must be allowed"
+    );
+    assert!(
+        !csp.contains("script-src 'self' 'unsafe-inline'"),
+        "runtime styles must not weaken the script policy"
+    );
+
+    let disabled_directives = security
+        .get("dangerousDisableAssetCspModification")
+        .and_then(Value::as_array)
+        .expect("Tauri CSP modification exceptions must be directive-scoped");
+    assert_eq!(
+        disabled_directives,
+        &[Value::String("style-src".to_string())],
+        "only style-src nonce injection may be disabled"
+    );
 }
 
 #[test]

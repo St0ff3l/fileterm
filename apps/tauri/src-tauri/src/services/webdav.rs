@@ -644,6 +644,22 @@ mod tests {
             assert!(count > 0, "client closed before completing HTTP headers");
             request.extend_from_slice(&byte[..count]);
         }
+
+        let headers = String::from_utf8(request.clone()).unwrap();
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().unwrap())
+            })
+            .unwrap_or_default();
+        if content_length > 0 {
+            let mut body = vec![0_u8; content_length];
+            socket.read_exact(&mut body).await.unwrap();
+            request.extend_from_slice(&body);
+        }
+
         String::from_utf8(request).unwrap()
     }
 
@@ -775,11 +791,10 @@ mod tests {
             last_etag: Some("\"etag-before-write\"".to_string()),
             content_hash: None,
         };
-        let error = upload_payload(&client().unwrap(), &config, b"{}".to_vec())
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains("ETag 冲突"));
+        let result = upload_payload(&client().unwrap(), &config, b"{}".to_vec()).await;
         server.await.unwrap();
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("ETag 冲突"), "{error}");
     }
 
     #[tokio::test]
@@ -805,8 +820,7 @@ mod tests {
             assert!(
                 put_request.contains(&format!("content-length: {}\r\n", expected_payload.len()))
             );
-            let mut body = vec![0_u8; expected_payload.len()];
-            put.read_exact(&mut body).await.unwrap();
+            let body = put_request.split_once("\r\n\r\n").unwrap().1.as_bytes();
             assert_eq!(body, expected_payload);
             put.write_all(
                 b"HTTP/1.1 201 Created\r\nETag: \"etag-after-write\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",

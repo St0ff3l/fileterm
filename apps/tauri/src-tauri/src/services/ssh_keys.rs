@@ -464,7 +464,9 @@ fn lock_down_dir(_path: &Path) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{probably_encrypted, write_bytes_atomic};
+    use super::probably_encrypted;
+    #[cfg(unix)]
+    use super::write_bytes_atomic;
 
     #[test]
     fn recognizes_private_key_headers_without_treating_public_keys_as_private() {

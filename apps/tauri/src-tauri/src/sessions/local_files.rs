@@ -542,9 +542,9 @@ fn encode_text(text: &str, encoding: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod permission_tests {
-    use super::{
-        app_change_local_permissions, LocalFileItem, PermissionApplyTarget, PermissionChangeOptions,
-    };
+    #[cfg(unix)]
+    use super::app_change_local_permissions;
+    use super::{LocalFileItem, PermissionApplyTarget, PermissionChangeOptions};
 
     #[test]
     fn local_file_items_serialize_with_core_camel_case_fields() {
