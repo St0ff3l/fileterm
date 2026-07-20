@@ -187,7 +187,7 @@ platform probe
 - Tauri 无边框子窗口在 macOS 与 Windows 使用透明原生表面，由 renderer 的 `standalone-window-frame` 统一裁切圆角；Windows 主窗口通过平台专用配置使用相同的 renderer 圆角，并在最大化时取消圆角。Windows 子窗口保持隐藏到 React 首帧完成以避免 WebView2 启动闪烁，Linux 继续使用不透明原生表面。
 - Windows 下严禁从同步 Tauri command、托盘回调或原生菜单回调直接执行 `WebviewWindowBuilder::build()`；WebView2 会在该上下文发生建窗死锁并阻塞后续全部 invoke。Renderer 建窗入口必须使用 async command，实际 builder 工作进入 blocking worker；原生事件入口也必须先交给 worker。
 - macOS 菜单栏托盘图标使用 `apps/tauri/build/trayTemplate*.png` template 资源，由 Rust/Tauri backend 设置 template 属性。
-- macOS 主窗口保留原生红黄绿按钮；开发态与打包态共用 `tauri.conf.json` 的 traffic-light 坐标，renderer 不得用 CSS 伪造或补偿原生按钮。
+- macOS 主窗口保留原生红黄绿按钮；开发态使用 `tauri.conf.json` 的 traffic-light 坐标，macOS Release 使用 `tauri.release.macos.conf.json` 针对打包后的 AppKit 几何做纵向校准，renderer 不得用 CSS 伪造或补偿原生按钮。
 - Tauri 托盘由 Rust backend 显式创建：macOS 使用独立 template 图标，Windows/Linux 使用应用图标。主窗口与可见子窗口隐藏到托盘后会成组恢复；普通关闭请求与真正退出请求保持分离。
 - 应用更新通过 Rust/Tauri update service 统一管理，renderer 仅经 `Rust commands/events -> tauri-api.ts -> renderer` 查询状态和触发检查；Windows 使用 GitHub Release 的签名 `latest.json`、NSIS 安装器及其 `.sig` 和两段式“下载验签 → 重启安装”，macOS 发行构建使用 ad hoc 签名并保持检查后跳转 GitHub Release 下载页（不接入 Apple 证书、公证或应用内 updater）。
 - 原生关闭快捷键由 Rust/Tauri backend 统一收口：macOS 使用 `Cmd+Q` 请求应用退出确认、`Cmd+W` 请求关闭当前工作区项/子窗口；Windows/Linux 分别保持 `Alt+F4` 退出与 `Ctrl+W` 关闭窗口语义。最后一个工作区项只触发普通窗口关闭/隐藏，不得直接销毁主窗口；托盘退出和应用退出快捷键必须走同一确认与 transfer journal 清理链路。真正退出前还必须逐个等待独立 Monaco 编辑器完成保存或确认丢弃，任一编辑器取消都会中止 session/transfer shutdown。
