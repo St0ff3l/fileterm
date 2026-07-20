@@ -35,10 +35,7 @@ jobs:
         run: npm audit --audit-level=low
 
       - name: Build shared packages
-        run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+        run: npm run build:packages
 
       - name: Typecheck Tauri renderer and shared packages
         run: |
@@ -143,10 +140,7 @@ jobs:
         run: npm ci
 
       - name: Build shared packages for Tauri renderer
-        run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+        run: npm run build:packages
 
       - name: Install protocol fixtures and Linux Tauri dependencies
         run: |
@@ -190,3 +184,38 @@ jobs:
           # Scoped, time-bounded exceptions are reviewed in:
           # docs/quality/rustsec-advisory-exceptions.md
           ignore: RUSTSEC-2023-0071,RUSTSEC-2026-0194,RUSTSEC-2026-0195
+
+  validate:
+    name: validate
+    if: ${{ always() }}
+    needs:
+      - tauri-renderer-and-shared-quality
+      - tauri-socket-lifecycle
+      - tauri-serial-virtual
+      - tauri-real-protocols
+      - rust-security-audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required jobs
+        env:
+          RENDERER_RESULT: "${{ needs['tauri-renderer-and-shared-quality'].result }}"
+          SOCKET_RESULT: "${{ needs['tauri-socket-lifecycle'].result }}"
+          SERIAL_RESULT: "${{ needs['tauri-serial-virtual'].result }}"
+          PROTOCOL_RESULT: "${{ needs['tauri-real-protocols'].result }}"
+          SECURITY_RESULT: "${{ needs['rust-security-audit'].result }}"
+        run: |
+          set -euo pipefail
+          printf 'tauri-renderer-and-shared-quality: %s\n' "$RENDERER_RESULT"
+          printf 'tauri-socket-lifecycle: %s\n' "$SOCKET_RESULT"
+          printf 'tauri-serial-virtual: %s\n' "$SERIAL_RESULT"
+          printf 'tauri-real-protocols: %s\n' "$PROTOCOL_RESULT"
+          printf 'rust-security-audit: %s\n' "$SECURITY_RESULT"
+
+          if [ "$RENDERER_RESULT" != success ] ||
+            [ "$SOCKET_RESULT" != success ] ||
+            [ "$SERIAL_RESULT" != success ] ||
+            [ "$PROTOCOL_RESULT" != success ] ||
+            [ "$SECURITY_RESULT" != success ]; then
+            echo 'One or more required CI jobs did not succeed.' >&2
+            exit 1
+          fi

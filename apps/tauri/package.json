@@ -1,14 +1,14 @@
 {
   "name": "@fileterm/tauri",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "private": true,
   "type": "module",
   "description": "Modern remote workspace for SSH, SFTP, and FTP.",
   "author": "St0ff3l",
   "scripts": {
-    "predev": "npm --prefix ../.. run sync:version",
-    "prebuild": "npm --prefix ../.. run sync:version",
-    "pretypecheck": "npm --prefix ../.. run sync:version",
+    "predev": "node ../../scripts/workspace-run.mjs sync:version . && node ../../scripts/workspace-run.mjs build:packages .",
+    "prebuild": "node ../../scripts/workspace-run.mjs sync:version . && node ../../scripts/workspace-run.mjs build:packages .",
+    "pretypecheck": "node ../../scripts/workspace-run.mjs sync:version . && node ../../scripts/workspace-run.mjs build:packages .",
     "prepackage:mac": "npm --prefix ../.. run sync:version",
     "prepackage:win": "npm --prefix ../.. run sync:version",
     "dev": "node ./scripts/run-tauri.mjs dev",
@@ -21,11 +21,12 @@
     "clean:release": "node ./scripts/clean-release.mjs",
     "release:mac": "node ./scripts/run-tauri.mjs build --target aarch64-apple-darwin --config src-tauri/tauri.release.macos.conf.json",
     "release:mac:x64": "node ./scripts/run-tauri.mjs build --target x86_64-apple-darwin --config src-tauri/tauri.release.macos.conf.json",
-    "release:win": "node ./scripts/run-tauri.mjs build --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.windows.conf.json"
+    "release:win": "node ./scripts/run-tauri.mjs build --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.windows.conf.json",
+    "release:linux": "node ./scripts/run-tauri.mjs build --target x86_64-unknown-linux-gnu --config src-tauri/tauri.release.linux.conf.json"
   },
   "dependencies": {
-    "@fileterm/core": "2.0.2",
-    "@fileterm/shared": "2.0.2",
+    "@fileterm/core": "2.0.3",
+    "@fileterm/shared": "2.0.3",
     "@monaco-editor/react": "4.7.0",
     "@tanstack/react-virtual": "^3.14.3",
     "@xterm/addon-fit": "^0.11.0",
