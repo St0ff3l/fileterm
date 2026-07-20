@@ -820,6 +820,66 @@ fn prefer_windows_native_rounded_corners(window: &WebviewWindow<Wry>) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSView, NSWindowButton};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    const BUTTON_SIZE: f64 = 14.0;
+    const BUTTON_SPACING: f64 = 23.0;
+    // The packaged Overlay window has a 1.5pt AppKit vertical drift compared
+    // with the dev window. Keep this compensation native so renderer CSS does
+    // not have to know which build flavor launched the app.
+    const RELEASE_VERTICAL_OFFSET: f64 = 1.5;
+
+    let Ok(handle) = window.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return;
+    };
+    let Some(_main_thread) = MainThreadMarker::new() else {
+        return;
+    };
+
+    // Tauri exposes the AppKit view through raw-window-handle. AppKit objects
+    // are main-thread-only, and this function is called from setup on macOS.
+    let view = unsafe { &*(handle.ns_view.as_ptr() as *const NSView) };
+    let Some(ns_window) = view.window() else {
+        return;
+    };
+    let Some(close) = ns_window.standardWindowButton(NSWindowButton::CloseButton) else {
+        return;
+    };
+    let Some(miniaturize) = ns_window.standardWindowButton(NSWindowButton::MiniaturizeButton)
+    else {
+        return;
+    };
+    let Some(zoom) = ns_window.standardWindowButton(NSWindowButton::ZoomButton) else {
+        return;
+    };
+
+    let buttons = [&close, &miniaturize, &zoom];
+    let first_frame = buttons[0].frame();
+    let vertical_offset = if cfg!(debug_assertions) {
+        0.0
+    } else {
+        RELEASE_VERTICAL_OFFSET
+    };
+    let center_y = first_frame.origin.y + first_frame.size.height / 2.0 + vertical_offset;
+    let center_x = first_frame.origin.x + first_frame.size.width / 2.0;
+
+    for (index, button) in buttons.into_iter().enumerate() {
+        let mut frame = button.frame();
+        frame.origin.x = center_x + index as f64 * BUTTON_SPACING - BUTTON_SIZE / 2.0;
+        frame.origin.y = center_y - BUTTON_SIZE / 2.0;
+        frame.size.width = BUTTON_SIZE;
+        frame.size.height = BUTTON_SIZE;
+        button.setFrame(frame);
+    }
+}
+
 pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
     if input.kind == "file-editor"
         && input.source.as_deref() == Some("remote")
@@ -1039,11 +1099,13 @@ pub fn run() {
 
             // ── Platform-specific window chrome ────────────────────────────
             // macOS: keep decorations + Overlay titleBarStyle so the traffic
-            //        lights float over renderer content. Overlay's AppKit
-            //        geometry is intentionally calibrated in renderer CSS;
-            //        it is not identical to Electron's hiddenInset.
+            //        lights float over renderer content. AppKit button frames
+            //        are calibrated below so dev and packaged builds match.
             // Windows: drop the OS frame so the renderer owns the title bar.
             // Linux: keep native decorations.
+            #[cfg(target_os = "macos")]
+            calibrate_macos_traffic_lights(&main_window);
+
             #[cfg(target_os = "windows")]
             {
                 let _ = main_window.set_decorations(false);

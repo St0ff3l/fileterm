@@ -43,5 +43,17 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 raw-window-handle = "0.6"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "NSButton",
+  "NSControl",
+  "NSResponder",
+  "NSView",
+  "NSWindow",
+] }
+raw-window-handle = "0.6"
+
 [dev-dependencies]
 rand = "0.10"
