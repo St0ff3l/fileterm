@@ -1,0 +1,93 @@
+name: Beta macOS ARM64
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Beta version to package and publish
+        required: true
+        default: 2.0.3-beta.1
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: beta-macos-arm64
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set temporary beta version
+        env:
+          BETA_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          npm version "$BETA_VERSION" --no-git-tag-version --ignore-scripts
+          npm run sync:version
+
+      - name: Build shared packages
+        run: npm run build:packages
+
+      - name: Package macOS Apple Silicon
+        run: npm run release:mac -w @fileterm/tauri
+
+      - name: Normalize artifact name
+        shell: bash
+        env:
+          BETA_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          bundle_dir="apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg"
+          source_file="$(find "$bundle_dir" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$source_file"
+          target_file="$bundle_dir/FileTerm-${BETA_VERSION}-macos-arm64.dmg"
+          mv "$source_file" "$target_file"
+          echo "DMG_PATH=$target_file" >> "$GITHUB_ENV"
+
+      - name: Upload macOS ARM64 artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: FileTerm-${{ inputs.version }}-macOS-arm64
+          path: ${{ env.DMG_PATH }}
+          if-no-files-found: error
+
+      - name: Publish GitHub pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA_VERSION: ${{ inputs.version }}
+          DMG_PATH: ${{ env.DMG_PATH }}
+        run: |
+          set -euo pipefail
+          tag="beta-${BETA_VERSION}-macos-arm64"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release $tag already exists; choose a new beta version."
+            exit 1
+          fi
+          gh release create "$tag" "$DMG_PATH" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "FileTerm $BETA_VERSION (macOS ARM64 beta)" \
+            --notes "Test beta build for macOS Apple Silicon. This release intentionally contains only the ARM64 DMG."
