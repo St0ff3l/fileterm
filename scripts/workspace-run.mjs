@@ -35,9 +35,10 @@ function runScript(workspaceDir, script) {
     })
 
     child.on('error', reject)
-    child.on('exit', (code) => {
-      if (code) {
-        reject(new Error(`\`${manager} run ${script}\` in ${workspaceDir} exited with code ${code}`))
+    child.on('exit', (code, signal) => {
+      if (code !== 0) {
+        const reason = signal ? `was terminated by signal ${signal}` : `exited with code ${code}`
+        reject(new Error(`\`${manager} run ${script}\` in ${workspaceDir} ${reason}`))
         return
       }
       resolve()

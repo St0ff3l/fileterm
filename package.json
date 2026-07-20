@@ -24,9 +24,9 @@
     "test:tauri": "node ./scripts/workspace-run.mjs test apps/tauri",
     "prepare": "husky",
     "version:bump": "node ./scripts/bump-version.mjs",
-    "release:mac": "npm run release:mac -w @fileterm/tauri",
-    "release:win": "npm run release:win -w @fileterm/tauri",
-    "release:linux": "npm run release:linux -w @fileterm/tauri",
+    "release:mac": "node ./scripts/workspace-run.mjs release:mac apps/tauri",
+    "release:win": "node ./scripts/workspace-run.mjs release:win apps/tauri",
+    "release:linux": "node ./scripts/workspace-run.mjs release:linux apps/tauri",
     "postinstall": "node ./vendor/cpu-features-shim/apply-shim.mjs"
   },
   "engines": {
