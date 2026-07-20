@@ -828,10 +828,9 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) {
 
     const BUTTON_SIZE: f64 = 14.0;
     const BUTTON_SPACING: f64 = 23.0;
-    // The packaged Overlay window has a 1.5pt AppKit vertical drift compared
-    // with the dev window. Keep this compensation native so renderer CSS does
-    // not have to know which build flavor launched the app.
-    const RELEASE_VERTICAL_OFFSET: f64 = 1.5;
+    // Keep the packaged Overlay window's vertical compensation native so
+    // renderer CSS does not have to know which build flavor launched the app.
+    const RELEASE_VERTICAL_OFFSET: f64 = 1.0;
 
     let Ok(handle) = window.window_handle() else {
         return;
