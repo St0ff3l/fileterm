@@ -106,6 +106,18 @@ See [docs/architecture.md](./docs/architecture.md) for the complete architecture
 
 - Node.js >= 22.12.0
 - npm
+- Rust stable, plus the Tauri system dependencies for your platform
+
+On Linux (Ubuntu/Debian) you also need the GTK and WebKit runtimes:
+
+```bash
+# Ubuntu 24.04 and newer
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential libssl-dev
+
+# On Ubuntu 22.04, replace 4.1 with 4.0
+```
+
+`npm run dev` requires a local graphical session. GTK cannot initialize over plain SSH, on a headless server, or in a Wayland session without XWayland. In those cases the launcher prints the current display environment and troubleshooting hints instead of a bare GTK panic.
 
 ### Install and Run
 
@@ -113,6 +125,8 @@ See [docs/architecture.md](./docs/architecture.md) for the complete architecture
 npm install
 npm run dev
 ```
+
+`dev`, `build`, and `typecheck` build `@fileterm/core`, `@fileterm/shared`, and `@fileterm/storage` first, since their entry points resolve to `dist/`. No manual build step is needed after a fresh clone.
 
 ### Common Commands
 

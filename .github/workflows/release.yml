@@ -62,9 +62,7 @@ jobs:
 
       - name: Build shared packages and typecheck Tauri
         run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+          npm run build:packages
           npm run typecheck -w @fileterm/tauri
 
       - name: Package macOS Apple Silicon
@@ -113,9 +111,7 @@ jobs:
 
       - name: Build shared packages and typecheck Tauri
         run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+          npm run build:packages
           npm run typecheck -w @fileterm/tauri
 
       - name: Package macOS Intel
@@ -168,9 +164,7 @@ jobs:
 
       - name: Build shared packages and typecheck Tauri
         run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+          npm run build:packages
           npm run typecheck -w @fileterm/tauri
 
       - name: Require the updater signing key
@@ -217,8 +211,76 @@ jobs:
             apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/latest.json
           if-no-files-found: error
 
+  build-linux:
+    needs: validate-release-tag
+    # 22.04 links against an older glibc, so the bundles run on a wider range of
+    # distributions than an ubuntu-latest build would.
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages and typecheck Tauri
+        run: |
+          npm run build:packages
+          npm run typecheck -w @fileterm/tauri
+
+      - name: Package Linux deb and AppImage
+        run: npm run release:linux -w @fileterm/tauri
+
+      - name: Normalize Linux artifact names
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          version="${GITHUB_REF_NAME#v}"
+
+          deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb_file"
+          mv "$deb_file" "$bundle_root/deb/FileTerm-${version}-linux-x86_64.deb"
+
+          appimage_file="$(find "$bundle_root/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
+          test -n "$appimage_file"
+          mv "$appimage_file" "$bundle_root/appimage/FileTerm-${version}-linux-x86_64.AppImage"
+
+      - name: Verify Linux packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          test -n "$(find "$bundle_root/deb" -name '*.deb' -print -quit)"
+          test -n "$(find "$bundle_root/appimage" -name '*.AppImage' -print -quit)"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: FileTerm-Linux-x64
+          path: |
+            apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
   release:
-    needs: [validate-release-tag, build-macos-arm64, build-macos-x64, build-windows]
+    needs: [validate-release-tag, build-macos-arm64, build-macos-x64, build-windows, build-linux]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -251,7 +313,7 @@ jobs:
             release_flags+=(--prerelease)
           fi
 
-          mapfile -d '' assets < <(find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.sig' -o -name 'latest.json' \) -print0)
+          mapfile -d '' assets < <(find . -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.sig' -o -name 'latest.json' \) -print0)
           if [ "${#assets[@]}" -eq 0 ]; then
             echo 'No Tauri release assets were downloaded.'
             exit 1

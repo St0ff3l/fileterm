@@ -106,12 +106,25 @@ Renderer UI
 - npm
 - Rust stable 与当前平台所需的 Tauri 系统依赖
 
+Linux（Ubuntu/Debian）还需要安装 GTK 与 WebKit 运行时：
+
+```bash
+# Ubuntu 24.04 及以上
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential libssl-dev
+
+# Ubuntu 22.04 请将 4.1 替换为 4.0
+```
+
+`npm run dev` 需要本地图形会话。纯 SSH、无桌面的服务器或缺少 XWayland 的 Wayland 会话下 GTK 无法初始化；此时启动脚本会打印当前的显示环境变量与排查建议，而不是直接抛出 GTK panic。
+
 ### 安装与启动
 
 ```bash
 npm install
 npm run dev # 默认启动 Tauri/Rust 运行时
 ```
+
+`dev`、`build`、`typecheck` 会自动先构建 `@fileterm/core`、`@fileterm/shared`、`@fileterm/storage`（它们的入口指向 `dist/`）。全新克隆后无需手动构建这些包。
 
 ### 常用命令
 

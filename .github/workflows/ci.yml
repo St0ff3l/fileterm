@@ -35,10 +35,7 @@ jobs:
         run: npm audit --audit-level=low
 
       - name: Build shared packages
-        run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+        run: npm run build:packages
 
       - name: Typecheck Tauri renderer and shared packages
         run: |
@@ -143,10 +140,7 @@ jobs:
         run: npm ci
 
       - name: Build shared packages for Tauri renderer
-        run: |
-          npm run build -w @fileterm/core
-          npm run build -w @fileterm/shared
-          npm run build -w @fileterm/storage
+        run: npm run build:packages
 
       - name: Install protocol fixtures and Linux Tauri dependencies
         run: |
