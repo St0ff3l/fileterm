@@ -770,11 +770,12 @@
 :root[data-runtime='tauri'][data-platform='darwin'] .titlebar-brand strong {
   /* In Tauri Overlay, trafficLightPosition y shifts the title-bar container
      rather than each button's frame. With y: 26 the traffic lights share the
-     48px renderer tab bar's visual center, so compensate the brand glyph for
-     its optical (not line-box) center. Scope this to Tauri: Electron
-     hiddenInset uses a different native geometry. */
+     48px renderer tab bar's visual center. The previous -0.5px lift left the
+     brand glyph optically high after the native traffic-light calibration, so
+     restore the line-box baseline. Scope this to Tauri: Electron hiddenInset
+     uses a different native geometry. */
   position: relative;
-  top: -0.5px;
+  top: 0;
 }
 
 .titlebar-tabarea {
