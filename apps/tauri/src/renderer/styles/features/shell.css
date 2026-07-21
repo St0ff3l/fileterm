@@ -774,7 +774,7 @@
      its optical (not line-box) center. Scope this to Tauri: Electron
      hiddenInset uses a different native geometry. */
   position: relative;
-  top: -1px;
+  top: -0.5px;
 }
 
 .titlebar-tabarea {
