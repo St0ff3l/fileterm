@@ -9,7 +9,16 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
   }
 
   return (
-    <div className="window-menubar" data-tauri-drag-region="deep">
+    <div
+      className="window-menubar"
+      data-tauri-drag-region="deep"
+      onDoubleClick={(event) => {
+        if (event.target instanceof Element && event.target.closest('button')) {
+          return
+        }
+        void desktopApi?.toggleMaximizeCurrentWindow()
+      }}
+    >
       <div className="window-menu-items">
         <button type="button" onClick={(event) => openWindowMenu('file', event.currentTarget)}>
           {t.nativeMenuFile}

@@ -30,6 +30,7 @@ export interface TabBarProps {
   onDragStart(tabKey: string): void
   onOpenTabContext(event: MouseEvent<HTMLDivElement>, target: TabContextTarget): void
   onOpenSettings(): void
+  onToggleWindowMaximize(): void
   onToggleWorkspaceFocus(): void
   orderedTabs: OrderedTabEntry[]
 }
@@ -49,6 +50,7 @@ export function TabBar({
   onDragStart,
   onOpenTabContext,
   onOpenSettings,
+  onToggleWindowMaximize,
   onToggleWorkspaceFocus,
   orderedTabs
 }: TabBarProps) {
@@ -79,7 +81,17 @@ export function TabBar({
   })
 
   return (
-    <header className="fs-tabbar" data-tauri-drag-region="deep">
+    <header
+      className="fs-tabbar"
+      data-tauri-drag-region="deep"
+      onDoubleClick={(event) => {
+        const target = event.target instanceof Element ? event.target : null
+        if (target?.closest('.fs-tab, .add-tab, .window-tools, .window-controls-decorator')) {
+          return
+        }
+        onToggleWindowMaximize()
+      }}
+    >
       <div
         className={`titlebar-brand ${homeBrandContent ? 'has-home-brand-content' : ''}`}
         data-tauri-drag-region="deep"
