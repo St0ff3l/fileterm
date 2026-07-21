@@ -43,7 +43,11 @@ export function SystemSidebarShell({
         <div
           aria-label={t.resizeSidebar}
           className={`sidebar-resizer ${isResizing ? 'is-active' : ''}`}
-          onMouseDown={onResizeStart}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onResizeStart()
+          }}
           role="separator"
         />
       ) : null}

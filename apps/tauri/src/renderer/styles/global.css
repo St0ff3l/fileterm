@@ -39,6 +39,12 @@ textarea,
   -webkit-user-select: text;
 }
 
+body.is-resizing-sidebar,
+body.is-resizing-sidebar * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 input::placeholder,
 textarea::placeholder {
   user-select: none;

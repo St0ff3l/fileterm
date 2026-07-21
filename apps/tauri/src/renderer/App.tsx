@@ -571,6 +571,12 @@ export function App() {
   })
 
   // Sidebars resizing logic
+  const startSidebarResize = useCallback(() => {
+    window.getSelection()?.removeAllRanges()
+    document.body.classList.add('is-resizing-sidebar')
+    setIsResizingSidebar(true)
+  }, [])
+
   useEffect(() => {
     if (!isResizingSidebar) {
       return
@@ -584,17 +590,22 @@ export function App() {
     }
 
     const onMouseUp = () => {
+      window.getSelection()?.removeAllRanges()
       setIsResizingSidebar(false)
     }
 
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', onMouseUp)
+    document.body.classList.add('is-resizing-sidebar')
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('blur', onMouseUp)
+      document.body.classList.remove('is-resizing-sidebar')
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -1194,7 +1205,7 @@ export function App() {
             showResourceMeters={isResourceMonitoringAvailable}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
-            onResizeStart={() => setIsResizingSidebar(true)}
+            onResizeStart={startSidebarResize}
             onRestoreWidth={() => setSidebarWidth(214)}
             onToggleCollapsed={setIsSystemSidebarCollapsed}
           />
@@ -1310,7 +1321,7 @@ export function App() {
                 isWorkspaceFocusMode={isWorkspaceFocusMode}
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
-                onResizeStart={() => setIsResizingSidebar(true)}
+                onResizeStart={startSidebarResize}
               />
             </div>
           </div>

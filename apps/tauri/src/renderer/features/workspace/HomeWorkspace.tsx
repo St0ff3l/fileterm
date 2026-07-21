@@ -286,7 +286,11 @@ export function HomeWorkspace({
         <div
           aria-label={t.resizeSidebar}
           className={`sidebar-resizer ${isResizingSidebar ? 'is-active' : ''}`}
-          onMouseDown={onResizeStart}
+          onMouseDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onResizeStart()
+          }}
           role="separator"
         />
       </aside>
