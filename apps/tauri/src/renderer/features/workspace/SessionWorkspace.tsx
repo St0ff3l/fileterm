@@ -467,6 +467,7 @@ export function SessionWorkspace({
             onCutItems={onCutItems}
             onClearCutState={onClearCutState}
             onExecuteCommand={onExecuteCommand}
+            onSendTerminalCommand={onSendTerminalCommand}
             onOpenCommandManager={onOpenCommandManager}
             onOpenLocalItem={onOpenLocalItem}
             onOpenLocalPath={onOpenLocalPath}

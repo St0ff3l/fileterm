@@ -161,6 +161,7 @@ export function FileManager({
   localCutPaths,
   remoteCutPaths,
   onExecuteCommand,
+  onSendTerminalCommand,
   onOpenCommandManager,
   onCopyItems,
   onCutItems,
@@ -211,6 +212,12 @@ export function FileManager({
     scope: SendScope,
     selectedTabIds: string[]
   ): void
+  onSendTerminalCommand(
+    command: string,
+    options: CommandExecutionOptions,
+    scope: SendScope,
+    selectedTabIds: string[]
+  ): Promise<void>
   onOpenCommandManager(): void
   onCopyItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onCutItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
@@ -747,6 +754,7 @@ export function FileManager({
             isBusy={isBusy}
             sendTargets={sendTargets}
             onExecute={onExecuteCommand}
+            onSendTerminalCommand={onSendTerminalCommand}
             paneWidth={localPaneWidth}
             onPaneWidthChange={setLocalPaneWidth}
           />

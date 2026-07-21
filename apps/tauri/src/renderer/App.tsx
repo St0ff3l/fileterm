@@ -65,6 +65,8 @@ import { StandaloneWindowFrame } from './features/layout/StandaloneWindowFrame'
 
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
+const DEFAULT_SIDEBAR_WIDTH = 214
+const SIDEBAR_SNAP_THRESHOLD = 10
 
 type ErrorDetails = {
   item?: RemoteFileItem
@@ -267,7 +269,7 @@ export function App() {
   const isResourceMonitoringAvailable =
     activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring !== false
   const isSystemSidebarCollapsed =
-    isSystemSidebarUserCollapsed || Boolean(activeTab && (isWorkspaceFocusMode || !isResourceMonitoringAvailable))
+    isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
   const activeTabId = activeTab?.id ?? null
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {
@@ -569,27 +571,41 @@ export function App() {
   })
 
   // Sidebars resizing logic
+  const startSidebarResize = useCallback(() => {
+    window.getSelection()?.removeAllRanges()
+    document.body.classList.add('is-resizing-sidebar')
+    setIsResizingSidebar(true)
+  }, [])
+
   useEffect(() => {
     if (!isResizingSidebar) {
       return
     }
 
     const onMouseMove = (event: globalThis.MouseEvent) => {
-      setSidebarWidth(Math.min(360, Math.max(190, event.clientX)))
+      const nextWidth = Math.min(360, Math.max(190, event.clientX))
+      setSidebarWidth(
+        Math.abs(nextWidth - DEFAULT_SIDEBAR_WIDTH) <= SIDEBAR_SNAP_THRESHOLD ? DEFAULT_SIDEBAR_WIDTH : nextWidth
+      )
     }
 
     const onMouseUp = () => {
+      window.getSelection()?.removeAllRanges()
       setIsResizingSidebar(false)
     }
 
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', onMouseUp)
+    document.body.classList.add('is-resizing-sidebar')
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('blur', onMouseUp)
+      document.body.classList.remove('is-resizing-sidebar')
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -1126,14 +1142,7 @@ export function App() {
   // --- Main Workspace Render ---
 
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
-  const isHomeTabActive = isHomeWorkspaceVisible
-  const brandWidth = isHomeTabActive
-    ? isSystemSidebarCollapsed
-      ? 214
-      : resolvedSidebarWidth
-    : showSidebar && !isSystemSidebarCollapsed
-      ? sidebarWidth
-      : 214
+  const brandWidth = DEFAULT_SIDEBAR_WIDTH
 
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
@@ -1152,6 +1161,9 @@ export function App() {
     onDragEnter: enterDraggedTab,
     onDragStart: startTabDrag,
     onOpenSettings: () => setShowSettings(true),
+    onToggleWindowMaximize: () => {
+      void desktopApi?.toggleMaximizeCurrentWindow()
+    },
     onOpenTabContext: (event: React.MouseEvent<HTMLDivElement>, target: TabContextTarget) => {
       openTabContextMenu(event, target)
     },
@@ -1193,7 +1205,7 @@ export function App() {
             showResourceMeters={isResourceMonitoringAvailable}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
-            onResizeStart={() => setIsResizingSidebar(true)}
+            onResizeStart={startSidebarResize}
             onRestoreWidth={() => setSidebarWidth(214)}
             onToggleCollapsed={setIsSystemSidebarCollapsed}
           />
@@ -1309,7 +1321,7 @@ export function App() {
                 isWorkspaceFocusMode={isWorkspaceFocusMode}
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
-                onResizeStart={() => setIsResizingSidebar(true)}
+                onResizeStart={startSidebarResize}
               />
             </div>
           </div>
