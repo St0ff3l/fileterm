@@ -826,7 +826,7 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) {
     use objc2_app_kit::{NSView, NSWindowButton};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    const BUTTON_SIZE: f64 = 15.0;
+    const BUTTON_SIZE: f64 = 16.0;
     const BUTTON_SPACING: f64 = 22.0;
     // Keep the packaged Overlay window's vertical compensation native so
     // renderer CSS does not have to know which build flavor launched the app.
