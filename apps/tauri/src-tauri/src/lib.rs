@@ -827,9 +827,11 @@ fn prefer_windows_native_rounded_corners(window: &WebviewWindow<Wry>) {
 fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSControlSize, NSView, NSWindowButton};
+    use objc2_quartz_core::{CATransaction, CATransform3D};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     const BUTTON_SIZE: f64 = 14.0;
+    const APPKIT_DRAWN_CIRCLE_SIZE: f64 = 12.0;
     const BUTTON_SPACING: f64 = 23.0;
     // Keep the packaged Overlay window's vertical compensation native so
     // renderer CSS does not have to know which build flavor launched the app.
@@ -871,10 +873,16 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     };
     let center_y = first_frame.origin.y + first_frame.size.height / 2.0 + vertical_offset;
     let center_x = first_frame.origin.x + first_frame.size.width / 2.0;
+    let release_content_scale = BUTTON_SIZE / APPKIT_DRAWN_CIRCLE_SIZE;
 
+    CATransaction::begin();
+    CATransaction::setDisableActions(true);
     for (index, button) in buttons.into_iter().enumerate() {
-        // AppKit draws the colored circle from NSControlSize. Changing only
-        // the view frame leaves the packaged app's 12pt circle unchanged.
+        // The packaged Overlay window keeps drawing a 12pt circle even when
+        // its native button frame and control size are 14pt. In release builds,
+        // scale the actual AppKit presentation layer around the button center
+        // so it matches the already-correct 14pt development rendering without
+        // moving the calibrated centers.
         button.setControlSize(NSControlSize::Regular);
         button.sizeToFit();
 
@@ -884,8 +892,20 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
         frame.size.width = BUTTON_SIZE;
         frame.size.height = BUTTON_SIZE;
         button.setFrame(frame);
+        if !cfg!(debug_assertions) {
+            button.setWantsLayer(true);
+            if let Some(layer) = button.layer() {
+                let mut transform =
+                    CATransform3D::new_scale(release_content_scale, release_content_scale, 1.0);
+                let centered_translation = BUTTON_SIZE / 2.0 * (1.0 - release_content_scale);
+                transform.m41 = centered_translation;
+                transform.m42 = centered_translation;
+                layer.setTransform(transform);
+            }
+        }
         NSView::setNeedsDisplay(button, true);
     }
+    CATransaction::commit();
 
     true
 }

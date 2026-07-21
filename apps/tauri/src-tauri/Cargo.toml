@@ -53,6 +53,14 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "NSResponder",
   "NSView",
   "NSWindow",
+  "objc2-quartz-core",
+] }
+objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "CALayer",
+  "CATransaction",
+  "CATransform3D",
+  "objc2-core-foundation",
 ] }
 raw-window-handle = "0.6"
 
