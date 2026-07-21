@@ -401,7 +401,7 @@ export function CommandCenter({
                       ariaLabel={t.commandTemporaryEditorTitle}
                     />
                   </div>
-                  <div className="command-temporary-editor-toolbar">
+                  <div className="command-runner-actions command-temporary-editor-toolbar">
                     <label className="command-toggle">
                       <input
                         checked={appendCarriageReturn}

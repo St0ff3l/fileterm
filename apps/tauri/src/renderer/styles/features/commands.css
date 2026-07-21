@@ -410,14 +410,16 @@
 }
 
 .command-temporary-runner {
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 .command-temporary-editor {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: max-content;
   gap: 12px;
 }
 
@@ -435,23 +437,19 @@
 }
 
 .command-temporary-editor-field {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .command-temporary-editor-field .command-code-area {
-  flex: 1;
-  height: auto;
+  height: 290px;
   min-height: 290px;
-  max-height: none;
+  max-height: 290px;
 }
 
 .command-temporary-editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 8px;
   min-height: 28px;
-  flex-shrink: 0;
 }
 
 .command-temporary-editor-toolbar .command-toggle {
