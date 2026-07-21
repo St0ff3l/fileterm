@@ -21,11 +21,7 @@
         "dragDropEnabled": true,
         "decorations": true,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "trafficLightPosition": {
-          "x": 20,
-          "y": 26
-        }
+        "hiddenTitle": true
       }
     ],
     "security": {
