@@ -384,6 +384,32 @@ export function CommandCenter({
                         popover={true}
                       />
                     </div>
+                    <div className="command-runner-actions command-temporary-editor-toolbar">
+                      <label className="command-toggle">
+                        <input
+                          checked={appendCarriageReturn}
+                          type="checkbox"
+                          onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
+                        />
+                        <span>{t.commandAppendCr}</span>
+                      </label>
+                      <button
+                        className="flat-button compact"
+                        type="button"
+                        onClick={() => setTemporaryCommand('')}
+                        disabled={!temporaryCommand}
+                      >
+                        {t.clear}
+                      </button>
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={handleTemporaryRun}
+                        disabled={isBusy || isSendingTemporary || !canSendTemporary}
+                      >
+                        {t.send}
+                      </button>
+                    </div>
                   </div>
                   <div className="command-editor-field full command-editor-dialog-textarea command-temporary-editor-field">
                     <span>{t.commandTemplate}</span>
@@ -400,32 +426,6 @@ export function CommandCenter({
                       autoFocus={true}
                       ariaLabel={t.commandTemporaryEditorTitle}
                     />
-                  </div>
-                  <div className="command-runner-actions command-temporary-editor-toolbar">
-                    <label className="command-toggle">
-                      <input
-                        checked={appendCarriageReturn}
-                        type="checkbox"
-                        onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
-                      />
-                      <span>{t.commandAppendCr}</span>
-                    </label>
-                    <button
-                      className="flat-button compact"
-                      type="button"
-                      onClick={() => setTemporaryCommand('')}
-                      disabled={!temporaryCommand}
-                    >
-                      {t.clear}
-                    </button>
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={handleTemporaryRun}
-                      disabled={isBusy || isSendingTemporary || !canSendTemporary}
-                    >
-                      {t.send}
-                    </button>
                   </div>
                 </div>
               ) : selectedTemplate ? (
