@@ -10,6 +10,8 @@ import { SshKeyPassphraseModal } from '../connections/SshKeyPassphraseModal'
 import { FileActionModal } from '../files/FileActionModal'
 import { FilePermissionModal } from '../files/FilePermissionModal'
 import { RootAccessModal } from '../files/RootAccessModal'
+import { SmbCredentialsModal } from '../files/SmbCredentialsModal'
+import { SmbSharePickerModal } from '../files/SmbSharePickerModal'
 import { SettingsModal } from '../settings/SettingsModal'
 import { TabContextMenu } from './TabContextMenu'
 
@@ -28,6 +30,8 @@ export type SettingsModalBinding = ModalBinding<typeof SettingsModal>
 export type ConnectionFormModalBinding = NonStandaloneModalBinding<typeof ConnectionFormHost>
 export type FilePermissionModalBinding = ModalBinding<typeof FilePermissionModal>
 export type RootAccessModalBinding = ModalBinding<typeof RootAccessModal>
+export type SmbCredentialsModalBinding = ModalBinding<typeof SmbCredentialsModal>
+export type SmbSharePickerModalBinding = ModalBinding<typeof SmbSharePickerModal>
 export type SshCredentialsModalBinding = ModalBinding<typeof SshCredentialsModal>
 export type SshHostVerificationModalBinding = ModalBinding<typeof SshHostVerificationModal>
 export type SshKeyboardInteractiveModalBinding = ModalBinding<typeof SshKeyboardInteractiveModal>
@@ -56,6 +60,8 @@ export interface ModalPortalManagerProps {
   fileEditorFallback?: ReactNode
   filePermission: FilePermissionModalBinding
   rootAccess: RootAccessModalBinding
+  smbCredentials: SmbCredentialsModalBinding
+  smbSharePicker: SmbSharePickerModalBinding
   settings: SettingsModalBinding
   shortcutCloseConfirm: ConfirmActionDialogBinding
   sshCredentials: SshCredentialsModalBinding
@@ -75,6 +81,8 @@ export function ModalPortalManager({
   fileEditorFallback = null,
   filePermission,
   rootAccess,
+  smbCredentials,
+  smbSharePicker,
   settings,
   shortcutCloseConfirm,
   sshCredentials,
@@ -103,6 +111,8 @@ export function ModalPortalManager({
       ) : null}
       {filePermission ? <FilePermissionModal {...filePermission} /> : null}
       {rootAccess ? <RootAccessModal {...rootAccess} /> : null}
+      {smbCredentials ? <SmbCredentialsModal {...smbCredentials} /> : null}
+      {smbSharePicker ? <SmbSharePickerModal {...smbSharePicker} /> : null}
       {sshCredentials ? <SshCredentialsModal {...sshCredentials} /> : null}
       {sshHostVerification ? <SshHostVerificationModal {...sshHostVerification} /> : null}
       {sshKeyboardInteractive ? <SshKeyboardInteractiveModal {...sshKeyboardInteractive} /> : null}

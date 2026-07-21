@@ -38,6 +38,8 @@ export type UseWorkspaceIpcSyncResult = {
   setLocalPath: Dispatch<SetStateAction<string>>
   localItems: LocalFileItem[]
   setLocalItems: Dispatch<SetStateAction<LocalFileItem[]>>
+  isLocalDirectoryLoading: boolean
+  setIsLocalDirectoryLoading: Dispatch<SetStateAction<boolean>>
   hasLoadedInitialSnapshot: boolean
   isMaximized: boolean
   windowCloseRequest: WorkspaceWindowCloseRequest | null
@@ -78,6 +80,7 @@ export function useWorkspaceIpcSync({
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot>(emptyState)
   const [localPath, setLocalPath] = useState(previewLocalPath)
   const [localItems, setLocalItems] = useState<LocalFileItem[]>(localPreviewFiles)
+  const [isLocalDirectoryLoading, setIsLocalDirectoryLoading] = useState(false)
   const [hasLoadedInitialSnapshot, setHasLoadedInitialSnapshot] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
   const [windowCloseRequest, setWindowCloseRequest] = useState<WorkspaceWindowCloseRequest | null>(null)
@@ -255,6 +258,7 @@ export function useWorkspaceIpcSync({
       setWorkspace(previewState)
       setLocalPath(previewLocalPath)
       setLocalItems(localPreviewFiles)
+      setIsLocalDirectoryLoading(false)
       setHasLoadedInitialSnapshot(true)
       if (isMainWorkspaceWindow) {
         onStatusMessageRef.current(t.browserPreview)
@@ -369,6 +373,7 @@ export function useWorkspaceIpcSync({
     void hydrateWorkspace()
 
     if (isMainWorkspaceWindow) {
+      setIsLocalDirectoryLoading(true)
       void desktopApi
         .listLocalDirectory()
         .then(({ path, items }) => {
@@ -381,6 +386,11 @@ export function useWorkspaceIpcSync({
         .catch((error: unknown) => {
           if (!canceled) {
             onErrorRef.current('读取本机目录', error)
+          }
+        })
+        .finally(() => {
+          if (!canceled) {
+            setIsLocalDirectoryLoading(false)
           }
         })
     }
@@ -435,6 +445,8 @@ export function useWorkspaceIpcSync({
     setLocalPath,
     localItems,
     setLocalItems,
+    isLocalDirectoryLoading,
+    setIsLocalDirectoryLoading,
     hasLoadedInitialSnapshot,
     isMaximized,
     windowCloseRequest,

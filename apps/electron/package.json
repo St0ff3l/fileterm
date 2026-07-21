@@ -64,7 +64,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^6.0.2",
-    "concurrently": "^10.0.3",
+    "concurrently": "^9.2.4",
     "electron": "42.4.0",
     "electron-builder": "^26.15.2",
     "typescript": "^6.0.3",

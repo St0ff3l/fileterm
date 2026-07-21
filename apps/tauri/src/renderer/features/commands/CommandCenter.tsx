@@ -5,6 +5,7 @@ import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
+import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import { extractCommandParams, groupCommands, sortByOrder } from './command-utils'
 
 export function CommandCenter({
@@ -100,15 +101,23 @@ export function CommandCenter({
     async function loadPreferences() {
       const desktopApi = window.fileterm
       if (!desktopApi?.getCommandSendPreferences) {
+        setPreferencesLoaded(true)
         return
       }
 
-      const storedPreferences = await desktopApi.getCommandSendPreferences()
-      if (!canceled) {
-        setRememberSelection(storedPreferences.rememberSelection)
-        setSendScope(storedPreferences.rememberSelection ? storedPreferences.sendScope : 'current')
-        setSelectedTabIds(storedPreferences.rememberSelection ? storedPreferences.selectedTabIds : [])
-        setPreferencesLoaded(true)
+      try {
+        const storedPreferences = await desktopApi.getCommandSendPreferences()
+        if (!canceled) {
+          setRememberSelection(storedPreferences.rememberSelection)
+          setSendScope(storedPreferences.rememberSelection ? storedPreferences.sendScope : 'current')
+          setSelectedTabIds(storedPreferences.rememberSelection ? storedPreferences.selectedTabIds : [])
+        }
+      } catch {
+        // Command execution remains usable when preference hydration fails.
+      } finally {
+        if (!canceled) {
+          setPreferencesLoaded(true)
+        }
       }
     }
 
@@ -187,188 +196,191 @@ export function CommandCenter({
 
   return (
     <section className="command-center">
-      <div
-        className="command-center-body"
-        ref={splitRef}
-        style={{ '--list-pane-width': `${paneWidth}px` } as React.CSSProperties}
-      >
-        <section className="command-pane command-pane-list">
-          <div className="command-folder-bar">
-            <div className="command-folder-tabs" onWheel={handleHorizontalWheelScroll}>
-              <button
-                className={activeFolderId === 'all' ? 'active' : ''}
-                type="button"
-                onClick={() => setActiveFolderId('all')}
-              >
-                <span>{t.all}</span>
-                <small>{commandTemplates.length}</small>
-              </button>
-              {grouped.map(({ folder, templates }) => (
-                <button
-                  key={folder.id}
-                  className={activeFolderId === folder.id ? 'active' : ''}
-                  type="button"
-                  onClick={() => setActiveFolderId(folder.id)}
-                >
-                  <span>{folder.name}</span>
-                  <small>{templates.length}</small>
-                </button>
-              ))}
-              {ungrouped.length ? (
-                <button
-                  className={activeFolderId === 'ungrouped' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setActiveFolderId('ungrouped')}
-                >
-                  <span>{t.commandUncategorized}</span>
-                  <small>{ungrouped.length}</small>
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="command-template-list-region">
-            <div className="command-template-list scrollbar-scroll" ref={templateListScrollRef}>
-              <table className="fs-file-table compact command-table">
-                <colgroup>
-                  <col style={{ width: '100%' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>{t.name}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleTemplates.map((template) => (
-                    <tr
-                      key={template.id}
-                      className={selectedTemplate?.id === template.id ? 'is-selected' : ''}
-                      onClick={() => setSelectedCommandId(template.id)}
-                    >
-                      <td>
-                        <div className="col-name-wrapper">
-                          <strong>{template.name}</strong>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!visibleTemplates.length ? <div className="command-empty-state">{t.commandEmpty}</div> : null}
-            </div>
-            <VerticalScrollbar ariaLabel="滚动命令列表" scrollRef={templateListScrollRef} topInset={24} />
-          </div>
-        </section>
-
+      {!preferencesLoaded ? <WorkspaceLoadingState label={t.loadingWorkspace} /> : null}
+      {preferencesLoaded ? (
         <div
-          className="file-split-resizer"
-          onMouseDown={() => {
-            isResizingCommandSplit.current = true
-            document.body.style.cursor = 'col-resize'
-            document.body.style.userSelect = 'none'
-          }}
-          role="separator"
-        />
-
-        <section className="command-pane command-pane-preview">
-          <div className="command-pane-head">
-            <strong>{t.commandPreview}</strong>
-            <span>{selectedTemplate ? t.commandRendered : t.commandNoDescription}</span>
-          </div>
-
-          <div className="command-runner scrollbar-scroll">
-            {selectedTemplate ? (
-              <>
-                <div className="command-runner-head">
-                  <div className="command-runner-title-line">
-                    <strong>{selectedTemplate.name}</strong>
-                    <SessionSendTargetPicker
-                      allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
-                      currentLabel={
-                        activeTab
-                          ? t.commandSendCurrentWithIndex.replace(
-                              '{index}',
-                              String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
-                            )
-                          : t.commandSendCurrent
-                      }
-                      onScopeChange={setSendScope}
-                      onSelectedTabIdsChange={setSelectedTabIds}
-                      scope={sendScope}
-                      selectedTabIds={selectedTabIds}
-                      targets={sendTargets}
-                      showRememberSelection={true}
-                      rememberSelection={rememberSelection}
-                      onRememberSelectionChange={setRememberSelection}
-                      popover={true}
-                    />
-                  </div>
-                  <div className="command-runner-actions">
-                    <label className="command-toggle">
-                      <input
-                        checked={appendCarriageReturn}
-                        type="checkbox"
-                        onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
-                      />
-                      <span>{t.commandAppendCr}</span>
-                    </label>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      onClick={handleRun}
-                      disabled={
-                        isBusy ||
-                        (sendScope === 'current'
-                          ? !canRunCurrent
-                          : sendScope === 'all-ssh'
-                            ? !canRunAny
-                            : !canRunSelected)
-                      }
-                    >
-                      {t.send}
-                    </button>
-                  </div>
-                </div>
-                <div className="command-detail-block">
-                  <span>{t.name}</span>
-                  <p>{selectedTemplate.name}</p>
-                </div>
-                <div className="command-detail-block">
-                  <span>{t.description}</span>
-                  <p>{selectedTemplate.description || t.commandNoDescription}</p>
-                </div>
-                <div className="command-preview command-detail-block">
-                  <span>{t.commandTemplate}</span>
-                  <code>{selectedTemplate.command}</code>
-                </div>
-                {paramIndexes.length ? (
-                  <div className="command-param-grid">
-                    {paramIndexes.map((index) => (
-                      <label key={index}>
-                        <span>{`${t.commandParam} ${index}`}</span>
-                        <input
-                          type="text"
-                          value={paramValues[index] ?? ''}
-                          onChange={(event) => {
-                            const value = event.currentTarget.value
-                            setParamValues((prev) => ({ ...prev, [index]: value }))
-                          }}
-                        />
-                      </label>
-                    ))}
-                  </div>
+          className="command-center-body"
+          ref={splitRef}
+          style={{ '--list-pane-width': `${paneWidth}px` } as React.CSSProperties}
+        >
+          <section className="command-pane command-pane-list">
+            <div className="command-folder-bar">
+              <div className="command-folder-tabs" onWheel={handleHorizontalWheelScroll}>
+                <button
+                  className={activeFolderId === 'all' ? 'active' : ''}
+                  type="button"
+                  onClick={() => setActiveFolderId('all')}
+                >
+                  <span>{t.all}</span>
+                  <small>{commandTemplates.length}</small>
+                </button>
+                {grouped.map(({ folder, templates }) => (
+                  <button
+                    key={folder.id}
+                    className={activeFolderId === folder.id ? 'active' : ''}
+                    type="button"
+                    onClick={() => setActiveFolderId(folder.id)}
+                  >
+                    <span>{folder.name}</span>
+                    <small>{templates.length}</small>
+                  </button>
+                ))}
+                {ungrouped.length ? (
+                  <button
+                    className={activeFolderId === 'ungrouped' ? 'active' : ''}
+                    type="button"
+                    onClick={() => setActiveFolderId('ungrouped')}
+                  >
+                    <span>{t.commandUncategorized}</span>
+                    <small>{ungrouped.length}</small>
+                  </button>
                 ) : null}
-                <div className="command-preview command-detail-block">
-                  <span>{t.commandRendered}</span>
-                  <code>{lastRenderedCommand || selectedTemplate.command}</code>
-                </div>
-              </>
-            ) : (
-              <div className="command-empty-state">{t.commandEmpty}</div>
-            )}
-          </div>
-        </section>
-      </div>
+              </div>
+            </div>
+
+            <div className="command-template-list-region">
+              <div className="command-template-list scrollbar-scroll" ref={templateListScrollRef}>
+                <table className="fs-file-table compact command-table">
+                  <colgroup>
+                    <col style={{ width: '100%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>{t.name}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleTemplates.map((template) => (
+                      <tr
+                        key={template.id}
+                        className={selectedTemplate?.id === template.id ? 'is-selected' : ''}
+                        onClick={() => setSelectedCommandId(template.id)}
+                      >
+                        <td>
+                          <div className="col-name-wrapper">
+                            <strong>{template.name}</strong>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!visibleTemplates.length ? <div className="command-empty-state">{t.commandEmpty}</div> : null}
+              </div>
+              <VerticalScrollbar ariaLabel="滚动命令列表" scrollRef={templateListScrollRef} topInset={24} />
+            </div>
+          </section>
+
+          <div
+            className="file-split-resizer"
+            onMouseDown={() => {
+              isResizingCommandSplit.current = true
+              document.body.style.cursor = 'col-resize'
+              document.body.style.userSelect = 'none'
+            }}
+            role="separator"
+          />
+
+          <section className="command-pane command-pane-preview">
+            <div className="command-pane-head">
+              <strong>{t.commandPreview}</strong>
+              <span>{selectedTemplate ? t.commandRendered : t.commandNoDescription}</span>
+            </div>
+
+            <div className="command-runner scrollbar-scroll">
+              {selectedTemplate ? (
+                <>
+                  <div className="command-runner-head">
+                    <div className="command-runner-title-line">
+                      <strong>{selectedTemplate.name}</strong>
+                      <SessionSendTargetPicker
+                        allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
+                        currentLabel={
+                          activeTab
+                            ? t.commandSendCurrentWithIndex.replace(
+                                '{index}',
+                                String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
+                              )
+                            : t.commandSendCurrent
+                        }
+                        onScopeChange={setSendScope}
+                        onSelectedTabIdsChange={setSelectedTabIds}
+                        scope={sendScope}
+                        selectedTabIds={selectedTabIds}
+                        targets={sendTargets}
+                        showRememberSelection={true}
+                        rememberSelection={rememberSelection}
+                        onRememberSelectionChange={setRememberSelection}
+                        popover={true}
+                      />
+                    </div>
+                    <div className="command-runner-actions">
+                      <label className="command-toggle">
+                        <input
+                          checked={appendCarriageReturn}
+                          type="checkbox"
+                          onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
+                        />
+                        <span>{t.commandAppendCr}</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={handleRun}
+                        disabled={
+                          isBusy ||
+                          (sendScope === 'current'
+                            ? !canRunCurrent
+                            : sendScope === 'all-ssh'
+                              ? !canRunAny
+                              : !canRunSelected)
+                        }
+                      >
+                        {t.send}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="command-detail-block">
+                    <span>{t.name}</span>
+                    <p>{selectedTemplate.name}</p>
+                  </div>
+                  <div className="command-detail-block">
+                    <span>{t.description}</span>
+                    <p>{selectedTemplate.description || t.commandNoDescription}</p>
+                  </div>
+                  <div className="command-preview command-detail-block">
+                    <span>{t.commandTemplate}</span>
+                    <code>{selectedTemplate.command}</code>
+                  </div>
+                  {paramIndexes.length ? (
+                    <div className="command-param-grid">
+                      {paramIndexes.map((index) => (
+                        <label key={index}>
+                          <span>{`${t.commandParam} ${index}`}</span>
+                          <input
+                            type="text"
+                            value={paramValues[index] ?? ''}
+                            onChange={(event) => {
+                              const value = event.currentTarget.value
+                              setParamValues((prev) => ({ ...prev, [index]: value }))
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="command-preview command-detail-block">
+                    <span>{t.commandRendered}</span>
+                    <code>{lastRenderedCommand || selectedTemplate.command}</code>
+                  </div>
+                </>
+              ) : (
+                <div className="command-empty-state">{t.commandEmpty}</div>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }

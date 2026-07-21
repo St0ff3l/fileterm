@@ -1486,6 +1486,7 @@ pub fn run() {
             crate::commands::app_execute_command_template,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
+            crate::sessions::local_files::app_connect_local_network_share,
             crate::sessions::local_files::app_read_local_file,
             crate::sessions::local_files::app_write_local_file,
             crate::sessions::local_files::app_create_local_directory,
@@ -1508,6 +1509,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = _event {
                 show_main_window(_app_handle);
+            }
+
+            #[cfg(target_os = "macos")]
+            if matches!(_event, tauri::RunEvent::Exit) {
+                crate::sessions::local_files::cleanup_network_mounts();
             }
         });
 }

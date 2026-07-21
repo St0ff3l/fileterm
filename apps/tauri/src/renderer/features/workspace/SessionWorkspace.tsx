@@ -36,6 +36,10 @@ export function SessionWorkspace({
   terminalDockSelectedTabIds,
   localItems,
   localPath,
+  localPanePath,
+  isLocalNetworkShare,
+  isLocalDirectoryLoading,
+  isWorkspaceRefreshing,
   canPasteToLocal,
   canPasteToRemote,
   clipboardStatusText,
@@ -71,6 +75,7 @@ export function SessionWorkspace({
   onUploadFiles,
   onChooseUploadFiles,
   onDownloadFiles,
+  onDownloadLocalNetworkFiles,
   onDropUpload,
   isWorkspaceFocusMode
 }: {
@@ -84,6 +89,10 @@ export function SessionWorkspace({
   terminalDockSelectedTabIds: string[]
   localItems: LocalFileItem[]
   localPath: string
+  localPanePath: string
+  isLocalNetworkShare: boolean
+  isLocalDirectoryLoading: boolean
+  isWorkspaceRefreshing: boolean
   canPasteToLocal: boolean
   canPasteToRemote: boolean
   clipboardStatusText: string | null
@@ -125,6 +134,7 @@ export function SessionWorkspace({
   onUploadFiles(items: LocalFileItem[]): void
   onChooseUploadFiles(): void
   onDownloadFiles(items: RemoteFileItem[], targetDirectory?: string): void
+  onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
   onDropUpload(event: DragEvent<HTMLDivElement>): void
   isWorkspaceFocusMode: boolean
 }) {
@@ -444,6 +454,10 @@ export function SessionWorkspace({
             isBusy={isBusy}
             localItems={localItems}
             localPath={localPath}
+            localPanePath={localPanePath}
+            isLocalNetworkShare={isLocalNetworkShare}
+            isLocalDirectoryLoading={isLocalDirectoryLoading}
+            isWorkspaceRefreshing={isWorkspaceRefreshing}
             canPasteToLocal={canPasteToLocal}
             canPasteToRemote={canPasteToRemote}
             clipboardStatusText={clipboardStatusText}
@@ -473,6 +487,7 @@ export function SessionWorkspace({
             onUploadFiles={onUploadFiles}
             onChooseUploadFiles={onChooseUploadFiles}
             onDownloadFiles={onDownloadFiles}
+            onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
             onDropUpload={onDropUpload}
           />
         </div>

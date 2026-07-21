@@ -167,6 +167,8 @@ export function App() {
     setLocalPath,
     localItems,
     setLocalItems,
+    isLocalDirectoryLoading,
+    setIsLocalDirectoryLoading,
     hasLoadedInitialSnapshot,
     isMaximized,
     windowCloseRequest,
@@ -468,6 +470,7 @@ export function App() {
   // 5. File Operations Hook
   const {
     isRemoteDirectoryLoading,
+    isWorkspaceRefreshing,
     canPasteIntoLocal,
     canPasteIntoRemote,
     localCutPaths,
@@ -482,6 +485,13 @@ export function App() {
     rootAccessDialog,
     rootAccessDialogError,
     isRootAccessSubmitting,
+    localNetworkCredentialsDialog,
+    localNetworkCredentialsDialogError,
+    localNetworkShareDialog,
+    localNetworkShareDialogError,
+    isLocalNetworkCredentialsSubmitting,
+    isLocalNetworkShare,
+    localPanePath,
     remoteFileAccessMode,
     openLocalDirectory,
     handleOpenLocalItem,
@@ -508,9 +518,14 @@ export function App() {
     handleUploadFiles,
     handleChooseUploadFiles,
     handleDownloadFiles,
+    handleDownloadLocalNetworkFiles,
     handleDropUpload,
     handleRefreshWorkspace,
-    dismissRootAccessDialog
+    dismissRootAccessDialog,
+    handleSubmitLocalNetworkCredentials,
+    dismissLocalNetworkCredentialsDialog,
+    handleSubmitLocalNetworkShare,
+    dismissLocalNetworkShareDialog
   } = useFileOperations({
     desktopApi,
     workspace,
@@ -522,6 +537,7 @@ export function App() {
     localItems,
     setLocalPath,
     setLocalItems,
+    setIsLocalDirectoryLoading,
     onApplySnapshot: applySnapshot,
     onBusyChange: setIsBusy,
     onStatusMessage: (msg) => setError(msg),
@@ -1214,6 +1230,10 @@ export function App() {
                 isBusy={isBusy}
                 localItems={localItems}
                 localPath={localPath}
+                localPanePath={localPanePath}
+                isLocalNetworkShare={isLocalNetworkShare}
+                isLocalDirectoryLoading={isLocalDirectoryLoading}
+                isWorkspaceRefreshing={isWorkspaceRefreshing}
                 canPasteToLocal={canPasteIntoLocal}
                 canPasteToRemote={canPasteIntoRemote}
                 clipboardStatusText={clipboardStatusText}
@@ -1236,6 +1256,7 @@ export function App() {
                 profiles={workspace.profiles}
                 onChooseUploadFiles={handleChooseUploadFiles}
                 onDownloadFiles={handleDownloadFiles}
+                onDownloadLocalNetworkFiles={handleDownloadLocalNetworkFiles}
                 onDropUpload={handleDropUpload}
                 onOpenLocalItem={handleOpenLocalItem}
                 onOpenLocalPath={handleOpenLocalPath}
@@ -1429,6 +1450,29 @@ export function App() {
                 isSubmitting: isRootAccessSubmitting,
                 onClose: dismissRootAccessDialog,
                 onSubmit: handleConfirmRootAccess
+              }
+            : null
+        }
+        smbCredentials={
+          localNetworkCredentialsDialog
+            ? {
+                errorMessage: localNetworkCredentialsDialogError,
+                isSubmitting: isLocalNetworkCredentialsSubmitting,
+                path: localNetworkCredentialsDialog.path,
+                onCancel: dismissLocalNetworkCredentialsDialog,
+                onSubmit: handleSubmitLocalNetworkCredentials
+              }
+            : null
+        }
+        smbSharePicker={
+          localNetworkShareDialog
+            ? {
+                errorMessage: localNetworkShareDialogError,
+                isSubmitting: isLocalNetworkCredentialsSubmitting,
+                path: localNetworkShareDialog.path,
+                shares: localNetworkShareDialog.shares,
+                onCancel: dismissLocalNetworkShareDialog,
+                onSubmit: handleSubmitLocalNetworkShare
               }
             : null
         }

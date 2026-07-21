@@ -13,6 +13,12 @@ import { withParentRow } from '../app/app-utils'
 import { t, type AppLocale } from '../i18n'
 
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
+const SMB_CREDENTIALS_REQUIRED = /SMB_CREDENTIALS_REQUIRED/i
+
+function isSmbCredentialsRequiredError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return SMB_CREDENTIALS_REQUIRED.test(message)
+}
 
 export type FilePane = 'local' | 'remote'
 export type FileClipboardOperation = 'copy' | 'cut'
@@ -48,6 +54,26 @@ export type RootAccessDialogState = {
   sudoUser: string
 }
 
+export type LocalNetworkCredentialsDialogState = {
+  path: string
+}
+
+export type LocalNetworkShareDialogState = {
+  path: string
+  username: string
+  password: string
+  shares: string[]
+}
+
+export type LocalNetworkShareSource = {
+  mountPath: string
+  remotePath: string
+  hostPath: string
+  shares: string[]
+  username: string
+  password: string
+}
+
 export type RootAccessCredentials = {
   sudoUser: string
   sudoPassword: string
@@ -69,6 +95,7 @@ export interface UseFileOperationsOptions {
   localItems: LocalFileItem[]
   setLocalPath: Dispatch<SetStateAction<string>>
   setLocalItems: Dispatch<SetStateAction<LocalFileItem[]>>
+  setIsLocalDirectoryLoading: Dispatch<SetStateAction<boolean>>
   onApplySnapshot(snapshot: WorkspaceSnapshot): void
   onBusyChange(isBusy: boolean): void
   onStatusMessage(message: string): void
@@ -199,6 +226,106 @@ export function joinLocalPath(directoryPath: string, name: string) {
   return `${normalized}${separator}${name}`
 }
 
+export function normalizeNetworkSharePath(targetPath: string) {
+  const normalized = targetPath.trim().replace(/\/+/g, '\\')
+  return normalized.replace(/^\\+/, '\\\\').replace(/\\+$/, '')
+}
+
+export function joinNetworkSharePath(directoryPath: string, name: string) {
+  return `${normalizeNetworkSharePath(directoryPath)}\\${name.trim().replace(/^[\\/]+|[\\/]+$/g, '')}`
+}
+
+function networkShareHostPath(remotePath: string) {
+  const host = normalizeNetworkSharePath(remotePath).split('\\').filter(Boolean)[0]
+  return host ? `\\\\${host}` : normalizeNetworkSharePath(remotePath)
+}
+
+function createNetworkShareParentRow(hostPath: string): LocalFileItem {
+  return {
+    path: hostPath,
+    name: '..',
+    type: 'folder',
+    modified: '',
+    size: '-'
+  }
+}
+
+function createNetworkShareRootItems(source: LocalNetworkShareSource) {
+  return source.shares.map((share) => ({
+    path: joinNetworkSharePath(source.hostPath, share),
+    name: share,
+    type: 'folder' as const,
+    modified: '',
+    size: '-'
+  }))
+}
+
+function isLocalPathWithin(rootPath: string, targetPath: string) {
+  const normalizeForComparison = (value: string) => normalizeLocalPath(value).replace(/\\/g, '/').toLocaleLowerCase()
+  const root = normalizeForComparison(rootPath)
+  const target = normalizeForComparison(targetPath)
+  return target === root || target.startsWith(`${root}/`)
+}
+
+function areLocalPathsEqual(leftPath: string, rightPath: string) {
+  const normalizeForComparison = (value: string) => normalizeLocalPath(value).replace(/\\/g, '/').toLocaleLowerCase()
+  return normalizeForComparison(leftPath) === normalizeForComparison(rightPath)
+}
+
+function isNetworkShareHostPath(source: LocalNetworkShareSource, targetPath: string) {
+  return normalizeNetworkSharePath(targetPath).toLocaleLowerCase() === source.hostPath.toLocaleLowerCase()
+}
+
+function isNetworkShareRootItem(source: LocalNetworkShareSource, targetPath: string) {
+  const target = normalizeNetworkSharePath(targetPath).toLocaleLowerCase()
+  const host = source.hostPath.toLocaleLowerCase()
+  const prefix = `${host}\\`
+  const relative = target.startsWith(prefix) ? target.slice(prefix.length) : ''
+  return Boolean(relative) && !relative.includes('\\')
+}
+
+function resolveNetworkSharePath(source: LocalNetworkShareSource, targetPath: string) {
+  const target = normalizeNetworkSharePath(targetPath)
+  const remoteRoot = normalizeNetworkSharePath(source.remotePath)
+  const targetLower = target.toLocaleLowerCase()
+  const remoteRootLower = remoteRoot.toLocaleLowerCase()
+
+  if (targetLower === remoteRootLower) {
+    return source.mountPath
+  }
+
+  const prefix = `${remoteRoot}\\`
+  if (!targetLower.startsWith(prefix.toLocaleLowerCase())) {
+    return targetPath
+  }
+
+  return target.slice(prefix.length).split('\\').filter(Boolean).reduce(joinLocalPath, source.mountPath)
+}
+
+function getNetworkShareDisplayPath(source: LocalNetworkShareSource, localPath: string) {
+  if (isNetworkShareHostPath(source, localPath)) {
+    return source.hostPath
+  }
+
+  const normalizedRoot = normalizeLocalPath(source.mountPath).replaceAll('\\', '/')
+  const normalizedTarget = normalizeLocalPath(localPath).replaceAll('\\', '/')
+  const root = normalizedRoot.toLocaleLowerCase()
+  const target = normalizedTarget.toLocaleLowerCase()
+  if (target === root) {
+    return source.remotePath
+  }
+
+  const prefix = `${root}/`
+  if (!target.startsWith(prefix)) {
+    return source.remotePath
+  }
+
+  return joinNetworkSharePath(
+    source.remotePath,
+    normalizedTarget.slice(normalizedRoot.length + 1).replaceAll('/', '\\')
+  )
+}
+
 export function normalizeRemoteErrorMessage(error: unknown) {
   const rawMessage = error instanceof Error ? error.message : String(error)
   return rawMessage.replace(REMOTE_METHOD_ERROR_PREFIX, '').trim()
@@ -243,6 +370,7 @@ export function useFileOperations({
   localItems,
   setLocalPath,
   setLocalItems,
+  setIsLocalDirectoryLoading,
   onApplySnapshot,
   onBusyChange,
   onStatusMessage,
@@ -264,6 +392,15 @@ export function useFileOperations({
   const [rootAccessDialogError, setRootAccessDialogError] = useState<string | null>(null)
   const [isRootAccessSubmitting, setIsRootAccessSubmitting] = useState(false)
   const rootAccessSubmittingRef = useRef(false)
+  const [localNetworkCredentialsDialog, setLocalNetworkCredentialsDialog] =
+    useState<LocalNetworkCredentialsDialogState | null>(null)
+  const [localNetworkCredentialsDialogError, setLocalNetworkCredentialsDialogError] = useState<string | null>(null)
+  const [localNetworkShareDialog, setLocalNetworkShareDialog] = useState<LocalNetworkShareDialogState | null>(null)
+  const [localNetworkShareDialogError, setLocalNetworkShareDialogError] = useState<string | null>(null)
+  const [localNetworkShareSource, setLocalNetworkShareSource] = useState<LocalNetworkShareSource | null>(null)
+  const [isWorkspaceRefreshing, setIsWorkspaceRefreshing] = useState(false)
+  const [isLocalNetworkCredentialsSubmitting, setIsLocalNetworkCredentialsSubmitting] = useState(false)
+  const localNetworkCredentialsSubmittingRef = useRef(false)
   const nativeRemoteDropTargetAtRef = useRef(0)
   const nativeDropConsumedAtRef = useRef(0)
 
@@ -330,15 +467,87 @@ export function useFileOperations({
     return true
   }
 
-  const openLocalDirectory = async (targetPath: string) => {
+  const openLocalDirectory = async (
+    targetPath: string,
+    options?: {
+      promptForSmbCredentials?: boolean
+      networkShareSource?: LocalNetworkShareSource
+    }
+  ) => {
     if (!desktopApi) {
       setLocalPath(targetPath)
       return
     }
 
-    const { path, items } = await desktopApi.listLocalDirectory(targetPath)
-    setLocalPath(path)
-    setLocalItems(withParentRow(path, items))
+    setIsLocalDirectoryLoading(true)
+    const resolvedTargetPath = localNetworkShareSource
+      ? resolveNetworkSharePath(localNetworkShareSource, targetPath)
+      : targetPath
+    const networkShareSource =
+      options?.networkShareSource ??
+      (localNetworkShareSource &&
+      (isLocalPathWithin(localNetworkShareSource.mountPath, resolvedTargetPath) ||
+        isNetworkShareHostPath(localNetworkShareSource, resolvedTargetPath))
+        ? localNetworkShareSource
+        : null)
+    setLocalNetworkShareSource(networkShareSource)
+
+    try {
+      if (
+        networkShareSource &&
+        networkShareSource.shares.length > 0 &&
+        isNetworkShareHostPath(networkShareSource, resolvedTargetPath)
+      ) {
+        setLocalPath(networkShareSource.hostPath)
+        setLocalItems(createNetworkShareRootItems(networkShareSource))
+        return
+      }
+
+      const { path, items } = await desktopApi.listLocalDirectory(resolvedTargetPath)
+      setLocalPath(path)
+      const parentRow =
+        networkShareSource &&
+        networkShareSource.shares.length > 0 &&
+        areLocalPathsEqual(networkShareSource.mountPath, path)
+          ? [createNetworkShareParentRow(networkShareSource.hostPath)]
+          : []
+      setLocalItems([...parentRow, ...withParentRow(path, items, networkShareSource?.mountPath)])
+    } catch (error) {
+      if (
+        options?.promptForSmbCredentials !== false &&
+        desktopApi.connectLocalNetworkShare &&
+        isSmbCredentialsRequiredError(error)
+      ) {
+        setLocalNetworkCredentialsDialog({ path: targetPath })
+        setLocalNetworkCredentialsDialogError(null)
+        return
+      }
+      throw error
+    } finally {
+      setIsLocalDirectoryLoading(false)
+    }
+  }
+
+  const openNetworkShareItem = async (item: LocalFileItem, source: LocalNetworkShareSource) => {
+    if (!desktopApi?.connectLocalNetworkShare) {
+      throw new Error('当前运行环境不支持切换 SMB 共享文件夹。')
+    }
+
+    const result = await desktopApi.connectLocalNetworkShare(item.path, source.username, source.password)
+    if (result.kind !== 'connected') {
+      throw new Error(t.networkShareSelectUnavailable)
+    }
+    await openLocalDirectory(result.path, {
+      promptForSmbCredentials: false,
+      networkShareSource: {
+        mountPath: result.path,
+        remotePath: item.path,
+        hostPath: source.hostPath,
+        shares: source.shares,
+        username: source.username,
+        password: source.password
+      }
+    })
   }
 
   const openRemoteDirectory = async (tabId: string, targetPath: string, item?: RemoteFileItem) => {
@@ -380,7 +589,11 @@ export function useFileOperations({
 
     try {
       if (item.type === 'folder') {
-        await openLocalDirectory(item.path)
+        if (localNetworkShareSource && isNetworkShareRootItem(localNetworkShareSource, item.path)) {
+          await openNetworkShareItem(item, localNetworkShareSource)
+        } else {
+          await openLocalDirectory(item.path)
+        }
       } else {
         await openLocalFile(item)
       }
@@ -1026,6 +1239,50 @@ export function useFileOperations({
     })()
   }
 
+  const handleDownloadLocalNetworkFiles = (items: LocalFileItem[]) => {
+    if (!desktopApi || !localNetworkShareSource) {
+      return
+    }
+
+    void (async () => {
+      const downloadableItems = items.filter((row) => row.name !== '..')
+      if (!downloadableItems.length) {
+        return
+      }
+
+      let downloadDirectory: string | null | undefined
+      let markedBusy = false
+      try {
+        downloadDirectory = await desktopApi.selectLocalDirectory()
+        if (!downloadDirectory) {
+          return
+        }
+
+        const destinationSnapshot = await desktopApi.listLocalDirectory(downloadDirectory)
+        const existingNames = destinationSnapshot.items.filter((item) => item.name !== '..').map((item) => item.name)
+        const targetItems = downloadableItems.map((item) => ({
+          pane: 'local' as const,
+          path: item.path,
+          name: item.name,
+          type: item.type
+        }))
+        const targetNames = allocateTargetNames(targetItems, existingNames, 'copy', downloadDirectory)
+
+        onBusyChange(true)
+        markedBusy = true
+        for (const [index, item] of downloadableItems.entries()) {
+          await desktopApi.copyLocalPath(item.path, joinLocalPath(downloadDirectory, targetNames[index]!))
+        }
+      } catch (error) {
+        reportStatusError('下载网络共享文件或目录', error, { targetPath: downloadDirectory ?? undefined })
+      } finally {
+        if (markedBusy) {
+          onBusyChange(false)
+        }
+      }
+    })()
+  }
+
   const handleRefreshWorkspace = () => {
     if (!activeTab || !activeSession || !ensureActiveRemoteSessionConnected()) {
       return
@@ -1033,13 +1290,14 @@ export function useFileOperations({
 
     void (async () => {
       try {
+        setIsWorkspaceRefreshing(true)
         setRemoteDirectoryLoadingTabId(activeTab.id)
         setFileClipboard(null)
-        await openLocalDirectory(localPath)
-        await openRemoteDirectory(activeTab.id, activeSession.remotePath)
+        await Promise.all([openLocalDirectory(localPath), openRemoteDirectory(activeTab.id, activeSession.remotePath)])
       } catch (error) {
         reportStatusError('刷新工作区', error, { targetPath: activeSession.remotePath })
       } finally {
+        setIsWorkspaceRefreshing(false)
         setRemoteDirectoryLoadingTabId((current) => (current === activeTab.id ? null : current))
       }
     })()
@@ -1170,9 +1428,141 @@ export function useFileOperations({
     rootAccessSubmittingRef.current = false
   }
 
+  const handleSubmitLocalNetworkCredentials = ({
+    username: rawUsername,
+    password
+  }: {
+    username: string
+    password: string
+  }) => {
+    if (
+      !desktopApi?.connectLocalNetworkShare ||
+      !localNetworkCredentialsDialog ||
+      localNetworkCredentialsSubmittingRef.current
+    ) {
+      return
+    }
+
+    const connectLocalNetworkShare = desktopApi.connectLocalNetworkShare
+    const credentialsDialog = localNetworkCredentialsDialog
+
+    const username = rawUsername.trim()
+    if (!username || !password) {
+      setLocalNetworkCredentialsDialogError(t.networkShareCredentialsFillRequired)
+      return
+    }
+
+    localNetworkCredentialsSubmittingRef.current = true
+    void (async () => {
+      try {
+        setIsLocalNetworkCredentialsSubmitting(true)
+        setLocalNetworkCredentialsDialogError(null)
+        const result = await connectLocalNetworkShare(credentialsDialog.path, username, password)
+        if (result.kind === 'select-share') {
+          setLocalNetworkShareDialog({
+            path: result.path,
+            username,
+            password,
+            shares: result.shares
+          })
+          setLocalNetworkCredentialsDialog(null)
+          setLocalNetworkCredentialsDialogError(null)
+          return
+        }
+        await openLocalDirectory(result.path, {
+          promptForSmbCredentials: false,
+          networkShareSource: {
+            mountPath: result.path,
+            remotePath: normalizeNetworkSharePath(credentialsDialog.path),
+            hostPath: networkShareHostPath(credentialsDialog.path),
+            shares: [],
+            username,
+            password
+          }
+        })
+        setLocalNetworkCredentialsDialog(null)
+        setLocalNetworkCredentialsDialogError(null)
+      } catch (error) {
+        setLocalNetworkCredentialsDialogError(formatError('连接 SMB 网络共享', error))
+      } finally {
+        localNetworkCredentialsSubmittingRef.current = false
+        setIsLocalNetworkCredentialsSubmitting(false)
+      }
+    })()
+  }
+
+  const handleSubmitLocalNetworkShare = (share: string) => {
+    if (
+      !desktopApi?.connectLocalNetworkShare ||
+      !localNetworkShareDialog ||
+      localNetworkCredentialsSubmittingRef.current
+    ) {
+      return
+    }
+
+    if (!share) {
+      setLocalNetworkShareDialogError(t.networkShareSelectRequired)
+      return
+    }
+
+    const connectLocalNetworkShare = desktopApi.connectLocalNetworkShare
+    const shareDialog = localNetworkShareDialog
+    localNetworkCredentialsSubmittingRef.current = true
+    void (async () => {
+      try {
+        setIsLocalNetworkCredentialsSubmitting(true)
+        setLocalNetworkShareDialogError(null)
+        const result = await connectLocalNetworkShare(
+          shareDialog.path,
+          shareDialog.username,
+          shareDialog.password,
+          share
+        )
+        if (result.kind !== 'connected') {
+          throw new Error(t.networkShareSelectUnavailable)
+        }
+        await openLocalDirectory(result.path, {
+          promptForSmbCredentials: false,
+          networkShareSource: {
+            mountPath: result.path,
+            remotePath: joinNetworkSharePath(shareDialog.path, share),
+            hostPath: normalizeNetworkSharePath(shareDialog.path),
+            shares: shareDialog.shares,
+            username: shareDialog.username,
+            password: shareDialog.password
+          }
+        })
+        setLocalNetworkShareDialog(null)
+        setLocalNetworkShareDialogError(null)
+      } catch (error) {
+        setLocalNetworkShareDialogError(formatError('打开 SMB 共享文件夹', error))
+      } finally {
+        localNetworkCredentialsSubmittingRef.current = false
+        setIsLocalNetworkCredentialsSubmitting(false)
+      }
+    })()
+  }
+
+  const dismissLocalNetworkCredentialsDialog = () => {
+    if (localNetworkCredentialsSubmittingRef.current) return
+    setLocalNetworkCredentialsDialog(null)
+    setLocalNetworkCredentialsDialogError(null)
+    setIsLocalNetworkCredentialsSubmitting(false)
+    localNetworkCredentialsSubmittingRef.current = false
+  }
+
+  const dismissLocalNetworkShareDialog = () => {
+    if (localNetworkCredentialsSubmittingRef.current) return
+    setLocalNetworkShareDialog(null)
+    setLocalNetworkShareDialogError(null)
+    setIsLocalNetworkCredentialsSubmitting(false)
+    localNetworkCredentialsSubmittingRef.current = false
+  }
+
   return {
     remoteDirectoryLoadingTabId,
     isRemoteDirectoryLoading: remoteDirectoryLoadingTabId === activeTab?.id,
+    isWorkspaceRefreshing,
     fileClipboard,
     canPasteIntoLocal,
     canPasteIntoRemote,
@@ -1188,6 +1578,14 @@ export function useFileOperations({
     rootAccessDialog,
     rootAccessDialogError,
     isRootAccessSubmitting,
+    localNetworkCredentialsDialog,
+    localNetworkCredentialsDialogError,
+    localNetworkShareDialog,
+    localNetworkShareDialogError,
+    isLocalNetworkCredentialsSubmitting,
+    isLocalNetworkShare: Boolean(localNetworkShareSource),
+    localPanePath: localNetworkShareSource ? getNetworkShareDisplayPath(localNetworkShareSource, localPath) : localPath,
+    localNetworkShareSource,
     remoteFileAccessMode: activeSession?.fileAccessMode ?? 'user',
     openLocalDirectory,
     openRemoteDirectory,
@@ -1216,11 +1614,16 @@ export function useFileOperations({
     handleUploadFiles,
     handleChooseUploadFiles,
     handleDownloadFiles,
+    handleDownloadLocalNetworkFiles,
     handleRefreshWorkspace,
     handleToggleRemoteFileAccessMode,
     handleToggleFollowShellCwd,
     handleConfirmRootAccess,
-    dismissRootAccessDialog
+    dismissRootAccessDialog,
+    handleSubmitLocalNetworkCredentials,
+    dismissLocalNetworkCredentialsDialog,
+    handleSubmitLocalNetworkShare,
+    dismissLocalNetworkShareDialog
   }
 }
 

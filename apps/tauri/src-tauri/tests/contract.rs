@@ -245,6 +245,7 @@ fn contract_commands_use_app_prefix() {
         "app_delete_command_template",
         "app_execute_command_template",
         "app_list_local_directory",
+        "app_connect_local_network_share",
         "app_read_local_file",
         "app_write_local_file",
         "app_create_local_directory",
