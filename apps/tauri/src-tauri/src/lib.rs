@@ -74,6 +74,9 @@ struct HiddenWithMainRegistry {
     labels: Mutex<HashSet<String>>,
 }
 
+#[cfg(target_os = "macos")]
+static MACOS_TRAFFIC_LIGHTS_CALIBRATED: AtomicBool = AtomicBool::new(false);
+
 impl FileEditorCloseRegistry {
     fn request(&self, label: &str) -> bool {
         self.state
@@ -821,42 +824,42 @@ fn prefer_windows_native_rounded_corners(window: &WebviewWindow<Wry>) {
 }
 
 #[cfg(target_os = "macos")]
-fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) {
+fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSView, NSWindowButton};
+    use objc2_app_kit::{NSControlSize, NSView, NSWindowButton};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    const BUTTON_SIZE: f64 = 17.0;
-    const BUTTON_SPACING: f64 = 22.0;
+    const BUTTON_SIZE: f64 = 14.0;
+    const BUTTON_SPACING: f64 = 23.0;
     // Keep the packaged Overlay window's vertical compensation native so
     // renderer CSS does not have to know which build flavor launched the app.
-    const RELEASE_VERTICAL_OFFSET: f64 = 1.0;
+    const RELEASE_VERTICAL_OFFSET: f64 = 0.5;
 
     let Ok(handle) = window.window_handle() else {
-        return;
+        return false;
     };
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
-        return;
+        return false;
     };
     let Some(_main_thread) = MainThreadMarker::new() else {
-        return;
+        return false;
     };
 
     // Tauri exposes the AppKit view through raw-window-handle. AppKit objects
-    // are main-thread-only, and this function is called from setup on macOS.
+    // are main-thread-only, and this runs after the first page load on macOS.
     let view = unsafe { &*(handle.ns_view.as_ptr() as *const NSView) };
     let Some(ns_window) = view.window() else {
-        return;
+        return false;
     };
     let Some(close) = ns_window.standardWindowButton(NSWindowButton::CloseButton) else {
-        return;
+        return false;
     };
     let Some(miniaturize) = ns_window.standardWindowButton(NSWindowButton::MiniaturizeButton)
     else {
-        return;
+        return false;
     };
     let Some(zoom) = ns_window.standardWindowButton(NSWindowButton::ZoomButton) else {
-        return;
+        return false;
     };
 
     let buttons = [&close, &miniaturize, &zoom];
@@ -870,13 +873,21 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) {
     let center_x = first_frame.origin.x + first_frame.size.width / 2.0;
 
     for (index, button) in buttons.into_iter().enumerate() {
+        // AppKit draws the colored circle from NSControlSize. Changing only
+        // the view frame leaves the packaged app's 12pt circle unchanged.
+        button.setControlSize(NSControlSize::Regular);
+        button.sizeToFit();
+
         let mut frame = button.frame();
         frame.origin.x = center_x + index as f64 * BUTTON_SPACING - BUTTON_SIZE / 2.0;
         frame.origin.y = center_y - BUTTON_SIZE / 2.0;
         frame.size.width = BUTTON_SIZE;
         frame.size.height = BUTTON_SIZE;
         button.setFrame(frame);
+        NSView::setNeedsDisplay(button, true);
     }
+
+    true
 }
 
 pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
@@ -1072,6 +1083,23 @@ pub fn run() {
     #[cfg(target_os = "windows")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
+    #[cfg(target_os = "macos")]
+    let builder = builder.on_page_load(|webview, payload| {
+        if webview.label() == "main"
+            && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished)
+            && !MACOS_TRAFFIC_LIGHTS_CALIBRATED.load(Ordering::Acquire)
+        {
+            if let Some(window) = webview.get_webview_window("main") {
+                let calibration_window = window.clone();
+                let _ = window.run_on_main_thread(move || {
+                    if calibrate_macos_traffic_lights(&calibration_window) {
+                        MACOS_TRAFFIC_LIGHTS_CALIBRATED.store(true, Ordering::Release);
+                    }
+                });
+            }
+        }
+    });
+
     builder
         .setup(|app| {
             crate::storage::migrate_legacy_data_once(app.handle())?;
@@ -1098,13 +1126,10 @@ pub fn run() {
 
             // ── Platform-specific window chrome ────────────────────────────
             // macOS: keep decorations + Overlay titleBarStyle so the traffic
-            //        lights float over renderer content. AppKit button frames
-            //        are calibrated below so dev and packaged builds match.
+            //        lights float over renderer content. AppKit control size
+            //        and frames are calibrated after the first page load.
             // Windows: drop the OS frame so the renderer owns the title bar.
             // Linux: keep native decorations.
-            #[cfg(target_os = "macos")]
-            calibrate_macos_traffic_lights(&main_window);
-
             #[cfg(target_os = "windows")]
             {
                 let _ = main_window.set_decorations(false);
