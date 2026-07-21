@@ -40,6 +40,10 @@ export function WorkspaceStage({
   isBusy,
   localItems,
   localPath,
+  localPanePath,
+  isLocalNetworkShare,
+  isLocalDirectoryLoading,
+  isWorkspaceRefreshing,
   canPasteToLocal,
   canPasteToRemote,
   clipboardStatusText,
@@ -58,6 +62,7 @@ export function WorkspaceStage({
   onOpenCommandManager,
   onChooseUploadFiles,
   onDownloadFiles,
+  onDownloadLocalNetworkFiles,
   onDropUpload,
   onOpenLocalItem,
   onOpenLocalPath,
@@ -119,6 +124,10 @@ export function WorkspaceStage({
   isBusy: boolean
   localItems: LocalFileItem[]
   localPath: string
+  localPanePath: string
+  isLocalNetworkShare: boolean
+  isLocalDirectoryLoading: boolean
+  isWorkspaceRefreshing: boolean
   canPasteToLocal: boolean
   canPasteToRemote: boolean
   clipboardStatusText: string | null
@@ -143,6 +152,7 @@ export function WorkspaceStage({
   onOpenCommandManager(): void
   onChooseUploadFiles(): void
   onDownloadFiles(items: RemoteFileItem[], targetDirectory?: string): void
+  onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
   onDropUpload(event: DragEvent<HTMLDivElement>): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
@@ -217,6 +227,10 @@ export function WorkspaceStage({
         isBusy={isBusy}
         localItems={localItems}
         localPath={localPath}
+        localPanePath={localPanePath}
+        isLocalNetworkShare={isLocalNetworkShare}
+        isLocalDirectoryLoading={isLocalDirectoryLoading}
+        isWorkspaceRefreshing={isWorkspaceRefreshing}
         canPasteToLocal={canPasteToLocal}
         canPasteToRemote={canPasteToRemote}
         clipboardStatusText={clipboardStatusText}
@@ -232,6 +246,7 @@ export function WorkspaceStage({
         onOpenCommandManager={onOpenCommandManager}
         onChooseUploadFiles={onChooseUploadFiles}
         onDownloadFiles={onDownloadFiles}
+        onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
         onDropUpload={onDropUpload}
         onOpenLocalItem={onOpenLocalItem}
         onOpenLocalPath={onOpenLocalPath}

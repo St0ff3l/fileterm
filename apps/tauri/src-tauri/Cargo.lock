@@ -1341,6 +1341,7 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "image",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-quartz-core",

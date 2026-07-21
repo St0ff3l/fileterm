@@ -31,6 +31,7 @@ import {
 } from '../../app/app-utils'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
+import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { CommandCenter } from '../commands/CommandCenter'
@@ -38,6 +39,8 @@ import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
 import { getDisplayFileTypeSortKey } from './file-kind'
 import { FileTable, LocalFileTable, PanePathBar, type RemoteFileSortState } from './FileTables'
+
+const VIEW_TRANSITION_LOADING_MS = 180
 
 function areStringArraysEqual(left: string[], right: string[]) {
   if (left === right) {
@@ -148,6 +151,10 @@ export function FileManager({
   isBusy,
   localItems,
   localPath,
+  localPanePath,
+  isLocalNetworkShare,
+  isLocalDirectoryLoading,
+  isWorkspaceRefreshing,
   canPasteToLocal,
   canPasteToRemote,
   clipboardStatusText,
@@ -167,6 +174,7 @@ export function FileManager({
   onUploadFiles,
   onChooseUploadFiles,
   onDownloadFiles,
+  onDownloadLocalNetworkFiles,
   onDropUpload,
   onRequestChangePermissions,
   onRequestDelete,
@@ -187,6 +195,10 @@ export function FileManager({
   isBusy: boolean
   localItems: LocalFileItem[]
   localPath: string
+  localPanePath: string
+  isLocalNetworkShare: boolean
+  isLocalDirectoryLoading: boolean
+  isWorkspaceRefreshing: boolean
   canPasteToLocal: boolean
   canPasteToRemote: boolean
   clipboardStatusText: string | null
@@ -212,6 +224,7 @@ export function FileManager({
   onUploadFiles(items: LocalFileItem[]): void
   onChooseUploadFiles(): void
   onDownloadFiles(items: RemoteFileItem[], targetDirectory?: string): void
+  onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
   onDropUpload(event: DragEvent<HTMLDivElement>): void
   onRequestChangePermissions(pane: 'local' | 'remote', item: LocalFileItem | RemoteFileItem): void
   onRequestDelete(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
@@ -230,7 +243,10 @@ export function FileManager({
   const isSshSession = activeTab?.sessionType === 'ssh'
   const canManageTunnels = activeSession.capabilities?.tunnels === true
   const showRemoteDirectoryLoading = isRemoteDirectoryLoading || activeSession.remoteFilesLoading === true
+  const showLocalDirectoryLoading = isLocalDirectoryLoading && !isWorkspaceRefreshing
+  const showPaneRemoteDirectoryLoading = showRemoteDirectoryLoading && !isWorkspaceRefreshing
   const [activeView, setActiveView] = useState<'file' | 'command' | 'tunnel'>('file')
+  const [isViewLoading, setIsViewLoading] = useState(false)
   const [localPaneWidth, setLocalPaneWidth] = useState(214)
   const [localPathInput, setLocalPathInput] = useState(localPath)
   const [remotePathInput, setRemotePathInput] = useState(activeSession.remotePath)
@@ -259,14 +275,24 @@ export function FileManager({
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const localScrollRef = useRef<HTMLDivElement | null>(null)
   const remoteScrollRef = useRef<HTMLDivElement | null>(null)
+  const requestedInitialLocalDirectoryRef = useRef(false)
+
+  const switchActiveView = (nextView: 'file' | 'command' | 'tunnel') => {
+    if (nextView === activeView) {
+      return
+    }
+
+    setIsViewLoading(true)
+    setActiveView(nextView)
+  }
 
   useEffect(() => {
-    setLocalPathInput((prev) => (prev === localPath ? prev : localPath))
+    setLocalPathInput((prev) => (prev === localPath || prev === localPanePath ? prev : localPanePath))
     setSelectedLocalPaths((prev) => {
       const next = prev.filter((selectedPath) => localItems.some((item) => item.path === selectedPath))
       return areStringArraysEqual(prev, next) ? prev : next
     })
-  }, [localItems, localPath])
+  }, [localItems, localPanePath, localPath])
 
   useEffect(() => {
     setRemotePathInput((prev) => (prev === activeSession.remotePath ? prev : activeSession.remotePath))
@@ -294,6 +320,32 @@ export function FileManager({
       setActiveView('file')
     }
   }, [activeView, canManageTunnels])
+
+  useEffect(() => {
+    if (!isViewLoading) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setIsViewLoading(false)
+    }, VIEW_TRANSITION_LOADING_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [activeView, isViewLoading])
+
+  useEffect(() => {
+    if (
+      activeView !== 'file' ||
+      localItems.length > 0 ||
+      isLocalDirectoryLoading ||
+      requestedInitialLocalDirectoryRef.current
+    ) {
+      return
+    }
+
+    requestedInitialLocalDirectoryRef.current = true
+    onOpenLocalPath(localPath)
+  }, [activeView, isLocalDirectoryLoading, localItems.length, localPath, onOpenLocalPath])
 
   const sortedRemoteRows = useMemo(() => {
     if (!canUseRemoteFiles) {
@@ -338,7 +390,10 @@ export function FileManager({
   const canCopyContextItems = contextSelectionCount > 0
   const canCopyContextPath = Boolean(singleContextItem && !isMultiContextSelection)
   const canCutContextItems = contextSelectionCount > 0
-  const canDownloadContextItems = canUseRemoteFiles && contextRemoteSelection.length > 0
+  const canDownloadContextItems =
+    contextMenu?.pane === 'local'
+      ? isLocalNetworkShare && contextLocalSelection.length > 0
+      : canUseRemoteFiles && contextRemoteSelection.length > 0
   const canPasteIntoContextPane =
     contextMenu?.pane === 'local' ? canPasteToLocal : canUseRemoteFiles && canPasteToRemote
   const canUploadContextItems =
@@ -600,14 +655,18 @@ export function FileManager({
     >
       <div className="file-tabs">
         <div className="file-tabs-left">
-          <button className={activeView === 'file' ? 'active' : ''} type="button" onClick={() => setActiveView('file')}>
+          <button
+            className={activeView === 'file' ? 'active' : ''}
+            type="button"
+            onClick={() => switchActiveView('file')}
+          >
             {t.file}
           </button>
           {isSshSession ? (
             <button
               className={activeView === 'command' ? 'active' : ''}
               type="button"
-              onClick={() => setActiveView('command')}
+              onClick={() => switchActiveView('command')}
             >
               {t.command}
             </button>
@@ -616,7 +675,7 @@ export function FileManager({
             <button
               className={activeView === 'tunnel' ? 'active' : ''}
               type="button"
-              onClick={() => setActiveView('tunnel')}
+              onClick={() => switchActiveView('tunnel')}
             >
               {t.tunnel}
             </button>
@@ -675,20 +734,30 @@ export function FileManager({
         ) : null}
       </div>
       {activeView === 'tunnel' && canManageTunnels && activeTab ? (
-        <SshTunnelPanel tabId={activeTab.id} />
+        <div className="workspace-view-content">
+          <SshTunnelPanel tabId={activeTab.id} />
+          {isViewLoading ? <WorkspaceLoadingState className="workspace-loading-state--overlay" /> : null}
+        </div>
       ) : activeView === 'command' && isSshSession ? (
-        <CommandCenter
-          activeTab={activeTab}
-          commandFolders={commandFolders}
-          commandTemplates={commandTemplates}
-          isBusy={isBusy}
-          sendTargets={sendTargets}
-          onExecute={onExecuteCommand}
-          paneWidth={localPaneWidth}
-          onPaneWidthChange={setLocalPaneWidth}
-        />
+        <div className="workspace-view-content">
+          <CommandCenter
+            activeTab={activeTab}
+            commandFolders={commandFolders}
+            commandTemplates={commandTemplates}
+            isBusy={isBusy}
+            sendTargets={sendTargets}
+            onExecute={onExecuteCommand}
+            paneWidth={localPaneWidth}
+            onPaneWidthChange={setLocalPaneWidth}
+          />
+          {isViewLoading ? <WorkspaceLoadingState className="workspace-loading-state--overlay" /> : null}
+        </div>
       ) : (
-        <div className="file-split" ref={splitRef}>
+        <div
+          aria-busy={isViewLoading || isWorkspaceRefreshing || isLocalDirectoryLoading || showRemoteDirectoryLoading}
+          className="file-split"
+          ref={splitRef}
+        >
           <div
             className="local-pane"
             onMouseDownCapture={() => {
@@ -708,7 +777,7 @@ export function FileManager({
             onDrop={handleLocalPaneDrop}
           >
             <PanePathBar
-              label={t.localComputer}
+              label={isLocalNetworkShare ? t.networkShare : t.localComputer}
               value={localPathInput}
               onChange={setLocalPathInput}
               onSubmit={submitLocalPath}
@@ -802,6 +871,9 @@ export function FileManager({
               </div>
               <VerticalScrollbar ariaLabel="滚动本地文件列表" scrollRef={localScrollRef} topInset={24} />
             </div>
+            {showLocalDirectoryLoading ? (
+              <WorkspaceLoadingState className="workspace-loading-state--overlay" label={t.loadingLocalDirectory} />
+            ) : null}
           </div>
           <div
             className="file-split-resizer"
@@ -979,18 +1051,14 @@ export function FileManager({
                 </div>
                 <VerticalScrollbar ariaLabel="滚动远程文件列表" scrollRef={remoteScrollRef} topInset={24} />
               </div>
-              {showRemoteDirectoryLoading ? (
-                <div
-                  aria-label={t.loadingRemoteDirectory}
-                  aria-live="polite"
-                  className="remote-directory-loading"
-                  role="status"
-                >
-                  <span aria-hidden="true" className="remote-directory-loading-spinner" />
-                </div>
+              {showPaneRemoteDirectoryLoading ? (
+                <WorkspaceLoadingState className="workspace-loading-state--overlay" label={t.loadingRemoteDirectory} />
               ) : null}
             </div>
           </div>
+          {isViewLoading || isWorkspaceRefreshing ? (
+            <WorkspaceLoadingState className="workspace-loading-state--overlay" label={t.loadingWorkspace} />
+          ) : null}
         </div>
       )}
       {contextMenu ? (
@@ -1047,8 +1115,11 @@ export function FileManager({
             setContextMenu(null)
           }}
           onDownload={() => {
-            const items = contextRemoteSelection
-            onDownloadFiles(items)
+            if (contextMenu.pane === 'local') {
+              onDownloadLocalNetworkFiles(contextLocalSelection)
+            } else {
+              onDownloadFiles(contextRemoteSelection)
+            }
             setContextMenu(null)
           }}
           onNewFile={() => {

@@ -4,6 +4,7 @@ import type { SshForwardRule, SshTunnelSnapshot } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
+import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 
 const initialDraft = (): SshForwardRule => ({
   id: globalThis.crypto.randomUUID(),
@@ -121,8 +122,10 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
         </p>
       </div>
       {error ? <p className="ssh-tunnel-error">{error}</p> : null}
-      <div className="ssh-tunnel-list">
-        {tunnels.length ? (
+      <div aria-busy={isLoading} className={`ssh-tunnel-list${isLoading ? ' is-loading' : ''}`}>
+        {isLoading ? (
+          <WorkspaceLoadingState label="正在加载隧道状态…" />
+        ) : tunnels.length ? (
           tunnels.map((tunnel) => (
             <TunnelRow key={tunnel.id} tabId={tabId} tunnel={tunnel} onChange={setTunnels} onError={setError} />
           ))

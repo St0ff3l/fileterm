@@ -18,6 +18,18 @@ export interface ConnectionFolder extends BaseEntity {
   isExpanded?: boolean
 }
 
+export type LocalNetworkShareConnectionResult =
+  | {
+      kind: 'connected'
+      path: string
+      shares: string[]
+    }
+  | {
+      kind: 'select-share'
+      path: string
+      shares: string[]
+    }
+
 export interface CommandFolder extends BaseEntity {
   type: 'command-folder'
 }
@@ -938,6 +950,12 @@ export interface FileTermDesktopApi {
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   closeTab(tabId: string): Promise<WorkspaceSnapshot>
   listLocalDirectory(dirPath?: string): Promise<DirectorySnapshot<LocalFileItem>>
+  connectLocalNetworkShare?(
+    path: string,
+    username: string,
+    password: string,
+    share?: string
+  ): Promise<LocalNetworkShareConnectionResult>
   readLocalFile(filePath: string, encoding?: string): Promise<string>
   writeLocalFile(filePath: string, content: string, encoding?: string): Promise<void>
   createLocalDirectory(dirPath: string, name: string): Promise<void>

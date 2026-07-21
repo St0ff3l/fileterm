@@ -26,6 +26,7 @@ import type {
   SshKeyMetadata,
   ImportSshKeyInput,
   LocalFileItem,
+  LocalNetworkShareConnectionResult,
   SshForwardRule,
   SshTunnelSnapshot,
   CommandExecutionResult
@@ -269,6 +270,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     listLocalDirectory: (dirPath?: string) =>
       invoke<{ path: string; items: LocalFileItem[] }>('app_list_local_directory', {
         dirPath: dirPath ?? null
+      }),
+    connectLocalNetworkShare: (path: string, username: string, password: string, share?: string) =>
+      invoke<LocalNetworkShareConnectionResult>('app_connect_local_network_share', {
+        path,
+        username,
+        password,
+        share: share ?? null
       }),
     readLocalFile: (filePath: string, encoding?: string) =>
       invoke<string>('app_read_local_file', { filePath, encoding: encoding ?? null }),

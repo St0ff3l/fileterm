@@ -114,9 +114,23 @@ export function tabStatusClass(status: WorkspaceTab['status']) {
   return 'idle'
 }
 
-export function withParentRow(dirPath: string, items: LocalFileItem[]) {
-  const parentPath = dirPath.includes('/') ? dirPath.split('/').slice(0, -1).join('/') || '/' : dirPath
-  return dirPath === '/'
+export function withParentRow(dirPath: string, items: LocalFileItem[], rootPath?: string) {
+  const normalizedPath = dirPath
+    .replace(/[\\/]+$/, '')
+    .replace(/\\/g, '/')
+    .toLocaleLowerCase()
+  const normalizedRoot = rootPath
+    ?.replace(/[\\/]+$/, '')
+    .replace(/\\/g, '/')
+    .toLocaleLowerCase()
+  const windowsRoot = /^[A-Za-z]:[\\/]?$/.test(dirPath) ? `${dirPath.slice(0, 2)}\\` : null
+  const isAtRoot = normalizedRoot !== undefined && normalizedPath === normalizedRoot
+  const parentPath = dirPath.includes('/')
+    ? dirPath.split('/').slice(0, -1).join('/') || '/'
+    : dirPath.includes('\\')
+      ? windowsRoot || dirPath.split('\\').slice(0, -1).join('\\') || '\\'
+      : dirPath
+  return dirPath === '/' || isAtRoot
     ? items
     : [
         {
