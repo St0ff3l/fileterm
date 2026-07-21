@@ -723,6 +723,7 @@ pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySna
         Some(p) if !p.is_empty() => PathBuf::from(p),
         _ => initial_path(),
     };
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let requested_path_text = requested_path.to_string_lossy().into_owned();
 
     #[cfg(target_os = "macos")]
