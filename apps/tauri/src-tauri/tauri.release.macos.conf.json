@@ -1,24 +1,5 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "app": {
-    "windows": [
-      {
-        "title": "FileTerm",
-        "width": 1280,
-        "height": 820,
-        "minWidth": 1150,
-        "minHeight": 790,
-        "dragDropEnabled": true,
-        "decorations": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "trafficLightPosition": {
-          "x": 20,
-          "y": 23.5
-        }
-      }
-    ]
-  },
   "bundle": {
     "macOS": {
       "signingIdentity": "-"

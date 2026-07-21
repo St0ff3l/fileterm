@@ -77,6 +77,27 @@ struct HiddenWithMainRegistry {
 #[cfg(target_os = "macos")]
 static MACOS_TRAFFIC_LIGHTS_CALIBRATED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(target_os = "macos")]
+const MACOS_RENDERER_TITLEBAR_HEIGHT: f64 = 48.0;
+#[cfg(target_os = "macos")]
+const MACOS_TRAFFIC_LIGHT_FRAME_SIZE: f64 = 14.0;
+#[cfg(target_os = "macos")]
+const MACOS_TRAFFIC_LIGHT_DRAWN_SIZE: f64 = 12.0;
+#[cfg(target_os = "macos")]
+const MACOS_TRAFFIC_LIGHT_LEFT_INSET: f64 = 20.0;
+#[cfg(target_os = "macos")]
+const MACOS_TRAFFIC_LIGHT_CENTER_SPACING: f64 = 23.0;
+
+#[cfg(target_os = "macos")]
+fn macos_traffic_light_target_center(window_height: f64, index: usize) -> (f64, f64) {
+    (
+        MACOS_TRAFFIC_LIGHT_LEFT_INSET
+            + MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0
+            + index as f64 * MACOS_TRAFFIC_LIGHT_CENTER_SPACING,
+        window_height - MACOS_RENDERER_TITLEBAR_HEIGHT / 2.0,
+    )
+}
+
 impl FileEditorCloseRegistry {
     fn request(&self, label: &str) -> bool {
         self.state
@@ -830,13 +851,6 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     use objc2_quartz_core::{CATransaction, CATransform3D};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    const BUTTON_SIZE: f64 = 14.0;
-    const APPKIT_DRAWN_CIRCLE_SIZE: f64 = 12.0;
-    const BUTTON_SPACING: f64 = 23.0;
-    // Keep the packaged Overlay window's vertical compensation native so
-    // renderer CSS does not have to know which build flavor launched the app.
-    const RELEASE_VERTICAL_OFFSET: f64 = 0.5;
-
     let Ok(handle) = window.window_handle() else {
         return false;
     };
@@ -863,45 +877,56 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     let Some(zoom) = ns_window.standardWindowButton(NSWindowButton::ZoomButton) else {
         return false;
     };
-
-    let buttons = [&close, &miniaturize, &zoom];
-    let first_frame = buttons[0].frame();
-    let vertical_offset = if cfg!(debug_assertions) {
-        0.0
-    } else {
-        RELEASE_VERTICAL_OFFSET
+    // Standard window buttons are retained above and remain attached to the
+    // NSWindow title-bar hierarchy for the duration of this main-thread call.
+    let Some(close_superview) = (unsafe { close.superview() }) else {
+        return false;
     };
-    let center_y = first_frame.origin.y + first_frame.size.height / 2.0 + vertical_offset;
-    let center_x = first_frame.origin.x + first_frame.size.width / 2.0;
-    let release_content_scale = BUTTON_SIZE / APPKIT_DRAWN_CIRCLE_SIZE;
+    let Some(miniaturize_superview) = (unsafe { miniaturize.superview() }) else {
+        return false;
+    };
+    let Some(zoom_superview) = (unsafe { zoom.superview() }) else {
+        return false;
+    };
+
+    let buttons = [
+        (&close, &close_superview),
+        (&miniaturize, &miniaturize_superview),
+        (&zoom, &zoom_superview),
+    ];
+    let window_height = ns_window.frame().size.height;
+    let content_scale = MACOS_TRAFFIC_LIGHT_FRAME_SIZE / MACOS_TRAFFIC_LIGHT_DRAWN_SIZE;
 
     CATransaction::begin();
     CATransaction::setDisableActions(true);
-    for (index, button) in buttons.into_iter().enumerate() {
-        // The packaged Overlay window keeps drawing a 12pt circle even when
-        // its native button frame and control size are 14pt. In release builds,
-        // scale the actual AppKit presentation layer around the button center
-        // so it matches the already-correct 14pt development rendering without
-        // moving the calibrated centers.
+    for (index, (button, button_superview)) in buttons.into_iter().enumerate() {
+        // The design target is expressed in window coordinates, independent
+        // of AppKit's Debug/Release title-bar container geometry. Convert that
+        // absolute center into each native button's own superview before
+        // assigning its frame.
         button.setControlSize(NSControlSize::Regular);
         button.sizeToFit();
 
+        let (target_center_x, target_center_y) =
+            macos_traffic_light_target_center(window_height, index);
+        let mut target_center_in_window = button.frame().origin;
+        target_center_in_window.x = target_center_x;
+        target_center_in_window.y = target_center_y;
+        let target_center = button_superview.convertPoint_fromView(target_center_in_window, None);
+
         let mut frame = button.frame();
-        frame.origin.x = center_x + index as f64 * BUTTON_SPACING - BUTTON_SIZE / 2.0;
-        frame.origin.y = center_y - BUTTON_SIZE / 2.0;
-        frame.size.width = BUTTON_SIZE;
-        frame.size.height = BUTTON_SIZE;
+        frame.origin.x = target_center.x - MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0;
+        frame.origin.y = target_center.y - MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0;
+        frame.size.width = MACOS_TRAFFIC_LIGHT_FRAME_SIZE;
+        frame.size.height = MACOS_TRAFFIC_LIGHT_FRAME_SIZE;
         button.setFrame(frame);
-        if !cfg!(debug_assertions) {
-            button.setWantsLayer(true);
-            if let Some(layer) = button.layer() {
-                let mut transform =
-                    CATransform3D::new_scale(release_content_scale, release_content_scale, 1.0);
-                let centered_translation = BUTTON_SIZE / 2.0 * (1.0 - release_content_scale);
-                transform.m41 = centered_translation;
-                transform.m42 = centered_translation;
-                layer.setTransform(transform);
-            }
+        button.setWantsLayer(true);
+        if let Some(layer) = button.layer() {
+            let mut transform = CATransform3D::new_scale(content_scale, content_scale, 1.0);
+            let centered_translation = MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0 * (1.0 - content_scale);
+            transform.m41 = centered_translation;
+            transform.m42 = centered_translation;
+            layer.setTransform(transform);
         }
         NSView::setNeedsDisplay(button, true);
     }
@@ -1497,6 +1522,23 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     use super::{windows_app_icon, windows_tray_icon};
+
+    #[cfg(target_os = "macos")]
+    use super::{macos_traffic_light_target_center, MACOS_TRAFFIC_LIGHT_FRAME_SIZE};
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_traffic_lights_use_absolute_renderer_titlebar_geometry() {
+        let window_height = 820.0;
+        let close = macos_traffic_light_target_center(window_height, 0);
+        let miniaturize = macos_traffic_light_target_center(window_height, 1);
+        let zoom = macos_traffic_light_target_center(window_height, 2);
+
+        assert_eq!(close, (27.0, 796.0));
+        assert_eq!(miniaturize, (50.0, 796.0));
+        assert_eq!(zoom, (73.0, 796.0));
+        assert_eq!(close.0 - MACOS_TRAFFIC_LIGHT_FRAME_SIZE / 2.0, 20.0);
+    }
 
     #[test]
     fn keeps_mac_and_non_mac_window_shortcuts_distinct() {
