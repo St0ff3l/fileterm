@@ -418,8 +418,8 @@
 .command-temporary-editor {
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
-  min-height: max-content;
+  flex: 1 1 auto;
+  min-height: 100%;
   gap: 12px;
 }
 
@@ -437,13 +437,15 @@
 }
 
 .command-temporary-editor-field {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 160px;
 }
 
 .command-temporary-editor-field .command-code-area {
-  height: 290px;
-  min-height: 290px;
-  max-height: 290px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 160px;
+  max-height: none;
 }
 
 .command-temporary-editor-toolbar {
