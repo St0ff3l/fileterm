@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use russh::client::{Handle, Handler};
 use russh::keys::PrivateKeyWithHashAlg;
-use russh::{Channel, ChannelMsg};
+use russh::{Channel, ChannelMsg, ChannelWriteHalf, Sig};
 use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::fs::Metadata as SftpMetadata;
 use russh_sftp::client::SftpSession;
@@ -47,6 +47,28 @@ const SSH_INTERACTION_TIMEOUT: Duration = Duration::from_secs(300);
 const SSH_TRANSPORT_TIMEOUT: Duration = Duration::from_secs(30);
 const SSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 const SSH_PASSWORD_AUTH_TIMEOUT: Duration = Duration::from_secs(30);
+/// A remote PTY write must not pin the SSH worker forever when the server has
+/// stopped consuming the channel or the channel window is exhausted.
+const TERMINAL_WRITE_TIMEOUT: Duration = Duration::from_secs(2);
+/// SIGINT is an out-of-band emergency path. Keep its wait short so a broken
+/// SSH transport cannot make Ctrl+C look like a frozen desktop app.
+const TERMINAL_INTERRUPT_TIMEOUT: Duration = Duration::from_millis(500);
+
+type SshShellWriteHalf = ChannelWriteHalf<russh::client::Msg>;
+
+async fn write_shell_data(
+    writer: &SshShellWriteHalf,
+    data: impl Into<Vec<u8>>,
+) -> Result<(), String> {
+    timeout(TERMINAL_WRITE_TIMEOUT, writer.data_bytes(data.into()))
+        .await
+        .map_err(|_| "SSH terminal write timed out".to_string())?
+        .map_err(|error| error.to_string())
+}
+
+fn contains_interrupt_byte(data: &str) -> bool {
+    data.as_bytes().contains(&0x03)
+}
 
 async fn wait_for_ssh_stage<T>(
     stage: &str,
@@ -2752,7 +2774,7 @@ async fn run_worker_loop(
     let handle: Arc<Handle<ClientHandler>> = Arc::new(open_session(profile, app, tab_id).await?);
 
     // ── Shell channel ──────────────────────────────────────────────────────
-    let mut shell_channel = handle
+    let shell_channel = handle
         .channel_open_session()
         .await
         .map_err(|e| e.to_string())?;
@@ -2775,6 +2797,36 @@ async fn run_worker_loop(
         .request_shell(true)
         .await
         .map_err(|e| e.to_string())?;
+    let (mut shell_reader, shell_writer) = shell_channel.split();
+    let shell_writer = Arc::new(shell_writer);
+
+    // Normal terminal bytes are serialized here so a slow SSH channel cannot
+    // block the session event loop. Ctrl+C bypasses this queue below via the
+    // SSH SIGINT request and also keeps its raw 0x03 byte as a fallback.
+    let (terminal_write_tx, mut terminal_write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    let terminal_writer = Arc::clone(&shell_writer);
+    let terminal_writer_cancellation = cancellation.clone();
+    let terminal_writer_app = app.clone();
+    let terminal_writer_tab_id = tab_id.to_string();
+    let _terminal_writer_task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = terminal_writer_cancellation.cancelled() => break,
+                data = terminal_write_rx.recv() => {
+                    let Some(data) = data else { break };
+                    if let Err(error) = write_shell_data(&terminal_writer, data).await {
+                        crate::services::logging::session(
+                            &terminal_writer_app,
+                            "WARN",
+                            "ssh",
+                            &terminal_writer_tab_id,
+                            format!("terminal write failed: {error}"),
+                        );
+                    }
+                }
+            }
+        }
+    });
 
     // ── Probe platform ─────────────────────────────────────────────────────
     let platform = super::system_metrics::probe_remote_platform(&handle).await;
@@ -3271,10 +3323,37 @@ async fn run_worker_loop(
                         session.has_reusable_sudo_auth = sudo_password.is_some();
                     }
                 }
-                shell_channel
-                    .data(data.as_bytes())
+                if contains_interrupt_byte(&data) {
+                    match timeout(
+                        TERMINAL_INTERRUPT_TIMEOUT,
+                        shell_writer.signal(Sig::INT),
+                    )
                     .await
-                    .map_err(|error| error.to_string())?;
+                    {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => {
+                            crate::services::logging::session(
+                                app,
+                                "WARN",
+                                "ssh",
+                                tab_id,
+                                format!("terminal SIGINT request failed: {error}"),
+                            );
+                        }
+                        Err(_) => {
+                            crate::services::logging::session(
+                                app,
+                                "WARN",
+                                "ssh",
+                                tab_id,
+                                "terminal SIGINT request timed out",
+                            );
+                        }
+                    }
+                }
+                terminal_write_tx
+                    .send(data.into_bytes())
+                    .map_err(|_| "Terminal writer stopped".to_string())?;
             }
             // Commands and shell output intentionally share Tokio's fair
             // selection. Making this branch unconditionally preferred lets a
@@ -3304,7 +3383,7 @@ async fn run_worker_loop(
                             handle_worker_cmd(
                                 cmd,
                                 &handle,
-                                &shell_channel,
+                                &shell_writer,
                                 sftp,
                                 &transfer_sftp_slot,
                                 &mut file_access_mode,
@@ -3319,7 +3398,7 @@ async fn run_worker_loop(
                             handle_worker_cmd_without_sftp(
                                 cmd,
                                 &handle,
-                                &shell_channel,
+                                &shell_writer,
                                 &mut file_access_mode,
                                 &mut sudo_user,
                                 &mut sudo_password,
@@ -3365,7 +3444,7 @@ async fn run_worker_loop(
                 }
             }
             // 2. Drain shell channel output.
-            msg = shell_channel.wait() => {
+            msg = shell_reader.wait() => {
                 match msg {
                     Some(ChannelMsg::Data { data }) => {
                         let bytes = data.as_ref();
@@ -3497,7 +3576,7 @@ async fn run_worker_loop(
                             if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
                                 last_shell_setup_injection = Instant::now();
                                 let setup_command = format!(" {setup}\r");
-                                match shell_channel.data(setup_command.as_bytes()).await {
+                                match write_shell_data(&shell_writer, setup_command.into_bytes()).await {
                                     Ok(()) => {
                                         // The banner and first prompt have already been forwarded.
                                         // Everything after this write is internal setup output until
@@ -3527,7 +3606,7 @@ async fn run_worker_loop(
                             if !shell_is_root {
                                 if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
                                     last_shell_setup_injection = Instant::now();
-                                    if shell_channel.data(format!(" {setup}\r").as_bytes()).await.is_ok() {
+                                    if write_shell_data(&shell_writer, format!(" {setup}\r").into_bytes()).await.is_ok() {
                                         pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new(false));
                                     }
                                 }
@@ -3571,7 +3650,7 @@ async fn run_worker_loop(
 async fn handle_worker_cmd_without_sftp(
     cmd: WorkerCmd,
     handle: &Handle<ClientHandler>,
-    shell_channel: &Channel<russh::client::Msg>,
+    shell_writer: &SshShellWriteHalf,
     file_access_mode: &mut String,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
@@ -3582,14 +3661,11 @@ async fn handle_worker_cmd_without_sftp(
 ) -> Result<bool, String> {
     match cmd {
         WorkerCmd::WriteTerminal(data) => {
-            shell_channel
-                .data(data.as_bytes())
-                .await
-                .map_err(|error| error.to_string())?;
+            write_shell_data(shell_writer, data.into_bytes()).await?;
             Ok(false)
         }
         WorkerCmd::ResizeTerminal { cols, rows, .. } => {
-            shell_channel
+            shell_writer
                 .window_change(cols, rows, 0, 0)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -3718,7 +3794,7 @@ async fn handle_worker_cmd_without_sftp(
 async fn handle_worker_cmd(
     cmd: WorkerCmd,
     handle: &Arc<Handle<ClientHandler>>,
-    shell_channel: &Channel<russh::client::Msg>,
+    shell_writer: &SshShellWriteHalf,
     sftp: &SharedSftpSession,
     transfer_sftp_slot: &TransferSftpSlot,
     file_access_mode: &mut String,
@@ -3731,15 +3807,11 @@ async fn handle_worker_cmd(
 ) -> Result<bool, String> {
     match cmd {
         WorkerCmd::WriteTerminal(data) => {
-            let bytes = data.as_bytes().to_vec();
-            shell_channel
-                .data(&bytes[..])
-                .await
-                .map_err(|e| e.to_string())?;
+            write_shell_data(shell_writer, data.into_bytes()).await?;
             Ok(false)
         }
         WorkerCmd::ResizeTerminal { cols, rows, .. } => {
-            shell_channel
+            shell_writer
                 .window_change(cols, rows, 0, 0)
                 .await
                 .map_err(|e| e.to_string())?;
@@ -5405,8 +5477,8 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 mod tests {
     use super::{
         build_http_connect_request, capture_sudo_password_input, coalesce_terminal_input,
-        default_ssh_key_paths, format_sftp_unavailable_reason, is_password_prompt,
-        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        contains_interrupt_byte, default_ssh_key_paths, format_sftp_unavailable_reason,
+        is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
         remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
         suppress_shell_setup_echo, track_cwd_and_user, track_sudo_prompt_from_terminal,
@@ -5857,6 +5929,13 @@ mod tests {
         assert!(merged.starts_with("clear\r"));
         assert_eq!(merged.matches('\r').count(), 2_001);
         assert!(receiver.is_empty());
+    }
+
+    #[test]
+    fn detects_ctrl_c_without_matching_other_control_bytes() {
+        assert!(contains_interrupt_byte("build\r\u{3}"));
+        assert!(!contains_interrupt_byte("build\r"));
+        assert!(!contains_interrupt_byte("\u{1b}[2J"));
     }
 
     #[test]
