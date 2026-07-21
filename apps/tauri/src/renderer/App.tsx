@@ -1131,12 +1131,7 @@ export function App() {
   // --- Main Workspace Render ---
 
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
-  const isHomeTabActive = isHomeWorkspaceVisible
-  const brandWidth = isHomeTabActive
-    ? DEFAULT_SIDEBAR_WIDTH
-    : showSidebar && !isSystemSidebarCollapsed
-      ? sidebarWidth
-      : DEFAULT_SIDEBAR_WIDTH
+  const brandWidth = DEFAULT_SIDEBAR_WIDTH
 
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
