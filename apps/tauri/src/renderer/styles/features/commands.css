@@ -450,6 +450,14 @@
   max-height: none;
 }
 
+/* The shared command form sets a fixed editor height later in this file.
+   Keep the temporary editor fluid so it can occupy the panel's remaining space. */
+.command-temporary-editor-field.command-editor-dialog-textarea .command-code-area {
+  height: auto;
+  min-height: 160px;
+  max-height: none;
+}
+
 .command-temporary-editor-toolbar {
   border-top: 1px solid var(--border-light);
   padding-top: 8px;
