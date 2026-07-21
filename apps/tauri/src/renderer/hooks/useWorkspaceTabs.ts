@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type {
   ConnectionProfile,
+  CommandExecutionOptions,
   FileTermDesktopApi,
   SessionSnapshot,
   WorkspaceSnapshot,
@@ -678,17 +679,21 @@ export function useWorkspaceTabs({
     }))
   }
 
-  const sendTerminalCommand = async (command: string) => {
+  const sendTerminalCommand = async (
+    command: string,
+    options?: CommandExecutionOptions,
+    scope?: SendScope,
+    selectedTabIds?: string[]
+  ) => {
     if (!desktopApi || !activeTab) {
       return
     }
 
-    const targetIds = resolveSelectedTabIds(
-      activeTerminalDockSendState.scope,
-      activeTab,
-      activeTerminalDockSendState.selectedTabIds,
-      sessionSendTargets
-    )
+    const usesDockState = options === undefined && scope === undefined && selectedTabIds === undefined
+    const effectiveScope = scope ?? activeTerminalDockSendState.scope
+    const effectiveSelectedTabIds = selectedTabIds ?? activeTerminalDockSendState.selectedTabIds
+
+    const targetIds = resolveSelectedTabIds(effectiveScope, activeTab, effectiveSelectedTabIds, sessionSendTargets)
 
     if (!targetIds.length) {
       onStatusMessage(t.commandNoAvailableTargets)
@@ -701,7 +706,7 @@ export function useWorkspaceTabs({
       // 顺序 await 会让一个卡住的 tab 阻塞后续所有 tab；后端已为每个
       // invoke 加了 send 超时，但并行化能进一步保证单个慢 tab 不影响
       // 其他 tab 的投递时序。allSettled 确保一个失败不影响其余。
-      const payload = `${terminalCommand}\r`
+      const payload = options?.appendCarriageReturn === false ? terminalCommand : `${terminalCommand}\r`
       const results = await Promise.allSettled(targetIds.map((tabId) => desktopApi.writeTerminal(tabId, payload)))
       const failure = settledResultsError('发送终端命令', results)
       if (failure) {
@@ -711,7 +716,7 @@ export function useWorkspaceTabs({
       onError('发送终端命令', error)
       throw error
     } finally {
-      if (!activeTerminalDockSendState.rememberSelection && activeTab) {
+      if (usesDockState && !activeTerminalDockSendState.rememberSelection && activeTab) {
         setTerminalDockSendStateByTabId((current) => ({
           ...current,
           [activeTab.id]: createDefaultTerminalDockSendState()

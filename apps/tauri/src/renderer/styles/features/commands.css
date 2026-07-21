@@ -184,6 +184,21 @@
   z-index: 2;
 }
 
+.command-folder-tabs .command-folder-tab-temporary {
+  min-width: 106px;
+  color: var(--primary);
+}
+
+.command-folder-tabs .command-folder-tab-temporary .material-symbols-outlined {
+  font-size: 15px;
+}
+
+.command-folder-tabs .command-folder-tab-temporary.active {
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border-light));
+  color: var(--primary);
+}
+
 .command-folder-tabs button small {
   background: var(--surface-chip);
   padding: 1px 5px;
@@ -262,6 +277,24 @@
 .command-template-list::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+.command-temporary-list-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 20px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 11px;
+}
+
+.command-temporary-list-placeholder .material-symbols-outlined {
+  color: var(--primary);
+  font-size: 24px;
 }
 
 .command-list-toolbar {
@@ -374,6 +407,60 @@
   background: transparent;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.command-temporary-runner {
+  overflow: hidden;
+}
+
+.command-temporary-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+
+.command-temporary-editor-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.command-temporary-editor-heading span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.command-temporary-editor-field {
+  flex: 1;
+  min-height: 0;
+}
+
+.command-temporary-editor-field .command-code-area {
+  flex: 1;
+  height: auto;
+  min-height: 290px;
+  max-height: none;
+}
+
+.command-temporary-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  flex-shrink: 0;
+}
+
+.command-temporary-editor-toolbar .command-toggle {
+  margin-right: auto;
+}
+
+.command-temporary-editor-toolbar button {
+  height: 28px;
+  white-space: nowrap;
 }
 
 .command-runner-head {

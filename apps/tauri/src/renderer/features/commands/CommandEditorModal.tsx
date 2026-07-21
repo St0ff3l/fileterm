@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CommandFolder, CommandTemplate, CommandTemplateInput } from '@fileterm/core'
 import { t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from './command-utils'
+import { CommandCodeEditor } from './CommandCodeEditor'
 import { CloseButton } from '../common/CloseButton'
 
 export const emptyCommandForm: CommandTemplateInput = {
@@ -11,8 +12,6 @@ export const emptyCommandForm: CommandTemplateInput = {
   parentId: undefined,
   appendCarriageReturn: true
 }
-
-const COMMAND_EDITOR_MIN_LINE_COUNT = 14
 
 export function toCommandTemplateInput(command: CommandTemplate): CommandTemplateInput {
   return {
@@ -124,15 +123,6 @@ export function CommandEditorModal({
     }
   }
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const lineNumRef = useRef<HTMLDivElement>(null)
-
-  const handleTextareaScroll = () => {
-    if (lineNumRef.current && textareaRef.current) {
-      lineNumRef.current.scrollTop = textareaRef.current.scrollTop
-    }
-  }
-
   const editorFields = (
     <fieldset disabled={submitLocked} style={{ border: 0, display: 'contents', margin: 0, padding: 0 }}>
       <div className="command-editor-grid">
@@ -185,30 +175,12 @@ export function CommandEditorModal({
         </label>
         <div className="command-editor-field full command-editor-dialog-textarea">
           <span>{t.commandTemplate}</span>
-          <div className="command-code-area">
-            <div className="command-line-numbers" ref={lineNumRef} aria-hidden="true">
-              {Array.from(
-                { length: Math.max(form.command.split('\n').length, COMMAND_EDITOR_MIN_LINE_COUNT) },
-                (_, i) => (
-                  <div key={i} className="command-line-number">
-                    {i + 1}
-                  </div>
-                )
-              )}
-            </div>
-            <textarea
-              ref={textareaRef}
-              rows={12}
-              value={form.command}
-              spellCheck={false}
-              className={showValidation && !form.command?.trim() ? 'is-invalid' : ''}
-              onChange={(event) => {
-                const { value } = event.target
-                setForm((prev) => ({ ...prev, command: value }))
-              }}
-              onScroll={handleTextareaScroll}
-            />
-          </div>
+          <CommandCodeEditor
+            value={form.command}
+            onChange={(value) => setForm((prev) => ({ ...prev, command: value }))}
+            ariaLabel={t.commandTemplate}
+            className={showValidation && !form.command?.trim() ? 'is-invalid' : ''}
+          />
         </div>
         <div className="command-editor-field full command-editor-dialog-params">
           <span>{t.commandParamHint}</span>
