@@ -768,14 +768,11 @@
 }
 
 :root[data-runtime='tauri'][data-platform='darwin'] .titlebar-brand strong {
-  /* In Tauri Overlay, trafficLightPosition y shifts the title-bar container
-     rather than each button's frame. With y: 26 the traffic lights share the
-     48px renderer tab bar's visual center. The previous -0.5px lift left the
-     brand glyph optically high after the native traffic-light calibration, so
-     lower it by another 0.5px and use the larger 16px wordmark. Scope this to
-     Tauri: Electron hiddenInset uses a different native geometry. */
+  /* Keep the Tauri wordmark on the native AppKit title-bar baseline. The
+     traffic lights are calibrated independently in Rust; this is only the
+     optical adjustment for the renderer-owned brand glyph. */
   position: relative;
-  top: 0.5px;
+  top: 0;
   font-size: 16px;
 }
 
