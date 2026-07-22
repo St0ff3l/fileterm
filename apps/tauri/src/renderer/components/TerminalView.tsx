@@ -140,6 +140,9 @@ export const TerminalView = memo(function TerminalView({
   const preserveVisibleBufferRef = useRef(false)
   const bootedTabs = useRef(new Set<string>())
   const wasConnectedRef = useRef(false)
+  // 后端 worker 异常退出时 writeTerminal 会 reject；记录一次避免每个按键
+  // 都刷一行提示，直到 terminal:state 重新同步后复位。
+  const inputSendFailedRef = useRef(false)
   // `onData` is registered once for the xterm instance.  Reading the prop
   // through a ref prevents a stale terminal-state event from a background
   // tab from swallowing keystrokes after this tab is brought back.
@@ -797,7 +800,23 @@ export const TerminalView = memo(function TerminalView({
       }
       clearEphemeralHighlight()
       setContextMenu(null)
-      void window.fileterm?.writeTerminal(tabIdRef.current, data)
+      // 发送失败必须可见：后端 worker 死亡（panic/断连）时 send 会 reject，
+      // 静默吞掉会让终端看起来"卡死且 Ctrl+C 无效"。降级为未连接状态并
+      // 给出重连提示，Enter 重连路径随之可用。
+      window.fileterm?.writeTerminal(tabIdRef.current, data)?.catch(() => {
+        if (inputSendFailedRef.current) {
+          return
+        }
+        inputSendFailedRef.current = true
+        // Do not wait for the backend's terminal:state broadcast before
+        // allowing Enter to use the reconnect path. A dead worker cannot
+        // consume another input packet, so retaining `connected=true` here
+        // would make the first retry look swallowed.
+        connectedRef.current = false
+        wasConnectedRef.current = false
+        const reconnectHint = onReconnectRef.current ? `\r\n${t.pressEnterToReconnect}` : ''
+        terminal.write(`\r\n${t.terminalConnectionClosed}${reconnectHint}\r\n`)
+      })
     })
 
     const onSelectionDispose = terminal.onSelectionChange(() => {
@@ -859,6 +878,7 @@ export const TerminalView = memo(function TerminalView({
         wasConnectedRef.current = connected
         if (connected) {
           isReconnectingRef.current = false
+          inputSendFailedRef.current = false
         }
       }
     })

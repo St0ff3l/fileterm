@@ -81,6 +81,25 @@ fn contains_interrupt_byte(data: &str) -> bool {
     data.as_bytes().contains(&0x03)
 }
 
+/// Trim a rolling string buffer to its last `keep` bytes without splitting a
+/// multi-byte UTF-8 character. Plain byte-index slicing (`s[len - keep..]`)
+/// panics when the cut lands inside a CJK character or a U+FFFD replacement
+/// char emitted by `from_utf8_lossy`. Inside a spawned tokio task such a
+/// panic silently kills the SSH worker / output pump: the JoinHandle is
+/// dropped, no state update reaches the renderer, and the terminal looks
+/// frozen with Ctrl+C dead — the exact "跑脚本卡住" report. Every rolling
+/// buffer on the terminal hot path must go through this helper.
+fn trim_string_front(value: &mut String, keep: usize) {
+    if value.len() <= keep {
+        return;
+    }
+    let mut start = value.len() - keep;
+    while start < value.len() && !value.is_char_boundary(start) {
+        start += 1;
+    }
+    value.drain(..start);
+}
+
 async fn wait_for_ssh_stage<T>(
     stage: &str,
     deadline: Duration,
@@ -189,15 +208,35 @@ pub fn start_ssh_worker(
         // snapshot's `terminal_transcript` (set by `app_open_profile`), so
         // the renderer hydrates it via `bootText` — no need to emit it here.
         // Emitting here would race the renderer's listener registration.
-        let run_result = run_worker_loop(
-            &tab_id,
-            &profile,
-            &mut cmd_rx,
-            &mut terminal_input_rx,
-            &app,
-            cancellation.clone(),
-        )
-        .await;
+        //
+        // 监督层：run_worker_loop 过去直接 await 在这个 spawn 里，循环内任何
+        // panic（例如热路径上的 String 字节切片切到多字节字符内部）都会无声
+        // 杀死任务——JoinHandle 无人 await，没有日志、没有状态更新，renderer
+        // 永远显示"已连接"，终端冻结且 Ctrl+C 无效。现在把循环放进独立任务
+        // 并 await 其 JoinHandle：panic 转成 JoinError 后走下面统一的失败
+        // 收尾路径（错误日志 + transcript 提示 + 状态广播 + 自动重连判断）。
+        // 关闭链路只用 CancellationToken（无 abort），所以 JoinError 一定
+        // 是 panic，不是正常取消。
+        let worker_app = app.clone();
+        let worker_cancellation = cancellation.clone();
+        let worker_profile = profile.clone();
+        let run_result = tokio::spawn(async move {
+            run_worker_loop(
+                &tab_id,
+                &worker_profile,
+                &mut cmd_rx,
+                &mut terminal_input_rx,
+                &worker_app,
+                worker_cancellation,
+            )
+            .await
+        })
+        .await
+        .unwrap_or_else(|join_error| {
+            Err(format!(
+                "worker task terminated abnormally (panic): {join_error}"
+            ))
+        });
         if cancellation.is_cancelled() {
             crate::services::logging::session(&app, "INFO", "ssh", &tid, "worker cancelled");
             return;
@@ -503,6 +542,93 @@ struct TunnelManager {
     tunnels: HashMap<String, SshTunnelSnapshot>,
     local_stops: HashMap<String, oneshot::Sender<()>>,
     remote_rules: HashMap<String, (String, u32)>,
+}
+
+/// Tunnel operations use a dedicated FIFO worker instead of borrowing the
+/// SSH session's main select loop. Starting or stopping a remote tunnel can
+/// legitimately wait for the server's global-request reply; that wait must
+/// never delay terminal input or SIGINT handling.
+enum TunnelCommand {
+    List {
+        respond_to: oneshot::Sender<Result<Vec<Value>, String>>,
+    },
+    Create {
+        rule: SshTunnelRule,
+        respond_to: oneshot::Sender<Result<Vec<Value>, String>>,
+    },
+    Start {
+        rule_id: String,
+        respond_to: oneshot::Sender<Result<Vec<Value>, String>>,
+    },
+    Stop {
+        rule_id: String,
+        respond_to: oneshot::Sender<Result<Vec<Value>, String>>,
+    },
+    Delete {
+        rule_id: String,
+        respond_to: oneshot::Sender<Result<Vec<Value>, String>>,
+    },
+}
+
+impl TunnelCommand {
+    fn reject(self, error: &str) {
+        let respond_to = match self {
+            Self::List { respond_to }
+            | Self::Create { respond_to, .. }
+            | Self::Start { respond_to, .. }
+            | Self::Stop { respond_to, .. }
+            | Self::Delete { respond_to, .. } => respond_to,
+        };
+        let _ = respond_to.send(Err(error.to_string()));
+    }
+}
+
+fn enqueue_tunnel_command(
+    sender: &mpsc::UnboundedSender<TunnelCommand>,
+    command: TunnelCommand,
+) {
+    if let Err(error) = sender.send(command) {
+        error.0.reject("SSH tunnel worker stopped");
+    }
+}
+
+async fn run_tunnel_command_loop(
+    mut tunnel_manager: TunnelManager,
+    mut command_rx: mpsc::UnboundedReceiver<TunnelCommand>,
+) {
+    while let Some(command) = command_rx.recv().await {
+        match command {
+            TunnelCommand::List { respond_to } => {
+                let _ = respond_to.send(tunnel_manager.list());
+            }
+            TunnelCommand::Create { rule, respond_to } => {
+                let _ = respond_to.send(tunnel_manager.create(rule).await);
+            }
+            TunnelCommand::Start {
+                rule_id,
+                respond_to,
+            } => {
+                let _ = respond_to.send(tunnel_manager.start(&rule_id).await);
+            }
+            TunnelCommand::Stop {
+                rule_id,
+                respond_to,
+            } => {
+                let _ = respond_to.send(tunnel_manager.stop(&rule_id).await);
+            }
+            TunnelCommand::Delete {
+                rule_id,
+                respond_to,
+            } => {
+                let _ = respond_to.send(tunnel_manager.delete(&rule_id).await);
+            }
+        }
+    }
+
+    // The SSH worker owns the only sender. Once it exits, finish tunnel
+    // cleanup in this isolated task so disconnecting can never pin terminal
+    // input behind a remote cancel request.
+    tunnel_manager.stop_all().await;
 }
 
 impl TunnelManager {
@@ -1008,10 +1134,9 @@ async fn emit_terminal_data(app: &AppHandle, tab_id: &str, chunk: &str) {
     if let Some(s) = sessions.get_mut(tab_id) {
         s.terminal_transcript.push_str(chunk);
         // Cap transcript to 200k chars (matches Electron's BoundedTextBuffer).
-        if s.terminal_transcript.len() > 200_000 {
-            let cut = s.terminal_transcript.len() - 180_000;
-            s.terminal_transcript = s.terminal_transcript[cut..].to_string();
-        }
+        // 必须走 char 边界安全裁剪：transcript 含中文与 U+FFFD，直接字节
+        // 切片会 panic 并杀死 output pump，终端输出永久冻结。
+        trim_string_front(&mut s.terminal_transcript, 180_000);
     }
 }
 
@@ -1046,14 +1171,22 @@ async fn follow_shell_cwd(
     // The SFTP session belongs to the login user. Once `sudo -i` has started
     // a root shell, following CWD through that channel silently remains in
     // the old user's view. Electron switches to its sudo shell path here.
-    let files = if file_access_mode == "root" {
-        exec_list_dir_via_shell(&handle, &cwd, &sudo_user, &sudo_password).await
-    } else {
-        // russh-sftp's client is one request stream. Serialise access to it:
-        // concurrent read locks let multiple list/delete/upload requests
-        // interleave and eventually time out after app focus is restored.
-        let sftp = sftp.write().await;
-        list_dir(&sftp, &cwd).await
+    let files = match timeout(FILE_OPERATION_TIMEOUT, async {
+        if file_access_mode == "root" {
+            exec_list_dir_via_shell(&handle, &cwd, &sudo_user, &sudo_password).await
+        } else {
+            // russh-sftp's client is one request stream. Serialise access to it:
+            // concurrent read locks let multiple list/delete/upload requests
+            // interleave and eventually time out after app focus is restored.
+            // The timeout covers both waiting for the lock and SFTP read_dir.
+            let sftp = sftp.write().await;
+            list_dir(&sftp, &cwd).await
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Err(format!("跟随终端目录 {cwd} 超时")),
     };
 
     let follow_error = files.as_ref().err().cloned();
@@ -1146,7 +1279,9 @@ fn track_cwd_and_user(chunk: &str, buffer: &mut String) -> (Option<String>, Opti
 
     buffer.push_str(chunk);
     if buffer.len() > 8192 {
-        *buffer = buffer[buffer.len() - 4096..].to_string();
+        // 滚动窗口裁剪必须 char 边界安全：buffer 里有原始终端输出
+        // （含中文），切片切到多字节字符内部会 panic 杀死 worker。
+        trim_string_front(buffer, 4096);
     }
 
     let mut cwd = None;
@@ -1225,8 +1360,9 @@ fn capture_sudo_password_input(
     for ch in input.chars() {
         recent_input.push(ch);
         if recent_input.len() > 512 {
-            let keep_from = recent_input.len() - 256;
-            *recent_input = recent_input[keep_from..].to_string();
+            // 用户输入可含 CJK，滚动窗口必须 char 边界安全，否则此分支
+            // panic 会无声杀死 worker（输入通道随之失效，Ctrl+C 无响应）。
+            trim_string_front(recent_input, 256);
         }
         if !*awaiting_password {
             continue;
@@ -1273,8 +1409,9 @@ fn track_sudo_prompt_from_terminal(
 ) -> bool {
     prompt_buffer.push_str(&visible_shell_text(output));
     if prompt_buffer.len() > 2048 {
-        let keep_from = prompt_buffer.len() - 1024;
-        *prompt_buffer = prompt_buffer[keep_from..].to_string();
+        // shell 输出含中文时直接字节切片会 panic 杀死 worker，
+        // 滚动窗口必须 char 边界安全。
+        trim_string_front(prompt_buffer, 1024);
     }
     let lower = prompt_buffer.to_ascii_lowercase();
     let auth_failed = lower.contains("sorry, try again")
@@ -3300,28 +3437,62 @@ async fn run_worker_loop(
                         crate::services::workspace::initial_remote_path_for_profile(profile)
                     })
             };
-            let initial_files = {
-                let sftp = sftp_arc.write().await;
-                list_dir(&sftp, &initial_remote_path).await
-            };
-            match initial_files {
-                Ok(files) => {
-                    let mut sessions = state.sessions.write().await;
-                    if let Some(session) = sessions.get_mut(tab_id) {
+            // A server can accept the SFTP subsystem and then stop replying
+            // to read_dir. Do not await the initial directory load before the
+            // terminal select loop: otherwise Ctrl+C reaches IPC but cannot be
+            // consumed until the SFTP request returns. The bound includes both
+            // the lock wait and read_dir; the task publishes its own snapshot.
+            {
+                let mut sessions = state.sessions.write().await;
+                if let Some(session) = sessions.get_mut(tab_id) {
+                    session.remote_files_loading = true;
+                }
+            }
+            let initial_sftp = Arc::clone(&sftp_arc);
+            let initial_app = app.clone();
+            let initial_tab_id = tab_id.to_string();
+            tokio::spawn(async move {
+                let initial_files = match timeout(FILE_OPERATION_TIMEOUT, async {
+                    let sftp = initial_sftp.write().await;
+                    list_dir(&sftp, &initial_remote_path).await
+                })
+                .await
+                {
+                    Ok(result) => result,
+                    Err(_) => Err(format!("列出远程目录 {initial_remote_path} 超时")),
+                };
+
+                let initial_error = initial_files.as_ref().err().cloned();
+                let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
+                if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
+                    session.remote_files_loading = false;
+                    if let Ok(files) = initial_files {
                         session.remote_files = files;
                     }
                 }
-                Err(error) => {
+
+                if let Some(error) = initial_error {
+                    crate::services::logging::session(
+                        &initial_app,
+                        "WARN",
+                        "sftp",
+                        &initial_tab_id,
+                        format!("initial directory listing failed: {error}"),
+                    );
                     // A usable SFTP channel can still lack access to the
                     // profile's configured starting directory.
                     emit_terminal_data(
-                        app,
-                        tab_id,
+                        &initial_app,
+                        &initial_tab_id,
                         &format!("\r\n[files] 列出目录 {initial_remote_path} 失败: {error}\r\n"),
                     )
                     .await;
                 }
-            }
+
+                if let Ok(snapshot) = crate::commands::get_workspace_snapshot(initial_app.clone()).await {
+                    let _ = initial_app.emit("workspace:snapshot", snapshot);
+                }
+            });
             (Some(sftp_arc), None)
         }
         Err(error) => {
@@ -3677,6 +3848,7 @@ async fn run_worker_loop(
     let mut last_shell_setup_injection = Instant::now() - Duration::from_secs(3);
 
     let mut tunnel_manager = TunnelManager::new(tab_id, app, Arc::clone(&handle));
+    let mut auto_start_tunnel_ids = Vec::new();
     if let Some(rules) = profile.get("forwards").and_then(Value::as_array) {
         for raw_rule in rules {
             match serde_json::from_value::<SshTunnelRule>(raw_rule.clone()) {
@@ -3690,14 +3862,7 @@ async fn run_worker_loop(
                         )
                         .await;
                     } else if should_start {
-                        if let Err(error) = tunnel_manager.start(&rule.id).await {
-                            emit_terminal_data(
-                                app,
-                                tab_id,
-                                &format!("[tunnel] 自动启动 {} 失败: {error}\r\n", rule.id),
-                            )
-                            .await;
-                        }
+                        auto_start_tunnel_ids.push(rule.id);
                     }
                 }
                 Err(error) => {
@@ -3706,6 +3871,45 @@ async fn run_worker_loop(
                 }
             }
         }
+    }
+    // Keep potentially slow tunnel control operations out of the terminal
+    // worker. The queue preserves command order (for example Start → Stop)
+    // while its own task absorbs server-side request/cancel waits.
+    let (tunnel_command_tx, tunnel_command_rx) = mpsc::unbounded_channel();
+    tokio::spawn(run_tunnel_command_loop(tunnel_manager, tunnel_command_rx));
+    for rule_id in auto_start_tunnel_ids {
+        let (respond_to, response_rx) = oneshot::channel();
+        enqueue_tunnel_command(
+            &tunnel_command_tx,
+            TunnelCommand::Start {
+                rule_id: rule_id.clone(),
+                respond_to,
+            },
+        );
+        let auto_tunnel_app = app.clone();
+        let auto_tunnel_tab_id = tab_id.to_string();
+        tokio::spawn(async move {
+            match response_rx.await {
+                Ok(Err(error)) => {
+                    emit_terminal_data(
+                        &auto_tunnel_app,
+                        &auto_tunnel_tab_id,
+                        &format!("[tunnel] 自动启动 {rule_id} 失败: {error}\r\n"),
+                    )
+                    .await;
+                }
+                Err(_) => {
+                    crate::services::logging::session(
+                        &auto_tunnel_app,
+                        "WARN",
+                        "tunnel",
+                        &auto_tunnel_tab_id,
+                        format!("auto-start response dropped id={rule_id}"),
+                    );
+                }
+                Ok(Ok(_)) => {}
+            }
+        });
     }
 
     loop {
@@ -3717,14 +3921,12 @@ async fn run_worker_loop(
             _ = cancellation.cancelled() => {
                 flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                 metrics_shutdown.notify_waiters();
-                tunnel_manager.stop_all().await;
                 return Ok(());
             }
             input = terminal_input_rx.recv() => {
                 let Some(data) = input else {
                     flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                     metrics_shutdown.notify_waiters();
-                    tunnel_manager.stop_all().await;
                     return Ok(());
                 };
                 let data = coalesce_terminal_input(data, terminal_input_rx);
@@ -3821,7 +4023,7 @@ async fn run_worker_loop(
                                 tab_id,
                                 app,
                                 &state,
-                                &mut tunnel_manager,
+                                &tunnel_command_tx,
                             ).await
                         } else {
                             handle_worker_cmd_without_sftp(
@@ -3833,7 +4035,7 @@ async fn run_worker_loop(
                                 &mut sudo_password,
                                 tab_id,
                                 &state,
-                                &mut tunnel_manager,
+                                &tunnel_command_tx,
                                 sftp_unavailable_reason.as_deref().unwrap_or(SFTP_UNAVAILABLE_FALLBACK),
                             ).await
                         };
@@ -3842,7 +4044,6 @@ async fn run_worker_loop(
                                 // WorkerCmd::Disconnect requested — flush and exit.
                                 flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                                 metrics_shutdown.notify_waiters();
-                                tunnel_manager.stop_all().await;
                                 return Ok(());
                             }
                             Ok(false) => {}
@@ -3855,7 +4056,6 @@ async fn run_worker_loop(
                         // Sender dropped — flush and exit cleanly.
                         flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                         metrics_shutdown.notify_waiters();
-                        tunnel_manager.stop_all().await;
                         return Ok(());
                     }
                 }
@@ -4008,8 +4208,8 @@ async fn run_worker_loop(
                         if shell_setup_waiting_for_prompt {
                             shell_prompt_buffer.push_str(&visible_shell_text(&text));
                             if shell_prompt_buffer.len() > 4096 {
-                                let keep_from = shell_prompt_buffer.len() - 2048;
-                                shell_prompt_buffer = shell_prompt_buffer[keep_from..].to_string();
+                                // char 边界安全裁剪，避免 panic 杀死 worker。
+                                trim_string_front(&mut shell_prompt_buffer, 2048);
                             }
                         }
 
@@ -4069,7 +4269,6 @@ async fn run_worker_loop(
                         // Shell closed → flush and disconnect.
                         flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                         metrics_shutdown.notify_waiters();
-                        tunnel_manager.stop_all().await;
                         return Ok(());
                     }
                     _ => {}
@@ -4105,7 +4304,7 @@ async fn handle_worker_cmd_without_sftp(
     sudo_password: &mut Option<String>,
     tab_id: &str,
     state: &crate::services::workspace::WorkspaceState,
-    tunnel_manager: &mut TunnelManager,
+    tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     unavailable_reason: &str,
 ) -> Result<bool, String> {
     match cmd {
@@ -4132,36 +4331,58 @@ async fn handle_worker_cmd_without_sftp(
             Ok(false)
         }
         WorkerCmd::ListSshTunnels { respond_to } => {
-            let _ = respond_to.send(tunnel_manager.list());
+            enqueue_tunnel_command(tunnel_commands, TunnelCommand::List { respond_to });
             Ok(false)
         }
         WorkerCmd::CreateSshTunnel { rule, respond_to } => {
-            let result = match serde_json::from_value::<SshTunnelRule>(rule) {
-                Ok(rule) => tunnel_manager.create(rule).await,
-                Err(error) => Err(format!("Invalid tunnel rule: {error}")),
-            };
-            let _ = respond_to.send(result);
+            match serde_json::from_value::<SshTunnelRule>(rule) {
+                Ok(rule) => enqueue_tunnel_command(
+                    tunnel_commands,
+                    TunnelCommand::Create { rule, respond_to },
+                ),
+                Err(error) => {
+                    let _ = respond_to.send(Err(format!("Invalid tunnel rule: {error}")));
+                }
+            }
             Ok(false)
         }
         WorkerCmd::StartSshTunnel {
             rule_id,
             respond_to,
         } => {
-            let _ = respond_to.send(tunnel_manager.start(&rule_id).await);
+            enqueue_tunnel_command(
+                tunnel_commands,
+                TunnelCommand::Start {
+                    rule_id,
+                    respond_to,
+                },
+            );
             Ok(false)
         }
         WorkerCmd::StopSshTunnel {
             rule_id,
             respond_to,
         } => {
-            let _ = respond_to.send(tunnel_manager.stop(&rule_id).await);
+            enqueue_tunnel_command(
+                tunnel_commands,
+                TunnelCommand::Stop {
+                    rule_id,
+                    respond_to,
+                },
+            );
             Ok(false)
         }
         WorkerCmd::DeleteSshTunnel {
             rule_id,
             respond_to,
         } => {
-            let _ = respond_to.send(tunnel_manager.delete(&rule_id).await);
+            enqueue_tunnel_command(
+                tunnel_commands,
+                TunnelCommand::Delete {
+                    rule_id,
+                    respond_to,
+                },
+            );
             Ok(false)
         }
         WorkerCmd::ListRemoteFiles { respond_to, .. } => {
@@ -4273,7 +4494,7 @@ async fn handle_worker_cmd(
     tab_id: &str,
     app: &AppHandle,
     state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
-    tunnel_manager: &mut TunnelManager,
+    tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
 ) -> Result<bool, String> {
     match cmd {
         WorkerCmd::WriteTerminal(data) => {
@@ -4313,36 +4534,58 @@ async fn handle_worker_cmd(
             Ok(false)
         }
         WorkerCmd::ListSshTunnels { respond_to } => {
-            let _ = respond_to.send(tunnel_manager.list());
+            enqueue_tunnel_command(tunnel_commands, TunnelCommand::List { respond_to });
             Ok(false)
         }
         WorkerCmd::CreateSshTunnel { rule, respond_to } => {
-            let result = match serde_json::from_value::<SshTunnelRule>(rule) {
-                Ok(rule) => tunnel_manager.create(rule).await,
-                Err(error) => Err(format!("Invalid tunnel rule: {error}")),
-            };
-            let _ = respond_to.send(result);
+            match serde_json::from_value::<SshTunnelRule>(rule) {
+                Ok(rule) => enqueue_tunnel_command(
+                    tunnel_commands,
+                    TunnelCommand::Create { rule, respond_to },
+                ),
+                Err(error) => {
+                    let _ = respond_to.send(Err(format!("Invalid tunnel rule: {error}")));
+                }
+            }
             Ok(false)
         }
         WorkerCmd::StartSshTunnel {
             rule_id,
             respond_to,
         } => {
-            let _ = respond_to.send(tunnel_manager.start(&rule_id).await);
+            enqueue_tunnel_command(
+                tunnel_commands,
+                TunnelCommand::Start {
+                    rule_id,
+                    respond_to,
+                },
+            );
             Ok(false)
         }
         WorkerCmd::StopSshTunnel {
             rule_id,
             respond_to,
         } => {
-            let _ = respond_to.send(tunnel_manager.stop(&rule_id).await);
+            enqueue_tunnel_command(
+                tunnel_commands,
+                TunnelCommand::Stop {
+                    rule_id,
+                    respond_to,
+                },
+            );
             Ok(false)
         }
         WorkerCmd::DeleteSshTunnel {
             rule_id,
             respond_to,
         } => {
-            let _ = respond_to.send(tunnel_manager.delete(&rule_id).await);
+            enqueue_tunnel_command(
+                tunnel_commands,
+                TunnelCommand::Delete {
+                    rule_id,
+                    respond_to,
+                },
+            );
             Ok(false)
         }
         WorkerCmd::StatRemoteFile { path, respond_to } => {
@@ -5985,14 +6228,15 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 mod tests {
     use super::{
         build_http_connect_request, capture_sudo_password_input, coalesce_terminal_input,
-        contains_interrupt_byte, default_ssh_key_paths, format_sftp_unavailable_reason,
-        is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
-        missing_password_credential, parent_remote_item, parent_remote_path,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        suppress_shell_setup_echo, track_cwd_and_user, track_sudo_prompt_from_terminal,
+        contains_interrupt_byte, default_ssh_key_paths, enqueue_tunnel_command,
+        format_sftp_unavailable_reason, is_password_prompt, looks_like_mfa_prompt,
+        looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
+        parent_remote_item, parent_remote_path, remote_bind_host_matches,
+        resolve_shell_file_access, resource_monitoring_enabled, suppress_shell_setup_echo,
+        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
         wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
-        SHELL_SETUP_SETTLE_DELAY,
+        TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -6006,6 +6250,7 @@ mod tests {
     #[cfg(unix)]
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use tokio::sync::{mpsc, oneshot};
     use tokio::time::{timeout, Duration};
 
     #[test]
@@ -6017,6 +6262,72 @@ mod tests {
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
         })));
+    }
+
+    #[tokio::test]
+    async fn dropped_tunnel_worker_rejects_queued_command() {
+        let (tunnel_tx, tunnel_rx) = mpsc::unbounded_channel::<TunnelCommand>();
+        drop(tunnel_rx);
+        let (respond_to, response_rx) = oneshot::channel();
+
+        enqueue_tunnel_command(&tunnel_tx, TunnelCommand::List { respond_to });
+
+        assert_eq!(
+            response_rx
+                .await
+                .expect("dropped tunnel worker must answer the caller")
+                .expect_err("dropped tunnel worker must not report success"),
+            "SSH tunnel worker stopped"
+        );
+    }
+
+    #[test]
+    fn trim_string_front_never_panics_on_multibyte_boundaries() {
+        // 回归：热路径上的滚动 buffer 都含中文/U+FFFD（3 字节字符），
+        // `s[len - keep..]` 直接切片落在字符内部会 panic 并无声杀死
+        // worker/pump（终端冻结、Ctrl+C 失效）。裁剪后必须始终是合法 UTF-8。
+        for fill in ["中文输出", "\u{FFFD}\u{FFFD}", "a中文b", "✓ 成功"] {
+            for extra in 0..8 {
+                let mut value = "x".repeat(extra) + &fill.repeat(1024);
+                let original_len = value.len();
+                trim_string_front(&mut value, 512);
+                assert!(value.len() <= 512 || original_len <= 512);
+                assert!(value.len() >= 512 - 3 || original_len <= 512);
+            }
+        }
+        // keep 大于长度时不动；空字符串安全。
+        let mut small = "abc中文".to_string();
+        trim_string_front(&mut small, 1024);
+        assert_eq!(small, "abc中文");
+        let mut empty = String::new();
+        trim_string_front(&mut empty, 0);
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn rolling_buffers_survive_cjk_flood_without_panic() {
+        // 回归：模拟高吞吐中文脚本输出冲刷 track_cwd_and_user 与
+        // track_sudo_prompt_from_terminal 的滚动窗口。修复前窗口裁剪
+        // 落在多字节字符内部直接 panic，SSH worker 任务随之死亡。
+        let flood = "[ ✓ success ] 检查点 重建分区表 running\r\n".repeat(400);
+        let mut cwd_buffer = String::new();
+        let mut prompt_buffer = String::new();
+        let mut awaiting = false;
+        let mut pending = String::new();
+        let mut sudo_password = None;
+        for chunk in flood.as_bytes().chunks(97) {
+            let text = String::from_utf8_lossy(chunk);
+            let _ = track_cwd_and_user(&text, &mut cwd_buffer);
+            let _ = track_sudo_prompt_from_terminal(
+                &text,
+                &mut prompt_buffer,
+                &mut awaiting,
+                &mut pending,
+                &mut sudo_password,
+            );
+        }
+        assert!(cwd_buffer.len() < 16384);
+        assert!(prompt_buffer.len() < 4096);
     }
 
     #[tokio::test]

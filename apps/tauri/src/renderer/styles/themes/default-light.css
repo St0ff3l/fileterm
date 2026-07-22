@@ -251,9 +251,13 @@
   background: var(--border-dark);
 }
 
-:root[data-theme='default-light'] .fs-sidebar,
-:root[data-theme='default-light'] .titlebar-brand {
+:root[data-theme='default-light'] .fs-sidebar {
   border-right: 1px solid var(--system-sidebar-frame) !important;
+}
+
+:root[data-theme='default-light'] .titlebar-brand {
+  border-right: 0 !important;
+  --titlebar-brand-divider: var(--system-sidebar-frame);
 }
 
 :root[data-theme='default-light'] .fs-tabbar {

@@ -738,7 +738,19 @@
   align-items: center;
   justify-content: center;
   padding: 0 14px;
-  border-right: 1px solid var(--border-light);
+  position: relative;
+  --titlebar-brand-divider: var(--border-light);
+}
+
+.titlebar-brand::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 1px;
+  width: 1px;
+  background: var(--titlebar-brand-divider);
+  pointer-events: none;
 }
 
 .titlebar-brand.has-home-brand-content {
