@@ -10,6 +10,7 @@ import {
 import type {
   CommandExecutionOptions,
   CommandFolder,
+  CommandTemplateInput,
   CommandTemplate,
   LocalFileItem,
   RemoteFileItem,
@@ -27,6 +28,10 @@ const DEFAULT_FILE_PANEL_HEIGHT = 218
 
 export function SessionWorkspace({
   activeTab,
+  activeView,
+  onActiveViewChange,
+  commandPaneWidth,
+  onCommandPaneWidthChange,
   activeSession,
   filePanelHeight,
   onFilePanelHeightChange,
@@ -40,6 +45,7 @@ export function SessionWorkspace({
   isLocalNetworkShare,
   isLocalDirectoryLoading,
   isWorkspaceRefreshing,
+  isWorkspaceSwitching,
   canPasteToLocal,
   canPasteToRemote,
   clipboardStatusText,
@@ -53,6 +59,8 @@ export function SessionWorkspace({
   onClearCutState,
   onExecuteCommand,
   onSendTerminalCommand,
+  onSaveTemporaryCommand,
+  onUpdateCommand,
   onTerminalDockSendScopeChange,
   onTerminalDockSelectedTabIdsChange,
   onOpenCommandManager,
@@ -80,6 +88,10 @@ export function SessionWorkspace({
   isWorkspaceFocusMode
 }: {
   activeTab: WorkspaceTab
+  activeView: 'file' | 'command' | 'tunnel'
+  onActiveViewChange(view: 'file' | 'command' | 'tunnel'): void
+  commandPaneWidth: number
+  onCommandPaneWidthChange(width: number): void
   activeSession: SessionSnapshot
   filePanelHeight: number
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
@@ -93,6 +105,7 @@ export function SessionWorkspace({
   isLocalNetworkShare: boolean
   isLocalDirectoryLoading: boolean
   isWorkspaceRefreshing: boolean
+  isWorkspaceSwitching: boolean
   canPasteToLocal: boolean
   canPasteToRemote: boolean
   clipboardStatusText: string | null
@@ -112,6 +125,8 @@ export function SessionWorkspace({
     selectedTabIds: string[]
   ): void
   onSendTerminalCommand(command: string): Promise<void>
+  onSaveTemporaryCommand(command: string, appendCarriageReturn: boolean): Promise<boolean> | boolean | void
+  onUpdateCommand(commandId: string, input: CommandTemplateInput): Promise<boolean> | boolean | void
   onTerminalDockSendScopeChange(scope: SendScope, rememberSelection: boolean): void
   onTerminalDockSelectedTabIdsChange(tabIds: string[], rememberSelection: boolean): void
   onOpenCommandManager(): void
@@ -422,6 +437,7 @@ export function SessionWorkspace({
           className="session-split-resizer"
           onMouseDown={(event) => {
             event.preventDefault()
+            window.getSelection()?.removeAllRanges()
             isResizingFilePanel.current = true
             setIsFilePanelDragging(true)
 
@@ -448,6 +464,10 @@ export function SessionWorkspace({
           <FileManager
             activeSession={activeSession}
             activeTab={activeTab}
+            activeView={activeView}
+            onActiveViewChange={onActiveViewChange}
+            commandPaneWidth={commandPaneWidth}
+            onCommandPaneWidthChange={onCommandPaneWidthChange}
             sendTargets={sendTargets}
             commandFolders={commandFolders}
             commandTemplates={commandTemplates}
@@ -458,6 +478,7 @@ export function SessionWorkspace({
             isLocalNetworkShare={isLocalNetworkShare}
             isLocalDirectoryLoading={isLocalDirectoryLoading}
             isWorkspaceRefreshing={isWorkspaceRefreshing}
+            isWorkspaceSwitching={isWorkspaceSwitching}
             canPasteToLocal={canPasteToLocal}
             canPasteToRemote={canPasteToRemote}
             clipboardStatusText={clipboardStatusText}
@@ -468,6 +489,8 @@ export function SessionWorkspace({
             onClearCutState={onClearCutState}
             onExecuteCommand={onExecuteCommand}
             onSendTerminalCommand={onSendTerminalCommand}
+            onSaveTemporaryCommand={onSaveTemporaryCommand}
+            onUpdateCommand={onUpdateCommand}
             onOpenCommandManager={onOpenCommandManager}
             onOpenLocalItem={onOpenLocalItem}
             onOpenLocalPath={onOpenLocalPath}

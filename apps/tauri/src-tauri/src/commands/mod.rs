@@ -720,6 +720,7 @@ pub struct OpenWindowInput {
     pub profile_id: Option<String>,
     pub command_id: Option<String>,
     pub folder_id: Option<String>,
+    pub command: Option<String>,
     pub source: Option<String>,
     pub path: Option<String>,
     pub name: Option<String>,

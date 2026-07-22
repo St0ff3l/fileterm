@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
-import type { CommandExecutionOptions, CommandFolder, CommandTemplate, WorkspaceTab } from '@fileterm/core'
+import type {
+  CommandExecutionOptions,
+  CommandFolder,
+  CommandTemplate,
+  CommandTemplateInput,
+  TerminalCommandHistoryEntry,
+  WorkspaceTab
+} from '@fileterm/core'
 import { t } from '../../i18n'
+import { CloseButton } from '../common/CloseButton'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
@@ -10,6 +18,19 @@ import { CommandCodeEditor } from './CommandCodeEditor'
 import { extractCommandParams, groupCommands, sortByOrder } from './command-utils'
 
 const TEMPORARY_EDITOR_ID = '__temporary-command-editor__'
+const TEMPORARY_HISTORY_LIMIT = 40
+
+type TemporaryHistoryEntry = TerminalCommandHistoryEntry & {
+  appendCarriageReturn: boolean
+}
+
+function temporaryHistoryKey(entry: TemporaryHistoryEntry) {
+  return `${entry.createdAt}-${entry.command}`
+}
+
+function formatTemporaryHistoryTime(createdAt: number) {
+  return new Date(createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
 
 export function CommandCenter({
   activeTab,
@@ -19,6 +40,8 @@ export function CommandCenter({
   sendTargets,
   onExecute,
   onSendTerminalCommand,
+  onSaveTemporaryCommand,
+  onUpdateCommand,
   paneWidth,
   onPaneWidthChange
 }: {
@@ -40,6 +63,8 @@ export function CommandCenter({
     scope: SendScope,
     selectedTabIds: string[]
   ): Promise<void>
+  onSaveTemporaryCommand(command: string, appendCarriageReturn: boolean): Promise<boolean> | boolean | void
+  onUpdateCommand(commandId: string, input: CommandTemplateInput): Promise<boolean> | boolean | void
   paneWidth: number
   onPaneWidthChange(width: number): void
 }) {
@@ -52,8 +77,11 @@ export function CommandCenter({
   const [selectedCommandId, setSelectedCommandId] = useState<string | null>(commandTemplates[0]?.id ?? null)
   const [temporaryCommand, setTemporaryCommand] = useState('')
   const [isSendingTemporary, setIsSendingTemporary] = useState(false)
+  const [temporaryHistory, setTemporaryHistory] = useState<TemporaryHistoryEntry[]>([])
+  const [savingHistoryKey, setSavingHistoryKey] = useState<string | null>(null)
   const [paramValues, setParamValues] = useState<Record<number, string>>({})
-  const [lastRenderedCommand, setLastRenderedCommand] = useState('')
+  const [isEditingTemplate, setIsEditingTemplate] = useState(false)
+  const [templateDraftCommand, setTemplateDraftCommand] = useState('')
   const [appendCarriageReturn, setAppendCarriageReturn] = useState(true)
   const [preferencesLoaded, setPreferencesLoaded] = useState(false)
   const [rememberSelection, setRememberSelection] = useState(false)
@@ -64,6 +92,7 @@ export function CommandCenter({
   const splitRef = useRef<HTMLDivElement | null>(null)
   const templateListScrollRef = useRef<HTMLDivElement | null>(null)
   const isResizingCommandSplit = useRef(false)
+  const temporaryHistoryRef = useRef<TemporaryHistoryEntry[]>([])
 
   const visibleTemplates = useMemo(() => {
     if (isTemporaryEditor) {
@@ -90,6 +119,15 @@ export function CommandCenter({
     )
   }, [commandTemplates, isTemporaryEditor, selectedCommandId, visibleTemplates])
   const paramIndexes = selectedTemplate ? extractCommandParams(selectedTemplate.command) : []
+  const previewCommand = isEditingTemplate ? templateDraftCommand : (selectedTemplate?.command ?? '')
+  const renderedCommand = useMemo(
+    () =>
+      previewCommand.replace(
+        /\[p#(\d+)\]/g,
+        (_, rawIndex: string) => paramValues[Number(rawIndex)] ?? `[p#${rawIndex}]`
+      ),
+    [paramValues, previewCommand]
+  )
   const canRunCurrent = Boolean(
     activeTab && selectedTemplate && sendTargets.some((target) => target.tabId === activeTab.id)
   )
@@ -118,12 +156,47 @@ export function CommandCenter({
     }
     setParamValues({})
     setAppendCarriageReturn(selectedTemplate?.appendCarriageReturn ?? true)
-    setLastRenderedCommand('')
-  }, [isTemporaryEditor, selectedTemplate?.id])
+    setTemplateDraftCommand(selectedTemplate?.command ?? '')
+    setIsEditingTemplate(false)
+  }, [isTemporaryEditor, selectedTemplate?.command, selectedTemplate?.id])
 
   useEffect(() => {
     setSelectedTabIds((prev) => prev.filter((tabId) => sendTargets.some((target) => target.tabId === tabId)))
   }, [sendTargets])
+
+  useEffect(() => {
+    let canceled = false
+
+    temporaryHistoryRef.current = []
+    setTemporaryHistory([])
+
+    if (!activeTab?.profileId || !window.fileterm?.getTerminalCommandHistory) {
+      return
+    }
+
+    void window.fileterm
+      .getTerminalCommandHistory(activeTab.profileId)
+      .then((entries) => {
+        if (canceled) {
+          return
+        }
+
+        const hydratedEntries = entries.map((entry) => ({
+          ...entry,
+          appendCarriageReturn: true
+        }))
+        temporaryHistoryRef.current = hydratedEntries
+        setTemporaryHistory(hydratedEntries)
+      })
+      .catch(() => {
+        // History is an enhancement; the temporary editor remains usable when
+        // stored history hydration fails.
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [activeTab?.profileId])
 
   useEffect(() => {
     let canceled = false
@@ -170,27 +243,118 @@ export function CommandCenter({
     })
   }, [preferencesLoaded, rememberSelection, sendScope, selectedTabIds])
 
+  const persistTemporaryHistory = (entries: TemporaryHistoryEntry[]) => {
+    if (activeTab?.profileId && window.fileterm?.setTerminalCommandHistory) {
+      void window.fileterm.setTerminalCommandHistory(
+        activeTab.profileId,
+        entries.map(({ command: historyCommand, createdAt }) => ({
+          command: historyCommand,
+          createdAt
+        }))
+      )
+    }
+  }
+
+  const addTemporaryHistoryEntry = (command: string, nextAppendCarriageReturn: boolean) => {
+    const entry = {
+      command,
+      createdAt: Date.now(),
+      appendCarriageReturn: nextAppendCarriageReturn
+    }
+    const nextHistory = [entry, ...temporaryHistoryRef.current.filter((item) => item.command !== command)].slice(
+      0,
+      TEMPORARY_HISTORY_LIMIT
+    )
+
+    temporaryHistoryRef.current = nextHistory
+    setTemporaryHistory(nextHistory)
+    persistTemporaryHistory(nextHistory)
+  }
+
+  const handleTemporaryHistoryDelete = (entry: TemporaryHistoryEntry) => {
+    const key = temporaryHistoryKey(entry)
+    const nextHistory = temporaryHistoryRef.current.filter((item) => temporaryHistoryKey(item) !== key)
+    temporaryHistoryRef.current = nextHistory
+    setTemporaryHistory(nextHistory)
+    persistTemporaryHistory(nextHistory)
+  }
+
+  const handleTemporaryHistoryClear = () => {
+    temporaryHistoryRef.current = []
+    setTemporaryHistory([])
+    persistTemporaryHistory([])
+  }
+
   const handleRun = () => {
     if (!selectedTemplate) {
       return
     }
     const args = paramIndexes.map((index) => paramValues[index] ?? '')
-    const rendered = selectedTemplate.command.replace(
-      /\[p#(\d+)\]/g,
-      (_, rawIndex: string) => args[Number(rawIndex) - 1] ?? ''
-    )
-    setLastRenderedCommand(rendered)
     onExecute(selectedTemplate.id, args, { appendCarriageReturn }, sendScope, selectedTabIds)
+  }
+
+  const handleTemplateEdit = () => {
+    if (!selectedTemplate) return
+    setTemplateDraftCommand(selectedTemplate.command)
+    setIsEditingTemplate(true)
+  }
+
+  const handleTemplateSave = () => {
+    if (!selectedTemplate || !isEditingTemplate) return
+    const input: CommandTemplateInput = {
+      name: selectedTemplate.name,
+      command: templateDraftCommand,
+      description: selectedTemplate.description,
+      parentId: selectedTemplate.parentId,
+      order: selectedTemplate.order,
+      appendCarriageReturn
+    }
+    void Promise.resolve(onUpdateCommand(selectedTemplate.id, input)).then((saved) => {
+      if (saved !== false) {
+        setIsEditingTemplate(false)
+      }
+    })
   }
 
   const handleTemporaryRun = () => {
     if (isBusy || isSendingTemporary || !canSendTemporary) {
       return
     }
+    const command = temporaryCommand.trim()
     setIsSendingTemporary(true)
-    void onSendTerminalCommand(temporaryCommand, { appendCarriageReturn }, sendScope, selectedTabIds)
+    void onSendTerminalCommand(command, { appendCarriageReturn }, sendScope, selectedTabIds)
+      .then(() => {
+        addTemporaryHistoryEntry(command, appendCarriageReturn)
+      })
       .catch(() => undefined)
       .finally(() => setIsSendingTemporary(false))
+  }
+
+  const handleTemporaryHistoryEdit = (entry: TemporaryHistoryEntry) => {
+    setTemporaryCommand(entry.command)
+    setAppendCarriageReturn(entry.appendCarriageReturn)
+  }
+
+  const handleTemporaryHistorySave = (entry: TemporaryHistoryEntry) => {
+    const key = temporaryHistoryKey(entry)
+    if (savingHistoryKey) {
+      return
+    }
+
+    setSavingHistoryKey(key)
+    void Promise.resolve(onSaveTemporaryCommand(entry.command, entry.appendCarriageReturn))
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => setSavingHistoryKey(null))
+  }
+
+  const handleTemporaryHistoryNew = () => {
+    const command = temporaryCommand.trim()
+    if (command) {
+      addTemporaryHistoryEntry(command, appendCarriageReturn)
+    }
+    setTemporaryCommand('')
+    setAppendCarriageReturn(true)
   }
 
   useEffect(() => {
@@ -245,57 +409,155 @@ export function CommandCenter({
         >
           <section className="command-pane command-pane-list">
             <div className="command-folder-bar">
-              <div className="command-folder-tabs" onWheel={handleHorizontalWheelScroll}>
-                <button
-                  className={`command-folder-tab-temporary ${isTemporaryEditor ? 'active' : ''}`}
-                  type="button"
-                  onClick={() => setActiveFolderId(TEMPORARY_EDITOR_ID)}
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    edit_note
-                  </span>
-                  <span>{t.commandTemporaryEditor}</span>
-                </button>
-                <button
-                  className={activeFolderId === 'all' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setActiveFolderId('all')}
-                >
-                  <span>{t.all}</span>
-                  <small>{commandTemplates.length}</small>
-                </button>
-                {grouped.map(({ folder, templates }) => (
+              <div className="command-folder-tabs-scroll" onWheel={handleHorizontalWheelScroll}>
+                <div className="command-folder-tabs">
                   <button
-                    key={folder.id}
-                    className={activeFolderId === folder.id ? 'active' : ''}
+                    className={`command-folder-tab-temporary ${isTemporaryEditor ? 'active' : ''}`}
                     type="button"
-                    onClick={() => setActiveFolderId(folder.id)}
+                    onClick={() => setActiveFolderId(TEMPORARY_EDITOR_ID)}
                   >
-                    <span>{folder.name}</span>
-                    <small>{templates.length}</small>
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      edit_note
+                    </span>
+                    <span>{t.commandTemporaryEditor}</span>
                   </button>
-                ))}
-                {ungrouped.length ? (
                   <button
-                    className={activeFolderId === 'ungrouped' ? 'active' : ''}
+                    className={activeFolderId === 'all' ? 'active' : ''}
                     type="button"
-                    onClick={() => setActiveFolderId('ungrouped')}
+                    onClick={() => setActiveFolderId('all')}
                   >
-                    <span>{t.commandUncategorized}</span>
-                    <small>{ungrouped.length}</small>
+                    <span>{t.all}</span>
+                    <small>{commandTemplates.length}</small>
                   </button>
-                ) : null}
+                  {grouped.map(({ folder, templates }) => (
+                    <button
+                      key={folder.id}
+                      className={activeFolderId === folder.id ? 'active' : ''}
+                      type="button"
+                      onClick={() => setActiveFolderId(folder.id)}
+                    >
+                      <span>{folder.name}</span>
+                      <small>{templates.length}</small>
+                    </button>
+                  ))}
+                  {ungrouped.length ? (
+                    <button
+                      className={activeFolderId === 'ungrouped' ? 'active' : ''}
+                      type="button"
+                      onClick={() => setActiveFolderId('ungrouped')}
+                    >
+                      <span>{t.commandUncategorized}</span>
+                      <small>{ungrouped.length}</small>
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
 
             <div className="command-template-list-region">
               <div className="command-template-list scrollbar-scroll" ref={templateListScrollRef}>
                 {isTemporaryEditor ? (
-                  <div className="command-temporary-list-placeholder">
-                    <span className="material-symbols-outlined" aria-hidden="true">
-                      edit_note
-                    </span>
-                    <span>{t.commandTemporaryEditorHint}</span>
+                  <div className="command-temporary-history">
+                    <div className="command-temporary-history-head">
+                      <div className="command-temporary-history-title">
+                        <span className="material-symbols-outlined" aria-hidden="true">
+                          history
+                        </span>
+                        <strong>{t.history}</strong>
+                        <small>{temporaryHistory.length}</small>
+                      </div>
+                      <div className="command-temporary-history-actions">
+                        <button
+                          className="flat-button compact command-temporary-history-clear"
+                          disabled={!temporaryHistory.length}
+                          type="button"
+                          title={t.clear}
+                          onClick={handleTemporaryHistoryClear}
+                        >
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            delete_sweep
+                          </span>
+                          <span>{t.clear}</span>
+                        </button>
+                        <button
+                          className="flat-button compact command-temporary-history-new"
+                          disabled={!temporaryCommand.trim()}
+                          type="button"
+                          aria-label={t.commandTemporaryHistoryNew}
+                          title={t.commandTemporaryHistoryNew}
+                          onClick={handleTemporaryHistoryNew}
+                        >
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            add
+                          </span>
+                          <span>{t.commandTemporaryHistoryNew}</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="command-temporary-history-help">{t.commandTemporaryHistoryNewHint}</div>
+                    <div className="command-temporary-history-list scrollbar-scroll">
+                      {temporaryHistory.length ? (
+                        temporaryHistory.map((entry, index) => {
+                          const key = temporaryHistoryKey(entry)
+                          return (
+                            <article className="command-temporary-history-item" key={key}>
+                              <div className="command-temporary-history-command">
+                                <span className="command-temporary-history-index" aria-hidden="true">
+                                  {String(index + 1).padStart(2, '0')}
+                                </span>
+                                <code title={entry.command}>{entry.command}</code>
+                              </div>
+                              <div className="command-temporary-history-meta">
+                                <time dateTime={new Date(entry.createdAt).toISOString()}>
+                                  {formatTemporaryHistoryTime(entry.createdAt)}
+                                </time>
+                                <button
+                                  className="command-temporary-history-action"
+                                  type="button"
+                                  title={t.edit}
+                                  onClick={() => handleTemporaryHistoryEdit(entry)}
+                                >
+                                  <span className="material-symbols-outlined" aria-hidden="true">
+                                    edit
+                                  </span>
+                                  <span>{t.edit}</span>
+                                </button>
+                                <button
+                                  className="command-temporary-history-action"
+                                  type="button"
+                                  title={t.save}
+                                  disabled={savingHistoryKey === key}
+                                  onClick={() => handleTemporaryHistorySave(entry)}
+                                >
+                                  {savingHistoryKey === key ? (
+                                    <span aria-hidden="true" className="button-spinner" />
+                                  ) : (
+                                    <span className="material-symbols-outlined" aria-hidden="true">
+                                      save
+                                    </span>
+                                  )}
+                                  <span>{t.save}</span>
+                                </button>
+                                <CloseButton
+                                  aria-label={t.delete}
+                                  className="command-temporary-history-delete"
+                                  onClick={() => handleTemporaryHistoryDelete(entry)}
+                                  size="tab"
+                                  title={t.delete}
+                                />
+                              </div>
+                            </article>
+                          )
+                        })
+                      ) : (
+                        <div className="command-temporary-history-empty">
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            history
+                          </span>
+                          <span>{t.commandTemporaryHistoryEmpty}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -334,7 +596,9 @@ export function CommandCenter({
 
           <div
             className="file-split-resizer"
-            onMouseDown={() => {
+            onMouseDown={(event) => {
+              event.preventDefault()
+              window.getSelection()?.removeAllRanges()
               isResizingCommandSplit.current = true
               document.body.style.cursor = 'col-resize'
               document.body.style.userSelect = 'none'
@@ -343,76 +607,111 @@ export function CommandCenter({
           />
 
           <section className="command-pane command-pane-preview">
-            <div className="command-pane-head">
+            <div
+              className={`command-pane-head ${isTemporaryEditor ? 'command-temporary-pane-head' : 'command-template-pane-head'}`}
+            >
               <strong>{isTemporaryEditor ? t.commandTemporaryEditorTitle : t.commandPreview}</strong>
-              <span>
-                {isTemporaryEditor
-                  ? t.commandTemporaryEditorHint
-                  : selectedTemplate
-                    ? t.commandRendered
-                    : t.commandNoDescription}
-              </span>
+              {isTemporaryEditor ? (
+                <div className="command-pane-actions">
+                  <label className="command-toggle">
+                    <input
+                      checked={appendCarriageReturn}
+                      type="checkbox"
+                      onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
+                    />
+                    <span>{t.commandAppendCr}</span>
+                  </label>
+                  <button
+                    className="flat-button compact"
+                    type="button"
+                    onClick={() => setTemporaryCommand('')}
+                    disabled={!temporaryCommand}
+                  >
+                    {t.clear}
+                  </button>
+                  <button
+                    className="primary-button compact"
+                    type="button"
+                    onClick={handleTemporaryRun}
+                    disabled={isBusy || isSendingTemporary || !canSendTemporary}
+                  >
+                    {isSendingTemporary ? <span aria-hidden="true" className="button-spinner" /> : null}
+                    {t.send}
+                  </button>
+                  <SessionSendTargetPicker
+                    allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
+                    currentLabel={
+                      activeTab
+                        ? t.commandSendCurrentWithIndex.replace(
+                            '{index}',
+                            String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
+                          )
+                        : t.commandSendCurrent
+                    }
+                    onScopeChange={setSendScope}
+                    onSelectedTabIdsChange={setSelectedTabIds}
+                    scope={sendScope}
+                    selectedTabIds={selectedTabIds}
+                    targets={sendTargets}
+                    showRememberSelection={true}
+                    rememberSelection={rememberSelection}
+                    onRememberSelectionChange={setRememberSelection}
+                    popover={true}
+                  />
+                </div>
+              ) : selectedTemplate ? (
+                <div className="command-pane-actions">
+                  <label className="command-toggle">
+                    <input
+                      checked={appendCarriageReturn}
+                      type="checkbox"
+                      onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
+                    />
+                    <span>{t.commandAppendCr}</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="primary-button compact"
+                    onClick={handleRun}
+                    disabled={
+                      isBusy ||
+                      (sendScope === 'current'
+                        ? !canRunCurrent
+                        : sendScope === 'all-ssh'
+                          ? !canRunAny
+                          : !canRunSelected)
+                    }
+                  >
+                    {t.send}
+                  </button>
+                  <SessionSendTargetPicker
+                    allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
+                    currentLabel={
+                      activeTab
+                        ? t.commandSendCurrentWithIndex.replace(
+                            '{index}',
+                            String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
+                          )
+                        : t.commandSendCurrent
+                    }
+                    onScopeChange={setSendScope}
+                    onSelectedTabIdsChange={setSelectedTabIds}
+                    scope={sendScope}
+                    selectedTabIds={selectedTabIds}
+                    targets={sendTargets}
+                    showRememberSelection={true}
+                    rememberSelection={rememberSelection}
+                    onRememberSelectionChange={setRememberSelection}
+                    popover={true}
+                  />
+                </div>
+              ) : null}
             </div>
 
             <div className={`command-runner scrollbar-scroll ${isTemporaryEditor ? 'command-temporary-runner' : ''}`}>
               {isTemporaryEditor ? (
                 <div className="command-temporary-editor">
-                  <div className="command-runner-head">
-                    <div className="command-runner-title-line">
-                      <div className="command-temporary-editor-heading">
-                        <strong>{t.commandTemporaryEditorTitle}</strong>
-                        <span>{t.commandTemporaryEditorShortcut}</span>
-                      </div>
-                      <SessionSendTargetPicker
-                        allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
-                        currentLabel={
-                          activeTab
-                            ? t.commandSendCurrentWithIndex.replace(
-                                '{index}',
-                                String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
-                              )
-                            : t.commandSendCurrent
-                        }
-                        onScopeChange={setSendScope}
-                        onSelectedTabIdsChange={setSelectedTabIds}
-                        scope={sendScope}
-                        selectedTabIds={selectedTabIds}
-                        targets={sendTargets}
-                        showRememberSelection={true}
-                        rememberSelection={rememberSelection}
-                        onRememberSelectionChange={setRememberSelection}
-                        popover={true}
-                      />
-                    </div>
-                    <div className="command-runner-actions command-temporary-editor-toolbar">
-                      <label className="command-toggle">
-                        <input
-                          checked={appendCarriageReturn}
-                          type="checkbox"
-                          onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
-                        />
-                        <span>{t.commandAppendCr}</span>
-                      </label>
-                      <button
-                        className="flat-button compact"
-                        type="button"
-                        onClick={() => setTemporaryCommand('')}
-                        disabled={!temporaryCommand}
-                      >
-                        {t.clear}
-                      </button>
-                      <button
-                        className="primary-button"
-                        type="button"
-                        onClick={handleTemporaryRun}
-                        disabled={isBusy || isSendingTemporary || !canSendTemporary}
-                      >
-                        {t.send}
-                      </button>
-                    </div>
-                  </div>
                   <div className="command-editor-field full command-editor-dialog-textarea command-temporary-editor-field">
-                    <span>{t.commandTemplate}</span>
                     <CommandCodeEditor
                       value={temporaryCommand}
                       onChange={setTemporaryCommand}
@@ -430,67 +729,40 @@ export function CommandCenter({
                 </div>
               ) : selectedTemplate ? (
                 <>
-                  <div className="command-runner-head">
+                  <div className="command-runner-head command-template-runner-head">
                     <div className="command-runner-title-line">
-                      <strong>{selectedTemplate.name}</strong>
-                      <SessionSendTargetPicker
-                        allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}
-                        currentLabel={
-                          activeTab
-                            ? t.commandSendCurrentWithIndex.replace(
-                                '{index}',
-                                String(sendTargets.find((target) => target.tabId === activeTab.id)?.index ?? '-')
-                              )
-                            : t.commandSendCurrent
-                        }
-                        onScopeChange={setSendScope}
-                        onSelectedTabIdsChange={setSelectedTabIds}
-                        scope={sendScope}
-                        selectedTabIds={selectedTabIds}
-                        targets={sendTargets}
-                        showRememberSelection={true}
-                        rememberSelection={rememberSelection}
-                        onRememberSelectionChange={setRememberSelection}
-                        popover={true}
+                      <div className="command-template-description">
+                        <span>{t.name}</span>
+                        <strong>{selectedTemplate.name}</strong>
+                        <span>{t.description}</span>
+                        <p>{selectedTemplate.description || t.commandNoDescription}</p>
+                      </div>
+                      <div className="command-template-actions">
+                        <button type="button" onClick={handleTemplateEdit} disabled={isEditingTemplate}>
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            edit
+                          </span>
+                          <span>{t.edit}</span>
+                        </button>
+                        <button type="button" onClick={handleTemplateSave} disabled={!isEditingTemplate || isBusy}>
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            save
+                          </span>
+                          <span>{t.save}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="command-preview command-detail-block command-template-preview">
+                    <span>{t.commandTemplate}</span>
+                    <div className="command-editor-dialog-textarea">
+                      <CommandCodeEditor
+                        value={previewCommand}
+                        onChange={setTemplateDraftCommand}
+                        readOnly={!isEditingTemplate}
+                        ariaLabel={t.commandTemplate}
                       />
                     </div>
-                    <div className="command-runner-actions">
-                      <label className="command-toggle">
-                        <input
-                          checked={appendCarriageReturn}
-                          type="checkbox"
-                          onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
-                        />
-                        <span>{t.commandAppendCr}</span>
-                      </label>
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={handleRun}
-                        disabled={
-                          isBusy ||
-                          (sendScope === 'current'
-                            ? !canRunCurrent
-                            : sendScope === 'all-ssh'
-                              ? !canRunAny
-                              : !canRunSelected)
-                        }
-                      >
-                        {t.send}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="command-detail-block">
-                    <span>{t.name}</span>
-                    <p>{selectedTemplate.name}</p>
-                  </div>
-                  <div className="command-detail-block">
-                    <span>{t.description}</span>
-                    <p>{selectedTemplate.description || t.commandNoDescription}</p>
-                  </div>
-                  <div className="command-preview command-detail-block">
-                    <span>{t.commandTemplate}</span>
-                    <code>{selectedTemplate.command}</code>
                   </div>
                   {paramIndexes.length ? (
                     <div className="command-param-grid">
@@ -509,9 +781,11 @@ export function CommandCenter({
                       ))}
                     </div>
                   ) : null}
-                  <div className="command-preview command-detail-block">
+                  <div className="command-preview command-detail-block command-template-preview">
                     <span>{t.commandRendered}</span>
-                    <code>{lastRenderedCommand || selectedTemplate.command}</code>
+                    <div className="command-editor-dialog-textarea">
+                      <CommandCodeEditor value={renderedCommand} readOnly={true} ariaLabel={t.commandRendered} />
+                    </div>
                   </div>
                 </>
               ) : (

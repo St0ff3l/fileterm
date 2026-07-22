@@ -695,6 +695,9 @@ fn window_query(input: &OpenWindowInput) -> String {
     if let Some(value) = &input.folder_id {
         serializer.append_pair("folderId", value);
     }
+    if let Some(value) = &input.command {
+        serializer.append_pair("command", value);
+    }
     if let Some(value) = &input.source {
         serializer.append_pair("source", value);
     }
@@ -1250,6 +1253,7 @@ pub fn run() {
                                 profile_id: None,
                                 command_id: None,
                                 folder_id: None,
+                                command: None,
                                 source: None,
                                 path: None,
                                 name: None,
@@ -1267,6 +1271,7 @@ pub fn run() {
                                 profile_id: None,
                                 command_id: None,
                                 folder_id: None,
+                                command: None,
                                 source: None,
                                 path: None,
                                 name: None,
@@ -1306,6 +1311,7 @@ pub fn run() {
                         profile_id: None,
                         command_id: None,
                         folder_id: None,
+                        command: None,
                         source: None,
                         path: None,
                         name: None,
@@ -1323,6 +1329,7 @@ pub fn run() {
                         profile_id: None,
                         command_id: None,
                         folder_id: None,
+                        command: None,
                         source: None,
                         path: None,
                         name: None,
@@ -1340,6 +1347,7 @@ pub fn run() {
                         profile_id: None,
                         command_id: None,
                         folder_id: None,
+                        command: None,
                         source: None,
                         path: None,
                         name: None,

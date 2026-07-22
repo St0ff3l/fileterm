@@ -28,6 +28,10 @@ export function WorkspaceStage({
   activeProfile,
   activeSession,
   activeTab,
+  activeView,
+  onActiveViewChange,
+  commandPaneWidth,
+  onCommandPaneWidthChange,
   filePanelHeight,
   onFilePanelHeightChange,
   shouldAlignFilePanelOnMount,
@@ -44,6 +48,7 @@ export function WorkspaceStage({
   isLocalNetworkShare,
   isLocalDirectoryLoading,
   isWorkspaceRefreshing,
+  isWorkspaceSwitching,
   canPasteToLocal,
   canPasteToRemote,
   clipboardStatusText,
@@ -57,6 +62,7 @@ export function WorkspaceStage({
   onClearCutState,
   onExecuteCommand,
   onSendTerminalCommand,
+  onSaveTemporaryCommand,
   onTerminalDockSendScopeChange,
   onTerminalDockSelectedTabIdsChange,
   onOpenCommandManager,
@@ -112,6 +118,10 @@ export function WorkspaceStage({
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   activeTab: WorkspaceTab | null
+  activeView: 'file' | 'command' | 'tunnel'
+  onActiveViewChange(view: 'file' | 'command' | 'tunnel'): void
+  commandPaneWidth: number
+  onCommandPaneWidthChange(width: number): void
   filePanelHeight: number
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
   shouldAlignFilePanelOnMount: boolean
@@ -128,6 +138,7 @@ export function WorkspaceStage({
   isLocalNetworkShare: boolean
   isLocalDirectoryLoading: boolean
   isWorkspaceRefreshing: boolean
+  isWorkspaceSwitching: boolean
   canPasteToLocal: boolean
   canPasteToRemote: boolean
   clipboardStatusText: string | null
@@ -147,6 +158,8 @@ export function WorkspaceStage({
     selectedTabIds: string[]
   ): void
   onSendTerminalCommand(command: string): Promise<void>
+  onSaveTemporaryCommand(command: string, appendCarriageReturn: boolean): Promise<boolean> | boolean | void
+  onUpdateCommand(commandId: string, input: CommandTemplateInput): Promise<boolean> | boolean | void
   onTerminalDockSendScopeChange(scope: SendScope, rememberSelection: boolean): void
   onTerminalDockSelectedTabIdsChange(tabIds: string[], rememberSelection: boolean): void
   onOpenCommandManager(): void
@@ -216,6 +229,10 @@ export function WorkspaceStage({
       <SessionWorkspace
         activeSession={activeSession}
         activeTab={activeTab}
+        activeView={activeView}
+        onActiveViewChange={onActiveViewChange}
+        commandPaneWidth={commandPaneWidth}
+        onCommandPaneWidthChange={onCommandPaneWidthChange}
         filePanelHeight={filePanelHeight}
         onFilePanelHeightChange={onFilePanelHeightChange}
         shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
@@ -231,6 +248,7 @@ export function WorkspaceStage({
         isLocalNetworkShare={isLocalNetworkShare}
         isLocalDirectoryLoading={isLocalDirectoryLoading}
         isWorkspaceRefreshing={isWorkspaceRefreshing}
+        isWorkspaceSwitching={isWorkspaceSwitching}
         canPasteToLocal={canPasteToLocal}
         canPasteToRemote={canPasteToRemote}
         clipboardStatusText={clipboardStatusText}
@@ -241,6 +259,8 @@ export function WorkspaceStage({
         onClearCutState={onClearCutState}
         onExecuteCommand={onExecuteCommand}
         onSendTerminalCommand={onSendTerminalCommand}
+        onSaveTemporaryCommand={onSaveTemporaryCommand}
+        onUpdateCommand={onUpdateCommand}
         onTerminalDockSendScopeChange={onTerminalDockSendScopeChange}
         onTerminalDockSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
         onOpenCommandManager={onOpenCommandManager}

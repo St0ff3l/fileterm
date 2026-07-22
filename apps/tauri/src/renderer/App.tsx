@@ -66,6 +66,7 @@ import { StandaloneWindowFrame } from './features/layout/StandaloneWindowFrame'
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
 const DEFAULT_SIDEBAR_WIDTH = 214
+const DEFAULT_COMMAND_LIST_WIDTH = 300
 const SIDEBAR_SNAP_THRESHOLD = 10
 
 type ErrorDetails = {
@@ -108,6 +109,7 @@ export function App() {
   const formWindowProfileId = searchParams.get('profileId')
   const formWindowCommandId = searchParams.get('commandId')
   const formWindowFolderId = searchParams.get('folderId')
+  const formWindowCommand = searchParams.get('command') ?? ''
 
   const fileEditorWindowSource = searchParams.get('source') as FileContentSnapshot['source'] | null
   const fileEditorWindowPath = searchParams.get('path')
@@ -119,6 +121,8 @@ export function App() {
   const [isBusy, setIsBusy] = useState(false)
   const profileSaveInFlightRef = useRef(false)
   const [isWorkspaceTransitionActive, setIsWorkspaceTransitionActive] = useState(true)
+  const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false)
+  const hasRenderedWorkspaceRef = useRef(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams))
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams))
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
@@ -126,7 +130,9 @@ export function App() {
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
+  const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
   const [workspaceFocusModes, setWorkspaceFocusModes] = useState<Record<string, boolean>>({})
+  const [workspaceViews, setWorkspaceViews] = useState<Record<string, 'file' | 'command' | 'tunnel'>>({})
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
 
   const desktopApi = window.fileterm
@@ -266,6 +272,10 @@ export function App() {
     : false
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
+  const activeWorkspaceView = activeTab ? (workspaceViews[activeTab.id] ?? 'file') : 'file'
+  const activeCommandPaneWidth = activeTab
+    ? (commandPaneWidths[activeTab.id] ?? DEFAULT_COMMAND_LIST_WIDTH)
+    : DEFAULT_COMMAND_LIST_WIDTH
   const isResourceMonitoringAvailable =
     activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring !== false
   const isSystemSidebarCollapsed =
@@ -290,6 +300,14 @@ export function App() {
     [activeTabId]
   )
 
+  const setActiveCommandPaneWidth = useCallback(
+    (nextWidth: number) => {
+      if (!activeTabId) return
+      setCommandPaneWidths((currentWidths) => ({ ...currentWidths, [activeTabId]: nextWidth }))
+    },
+    [activeTabId]
+  )
+
   useEffect(() => {
     setIsWorkspaceTransitionActive(false)
     const frame = window.requestAnimationFrame(() => {
@@ -300,9 +318,25 @@ export function App() {
   }, [activeWorkspaceOrderKey])
 
   useEffect(() => {
+    if (!hasRenderedWorkspaceRef.current) {
+      hasRenderedWorkspaceRef.current = true
+      return
+    }
+
+    setIsWorkspaceSwitching(true)
+    const timeout = window.setTimeout(() => {
+      setIsWorkspaceSwitching(false)
+    }, 240)
+
+    return () => window.clearTimeout(timeout)
+  }, [activeWorkspaceOrderKey])
+
+  useEffect(() => {
     const openTabIds = new Set([...visibleWorkspaceTabs.map((tab) => tab.id), ...localTabs.map((tab) => tab.id)])
     setFilePanelHeights((currentHeights) => retainOpenTabUiState(currentHeights, openTabIds))
+    setCommandPaneWidths((currentWidths) => retainOpenTabUiState(currentWidths, openTabIds))
     setWorkspaceFocusModes((currentModes) => retainOpenTabUiState(currentModes, openTabIds))
+    setWorkspaceViews((currentViews) => retainOpenTabUiState(currentViews, openTabIds))
   }, [localTabs, visibleWorkspaceTabs])
 
   // 3. Workspace Modals Hook
@@ -1037,6 +1071,7 @@ export function App() {
               ? toCommandTemplateInput(editingCommand)
               : {
                   ...emptyCommandForm,
+                  command: formWindowCommand,
                   parentId: formWindowFolderId || undefined
                 }
           }
@@ -1232,6 +1267,13 @@ export function App() {
                 activeProfile={activeProfile}
                 activeSession={activeSession}
                 activeTab={activeTab}
+                activeView={activeWorkspaceView}
+                commandPaneWidth={activeCommandPaneWidth}
+                onCommandPaneWidthChange={setActiveCommandPaneWidth}
+                onActiveViewChange={(view) => {
+                  if (!activeTab) return
+                  setWorkspaceViews((currentViews) => ({ ...currentViews, [activeTab.id]: view }))
+                }}
                 filePanelHeight={activeFilePanelHeight}
                 onFilePanelHeightChange={setActiveFilePanelHeight}
                 shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
@@ -1248,6 +1290,7 @@ export function App() {
                 isLocalNetworkShare={isLocalNetworkShare}
                 isLocalDirectoryLoading={isLocalDirectoryLoading}
                 isWorkspaceRefreshing={isWorkspaceRefreshing}
+                isWorkspaceSwitching={isWorkspaceSwitching}
                 canPasteToLocal={canPasteIntoLocal}
                 canPasteToRemote={canPasteIntoRemote}
                 clipboardStatusText={clipboardStatusText}
@@ -1260,6 +1303,15 @@ export function App() {
                   void executeCommandTemplate(commandId, args, options, scope, selectedTabIds)
                 }}
                 onSendTerminalCommand={sendTerminalCommand}
+                onSaveTemporaryCommand={(command) => {
+                  if (desktopApi) {
+                    return desktopApi
+                      .openCommandFormWindow('create', undefined, undefined, command)
+                      .then(() => true)
+                      .catch(() => false)
+                  }
+                  return false
+                }}
                 onTerminalDockSendScopeChange={(scope, rememberSelection) => {
                   updateTerminalDockSendScope(scope, rememberSelection)
                 }}
