@@ -816,16 +816,23 @@ async fn forward_local_connection<H: Handler>(
         .map(|address| address.ip().to_string())
         .unwrap_or_else(|| "127.0.0.1".to_string());
     let origin_port = origin.map(|address| address.port()).unwrap_or(0);
-    let mut channel = handle
-        .channel_open_direct_tcpip(
+    // 加 timeout：channel_open_direct_tcpip 在远端服务器卡住时会永久
+    // await，虽然本函数在 spawn task 里不阻塞主循环，但卡住的 task
+    // 不会清理，local 端 TCP 连接也不会关闭，用户侧表现为隧道连接
+    // "连上但没数据"。5 秒与 SSH_TUNNEL_OP_TIMEOUT 对齐。
+    let channel = timeout(
+        SSH_TUNNEL_OP_TIMEOUT,
+        handle.channel_open_direct_tcpip(
             rule.target_host.clone().unwrap_or_default(),
             rule.target_port.unwrap_or_default() as u32,
             origin_host,
             origin_port as u32,
-        )
-        .await
-        .map_err(|error| format!("SSH local forward failed: {error}"))?
-        .into_stream();
+        ),
+    )
+    .await
+    .map_err(|_| "SSH local forward timed out: 服务器未在 5 秒内响应 channel_open_direct_tcpip".to_string())?
+    .map_err(|error| format!("SSH local forward failed: {error}"))?;
+    let mut channel = channel.into_stream();
     copy_bidirectional(&mut socket, &mut channel)
         .await
         .map_err(|error| error.to_string())?;
@@ -836,18 +843,22 @@ async fn forward_socks5_connection<H: Handler>(
     mut socket: TcpStream,
     handle: Arc<Handle<H>>,
 ) -> Result<(), String> {
+    // SOCKS5 握手阶段加整体 timeout：恶意客户端可以连上 TCP 但不发
+    // 任何数据，让 read_exact 永久 await，spawn task 永远不退出，local
+    // 监听端口上的连接数无界增长。10 秒足够正常 SOCKS5 客户端完成握手。
+    let handshake_deadline = Duration::from_secs(10);
     let mut greeting = [0_u8; 2];
-    socket
-        .read_exact(&mut greeting)
+    timeout(handshake_deadline, socket.read_exact(&mut greeting))
         .await
+        .map_err(|_| "SOCKS5 handshake timed out: greeting".to_string())?
         .map_err(|error| error.to_string())?;
     if greeting[0] != 5 {
         return Err("Only SOCKS5 is supported".to_string());
     }
     let mut methods = vec![0_u8; greeting[1] as usize];
-    socket
-        .read_exact(&mut methods)
+    timeout(handshake_deadline, socket.read_exact(&mut methods))
         .await
+        .map_err(|_| "SOCKS5 handshake timed out: methods".to_string())?
         .map_err(|error| error.to_string())?;
     if !methods.contains(&0) {
         socket
@@ -862,18 +873,18 @@ async fn forward_socks5_connection<H: Handler>(
         .map_err(|error| error.to_string())?;
 
     let mut request = [0_u8; 4];
-    socket
-        .read_exact(&mut request)
+    timeout(handshake_deadline, socket.read_exact(&mut request))
         .await
+        .map_err(|_| "SOCKS5 handshake timed out: request".to_string())?
         .map_err(|error| error.to_string())?;
     if request[0] != 5 || request[1] != 1 {
         return Err("Only SOCKS5 CONNECT is supported".to_string());
     }
     let target_host = read_socks5_host(&mut socket, request[3]).await?;
     let mut port = [0_u8; 2];
-    socket
-        .read_exact(&mut port)
+    timeout(handshake_deadline, socket.read_exact(&mut port))
         .await
+        .map_err(|_| "SOCKS5 handshake timed out: port".to_string())?
         .map_err(|error| error.to_string())?;
     let target_port = u16::from_be_bytes(port);
     let origin = socket.local_addr().ok();
@@ -881,16 +892,20 @@ async fn forward_socks5_connection<H: Handler>(
         .map(|address| address.ip().to_string())
         .unwrap_or_else(|| "127.0.0.1".to_string());
     let origin_port = origin.map(|address| address.port()).unwrap_or(0);
-    let mut channel = handle
-        .channel_open_direct_tcpip(
+    // channel_open_direct_tcpip 加 timeout，同 forward_local_connection。
+    let channel = timeout(
+        SSH_TUNNEL_OP_TIMEOUT,
+        handle.channel_open_direct_tcpip(
             target_host,
             target_port as u32,
             origin_host,
             origin_port as u32,
-        )
-        .await
-        .map_err(|error| format!("SSH SOCKS5 forward failed: {error}"))?
-        .into_stream();
+        ),
+    )
+    .await
+    .map_err(|_| "SSH SOCKS5 forward timed out: 服务器未在 5 秒内响应 channel_open_direct_tcpip".to_string())?
+    .map_err(|error| format!("SSH SOCKS5 forward failed: {error}"))?;
+    let mut channel = channel.into_stream();
     socket
         .write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0])
         .await
@@ -902,33 +917,36 @@ async fn forward_socks5_connection<H: Handler>(
 }
 
 async fn read_socks5_host(socket: &mut TcpStream, address_type: u8) -> Result<String, String> {
+    // 复用 forward_socks5_connection 的握手 deadline，防止恶意客户端
+    // 在 SOCKS5 握手最后阶段（读取目标地址）卡住。
+    let read_deadline = Duration::from_secs(10);
     match address_type {
         1 => {
             let mut address = [0_u8; 4];
-            socket
-                .read_exact(&mut address)
+            timeout(read_deadline, socket.read_exact(&mut address))
                 .await
+                .map_err(|_| "SOCKS5 handshake timed out: IPv4 address".to_string())?
                 .map_err(|error| error.to_string())?;
             Ok(std::net::Ipv4Addr::from(address).to_string())
         }
         3 => {
             let mut length = [0_u8; 1];
-            socket
-                .read_exact(&mut length)
+            timeout(read_deadline, socket.read_exact(&mut length))
                 .await
+                .map_err(|_| "SOCKS5 handshake timed out: hostname length".to_string())?
                 .map_err(|error| error.to_string())?;
             let mut name = vec![0_u8; length[0] as usize];
-            socket
-                .read_exact(&mut name)
+            timeout(read_deadline, socket.read_exact(&mut name))
                 .await
+                .map_err(|_| "SOCKS5 handshake timed out: hostname".to_string())?
                 .map_err(|error| error.to_string())?;
             String::from_utf8(name).map_err(|_| "Invalid SOCKS5 hostname".to_string())
         }
         4 => {
             let mut address = [0_u8; 16];
-            socket
-                .read_exact(&mut address)
+            timeout(read_deadline, socket.read_exact(&mut address))
                 .await
+                .map_err(|_| "SOCKS5 handshake timed out: IPv6 address".to_string())?
                 .map_err(|error| error.to_string())?;
             Ok(std::net::Ipv6Addr::from(address).to_string())
         }
@@ -2095,8 +2113,18 @@ async fn authenticate_private_key_content(
         .map_err(|error| error.to_string())?;
     // Best-effort: pick the strongest RSA hash the server advertises. For
     // non-RSA keys, hash_alg is ignored by PrivateKeyWithHashAlg::new.
+    // 加 timeout：best_supported_rsa_hash 在服务器不响应时可能永久 await，
+    // 而 authenticate_private_key_content 在 open_session 阶段调用，卡住
+    // 会让 worker 永远起不来。使用 SSH_PASSWORD_AUTH_TIMEOUT 与密码认证
+    // 对齐，保持一致的认证阶段超时语义。
     let hash_alg: Option<russh::keys::HashAlg> = if key_pair.algorithm().is_rsa() {
-        match handle.best_supported_rsa_hash().await {
+        match wait_for_ssh_stage(
+            "SSH RSA hash negotiation",
+            SSH_PASSWORD_AUTH_TIMEOUT,
+            async { handle.best_supported_rsa_hash().await.map_err(|e| e.to_string()) },
+        )
+        .await
+        {
             Ok(Some(Some(hash))) => Some(hash),
             _ => Some(russh::keys::HashAlg::Sha512),
         }
@@ -2104,11 +2132,18 @@ async fn authenticate_private_key_content(
         None
     };
     let key_with_hash = PrivateKeyWithHashAlg::new(Arc::new(key_pair), hash_alg);
-    handle
-        .authenticate_publickey(username, key_with_hash)
-        .await
-        .map(|result| result.success())
-        .map_err(|error| error.to_string())
+    let result = wait_for_ssh_stage(
+        "SSH public key authentication",
+        SSH_PASSWORD_AUTH_TIMEOUT,
+        async {
+            handle
+                .authenticate_publickey(username, key_with_hash)
+                .await
+                .map_err(|error| error.to_string())
+        },
+    )
+    .await?;
+    Ok(result.success())
 }
 
 async fn try_system_authenticate(
@@ -2123,31 +2158,60 @@ async fn try_system_authenticate(
 
     // Agent support is Unix-only in russh, but a missing/broken agent must not
     // prevent the default-key fallback (including on Windows).
+    // 加 timeout：AgentClient::connect_env / request_identities /
+    // authenticate_publickey_with 在 SSH agent 卡住（unix socket 阻塞、
+    // agent 进程 hang）时会永久 await，而本函数在 open_session 阶段
+    // 调用，卡住会让 worker 永远起不来。
     #[cfg(unix)]
-    match russh::keys::agent::client::AgentClient::connect_env().await {
+    match wait_for_ssh_stage(
+        "SSH agent connect",
+        SSH_PASSWORD_AUTH_TIMEOUT,
+        async { russh::keys::agent::client::AgentClient::connect_env().await.map_err(|e| e.to_string()) },
+    )
+    .await
+    {
         Ok(mut agent) => {
             candidate_found = true;
-            match agent.request_identities().await {
+            match wait_for_ssh_stage(
+                "SSH agent list identities",
+                SSH_PASSWORD_AUTH_TIMEOUT,
+                async { agent.request_identities().await.map_err(|e| e.to_string()) },
+            )
+            .await
+            {
                 Ok(identities) => {
                     for identity in identities {
                         authentication_attempted = true;
                         let public_key = identity.public_key().into_owned();
-                        match handle
-                            .authenticate_publickey_with(username, public_key, None, &mut agent)
-                            .await
+                        match wait_for_ssh_stage(
+                            "SSH agent public key authentication",
+                            SSH_PASSWORD_AUTH_TIMEOUT,
+                            async {
+                                handle
+                                    .authenticate_publickey_with(
+                                        username,
+                                        public_key,
+                                        None,
+                                        &mut agent,
+                                    )
+                                    .await
+                                    .map_err(|error| error.to_string())
+                            },
+                        )
+                        .await
                         {
                             Ok(result) if result.success() => {
                                 return Ok(AuthenticationResult::Authenticated)
                             }
                             Ok(_) => {}
-                            Err(error) => candidate_errors.push(error.to_string()),
+                            Err(error) => candidate_errors.push(error),
                         }
                     }
                 }
-                Err(error) => candidate_errors.push(error.to_string()),
+                Err(error) => candidate_errors.push(error),
             }
         }
-        Err(error) => candidate_errors.push(error.to_string()),
+        Err(error) => candidate_errors.push(error),
     }
 
     let home_directory = app.path().home_dir().map_err(|error| error.to_string())?;
@@ -2541,10 +2605,21 @@ where
     F: FnMut(KeyboardInteractiveRequest) -> Fut,
     Fut: Future<Output = Option<Vec<String>>>,
 {
-    let res = handle
-        .authenticate_keyboard_interactive_start(username, None)
-        .await
-        .map_err(|e| e.to_string())?;
+    // SSH 协议层交互加 timeout：authenticate_keyboard_interactive_start /
+    // respond 在服务器不响应时可能永久 await，而本函数在 open_session
+    // 阶段调用，卡住会让 worker 永远起不来。request_answers 等待用户
+    // 输入 MFA，不加 timeout。
+    let res = wait_for_ssh_stage(
+        "SSH keyboard-interactive start",
+        SSH_PASSWORD_AUTH_TIMEOUT,
+        async {
+            handle
+                .authenticate_keyboard_interactive_start(username, None)
+                .await
+                .map_err(|e| e.to_string())
+        },
+    )
+    .await?;
 
     let mut current = match res {
         russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(true),
@@ -2604,10 +2679,17 @@ where
             }
         }
 
-        let res = handle
-            .authenticate_keyboard_interactive_respond(answers)
-            .await
-            .map_err(|e| e.to_string())?;
+        let res = wait_for_ssh_stage(
+            "SSH keyboard-interactive respond",
+            SSH_PASSWORD_AUTH_TIMEOUT,
+            async {
+                handle
+                    .authenticate_keyboard_interactive_respond(answers)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+        )
+        .await?;
         current = match res {
             russh::client::KeyboardInteractiveAuthResponse::Success => return Ok(true),
             russh::client::KeyboardInteractiveAuthResponse::Failure { .. } => return Ok(false),
