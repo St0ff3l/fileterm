@@ -12,6 +12,9 @@ use std::sync::{Mutex, OnceLock};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 const SMB_CREDENTIALS_REQUIRED: &str = "SMB_CREDENTIALS_REQUIRED";
 
+/// Synthetic path for the Windows "This PC" drive list.
+pub const WINDOWS_DRIVES_PATH: &str = "fileterm://windows-drives";
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalFileItem {
@@ -838,6 +841,29 @@ fn modified_secs(meta: &fs::Metadata) -> u64 {
 
 #[tauri::command]
 pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySnapshot, AppError> {
+    #[cfg(target_os = "windows")]
+    if dir_path.as_deref() == Some(WINDOWS_DRIVES_PATH) {
+        let mut items = Vec::new();
+        for letter in b'A'..=b'Z' {
+            let drive = format!("{}:\\", letter as char);
+            if fs::metadata(&drive).is_ok() {
+                items.push(LocalFileItem {
+                    path: drive,
+                    name: format!("{}:", letter as char),
+                    r#type: "folder".to_string(),
+                    modified: String::new(),
+                    size: "-".to_string(),
+                    permission: String::new(),
+                    owner_group: String::new(),
+                });
+            }
+        }
+        return Ok(DirectorySnapshot {
+            path: WINDOWS_DRIVES_PATH.to_string(),
+            items,
+        });
+    }
+
     let requested_path = match dir_path {
         Some(p) if !p.is_empty() => PathBuf::from(p),
         _ => initial_path(),

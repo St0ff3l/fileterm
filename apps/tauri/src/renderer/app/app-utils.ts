@@ -4,6 +4,7 @@ import { formatMessage, localizeErrorScope, t } from '../i18n'
 
 export const localFileDragType = 'application/x-fileterm-local-file'
 export const remoteFileDragType = 'application/x-fileterm-remote-file'
+export const WINDOWS_DRIVES_PATH = 'fileterm://windows-drives'
 
 export function isActiveTransfer(transfer: TransferTask) {
   return (
@@ -127,14 +128,15 @@ export function withParentRow(dirPath: string, items: LocalFileItem[], rootPath?
     ?.replace(/[\\/]+$/, '')
     .replace(/\\/g, '/')
     .toLocaleLowerCase()
-  const windowsRoot = /^[A-Za-z]:[\\/]?$/.test(dirPath) ? `${dirPath.slice(0, 2)}\\` : null
+  const windowsRoot = /^[A-Za-z]:[\\/]?$/.test(dirPath) ? WINDOWS_DRIVES_PATH : null
   const isAtRoot = normalizedRoot !== undefined && normalizedPath === normalizedRoot
-  const parentPath = dirPath.includes('/')
+  const rawParentPath = dirPath.includes('/')
     ? dirPath.split('/').slice(0, -1).join('/') || '/'
     : dirPath.includes('\\')
       ? windowsRoot || dirPath.split('\\').slice(0, -1).join('\\') || '\\'
       : dirPath
-  return dirPath === '/' || isAtRoot
+  const parentPath = /^[A-Za-z]:$/.test(rawParentPath) ? `${rawParentPath}\\` : rawParentPath
+  return dirPath === '/' || dirPath === WINDOWS_DRIVES_PATH || isAtRoot
     ? items
     : [
         {

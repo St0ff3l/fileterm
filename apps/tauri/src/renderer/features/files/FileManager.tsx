@@ -28,7 +28,8 @@ import {
   parseDraggedPaths,
   rangePaths,
   remoteFileDragType,
-  setFileDragPreview
+  setFileDragPreview,
+  WINDOWS_DRIVES_PATH
 } from '../../app/app-utils'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -811,9 +812,21 @@ export function FileManager({
           >
             <PanePathBar
               label={isLocalNetworkShare ? t.networkShare : t.localComputer}
-              value={localPathInput}
+              value={localPathInput === WINDOWS_DRIVES_PATH ? t.localComputer : localPathInput}
               onChange={setLocalPathInput}
               onSubmit={submitLocalPath}
+              action={
+                isLocalNetworkShare ? (
+                  <button
+                    type="button"
+                    className="pane-path-bar-action"
+                    title={t.backToThisPC}
+                    onClick={() => onOpenLocalPath(WINDOWS_DRIVES_PATH)}
+                  >
+                    {t.localComputer}
+                  </button>
+                ) : null
+              }
             />
             <div className="file-table-scroll-region">
               <div

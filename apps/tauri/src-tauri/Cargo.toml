@@ -17,7 +17,7 @@ arboard = "3"
 open = "5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico", "macos-private-api"] }
 tauri-plugin-updater = "2"
 thiserror = "2"
 url = "2"
@@ -39,7 +39,6 @@ suppaftp = { version = "10", default-features = false, features = ["tokio-async-
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-image = { version = "0.25", default-features = false, features = ["png"] }
 raw-window-handle = "0.6"
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",

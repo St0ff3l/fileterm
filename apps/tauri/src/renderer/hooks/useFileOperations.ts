@@ -9,7 +9,7 @@ import type {
   WorkspaceSnapshot,
   WorkspaceTab
 } from '@fileterm/core'
-import { withParentRow } from '../app/app-utils'
+import { WINDOWS_DRIVES_PATH, withParentRow } from '../app/app-utils'
 import { formatMessage, t, type AppLocale } from '../i18n'
 
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
@@ -205,7 +205,7 @@ export function normalizeLocalPath(targetPath: string) {
 export function localDirname(targetPath: string) {
   const normalized = normalizeLocalPath(targetPath)
   if (/^[A-Za-z]:$/.test(normalized)) {
-    return `${normalized}\\`
+    return WINDOWS_DRIVES_PATH
   }
   const slashIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'))
   if (slashIndex <= 0) {
