@@ -9,15 +9,17 @@ export function CommandCodeEditor({
   placeholder,
   autoFocus = false,
   ariaLabel,
-  className
+  className,
+  readOnly = false
 }: {
   value: string
-  onChange(value: string): void
+  onChange?(value: string): void
   onKeyDown?(event: KeyboardEvent<HTMLTextAreaElement>): void
   placeholder?: string
   autoFocus?: boolean
   ariaLabel?: string
   className?: string
+  readOnly?: boolean
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lineNumRef = useRef<HTMLDivElement>(null)
@@ -53,7 +55,8 @@ export function CommandCodeEditor({
         spellCheck={false}
         className={className}
         value={value}
-        onChange={(event) => onChange(event.currentTarget.value)}
+        readOnly={readOnly}
+        onChange={readOnly ? undefined : (event) => onChange?.(event.currentTarget.value)}
         onKeyDown={onKeyDown}
         onScroll={handleTextareaScroll}
       />

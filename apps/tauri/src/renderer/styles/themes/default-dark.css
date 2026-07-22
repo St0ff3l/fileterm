@@ -2112,11 +2112,14 @@
 
 :root:not([data-theme]) .local-pane,
 :root[data-theme='default-dark'] .local-pane,
-:root[data-theme='default'] .local-pane,
+:root[data-theme='default'] .local-pane {
+  background: #1d1d1d;
+}
+
 :root:not([data-theme]) .command-pane-list,
 :root[data-theme='default-dark'] .command-pane-list,
 :root[data-theme='default'] .command-pane-list {
-  background: #1d1d1d;
+  background: transparent;
 }
 
 :root:not([data-theme]) .file-split-resizer,

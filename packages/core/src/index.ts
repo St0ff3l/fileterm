@@ -880,7 +880,12 @@ export interface FileTermDesktopApi {
   openConnectionManagerWindow(): Promise<void>
   openCommandManagerWindow(): Promise<void>
   openConnectionFormWindow(mode: ConnectionFormMode, profileId?: string): Promise<void>
-  openCommandFormWindow(mode: ConnectionFormMode, commandId?: string, folderId?: string): Promise<void>
+  openCommandFormWindow(
+    mode: ConnectionFormMode,
+    commandId?: string,
+    folderId?: string,
+    command?: string
+  ): Promise<void>
   openFileEditorWindow(input: FileEditorWindowInput): Promise<void>
   openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>

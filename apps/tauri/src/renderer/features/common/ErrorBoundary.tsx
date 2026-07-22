@@ -40,19 +40,22 @@ export class ErrorBoundary extends Component<Props, State> {
           minHeight: '100vh',
           boxSizing: 'border-box',
           padding: 24,
-          background: 'var(--bg-main, #f5f5f5)',
+          background: 'var(--modal-backdrop-bg, rgba(0, 0, 0, 0.78))',
           color: 'var(--text-main, #1a1a1a)',
           fontFamily: "'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif",
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           overflow: 'auto'
         }}
       >
         <div
           style={{
             maxWidth: 480,
-            padding: 32,
-            background: 'var(--bg-card, #fff)',
-            borderRadius: 12,
-            border: '1px solid var(--border, rgba(0, 0, 0, 0.1))'
+            padding: 24,
+            background: 'var(--dialog-surface, var(--bg-card, #fff))',
+            borderRadius: 14,
+            border: '1px solid var(--dialog-border, rgba(255, 255, 255, 0.12))',
+            boxShadow: 'var(--dialog-shadow, 0 22px 70px rgba(0, 0, 0, 0.45))'
           }}
         >
           <h1 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>{t.errorBoundaryTitle}</h1>
@@ -64,7 +67,7 @@ export class ErrorBoundary extends Component<Props, State> {
               fontSize: 12,
               padding: 12,
               margin: '0 0 16px',
-              background: 'var(--bg-elevated, #f0f0f0)',
+              background: 'var(--bg-elevated, rgba(255, 255, 255, 0.08))',
               borderRadius: 8,
               overflow: 'auto',
               fontFamily: 'var(--font-mono, monospace)',
@@ -81,9 +84,9 @@ export class ErrorBoundary extends Component<Props, State> {
               padding: '8px 20px',
               fontSize: 14,
               fontWeight: 500,
-              border: 'none',
+              border: '1px solid var(--button-primary-border, rgba(255, 255, 255, 0.12))',
               borderRadius: 8,
-              background: 'var(--accent-primary, #534ab7)',
+              background: 'var(--button-primary-bg, #1687e8)',
               color: '#fff',
               cursor: 'pointer'
             }}

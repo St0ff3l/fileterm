@@ -234,9 +234,9 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       // window receives no `profileId` in its URL and falls back to an empty
       // form.
       invoke<void>('app_open_window', { input: { kind: 'connection-form', mode, profileId } }),
-    openCommandFormWindow: (mode: 'create' | 'edit', commandId?: string, folderId?: string) =>
+    openCommandFormWindow: (mode: 'create' | 'edit', commandId?: string, folderId?: string, command?: string) =>
       invoke<void>('app_open_window', {
-        input: { kind: 'command-form', mode, commandId, folderId }
+        input: { kind: 'command-form', mode, commandId, folderId, command }
       }),
     openFileEditorWindow: (input: {
       source: 'local' | 'remote'

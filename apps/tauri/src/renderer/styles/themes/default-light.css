@@ -680,9 +680,12 @@
   background: #ffffff;
 }
 
-:root[data-theme='default-light'] .local-pane,
-:root[data-theme='default-light'] .command-pane-list {
+:root[data-theme='default-light'] .local-pane {
   background: #fbfcfe;
+}
+
+:root[data-theme='default-light'] .command-pane-list {
+  background: transparent;
 }
 
 :root[data-theme='default-light'] .file-split-resizer {

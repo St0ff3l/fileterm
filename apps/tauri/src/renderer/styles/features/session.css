@@ -3067,6 +3067,7 @@
   flex: 1;
   min-height: 0;
   gap: 8px;
+  align-content: start;
   padding-top: 14px;
 }
 .ssh-tunnel-list.is-loading {
@@ -3130,14 +3131,21 @@
 }
 .ssh-tunnel-empty {
   display: grid;
+  align-self: start;
   justify-items: center;
   gap: 5px;
-  padding: 16px 12px;
+  width: min(100%, 720px);
+  min-height: 176px;
+  box-sizing: border-box;
+  justify-self: center;
+  align-content: center;
+  padding: 20px 24px;
   color: var(--text-muted);
   text-align: center;
   font-size: 12px;
-  border: 1px dashed var(--border-subtle);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 42%, transparent);
 }
 .ssh-tunnel-empty > .app-icon {
   color: var(--accent-primary);

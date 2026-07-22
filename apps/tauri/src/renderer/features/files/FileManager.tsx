@@ -13,6 +13,7 @@ import type {
   CommandExecutionOptions,
   CommandFolder,
   CommandTemplate,
+  CommandTemplateInput,
   LocalFileItem,
   RemoteFileItem,
   SessionSnapshot,
@@ -145,6 +146,10 @@ function sortRemoteFiles(rows: RemoteFileItem[], sort: RemoteFileSortState) {
 export function FileManager({
   activeSession,
   activeTab,
+  activeView,
+  onActiveViewChange,
+  commandPaneWidth,
+  onCommandPaneWidthChange,
   sendTargets,
   commandFolders,
   commandTemplates,
@@ -155,6 +160,7 @@ export function FileManager({
   isLocalNetworkShare,
   isLocalDirectoryLoading,
   isWorkspaceRefreshing,
+  isWorkspaceSwitching,
   canPasteToLocal,
   canPasteToRemote,
   clipboardStatusText,
@@ -162,6 +168,8 @@ export function FileManager({
   remoteCutPaths,
   onExecuteCommand,
   onSendTerminalCommand,
+  onSaveTemporaryCommand,
+  onUpdateCommand,
   onOpenCommandManager,
   onCopyItems,
   onCutItems,
@@ -193,6 +201,10 @@ export function FileManager({
   sendTargets: SessionSendTarget[]
   commandFolders: CommandFolder[]
   commandTemplates: CommandTemplate[]
+  activeView: 'file' | 'command' | 'tunnel'
+  onActiveViewChange(view: 'file' | 'command' | 'tunnel'): void
+  commandPaneWidth: number
+  onCommandPaneWidthChange(width: number): void
   isBusy: boolean
   localItems: LocalFileItem[]
   localPath: string
@@ -200,6 +212,7 @@ export function FileManager({
   isLocalNetworkShare: boolean
   isLocalDirectoryLoading: boolean
   isWorkspaceRefreshing: boolean
+  isWorkspaceSwitching: boolean
   canPasteToLocal: boolean
   canPasteToRemote: boolean
   clipboardStatusText: string | null
@@ -218,6 +231,8 @@ export function FileManager({
     scope: SendScope,
     selectedTabIds: string[]
   ): Promise<void>
+  onSaveTemporaryCommand(command: string, appendCarriageReturn: boolean): Promise<boolean> | boolean | void
+  onUpdateCommand(commandId: string, input: CommandTemplateInput): Promise<boolean> | boolean | void
   onOpenCommandManager(): void
   onCopyItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onCutItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
@@ -252,9 +267,7 @@ export function FileManager({
   const showRemoteDirectoryLoading = isRemoteDirectoryLoading || activeSession.remoteFilesLoading === true
   const showLocalDirectoryLoading = isLocalDirectoryLoading && !isWorkspaceRefreshing
   const showPaneRemoteDirectoryLoading = showRemoteDirectoryLoading && !isWorkspaceRefreshing
-  const [activeView, setActiveView] = useState<'file' | 'command' | 'tunnel'>('file')
   const [isViewLoading, setIsViewLoading] = useState(false)
-  const [localPaneWidth, setLocalPaneWidth] = useState(214)
   const [localPathInput, setLocalPathInput] = useState(localPath)
   const [remotePathInput, setRemotePathInput] = useState(activeSession.remotePath)
   const [remoteSort, setRemoteSort] = useState<RemoteFileSortState>(defaultRemoteSort)
@@ -290,7 +303,7 @@ export function FileManager({
     }
 
     setIsViewLoading(true)
-    setActiveView(nextView)
+    onActiveViewChange(nextView)
   }
 
   useEffect(() => {
@@ -324,9 +337,9 @@ export function FileManager({
 
   useEffect(() => {
     if (!canManageTunnels && activeView === 'tunnel') {
-      setActiveView('file')
+      onActiveViewChange('file')
     }
-  }, [activeView, canManageTunnels])
+  }, [activeView, canManageTunnels, onActiveViewChange])
 
   useEffect(() => {
     if (!isViewLoading) {
@@ -623,7 +636,7 @@ export function FileManager({
       const minRemoteWidth = 320
       const maxLocalWidth = Math.max(minLocalWidth, rect.width - minRemoteWidth)
       const nextWidth = Math.min(maxLocalWidth, Math.max(minLocalWidth, event.clientX - rect.left))
-      setLocalPaneWidth(nextWidth)
+      onCommandPaneWidthChange(nextWidth)
     }
 
     const handleMouseUp = () => {
@@ -658,7 +671,7 @@ export function FileManager({
       onClick={() => setContextMenu(null)}
       onKeyDown={handleKeyboardShortcuts}
       tabIndex={0}
-      style={{ '--local-pane-width': `${localPaneWidth}px` } as CSSProperties}
+      style={{ '--local-pane-width': `${commandPaneWidth}px` } as CSSProperties}
     >
       <div className="file-tabs">
         <div className="file-tabs-left">
@@ -743,7 +756,9 @@ export function FileManager({
       {activeView === 'tunnel' && canManageTunnels && activeTab ? (
         <div className="workspace-view-content">
           <SshTunnelPanel tabId={activeTab.id} />
-          {isViewLoading ? <WorkspaceLoadingState className="workspace-loading-state--overlay" /> : null}
+          {isViewLoading || isWorkspaceSwitching ? (
+            <WorkspaceLoadingState className="workspace-loading-state--overlay" />
+          ) : null}
         </div>
       ) : activeView === 'command' && isSshSession ? (
         <div className="workspace-view-content">
@@ -755,14 +770,24 @@ export function FileManager({
             sendTargets={sendTargets}
             onExecute={onExecuteCommand}
             onSendTerminalCommand={onSendTerminalCommand}
-            paneWidth={localPaneWidth}
-            onPaneWidthChange={setLocalPaneWidth}
+            onSaveTemporaryCommand={onSaveTemporaryCommand}
+            onUpdateCommand={onUpdateCommand}
+            paneWidth={commandPaneWidth}
+            onPaneWidthChange={onCommandPaneWidthChange}
           />
-          {isViewLoading ? <WorkspaceLoadingState className="workspace-loading-state--overlay" /> : null}
+          {isViewLoading || isWorkspaceSwitching ? (
+            <WorkspaceLoadingState className="workspace-loading-state--overlay" />
+          ) : null}
         </div>
       ) : (
         <div
-          aria-busy={isViewLoading || isWorkspaceRefreshing || isLocalDirectoryLoading || showRemoteDirectoryLoading}
+          aria-busy={
+            isViewLoading ||
+            isWorkspaceRefreshing ||
+            isWorkspaceSwitching ||
+            isLocalDirectoryLoading ||
+            showRemoteDirectoryLoading
+          }
           className="file-split"
           ref={splitRef}
         >
@@ -885,7 +910,9 @@ export function FileManager({
           </div>
           <div
             className="file-split-resizer"
-            onMouseDown={() => {
+            onMouseDown={(event) => {
+              event.preventDefault()
+              window.getSelection()?.removeAllRanges()
               isResizingFileSplit.current = true
               document.body.style.cursor = 'col-resize'
               document.body.style.userSelect = 'none'
@@ -1064,7 +1091,7 @@ export function FileManager({
               ) : null}
             </div>
           </div>
-          {isViewLoading || isWorkspaceRefreshing ? (
+          {isViewLoading || isWorkspaceRefreshing || isWorkspaceSwitching ? (
             <WorkspaceLoadingState className="workspace-loading-state--overlay" label={t.loadingWorkspace} />
           ) : null}
         </div>
