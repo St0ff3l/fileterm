@@ -436,8 +436,15 @@ impl Handler for ClientHandler {
         let app = self.app.clone();
         tokio::spawn(async move {
             let result = async {
-                let mut local =
-                    TcpStream::connect((&*target.target_host, target.target_port)).await?;
+                // 加 timeout：远端转发的目标 host 卡住时 TcpStream::connect
+                // 会永久 await，spawn task 不退出，远端发起方也一直等。
+                // 10 秒覆盖正常 RTT，超时后清理 task 让远端拿到连接重置。
+                let mut local = timeout(
+                    Duration::from_secs(10),
+                    TcpStream::connect((&*target.target_host, target.target_port)),
+                )
+                .await
+                .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "remote forward target connect timed out"))??;
                 let mut remote = channel.into_stream();
                 copy_bidirectional(&mut local, &mut remote).await?;
                 Ok::<(), std::io::Error>(())
@@ -2108,6 +2115,8 @@ async fn authenticate_private_key_content(
     username: &str,
     key_content: &str,
     passphrase: Option<&str>,
+    app: &AppHandle,
+    tab_id: &str,
 ) -> Result<bool, String> {
     let key_pair = russh::keys::decode_secret_key(key_content, passphrase)
         .map_err(|error| error.to_string())?;
@@ -2126,7 +2135,17 @@ async fn authenticate_private_key_content(
         .await
         {
             Ok(Some(Some(hash))) => Some(hash),
-            _ => Some(russh::keys::HashAlg::Sha512),
+            Ok(_) => Some(russh::keys::HashAlg::Sha512),
+            Err(error) => {
+                crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "ssh",
+                    tab_id,
+                    format!("RSA hash negotiation failed, falling back to Sha512: {error}"),
+                );
+                Some(russh::keys::HashAlg::Sha512)
+            }
         }
     } else {
         None
@@ -2143,6 +2162,13 @@ async fn authenticate_private_key_content(
         },
     )
     .await?;
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!("public key authentication completed success={}", result.success()),
+    );
     Ok(result.success())
 }
 
@@ -2151,6 +2177,7 @@ async fn try_system_authenticate(
     username: &str,
     profile: &Value,
     app: &AppHandle,
+    tab_id: &str,
 ) -> Result<AuthenticationResult, String> {
     let mut candidate_found = false;
     let mut authentication_attempted = false;
@@ -2172,6 +2199,13 @@ async fn try_system_authenticate(
     {
         Ok(mut agent) => {
             candidate_found = true;
+            crate::services::logging::session(
+                app,
+                "INFO",
+                "ssh",
+                tab_id,
+                "SSH agent connected, listing identities",
+            );
             match wait_for_ssh_stage(
                 "SSH agent list identities",
                 SSH_PASSWORD_AUTH_TIMEOUT,
@@ -2180,6 +2214,13 @@ async fn try_system_authenticate(
             .await
             {
                 Ok(identities) => {
+                    crate::services::logging::session(
+                        app,
+                        "INFO",
+                        "ssh",
+                        tab_id,
+                        format!("SSH agent returned {} identities", identities.len()),
+                    );
                     for identity in identities {
                         authentication_attempted = true;
                         let public_key = identity.public_key().into_owned();
@@ -2208,10 +2249,32 @@ async fn try_system_authenticate(
                         }
                     }
                 }
-                Err(error) => candidate_errors.push(error),
+                Err(error) => {
+                    crate::services::logging::session(
+                        app,
+                        "WARN",
+                        "ssh",
+                        tab_id,
+                        format!("SSH agent list identities failed: {error}"),
+                    );
+                    candidate_errors.push(error);
+                }
             }
         }
-        Err(error) => candidate_errors.push(error),
+        Err(error) => {
+            // agent 不可用很常见（Windows、无 agent 的 Linux），只在 DEBUG
+            // 级别记录，避免日志噪音。但超时（30s）需要 WARN 提醒用户。
+            if error.contains("timed out") {
+                crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "ssh",
+                    tab_id,
+                    format!("SSH agent connect timed out: {error}"),
+                );
+            }
+            candidate_errors.push(error);
+        }
     }
 
     let home_directory = app.path().home_dir().map_err(|error| error.to_string())?;
@@ -2227,7 +2290,7 @@ async fn try_system_authenticate(
             }
         };
         candidate_found = true;
-        match authenticate_private_key_content(handle, username, &key_content, passphrase).await {
+        match authenticate_private_key_content(handle, username, &key_content, passphrase, app, tab_id).await {
             Ok(true) => return Ok(AuthenticationResult::Authenticated),
             Ok(false) => authentication_attempted = true,
             Err(error) => candidate_errors.push(error),
@@ -2385,6 +2448,8 @@ async fn try_authenticate(
                 username,
                 &key_content,
                 passphrase.as_deref(),
+                app,
+                tab_id,
             )
             .await?;
             Ok(if authenticated {
@@ -2419,7 +2484,7 @@ async fn try_authenticate(
                 },
             )
         }
-        _ => try_system_authenticate(handle, username, profile, app).await,
+        _ => try_system_authenticate(handle, username, profile, app, tab_id).await,
     }
 }
 
@@ -2953,17 +3018,45 @@ async fn run_worker_loop(
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
     // one authenticated handle for every channel. The handle is wrapped in
     // `Arc` so the background metrics task can share it with the main loop.
-    let handle: Arc<Handle<ClientHandler>> = Arc::new(open_session(profile, app, tab_id).await?);
+    let handle: Arc<Handle<ClientHandler>> = match open_session(profile, app, tab_id).await {
+        Ok(h) => Arc::new(h),
+        Err(error) => {
+            crate::services::logging::session(
+                app,
+                "ERROR",
+                "ssh",
+                tab_id,
+                format!("open_session failed: {error}"),
+            );
+            return Err(error);
+        }
+    };
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        "SSH session established",
+    );
 
     // ── Shell channel ──────────────────────────────────────────────────────
     // 三步都加 timeout：服务器在 PTY 协商阶段卡住（嵌入式 dropbear /
     // 网络设备偶发）时 russh 默认无超时，会永久 await，worker 永远起
     // 不来，所有后续命令（含 Ctrl+C）都进不了 cmd_rx。
-    let shell_channel = timeout(SHELL_INIT_STEP_TIMEOUT, handle.channel_open_session())
-        .await
-        .map_err(|_| "Shell channel 建立超时：服务器未响应 channel_open_session".to_string())?
-        .map_err(|e| format!("无法打开 shell channel: {e}"))?;
-    timeout(
+    let shell_channel = match timeout(SHELL_INIT_STEP_TIMEOUT, handle.channel_open_session()).await {
+        Ok(Ok(c)) => c,
+        Ok(Err(e)) => {
+            let msg = format!("无法打开 shell channel: {e}");
+            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
+            return Err(msg);
+        }
+        Err(_) => {
+            let msg = "Shell channel 建立超时：服务器未响应 channel_open_session".to_string();
+            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
+            return Err(msg);
+        }
+    };
+    match timeout(
         SHELL_INIT_STEP_TIMEOUT,
         shell_channel.request_pty(
             true,
@@ -2979,12 +3072,39 @@ async fn run_worker_loop(
         ),
     )
     .await
-    .map_err(|_| "Shell channel 建立超时：服务器未响应 request_pty".to_string())?
-    .map_err(|e| format!("request_pty failed: {e}"))?;
-    timeout(SHELL_INIT_STEP_TIMEOUT, shell_channel.request_shell(true))
-        .await
-        .map_err(|_| "Shell channel 建立超时：服务器未响应 request_shell".to_string())?
-        .map_err(|e| format!("request_shell failed: {e}"))?;
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            let msg = format!("request_pty failed: {err}");
+            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
+            return Err(msg);
+        }
+        Err(_) => {
+            let msg = "Shell channel 建立超时：服务器未响应 request_pty".to_string();
+            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
+            return Err(msg);
+        }
+    }
+    match timeout(SHELL_INIT_STEP_TIMEOUT, shell_channel.request_shell(true)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            let msg = format!("request_shell failed: {err}");
+            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
+            return Err(msg);
+        }
+        Err(_) => {
+            let msg = "Shell channel 建立超时：服务器未响应 request_shell".to_string();
+            crate::services::logging::session(app, "ERROR", "ssh", tab_id, &msg);
+            return Err(msg);
+        }
+    }
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        "shell channel ready",
+    );
     let (mut shell_reader, shell_writer) = shell_channel.split();
     let shell_writer = Arc::new(shell_writer);
 
@@ -3145,6 +3265,13 @@ async fn run_worker_loop(
     // and tunnel features available while exposing the file-channel error.
     let (sftp_arc, sftp_unavailable_reason) = match open_sftp_session(&handle).await {
         Ok(sftp) => {
+            crate::services::logging::session(
+                app,
+                "INFO",
+                "sftp",
+                tab_id,
+                "SFTP session ready",
+            );
             let sftp_arc = Arc::new(RwLock::new(sftp));
             let initial_remote_path = {
                 let sessions = state.sessions.read().await;
