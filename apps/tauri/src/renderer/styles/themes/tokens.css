@@ -1,4 +1,5 @@
 :root {
+  --font-ui: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
@@ -7,6 +8,11 @@
   --button-height-md: 36px;
   --button-padding-x-md: 20px;
   --button-gap-md: 8px;
+  --button-font-size-compact: 11px;
+  --button-font-size-regular: 12px;
+  --button-font-size-prominent: 13px;
+  --button-font-weight: 600;
+  --button-line-height: 1;
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 6px 16px rgba(15, 23, 42, 0.08);

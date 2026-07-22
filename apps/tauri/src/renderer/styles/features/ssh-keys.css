@@ -195,8 +195,10 @@
   height: 38px;
   padding: 0 13px;
   border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-regular);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
 }
 
 .ssh-private-key-field > .ssh-private-key-action-button {
@@ -360,8 +362,10 @@
   border-radius: 8px;
   background: var(--bg-hover);
   color: var(--text-main);
-  font-size: 13px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-prominent);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
   transition:
     background-color 0.18s ease,
     border-color 0.18s ease,

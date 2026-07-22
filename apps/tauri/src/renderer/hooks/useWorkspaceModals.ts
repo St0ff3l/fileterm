@@ -25,7 +25,7 @@ type UseWorkspaceModalsOptions = {
 }
 
 function collectConnectionGroups(folderNames: string[], profileGroups: string[], currentGroup?: string) {
-  const groups = new Set<string>(['默认'])
+  const groups = new Set<string>([t.defaultGroup])
 
   for (const name of folderNames) {
     const value = name.trim()
@@ -48,6 +48,10 @@ function collectConnectionGroups(folderNames: string[], profileGroups: string[],
   return [...groups]
 }
 
+function createDefaultForm(): CreateProfileInput {
+  return { ...defaultForm, group: t.defaultGroup }
+}
+
 export function useWorkspaceModals({
   desktopApi,
   folders,
@@ -61,7 +65,7 @@ export function useWorkspaceModals({
   const [showConnectionManager, setShowConnectionManager] = useState(false)
   const [showCommandManager, setShowCommandManager] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [form, setForm] = useState<CreateProfileInput>(defaultForm)
+  const [form, setForm] = useState<CreateProfileInput>(createDefaultForm)
   const [formError, setFormError] = useState<string | null>(null)
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [windowCloseConfirm, setWindowCloseConfirm] = useState<WindowCloseConfirmState | null>(null)
@@ -99,7 +103,7 @@ export function useWorkspaceModals({
     }
 
     setEditingProfileId(null)
-    setForm(defaultForm)
+    setForm(createDefaultForm())
     setFormError(null)
   }, [formWindowMode, formWindowProfileId, hasLoadedInitialSnapshot, isConnectionFormWindow, profiles])
 
@@ -110,7 +114,7 @@ export function useWorkspaceModals({
 
   const openCreateModal = () => {
     setEditingProfileId(null)
-    setForm(defaultForm)
+    setForm(createDefaultForm())
     setFormError(null)
     setShowConnectionForm(true)
   }

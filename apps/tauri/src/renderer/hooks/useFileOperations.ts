@@ -10,7 +10,7 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { withParentRow } from '../app/app-utils'
-import { t, type AppLocale } from '../i18n'
+import { formatMessage, t, type AppLocale } from '../i18n'
 
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
 const SMB_CREDENTIALS_REQUIRED = /SMB_CREDENTIALS_REQUIRED/i
@@ -530,7 +530,7 @@ export function useFileOperations({
 
   const openNetworkShareItem = async (item: LocalFileItem, source: LocalNetworkShareSource) => {
     if (!desktopApi?.connectLocalNetworkShare) {
-      throw new Error('当前运行环境不支持切换 SMB 共享文件夹。')
+      throw new Error(t.smbFolderSwitchUnsupported)
     }
 
     const result = await desktopApi.connectLocalNetworkShare(item.path, source.username, source.password)
@@ -726,12 +726,8 @@ export function useFileOperations({
 
   const clipboardStatusText = fileClipboard
     ? fileClipboard.operation === 'cut'
-      ? locale === 'zhCN'
-        ? `已剪切 ${fileClipboard.items.length} 个文件，按 Esc 取消`
-        : `Cut ${fileClipboard.items.length} files, press Esc to cancel`
-      : locale === 'zhCN'
-        ? `已复制 ${fileClipboard.items.length} 个文件，可在其他目录粘贴，按 Esc 取消`
-        : `Copied ${fileClipboard.items.length} files, ready to paste in another folder. Press Esc to cancel`
+      ? formatMessage(t.filesCutStatus, { count: fileClipboard.items.length })
+      : formatMessage(t.filesCopiedStatus, { count: fileClipboard.items.length })
     : null
 
   const clearCutState = () => {
@@ -761,11 +757,7 @@ export function useFileOperations({
         }
 
         if (fileClipboard.pane === 'remote' && pane === 'remote' && fileClipboard.tabId !== activeTab?.id) {
-          throw new Error(
-            locale === 'zhCN'
-              ? '暂不支持跨远程会话粘贴，请在原会话内操作或先下载到本地'
-              : 'Cross-session remote paste is not supported. Paste in the original session or download locally first.'
-          )
+          throw new Error(t.crossSessionPasteUnsupported)
         }
 
         const existingNames =
@@ -1559,6 +1551,14 @@ export function useFileOperations({
     localNetworkCredentialsSubmittingRef.current = false
   }
 
+  const changeLocalNetworkCredentials = () => {
+    if (!localNetworkShareDialog || localNetworkCredentialsSubmittingRef.current) return
+    setLocalNetworkCredentialsDialog({ path: localNetworkShareDialog.path })
+    setLocalNetworkCredentialsDialogError(null)
+    setLocalNetworkShareDialog(null)
+    setLocalNetworkShareDialogError(null)
+  }
+
   return {
     remoteDirectoryLoadingTabId,
     isRemoteDirectoryLoading: remoteDirectoryLoadingTabId === activeTab?.id,
@@ -1623,7 +1623,8 @@ export function useFileOperations({
     handleSubmitLocalNetworkCredentials,
     dismissLocalNetworkCredentialsDialog,
     handleSubmitLocalNetworkShare,
-    dismissLocalNetworkShareDialog
+    dismissLocalNetworkShareDialog,
+    changeLocalNetworkCredentials
   }
 }
 

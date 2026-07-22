@@ -50,8 +50,10 @@
   min-height: 44px;
   padding: 12px 24px;
   border-radius: 0;
-  font-size: 14px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-prominent);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
   cursor: pointer;
   transition:
     background-color 0.2s ease,

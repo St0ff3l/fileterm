@@ -160,7 +160,7 @@ export function QuickLinksPage({
       <header className="page-header">
         <div className="header-meta">
           <h1 className="header-title">{t.quickConnect}</h1>
-          <p className="header-subtitle">管理和连接到你配置的环境</p>
+          <p className="header-subtitle">{t.quickLinksDescription}</p>
         </div>
         <button className="btn-new-connection" onClick={onOpenNewConnection} type="button">
           <span className="material-symbols-outlined">add</span>
@@ -172,11 +172,11 @@ export function QuickLinksPage({
         <div className="flat-grid">
           <div className="grid-header">
             <div></div>
-            <div>名称</div>
-            <div>路径</div>
-            <div>用户</div>
-            <div>类型</div>
-            <div className="text-right">操作</div>
+            <div>{t.name}</div>
+            <div>{t.quickLinkPath}</div>
+            <div>{t.quickLinkUser}</div>
+            <div>{t.type}</div>
+            <div className="text-right">{t.actions}</div>
           </div>
 
           <div className="grid-rows">

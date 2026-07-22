@@ -154,7 +154,7 @@ export function SystemSidebar({
                       </div>
                     ))}
               </div>
-              <VerticalScrollbar ariaLabel="滚动磁盘列表" scrollRef={diskScrollRef} />
+              <VerticalScrollbar ariaLabel={t.scrollDiskList} scrollRef={diskScrollRef} />
             </div>
           </section>
         </>
@@ -174,7 +174,7 @@ function AddressLine({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong
         className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''}`}
-        title={canCopy ? (copied ? '已复制' : `${t.copy}: ${value}`) : value}
+        title={canCopy ? (copied ? t.copied : `${t.copy}: ${value}`) : value}
         onClick={() => {
           if (canCopy && !hasSelectedText()) {
             copyText(value)
@@ -183,7 +183,7 @@ function AddressLine({ label, value }: { label: string; value: string }) {
           }
         }}
       >
-        {copied ? '已复制' : value}
+        {copied ? t.copied : value}
       </strong>
     </div>
   )

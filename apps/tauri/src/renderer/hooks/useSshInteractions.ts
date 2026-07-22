@@ -141,7 +141,7 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
     async ({ passphrase, savePassphrase }: { passphrase: string; savePassphrase: boolean }) => {
       if (!keyPassphraseRequest) return
       if (!passphrase) {
-        setErrorMessage('请输入私钥口令。')
+        setErrorMessage(t.sshKeyPassphraseEmpty)
         return
       }
       await resolve(keyPassphraseRequest.requestId, {

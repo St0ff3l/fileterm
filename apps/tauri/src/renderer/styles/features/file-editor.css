@@ -67,9 +67,10 @@
   padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-compact);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
   color: var(--text-muted);
   background: var(--file-editor-button-bg);
   cursor: not-allowed;

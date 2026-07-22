@@ -1,6 +1,6 @@
 import type { DragEvent, MouseEvent } from 'react'
 import type { LocalFileItem, TransferTask, WorkspaceTab } from '@fileterm/core'
-import { t } from '../i18n'
+import { formatMessage, localizeErrorScope, t } from '../i18n'
 
 export const localFileDragType = 'application/x-fileterm-local-file'
 export const remoteFileDragType = 'application/x-fileterm-remote-file'
@@ -56,7 +56,11 @@ export function settledResultsError(action: string, results: PromiseSettledResul
   }
   const firstReason = failures[0]?.reason
   const detail = firstReason instanceof Error ? firstReason.message : String(firstReason ?? '')
-  const summary = `${action}失败：${failures.length}/${results.length} 个目标未完成`
+  const summary = formatMessage(t.operationFailedSummary, {
+    action: localizeErrorScope(action),
+    failed: failures.length,
+    total: results.length
+  })
   return new Error(detail ? `${summary}；${detail}` : summary)
 }
 

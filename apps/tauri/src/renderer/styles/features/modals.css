@@ -357,8 +357,10 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--primary) 7%, transparent);
   color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-regular);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
 }
 .tunnel-add-button:hover {
   background: color-mix(in srgb, var(--primary) 14%, transparent);
@@ -829,9 +831,10 @@
   padding: 0 20px;
   border: 1px solid transparent;
   border-radius: 10px;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-prominent);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }

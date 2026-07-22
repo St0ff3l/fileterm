@@ -158,6 +158,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
+  background: rgb(27, 27, 27) !important;
 }
 
 .file-permission-dialog__header {
@@ -211,9 +212,9 @@
   align-items: center;
   gap: 12px;
   padding: 14px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-hover));
-  border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+  border-radius: 0;
+  background: transparent;
+  border: 1px solid var(--border-dark);
 }
 
 .file-permission-dialog__hero-icon {
@@ -221,8 +222,9 @@
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: rgb(26, 26, 26);
   color: var(--primary);
   flex: 0 0 auto;
 }
@@ -248,15 +250,16 @@
   word-break: break-all;
 }
 
-.file-permission-dialog__section {
+.ssh-fieldset.file-permission-dialog__fieldset {
   display: grid;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 24px 14px;
 }
 
-.file-permission-dialog__section-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
+.file-permission-dialog__fieldset > legend {
+  padding-inline: 8px;
 }
 
 .file-permission-dialog__matrix-card,
@@ -264,16 +267,18 @@
 .file-permission-dialog__recursive-card,
 .file-permission-dialog__apply-option,
 .file-permission-dialog__mode-hint {
-  border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
-  background: color-mix(in srgb, var(--bg-card) 90%, var(--bg-hover));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-main) 3%, transparent);
+  border: 1px solid var(--border-light);
+  background: rgb(26, 26, 26);
+  box-shadow: none;
 }
 
 .file-permission-dialog__matrix-card {
   display: grid;
-  gap: 6px;
-  padding: 12px;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .file-permission-dialog__matrix-head,
@@ -296,8 +301,9 @@
 
 .file-permission-dialog__matrix-row {
   padding: 9px 10px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-hover) 54%, transparent);
+  border: 1px solid var(--border-light);
+  border-radius: 0;
+  background: rgb(26, 26, 26);
 }
 
 .file-permission-dialog__matrix-label {
@@ -313,48 +319,12 @@
   cursor: pointer;
 }
 
-.file-permission-dialog__matrix-cell input,
-.file-permission-dialog__apply-option input,
 .file-permission-dialog__switch input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.file-permission-dialog__matrix-cell span {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--bg-main) 90%, transparent);
-  position: relative;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    transform 0.2s ease;
-}
-
-.file-permission-dialog__matrix-cell span::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 999px;
-  background: var(--accent-primary);
-  transform: scale(0);
-  transition: transform 0.16s ease;
-}
-
-.file-permission-dialog__matrix-cell input:checked + span {
-  border-color: color-mix(in srgb, var(--accent-primary) 75%, var(--border-light));
-  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-main));
-}
-
-.file-permission-dialog__matrix-cell input:checked + span::after {
-  transform: scale(1);
-}
-
-.file-permission-dialog__matrix-cell input:focus-visible + span,
-.file-permission-dialog__apply-option input:focus-visible + span,
 .file-permission-dialog__switch input:focus-visible + .file-permission-dialog__switch-track {
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
@@ -368,7 +338,7 @@
 .file-permission-dialog__info-card,
 .file-permission-dialog__recursive-card {
   min-height: 0;
-  border-radius: 12px;
+  border-radius: 0;
   padding: 10px 12px;
 }
 
@@ -423,17 +393,17 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: var(--accent-primary);
+  color: var(--copy-link);
 }
 
 .file-permission-dialog__mode-input input {
   width: 76px;
   height: 36px;
   padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent-primary) 42%, var(--border-light));
-  background: color-mix(in srgb, var(--bg-main) 82%, transparent);
-  color: var(--accent-primary);
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--copy-link) 42%, var(--border-light));
+  background: rgb(26, 26, 26);
+  color: var(--copy-link);
   font-family: 'Geist Mono', 'JetBrains Mono', Monaco, monospace;
   font-size: 16px;
   text-align: center;
@@ -442,7 +412,7 @@
 
 .file-permission-dialog__mode-input input:focus {
   outline: none;
-  border-color: var(--accent-primary);
+  border-color: var(--copy-link);
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
@@ -487,13 +457,13 @@
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track {
-  background: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-hover));
-  border-color: color-mix(in srgb, var(--accent-primary) 70%, var(--border-light));
+  background: color-mix(in srgb, var(--copy-link) 12%, var(--bg-hover));
+  border-color: color-mix(in srgb, var(--copy-link) 70%, var(--border-light));
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track::after {
   transform: translateX(22px);
-  background: var(--accent-primary);
+  background: var(--copy-link);
 }
 
 .file-permission-dialog__apply-grid {
@@ -508,39 +478,19 @@
   gap: 8px;
   min-height: 38px;
   padding: 8px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   cursor: pointer;
   color: var(--text-main);
 }
 
 .file-permission-dialog__apply-option span {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-size: 10px;
   line-height: 1.35;
 }
 
-.file-permission-dialog__apply-option span::before {
-  content: '';
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--bg-main) 90%, transparent);
-  box-sizing: border-box;
-  flex: 0 0 auto;
-}
-
-.file-permission-dialog__apply-option input:checked + span::before {
-  border-width: 3px;
-  border-color: var(--accent-primary);
-}
-
 .file-permission-dialog__apply-option:has(input:checked) {
-  border-color: color-mix(in srgb, var(--accent-primary) 70%, var(--border-light));
-  background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--copy-link) 70%, var(--border-light));
+  background: color-mix(in srgb, var(--copy-link) 10%, var(--bg-card));
 }
 
 .file-permission-dialog__actions {
@@ -556,8 +506,8 @@
   height: 36px;
   padding: 0 16px;
   border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--button-font-size-regular);
+  font-weight: var(--button-font-weight);
 }
 
 .file-permission-dialog__actions .primary-button {
@@ -1087,7 +1037,8 @@
   height: 28px;
   padding: 0 12px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--button-font-size-compact);
+  font-weight: var(--button-font-weight);
 }
 
 .theme-options-grid {
@@ -1406,8 +1357,8 @@
   padding: 0 16px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--button-font-size-regular);
+  font-weight: var(--button-font-weight);
 }
 
 .webdav-sync-actions .flat-button.compact {

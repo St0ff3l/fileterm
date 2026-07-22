@@ -2,6 +2,7 @@ import type { CreateProfileInput } from '@fileterm/core'
 import { useState } from 'react'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { SshKeyNoteDialog } from '../ssh-keys/SshKeyNoteDialog'
+import { formatMessage, t } from '../../i18n'
 
 export function SshPrivateKeyField({
   form,
@@ -38,7 +39,9 @@ export function SshPrivateKeyField({
       if (result) {
         setForm((previous) => ({ ...previous, privateKeyId: result.key.id, privateKeyPath: undefined }))
         setNotice(
-          result.duplicate ? `该密钥已存在，已选中“${result.key.name}”。` : `已导入并选中“${result.key.name}”。`
+          result.duplicate
+            ? formatMessage(t.privateKeyStatusExisting, { name: result.key.name })
+            : formatMessage(t.privateKeyStatusImported, { name: result.key.name })
         )
       }
       setPendingImport(null)
@@ -52,10 +55,10 @@ export function SshPrivateKeyField({
   return (
     <div className="span-2 ssh-private-key-field">
       <label>
-        私钥:
+        {t.privateKeyLabel}
         <span className="ft-select-shell">
           <select value={form.privateKeyId ?? ''} onChange={(event) => selectKey(event.target.value)}>
-            <option value="">请选择已导入的密钥</option>
+            <option value="">{t.privateKeyChooseImported}</option>
             {keys.map((key) => (
               <option key={key.id} value={key.id}>
                 {key.note ? `${key.note} · ${key.name}` : key.name} · {shortFingerprint(key.fingerprint)}
@@ -73,18 +76,21 @@ export function SshPrivateKeyField({
         onClick={() => requestImport()}
         type="button"
       >
-        {busy ? '正在导入…' : '导入新密钥'}
+        {busy ? t.privateKeyImporting : t.privateKeyImportNew}
       </button>
       {form.privateKeyPath && !form.privateKeyId ? (
         <div className="ssh-private-key-legacy">
-          <span>旧私钥路径：{form.privateKeyPath}</span>
+          <span>
+            {t.privateKeyLegacyPath}
+            {form.privateKeyPath}
+          </span>
           <button
             className="flat-button compact ssh-private-key-action-button"
             disabled={busy}
             onClick={() => requestImport(form.privateKeyPath)}
             type="button"
           >
-            导入到密钥管理器
+            {t.privateKeyImportToManager}
           </button>
         </div>
       ) : null}

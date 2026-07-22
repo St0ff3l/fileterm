@@ -4,6 +4,7 @@ import { App } from './App'
 import { ErrorBoundary } from './features/common/ErrorBoundary'
 import { createTauriApi } from '../bridge/tauri-api'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { t } from './i18n'
 import './styles/index.css'
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
@@ -67,7 +68,7 @@ void createTauriApi()
     console.error('Failed to initialize the Tauri desktop bridge:', error)
     root.render(
       <div role="alert" className="app-bootstrap-error">
-        无法初始化桌面运行时，请重新启动 FileTerm。
+        {t.runtimeInitFailed}
       </div>
     )
   })

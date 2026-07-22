@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
+import { t } from '../../i18n'
 
 const MIN_THUMB_HEIGHT = 24
 const AUTO_HIDE_DELAY_MS = 900
@@ -14,7 +15,7 @@ const EMPTY_METRICS: ScrollMetrics = { maxScrollTop: 0, trackHeight: 0, thumbHei
 
 /** Reusable overlay scrollbar matching the terminal's compact xterm slider. */
 export function VerticalScrollbar({
-  ariaLabel = '滚动内容',
+  ariaLabel = t.scrollContent,
   scrollRef,
   topInset = 0
 }: {

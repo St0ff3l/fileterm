@@ -43,8 +43,10 @@
   color: var(--button-primary-text);
   border: 1px solid var(--button-primary-border);
   border-radius: 10px;
-  font-size: 13px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-prominent);
+  font-weight: var(--button-font-weight);
+  line-height: var(--button-line-height);
   cursor: pointer;
   transition:
     background-color 0.2s ease,

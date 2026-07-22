@@ -689,7 +689,7 @@ export function ConnectionManagerModal({
                     }}
                   >
                     <span className="material-symbols-outlined">upload_file</span>
-                    <span>导入连接</span>
+                    <span>{t.importConnections}</span>
                   </button>
                   <button
                     className="drawer-option-btn secondary-btn"
@@ -700,7 +700,7 @@ export function ConnectionManagerModal({
                     }}
                   >
                     <span className="material-symbols-outlined">folder_open</span>
-                    <span>导入文件夹</span>
+                    <span>{t.importFolder}</span>
                   </button>
                 </>
               ) : null}
@@ -714,7 +714,7 @@ export function ConnectionManagerModal({
                   }}
                 >
                   <span className="material-symbols-outlined">download</span>
-                  <span>导出连接</span>
+                  <span>{t.exportConnections}</span>
                 </button>
               ) : null}
               <button

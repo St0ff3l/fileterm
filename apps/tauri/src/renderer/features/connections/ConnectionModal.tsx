@@ -327,9 +327,7 @@ export function ConnectionModal({
                         {mode === 'edit' && hasSavedPassword ? t.passwordSavedHint : t.passwordAuthHint}
                       </div>
                     ) : form.type === 'ssh' && form.authType === 'keyboard-interactive' ? (
-                      <div className="span-2 ssh-auth-hint">
-                        可选：先尝试此密码；服务器需要 OTP/MFA 时，会弹出单独的验证码输入框。
-                      </div>
+                      <div className="span-2 ssh-auth-hint">{t.keyboardInteractiveHint}</div>
                     ) : form.type === 'ftp' ? (
                       <>
                         <label className="span-2">
@@ -419,7 +417,7 @@ export function ConnectionModal({
                       </div>
                     </div>
                     <div className="reconnect-mode-group">
-                      <div className="reconnect-mode-group__label">断线行为</div>
+                      <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
                       <div className="advanced-toggle-list">
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
@@ -458,9 +456,10 @@ export function ConnectionModal({
                     </div>
                     <label className="jump-host-card">
                       <span className="jump-host-card__title">
-                        <span className="material-symbols-outlined">account_tree</span>跳板机（ProxyJump）
+                        <span className="material-symbols-outlined">account_tree</span>
+                        {t.proxyJump}
                       </span>
-                      <span className="jump-host-card__hint">先认证此 SSH 连接，再通过其安全通道访问目标主机。</span>
+                      <span className="jump-host-card__hint">{t.proxyJumpHint}</span>
                       <span className="ft-select-shell">
                         <select
                           value={form.jumpProfileId ?? ''}
@@ -468,7 +467,7 @@ export function ConnectionModal({
                             setForm((prev) => ({ ...prev, jumpProfileId: event.target.value || undefined }))
                           }
                         >
-                          <option value="">不使用跳板机（直连）</option>
+                          <option value="">{t.noProxyJump}</option>
                           {profiles
                             .filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
                             .map((profile) => (
@@ -625,7 +624,7 @@ export function ConnectionModal({
                   <legend>{t.tunnel}</legend>
                   <div className="tunnel-intro">
                     <span className="material-symbols-outlined">lan</span>
-                    <p>隧道在 SSH 连接成功后启动；断线或关闭标签时会自动回收。</p>
+                    <p>{t.tunnelAutoStartHint}</p>
                   </div>
                   <div className="tunnel-rule-list">
                     {(form.forwards ?? []).map((rule, index) => (
@@ -669,7 +668,8 @@ export function ConnectionModal({
                       }))
                     }
                   >
-                    <span className="material-symbols-outlined">add</span>添加隧道
+                    <span className="material-symbols-outlined">add</span>
+                    {t.addConnectionTunnel}
                   </button>
                 </fieldset>
               </div>
@@ -714,13 +714,15 @@ function TunnelRuleEditor({
       <header>
         <div>
           <span className="tunnel-rule-index">{String(index + 1).padStart(2, '0')}</span>
-          <strong>{rule.kind === 'local' ? '本地转发' : rule.kind === 'remote' ? '远程转发' : '动态 SOCKS5'}</strong>
+          <strong>
+            {rule.kind === 'local' ? t.localForward : rule.kind === 'remote' ? t.remoteForward : t.dynamicSocks5}
+          </strong>
         </div>
         <button
           type="button"
           className="tunnel-remove-button"
-          aria-label="删除隧道"
-          title="删除隧道"
+          aria-label={t.deleteTunnel}
+          title={t.deleteTunnel}
           onClick={onRemove}
         >
           <span className="material-symbols-outlined">delete</span>
@@ -728,7 +730,7 @@ function TunnelRuleEditor({
       </header>
       <div className="tunnel-rule-grid">
         <label>
-          类型
+          {t.tunnelType}
           <span className="ft-select-shell">
             <select
               value={rule.kind}
@@ -739,9 +741,9 @@ function TunnelRuleEditor({
                 })
               }
             >
-              <option value="local">本地 (-L)</option>
-              <option value="remote">远程 (-R)</option>
-              <option value="dynamic">动态 (-D)</option>
+              <option value="local">{t.localForwardShort}</option>
+              <option value="remote">{t.remoteForwardShort}</option>
+              <option value="dynamic">{t.dynamicForwardShort}</option>
             </select>
             <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
               expand_more
@@ -749,11 +751,11 @@ function TunnelRuleEditor({
           </span>
         </label>
         <label>
-          监听地址
+          {t.tunnelBindHost}
           <input value={rule.bindHost} onChange={(event) => onChange({ bindHost: event.target.value })} />
         </label>
         <label>
-          监听端口
+          {t.tunnelBindPort}
           <input
             inputMode="numeric"
             value={rule.bindPort || ''}
@@ -763,11 +765,11 @@ function TunnelRuleEditor({
         {!isDynamic ? (
           <>
             <label>
-              目标主机
+              {t.tunnelTargetHost}
               <input value={rule.targetHost ?? ''} onChange={(event) => onChange({ targetHost: event.target.value })} />
             </label>
             <label>
-              目标端口
+              {t.tunnelTargetPort}
               <input
                 inputMode="numeric"
                 value={rule.targetPort || ''}
@@ -777,7 +779,8 @@ function TunnelRuleEditor({
           </>
         ) : (
           <div className="tunnel-socks-note">
-            <span className="material-symbols-outlined">vpn_key</span>客户端连接此地址后自行指定目标。
+            <span className="material-symbols-outlined">vpn_key</span>
+            {t.tunnelClientTargetHint}
           </div>
         )}
       </div>
@@ -787,7 +790,7 @@ function TunnelRuleEditor({
           checked={rule.autoStart}
           onChange={(event) => onChange({ autoStart: event.target.checked })}
         />
-        连接后自动启动
+        {t.autoStartAfterConnect}
       </label>
     </article>
   )

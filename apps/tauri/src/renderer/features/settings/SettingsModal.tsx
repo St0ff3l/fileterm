@@ -46,7 +46,7 @@ export function SettingsModal({
             : 'available',
         availableVersion: '1.1.0',
         progress: updatePreviewState === 'downloading' ? 62 : updatePreviewState === 'downloaded' ? 100 : undefined,
-        message: updatePreviewState === 'error' ? '无法连接到更新服务器' : undefined
+        message: updatePreviewState === 'error' ? t.updateServerUnavailable : undefined
       })
       return
     }
@@ -147,7 +147,7 @@ export function SettingsModal({
             <span className="connection-manager-sidebar-icon">
               <span className="material-symbols-outlined">cloud_sync</span>
             </span>
-            <span className="connection-manager-sidebar-label">配置同步</span>
+            <span className="connection-manager-sidebar-label">{t.configSync}</span>
           </button>
           <button
             className={`connection-manager-sidebar-item ${activeTab === 'updates' ? 'active' : ''}`}
@@ -278,15 +278,12 @@ export function SettingsModal({
           {activeTab === 'sync' && syncConfig ? (
             <div className="settings-panel">
               <section className="settings-section">
-                <h3>WebDAV 配置同步</h3>
-                <p className="settings-tools-hint">
-                  手动上传和下载完整连接配置，包括密码、私钥口令和代理密码。同步文件是含明文凭据的 JSON，请仅使用可信的
-                  HTTPS WebDAV 和受控存储。
-                </p>
+                <h3>{t.webdavConfigSync}</h3>
+                <p className="settings-tools-hint">{t.webdavConfigSyncDescription}</p>
                 <fieldset disabled={syncOperation !== null} style={{ border: 0, margin: 0, padding: 0 }}>
                   <div className="webdav-sync-form">
                     <label>
-                      <span>WebDAV 地址</span>
+                      <span>{t.webdavUrl}</span>
                       <input
                         value={syncConfig.url}
                         placeholder="https://dav.example.com/remote.php/dav/files/me"
@@ -294,7 +291,7 @@ export function SettingsModal({
                       />
                     </label>
                     <label>
-                      <span>远端文件</span>
+                      <span>{t.webdavRemoteFile}</span>
                       <input
                         value={syncConfig.remotePath}
                         placeholder="fileterm-connections.json"
@@ -302,19 +299,19 @@ export function SettingsModal({
                       />
                     </label>
                     <label>
-                      <span>用户名</span>
+                      <span>{t.webdavUsername}</span>
                       <input
                         value={syncConfig.username ?? ''}
                         onChange={(event) => setSyncConfig({ ...syncConfig, username: event.target.value })}
                       />
                     </label>
                     <label>
-                      <span>密码</span>
+                      <span>{t.webdavPassword}</span>
                       <input
                         type="password"
                         autoComplete="new-password"
                         value={syncPassword}
-                        placeholder="留空以保留已保存密码"
+                        placeholder={t.webdavPasswordPlaceholder}
                         onChange={(event) => setSyncPassword(event.target.value)}
                       />
                     </label>
@@ -325,7 +322,7 @@ export function SettingsModal({
                           checked={syncConfig.enabled}
                           onChange={(event) => setSyncConfig({ ...syncConfig, enabled: event.target.checked })}
                         />
-                        启用 WebDAV 配置同步
+                        {t.enableWebdavSync}
                       </label>
                       <label className="webdav-checkbox ssh-checkbox">
                         <input
@@ -333,7 +330,7 @@ export function SettingsModal({
                           checked={syncConfig.allowInsecureTls === true}
                           onChange={(event) => setSyncConfig({ ...syncConfig, allowInsecureTls: event.target.checked })}
                         />
-                        允许不安全的 HTTP（高风险）
+                        {t.allowInsecureHttp}
                       </label>
                     </div>
                   </div>
@@ -351,12 +348,12 @@ export function SettingsModal({
                           })
                           setSyncConfig(config)
                           setSyncPassword('')
-                          setSyncMessage('同步配置已保存。')
+                          setSyncMessage(t.syncConfigSaved)
                         })
                       }}
                     >
                       {syncOperation === 'save' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>保存</span>
+                      <span>{t.save}</span>
                     </button>
                     <button
                       className="flat-button compact"
@@ -371,7 +368,7 @@ export function SettingsModal({
                       }}
                     >
                       {syncOperation === 'upload' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>上传</span>
+                      <span>{t.syncUpload}</span>
                     </button>
                     <button
                       className="flat-button compact"
@@ -386,12 +383,14 @@ export function SettingsModal({
                       }}
                     >
                       {syncOperation === 'download' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>下载</span>
+                      <span>{t.syncDownload}</span>
                     </button>
                   </div>
                 </fieldset>
                 {syncConfig.lastSyncedAt ? (
-                  <p className="settings-tools-hint">上次同步：{new Date(syncConfig.lastSyncedAt).toLocaleString()}</p>
+                  <p className="settings-tools-hint">
+                    {t.lastSync.replace('{time}', new Date(syncConfig.lastSyncedAt).toLocaleString())}
+                  </p>
                 ) : null}
                 {syncMessage ? <p className="settings-tools-hint">{syncMessage}</p> : null}
               </section>
@@ -401,9 +400,9 @@ export function SettingsModal({
           {activeTab === 'sync' && !syncConfig ? (
             <div className="settings-panel">
               <section aria-busy="true" className="settings-section">
-                <h3>WebDAV 配置同步</h3>
+                <h3>{t.webdavConfigSync}</h3>
                 <p className="settings-tools-hint">
-                  <span aria-hidden="true" className="button-spinner" /> 正在读取同步配置…
+                  <span aria-hidden="true" className="button-spinner" /> {t.loadingSyncConfig}
                 </p>
                 {syncMessage ? <p className="modal-error">{syncMessage}</p> : null}
               </section>

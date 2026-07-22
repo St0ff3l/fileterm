@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { t } from '../../i18n'
 
 interface Props {
   children: ReactNode
@@ -29,7 +30,6 @@ export class ErrorBoundary extends Component<Props, State> {
       return this.props.children
     }
 
-    const isZhCN = navigator.language.toLowerCase().startsWith('zh')
     return (
       <div
         role="alert"
@@ -55,13 +55,9 @@ export class ErrorBoundary extends Component<Props, State> {
             border: '1px solid var(--border, rgba(0, 0, 0, 0.1))'
           }}
         >
-          <h1 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>
-            {isZhCN ? '应用遇到错误' : 'The app encountered an error'}
-          </h1>
+          <h1 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>{t.errorBoundaryTitle}</h1>
           <p style={{ fontSize: 14, lineHeight: 1.6, margin: '0 0 16px', opacity: 0.8 }}>
-            {isZhCN
-              ? '发生了一个未处理的异常，请重新加载应用继续使用。'
-              : 'An unhandled exception occurred. Please reload the app to continue.'}
+            {t.errorBoundaryDescription}
           </p>
           <pre
             style={{
@@ -92,7 +88,7 @@ export class ErrorBoundary extends Component<Props, State> {
               cursor: 'pointer'
             }}
           >
-            {isZhCN ? '重新加载' : 'Reload'}
+            {t.errorBoundaryReload}
           </button>
         </div>
       </div>

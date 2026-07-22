@@ -1,7 +1,7 @@
 import { useState, useEffect, type DragEvent, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
-import { t } from '../../i18n'
+import { formatMessage, t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { getDisplayFileIconName, getDisplayFileTypeLabel } from './file-kind'
 
@@ -33,7 +33,7 @@ export function PanePathBar({
     <form className="pane-path-bar" onSubmit={onSubmit}>
       <strong>{label}</strong>
       <input
-        aria-label={`${label}路径`}
+        aria-label={formatMessage(t.pathAria, { label })}
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -183,7 +183,7 @@ export function FileTable({
                   }
                   onToggleSort?.(header.field)
                 }}
-                title={onToggleSort ? `${header.label} - 单击切换排序` : undefined}
+                title={onToggleSort ? formatMessage(t.sortHeaderTitle, { label: header.label }) : undefined}
               >
                 <span className={`file-table-heading ${isActive ? 'is-active' : ''}`}>
                   <span>{header.label}</span>
