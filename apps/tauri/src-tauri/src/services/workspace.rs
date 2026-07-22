@@ -303,8 +303,7 @@ impl WorkspaceState {
     /// responding until the webview caught up.
     pub fn publish_terminal_output(&self, tab_id: &str, chunk: &str) {
         let payload = serde_json::json!({ "tabId": tab_id, "chunk": chunk });
-        let snapshot: Vec<Channel<serde_json::Value>> = match self.terminal_output_channels.lock()
-        {
+        let snapshot: Vec<Channel<serde_json::Value>> = match self.terminal_output_channels.lock() {
             Ok(channels) => channels.values().cloned().collect(),
             Err(_) => return,
         };

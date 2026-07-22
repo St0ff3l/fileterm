@@ -483,7 +483,12 @@ impl Handler for ClientHandler {
                     TcpStream::connect((&*target.target_host, target.target_port)),
                 )
                 .await
-                .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "remote forward target connect timed out"))??;
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "remote forward target connect timed out",
+                    )
+                })??;
                 let mut remote = channel.into_stream();
                 copy_bidirectional(&mut local, &mut remote).await?;
                 Ok::<(), std::io::Error>(())
@@ -583,10 +588,7 @@ impl TunnelCommand {
     }
 }
 
-fn enqueue_tunnel_command(
-    sender: &mpsc::UnboundedSender<TunnelCommand>,
-    command: TunnelCommand,
-) {
+fn enqueue_tunnel_command(sender: &mpsc::UnboundedSender<TunnelCommand>, command: TunnelCommand) {
     if let Err(error) = sender.send(command) {
         error.0.reject("SSH tunnel worker stopped");
     }
@@ -797,7 +799,9 @@ impl TunnelManager {
                 .tcpip_forward(rule.bind_host.clone(), rule.bind_port as u32),
         )
         .await
-        .map_err(|_| "Remote tunnel request timed out: 服务器未在 5 秒内响应 tcpip_forward".to_string())?
+        .map_err(|_| {
+            "Remote tunnel request timed out: 服务器未在 5 秒内响应 tcpip_forward".to_string()
+        })?
         .map_err(|error| format!("Remote tunnel request failed: {error}"))?;
         let target = crate::services::workspace::RemoteForwardTarget {
             bind_host: rule.bind_host.clone(),
@@ -963,7 +967,9 @@ async fn forward_local_connection<H: Handler>(
         ),
     )
     .await
-    .map_err(|_| "SSH local forward timed out: 服务器未在 5 秒内响应 channel_open_direct_tcpip".to_string())?
+    .map_err(|_| {
+        "SSH local forward timed out: 服务器未在 5 秒内响应 channel_open_direct_tcpip".to_string()
+    })?
     .map_err(|error| format!("SSH local forward failed: {error}"))?;
     let mut channel = channel.into_stream();
     copy_bidirectional(&mut socket, &mut channel)
@@ -1036,7 +1042,9 @@ async fn forward_socks5_connection<H: Handler>(
         ),
     )
     .await
-    .map_err(|_| "SSH SOCKS5 forward timed out: 服务器未在 5 秒内响应 channel_open_direct_tcpip".to_string())?
+    .map_err(|_| {
+        "SSH SOCKS5 forward timed out: 服务器未在 5 秒内响应 channel_open_direct_tcpip".to_string()
+    })?
     .map_err(|error| format!("SSH SOCKS5 forward failed: {error}"))?;
     let mut channel = channel.into_stream();
     socket
@@ -1323,18 +1331,15 @@ fn resolve_shell_file_access(login_user: &str, shell_user: &str) -> (&'static st
 /// detection), and re-compiling them per chunk burned enough CPU to
 /// noticeably stretch `terminal_input_rx` polling latency under
 /// high-throughput output (e.g. `pacman-key --populate`).
-static VISIBLE_SHELL_CSI_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]").expect("constant CSI regex")
-});
+static VISIBLE_SHELL_CSI_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\x1b\[[0-9;?]*[ -/]*[@-~]").expect("constant CSI regex"));
 static VISIBLE_SHELL_OSC_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)").expect("constant OSC regex")
 });
 
 fn visible_shell_text(value: &str) -> String {
     let stripped = VISIBLE_SHELL_CSI_RE.replace_all(value, "");
-    VISIBLE_SHELL_OSC_RE
-        .replace_all(&stripped, "")
-        .into_owned()
+    VISIBLE_SHELL_OSC_RE.replace_all(&stripped, "").into_owned()
 }
 
 fn looks_like_root_prompt(value: &str) -> bool {
@@ -2285,7 +2290,12 @@ async fn authenticate_private_key_content(
         match wait_for_ssh_stage(
             "SSH RSA hash negotiation",
             SSH_PASSWORD_AUTH_TIMEOUT,
-            async { handle.best_supported_rsa_hash().await.map_err(|e| e.to_string()) },
+            async {
+                handle
+                    .best_supported_rsa_hash()
+                    .await
+                    .map_err(|e| e.to_string())
+            },
         )
         .await
         {
@@ -2322,7 +2332,10 @@ async fn authenticate_private_key_content(
         "INFO",
         "ssh",
         tab_id,
-        format!("public key authentication completed success={}", result.success()),
+        format!(
+            "public key authentication completed success={}",
+            result.success()
+        ),
     );
     Ok(result.success())
 }
@@ -2345,11 +2358,11 @@ async fn try_system_authenticate(
     // agent 进程 hang）时会永久 await，而本函数在 open_session 阶段
     // 调用，卡住会让 worker 永远起不来。
     #[cfg(unix)]
-    match wait_for_ssh_stage(
-        "SSH agent connect",
-        SSH_PASSWORD_AUTH_TIMEOUT,
-        async { russh::keys::agent::client::AgentClient::connect_env().await.map_err(|e| e.to_string()) },
-    )
+    match wait_for_ssh_stage("SSH agent connect", SSH_PASSWORD_AUTH_TIMEOUT, async {
+        russh::keys::agent::client::AgentClient::connect_env()
+            .await
+            .map_err(|e| e.to_string())
+    })
     .await
     {
         Ok(mut agent) => {
@@ -2385,10 +2398,7 @@ async fn try_system_authenticate(
                             async {
                                 handle
                                     .authenticate_publickey_with(
-                                        username,
-                                        public_key,
-                                        None,
-                                        &mut agent,
+                                        username, public_key, None, &mut agent,
                                     )
                                     .await
                                     .map_err(|error| error.to_string())
@@ -2445,7 +2455,16 @@ async fn try_system_authenticate(
             }
         };
         candidate_found = true;
-        match authenticate_private_key_content(handle, username, &key_content, passphrase, app, tab_id).await {
+        match authenticate_private_key_content(
+            handle,
+            username,
+            &key_content,
+            passphrase,
+            app,
+            tab_id,
+        )
+        .await
+        {
             Ok(true) => return Ok(AuthenticationResult::Authenticated),
             Ok(false) => authentication_attempted = true,
             Err(error) => candidate_errors.push(error),
@@ -3186,19 +3205,14 @@ async fn run_worker_loop(
             return Err(error);
         }
     };
-    crate::services::logging::session(
-        app,
-        "INFO",
-        "ssh",
-        tab_id,
-        "SSH session established",
-    );
+    crate::services::logging::session(app, "INFO", "ssh", tab_id, "SSH session established");
 
     // ── Shell channel ──────────────────────────────────────────────────────
     // 三步都加 timeout：服务器在 PTY 协商阶段卡住（嵌入式 dropbear /
     // 网络设备偶发）时 russh 默认无超时，会永久 await，worker 永远起
     // 不来，所有后续命令（含 Ctrl+C）都进不了 cmd_rx。
-    let shell_channel = match timeout(SHELL_INIT_STEP_TIMEOUT, handle.channel_open_session()).await {
+    let shell_channel = match timeout(SHELL_INIT_STEP_TIMEOUT, handle.channel_open_session()).await
+    {
         Ok(Ok(c)) => c,
         Ok(Err(e)) => {
             let msg = format!("无法打开 shell channel: {e}");
@@ -3253,13 +3267,7 @@ async fn run_worker_loop(
             return Err(msg);
         }
     }
-    crate::services::logging::session(
-        app,
-        "INFO",
-        "ssh",
-        tab_id,
-        "shell channel ready",
-    );
+    crate::services::logging::session(app, "INFO", "ssh", tab_id, "shell channel ready");
     let (mut shell_reader, shell_writer) = shell_channel.split();
     let shell_writer = Arc::new(shell_writer);
 
@@ -3420,13 +3428,7 @@ async fn run_worker_loop(
     // and tunnel features available while exposing the file-channel error.
     let (sftp_arc, sftp_unavailable_reason) = match open_sftp_session(&handle).await {
         Ok(sftp) => {
-            crate::services::logging::session(
-                app,
-                "INFO",
-                "sftp",
-                tab_id,
-                "SFTP session ready",
-            );
+            crate::services::logging::session(app, "INFO", "sftp", tab_id, "SFTP session ready");
             let sftp_arc = Arc::new(RwLock::new(sftp));
             let initial_remote_path = {
                 let sessions = state.sessions.read().await;
@@ -3489,7 +3491,9 @@ async fn run_worker_loop(
                     .await;
                 }
 
-                if let Ok(snapshot) = crate::commands::get_workspace_snapshot(initial_app.clone()).await {
+                if let Ok(snapshot) =
+                    crate::commands::get_workspace_snapshot(initial_app.clone()).await
+                {
                     let _ = initial_app.emit("workspace:snapshot", snapshot);
                 }
             });
@@ -3823,8 +3827,7 @@ async fn run_worker_loop(
     // select! 永远不会被 IPC 推送或 RwLock 竞争阻塞，Ctrl+C 路径始终
     // 畅通。通道满时丢弃旧 chunk（终端输出是尽力而为的，丢几帧不影响
     // 功能，但 Ctrl+C 必须响应）。容量 128 覆盖 16ms × 8MB/s 的峰值。
-    let (terminal_output_tx, mut terminal_output_rx) =
-        tokio::sync::mpsc::channel::<String>(128);
+    let (terminal_output_tx, mut terminal_output_rx) = tokio::sync::mpsc::channel::<String>(128);
     let pump_app = app.clone();
     let pump_tab_id = tab_id.to_string();
     let _pump_handle = tokio::spawn(async move {
