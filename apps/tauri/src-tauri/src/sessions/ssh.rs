@@ -1086,16 +1086,34 @@ async fn follow_shell_cwd(
     }
 }
 
-/// Flush the batch buffer to the renderer and append to the session
-/// transcript in one step. Used by every flush path in the main event
-/// loop (cmd exit, shell close, 16ms timer) so they stay consistent.
-async fn flush_batch(batch: &mut Vec<u8>, app: &AppHandle, tab_id: &str) {
+/// Flush the batch buffer to the terminal output pump channel.
+///
+/// 非阻塞：用 `try_send` 把 chunk 推到 bounded channel，由独立的 pump
+/// task 异步消费并推送到 renderer。通道满时丢弃 chunk 并限频记录——终端
+/// 输出是尽力而为的，丢几帧不影响功能，但 worker 主循环的 select! 必须
+/// 立即返回以保证 Ctrl+C 路径畅通。
+fn flush_batch(
+    batch: &mut Vec<u8>,
+    output_tx: &tokio::sync::mpsc::Sender<String>,
+    app: &AppHandle,
+    tab_id: &str,
+) {
     if batch.is_empty() {
         return;
     }
     let chunk = String::from_utf8_lossy(batch).into_owned();
     batch.clear();
-    emit_terminal_data(app, tab_id, &chunk).await;
+    if let Err(tokio::sync::mpsc::error::TrySendError::Full(_)) = output_tx.try_send(chunk) {
+        // 通道满说明 pump task 跟不上（renderer IPC 或 RwLock 竞争）。
+        // 丢弃 chunk 避免阻塞主循环。限频日志避免在极端高吞吐下刷屏。
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "ssh",
+            tab_id,
+            "terminal output pump saturated, dropping chunk",
+        );
+    }
 }
 
 fn percent_decode(s: &str) -> String {
@@ -3627,6 +3645,23 @@ async fn run_worker_loop(
     let mut batch_buffer: Vec<u8> = Vec::new();
     let mut last_emit = Instant::now();
 
+    // Terminal output pump: 解耦 worker 主循环与 renderer IPC 推送。
+    // flush_batch 用 try_send 把 chunk 推到这个 bounded channel，独立的
+    // pump task 异步消费并调 emit_terminal_data（含 channel.send + RwLock
+    // 写）。这样高吞吐输出（pacman-key --populate）时 worker 主循环的
+    // select! 永远不会被 IPC 推送或 RwLock 竞争阻塞，Ctrl+C 路径始终
+    // 畅通。通道满时丢弃旧 chunk（终端输出是尽力而为的，丢几帧不影响
+    // 功能，但 Ctrl+C 必须响应）。容量 128 覆盖 16ms × 8MB/s 的峰值。
+    let (terminal_output_tx, mut terminal_output_rx) =
+        tokio::sync::mpsc::channel::<String>(128);
+    let pump_app = app.clone();
+    let pump_tab_id = tab_id.to_string();
+    let _pump_handle = tokio::spawn(async move {
+        while let Some(chunk) = terminal_output_rx.recv().await {
+            emit_terminal_data(&pump_app, &pump_tab_id, &chunk).await;
+        }
+    });
+
     // sudo / root-mode credentials — kept in worker-local state so they
     // never leak into SessionSnapshot (which is serialized to the renderer).
     let mut file_access_mode = "user".to_string();
@@ -3680,14 +3715,14 @@ async fn run_worker_loop(
 
         tokio::select! {
             _ = cancellation.cancelled() => {
-                flush_batch(&mut batch_buffer, app, tab_id).await;
+                flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                 metrics_shutdown.notify_waiters();
                 tunnel_manager.stop_all().await;
                 return Ok(());
             }
             input = terminal_input_rx.recv() => {
                 let Some(data) = input else {
-                    flush_batch(&mut batch_buffer, app, tab_id).await;
+                    flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                     metrics_shutdown.notify_waiters();
                     tunnel_manager.stop_all().await;
                     return Ok(());
@@ -3805,7 +3840,7 @@ async fn run_worker_loop(
                         match result {
                             Ok(true) => {
                                 // WorkerCmd::Disconnect requested — flush and exit.
-                                flush_batch(&mut batch_buffer, app, tab_id).await;
+                                flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                                 metrics_shutdown.notify_waiters();
                                 tunnel_manager.stop_all().await;
                                 return Ok(());
@@ -3818,7 +3853,7 @@ async fn run_worker_loop(
                     }
                     None => {
                         // Sender dropped — flush and exit cleanly.
-                        flush_batch(&mut batch_buffer, app, tab_id).await;
+                        flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                         metrics_shutdown.notify_waiters();
                         tunnel_manager.stop_all().await;
                         return Ok(());
@@ -3941,11 +3976,19 @@ async fn run_worker_loop(
                                     sudo_password.clone(),
                                 ));
                             } else if session_state_changed {
-                                if let Ok(snap) =
-                                    crate::commands::get_workspace_snapshot(app.clone()).await
-                                {
-                                    let _ = app.emit("workspace:snapshot", snap);
-                                }
+                                // 解耦：get_workspace_snapshot 会读整个 sessions
+                                // RwLock + 序列化所有 tab 数据，在 shell output 分支
+                                // 内同步 await 会阻塞 select! 轮询 terminal_input_rx。
+                                // CWD/user 变化频率有限，spawn 到后台不阻塞主循环。
+                                let snap_app = app.clone();
+                                tokio::spawn(async move {
+                                    if let Ok(snap) =
+                                        crate::commands::get_workspace_snapshot(snap_app.clone())
+                                            .await
+                                    {
+                                        let _ = snap_app.emit("workspace:snapshot", snap);
+                                    }
+                                });
                             }
                         }
 
@@ -3957,7 +4000,7 @@ async fn run_worker_loop(
                             // a flush so memory stays bounded and the next emit does
                             // not grow a multi-MB chunk in one shot.
                             if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {
-                                flush_batch(&mut batch_buffer, app, tab_id).await;
+                                flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                                 last_emit = Instant::now();
                             }
                         }
@@ -4018,13 +4061,13 @@ async fn run_worker_loop(
                     Some(ChannelMsg::ExtendedData { data, .. }) => {
                         batch_buffer.extend_from_slice(data.as_ref());
                         if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {
-                            flush_batch(&mut batch_buffer, app, tab_id).await;
+                            flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                             last_emit = Instant::now();
                         }
                     }
                     Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
                         // Shell closed → flush and disconnect.
-                        flush_batch(&mut batch_buffer, app, tab_id).await;
+                        flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                         metrics_shutdown.notify_waiters();
                         tunnel_manager.stop_all().await;
                         return Ok(());
@@ -4035,7 +4078,7 @@ async fn run_worker_loop(
             // 3. Periodic flush if there is buffered output.
             _ = tokio::time::sleep_until(next_batch_deadline) => {
                 if !batch_buffer.is_empty() {
-                    flush_batch(&mut batch_buffer, app, tab_id).await;
+                    flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                     last_emit = Instant::now();
                 } else {
                     last_emit = Instant::now();
