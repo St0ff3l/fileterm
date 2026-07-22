@@ -747,71 +747,14 @@ fn child_window_should_be_transparent(platform: &str, decorations: bool) -> bool
 }
 
 #[cfg(target_os = "windows")]
-fn prepare_windows_icon(size: u32, content_size: u32) -> Result<Image<'static>, AppError> {
-    use image::{imageops, imageops::FilterType, RgbaImage};
-
-    let source = image::load_from_memory(include_bytes!("../../build/icon.png"))
-        .map_err(|error| AppError::Window(error.to_string()))?
-        .into_rgba8();
-    let (mut min_x, mut min_y) = (source.width(), source.height());
-    let (mut max_x, mut max_y) = (0, 0);
-    let mut has_visible_pixel = false;
-
-    for (x, y, pixel) in source.enumerate_pixels() {
-        if pixel[3] > 8 {
-            has_visible_pixel = true;
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x);
-            max_y = max_y.max(y);
-        }
-    }
-
-    if !has_visible_pixel {
-        return Err(AppError::Window(
-            "Windows icon has no visible pixels".to_string(),
-        ));
-    }
-
-    let cropped =
-        imageops::crop_imm(&source, min_x, min_y, max_x - min_x + 1, max_y - min_y + 1).to_image();
-    let scale = content_size as f64 / cropped.width().max(cropped.height()) as f64;
-    let resized_width = (cropped.width() as f64 * scale).round().max(1.0) as u32;
-    let resized_height = (cropped.height() as f64 * scale).round().max(1.0) as u32;
-    let resized = imageops::resize(
-        &cropped,
-        resized_width,
-        resized_height,
-        FilterType::Lanczos3,
-    );
-    let mut canvas = RgbaImage::new(size, size);
-    imageops::overlay(
-        &mut canvas,
-        &resized,
-        ((size - resized_width) / 2) as i64,
-        ((size - resized_height) / 2) as i64,
-    );
-
-    Ok(Image::new_owned(canvas.into_raw(), size, size))
-}
-
-#[cfg(target_os = "windows")]
-fn windows_app_icon(scale_factor: f64) -> Result<Image<'static>, AppError> {
-    // Windows uses a 32px large icon at 100% scaling. Supplying the matching
-    // physical size avoids a second taskbar resample at 125%/150%/200% DPI.
-    let size = (32.0 * scale_factor).round().clamp(32.0, 128.0) as u32;
-    let content_size = (size as f64 * 0.96).round() as u32;
-    prepare_windows_icon(size, content_size)
-}
-
-#[cfg(target_os = "windows")]
-fn windows_tray_icon(scale_factor: f64) -> Result<Image<'static>, AppError> {
-    // Electron feeds Tray a 16x16 logical icon on Windows. Tauri accepts raw
-    // physical pixels, so account for Windows DPI here to avoid the shell
-    // upscaling a fixed 16px bitmap on 125%/150%/200% displays.
-    let size = (16.0 * scale_factor).round().clamp(16.0, 64.0) as u32;
-    let content_size = (size as f64 * 0.94).round() as u32;
-    prepare_windows_icon(size, content_size)
+fn windows_icon_image() -> Result<Image<'static>, AppError> {
+    // Keep the Windows runtime on the same source as Electron: the original
+    // high-resolution FileTerm icon, packaged as a multi-size ICO. Tauri's
+    // icon generator places the 32px frame first, which is the frame used by
+    // its dev-time context loader. The previous ICO had a 16px first frame,
+    // so npm dev loaded that bitmap and Windows enlarged it for the taskbar.
+    Image::from_bytes(include_bytes!("../../build/icon.ico"))
+        .map_err(|error| AppError::Window(error.to_string()))
 }
 
 #[cfg(target_os = "windows")]
@@ -1023,7 +966,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         })?;
     #[cfg(target_os = "windows")]
     window
-        .set_icon(windows_app_icon(window.scale_factor().unwrap_or(1.0))?)
+        .set_icon(windows_icon_image()?)
         .map_err(|error| AppError::Window(error.to_string()))?;
     #[cfg(target_os = "windows")]
     prefer_windows_native_rounded_corners(&window);
@@ -1183,10 +1126,7 @@ pub fn run() {
                 let _ = main_window.set_decorations(false);
                 prefer_windows_native_rounded_corners(&main_window);
                 main_window
-                    .set_icon(
-                        windows_app_icon(main_window.scale_factor().unwrap_or(1.0))
-                            .map_err(|error| error.to_string())?,
-                    )
+                    .set_icon(windows_icon_image().map_err(|error| error.to_string())?)
                     .map_err(|error| error.to_string())?;
             }
 
@@ -1229,8 +1169,7 @@ pub fn run() {
             let tray_icon = Image::from_bytes(include_bytes!("../../build/trayTemplate@2x.png"))
                 .map_err(|error| error.to_string())?;
             #[cfg(target_os = "windows")]
-            let tray_icon = windows_tray_icon(main_window.scale_factor().unwrap_or(1.0))
-                .map_err(|error| error.to_string())?;
+            let tray_icon = windows_icon_image().map_err(|error| error.to_string())?;
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             let tray_icon = app
                 .default_window_icon()
@@ -1535,7 +1474,7 @@ mod tests {
     };
 
     #[cfg(target_os = "windows")]
-    use super::{windows_app_icon, windows_tray_icon};
+    use super::windows_icon_image;
 
     #[cfg(target_os = "macos")]
     use super::{macos_traffic_light_target_center, MACOS_TRAFFIC_LIGHT_FRAME_SIZE};
@@ -1573,12 +1512,10 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn prepares_windows_icons_like_the_electron_runtime() {
-        let app_icon = windows_app_icon(1.5).unwrap();
-        let tray_icon = windows_tray_icon(1.5).unwrap();
+    fn loads_the_high_resolution_windows_icon_for_windows_surfaces() {
+        let icon = windows_icon_image().unwrap();
 
-        assert_eq!((app_icon.width(), app_icon.height()), (48, 48));
-        assert_eq!((tray_icon.width(), tray_icon.height()), (24, 24));
+        assert_eq!((icon.width(), icon.height()), (32, 32));
     }
 
     #[test]

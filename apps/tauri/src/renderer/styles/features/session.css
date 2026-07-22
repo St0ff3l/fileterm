@@ -949,6 +949,25 @@
   white-space: nowrap;
 }
 
+.pane-path-bar-action {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pane-path-bar-action:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 .file-current-path {
   user-select: text;
   -webkit-user-select: text;

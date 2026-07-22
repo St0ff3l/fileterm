@@ -1340,7 +1340,6 @@ dependencies = [
  "base64 0.22.1",
  "encoding_rs",
  "flate2",
- "image",
  "libc",
  "objc2",
  "objc2-app-kit",
