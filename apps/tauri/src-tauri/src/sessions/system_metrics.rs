@@ -22,6 +22,12 @@ use tokio::time::timeout;
 // command watchdog fires.
 const EXEC_CHANNEL_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
 
+/// `exec_command` / `exec_command_with_stdin` 收集的 output 字节上限。
+/// probe 命令的正常输出只有几行（uname / 系统信息），超过 256KB 说明
+/// 服务器配置异常或被入侵——这种情况下截断输出比让 Vec 无限增长更安全。
+/// 参考 meatshell 的 MON_BUF_CAP 设计，防止恶意服务器内存 DoS。
+const EXEC_COMMAND_OUTPUT_CAP: usize = 256 * 1024;
+
 pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
     // 1. Try POSIX probe
     let posix_cmd = "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'";
@@ -87,6 +93,7 @@ pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<S
 
     let mut output: Vec<u8> = Vec::new();
     let mut draining_after_close = false;
+    let mut capped = false;
     loop {
         let message = if draining_after_close {
             match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
@@ -98,10 +105,14 @@ pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<S
         };
         match message {
             Some(ChannelMsg::Data { data }) => {
-                output.extend_from_slice(data.as_ref());
+                if !capped {
+                    extend_with_cap(&mut output, data.as_ref(), &mut capped);
+                }
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
-                output.extend_from_slice(data.as_ref());
+                if !capped {
+                    extend_with_cap(&mut output, data.as_ref(), &mut capped);
+                }
             }
             Some(ChannelMsg::ExitStatus { .. })
             | Some(ChannelMsg::Eof)
@@ -136,6 +147,7 @@ pub async fn exec_command_with_stdin<H: Handler>(
 
     let mut output: Vec<u8> = Vec::new();
     let mut draining_after_close = false;
+    let mut capped = false;
     loop {
         let message = if draining_after_close {
             match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
@@ -147,10 +159,14 @@ pub async fn exec_command_with_stdin<H: Handler>(
         };
         match message {
             Some(ChannelMsg::Data { data }) => {
-                output.extend_from_slice(data.as_ref());
+                if !capped {
+                    extend_with_cap(&mut output, data.as_ref(), &mut capped);
+                }
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
-                output.extend_from_slice(data.as_ref());
+                if !capped {
+                    extend_with_cap(&mut output, data.as_ref(), &mut capped);
+                }
             }
             Some(ChannelMsg::ExitStatus { .. })
             | Some(ChannelMsg::Eof)
@@ -173,6 +189,27 @@ fn extract_probe_body(raw: &str) -> Option<String> {
         return None;
     }
     Some(raw[start + start_marker.len()..end].to_string())
+}
+
+/// Append `chunk` to `output` but stop growing once `EXEC_COMMAND_OUTPUT_CAP`
+/// is reached. Sets `capped` so the caller can skip future appends without
+/// re-checking the length each iteration. A malicious or misconfigured server
+/// that floods stdout must not be able to grow memory unbounded.
+fn extend_with_cap(output: &mut Vec<u8>, chunk: &[u8], capped: &mut bool) {
+    if *capped {
+        return;
+    }
+    let remaining = EXEC_COMMAND_OUTPUT_CAP.saturating_sub(output.len());
+    if remaining == 0 {
+        *capped = true;
+        return;
+    }
+    if chunk.len() <= remaining {
+        output.extend_from_slice(chunk);
+    } else {
+        output.extend_from_slice(&chunk[..remaining]);
+        *capped = true;
+    }
 }
 
 fn megabytes_to_bytes(val: &str) -> f64 {

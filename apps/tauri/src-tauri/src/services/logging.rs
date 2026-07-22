@@ -3,6 +3,12 @@
 //! It deliberately avoids putting credentials, bearer tokens, or private-key
 //! passphrases in diagnostics. The logs are local-only and can be opened from
 //! Settings through `app_open_logs_directory`.
+//!
+//! File IO runs on a dedicated blocking thread via `spawn_blocking` so the
+//! Tokio reactor is never stalled by `fs::write`/`OpenOptions` while a worker
+//! loop is waiting on the same Tokio thread. The synchronous `LOG_LOCK` is
+//! still acquired, but only inside the blocking task — callers from async
+//! contexts return immediately after handing the line off.
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -45,7 +51,19 @@ fn redact(message: &str) -> String {
         .into_owned()
 }
 
-fn append(directory: &Path, level: &str, scope: &str, message: &str) {
+/// Build the formatted log line. Pure / allocation-only, safe to call from
+/// async contexts without touching the filesystem.
+fn build_line(level: &str, scope: &str, message: &str) -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    format!("{timestamp} [{level}] [{scope}] {}\n", redact(message))
+}
+
+/// Synchronous append — only called from `spawn_blocking`. Holds `LOG_LOCK`
+/// and does all filesystem work off the reactor thread.
+fn append_sync(directory: &Path, line: &str) {
     let Ok(_guard) = LOG_LOCK.lock() else {
         return;
     };
@@ -61,13 +79,24 @@ fn append(directory: &Path, level: &str, scope: &str, message: &str) {
         let _ = fs::remove_file(&backup);
         let _ = fs::rename(&path, backup);
     }
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let line = format!("{timestamp} [{level}] [{scope}] {}\n", redact(message));
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
         let _ = file.write_all(line.as_bytes());
+    }
+}
+
+/// Dispatch a log line to a blocking thread when running inside a Tokio
+/// runtime; fall back to inline writes outside the runtime (e.g. during early
+/// startup or unit tests). Inline writes are acceptable there because no
+/// worker loop is depending on the calling thread.
+fn dispatch(directory: PathBuf, line: String) {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        // Fire-and-forget: the caller never waits for the file write. This is
+        // intentional — log latency must not propagate back into SSH worker
+        // loops, where it would manifest as multi-hundred-ms `select!` stalls
+        // and unresponsive Ctrl+C under high-throughput output.
+        handle.spawn_blocking(move || append_sync(&directory, &line));
+    } else {
+        append_sync(&directory, &line);
     }
 }
 
@@ -75,14 +104,16 @@ pub fn write(app: &AppHandle, level: &str, scope: &str, message: impl AsRef<str>
     let Some(directory) = log_directory(app) else {
         return;
     };
-    append(&directory, level, scope, message.as_ref());
+    let line = build_line(level, scope, message.as_ref());
+    dispatch(directory, line);
 }
 
 pub fn write_global(level: &str, scope: &str, message: impl AsRef<str>) {
     let Some(directory) = LOG_DIRECTORY.get() else {
         return;
     };
-    append(directory, level, scope, message.as_ref());
+    let line = build_line(level, scope, message.as_ref());
+    dispatch(directory.clone(), line);
 }
 
 pub fn debug(app: &AppHandle, scope: &str, message: impl AsRef<str>) {

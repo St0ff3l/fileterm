@@ -290,10 +290,35 @@ impl WorkspaceState {
         }
     }
 
+    /// Broadcast a terminal output chunk to every registered renderer channel.
+    ///
+    /// The std Mutex is held only long enough to clone the channel list out;
+    /// the per-channel `send` (which serializes the JSON payload and pushes
+    /// it through Tauri's IPC bridge) runs **outside** the lock. Holding the
+    /// lock during `send` was the original cause of multi-second worker-loop
+    /// stalls when the webview fell behind on high-throughput output (e.g.
+    /// `pacman-key --populate`): a single slow `channel.send` blocked the
+    /// Tokio worker thread, which blocked `flush_batch`, which blocked the
+    /// SSH `select!` from polling `terminal_input_rx` — so Ctrl+C stopped
+    /// responding until the webview caught up.
     pub fn publish_terminal_output(&self, tab_id: &str, chunk: &str) {
         let payload = serde_json::json!({ "tabId": tab_id, "chunk": chunk });
-        if let Ok(mut channels) = self.terminal_output_channels.lock() {
-            channels.retain(|_, channel| channel.send(payload.clone()).is_ok());
+        let snapshot: Vec<Channel<serde_json::Value>> = match self.terminal_output_channels.lock() {
+            Ok(channels) => channels.values().cloned().collect(),
+            Err(_) => return,
+        };
+        let mut dead_ids: Vec<u32> = Vec::new();
+        for channel in &snapshot {
+            if channel.send(payload.clone()).is_err() {
+                dead_ids.push(channel.id());
+            }
+        }
+        if !dead_ids.is_empty() {
+            if let Ok(mut channels) = self.terminal_output_channels.lock() {
+                for id in &dead_ids {
+                    channels.remove(id);
+                }
+            }
         }
     }
 }
