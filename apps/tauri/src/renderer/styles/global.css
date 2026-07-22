@@ -11,7 +11,7 @@ body,
   overflow: hidden;
   background: var(--bg-main);
   color: var(--text-main);
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   color-scheme: inherit;
   user-select: none;
@@ -59,6 +59,8 @@ table {
 }
 
 button {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
   cursor: pointer;
   transition: all 0.2s ease;
 }

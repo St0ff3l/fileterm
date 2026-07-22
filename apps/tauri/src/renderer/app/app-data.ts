@@ -1,4 +1,5 @@
 import type { ConnectionProfile, CreateProfileInput, LocalFileItem, WorkspaceSnapshot } from '@fileterm/core'
+import { t } from '../i18n'
 
 export const emptyState: WorkspaceSnapshot = {
   profiles: [],
@@ -23,7 +24,7 @@ export const defaultForm: CreateProfileInput = {
   host: '',
   port: 22,
   username: '',
-  group: '默认',
+  group: t.defaultGroup,
   remotePath: '/',
   note: '',
   password: '',

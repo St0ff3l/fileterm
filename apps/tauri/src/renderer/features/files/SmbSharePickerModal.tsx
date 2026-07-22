@@ -8,6 +8,7 @@ export function SmbSharePickerModal({
   path,
   shares,
   onCancel,
+  onChangeCredentials,
   onSubmit
 }: {
   errorMessage?: string | null
@@ -15,6 +16,7 @@ export function SmbSharePickerModal({
   path: string
   shares: string[]
   onCancel(): void
+  onChangeCredentials(): void
   onSubmit(share: string): void
 }) {
   const [selectedShare, setSelectedShare] = useState(shares[0] ?? '')
@@ -26,59 +28,70 @@ export function SmbSharePickerModal({
   return (
     <div className="modal-backdrop">
       <div className="modal-card ssh-interaction-modal network-share-picker-modal">
-        <div className="modal-header">
-          <span>{t.networkShareSelectTitle}</span>
-          <CloseButton disabled={isSubmitting} onClick={onCancel} />
-        </div>
-
-        <div className="root-access-description">{t.networkShareSelectDescription}</div>
-
-        <div className="root-access-meta network-share-credentials-path">
-          <span>{t.networkShareCredentialsPath}</span>
-          <strong title={path}>{path}</strong>
-        </div>
-
-        <label className="file-action-field">
-          <span>{t.networkShareSelectFolder}</span>
-          <span className="ft-select-shell network-share-select-shell">
-            <select
-              autoFocus
-              disabled={isSubmitting}
-              value={selectedShare}
-              onChange={(event) => setSelectedShare(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !isSubmitting) {
-                  onSubmit(selectedShare)
-                }
-              }}
-            >
-              {shares.map((share) => (
-                <option key={share} value={share}>
-                  {share}
-                </option>
-              ))}
-            </select>
-            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-              expand_more
+        <div className="network-share-modal__header">
+          <span className="network-share-modal__title">
+            <span aria-hidden="true" className="material-symbols-outlined">
+              folder_shared
             </span>
+            <span>{t.networkShareSelectTitle}</span>
           </span>
-        </label>
+          <CloseButton className="network-share-modal__close" disabled={isSubmitting} onClick={onCancel} />
+        </div>
 
-        {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
+        <div className="network-share-modal__body">
+          <fieldset className="ssh-fieldset network-share-fieldset" disabled={isSubmitting}>
+            <legend>{t.general}</legend>
+            <div className="network-share-description">{t.networkShareSelectDescription}</div>
+            <div className="network-share-path-value">
+              <span>{t.networkShareCredentialsPath}</span>
+              <strong title={path}>{path}</strong>
+            </div>
 
-        <div className="form-actions">
-          <button className="flat-button" disabled={isSubmitting} onClick={onCancel} type="button">
-            {t.cancel}
-          </button>
-          <button
-            className="primary-button"
-            disabled={isSubmitting || !selectedShare}
-            onClick={() => onSubmit(selectedShare)}
-            type="button"
-          >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.networkShareSelectConfirm}</span>
-          </button>
+            <label className="file-action-field">
+              <span>{t.networkShareSelectFolder}</span>
+              <span className="ft-select-shell network-share-select-shell">
+                <select
+                  autoFocus
+                  value={selectedShare}
+                  onChange={(event) => setSelectedShare(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !isSubmitting) {
+                      onSubmit(selectedShare)
+                    }
+                  }}
+                >
+                  {shares.map((share) => (
+                    <option key={share} value={share}>
+                      {share}
+                    </option>
+                  ))}
+                </select>
+                <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
+                  expand_more
+                </span>
+              </span>
+            </label>
+          </fieldset>
+
+          {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
+
+          <div className="form-actions">
+            <button className="flat-button" disabled={isSubmitting} onClick={onCancel} type="button">
+              {t.cancel}
+            </button>
+            <button className="flat-button" disabled={isSubmitting} onClick={onChangeCredentials} type="button">
+              {t.networkShareSelectChangeCredentials}
+            </button>
+            <button
+              className="primary-button"
+              disabled={isSubmitting || !selectedShare}
+              onClick={() => onSubmit(selectedShare)}
+              type="button"
+            >
+              {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
+              <span>{t.networkShareSelectConfirm}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

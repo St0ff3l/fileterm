@@ -5,6 +5,7 @@ import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
+import { t, formatMessage } from '../../i18n'
 
 const initialDraft = (): SshForwardRule => ({
   id: globalThis.crypto.randomUUID(),
@@ -73,23 +74,19 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
   }
 
   const tunnelKindHint =
-    draft.kind === 'local'
-      ? '本机应用访问 127.0.0.1:监听端口时，流量会通过 SSH 转到目标主机。适合访问服务器内网的数据库或管理后台。'
-      : draft.kind === 'remote'
-        ? '远端主机访问监听地址和端口时，流量会通过 SSH 回连到目标主机。适合把本机开发服务临时暴露给远端。'
-        : '在本机创建 SOCKS5 代理。将浏览器或开发工具指向监听地址和端口后，流量会通过当前 SSH 连接转发。'
+    draft.kind === 'local' ? t.tunnelLocalHint : draft.kind === 'remote' ? t.tunnelRemoteHint : t.tunnelDynamicHint
 
   return (
     <section className="ssh-tunnel-panel" aria-label="SSH tunnels">
       <header className="ssh-tunnel-panel-header">
         <div>
           <span className="ssh-tunnel-kicker">SSH RUNTIME</span>
-          <h2>SSH 隧道</h2>
-          <p>把端口接入当前 SSH 的加密通道，关闭标签后自动回收。</p>
+          <h2>{t.sshTunnels}</h2>
+          <p>{t.sshTunnelsDescription}</p>
         </div>
         <div className="ssh-tunnel-header-actions">
           <button
-            aria-label={isLoading ? '正在刷新隧道状态' : '刷新隧道状态'}
+            aria-label={isLoading ? t.refreshingTunnels : t.refreshTunnels}
             aria-busy={isLoading}
             className="tunnel-icon-button"
             disabled={isLoading}
@@ -107,24 +104,21 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
               setIsAdding(true)
             }}
           >
-            <AppIcon name="plus" size={14} /> 新增隧道
+            <AppIcon name="plus" size={14} /> {t.addTunnel}
           </button>
         </div>
       </header>
       <div className="ssh-tunnel-purpose">
         <AppIcon name="connections" size={18} />
         <p>
-          <strong>把一个端口安全地穿过 SSH 连接。</strong>
-          <span>
-            本地 <code>-L</code>：本机访问服务器内网服务；远程 <code>-R</code>：远端回连本机；动态 <code>-D</code>：本机
-            SOCKS5 代理。
-          </span>
+          <strong>{t.tunnelPurposeTitle}</strong>
+          <span>{t.tunnelPurpose}</span>
         </p>
       </div>
       {error ? <p className="ssh-tunnel-error">{error}</p> : null}
       <div aria-busy={isLoading} className={`ssh-tunnel-list${isLoading ? ' is-loading' : ''}`}>
         {isLoading ? (
-          <WorkspaceLoadingState label="正在加载隧道状态…" />
+          <WorkspaceLoadingState label={t.loadingTunnels} />
         ) : tunnels.length ? (
           tunnels.map((tunnel) => (
             <TunnelRow key={tunnel.id} tabId={tabId} tunnel={tunnel} onChange={setTunnels} onError={setError} />
@@ -132,8 +126,8 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
         ) : (
           <div className="ssh-tunnel-empty">
             <AppIcon name="connections" size={22} />
-            <strong>还没有运行时隧道</strong>
-            <span>创建后会立即绑定端口，并在当前 SSH 会话断开时自动停止。</span>
+            <strong>{t.noRuntimeTunnels}</strong>
+            <span>{t.noRuntimeTunnelsDescription}</span>
             <button
               className="flat-button compact ssh-tunnel-secondary-action"
               disabled={isCreating}
@@ -143,7 +137,7 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
                 setIsAdding(true)
               }}
             >
-              创建第一个隧道
+              {t.createFirstTunnel}
             </button>
           </div>
         )}
@@ -164,85 +158,105 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
             }}
           >
             <fieldset className="ssh-tunnel-form-fields" disabled={isCreating}>
-              <label>
-                类型
-                <select
-                  value={draft.kind}
-                  onChange={(event) =>
-                    setDraft((value) => ({ ...value, kind: event.target.value as SshForwardRule['kind'] }))
-                  }
-                >
-                  <option value="local">本地 -L</option>
-                  <option value="remote">远程 -R</option>
-                  <option value="dynamic">动态 -D (SOCKS5)</option>
-                </select>
-              </label>
-              <p className="ssh-tunnel-kind-hint">{tunnelKindHint}</p>
-              <label>
-                名称
-                <input
-                  value={draft.name}
-                  placeholder="例如：数据库"
-                  onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
-                />
-              </label>
-              <label>
-                监听地址
-                <input
-                  value={draft.bindHost}
-                  required
-                  onChange={(event) => setDraft((value) => ({ ...value, bindHost: event.target.value }))}
-                />
-              </label>
-              <label>
-                监听端口
-                <input
-                  min="1"
-                  max="65535"
-                  required
-                  type="number"
-                  value={draft.bindPort || ''}
-                  onChange={(event) => setDraft((value) => ({ ...value, bindPort: Number(event.target.value) }))}
-                />
-              </label>
-              {draft.kind !== 'dynamic' ? (
-                <>
+              <fieldset className="ssh-fieldset ssh-tunnel-fieldset">
+                <legend>{t.tunnelGeneral}</legend>
+                <div className="ssh-tunnel-field-grid">
                   <label>
-                    目标主机
+                    {t.tunnelType}
+                    <span className="ft-select-shell">
+                      <select
+                        value={draft.kind}
+                        onChange={(event) =>
+                          setDraft((value) => ({ ...value, kind: event.target.value as SshForwardRule['kind'] }))
+                        }
+                      >
+                        <option value="local">{t.tunnelLocal}</option>
+                        <option value="remote">{t.tunnelRemote}</option>
+                        <option value="dynamic">{t.tunnelDynamic}</option>
+                      </select>
+                      <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
+                        expand_more
+                      </span>
+                    </span>
+                  </label>
+                  <p className="ssh-tunnel-kind-hint">{tunnelKindHint}</p>
+                  <label className="ssh-tunnel-field-grid__full">
+                    {t.tunnelName}
                     <input
-                      value={draft.targetHost}
+                      value={draft.name}
+                      placeholder={t.tunnelNamePlaceholder}
+                      onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
+                    />
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="ssh-fieldset ssh-tunnel-fieldset">
+                <legend>{draft.kind === 'dynamic' ? t.tunnelListen : t.tunnelForwardRules}</legend>
+                <div className="ssh-tunnel-field-grid">
+                  <label>
+                    {t.tunnelBindHost}
+                    <input
+                      value={draft.bindHost}
                       required
-                      onChange={(event) => setDraft((value) => ({ ...value, targetHost: event.target.value }))}
+                      onChange={(event) => setDraft((value) => ({ ...value, bindHost: event.target.value }))}
                     />
                   </label>
                   <label>
-                    目标端口
+                    {t.tunnelBindPort}
                     <input
+                      className="ssh-tunnel-port-input"
                       min="1"
                       max="65535"
                       required
                       type="number"
-                      value={draft.targetPort || ''}
-                      onChange={(event) => setDraft((value) => ({ ...value, targetPort: Number(event.target.value) }))}
+                      value={draft.bindPort || ''}
+                      onChange={(event) => setDraft((value) => ({ ...value, bindPort: Number(event.target.value) }))}
                     />
                   </label>
-                </>
-              ) : null}
-              {error ? (
-                <p className="ssh-tunnel-error ssh-tunnel-dialog-error" role="alert">
-                  {error}
-                </p>
-              ) : null}
-              <div className="ssh-tunnel-form-actions">
-                <button className="flat-button" type="button" onClick={() => setIsAdding(false)}>
-                  取消
-                </button>
-                <button className="primary-button" type="submit">
-                  {isCreating ? <span aria-hidden="true" className="button-spinner" /> : null}
-                  {isCreating ? '添加中' : '添加并启动'}
-                </button>
-              </div>
+                  {draft.kind !== 'dynamic' ? (
+                    <>
+                      <label>
+                        {t.tunnelTargetHost}
+                        <input
+                          value={draft.targetHost}
+                          required
+                          onChange={(event) => setDraft((value) => ({ ...value, targetHost: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        {t.tunnelTargetPort}
+                        <input
+                          className="ssh-tunnel-port-input"
+                          min="1"
+                          max="65535"
+                          required
+                          type="number"
+                          value={draft.targetPort || ''}
+                          onChange={(event) =>
+                            setDraft((value) => ({ ...value, targetPort: Number(event.target.value) }))
+                          }
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                </div>
+              </fieldset>
             </fieldset>
+            {error ? (
+              <p className="ssh-tunnel-error ssh-tunnel-dialog-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="ssh-tunnel-form-actions">
+              <button className="flat-button" disabled={isCreating} type="button" onClick={() => setIsAdding(false)}>
+                {t.tunnelCancel}
+              </button>
+              <button className="primary-button" disabled={isCreating} type="submit">
+                {isCreating ? <span aria-hidden="true" className="button-spinner" /> : null}
+                {isCreating ? t.tunnelAdding : t.tunnelAddAndStart}
+              </button>
+            </div>
           </form>
         </TunnelEditorDialog>
       ) : null}
@@ -277,9 +291,9 @@ function TunnelEditorDialog({
         <header className="ssh-tunnel-dialog-header">
           <div className="ssh-tunnel-dialog-title">
             <AppIcon name="connections" size={16} />
-            <span id="ssh-tunnel-dialog-title">新增运行时隧道</span>
+            <span id="ssh-tunnel-dialog-title">{t.tunnelDialogTitle}</span>
           </div>
-          <CloseButton aria-label="关闭新增隧道窗口" disabled={isSubmitting} onClick={onClose} size="compact" />
+          <CloseButton aria-label={t.closeTunnelDialog} disabled={isSubmitting} onClick={onClose} size="compact" />
         </header>
         {children}
       </div>
@@ -364,7 +378,13 @@ function TunnelRow({
               )
             }
           >
-            {pendingAction === 'stop' ? '停止中' : pendingAction === 'start' ? '启动中' : running ? '停止' : '启动'}
+            {pendingAction === 'stop'
+              ? t.tunnelStopping
+              : pendingAction === 'start'
+                ? t.tunnelStarting
+                : running
+                  ? t.tunnelStop
+                  : t.tunnelStart}
           </button>
           {tunnel.runtimeOnly ? (
             <button
@@ -376,15 +396,18 @@ function TunnelRow({
                 setIsDeleteConfirmOpen(true)
               }}
             >
-              删除
+              {t.tunnelDelete}
             </button>
           ) : null}
         </div>
       </article>
       {isDeleteConfirmOpen ? (
         <ConfirmActionDialog
-          confirmLabel="删除"
-          description={`确定删除隧道“${tunnel.name || `${tunnel.kind.toUpperCase()} ${tunnel.bindPort}`}”吗？删除后 ${tunnel.bindHost}:${tunnel.bindPort} 的监听会立即停止，且无法恢复。`}
+          confirmLabel={t.tunnelDelete}
+          description={formatMessage(t.tunnelDeleteDescription, {
+            name: tunnel.name || `${tunnel.kind.toUpperCase()} ${tunnel.bindPort}`,
+            address: `${tunnel.bindHost}:${tunnel.bindPort}`
+          })}
           errorMessage={deleteError}
           isSubmitting={pendingAction === 'delete'}
           onClose={() => {
@@ -394,7 +417,7 @@ function TunnelRow({
             }
           }}
           onConfirm={() => void deleteTunnel()}
-          title="删除隧道"
+          title={t.tunnelDeleteTitle}
         />
       ) : null}
     </>

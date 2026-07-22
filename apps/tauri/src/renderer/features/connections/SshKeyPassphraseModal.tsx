@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SshKeyPassphrasePromptRequest } from '@fileterm/core'
+import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 
 export function SshKeyPassphraseModal({
@@ -29,20 +30,18 @@ export function SshKeyPassphraseModal({
     <div className="modal-backdrop">
       <div className="modal-card ssh-interaction-modal">
         <div className="modal-header">
-          <span>SSH 私钥口令</span>
+          <span>{t.sshKeyPassphraseTitle}</span>
           <CloseButton disabled={isSubmitting} onClick={onCancel} />
         </div>
         <div className="root-access-description">
-          {request.reason === 'invalid-saved'
-            ? '已保存的口令无法解锁该私钥，请重新输入。'
-            : '该私钥已加密，请输入口令。'}
+          {request.reason === 'invalid-saved' ? t.sshKeyPassphraseInvalidSaved : t.sshKeyPassphraseRequired}
         </div>
         <div className="root-access-meta">
-          <span>密钥</span>
+          <span>{t.sshKeyPassphraseKey}</span>
           <strong>{request.keyName}</strong>
         </div>
         <label className="file-action-field">
-          <span>口令</span>
+          <span>{t.sshKeyPassphraseLabel}</span>
           <input
             autoFocus
             disabled={isSubmitting}
@@ -61,16 +60,16 @@ export function SshKeyPassphraseModal({
             type="checkbox"
             onChange={(event) => setSavePassphrase(event.target.checked)}
           />
-          <span>保存此密钥口令，后续自动使用</span>
+          <span>{t.sshKeyPassphraseSave}</span>
         </label>
         {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
         <div className="form-actions">
           <button className="flat-button" disabled={isSubmitting} onClick={onCancel} type="button">
-            取消
+            {t.cancel}
           </button>
           <button className="primary-button" disabled={!passphrase || isSubmitting} onClick={submit} type="button">
             {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>继续连接</span>
+            <span>{t.sshKeyPassphraseContinue}</span>
           </button>
         </div>
       </div>

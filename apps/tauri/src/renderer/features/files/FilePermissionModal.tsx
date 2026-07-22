@@ -66,7 +66,7 @@ export function FilePermissionModal({
 
         <fieldset disabled={isSubmitting} style={{ border: 0, display: 'contents', margin: 0, padding: 0 }}>
           <div className="file-permission-dialog__scroll">
-            <div className="file-permission-dialog__hero">
+            <div className="ssh-fieldset file-permission-dialog__hero">
               <div className="file-permission-dialog__hero-icon" aria-hidden="true">
                 <AppIcon name={fileType === 'folder' ? 'folder' : 'file'} size={24} />
               </div>
@@ -76,8 +76,8 @@ export function FilePermissionModal({
               </div>
             </div>
 
-            <section className="file-permission-dialog__section">
-              <div className="file-permission-dialog__section-title">{t.permissionMatrixTitle}</div>
+            <fieldset className="ssh-fieldset file-permission-dialog__fieldset">
+              <legend>{t.permissionMatrixTitle}</legend>
               <div className="file-permission-dialog__matrix-card">
                 <div className="file-permission-dialog__matrix-head">
                   <span />
@@ -113,10 +113,10 @@ export function FilePermissionModal({
                   }}
                 />
               </div>
-            </section>
+            </fieldset>
 
-            <section className="file-permission-dialog__section">
-              <div className="file-permission-dialog__section-title">{t.permissionAdvancedTitle}</div>
+            <fieldset className="ssh-fieldset file-permission-dialog__fieldset">
+              <legend>{t.permissionAdvancedTitle}</legend>
               <div className="file-permission-dialog__advanced-grid">
                 <div className="file-permission-dialog__info-card">
                   <div className="file-permission-dialog__info-copy">
@@ -175,15 +175,15 @@ export function FilePermissionModal({
 
               {supportsRecursive && recursive ? (
                 <div className="file-permission-dialog__apply-grid">
-                  <label className="file-permission-dialog__apply-option">
+                  <label className="ssh-checkbox file-permission-dialog__apply-option">
                     <input checked={applyTo === 'all'} type="radio" onChange={() => setApplyTo('all')} />
                     <span>{t.permissionApplyAll}</span>
                   </label>
-                  <label className="file-permission-dialog__apply-option">
+                  <label className="ssh-checkbox file-permission-dialog__apply-option">
                     <input checked={applyTo === 'files'} type="radio" onChange={() => setApplyTo('files')} />
                     <span>{t.permissionApplyFiles}</span>
                   </label>
-                  <label className="file-permission-dialog__apply-option">
+                  <label className="ssh-checkbox file-permission-dialog__apply-option">
                     <input
                       checked={applyTo === 'directories'}
                       type="radio"
@@ -193,7 +193,7 @@ export function FilePermissionModal({
                   </label>
                 </div>
               ) : null}
-            </section>
+            </fieldset>
 
             {effectiveError ? <div className="modal-error">{effectiveError}</div> : null}
           </div>
@@ -269,14 +269,13 @@ function PermissionCell({
   onChange(checked: boolean): void
 }) {
   return (
-    <label className="file-permission-dialog__matrix-cell">
+    <label className="ssh-checkbox file-permission-dialog__matrix-cell">
       <input
         aria-label={label}
         checked={checked}
         type="checkbox"
         onChange={(event) => onChange(event.target.checked)}
       />
-      <span />
     </label>
   )
 }

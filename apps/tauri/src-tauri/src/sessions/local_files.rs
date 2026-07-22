@@ -114,6 +114,18 @@ fn is_network_path(path: &str) -> bool {
     network_path_components(path).is_some()
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn is_network_host_path(path: &str) -> bool {
+    network_path_components(path).is_some_and(|components| components.len() == 1)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn network_path_as_unc(path: &str) -> Option<String> {
+    network_path_components(path).map(|components| format!("\\\\{}", components.join("\\")))
+}
+
 #[cfg(target_os = "macos")]
 #[derive(Clone, Debug)]
 struct MacSmbMount {
@@ -432,7 +444,7 @@ fn connect_macos_smb(
     selected_share: Option<&str>,
 ) -> Result<LocalNetworkShareConnectionResult, AppError> {
     let components = network_path_components(path).ok_or_else(|| {
-        AppError::Storage("SMB 路径无效，请使用 \\\\服务器\\共享名。".to_string())
+        AppError::Storage("SMB 路径无效，请使用 \\\\服务器 或 \\\\服务器\\共享名。".to_string())
     })?;
     if username.trim().is_empty() || password.is_empty() {
         return Err(AppError::Storage("请输入 SMB 用户名和密码。".to_string()));
@@ -529,24 +541,49 @@ fn connect_windows_smb(
     path: &str,
     username: &str,
     password: &str,
+    selected_share: Option<&str>,
 ) -> Result<LocalNetworkShareConnectionResult, AppError> {
-    use windows_sys::Win32::Foundation::NO_ERROR;
+    use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, NO_ERROR};
+    use windows_sys::Win32::NetworkManagement::NetManagement::{
+        NetApiBufferFree, MAX_PREFERRED_LENGTH,
+    };
     use windows_sys::Win32::NetworkManagement::WNet::{
-        WNetAddConnection2W, CONNECT_TEMPORARY, NETRESOURCEW, RESOURCETYPE_DISK,
+        WNetAddConnection2W, CONNECT_TEMPORARY, NETRESOURCEW, RESOURCETYPE_ANY, RESOURCETYPE_DISK,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        NetShareEnum, SHARE_INFO_1, STYPE_DISKTREE, STYPE_MASK, STYPE_SPECIAL,
     };
 
     let components = network_path_components(path).ok_or_else(|| {
-        AppError::Storage("SMB 路径无效，请使用 \\\\服务器\\共享名。".to_string())
+        AppError::Storage("SMB 路径无效，请使用 \\\\服务器 或 \\\\服务器\\共享名。".to_string())
     })?;
     if username.trim().is_empty() || password.is_empty() {
         return Err(AppError::Storage("请输入 SMB 用户名和密码。".to_string()));
     }
-    let remote = if components.len() >= 2 {
-        format!("\\\\{}\\{}", components[0], components[1])
-    } else {
-        format!("\\\\{}\\IPC$", components[0])
+    let host = &components[0];
+    let requested_share = components
+        .get(1)
+        .map(String::as_str)
+        .or(selected_share.map(str::trim));
+    if let Some(share) = requested_share {
+        if share.is_empty() || share.contains(['/', '\\']) || share == "." || share == ".." {
+            return Err(AppError::Storage("SMB 共享目录名称无效。".to_string()));
+        }
+    }
+
+    // A bare UNC host is not a directory on Windows (read_dir returns
+    // ERROR_BAD_NET_NAME / 67). Authenticate against IPC$ first, then ask the
+    // server for the disk shares the user may open. A concrete share still
+    // connects directly so existing \\server\\share navigation is unchanged.
+    let remote = match requested_share {
+        Some(share) => format!("\\\\{host}\\{share}"),
+        None => format!("\\\\{host}\\IPC$"),
     };
     let mut remote_w: Vec<u16> = remote.encode_utf16().chain(std::iter::once(0)).collect();
+    let server_w: Vec<u16> = format!("\\\\{host}")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     let username_w: Vec<u16> = username
         .trim()
         .encode_utf16()
@@ -554,7 +591,11 @@ fn connect_windows_smb(
         .collect();
     let password_w: Vec<u16> = password.encode_utf16().chain(std::iter::once(0)).collect();
     let resource = NETRESOURCEW {
-        dwType: RESOURCETYPE_DISK,
+        dwType: if requested_share.is_some() {
+            RESOURCETYPE_DISK
+        } else {
+            RESOURCETYPE_ANY
+        },
         lpRemoteName: remote_w.as_mut_ptr(),
         ..Default::default()
     };
@@ -571,9 +612,88 @@ fn connect_windows_smb(
             "SMB 连接失败（Windows 错误码 {result}），请检查服务器、共享名、用户名和密码。"
         )));
     }
+
+    if requested_share.is_none() {
+        let mut shares = Vec::new();
+        let mut resume_handle = 0u32;
+        loop {
+            let mut buffer = std::ptr::null_mut();
+            let mut entries_read = 0u32;
+            let mut total_entries = 0u32;
+            let status = unsafe {
+                NetShareEnum(
+                    server_w.as_ptr(),
+                    1,
+                    &mut buffer,
+                    MAX_PREFERRED_LENGTH,
+                    &mut entries_read,
+                    &mut total_entries,
+                    &mut resume_handle,
+                )
+            };
+            if status != NO_ERROR && status != ERROR_MORE_DATA {
+                if !buffer.is_null() {
+                    unsafe {
+                        NetApiBufferFree(buffer.cast());
+                    }
+                }
+                return Err(AppError::Storage(format!(
+                    "无法读取 SMB 共享目录（Windows 错误码 {status}）。"
+                )));
+            }
+
+            if !buffer.is_null() {
+                let entries = unsafe {
+                    std::slice::from_raw_parts(buffer.cast::<SHARE_INFO_1>(), entries_read as usize)
+                };
+                for entry in entries {
+                    let is_disk_share = entry.shi1_type & STYPE_MASK == STYPE_DISKTREE;
+                    let is_special_share = entry.shi1_type & STYPE_SPECIAL != 0;
+                    if !is_disk_share || is_special_share || entry.shi1_netname.is_null() {
+                        continue;
+                    }
+                    let mut length = 0usize;
+                    unsafe {
+                        while *entry.shi1_netname.add(length) != 0 {
+                            length += 1;
+                        }
+                    }
+                    let share = String::from_utf16_lossy(unsafe {
+                        std::slice::from_raw_parts(entry.shi1_netname, length)
+                    });
+                    if !share.is_empty() && !shares.iter().any(|existing| existing == &share) {
+                        shares.push(share);
+                    }
+                }
+                unsafe {
+                    NetApiBufferFree(buffer.cast());
+                }
+            }
+
+            if status != ERROR_MORE_DATA {
+                break;
+            }
+        }
+        shares.sort_unstable_by_key(|share| share.to_ascii_lowercase());
+        if shares.is_empty() {
+            return Err(AppError::Storage(
+                "SMB 服务器没有可访问的共享目录。".to_string(),
+            ));
+        }
+        return Ok(LocalNetworkShareConnectionResult {
+            kind: "select-share".to_string(),
+            path: format!("\\\\{host}"),
+            shares,
+        });
+    }
+
     Ok(LocalNetworkShareConnectionResult {
         kind: "connected".to_string(),
-        path: path.to_string(),
+        path: components
+            .get(2..)
+            .filter(|tail| !tail.is_empty())
+            .map(|tail| format!("{}\\{}", remote, tail.join("\\")))
+            .unwrap_or(remote),
         shares: Vec::new(),
     })
 }
@@ -592,8 +712,7 @@ pub async fn app_connect_local_network_share(
         }
         #[cfg(target_os = "windows")]
         {
-            let _ = share;
-            connect_windows_smb(&path, &username, &password)
+            connect_windows_smb(&path, &username, &password, share.as_deref())
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
@@ -733,7 +852,11 @@ pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySna
     } else {
         requested_path
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    let root = network_path_as_unc(&requested_path_text)
+        .map(PathBuf::from)
+        .unwrap_or(requested_path);
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let root = requested_path;
 
     let entries = match fs::read_dir(&root) {
@@ -741,7 +864,11 @@ pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySna
         Err(error) => {
             crate::services::logging::error_global("local", format!("list failed error={error}"));
             #[cfg(target_os = "windows")]
-            if is_network_path(&requested_path_text) && error.raw_os_error() == Some(1326) {
+            if is_network_path(&requested_path_text)
+                && (error.raw_os_error() == Some(1326)
+                    || (is_network_host_path(&requested_path_text)
+                        && error.raw_os_error() == Some(67)))
+            {
                 return Err(smb_credentials_required(&requested_path_text, error));
             }
             return Err(AppError::Storage(format!(
@@ -1252,6 +1379,25 @@ mod smb_tests {
             )
         );
         assert!(network_path_components(r"\\server\share\..\secret").is_none());
+    }
+
+    #[test]
+    fn recognizes_a_bare_unc_host_for_share_selection() {
+        assert!(super::is_network_host_path(r"\\server"));
+        assert!(super::is_network_host_path("smb://server"));
+        assert!(!super::is_network_host_path(r"\\server\share"));
+    }
+
+    #[test]
+    fn normalizes_smb_urls_to_windows_unc_paths() {
+        assert_eq!(
+            super::network_path_as_unc("smb://server/share/folder"),
+            Some(r"\\server\share\folder".to_string())
+        );
+        assert_eq!(
+            super::network_path_as_unc(r"\\server\share"),
+            Some(r"\\server\share".to_string())
+        );
     }
 
     #[cfg(target_os = "macos")]

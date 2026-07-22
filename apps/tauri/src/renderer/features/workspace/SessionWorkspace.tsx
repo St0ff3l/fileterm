@@ -438,7 +438,7 @@ export function SessionWorkspace({
             document.body.style.cursor = 'row-resize'
             document.body.style.userSelect = 'none'
           }}
-          aria-label="调整终端与底部面板高度"
+          aria-label={t.resizeTerminalPanel}
           aria-orientation="horizontal"
           role="separator"
         />

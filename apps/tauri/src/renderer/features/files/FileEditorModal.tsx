@@ -9,7 +9,7 @@ import { CloseButton } from '../common/CloseButton'
 import { AppIcon } from '../common/AppIcon'
 import {
   EDITOR_ENCODINGS,
-  findEncodingOption,
+  getEditorEncodingLabel,
   sortEditorLanguages,
   type EditorLanguageOption
 } from './file-editor-config'
@@ -148,7 +148,7 @@ export function FileEditorModal({
 
   const lineCount = useMemo(() => (content.match(/\n/g)?.length ?? 0) + 1, [content])
   const characterCount = content.length
-  const currentEncoding = findEncodingOption(encoding)
+  const currentEncoding = getEditorEncodingLabel(encoding)
   const currentLanguage = languages.find((option) => option.id === language)?.label ?? language
   const handleMount: OnMount = (editor, monaco) => {
     disposeCanvasTextMetricsRef.current?.()
@@ -411,7 +411,7 @@ export function FileEditorModal({
               {t.fileEditorCursor}: {cursorLine}:{cursorColumn}
             </span>
             <div className="file-editor-status-actions">
-              <StatusMenu current={openMenu} label={currentEncoding.label} menu="encoding" onToggle={setOpenMenu}>
+              <StatusMenu current={openMenu} label={currentEncoding} menu="encoding" onToggle={setOpenMenu}>
                 {EDITOR_ENCODINGS.map((option) => (
                   <button
                     className={option.value === encoding ? 'is-active' : ''}
@@ -423,7 +423,7 @@ export function FileEditorModal({
                     }}
                     type="button"
                   >
-                    {option.label}
+                    {getEditorEncodingLabel(option.value)}
                   </button>
                 ))}
               </StatusMenu>

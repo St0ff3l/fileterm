@@ -15,7 +15,7 @@ import { ManagerInlineFolderRow } from '../common/ManagerInlineFolderRow'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { SshKeyNoteDialog } from './SshKeyNoteDialog'
-import { t } from '../../i18n'
+import { formatMessage, t } from '../../i18n'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 
 const SSH_KEY_MANAGER_UI_STATE = 'ssh-key-manager-ui'
@@ -195,7 +195,7 @@ export function SshKeyManagerPage({
   }
 
   useEffect(() => {
-    onActiveFolderChange?.(activeFolder?.name ?? '全部密钥')
+    onActiveFolderChange?.(activeFolder?.name ?? t.allKeys)
   }, [activeFolder?.name, onActiveFolderChange])
 
   useEffect(() => {
@@ -606,13 +606,13 @@ export function SshKeyManagerPage({
           <span aria-hidden="true" className="material-symbols-outlined">
             key
           </span>
-          <span>密钥管理器</span>
+          <span>{t.sshKeyManager}</span>
         </span>
         <label className="connection-manager-search ssh-key-manager-search">
           <AppIcon name="search" size={14} />
           <input
-            aria-label="筛选密钥"
-            placeholder="筛选密钥..."
+            aria-label={t.filterKeys}
+            placeholder={t.filterKeysPlaceholder}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -621,7 +621,7 @@ export function SshKeyManagerPage({
       </header>
 
       <div className="connection-manager-layout ssh-key-manager-layout">
-        <aside className="connection-manager-sidebar" aria-label="密钥文件夹">
+        <aside className="connection-manager-sidebar" aria-label={t.keyFolders}>
           <button
             className={`connection-manager-sidebar-item ssh-key-root-drop-target ${activeFolderId === 'all' ? 'active' : ''} ${
               dragOver?.id === ROOT_DROP_TARGET_ID ? 'drag-over' : ''
@@ -637,7 +637,7 @@ export function SshKeyManagerPage({
             <span className="connection-manager-sidebar-icon">
               <AppIcon name="key" size={14} />
             </span>
-            <span className="connection-manager-sidebar-label">全部密钥</span>
+            <span className="connection-manager-sidebar-label">{t.allKeys}</span>
             <span className="connection-manager-sidebar-count">{keys.length}</span>
           </button>
 
@@ -662,12 +662,12 @@ export function SshKeyManagerPage({
         <section className="connection-manager-main ssh-key-manager-main">
           <div className="manager-table connection-manager-table ssh-key-manager-table">
             <div className="manager-head">
-              <span>名称</span>
-              <span>算法 / 指纹</span>
-              <span>备注</span>
-              <span>导入时间</span>
-              <span>引用</span>
-              <span>操作</span>
+              <span>{t.name}</span>
+              <span>{t.keyAlgorithmFingerprint}</span>
+              <span>{t.keyNote}</span>
+              <span>{t.importedAt}</span>
+              <span>{t.keyReferences}</span>
+              <span>{t.actions}</span>
             </div>
             <div className="manager-body connection-manager-body">
               {(error || uiStateError) && !noteDialog ? (
@@ -760,9 +760,9 @@ export function SshKeyManagerPage({
                           <span>--</span>
                           <span className="manager-actions ssh-key-folder-actions">
                             <button
-                              aria-label={`重命名文件夹 ${folder.name}`}
+                              aria-label={formatMessage(t.renameFolderNamed, { name: folder.name })}
                               className="manager-icon-action"
-                              title="重命名文件夹"
+                              title={t.renameFolder}
                               type="button"
                               onMouseDown={(event) => event.stopPropagation()}
                               onPointerDown={(event) => event.stopPropagation()}
@@ -774,9 +774,9 @@ export function SshKeyManagerPage({
                               <AppIcon name="edit" size={14} />
                             </button>
                             <button
-                              aria-label={`删除文件夹 ${folder.name}`}
+                              aria-label={formatMessage(t.deleteFolderNamed, { name: folder.name })}
                               className="manager-icon-action danger"
-                              title="删除文件夹"
+                              title={t.deleteFolder}
                               type="button"
                               onMouseDown={(event) => event.stopPropagation()}
                               onPointerDown={(event) => event.stopPropagation()}
@@ -805,11 +805,11 @@ export function SshKeyManagerPage({
                   <span aria-hidden="true" className="material-symbols-outlined">
                     key_off
                   </span>
-                  <strong>{query ? '没有匹配的密钥' : '尚未导入私钥'}</strong>
-                  <span>{query ? '尝试其他搜索词。' : '新建密钥后即可在 SSH 连接中复用。'}</span>
+                  <strong>{query ? t.noMatchingKeys : t.noKeysImported}</strong>
+                  <span>{query ? t.tryAnotherSearch : t.noKeysHint}</span>
                 </div>
               ) : null}
-              {loading ? <div className="connection-manager-empty">正在加载密钥列表…</div> : null}
+              {loading ? <div className="connection-manager-empty">{t.loadingKeys}</div> : null}
             </div>
           </div>
 
@@ -826,15 +826,15 @@ export function SshKeyManagerPage({
                 }}
               >
                 <AppIcon name="folder" size={13} />
-                <span>新建文件夹</span>
+                <span>{t.newFolder}</span>
               </button>
               <button className="drawer-option-btn primary-btn" type="button" onClick={openNewKeyDialog}>
                 <AppIcon name="plus" size={13} />
-                <span>新建密钥</span>
+                <span>{t.newKey}</span>
               </button>
             </div>
             <button
-              aria-label="展开操作"
+              aria-label={t.expandActions}
               className="drawer-trigger-btn"
               type="button"
               onClick={() => setIsActionsExpanded((expanded) => !expanded)}
@@ -874,7 +874,7 @@ export function SshKeyManagerPage({
           description={
             pendingDelete.kind === 'folder'
               ? `${t.deleteConfirmPrefix}${pendingDelete.name}${t.deleteConfirmSuffix}`
-              : `确定删除 ${pendingDelete.name} 吗？此操作不会删除原始文件。`
+              : formatMessage(t.deleteKeyDescription, { name: pendingDelete.name })
           }
           isSubmitting={busy}
           errorMessage={deleteError || error || uiStateError}
@@ -937,7 +937,7 @@ function SshKeyRow({
           </span>
           <span className="manager-node-name">{item.name}</span>
         </span>
-        <small>{item.encrypted ? '已加密' : '未加密'}</small>
+        <small>{item.encrypted ? t.encrypted : t.unencrypted}</small>
       </span>
       <span className="ssh-key-fingerprint-cell">
         <span>{item.algorithm}</span>
@@ -950,9 +950,9 @@ function SshKeyRow({
       <span>{item.usageCount}</span>
       <span className="manager-actions ssh-key-actions">
         <button
-          aria-label="修改备注"
+          aria-label={t.editKeyNote}
           className="manager-icon-action"
-          title="修改备注"
+          title={t.editKeyNote}
           type="button"
           onMouseDown={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
@@ -964,10 +964,10 @@ function SshKeyRow({
           <AppIcon name="edit" size={14} />
         </button>
         <button
-          aria-label="删除密钥"
+          aria-label={t.deleteKey}
           className="manager-icon-action danger"
           disabled={item.usageCount > 0}
-          title={item.usageCount > 0 ? '该密钥仍被连接引用，无法删除' : '删除密钥'}
+          title={item.usageCount > 0 ? t.keyStillReferenced : t.deleteKey}
           type="button"
           onMouseDown={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}

@@ -51,7 +51,7 @@ import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
 import { WorkspaceStage } from './features/workspace/WorkspaceStage'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
-import { defaultLocale, setLocale, t, type AppLocale } from './i18n'
+import { defaultLocale, localizeErrorScope, setLocale, t, type AppLocale } from './i18n'
 
 import { useWorkspaceIpcSync } from './hooks/useWorkspaceIpcSync'
 import { useWorkspaceTabs } from './hooks/useWorkspaceTabs'
@@ -527,7 +527,8 @@ export function App() {
     handleSubmitLocalNetworkCredentials,
     dismissLocalNetworkCredentialsDialog,
     handleSubmitLocalNetworkShare,
-    dismissLocalNetworkShareDialog
+    dismissLocalNetworkShareDialog,
+    changeLocalNetworkCredentials
   } = useFileOperations({
     desktopApi,
     workspace,
@@ -645,6 +646,7 @@ export function App() {
 
   const formatAppError = (scope: string, err: unknown, details?: ErrorDetails) => {
     const message = normalizeErrorMessage(err)
+    const displayScope = localizeErrorScope(scope, locale)
     const likelyDisconnectedSession =
       /会话已断开|session disconnected|session not found|remote connection closed|connection closed/i.test(message)
     const likelyConcurrentRequestIssue =
@@ -678,7 +680,7 @@ export function App() {
       return `Could not open remote directory${pathText}${metadata}. It may not exist, may not be a directory, or your account may not have permission to make changes. Raw error: ${message}`
     }
 
-    return `${scope}${pathText}${metadata} failed: ${message}`
+    return `${displayScope}${pathText}${metadata} failed: ${message}`
   }
 
   const reportError = (setter: (message: string) => void, scope: string, err: unknown, details?: ErrorDetails) => {
@@ -1484,6 +1486,7 @@ export function App() {
                 path: localNetworkShareDialog.path,
                 shares: localNetworkShareDialog.shares,
                 onCancel: dismissLocalNetworkShareDialog,
+                onChangeCredentials: changeLocalNetworkCredentials,
                 onSubmit: handleSubmitLocalNetworkShare
               }
             : null

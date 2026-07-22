@@ -328,7 +328,7 @@ export function CommandCenter({
                   </>
                 )}
               </div>
-              <VerticalScrollbar ariaLabel="滚动命令列表" scrollRef={templateListScrollRef} topInset={24} />
+              <VerticalScrollbar ariaLabel={t.scrollCommandList} scrollRef={templateListScrollRef} topInset={24} />
             </div>
           </section>
 

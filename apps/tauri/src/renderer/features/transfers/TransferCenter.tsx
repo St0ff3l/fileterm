@@ -4,6 +4,7 @@ import { isActiveTransfer } from '../../app/app-utils'
 import { TransferBar } from './TransferBar'
 import { TransferPopover } from './TransferPopover'
 import { scopeTransfersToSession, type TransferSessionTab } from './transfer-scope'
+import { t } from '../../i18n'
 
 export function TransferCenter({
   activeProfileId,
@@ -75,7 +76,7 @@ export function TransferCenter({
       const snapshot = await desktopApi.clearTransfers(transferIds)
       onApplySnapshot(snapshot)
     } catch (error) {
-      onError('清理传输记录', error)
+      onError(t.clearTransferHistory, error)
     }
   }
 
@@ -95,14 +96,18 @@ export function TransferCenter({
           transfers={scopedTransfers}
           onDiscardTransfer={(transferId) =>
             desktopApi
-              ? runTransferAction('丢弃传输断点', (id) => desktopApi.discardTransfer(id), transferId)
+              ? runTransferAction(t.discardTransferCheckpoint, (id) => desktopApi.discardTransfer(id), transferId)
               : undefined
           }
           onPauseTransfer={(transferId) =>
-            desktopApi ? runTransferAction('暂停传输', (id) => desktopApi.pauseTransfer(id), transferId) : undefined
+            desktopApi
+              ? runTransferAction(t.pauseTransfer, (id) => desktopApi.pauseTransfer(id), transferId)
+              : undefined
           }
           onResumeTransfer={(transferId) =>
-            desktopApi ? runTransferAction('继续传输', (id) => desktopApi.resumeTransfer(id), transferId) : undefined
+            desktopApi
+              ? runTransferAction(t.resumeTransfer, (id) => desktopApi.resumeTransfer(id), transferId)
+              : undefined
           }
           onClearTransfers={clearTransfers}
           onClose={() => setShowTransfers(false)}

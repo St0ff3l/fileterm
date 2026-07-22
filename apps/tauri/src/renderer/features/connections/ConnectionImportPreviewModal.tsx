@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import type { ConnectionImportConflictStrategy, ConnectionImportPlan } from '@fileterm/core'
+import { formatMessage, t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 
 export function ConnectionImportPreviewModal({
@@ -46,23 +47,21 @@ export function ConnectionImportPreviewModal({
         <header className="connection-manager-header">
           <span className="connection-manager-title">
             <span className="material-symbols-outlined">preview</span>
-            <span>导入预览</span>
+            <span>{t.connectionImportPreviewTitle}</span>
           </span>
           <CloseButton disabled={isSubmitting} onClick={onClose} />
         </header>
-        <p className="connection-import-preview-hint">
-          密码、私钥和代理密码不会显示在此预览中；它们只在确认后由主进程写入本地 secret storage。
-        </p>
+        <p className="connection-import-preview-hint">{t.connectionImportPreviewHint}</p>
         <label className="connection-import-strategy">
-          发现重复连接时
+          {t.connectionImportConflictLabel}
           <select
             disabled={isSubmitting}
             value={strategy}
             onChange={(event) => setStrategy(event.target.value as ConnectionImportConflictStrategy)}
           >
-            <option value="skip">跳过重复项</option>
-            <option value="overwrite">覆盖连接信息（保留未提供的凭据）</option>
-            <option value="create">另存为新的连接</option>
+            <option value="skip">{t.connectionImportSkip}</option>
+            <option value="overwrite">{t.connectionImportOverwrite}</option>
+            <option value="create">{t.connectionImportCreate}</option>
           </select>
         </label>
         <div className="connection-import-list">
@@ -84,20 +83,29 @@ export function ConnectionImportPreviewModal({
                   {item.port ? `:${item.port}` : ''}
                   {item.username ? ` · ${item.username}` : ''}
                 </small>
-                {item.unsupportedFields?.length ? <small>忽略字段：{item.unsupportedFields.join(', ')}</small> : null}
+                {item.unsupportedFields?.length ? (
+                  <small>
+                    {t.connectionImportIgnoredFields}
+                    {item.unsupportedFields.join(', ')}
+                  </small>
+                ) : null}
               </span>
               <span className="connection-import-item-status">
-                {item.status === 'invalid' ? item.reason : item.conflictProfileId ? '检测到重复项' : '可导入'}
+                {item.status === 'invalid'
+                  ? item.reason
+                  : item.conflictProfileId
+                    ? t.connectionImportConflictDetected
+                    : t.connectionImportReady}
               </span>
             </label>
           ))}
         </div>
         <footer className="connection-import-actions">
           <span>
-            已选择 {selected.size} / {readyIds.length} 项
+            {formatMessage(t.connectionImportSelectedCount, { selected: selected.size, total: readyIds.length })}
           </span>
           <button disabled={isSubmitting} type="button" onClick={onClose}>
-            取消
+            {t.cancel}
           </button>
           <button
             className="primary-button compact"
@@ -106,7 +114,7 @@ export function ConnectionImportPreviewModal({
             onClick={() => void commit()}
           >
             {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{isSubmitting ? '正在导入…' : '确认导入'}</span>
+            <span>{isSubmitting ? t.connectionImporting : t.connectionImportConfirm}</span>
           </button>
         </footer>
       </section>

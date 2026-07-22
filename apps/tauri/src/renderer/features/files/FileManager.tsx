@@ -693,7 +693,7 @@ export function FileManager({
             ? clipboardStatusText || activeSession.remotePath
             : activeView === 'command'
               ? `${t.commandQuickLaunch} (${isSshSession ? t.send : t.commandSshOnly})`
-              : '当前 SSH 工作区的运行时隧道'}
+              : t.runtimeTunnelTab}
         </span>
         {activeView === 'file' ? (
           <div className="file-tab-actions">
@@ -877,7 +877,7 @@ export function FileManager({
                   onSelectionDragEnter={extendLocalDragSelection}
                 />
               </div>
-              <VerticalScrollbar ariaLabel="滚动本地文件列表" scrollRef={localScrollRef} topInset={24} />
+              <VerticalScrollbar ariaLabel={t.scrollLocalFiles} scrollRef={localScrollRef} topInset={24} />
             </div>
             {showLocalDirectoryLoading ? (
               <WorkspaceLoadingState className="workspace-loading-state--overlay" label={t.loadingLocalDirectory} />
@@ -1057,7 +1057,7 @@ export function FileManager({
                     }}
                   />
                 </div>
-                <VerticalScrollbar ariaLabel="滚动远程文件列表" scrollRef={remoteScrollRef} topInset={24} />
+                <VerticalScrollbar ariaLabel={t.scrollRemoteFiles} scrollRef={remoteScrollRef} topInset={24} />
               </div>
               {showPaneRemoteDirectoryLoading ? (
                 <WorkspaceLoadingState className="workspace-loading-state--overlay" label={t.loadingRemoteDirectory} />

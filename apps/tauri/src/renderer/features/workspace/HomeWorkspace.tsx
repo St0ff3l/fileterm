@@ -89,7 +89,7 @@ export function HomeWorkspace({
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
   const [activeCommandFolderName, setActiveCommandFolderName] = useState('')
-  const [activeSshKeyFolderName, setActiveSshKeyFolderName] = useState('全部密钥')
+  const [activeSshKeyFolderName, setActiveSshKeyFolderName] = useState(t.allKeys)
   const [sshKeyStats, setSshKeyStats] = useState({ keyCount: 0, folderCount: 0 })
 
   // 侧栏页签的纵向顺序,用于判断切换方向(目标更靠下=向下飞入,更靠上=向上飞入)
@@ -122,7 +122,7 @@ export function HomeWorkspace({
             : 'available',
         availableVersion: '1.1.0',
         progress: updatePreviewState === 'downloading' ? 62 : updatePreviewState === 'downloaded' ? 100 : undefined,
-        message: updatePreviewState === 'error' ? '无法连接到更新服务器' : undefined
+        message: updatePreviewState === 'error' ? t.updateServerUnavailable : undefined
       }
       setUpdateStatus(previewStatus)
       return
@@ -204,12 +204,12 @@ export function HomeWorkspace({
           <button
             className={`sidebar-nav-link ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => selectTab('overview')}
-            aria-label="概览"
-            title="概览"
+            aria-label={t.overview}
+            title={t.overview}
             type="button"
           >
             <span className="material-symbols-outlined">dashboard</span>
-            <span>概览</span>
+            <span>{t.overview}</span>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'connection-manager' ? 'active' : ''}`}
@@ -234,12 +234,12 @@ export function HomeWorkspace({
           <button
             className={`sidebar-nav-link ${activeTab === 'ssh-key-manager' ? 'active' : ''}`}
             onClick={() => selectTab('ssh-key-manager')}
-            aria-label="密钥管理器"
-            title="密钥管理器"
+            aria-label={t.sshKeyManager}
+            title={t.sshKeyManager}
             type="button"
           >
             <span className="material-symbols-outlined">key</span>
-            <span>密钥管理器</span>
+            <span>{t.sshKeyManager}</span>
           </button>
           <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
@@ -425,9 +425,9 @@ export function HomeWorkspace({
             {activeTab === 'ssh-key-manager' && (
               <>
                 <span className="footer-meta-separator">|</span>
-                <span>{sshKeyStats.keyCount} 个密钥</span>
+                <span>{t.keyCount.replace('{count}', String(sshKeyStats.keyCount))}</span>
                 <span className="footer-meta-separator">|</span>
-                <span>{sshKeyStats.folderCount} 个分组</span>
+                <span>{t.folderCount.replace('{count}', String(sshKeyStats.folderCount))}</span>
                 <span className="footer-meta-spacer"></span>
                 <span>{activeSshKeyFolderName}</span>
               </>
