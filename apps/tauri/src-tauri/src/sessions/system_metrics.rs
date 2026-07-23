@@ -1606,7 +1606,10 @@ mod tests {
         assert_eq!(metrics["diskRows"].as_array().map(Vec::len), Some(2));
         assert_eq!(metrics["topProcesses"].as_array().map(Vec::len), Some(2));
         // 按到达顺序，第一行是 systemd
-        assert_eq!(metrics["topProcesses"][0]["command"], "/usr/lib/systemd/systemd");
+        assert_eq!(
+            metrics["topProcesses"][0]["command"],
+            "/usr/lib/systemd/systemd"
+        );
         assert_eq!(metrics["topProcesses"][0]["pid"], 1);
         assert_eq!(metrics["topProcesses"][0]["user"], "root");
         assert_eq!(metrics["topProcesses"][0]["cpu"], "0.1");

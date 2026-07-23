@@ -1893,10 +1893,7 @@ fn validate_proxy_credentials(username: &str, password: &str) -> Result<(), Stri
             ));
         }
         if field.bytes().any(|b| b < 0x20 || b == 0x7f) {
-            return Err(format!(
-                "Proxy {} contains control characters",
-                label
-            ));
+            return Err(format!("Proxy {} contains control characters", label));
         }
     }
     Ok(())
@@ -1910,15 +1907,18 @@ async fn connect_http_proxy(
     username: &str,
     password: &str,
 ) -> Result<TcpStream, String> {
-    let mut stream = timeout(PROXY_IO_TIMEOUT, TcpStream::connect((proxy_host, proxy_port)))
-        .await
-        .map_err(|_| {
-            format!(
-                "HTTP proxy connect timed out after {} seconds",
-                PROXY_IO_TIMEOUT.as_secs()
-            )
-        })?
-        .map_err(|error| format!("HTTP proxy connect failed: {error}"))?;
+    let mut stream = timeout(
+        PROXY_IO_TIMEOUT,
+        TcpStream::connect((proxy_host, proxy_port)),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "HTTP proxy connect timed out after {} seconds",
+            PROXY_IO_TIMEOUT.as_secs()
+        )
+    })?
+    .map_err(|error| format!("HTTP proxy connect failed: {error}"))?;
     let _ = stream.set_nodelay(true);
     let request = build_http_connect_request(host, port, username, password)?;
     timeout(PROXY_IO_TIMEOUT, stream.write_all(&request))
@@ -1979,9 +1979,8 @@ fn parse_http_connect_status(status_line: &str) -> Result<u16, String> {
             "HTTP proxy returned a malformed status code: {status_line}"
         ));
     }
-    code.parse::<u16>().map_err(|_| {
-        format!("HTTP proxy returned an invalid status code: {status_line}")
-    })
+    code.parse::<u16>()
+        .map_err(|_| format!("HTTP proxy returned an invalid status code: {status_line}"))
 }
 
 fn build_http_connect_request(
@@ -2485,11 +2484,7 @@ async fn open_session(
         AuthenticationResult::Rejected => {
             let _ = timeout(
                 Duration::from_secs(3),
-                handle.disconnect(
-                    Disconnect::ByApplication,
-                    "authentication rejected",
-                    "en",
-                ),
+                handle.disconnect(Disconnect::ByApplication, "authentication rejected", "en"),
             )
             .await;
             Err("SSH Authentication failed".to_string())

@@ -374,15 +374,18 @@ async fn connect_http_proxy(
     {
         return Err("Telnet proxy values must not contain line breaks".to_string());
     }
-    let mut stream = timeout(PROXY_IO_TIMEOUT, TcpStream::connect((proxy_host, proxy_port)))
-        .await
-        .map_err(|_| {
-            format!(
-                "Telnet HTTP proxy connect timed out after {} seconds",
-                PROXY_IO_TIMEOUT.as_secs()
-            )
-        })?
-        .map_err(|error| format!("Telnet HTTP proxy connect failed: {error}"))?;
+    let mut stream = timeout(
+        PROXY_IO_TIMEOUT,
+        TcpStream::connect((proxy_host, proxy_port)),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "Telnet HTTP proxy connect timed out after {} seconds",
+            PROXY_IO_TIMEOUT.as_secs()
+        )
+    })?
+    .map_err(|error| format!("Telnet HTTP proxy connect failed: {error}"))?;
     let _ = stream.set_nodelay(true);
     let authority = if host.contains(':') && !host.starts_with('[') {
         format!("[{host}]:{port}")
