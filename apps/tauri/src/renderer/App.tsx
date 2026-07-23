@@ -74,23 +74,34 @@ type ErrorDetails = {
   targetPath?: string
 }
 
-function readInitialTheme(searchParams: URLSearchParams): ThemeMode {
+type InitialUiPreferences = {
+  theme: ThemeMode
+  locale: AppLocale
+}
+
+function readInitialTheme(searchParams: URLSearchParams, persistedPreferences?: InitialUiPreferences): ThemeMode {
   const queryTheme = searchParams.get('theme')
   if (queryTheme === 'default-light' || queryTheme === 'default-dark') {
     return queryTheme
   }
+  if (persistedPreferences?.theme === 'default-light' || persistedPreferences?.theme === 'default-dark') {
+    return persistedPreferences.theme
+  }
   return 'default-dark'
 }
 
-function readInitialLocale(searchParams: URLSearchParams): AppLocale {
+function readInitialLocale(searchParams: URLSearchParams, persistedPreferences?: InitialUiPreferences): AppLocale {
   const queryLocale = searchParams.get('locale')
   if (queryLocale === 'enUS' || queryLocale === 'zhCN') {
     return queryLocale
   }
+  if (persistedPreferences?.locale === 'enUS' || persistedPreferences?.locale === 'zhCN') {
+    return persistedPreferences.locale
+  }
   return defaultLocale
 }
 
-export function App() {
+export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUiPreferences } = {}) {
   const searchParams = new URLSearchParams(window.location.search)
   const windowMode = searchParams.get('window') ?? 'main'
   const isConnectionManagerWindow = windowMode === 'connection-manager'
@@ -123,8 +134,8 @@ export function App() {
   const [isWorkspaceTransitionActive, setIsWorkspaceTransitionActive] = useState(true)
   const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false)
   const hasRenderedWorkspaceRef = useRef(false)
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams))
-  const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams))
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams, initialUiPreferences))
+  const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
 
@@ -182,6 +193,9 @@ export function App() {
     windowCloseRequest,
     clearWindowCloseRequest,
     closeActiveRequestVersion,
+    newTabRequestVersion,
+    splitPaneRequest,
+    paneFocusRequest,
     closeCurrentWindow,
     requestQuitApp
   } = useWorkspaceIpcSync({
@@ -191,6 +205,7 @@ export function App() {
     isConnectionManagerWindow,
     themeMode,
     locale,
+    initialUiPreferencesLoaded: initialUiPreferences !== undefined,
     onThemeModeChange: setThemeMode,
     onLocaleChange: (nextLocale) => {
       setLocale(nextLocale)
@@ -221,12 +236,14 @@ export function App() {
     activeLocalTab,
     visibleActiveSessionTabId,
     activeTab,
-    activeSession,
     addHomeTab,
     isHomeWorkspaceVisible,
     showSidebar,
     effectiveActiveLocalTabId,
+    activeSession,
     activeProfile,
+    activePaneTab,
+    activePaneSession,
     activeWorkspaceOrderKey,
     workspaceNavDirection,
     orderedTabs,
@@ -249,7 +266,11 @@ export function App() {
     activateHomeTab,
     closeHomeTab,
     closeSessionTab,
-    openSystemInfo
+    openSystemInfo,
+    splitPane,
+    closePane,
+    activatePane,
+    setPaneWeights
   } = useWorkspaceTabs({
     desktopApi,
     workspace,
@@ -258,6 +279,9 @@ export function App() {
     locale,
     isBusy,
     closeActiveRequestVersion,
+    newTabRequestVersion,
+    splitPaneRequest,
+    paneFocusRequest,
     onSnapshot: applySnapshot,
     onBusyChange: setIsBusy,
     onStatusMessage: (msg) => setError(msg),
@@ -855,7 +879,7 @@ export function App() {
 
     try {
       setIsBusy(true)
-      const targetIds = resolveSelectedTabIds(scope, activeTab, selectedTabIds, sessionSendTargets)
+      const targetIds = resolveSelectedTabIds(scope, activePaneTab, selectedTabIds, sessionSendTargets)
       const targetTabs = visibleWorkspaceTabs.filter((tab) => targetIds.includes(tab.id))
 
       // 并行发送，对照 Electron 原版的 fire-and-forget 行为。
@@ -1267,6 +1291,9 @@ export function App() {
                 activeProfile={activeProfile}
                 activeSession={activeSession}
                 activeTab={activeTab}
+                terminalActiveTab={activePaneTab ?? activeTab}
+                terminalActiveSession={activePaneSession ?? activeSession}
+                splitRootTab={activeTab?.paneRoot ? activeTab : undefined}
                 activeView={activeWorkspaceView}
                 commandPaneWidth={activeCommandPaneWidth}
                 onCommandPaneWidthChange={setActiveCommandPaneWidth}
@@ -1376,6 +1403,12 @@ export function App() {
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
                 onResizeStart={startSidebarResize}
+                sessions={workspace.sessions}
+                activePaneTabId={activePaneTab?.id}
+                onClosePane={closePane}
+                onSplitPane={splitPane}
+                onActivatePane={activatePane}
+                onSetPaneWeights={setPaneWeights}
               />
             </div>
           </div>

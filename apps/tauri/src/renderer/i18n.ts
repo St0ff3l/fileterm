@@ -29,6 +29,8 @@ const zhCN = {
   findCaseSensitive: '区分大小写',
   findRegex: '使用正则表达式',
   clearScreen: '清屏',
+  splitVertically: '垂直分屏',
+  splitHorizontally: '水平分屏',
   findPrompt: '查找终端内容',
   findNotFound: '未找到匹配内容。',
   findResultLine: '第 {line} 行',
@@ -270,6 +272,9 @@ const zhCN = {
   enableExecChannel: '启用后台命令通道（Exec）',
   enableExecChannelHint:
     '用于读取系统信息、root 文件视图、终端目录跟随和用户状态同步。它会额外建立一条 SSH 命令连接；仅在连接后立即断开时才建议关闭。',
+  legacyAlgorithms: '兼容旧服务器算法（SHA-1）',
+  legacyAlgorithmsHint:
+    '老服务器（OpenSSH 4.x/5.x 时代）只支持 SHA-1 类 MAC/KEX，默认仅 SHA-2 会导致握手被拒。开启后追加 SHA-1 算法到列表末尾，SHA-2 仍优先；仅在连接失败时启用。',
   autoReconnect: '断线后自动重连',
   autoReconnectHint: '会话意外断线时后台自动重新连接，适合需要长期保持的后台会话。主动关闭标签不会触发重连。',
   reconnectEnter: '回车重连',
@@ -735,6 +740,8 @@ const enUS: typeof zhCN = {
   findCaseSensitive: 'Match case',
   findRegex: 'Use regular expression',
   clearScreen: 'Clear Screen',
+  splitVertically: 'Split Vertically',
+  splitHorizontally: 'Split Horizontally',
   findPrompt: 'Find in terminal',
   findNotFound: 'No match found.',
   findResultLine: 'Line {line}',
@@ -975,6 +982,9 @@ const enUS: typeof zhCN = {
   enableExecChannel: 'Enable background command channel (Exec)',
   enableExecChannelHint:
     'Used for system info, root file access, terminal directory following, and user-state sync. It opens one additional SSH command connection; turn it off only if the login disconnects immediately.',
+  legacyAlgorithms: 'Legacy server algorithms (SHA-1)',
+  legacyAlgorithmsHint:
+    'Old servers (OpenSSH 4.x/5.x era) only support SHA-1 MAC/KEX; the default SHA-2-only list causes handshake rejection. When enabled, SHA-1 algorithms are appended to the end of the preference list while SHA-2 stays preferred. Enable only if the connection fails.',
   autoReconnect: 'Auto-reconnect on disconnect',
   autoReconnectHint:
     'Automatically reconnects in the background when the session drops unexpectedly. Closing the tab intentionally will not trigger a reconnect.',

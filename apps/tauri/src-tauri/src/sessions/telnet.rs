@@ -4,6 +4,7 @@ use tauri::AppHandle;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio::time::{timeout, Duration};
 use tokio_socks::tcp::Socks5Stream;
 
 use super::telnet_direct::connect_direct_telnet;
@@ -20,6 +21,15 @@ const SB: u8 = 250;
 const SE: u8 = 240;
 const TERMINAL_TYPE: u8 = 24;
 const NAWS: u8 = 31;
+/// Telnet 传输层连接（直连或经代理）整体超时。Telnet 服务器或代理无响应时，
+/// `TcpStream::connect` 和 SOCKS5/HTTP CONNECT 握手都会永久 await，导致
+/// 标签页卡在 connecting 状态无法重试。30s 与 SSH 侧 SSH_TRANSPORT_TIMEOUT 对齐。
+const TELNET_TRANSPORT_TIMEOUT: Duration = Duration::from_secs(30);
+/// HTTP/SOCKS5 代理单步 IO 超时。代理服务器或中间网络卡住时，TCP 连接、
+/// CONNECT 请求写入、响应逐字节读取都不能让外层 30s 超时全部消耗在
+/// 单次 read 上——慢速代理可以每 29s 发一个字节拖满整个阶段。8s 覆盖
+/// 正常代理 RTT，超时后立即给出明确错误。
+const PROXY_IO_TIMEOUT: Duration = Duration::from_secs(8);
 
 trait TelnetTransport: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> TelnetTransport for T {}
@@ -250,8 +260,16 @@ async fn connect_transport(
         .and_then(Value::as_str)
         .unwrap_or("none");
     if proxy_type == "none" {
-        return connect_direct_telnet(host, port)
+        // 直连路径整体超时：Telnet 服务器无响应时 TcpStream::connect 会永久
+        // await，标签页卡在 connecting 状态无法重试。
+        return timeout(TELNET_TRANSPORT_TIMEOUT, connect_direct_telnet(host, port))
             .await
+            .map_err(|_| {
+                format!(
+                    "Telnet connect timed out after {} seconds",
+                    TELNET_TRANSPORT_TIMEOUT.as_secs()
+                )
+            })?
             .map(|stream| Box::new(stream) as Box<dyn TelnetTransport>);
     }
     let proxy_host = proxy
@@ -259,6 +277,7 @@ async fn connect_transport(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "Telnet proxy host is required".to_string())?;
+    validate_proxy_host(proxy_host)?;
     let proxy_port = proxy
         .and_then(|proxy| proxy.get("port"))
         .and_then(Value::as_u64)
@@ -272,27 +291,73 @@ async fn connect_transport(
         .and_then(|proxy| proxy.get("password"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    validate_proxy_credentials(username, password)?;
+
     match proxy_type {
         "socks5" if username.is_empty() => {
-            Socks5Stream::connect((proxy_host, proxy_port), (host, port))
-                .await
-                .map(|stream| Box::new(stream) as Box<dyn TelnetTransport>)
-                .map_err(|error| format!("Telnet SOCKS5 proxy connect failed: {error}"))
+            let stream = timeout(
+                PROXY_IO_TIMEOUT,
+                Socks5Stream::connect((proxy_host, proxy_port), (host, port)),
+            )
+            .await
+            .map_err(|_| "Telnet SOCKS5 proxy connect timed out".to_string())?
+            .map_err(|error| format!("Telnet SOCKS5 proxy connect failed: {error}"))?;
+            Ok(Box::new(stream) as Box<dyn TelnetTransport>)
         }
-        "socks5" => Socks5Stream::connect_with_password(
-            (proxy_host, proxy_port),
-            (host, port),
-            username,
-            password,
-        )
-        .await
-        .map(|stream| Box::new(stream) as Box<dyn TelnetTransport>)
-        .map_err(|error| format!("Telnet SOCKS5 proxy authentication failed: {error}")),
+        "socks5" => {
+            let stream = timeout(
+                PROXY_IO_TIMEOUT,
+                Socks5Stream::connect_with_password(
+                    (proxy_host, proxy_port),
+                    (host, port),
+                    username,
+                    password,
+                ),
+            )
+            .await
+            .map_err(|_| "Telnet SOCKS5 proxy authentication timed out".to_string())?
+            .map_err(|error| format!("Telnet SOCKS5 proxy authentication failed: {error}"))?;
+            Ok(Box::new(stream) as Box<dyn TelnetTransport>)
+        }
         "http" => connect_http_proxy(proxy_host, proxy_port, host, port, username, password)
             .await
             .map(|stream| Box::new(stream) as Box<dyn TelnetTransport>),
         other => Err(format!("Unsupported Telnet proxy type: {other}")),
     }
+}
+
+/// 校验代理主机名：拒绝控制字符（含 CRLF，防止 HTTP CONNECT 头注入；
+/// SOCKS5 虽是二进制协议，但控制字符 host 对任何代理都是非法输入），
+/// 拒绝超长 host（RFC 1035 限制 253 字符，留余量到 255）。
+fn validate_proxy_host(host: &str) -> Result<(), String> {
+    if host.len() > 255 {
+        return Err("Telnet proxy host is too long (max 255 characters)".to_string());
+    }
+    if host.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return Err("Telnet proxy host contains control characters".to_string());
+    }
+    Ok(())
+}
+
+/// 校验代理凭据：SOCKS5 用户名/密码认证（RFC 1929）限制各 255 字节；
+/// 控制字符检查防止 HTTP CONNECT 头注入（connect_http_proxy 已检查
+/// CRLF，这里作为纵深防御覆盖 SOCKS5 路径）。
+fn validate_proxy_credentials(username: &str, password: &str) -> Result<(), String> {
+    for (field, label) in [(username, "username"), (password, "password")] {
+        if field.len() > 255 {
+            return Err(format!(
+                "Telnet proxy {} is too long (max 255 bytes, RFC 1929)",
+                label
+            ));
+        }
+        if field.bytes().any(|b| b < 0x20 || b == 0x7f) {
+            return Err(format!(
+                "Telnet proxy {} contains control characters",
+                label
+            ));
+        }
+    }
+    Ok(())
 }
 
 async fn connect_http_proxy(
@@ -309,9 +374,19 @@ async fn connect_http_proxy(
     {
         return Err("Telnet proxy values must not contain line breaks".to_string());
     }
-    let mut stream = TcpStream::connect((proxy_host, proxy_port))
-        .await
-        .map_err(|error| error.to_string())?;
+    let mut stream = timeout(
+        PROXY_IO_TIMEOUT,
+        TcpStream::connect((proxy_host, proxy_port)),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "Telnet HTTP proxy connect timed out after {} seconds",
+            PROXY_IO_TIMEOUT.as_secs()
+        )
+    })?
+    .map_err(|error| format!("Telnet HTTP proxy connect failed: {error}"))?;
+    let _ = stream.set_nodelay(true);
     let authority = if host.contains(':') && !host.starts_with('[') {
         format!("[{host}]:{port}")
     } else {
@@ -326,10 +401,10 @@ async fn connect_http_proxy(
         request.push_str(&format!("Proxy-Authorization: Basic {encoded}\r\n"));
     }
     request.push_str("\r\n");
-    stream
-        .write_all(request.as_bytes())
+    timeout(PROXY_IO_TIMEOUT, stream.write_all(request.as_bytes()))
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|_| "Telnet HTTP proxy CONNECT write timed out".to_string())?
+        .map_err(|error| format!("Telnet HTTP proxy CONNECT write failed: {error}"))?;
     let mut response = Vec::new();
     // Read one byte at a time until the HTTP header boundary. Reading a larger
     // chunk could consume the first Telnet bytes sent immediately after a
@@ -340,25 +415,47 @@ async fn connect_http_proxy(
         if response.len() >= 32 * 1024 {
             return Err("Telnet proxy response headers are too large".to_string());
         }
-        let count = stream
-            .read(&mut chunk)
+        let count = timeout(PROXY_IO_TIMEOUT, stream.read(&mut chunk))
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|_| "Telnet HTTP proxy CONNECT read timed out".to_string())?
+            .map_err(|error| format!("Telnet HTTP proxy CONNECT read failed: {error}"))?;
         if count == 0 {
             return Err("Telnet proxy closed before CONNECT completed".to_string());
         }
         response.extend_from_slice(&chunk[..count]);
     }
-    let status = std::str::from_utf8(&response)
+    let status_line = std::str::from_utf8(&response)
         .map_err(|_| "Telnet proxy returned a non-text response".to_string())?
         .lines()
         .next()
-        .and_then(|line| line.split_whitespace().nth(1))
         .unwrap_or("");
-    if status != "200" {
-        return Err(format!("Telnet HTTP CONNECT failed: {status}"));
+    let status = parse_http_connect_status(status_line)?;
+    if status != 200 {
+        return Err(format!("Telnet HTTP CONNECT failed: {status_line}"));
     }
     Ok(stream)
+}
+
+/// 从 HTTP CONNECT 响应状态行提取并校验状态码。
+/// 状态行格式：`HTTP/1.1 200 Connection established`。校验 `HTTP/` 前缀
+/// 防止恶意代理返回非 HTTP 文本伪装成功；状态码必须是 3 位 ASCII 数字，
+/// 避免 `split_whitespace().nth(1)` 在异常格式下取到非状态码字段。
+fn parse_http_connect_status(status_line: &str) -> Result<u16, String> {
+    let mut parts = status_line.split_whitespace();
+    let version = parts.next().unwrap_or("");
+    if !version.starts_with("HTTP/") {
+        return Err(format!(
+            "Telnet proxy returned a malformed status line: {status_line}"
+        ));
+    }
+    let code = parts.next().unwrap_or("");
+    if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!(
+            "Telnet proxy returned a malformed status code: {status_line}"
+        ));
+    }
+    code.parse::<u16>()
+        .map_err(|_| format!("Telnet proxy returned an invalid status code: {status_line}"))
 }
 
 pub(crate) fn reject_unsupported(command: WorkerCmd, message: &str) {

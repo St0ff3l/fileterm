@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -65,6 +65,9 @@ export function TerminalDock({
   const isReconnectingRef = useRef(false)
   const reconnectFeedbackTimerRef = useRef<number | null>(null)
   const [reconnectFeedbackVisible, setReconnectFeedbackVisible] = useState(false)
+  const focusTerminal = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: activeTab.id }))
+  }, [activeTab.id])
 
   useEffect(() => {
     return () => {
@@ -200,7 +203,7 @@ export function TerminalDock({
           if (document.activeElement === inputRef.current || document.activeElement === historySearchInputRef.current) {
             inputRef.current?.blur()
             historySearchInputRef.current?.blur()
-            window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
+            focusTerminal()
           } else {
             if (panel === 'history') {
               historySearchInputRef.current?.focus()
@@ -218,7 +221,7 @@ export function TerminalDock({
         setPanel((prev) => {
           const next = prev === 'history' ? null : 'history'
           if (next !== 'history') {
-            window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
+            focusTerminal()
           }
           return next
         })
@@ -229,7 +232,7 @@ export function TerminalDock({
         if (event.key === 'Escape') {
           event.preventDefault()
           setPanel(null)
-          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
+          focusTerminal()
           return
         }
 
@@ -288,7 +291,7 @@ export function TerminalDock({
                 return trimmed ? `${trimmed} ${selectedToken}` : selectedToken
               })
               setPanel(null)
-              window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
+              focusTerminal()
             }
           }
           return
@@ -297,7 +300,7 @@ export function TerminalDock({
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [panel, filteredHistory, activeHistoryIndex, activeTokenIndex])
+  }, [panel, filteredHistory, activeHistoryIndex, activeTokenIndex, focusTerminal])
 
   useEffect(() => {
     let canceled = false
@@ -464,7 +467,7 @@ export function TerminalDock({
                                 return trimmed ? `${trimmed} ${token}` : token
                               })
                               setPanel(null)
-                              window.dispatchEvent(new CustomEvent('fileterm:focus-terminal'))
+                              focusTerminal()
                             }}
                           >
                             {token}

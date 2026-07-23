@@ -78,6 +78,19 @@ const TERMINAL_RESIZE_SETTLE_MS = 140
 const TERMINAL_RESIZE_OUTPUT_QUIET_MS = 260
 // Bound one xterm parse pass without serializing the native input path.
 const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
+
+type SplitPaneDirection = 'row' | 'column'
+
+function splitPaneShortcutsForPlatform(platform: string | undefined) {
+  if (platform === 'darwin') {
+    return { vertical: '⌘D', horizontal: '⇧⌘D' }
+  }
+  if (platform === 'win32') {
+    return { vertical: 'Alt+Shift+D', horizontal: 'Alt+Shift+-' }
+  }
+  return { vertical: 'Ctrl+Shift+D', horizontal: 'Ctrl+Alt+Shift+D' }
+}
+
 function trimTranscript(transcript: string) {
   if (transcript.length <= TERMINAL_TRANSCRIPT_LIMIT) {
     return transcript
@@ -114,7 +127,9 @@ export const TerminalView = memo(function TerminalView({
   connected = false,
   connecting = false,
   onStatus,
-  onReconnect
+  onReconnect,
+  onActivate,
+  onSplitPane
 }: {
   tabId: string
   bootText: string
@@ -122,6 +137,8 @@ export const TerminalView = memo(function TerminalView({
   connecting?: boolean
   onStatus?(message: string | null): void
   onReconnect?(): void | Promise<void>
+  onActivate?(): void
+  onSplitPane?(direction: SplitPaneDirection): void
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -182,7 +199,8 @@ export const TerminalView = memo(function TerminalView({
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
     paste: isMac ? '⌘V' : 'Ctrl+Shift+V',
-    find: isMac ? '⌘F' : 'Ctrl+F'
+    find: isMac ? '⌘F' : 'Ctrl+F',
+    ...splitPaneShortcutsForPlatform(window.fileterm?.platform)
   }
 
   const readColor = (name: string, fallback: string) =>
@@ -360,6 +378,10 @@ export const TerminalView = memo(function TerminalView({
     }
     terminal.clear()
     terminal.focus()
+  }
+
+  const runSplitPane = (direction: SplitPaneDirection) => {
+    onSplitPane?.(direction)
   }
 
   const flushPendingWrite = () => {
@@ -969,7 +991,11 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    const handleFocusTerminal = () => {
+    const handleFocusTerminal = (event: Event) => {
+      const targetTabId = event instanceof CustomEvent && typeof event.detail === 'string' ? event.detail : null
+      if (targetTabId && targetTabId !== tabIdRef.current) {
+        return
+      }
       terminal.focus()
     }
     const handleTerminalCopy = () => {
@@ -1183,7 +1209,7 @@ export const TerminalView = memo(function TerminalView({
   }, [findCaseSensitive, findOpen, findQuery, findRegex])
 
   return (
-    <div className="terminal-view">
+    <div className="terminal-view" onFocusCapture={onActivate} onMouseDown={onActivate}>
       <div className="terminal-host">
         <div className="terminal-inner" ref={hostRef} />
       </div>
@@ -1252,6 +1278,21 @@ export const TerminalView = memo(function TerminalView({
           items={[
             { label: t.copy, shortcut: shortcuts.copy, disabled: !hasSelection, action: runCopy },
             { label: t.paste, shortcut: shortcuts.paste, action: () => void runPaste() },
+            ...(onSplitPane
+              ? [
+                  { separator: true },
+                  {
+                    label: t.splitVertically,
+                    shortcut: shortcuts.vertical,
+                    action: () => runSplitPane('row')
+                  },
+                  {
+                    label: t.splitHorizontally,
+                    shortcut: shortcuts.horizontal,
+                    action: () => runSplitPane('column')
+                  }
+                ]
+              : []),
             { separator: true },
             { label: t.find, shortcut: shortcuts.find, action: runFind },
             { label: t.clearScreen, action: runClear }

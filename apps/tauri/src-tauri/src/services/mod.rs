@@ -7,4 +7,6 @@ pub mod updates;
 pub mod webdav;
 pub mod workspace;
 
-pub use workspace::{SessionSnapshot, WorkspaceState, WorkspaceTab, WorkspaceTabStatus};
+pub use workspace::{
+    PaneNode, SessionSnapshot, SplitDirection, WorkspaceState, WorkspaceTab, WorkspaceTabStatus,
+};

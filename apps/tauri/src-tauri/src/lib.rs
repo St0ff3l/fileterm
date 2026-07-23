@@ -292,12 +292,21 @@ pub(crate) fn install_localized_tray_menu(
 }
 
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
-    let (quit_accelerator, close_accelerator) = application_menu_accelerators(std::env::consts::OS);
+    let platform = std::env::consts::OS;
+    let (quit_accelerator, close_accelerator) = application_menu_accelerators(platform);
+    let new_tab_accelerator = workspace_new_tab_accelerator(platform);
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
         localized(is_english, "New Connection", "新建连接"),
     )
     .accelerator("CmdOrCtrl+N")
+    .build(app)
+    .map_err(|error| AppError::Window(error.to_string()))?;
+    let new_tab_menu = MenuItemBuilder::with_id(
+        "workspace-new-tab",
+        localized(is_english, "New Tab", "新建标签页"),
+    )
+    .accelerator(new_tab_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let connection_manager_menu = MenuItemBuilder::with_id(
@@ -316,6 +325,8 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     .map_err(|error| AppError::Window(error.to_string()))?;
 
     let file_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "File", "文件"))
+        .item(&new_tab_menu)
+        .separator()
         .item(&new_connection_menu)
         .item(&connection_manager_menu)
         .item(&command_manager_menu);
@@ -390,6 +401,68 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .build()
         .map_err(|error| AppError::Window(error.to_string()))?;
 
+    // View 菜单：分屏快捷键。终端聚焦时前端键盘事件会被 xterm 拦截，
+    // 原生菜单 accelerator 全局有效，与现有 Cmd+W 一致。
+    let (split_vertical_accelerator, split_horizontal_accelerator) =
+        split_pane_accelerators(platform);
+    let view_split_vertical = MenuItemBuilder::with_id(
+        "view-split-vertical",
+        localized(is_english, "Split Vertically", "垂直分屏"),
+    )
+    .accelerator(split_vertical_accelerator)
+    .build(app)
+    .map_err(|error| AppError::Window(error.to_string()))?;
+    let view_split_horizontal = MenuItemBuilder::with_id(
+        "view-split-horizontal",
+        localized(is_english, "Split Horizontally", "水平分屏"),
+    )
+    .accelerator(split_horizontal_accelerator)
+    .build(app)
+    .map_err(|error| AppError::Window(error.to_string()))?;
+    let view_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "View", "视图"))
+        .item(&view_split_vertical)
+        .item(&view_split_horizontal);
+    #[cfg(target_os = "windows")]
+    let view_submenu_builder = {
+        let focus_pane_left = MenuItemBuilder::with_id(
+            "view-focus-pane-left",
+            localized(is_english, "Focus Pane Left", "聚焦左侧窗格"),
+        )
+        .accelerator("Alt+Left")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let focus_pane_right = MenuItemBuilder::with_id(
+            "view-focus-pane-right",
+            localized(is_english, "Focus Pane Right", "聚焦右侧窗格"),
+        )
+        .accelerator("Alt+Right")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let focus_pane_up = MenuItemBuilder::with_id(
+            "view-focus-pane-up",
+            localized(is_english, "Focus Pane Up", "聚焦上方窗格"),
+        )
+        .accelerator("Alt+Up")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let focus_pane_down = MenuItemBuilder::with_id(
+            "view-focus-pane-down",
+            localized(is_english, "Focus Pane Down", "聚焦下方窗格"),
+        )
+        .accelerator("Alt+Down")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        view_submenu_builder
+            .separator()
+            .item(&focus_pane_left)
+            .item(&focus_pane_right)
+            .item(&focus_pane_up)
+            .item(&focus_pane_down)
+    };
+    let view_submenu = view_submenu_builder
+        .build()
+        .map_err(|error| AppError::Window(error.to_string()))?;
+
     let menu_builder = MenuBuilder::new(app);
     #[cfg(target_os = "macos")]
     let menu_builder = {
@@ -441,6 +514,7 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     menu_builder
         .item(&file_submenu)
         .item(&edit_submenu)
+        .item(&view_submenu)
         .item(&window_submenu)
         .build()
         .map_err(|error| AppError::Window(error.to_string()))
@@ -464,6 +538,25 @@ fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str)
         ("Cmd+Q", "Cmd+W")
     } else {
         ("Alt+F4", "Ctrl+W")
+    }
+}
+
+/// Keep Cmd+T on macOS, while avoiding Ctrl+T collisions with terminals and
+/// WebViews on Windows/Linux.
+fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
+    if platform == "macos" {
+        "Cmd+T"
+    } else {
+        "Ctrl+Shift+T"
+    }
+}
+
+/// Align split shortcuts with the host terminal where a convention exists.
+fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
+    match platform {
+        "macos" => ("Cmd+D", "Cmd+Shift+D"),
+        "windows" => ("Alt+Shift+D", "Alt+Shift+-"),
+        _ => ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D"),
     }
 }
 
@@ -1326,6 +1419,41 @@ pub fn run() {
                     }
                 }
             }
+            "workspace-new-tab" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:new-tab-request", ());
+                }
+            }
+            "view-split-vertical" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:split-pane-request", "row");
+                }
+            }
+            "view-split-horizontal" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:split-pane-request", "column");
+                }
+            }
+            "view-focus-pane-left" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:focus-pane-request", "left");
+                }
+            }
+            "view-focus-pane-right" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:focus-pane-request", "right");
+                }
+            }
+            "view-focus-pane-up" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:focus-pane-request", "up");
+                }
+            }
+            "view-focus-pane-down" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:focus-pane-request", "down");
+                }
+            }
             "window-minimize" => {
                 if let Some(window) = focused_webview_window(app) {
                     let _ = window.minimize();
@@ -1397,6 +1525,10 @@ pub fn run() {
             crate::commands::app_reconnect_tab,
             crate::commands::app_disconnect_tab,
             crate::commands::app_close_tab,
+            crate::commands::app_split_tab,
+            crate::commands::app_close_pane,
+            crate::commands::app_set_active_pane,
+            crate::commands::app_set_pane_weights,
             crate::commands::app_write_terminal,
             crate::commands::app_subscribe_terminal_data,
             crate::commands::app_resize_terminal,
@@ -1477,9 +1609,9 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        application_menu_accelerators, child_window_should_be_transparent,
-        tray_icon_should_be_template, tray_menu_labels, FileEditorCloseRegistry,
-        QuitPreparationRegistry, WindowMenuKind,
+        application_menu_accelerators, child_window_should_be_transparent, split_pane_accelerators,
+        tray_icon_should_be_template, tray_menu_labels, workspace_new_tab_accelerator,
+        FileEditorCloseRegistry, QuitPreparationRegistry, WindowMenuKind,
     };
 
     #[cfg(target_os = "windows")]
@@ -1510,6 +1642,26 @@ mod tests {
             ("Alt+F4", "Ctrl+W")
         );
         assert_eq!(application_menu_accelerators("linux"), ("Alt+F4", "Ctrl+W"));
+    }
+
+    #[test]
+    fn uses_a_non_conflicting_new_tab_shortcut_outside_macos() {
+        assert_eq!(workspace_new_tab_accelerator("macos"), "Cmd+T");
+        assert_eq!(workspace_new_tab_accelerator("windows"), "Ctrl+Shift+T");
+        assert_eq!(workspace_new_tab_accelerator("linux"), "Ctrl+Shift+T");
+    }
+
+    #[test]
+    fn matches_windows_terminal_split_shortcuts_on_windows() {
+        assert_eq!(split_pane_accelerators("macos"), ("Cmd+D", "Cmd+Shift+D"));
+        assert_eq!(
+            split_pane_accelerators("windows"),
+            ("Alt+Shift+D", "Alt+Shift+-")
+        );
+        assert_eq!(
+            split_pane_accelerators("linux"),
+            ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D")
+        );
     }
 
     #[test]

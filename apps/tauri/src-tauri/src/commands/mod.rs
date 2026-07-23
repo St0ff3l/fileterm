@@ -78,6 +78,19 @@ pub struct UiPreferencesInput {
     pub locale: Option<String>,
 }
 
+const DEFAULT_UI_THEME: &str = "default-dark";
+const DEFAULT_UI_LOCALE: &str = "zhCN";
+
+fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
+    if !matches!(preferences.theme.as_str(), "default-dark" | "default-light") {
+        preferences.theme = DEFAULT_UI_THEME.to_string();
+    }
+    if !matches!(preferences.locale.as_str(), "zhCN" | "enUS") {
+        preferences.locale = DEFAULT_UI_LOCALE.to_string();
+    }
+    preferences
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalCommandHistoryEntry {
@@ -242,11 +255,11 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             std::fs::read_to_string(path).map_err(|error| AppError::Storage(error.to_string()))?;
         let preferences: UiPreferences = serde_json::from_str(&content)
             .map_err(|error| AppError::Serialization(error.to_string()))?;
-        Ok(preferences)
+        Ok(normalize_ui_preferences(preferences))
     } else {
         Ok(UiPreferences {
-            theme: "default-dark".to_string(),
-            locale: "zhCN".to_string(),
+            theme: DEFAULT_UI_THEME.to_string(),
+            locale: DEFAULT_UI_LOCALE.to_string(),
         })
     }
 }
@@ -264,6 +277,7 @@ pub fn app_set_ui_preferences(
     if let Some(locale) = input.locale {
         preferences.locale = locale;
     }
+    let preferences = normalize_ui_preferences(preferences);
     let content = serde_json::to_string_pretty(&preferences)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
@@ -867,6 +881,7 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
     let active_tab_id = state.active_tab_id.read().await.clone();
     let sessions = state.sessions.read().await.clone();
     let transfers = state.transfers.read().await.clone();
+    let active_pane_tab_id_by_root = state.active_pane_tab_id_by_root.read().await.clone();
 
     // Read + heal profiles, then strip secrets before exposing in snapshot.
     let (profiles_with_secrets, folders) =
@@ -887,6 +902,7 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
         "activeTabId": active_tab_id,
         "transfers": transfers,
         "sessions": sessions,
+        "activePaneTabIdByRoot": active_pane_tab_id_by_root,
     }))
 }
 
@@ -1038,23 +1054,18 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     }
 }
 
-#[tauri::command]
-pub async fn app_open_profile(
-    app: AppHandle,
-    profile_id: String,
-) -> Result<serde_json::Value, AppError> {
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
-    let profiles = read_json_array(&app, "profiles.json")?;
-    let profile = profiles
-        .iter()
-        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
-        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
-
-    // Match Electron's open lifecycle: recency is about the user's intent to
-    // open a connection, not whether the later network handshake succeeds.
-    crate::services::profile_ops::touch_profile(&app, &profile_id)?;
-
+/// 为指定 profile 创建并启动一个新的 session（tab + session + worker）。
+/// 返回新 tab_id。调用者负责更新 active_tab_id、paneRoot 以及 emit snapshot。
+///
+/// 抽取自 `app_open_profile`，供 `app_split_tab` 复用：分屏时基于当前 profile
+/// 新建一个独立 session，不共享 PTY。
+async fn spawn_session_for_profile(
+    app: &AppHandle,
+    state: &crate::services::workspace::WorkspaceState,
+    profile: &serde_json::Value,
+    profile_id: &str,
+    pane_root_tab_id: Option<String>,
+) -> Result<String, AppError> {
     let profile_type = profile
         .get("type")
         .and_then(|t| t.as_str())
@@ -1065,13 +1076,17 @@ pub async fn app_open_profile(
         .unwrap_or("SSH Session");
 
     let tab_id = format!("tab-{}", uuid::Uuid::new_v4());
+    let capabilities =
+        crate::services::workspace::ConnectionCapabilities::for_session_type(profile_type);
     let new_tab = crate::services::WorkspaceTab {
         id: tab_id.clone(),
-        profile_id: profile_id.clone(),
+        profile_id: profile_id.to_string(),
         session_type: profile_type.to_string(),
         title: name.to_string(),
         layout: create_tab_layout(profile_type),
         status: crate::services::WorkspaceTabStatus::Connecting,
+        pane_root: None,
+        pane_root_tab_id,
     };
 
     let host = profile
@@ -1090,14 +1105,11 @@ pub async fn app_open_profile(
     {
         let mut tabs = state.tabs.write().await;
         tabs.push(new_tab);
-        let mut active = state.active_tab_id.write().await;
-        *active = Some(tab_id.clone());
-
         let mut sessions = state.sessions.write().await;
         sessions.insert(
             tab_id.clone(),
             crate::services::SessionSnapshot {
-                profile_id: profile_id.clone(),
+                profile_id: profile_id.to_string(),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: "连接主机...\r\n".to_string(),
@@ -1114,9 +1126,7 @@ pub async fn app_open_profile(
                 shell_user: None,
                 connected: false,
                 system_metrics: None,
-                capabilities: crate::services::workspace::ConnectionCapabilities::for_session_type(
-                    profile_type,
-                ),
+                capabilities,
                 reconnect_mode: crate::services::workspace::reconnect_mode_for_profile(profile),
             },
         );
@@ -1148,7 +1158,7 @@ pub async fn app_open_profile(
         .insert(tab_id.clone(), worker_control.clone());
 
     start_session_worker(
-        tab_id,
+        tab_id.clone(),
         profile.clone(),
         rx,
         terminal_input_rx,
@@ -1156,7 +1166,404 @@ pub async fn app_open_profile(
         worker_control,
     );
 
+    Ok(tab_id)
+}
+
+#[tauri::command]
+pub async fn app_open_profile(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+    let profiles = read_json_array(&app, "profiles.json")?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+
+    // Match Electron's open lifecycle: recency is about the user's intent to
+    // open a connection, not whether the later network handshake succeeds.
+    crate::services::profile_ops::touch_profile(&app, &profile_id)?;
+
+    let tab_id = spawn_session_for_profile(&app, &state, profile, &profile_id, None).await?;
+
+    {
+        let mut active = state.active_tab_id.write().await;
+        *active = Some(tab_id);
+    }
+
     get_workspace_snapshot_and_emit(&app).await
+}
+
+/// 分屏：基于当前 profile 新建一个独立 session，并在 pane tree 中把 source leaf
+/// 替换为 split(source_leaf, new_leaf)。
+///
+/// - `direction = "row"`：左右分（垂直分屏），新 pane 在右
+/// - `direction = "column"`：上下分（水平分屏），新 pane 在下
+///
+/// 只支持 SSH session。FTP / Telnet / Serial 暂不支持分屏。
+#[tauri::command]
+pub async fn app_split_tab(
+    app: AppHandle,
+    source_tab_id: String,
+    direction: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+
+    let split_direction = match direction.as_str() {
+        "row" => crate::services::SplitDirection::Row,
+        "column" => crate::services::SplitDirection::Column,
+        _ => {
+            return Err(AppError::Storage(format!(
+                "Invalid split direction: {}",
+                direction
+            )))
+        }
+    };
+
+    // 找到 source tab，并解析其所属的顶层 workspace tab。分屏 leaf 始终
+    // 归属一个 root，而不是第二个顶栏 tab。
+    let (profile_id, pane_root_tab_id) = {
+        let tabs = state.tabs.read().await;
+        let source = tabs
+            .iter()
+            .find(|t| t.id == source_tab_id)
+            .ok_or_else(|| AppError::Storage(format!("Tab not found: {}", source_tab_id)))?;
+        // 只支持 SSH 分屏
+        if source.session_type != "ssh" {
+            return Err(AppError::Storage(format!(
+                "Split pane is only supported for SSH sessions, got: {}",
+                source.session_type
+            )));
+        }
+        let root_tab_id = source.pane_root_tab_id.clone().unwrap_or_else(|| {
+            if source.pane_root.is_some() {
+                source.id.clone()
+            } else {
+                tabs.iter()
+                    .find(|tab| {
+                        tab.pane_root
+                            .as_ref()
+                            .map(|root| root.leaf_tab_ids().iter().any(|id| id == &source_tab_id))
+                            .unwrap_or(false)
+                    })
+                    .map(|tab| tab.id.clone())
+                    .unwrap_or_else(|| source.id.clone())
+            }
+        });
+        (source.profile_id.clone(), root_tab_id)
+    };
+
+    // 读 profile
+    let profiles = read_json_array(&app, "profiles.json")?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+
+    // 创建新 session（不 touch_profile，分屏不算独立打开）
+    let new_tab_id =
+        spawn_session_for_profile(&app, &state, profile, &profile_id, Some(pane_root_tab_id))
+            .await?;
+
+    // 更新 paneRoot，并保留承载该分屏树的 root tab id。
+    let root_tab_id = {
+        let mut tabs = state.tabs.write().await;
+
+        // 先找 source 是否已经是 root（有 paneRoot）
+        let root_idx = tabs
+            .iter()
+            .position(|t| t.id == source_tab_id && t.pane_root.is_some());
+
+        if let Some(idx) = root_idx {
+            // source 是 root，在其 paneRoot 里替换 source leaf
+            let root_tab = &mut tabs[idx];
+            if let Some(ref mut pane_root) = root_tab.pane_root {
+                let replacement = crate::services::PaneNode::Split {
+                    direction: split_direction,
+                    children: vec![
+                        crate::services::PaneNode::Leaf {
+                            tab_id: source_tab_id.clone(),
+                        },
+                        crate::services::PaneNode::Leaf {
+                            tab_id: new_tab_id.clone(),
+                        },
+                    ],
+                    weights: vec![0.5, 0.5],
+                };
+                pane_root.replace_leaf(&source_tab_id, replacement);
+            }
+            source_tab_id.clone()
+        } else {
+            // source 不是 root，可能是独立 tab 或某个 root 的 leaf
+            // 先检查它是否是某个 root 的 leaf
+            let containing_root_idx = tabs.iter().position(|t| {
+                t.pane_root
+                    .as_ref()
+                    .map(|root| root.leaf_tab_ids().iter().any(|id| id == &source_tab_id))
+                    .unwrap_or(false)
+            });
+
+            if let Some(idx) = containing_root_idx {
+                // source 是某个 root 的 leaf，在该 root 的 paneRoot 里替换
+                let root_tab = &mut tabs[idx];
+                if let Some(ref mut pane_root) = root_tab.pane_root {
+                    let replacement = crate::services::PaneNode::Split {
+                        direction: split_direction,
+                        children: vec![
+                            crate::services::PaneNode::Leaf {
+                                tab_id: source_tab_id.clone(),
+                            },
+                            crate::services::PaneNode::Leaf {
+                                tab_id: new_tab_id.clone(),
+                            },
+                        ],
+                        weights: vec![0.5, 0.5],
+                    };
+                    pane_root.replace_leaf(&source_tab_id, replacement);
+                }
+                root_tab.id.clone()
+            } else {
+                // source 是独立 tab，变成 root
+                let source_idx = tabs
+                    .iter()
+                    .position(|t| t.id == source_tab_id)
+                    .ok_or_else(|| AppError::Storage("Source tab vanished".to_string()))?;
+                tabs[source_idx].pane_root = Some(crate::services::PaneNode::Split {
+                    direction: split_direction,
+                    children: vec![
+                        crate::services::PaneNode::Leaf {
+                            tab_id: source_tab_id.clone(),
+                        },
+                        crate::services::PaneNode::Leaf {
+                            tab_id: new_tab_id.clone(),
+                        },
+                    ],
+                    weights: vec![0.5, 0.5],
+                });
+                source_tab_id.clone()
+            }
+        }
+    };
+
+    // 无论当前 source 是 root、leaf 还是独立 tab，顶层都必须停留在 root。
+    // 新 session 只作为 active pane，不得成为一个新的顶栏 tab。
+    {
+        let mut active_tab = state.active_tab_id.write().await;
+        *active_tab = Some(root_tab_id.clone());
+
+        let mut active_panes = state.active_pane_tab_id_by_root.write().await;
+        active_panes.insert(root_tab_id, new_tab_id.clone());
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct PaneCloseOutcome {
+    root_tab_id: String,
+    remaining_pane_tab_ids: Vec<String>,
+    keeps_split: bool,
+}
+
+/// Remove a leaf from a split root while preserving the invariant that a
+/// top-level tab is always backed by a live session. When the original root
+/// leaf is closed, a surviving leaf is promoted to be the new root rather
+/// than leaving a tree whose container points at a closed terminal.
+fn remove_split_pane_from_tabs(
+    tabs: &mut Vec<crate::services::WorkspaceTab>,
+    root_tab_id: &str,
+    pane_tab_id: &str,
+) -> Result<PaneCloseOutcome, AppError> {
+    let root_idx = tabs
+        .iter()
+        .position(|tab| tab.id == root_tab_id)
+        .ok_or_else(|| AppError::Storage(format!("Root tab not found: {root_tab_id}")))?;
+    let mut next_pane_root = tabs[root_idx]
+        .pane_root
+        .clone()
+        .ok_or_else(|| AppError::Storage("Tab does not have a split pane layout".to_string()))?;
+    let before = next_pane_root.leaf_tab_ids();
+    if before.len() < 2 {
+        return Err(AppError::Storage(
+            "Cannot close the only pane through the split-pane command".to_string(),
+        ));
+    }
+    if !before.iter().any(|id| id == pane_tab_id) {
+        return Err(AppError::Storage(format!("Pane not found: {pane_tab_id}")));
+    }
+
+    next_pane_root.remove_leaf(pane_tab_id);
+    let remaining_pane_tab_ids = next_pane_root.leaf_tab_ids();
+    let keeps_split = remaining_pane_tab_ids.len() > 1;
+
+    if pane_tab_id != root_tab_id {
+        let root_tab = &mut tabs[root_idx];
+        root_tab.pane_root = keeps_split.then_some(next_pane_root);
+        tabs.retain(|tab| tab.id != pane_tab_id);
+        return Ok(PaneCloseOutcome {
+            root_tab_id: root_tab_id.to_string(),
+            remaining_pane_tab_ids,
+            keeps_split,
+        });
+    }
+
+    // The original root session is itself a leaf. If it is the pane being
+    // closed, turn the first surviving session into the new top-level tab and
+    // repoint all remaining leaves at it. This mirrors Ghostty's separation of
+    // tab container and terminal surface without requiring us to rename a
+    // running SSH worker.
+    let promoted_root_tab_id = remaining_pane_tab_ids
+        .first()
+        .cloned()
+        .ok_or_else(|| AppError::Storage("Split pane has no surviving leaf".to_string()))?;
+    tabs.retain(|tab| tab.id != root_tab_id);
+
+    let promoted_root = tabs
+        .iter_mut()
+        .find(|tab| tab.id == promoted_root_tab_id)
+        .ok_or_else(|| AppError::Storage("Surviving pane tab not found".to_string()))?;
+    promoted_root.pane_root = keeps_split.then_some(next_pane_root);
+    promoted_root.pane_root_tab_id = None;
+
+    for tab in tabs.iter_mut() {
+        if tab.id != promoted_root_tab_id && remaining_pane_tab_ids.iter().any(|id| id == &tab.id) {
+            tab.pane_root_tab_id = keeps_split.then(|| promoted_root_tab_id.clone());
+        }
+    }
+
+    Ok(PaneCloseOutcome {
+        root_tab_id: promoted_root_tab_id,
+        remaining_pane_tab_ids,
+        keeps_split,
+    })
+}
+
+/// 关闭分屏中的单个 pane。若 pane tree 只剩一个 leaf，退化回普通 tab。
+#[tauri::command]
+pub async fn app_close_pane(
+    app: AppHandle,
+    root_tab_id: String,
+    pane_tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+
+    // Validate before stopping the session. Closing the final pane is a
+    // top-level-tab action and must go through its confirmation flow instead.
+    {
+        let tabs = state.tabs.read().await;
+        let root_tab = tabs
+            .iter()
+            .find(|tab| tab.id == root_tab_id)
+            .ok_or_else(|| AppError::Storage(format!("Root tab not found: {root_tab_id}")))?;
+        let leaves = root_tab
+            .pane_root
+            .as_ref()
+            .map(crate::services::PaneNode::leaf_tab_ids)
+            .ok_or_else(|| {
+                AppError::Storage("Tab does not have a split pane layout".to_string())
+            })?;
+        if leaves.len() < 2 {
+            return Err(AppError::Storage(
+                "Cannot close the only pane through the split-pane command".to_string(),
+            ));
+        }
+        if !leaves.iter().any(|id| id == &pane_tab_id) {
+            return Err(AppError::Storage(format!("Pane not found: {pane_tab_id}")));
+        }
+    }
+
+    let previous_active_pane = state
+        .active_pane_tab_id_by_root
+        .read()
+        .await
+        .get(&root_tab_id)
+        .cloned();
+
+    // 暂停该 pane 关联的传输，并清理对应 worker。
+    let _ = crate::services::transfers::pause_for_tab(
+        &app,
+        &pane_tab_id,
+        "Pane 关闭后已暂停，可在重连后继续传输",
+    )
+    .await;
+    stop_session_worker(&state, &pane_tab_id).await;
+
+    let outcome = {
+        let mut tabs = state.tabs.write().await;
+        remove_split_pane_from_tabs(&mut tabs, &root_tab_id, &pane_tab_id)?
+    };
+
+    state.sessions.write().await.remove(&pane_tab_id);
+
+    {
+        let mut active_tab = state.active_tab_id.write().await;
+        if active_tab.as_deref() == Some(root_tab_id.as_str()) {
+            *active_tab = Some(outcome.root_tab_id.clone());
+        }
+    }
+
+    {
+        let mut active_panes = state.active_pane_tab_id_by_root.write().await;
+        active_panes.remove(&root_tab_id);
+        if outcome.keeps_split {
+            let next_active_pane = previous_active_pane
+                .filter(|id| id != &pane_tab_id && outcome.remaining_pane_tab_ids.contains(id))
+                .unwrap_or_else(|| outcome.remaining_pane_tab_ids[0].clone());
+            active_panes.insert(outcome.root_tab_id, next_active_pane);
+        }
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+/// 设置分屏中的活跃 pane。
+#[tauri::command]
+pub async fn app_set_active_pane(
+    app: AppHandle,
+    root_tab_id: String,
+    pane_tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    {
+        let mut active_panes = state.active_pane_tab_id_by_root.write().await;
+        active_panes.insert(root_tab_id, pane_tab_id);
+    }
+    get_workspace_snapshot(app).await
+}
+
+/// 持久化分屏 weights（拖拽 resize 结束时调用）。
+#[tauri::command]
+pub async fn app_set_pane_weights(
+    app: AppHandle,
+    root_tab_id: String,
+    pane_path: Vec<usize>,
+    weights: Vec<f32>,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    {
+        let mut tabs = state.tabs.write().await;
+        let root_idx = tabs
+            .iter()
+            .position(|t| t.id == root_tab_id)
+            .ok_or_else(|| AppError::Storage(format!("Root tab not found: {}", root_tab_id)))?;
+        let root_tab = &mut tabs[root_idx];
+        if let Some(ref mut pane_root) = root_tab.pane_root {
+            if !pane_root.set_split_weights_at_path(&pane_path, &weights) {
+                return Err(AppError::Storage(
+                    "Split pane path or weights are invalid".to_string(),
+                ));
+            }
+        } else {
+            return Err(AppError::Storage(
+                "Tab does not have a split pane layout".to_string(),
+            ));
+        }
+    }
+    get_workspace_snapshot(app).await
 }
 
 #[tauri::command]
@@ -1165,9 +1572,19 @@ pub async fn app_activate_tab(
     tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    // A pane leaf owns a session but never owns a top-level tab. Normalizing
+    // here makes the invariant hold even for stale UI events.
+    let top_level_tab_id = state
+        .tabs
+        .read()
+        .await
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .and_then(|tab| tab.pane_root_tab_id.clone())
+        .unwrap_or(tab_id);
     {
         let mut active = state.active_tab_id.write().await;
-        *active = Some(tab_id);
+        *active = Some(top_level_tab_id);
     }
     get_workspace_snapshot(app).await
 }
@@ -1355,26 +1772,114 @@ pub async fn app_disconnect_tab(
 
 #[tauri::command]
 pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json::Value, AppError> {
-    crate::services::transfers::pause_for_tab(
-        &app,
-        &tab_id,
-        "标签关闭后已暂停，可在重连后继续传输",
-    )
-    .await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    stop_session_worker(&state, &tab_id).await;
-    {
-        let mut tabs = state.tabs.write().await;
-        tabs.retain(|t| t.id != tab_id);
 
-        let mut active = state.active_tab_id.write().await;
-        if *active == Some(tab_id.clone()) {
-            *active = tabs.last().map(|t| t.id.clone());
+    // 检查是否是分屏 root：如果是，关闭所有 leaf 的 worker 和传输
+    let pane_leaf_ids: Vec<String> = {
+        let tabs = state.tabs.read().await;
+        tabs.iter()
+            .find(|t| t.id == tab_id)
+            .and_then(|t| t.pane_root.as_ref())
+            .map(|root| root.leaf_tab_ids())
+            .unwrap_or_default()
+    };
+
+    // 检查是否是某个 root 的 leaf
+    let containing_root_id: Option<String> = if pane_leaf_ids.is_empty() {
+        let tabs = state.tabs.read().await;
+        tabs.iter()
+            .find(|t| {
+                t.pane_root
+                    .as_ref()
+                    .map(|root| root.leaf_tab_ids().iter().any(|id| id == &tab_id))
+                    .unwrap_or(false)
+            })
+            .map(|t| t.id.clone())
+    } else {
+        None
+    };
+
+    if let Some(root_id) = containing_root_id {
+        // tab_id 是某个 root 的 leaf，等价于 close_pane
+        // 暂停传输
+        let _ = crate::services::transfers::pause_for_tab(
+            &app,
+            &tab_id,
+            "Pane 关闭后已暂停，可在重连后继续传输",
+        )
+        .await;
+        stop_session_worker(&state, &tab_id).await;
+        {
+            let mut tabs = state.tabs.write().await;
+            let root_idx = tabs
+                .iter()
+                .position(|t| t.id == root_id)
+                .ok_or_else(|| AppError::Storage(format!("Root tab not found: {}", root_id)))?;
+            {
+                let root_tab = &mut tabs[root_idx];
+                if let Some(ref mut pane_root) = root_tab.pane_root {
+                    pane_root.remove_leaf(&tab_id);
+                    if let crate::services::PaneNode::Leaf { .. } = pane_root {
+                        root_tab.pane_root = None;
+                    }
+                }
+            }
+            tabs.retain(|t| t.id != tab_id);
+            let mut sessions = state.sessions.write().await;
+            sessions.remove(&tab_id);
+            let mut active_panes = state.active_pane_tab_id_by_root.write().await;
+            if let Some(root_tab) = tabs.get(root_idx) {
+                if root_tab.pane_root.is_none() {
+                    active_panes.remove(&root_id);
+                } else if let Some(ref pane_root) = root_tab.pane_root {
+                    let leaves = pane_root.leaf_tab_ids();
+                    if active_panes
+                        .get(&root_id)
+                        .map(|id| id == &tab_id || !leaves.contains(id))
+                        .unwrap_or(true)
+                    {
+                        if let Some(first) = leaves.first() {
+                            active_panes.insert(root_id.clone(), first.clone());
+                        }
+                    }
+                }
+            }
         }
+    } else {
+        // 普通关闭（可能是独立 tab 或分屏 root）
+        let all_ids_to_close = if pane_leaf_ids.is_empty() {
+            vec![tab_id.clone()]
+        } else {
+            pane_leaf_ids
+        };
 
-        let mut sessions = state.sessions.write().await;
-        sessions.remove(&tab_id);
+        for id in &all_ids_to_close {
+            crate::services::transfers::pause_for_tab(
+                &app,
+                id,
+                "标签关闭后已暂停，可在重连后继续传输",
+            )
+            .await?;
+            stop_session_worker(&state, id).await;
+        }
+        {
+            let mut tabs = state.tabs.write().await;
+            tabs.retain(|t| !all_ids_to_close.contains(&t.id));
+
+            let mut active = state.active_tab_id.write().await;
+            if *active == Some(tab_id.clone()) {
+                *active = tabs.last().map(|t| t.id.clone());
+            }
+
+            let mut sessions = state.sessions.write().await;
+            for id in &all_ids_to_close {
+                sessions.remove(id);
+            }
+            let mut active_panes = state.active_pane_tab_id_by_root.write().await;
+            active_panes.remove(&tab_id);
+        }
     }
+
     get_workspace_snapshot(app).await
 }
 
@@ -2206,6 +2711,107 @@ mod command_template_tests {
 }
 
 #[cfg(test)]
+mod split_pane_close_tests {
+    use super::remove_split_pane_from_tabs;
+    use crate::services::{PaneNode, SplitDirection, WorkspaceTab, WorkspaceTabStatus};
+
+    fn tab(id: &str, pane_root: Option<PaneNode>, pane_root_tab_id: Option<&str>) -> WorkspaceTab {
+        WorkspaceTab {
+            id: id.to_string(),
+            profile_id: "profile-1".to_string(),
+            session_type: "ssh".to_string(),
+            title: "Server".to_string(),
+            layout: "terminal-file".to_string(),
+            status: WorkspaceTabStatus::Connected,
+            pane_root,
+            pane_root_tab_id: pane_root_tab_id.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn closing_a_child_pane_keeps_the_existing_root_tab() {
+        let mut tabs = vec![
+            tab(
+                "root",
+                Some(PaneNode::Split {
+                    direction: SplitDirection::Row,
+                    children: vec![
+                        PaneNode::Leaf {
+                            tab_id: "root".to_string(),
+                        },
+                        PaneNode::Leaf {
+                            tab_id: "child".to_string(),
+                        },
+                    ],
+                    weights: vec![0.5, 0.5],
+                }),
+                None,
+            ),
+            tab("child", None, Some("root")),
+        ];
+
+        let outcome = remove_split_pane_from_tabs(&mut tabs, "root", "child").unwrap();
+
+        assert_eq!(outcome.root_tab_id, "root");
+        assert!(!outcome.keeps_split);
+        assert_eq!(outcome.remaining_pane_tab_ids, vec!["root"]);
+        assert_eq!(tabs.len(), 1);
+        assert_eq!(tabs[0].id, "root");
+        assert!(tabs[0].pane_root.is_none());
+    }
+
+    #[test]
+    fn closing_the_original_root_leaf_promotes_a_surviving_pane() {
+        let mut tabs = vec![
+            tab(
+                "root",
+                Some(PaneNode::Split {
+                    direction: SplitDirection::Row,
+                    children: vec![
+                        PaneNode::Leaf {
+                            tab_id: "root".to_string(),
+                        },
+                        PaneNode::Split {
+                            direction: SplitDirection::Column,
+                            children: vec![
+                                PaneNode::Leaf {
+                                    tab_id: "second".to_string(),
+                                },
+                                PaneNode::Leaf {
+                                    tab_id: "third".to_string(),
+                                },
+                            ],
+                            weights: vec![0.5, 0.5],
+                        },
+                    ],
+                    weights: vec![0.5, 0.5],
+                }),
+                None,
+            ),
+            tab("second", None, Some("root")),
+            tab("third", None, Some("root")),
+        ];
+
+        let outcome = remove_split_pane_from_tabs(&mut tabs, "root", "root").unwrap();
+
+        assert_eq!(outcome.root_tab_id, "second");
+        assert!(outcome.keeps_split);
+        assert_eq!(outcome.remaining_pane_tab_ids, vec!["second", "third"]);
+        assert_eq!(tabs.len(), 2);
+
+        let promoted_root = tabs.iter().find(|tab| tab.id == "second").unwrap();
+        assert!(promoted_root.pane_root.is_some());
+        assert!(promoted_root.pane_root_tab_id.is_none());
+        assert_eq!(
+            tabs.iter()
+                .find(|tab| tab.id == "third")
+                .and_then(|tab| tab.pane_root_tab_id.as_deref()),
+            Some("second")
+        );
+    }
+}
+
+#[cfg(test)]
 mod reconnect_tests {
     use super::claim_reconnect_tab;
     use crate::services::{WorkspaceTab, WorkspaceTabStatus};
@@ -2218,6 +2824,8 @@ mod reconnect_tests {
             title: "Server".to_string(),
             layout: "terminal-file".to_string(),
             status,
+            pane_root: None,
+            pane_root_tab_id: None,
         }
     }
 
@@ -2307,6 +2915,33 @@ mod ui_state_tests {
                 .and_then(|value| value.as_str()),
             Some("legacy-folders")
         );
+    }
+}
+
+#[cfg(test)]
+mod ui_preferences_tests {
+    use super::{normalize_ui_preferences, UiPreferences};
+
+    #[test]
+    fn falls_back_to_safe_values_for_unknown_preferences() {
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "unknown-theme".to_string(),
+            locale: "unknown-locale".to_string(),
+        });
+
+        assert_eq!(preferences.theme, "default-dark");
+        assert_eq!(preferences.locale, "zhCN");
+    }
+
+    #[test]
+    fn keeps_supported_preferences_unchanged() {
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-light".to_string(),
+            locale: "enUS".to_string(),
+        });
+
+        assert_eq!(preferences.theme, "default-light");
+        assert_eq!(preferences.locale, "enUS");
     }
 }
 

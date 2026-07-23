@@ -41,9 +41,10 @@ export function SystemSidebar({
   const sortedProcesses = useMemo(() => {
     const procs = [...(metrics?.topProcesses ?? [])]
     if (sortMode === 'command') {
+      // 按命令名字典序，便于找同名进程；同命令按 CPU 降序
       return procs
-        .sort((a, b) => a.elapsedSeconds - b.elapsedSeconds || parseFloat(b.cpu) - parseFloat(a.cpu))
-        .slice(0, 20)
+        .sort((a, b) => a.command.localeCompare(b.command) || parseFloat(b.cpu) - parseFloat(a.cpu))
+        .slice(0, 40)
     }
     return procs
       .sort((a, b) => {
@@ -55,7 +56,7 @@ export function SystemSidebar({
         }
         return 0
       })
-      .slice(0, 4)
+      .slice(0, 40)
   }, [metrics?.topProcesses, sortMode])
 
   return (
@@ -411,21 +412,29 @@ function getMetricTone(percent: number) {
 }
 
 function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
+  const processScrollRef = useRef<HTMLDivElement>(null)
   const displayRows = rows.length
     ? rows
-    : Array.from({ length: 4 }).map(() => ({ memory: '', cpu: '', command: '', elapsedSeconds: 0 }))
+    : Array.from({ length: 4 }).map(() => ({
+        pid: 0,
+        user: '',
+        memory: '',
+        cpu: '',
+        command: '',
+        elapsedSeconds: 0
+      }))
   return (
-    <div className="process-table scrollbar-scroll">
-      {displayRows.map((row, i) => (
-        <div
-          className="process-row"
-          key={rows.length ? `${row.command}-${row.memory}-${row.cpu}-${row.elapsedSeconds}` : `empty-${i}`}
-        >
-          <span>{row.memory}</span>
-          <span>{row.cpu}</span>
-          <span>{row.command}</span>
-        </div>
-      ))}
+    <div className="process-scroll-region">
+      <div className="process-table" ref={processScrollRef}>
+        {displayRows.map((row, i) => (
+          <div className="process-row" key={rows.length ? `${row.pid}-${row.command}-${row.cpu}-${i}` : `empty-${i}`}>
+            <span>{row.memory}</span>
+            <span>{row.cpu}</span>
+            <span title={row.command}>{row.command}</span>
+          </div>
+        ))}
+      </div>
+      <VerticalScrollbar ariaLabel={t.scrollContent} scrollRef={processScrollRef} />
     </div>
   )
 }

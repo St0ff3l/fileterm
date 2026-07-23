@@ -3,8 +3,6 @@
 // `probe_remote_platform` and `exec_command[_with_stdin]` are async and
 // operate on a `russh::client::Handle`. All parsing/formatting helpers
 // below are pure functions and unchanged from the ssh2 era.
-
-use std::collections::HashMap;
 use std::io::Write;
 use std::time::Duration;
 
@@ -573,49 +571,46 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         }
     }
 
-    // Top processes
+    // Top processes: shell 端已用 `ps --sort=-pcpu` 按 pcpu 降序取 top 40，
+    // 这里按到达顺序逐行解析，不做 comm 分组。每行一个 PID，保留 pid/user
+    // 字段供排查使用，command 用 args（完整命令行）而非 comm。
+    // 格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留）
     let transient_collector_commands: std::collections::HashSet<&str> =
         ["ps", "awk", "bash", "sleep", "sh", "powershell", "pwsh"]
             .iter()
             .cloned()
             .collect();
-    let mut grouped_processes: HashMap<String, (f64, f64, f64)> = HashMap::new();
+    let mut top_processes: Vec<serde_json::Value> = Vec::new();
     for line in read_block("__PROCS_START__", "__PROCS_END__") {
-        let parts: Vec<&str> = line.split('|').collect();
-        if parts.len() >= 4 {
-            let memory_str = parts[0].to_lowercase();
-            let memory_mb: f64 = memory_str.replace('m', "").parse().unwrap_or(0.0);
-            let cpu_val: f64 = parts[1].parse().unwrap_or(0.0);
-            let elapsed: f64 = parts[2].parse().unwrap_or(0.0);
-            let command = parts[3].to_string();
-
-            if !transient_collector_commands.contains(command.as_str()) {
-                let entry = grouped_processes.entry(command).or_insert((0.0, 0.0, 0.0));
-                entry.0 += memory_mb;
-                entry.1 += cpu_val;
-                entry.2 = entry.2.max(elapsed);
-            }
+        // splitn(6) 保留 args 内部所有字符（含 |），避免误切
+        let parts: Vec<&str> = line.splitn(6, '|').collect();
+        if parts.len() < 6 {
+            continue;
         }
+        let pid: u32 = parts[0].parse().unwrap_or(0);
+        let user = parts[1].to_string();
+        let memory_str = parts[2].to_lowercase();
+        let memory_mb: f64 = memory_str.replace('m', "").parse().unwrap_or(0.0);
+        let cpu_val: f64 = parts[3].parse().unwrap_or(0.0);
+        let _mem_percent: f64 = parts[4].parse().unwrap_or(0.0);
+        let command = parts[5].to_string();
+
+        // 过滤采集器自身（ps/awk/sh 等），按 args 首字段匹配
+        let comm = command.split_whitespace().next().unwrap_or("");
+        let comm_basename = comm.rsplit('/').next().unwrap_or(comm);
+        if transient_collector_commands.contains(comm_basename) {
+            continue;
+        }
+
+        top_processes.push(serde_json::json!({
+            "pid": pid,
+            "user": user,
+            "memory": format_process_megabytes(memory_mb),
+            "cpu": format!("{:.1}", cpu_val),
+            "command": command,
+            "elapsedSeconds": 0_i64,
+        }));
     }
-    // Sort numeric values before formatting them. The old implementation
-    // formatted all values, then compiled a Regex for every comparison while
-    // sorting. On hosts with large process tables that consumed multiple CPU
-    // cores continuously and starved Tauri's window/event loop.
-    let mut grouped_processes: Vec<(String, (f64, f64, f64))> =
-        grouped_processes.into_iter().collect();
-    grouped_processes.sort_by(|a, b| b.1 .0.total_cmp(&a.1 .0));
-    let top_processes: Vec<serde_json::Value> = grouped_processes
-        .into_iter()
-        .take(128)
-        .map(|(command, (memory_mb, cpu, elapsed))| {
-            serde_json::json!({
-                "memory": format_process_megabytes(memory_mb),
-                "cpu": format!("{:.1}", cpu),
-                "command": command,
-                "elapsedSeconds": elapsed as i64,
-            })
-        })
-        .collect();
 
     let mem_used_bytes_num = mem_used_bytes
         .parse::<f64>()
@@ -1157,12 +1152,24 @@ else
 fi
 disk=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK/%sK\n", $6, $4, $2}}' | head -n 12)
 filesystems=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK|%sK|%s|%sK|%s\n", $1, $2, $3, $5, $4, $6}}' | head -n 20)
+# 进程采集：参考 meatshell 的做法，让 ps 直接按 pcpu 降序排序后取 top 40，
+# Rust 端按到达顺序逐行解析，不做 comm 分组。这样：
+# 1. 高 CPU 进程排在最前面，shell 端排序比 Rust 端再排更省资源；
+# 2. 每个 PID 一行，能看到同名进程的不同实例（如 nginx 多个 worker）；
+# 3. 用 args 而不是 comm，命令列信息量更大，能区分同名进程的不同启动参数。
+# 输出格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留，cut 截断到 200 字符）
 if has_bounded_runner; then
-  procs=$(run_bounded 1 ps -eo rss=,pcpu=,etimes=,comm= 2>/dev/null | head -n 128 | awk 'NF >= 4 {{printf "%.1fM|%s|%s|%s\n", $1/1024, $2, $3, $4}}')
-  [ -z "$procs" ] && procs=$(run_bounded 1 ps 2>/dev/null | head -n 128 | awk 'NR>1 && NF >= 5 {{proc_name=$5; sub(/^.*\//, "", proc_name); printf "%.1fM|0|0|%s\n", $3/1024, proc_name}}')
+  procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; printf "%s|%s|%.1fM|%s|%s|%s\n", $1, $2, rss, $4, $5, substr(args,1,200)}}')
 else
-  procs=$(ps -eo rss=,pcpu=,etimes=,comm= 2>/dev/null | head -n 128 | awk 'NF >= 4 {{printf "%.1fM|%s|%s|%s\n", $1/1024, $2, $3, $4}}')
-  [ -z "$procs" ] && procs=$(ps 2>/dev/null | head -n 128 | awk 'NR>1 && NF >= 5 {{proc_name=$5; sub(/^.*\//, "", proc_name); printf "%.1fM|0|0|%s\n", $3/1024, proc_name}}')
+  procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; printf "%s|%s|%.1fM|%s|%s|%s\n", $1, $2, rss, $4, $5, substr(args,1,200)}}')
+fi
+if [ -z "$procs" ]; then
+  # fallback：极简 ps（如某些 BusyBox 不支持 --sort 或 -o args=）
+  if has_bounded_runner; then
+    procs=$(run_bounded 1 ps 2>/dev/null | head -n 40 | awk 'NR>1 && NF >= 5 {{printf "0|-|%.1fM|0|0|%s\n", $3/1024, $5}}')
+  else
+    procs=$(ps 2>/dev/null | head -n 40 | awk 'NR>1 && NF >= 5 {{printf "0|-|%.1fM|0|0|%s\n", $3/1024, $5}}')
+  fi
 fi
 echo "__PLATFORM__{}"
 echo "__OS__$os_name"
@@ -1562,7 +1569,8 @@ mod tests {
         let command = build_posix_metrics_command("linux");
 
         assert!(command.contains(r#"printf "%s|%sK/%sK\n"#));
-        assert!(command.contains(r#"printf "%.1fM|%s|%s|%s\n"#));
+        // 进程输出格式：pid|user|rss(M)|pcpu|pmem|args
+        assert!(command.contains(r#"printf "%s|%s|%.1fM|%s|%s|%s\n"#));
         assert!(command.contains("getconf _NPROCESSORS_ONLN"));
         assert!(command.contains("for (row_index = 1; row_index <= model_count; row_index++)"));
         assert!(!command.contains("for (index = 1; index <= model_count; index++)"));
@@ -1571,15 +1579,53 @@ mod tests {
     }
 
     #[test]
+    fn posix_metrics_command_sorts_processes_by_pcpu_at_shell_level() {
+        // 参考 meatshell：让 ps 直接 --sort=-pcpu 降序输出 top 40，Rust 端
+        // 不再分组或排序。验证 shell 命令包含关键片段。
+        let command = build_posix_metrics_command("linux");
+
+        // ps 直接按 pcpu 降序取 top 40
+        assert!(command.contains("ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu"));
+        assert!(command.contains("head -n 40"));
+        // 输出格式：pid|user|rss(M)|pcpu|pmem|args
+        assert!(command.contains(r#"printf "%s|%s|%.1fM|%s|%s|%s\n""#));
+        // 不应再有进程相关的 sort 命令（cpuinfo/disk 去重可能仍用 awk）
+        assert!(!command.contains("sort -t'|' -k2,2rn"));
+        assert!(!command.contains("sort -t'|' -k1,1rn"));
+    }
+
+    #[test]
     fn parser_keeps_disk_and_process_rows_separate() {
+        // 新格式：pid|user|rss(M)|pcpu|pmem|args
+        // Rust 端不排序，按 shell 端 --sort=-pcpu 的到达顺序保留
         let metrics = parse_system_metrics(
-            "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__DISK_START__\n/|10K/20K\n/dev|30K/40K\n__DISK_END__\n__PROCS_START__\n1.0M|0.1|4|systemd\n2.0M|0.2|5|sshd\n__PROCS_END__\n",
+            "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__DISK_START__\n/|10K/20K\n/dev|30K/40K\n__DISK_END__\n__PROCS_START__\n1|root|1.0M|0.1|0.5|/usr/lib/systemd/systemd\n2|root|2.0M|0.2|1.0|/usr/sbin/sshd -D\n__PROCS_END__\n",
             "linux",
         );
 
         assert_eq!(metrics["diskRows"].as_array().map(Vec::len), Some(2));
         assert_eq!(metrics["topProcesses"].as_array().map(Vec::len), Some(2));
-        assert_eq!(metrics["topProcesses"][0]["command"], "sshd");
+        // 按到达顺序，第一行是 systemd
+        assert_eq!(
+            metrics["topProcesses"][0]["command"],
+            "/usr/lib/systemd/systemd"
+        );
+        assert_eq!(metrics["topProcesses"][0]["pid"], 1);
+        assert_eq!(metrics["topProcesses"][0]["user"], "root");
+        assert_eq!(metrics["topProcesses"][0]["cpu"], "0.1");
+    }
+
+    #[test]
+    fn parser_filters_transient_collector_processes() {
+        // ps/awk/bash 等采集器自身进程应被过滤，不显示给用户
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__PROCS_START__\n100|root|1.0M|0.1|0.5|/usr/bin/sleep 1\n101|root|2.0M|0.2|1.0|/usr/sbin/nginx -g 'daemon off;'\n102|root|1.5M|0.3|0.8|ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu\n__PROCS_END__\n",
+            "linux",
+        );
+
+        let procs = metrics["topProcesses"].as_array().unwrap();
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0]["command"], "/usr/sbin/nginx -g 'daemon off;'");
     }
 
     #[test]

@@ -1540,7 +1540,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   padding: 0;
-  background: rgb(27, 27, 27) !important;
+  background: var(--bg-card) !important;
   overflow: hidden;
 }
 
@@ -1686,7 +1686,7 @@
   padding: 0 14px;
   border: 1px solid var(--border-light);
   border-radius: 4px;
-  background: rgb(26, 26, 26);
+  background: var(--input-bg);
   color: var(--text-main);
   font: inherit;
   font-size: 14px;
@@ -1734,7 +1734,7 @@
   padding: 10px 12px;
   border: 1px solid var(--border-light);
   border-radius: 0;
-  background: rgb(26, 26, 26);
+  background: var(--input-bg);
   font-size: 12px;
 }
 
@@ -2949,7 +2949,7 @@
 .modal-card.ssh-tunnel-dialog {
   width: min(560px, calc(100vw - 40px));
   padding: 0 !important;
-  background: rgb(27, 27, 27) !important;
+  background: var(--bg-card) !important;
   overflow: hidden;
 }
 .ssh-tunnel-dialog-header {
@@ -3020,7 +3020,7 @@
   border-radius: 4px;
   padding: 0 14px;
   color: var(--text-main);
-  background: rgb(26, 26, 26);
+  background: var(--input-bg);
   font: inherit;
   font-size: 14px;
 }
@@ -3048,7 +3048,7 @@
   padding: 10px 12px;
   border: 1px solid var(--border-light);
   border-left: 2px solid var(--copy-link);
-  background: rgb(26, 26, 26);
+  background: var(--input-bg);
   color: var(--text-secondary) !important;
   font-size: 12px !important;
   line-height: 1.6;
@@ -3192,4 +3192,141 @@
   .ssh-tunnel-state {
     display: none;
   }
+}
+
+/* ==========================================
+ * 分屏布局（Split Pane Layout）
+ * ========================================== */
+.split-pane-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--terminal-bg);
+  overflow: hidden;
+}
+
+.split-pane-container {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.split-pane-container--row {
+  flex-direction: row;
+}
+
+.split-pane-container--column {
+  flex-direction: column;
+}
+
+.split-pane-child {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.split-pane-resizer {
+  flex: 0 0 8px;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+}
+
+.split-pane-resizer::after {
+  position: absolute;
+  content: '';
+  background: var(--border-light);
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.split-pane-resizer:hover,
+.split-pane-resizer:active {
+  z-index: 3;
+}
+
+.split-pane-resizer:hover::after,
+.split-pane-resizer:active::after {
+  background: var(--accent-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 28%, transparent);
+}
+
+.split-pane-resizer--row {
+  cursor: col-resize;
+  width: 8px;
+}
+
+.split-pane-resizer--row::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.split-pane-resizer--column {
+  cursor: row-resize;
+  height: 8px;
+  width: 100%;
+}
+
+.split-pane-resizer--column::after {
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.split-pane-leaf {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--terminal-bg);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.split-pane-leaf--active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 72%, transparent);
+}
+
+.split-pane-leaf-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 8;
+  opacity: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+  transition: opacity 0.16s ease;
+}
+
+.split-pane-leaf:hover .split-pane-leaf-close,
+.split-pane-leaf:focus-within .split-pane-leaf-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.split-pane-terminal {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.split-pane-terminal .terminal-host,
+.split-pane-terminal .terminal-host > div,
+.split-pane-terminal .xterm {
+  width: 100%;
+  height: 100%;
 }

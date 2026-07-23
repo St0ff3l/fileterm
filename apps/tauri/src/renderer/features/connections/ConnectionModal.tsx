@@ -415,6 +415,19 @@ export function ConnectionModal({
                         </label>
                         <p className="advanced-toggle-hint">{t.resourceMonitoringDescription}</p>
                       </div>
+                      <div className="advanced-toggle-row">
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={Boolean(form.legacyAlgorithms)}
+                            type="checkbox"
+                            onChange={(event) =>
+                              setForm((prev) => ({ ...prev, legacyAlgorithms: event.target.checked }))
+                            }
+                          />
+                          <span className="advanced-toggle-name">{t.legacyAlgorithms}</span>
+                        </label>
+                        <p className="advanced-toggle-hint">{t.legacyAlgorithmsHint}</p>
+                      </div>
                     </div>
                     <div className="reconnect-mode-group">
                       <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
