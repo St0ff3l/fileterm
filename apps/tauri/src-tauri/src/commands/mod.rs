@@ -1433,7 +1433,9 @@ fn remove_split_pane_from_tabs(
         .iter()
         .position(|tab| tab.id == promoted_root_tab_id)
         .ok_or_else(|| {
-            AppError::Storage(format!("Promoted pane tab not found: {promoted_root_tab_id}"))
+            AppError::Storage(format!(
+                "Promoted pane tab not found: {promoted_root_tab_id}"
+            ))
         })?;
 
     let mut promoted_tab = tabs.remove(promoted_idx);
