@@ -1436,7 +1436,7 @@ fn remove_split_pane_from_tabs(
             AppError::Storage(format!("Promoted pane tab not found: {promoted_root_tab_id}"))
         })?;
 
-    let promoted_tab = &mut tabs[promoted_idx];
+    let mut promoted_tab = tabs.remove(promoted_idx);
     promoted_tab.pane_root_tab_id = None;
     promoted_tab.pane_root = keeps_split.then_some(next_pane_root);
 
@@ -1445,6 +1445,9 @@ fn remove_split_pane_from_tabs(
             tab.pane_root_tab_id = Some(promoted_root_tab_id.clone());
         }
     }
+
+    let insert_idx = root_idx.min(tabs.len());
+    tabs.insert(insert_idx, promoted_tab);
 
     Ok(PaneCloseOutcome {
         root_tab_id: promoted_root_tab_id,
