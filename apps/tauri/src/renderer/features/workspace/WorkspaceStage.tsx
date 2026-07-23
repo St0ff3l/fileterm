@@ -28,6 +28,9 @@ export function WorkspaceStage({
   activeProfile,
   activeSession,
   activeTab,
+  terminalActiveTab,
+  terminalActiveSession,
+  splitRootTab,
   activeView,
   onActiveViewChange,
   commandPaneWidth,
@@ -111,13 +114,22 @@ export function WorkspaceStage({
   isWorkspaceFocusMode,
   tabBarProps,
   isResizingSidebar,
-  onResizeStart
+  onResizeStart,
+  sessions,
+  activePaneTabId,
+  onClosePane,
+  onSplitPane,
+  onActivatePane,
+  onSetPaneWeights
 }: {
   activeLocalTab: ActiveLocalTab
   activeHomeTabId: string | null
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   activeTab: WorkspaceTab | null
+  terminalActiveTab: WorkspaceTab | null
+  terminalActiveSession: SessionSnapshot | null
+  splitRootTab?: WorkspaceTab
   activeView: 'file' | 'command' | 'tunnel'
   onActiveViewChange(view: 'file' | 'command' | 'tunnel'): void
   commandPaneWidth: number
@@ -213,6 +225,12 @@ export function WorkspaceStage({
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
   onResizeStart(): void
+  sessions: Record<string, SessionSnapshot>
+  activePaneTabId?: string
+  onClosePane(paneTabId: string): void
+  onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
+  onActivatePane(paneTabId: string): void
+  onSetPaneWeights(panePath: number[], weights: number[]): void
 }) {
   if (activeLocalTab?.kind === 'system') {
     return (
@@ -229,6 +247,15 @@ export function WorkspaceStage({
       <SessionWorkspace
         activeSession={activeSession}
         activeTab={activeTab}
+        terminalActiveTab={terminalActiveTab ?? activeTab}
+        terminalActiveSession={terminalActiveSession ?? activeSession}
+        splitRootTab={splitRootTab}
+        splitPaneSessions={sessions}
+        activePaneTabId={activePaneTabId}
+        onClosePane={onClosePane}
+        onSplitPane={onSplitPane}
+        onActivatePane={onActivatePane}
+        onSetPaneWeights={onSetPaneWeights}
         activeView={activeView}
         onActiveViewChange={onActiveViewChange}
         commandPaneWidth={commandPaneWidth}

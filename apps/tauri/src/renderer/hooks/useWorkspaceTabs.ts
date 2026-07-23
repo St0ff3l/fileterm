@@ -3,6 +3,8 @@ import type {
   ConnectionProfile,
   CommandExecutionOptions,
   FileTermDesktopApi,
+  PaneFocusDirection,
+  PaneNode,
   SessionSnapshot,
   WorkspaceSnapshot,
   WorkspaceTab
@@ -57,6 +59,14 @@ export type WorkspaceTabContextAction =
 export type WorkspaceStageKind = 'home' | 'session' | 'system'
 export type WorkspaceNavigationDirection = 'up' | 'down'
 
+type PaneBounds = {
+  tabId: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type UseWorkspaceTabsOptions = {
   desktopApi?: FileTermDesktopApi
   workspace: WorkspaceSnapshot
@@ -65,6 +75,9 @@ export type UseWorkspaceTabsOptions = {
   locale: AppLocale
   isBusy: boolean
   closeActiveRequestVersion: number
+  newTabRequestVersion: number
+  splitPaneRequest: { id: number; direction: 'row' | 'column' } | null
+  paneFocusRequest: { id: number; direction: PaneFocusDirection } | null
   onSnapshot(snapshot: WorkspaceSnapshot): void
   onBusyChange(isBusy: boolean): void
   onStatusMessage(message: string | null): void
@@ -107,6 +120,86 @@ function uniqueItemsById<T extends { id: string }>(items: T[]) {
     seen.add(item.id)
     return true
   })
+}
+
+function collectPaneBounds(node: PaneNode, x: number, y: number, width: number, height: number, result: PaneBounds[]) {
+  if (node.kind === 'leaf') {
+    result.push({ tabId: node.tabId, x, y, width, height })
+    return
+  }
+
+  const weights =
+    node.weights.length === node.children.length ? node.weights : node.children.map(() => 1 / node.children.length)
+  let offset = 0
+  node.children.forEach((child, index) => {
+    const weight = weights[index] ?? 1 / node.children.length
+    if (node.direction === 'row') {
+      const childWidth = width * weight
+      collectPaneBounds(child, x + offset, y, childWidth, height, result)
+      offset += childWidth
+      return
+    }
+
+    const childHeight = height * weight
+    collectPaneBounds(child, x, y + offset, width, childHeight, result)
+    offset += childHeight
+  })
+}
+
+function collectPaneLeafTabIds(node: PaneNode, result: string[] = []) {
+  if (node.kind === 'leaf') {
+    result.push(node.tabId)
+    return result
+  }
+
+  for (const child of node.children) {
+    collectPaneLeafTabIds(child, result)
+  }
+  return result
+}
+
+function findAdjacentPaneTabId(
+  paneRoot: PaneNode,
+  activePaneTabId: string,
+  direction: PaneFocusDirection
+): string | null {
+  const panes: PaneBounds[] = []
+  collectPaneBounds(paneRoot, 0, 0, 1, 1, panes)
+  const active = panes.find((pane) => pane.tabId === activePaneTabId)
+  if (!active) {
+    return null
+  }
+
+  const activeCenterX = active.x + active.width / 2
+  const activeCenterY = active.y + active.height / 2
+  const candidates = panes
+    .filter((pane) => pane.tabId !== activePaneTabId)
+    .map((pane) => {
+      const centerX = pane.x + pane.width / 2
+      const centerY = pane.y + pane.height / 2
+      const isInDirection =
+        (direction === 'left' && centerX < activeCenterX) ||
+        (direction === 'right' && centerX > activeCenterX) ||
+        (direction === 'up' && centerY < activeCenterY) ||
+        (direction === 'down' && centerY > activeCenterY)
+      if (!isInDirection) {
+        return null
+      }
+
+      const primaryDistance =
+        direction === 'left' || direction === 'right'
+          ? Math.abs(centerX - activeCenterX)
+          : Math.abs(centerY - activeCenterY)
+      const crossDistance =
+        direction === 'left' || direction === 'right'
+          ? Math.abs(centerY - activeCenterY)
+          : Math.abs(centerX - activeCenterX)
+      return { pane, score: primaryDistance * 2 + crossDistance }
+    })
+    .filter((candidate): candidate is { pane: PaneBounds; score: number } => candidate !== null)
+    .sort((left, right) => left.score - right.score)
+
+  return candidates[0]?.pane.tabId ?? null
 }
 
 function parseStoredMainTabUiState(raw: string | null | undefined): StoredMainTabUiState | null {
@@ -225,6 +318,9 @@ export function useWorkspaceTabs({
   locale,
   isBusy,
   closeActiveRequestVersion,
+  newTabRequestVersion,
+  splitPaneRequest,
+  paneFocusRequest,
   onSnapshot,
   onBusyChange,
   onStatusMessage,
@@ -254,6 +350,11 @@ export function useWorkspaceTabs({
   const pendingProfileOpenIdRef = useRef<string | null>(null)
   const hasSanitizedStoredPlaceholderRef = useRef(false)
   const handledCloseActiveRequestVersionRef = useRef(0)
+  const handledNewTabRequestVersionRef = useRef(0)
+  const handledSplitPaneRequestIdRef = useRef(0)
+  const handledPaneFocusRequestIdRef = useRef(0)
+  const splitCurrentPaneRef = useRef<(direction: 'row' | 'column') => Promise<void>>(async () => {})
+  const focusAdjacentPaneRef = useRef<(direction: PaneFocusDirection) => Promise<void>>(async () => {})
 
   useEffect(() => {
     localTabsRef.current = localTabs
@@ -298,9 +399,28 @@ export function useWorkspaceTabs({
   }, [desktopApi, isMainWorkspaceWindow])
 
   const closingSessionTabIdSet = useMemo(() => new Set(closingSessionTabIds), [closingSessionTabIds])
+  // 分屏 leaf tab id 集合：新建的 leaf 不在 tab bar 显示；持有 paneRoot 的
+  // root tab 仍需保留，不能因为它也作为树中的第一个 leaf 而被误隐藏。
+  const leafTabIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const tab of workspace.tabs) {
+      if (tab.paneRoot) {
+        for (const leafTabId of collectPaneLeafTabIds(tab.paneRoot)) {
+          ids.add(leafTabId)
+        }
+        ids.delete(tab.id)
+      }
+    }
+    return ids
+  }, [workspace.tabs])
   const visibleWorkspaceTabs = useMemo(
-    () => uniqueItemsById(workspace.tabs.filter((tab) => !closingSessionTabIdSet.has(tab.id))),
-    [closingSessionTabIdSet, workspace.tabs]
+    () =>
+      uniqueItemsById(
+        workspace.tabs.filter(
+          (tab) => !closingSessionTabIdSet.has(tab.id) && !tab.paneRootTabId && !leafTabIds.has(tab.id)
+        )
+      ),
+    [closingSessionTabIdSet, workspace.tabs, leafTabIds]
   )
 
   useEffect(() => {
@@ -492,6 +612,11 @@ export function useWorkspaceTabs({
     ? (visibleWorkspaceTabs.find((tab) => tab.id === displayedSessionTabId) ?? null)
     : null
   const activeSession = activeTab ? (workspace.sessions[activeTab.id] ?? null) : null
+  const activePaneTabId = activeTab?.paneRoot
+    ? (workspace.activePaneTabIdByRoot?.[activeTab.id] ?? activeTab.id)
+    : activeTab?.id
+  const activePaneTab = activePaneTabId ? (workspace.tabs.find((tab) => tab.id === activePaneTabId) ?? activeTab) : null
+  const activePaneSession = activePaneTab ? (workspace.sessions[activePaneTab.id] ?? null) : null
   const isSystemSidebarCollapsed = activeTab ? (systemSidebarCollapsedByTabId[activeTab.id] ?? false) : false
   const setIsSystemSidebarCollapsed = (nextCollapsed: boolean) => {
     if (!activeTab) {
@@ -521,6 +646,9 @@ export function useWorkspaceTabs({
     activeLocalTab?.id ?? (isHomeWorkspaceVisible ? resolveFallbackHomeTabId(localTabs, tabOrder) : null)
   const activeProfile = activeTab
     ? (workspace.profiles.find((profile) => profile.id === activeTab.profileId) ?? null)
+    : null
+  const activePaneProfile = activePaneTab
+    ? (workspace.profiles.find((profile) => profile.id === activePaneTab.profileId) ?? null)
     : null
   const activeWorkspaceOrderKey = activeLocalTab
     ? homeTabKey(activeLocalTab.id)
@@ -598,8 +726,8 @@ export function useWorkspaceTabs({
     [activeTab?.id, orderedTabs, workspace.sessions]
   )
 
-  const activeTerminalDockSendState = activeTab
-    ? (terminalDockSendStateByTabId[activeTab.id] ?? createDefaultTerminalDockSendState())
+  const activeTerminalDockSendState = activePaneTab
+    ? (terminalDockSendStateByTabId[activePaneTab.id] ?? createDefaultTerminalDockSendState())
     : createDefaultTerminalDockSendState()
 
   useEffect(() => {
@@ -607,7 +735,7 @@ export function useWorkspaceTabs({
       return
     }
 
-    const validTabIds = new Set(visibleWorkspaceTabs.map((tab) => tab.id))
+    const validTabIds = new Set(workspace.tabs.map((tab) => tab.id))
     setTerminalDockSendStateByTabId((current) => {
       const next = Object.fromEntries(Object.entries(current).filter(([tabId]) => validTabIds.has(tabId)))
       return Object.keys(next).length === Object.keys(current).length ? current : next
@@ -616,7 +744,7 @@ export function useWorkspaceTabs({
       const next = Object.fromEntries(Object.entries(current).filter(([tabId]) => validTabIds.has(tabId)))
       return Object.keys(next).length === Object.keys(current).length ? current : next
     })
-  }, [hasLoadedInitialSnapshot, visibleWorkspaceTabs])
+  }, [hasLoadedInitialSnapshot, visibleWorkspaceTabs, workspace.tabs])
 
   useEffect(() => {
     const availableTargetIds = new Set(sessionSendTargets.map((target) => target.tabId))
@@ -642,16 +770,16 @@ export function useWorkspaceTabs({
   }
 
   const updateTerminalDockSendState = (updater: (current: TerminalDockSendState) => TerminalDockSendState) => {
-    if (!activeTab) {
+    if (!activePaneTab) {
       return
     }
 
     setTerminalDockSendStateByTabId((currentByTabId) => {
-      const current = currentByTabId[activeTab.id] ?? createDefaultTerminalDockSendState()
+      const current = currentByTabId[activePaneTab.id] ?? createDefaultTerminalDockSendState()
       const next = updater(current)
       return {
         ...currentByTabId,
-        [activeTab.id]: {
+        [activePaneTab.id]: {
           ...next,
           selectedTabIds: next.selectedTabIds.filter((tabId) =>
             sessionSendTargets.some((target) => target.tabId === tabId)
@@ -685,7 +813,7 @@ export function useWorkspaceTabs({
     scope?: SendScope,
     selectedTabIds?: string[]
   ) => {
-    if (!desktopApi || !activeTab) {
+    if (!desktopApi || !activePaneTab) {
       return
     }
 
@@ -693,7 +821,7 @@ export function useWorkspaceTabs({
     const effectiveScope = scope ?? activeTerminalDockSendState.scope
     const effectiveSelectedTabIds = selectedTabIds ?? activeTerminalDockSendState.selectedTabIds
 
-    const targetIds = resolveSelectedTabIds(effectiveScope, activeTab, effectiveSelectedTabIds, sessionSendTargets)
+    const targetIds = resolveSelectedTabIds(effectiveScope, activePaneTab, effectiveSelectedTabIds, sessionSendTargets)
 
     if (!targetIds.length) {
       onStatusMessage(t.commandNoAvailableTargets)
@@ -716,10 +844,10 @@ export function useWorkspaceTabs({
       onError('发送终端命令', error)
       throw error
     } finally {
-      if (usesDockState && !activeTerminalDockSendState.rememberSelection && activeTab) {
+      if (usesDockState && !activeTerminalDockSendState.rememberSelection && activePaneTab) {
         setTerminalDockSendStateByTabId((current) => ({
           ...current,
-          [activeTab.id]: createDefaultTerminalDockSendState()
+          [activePaneTab.id]: createDefaultTerminalDockSendState()
         }))
       }
     }
@@ -890,6 +1018,128 @@ export function useWorkspaceTabs({
     return snapshot
   }
 
+  // ==========================================
+  // 分屏（Split Pane）操作
+  // ==========================================
+
+  /** 基于指定 pane 的 profile 新建独立 session，不共享 PTY。 */
+  const splitPane = async (sourceTabId: string, direction: 'row' | 'column') => {
+    if (!desktopApi) {
+      return
+    }
+    // 只对 SSH session 分屏
+    const sourceTab = workspace.tabs.find((tab) => tab.id === sourceTabId)
+    if (!sourceTab || sourceTab.sessionType !== 'ssh') {
+      return
+    }
+    try {
+      onBusyChange(true)
+      const snapshot = await desktopApi.splitTab(sourceTabId, direction)
+      onSnapshot(snapshot)
+    } catch (error) {
+      onError('splitPane', error)
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
+  /**
+   * 分屏当前活跃 pane：基于当前 profile 新建独立 session。
+   * source tab id 优先取 activePaneTabIdByRoot[activeTabId]，退回到 activeTabId。
+   */
+  const splitCurrentPane = async (direction: 'row' | 'column') => {
+    if (!workspace.activeTabId) {
+      return
+    }
+    const rootTabId = workspace.activeTabId
+    const activePaneTabId = workspace.activePaneTabIdByRoot?.[rootTabId] ?? rootTabId
+    await splitPane(activePaneTabId, direction)
+  }
+
+  useEffect(() => {
+    splitCurrentPaneRef.current = splitCurrentPane
+  })
+
+  const focusAdjacentPane = async (direction: PaneFocusDirection) => {
+    if (!desktopApi || !workspace.activeTabId) {
+      return
+    }
+
+    const rootTabId = workspace.activeTabId
+    const rootTab = workspace.tabs.find((tab) => tab.id === rootTabId)
+    const activePaneTabId = workspace.activePaneTabIdByRoot?.[rootTabId] ?? rootTabId
+    if (!rootTab?.paneRoot) {
+      return
+    }
+
+    const targetPaneTabId = findAdjacentPaneTabId(rootTab.paneRoot, activePaneTabId, direction)
+    if (!targetPaneTabId) {
+      return
+    }
+
+    try {
+      const snapshot = await desktopApi.setActivePane(rootTabId, targetPaneTabId)
+      onSnapshot(snapshot)
+      window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: targetPaneTabId }))
+    } catch (error) {
+      onError('focusAdjacentPane', error)
+    }
+  }
+
+  useEffect(() => {
+    focusAdjacentPaneRef.current = focusAdjacentPane
+  })
+
+  /** 关闭分屏中的单个 pane */
+  const closePane = async (paneTabId: string) => {
+    if (!desktopApi || !workspace.activeTabId) {
+      return
+    }
+    const rootTabId = workspace.activeTabId
+    const activePaneTabId = workspace.activePaneTabIdByRoot?.[rootTabId] ?? rootTabId
+    try {
+      const snapshot = await desktopApi.closePane(rootTabId, paneTabId)
+      onSnapshot(snapshot)
+      if (paneTabId === activePaneTabId) {
+        const nextRootTabId = snapshot.activeTabId ?? rootTabId
+        const nextPaneTabId = snapshot.activePaneTabIdByRoot?.[nextRootTabId] ?? nextRootTabId
+        window.requestAnimationFrame(() => {
+          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: nextPaneTabId }))
+        })
+      }
+    } catch (error) {
+      onError('closePane', error)
+    }
+  }
+
+  /** 设置分屏活跃 pane */
+  const activatePane = async (paneTabId: string) => {
+    if (!desktopApi || !workspace.activeTabId) {
+      return
+    }
+    const rootTabId = workspace.activeTabId
+    try {
+      const snapshot = await desktopApi.setActivePane(rootTabId, paneTabId)
+      onSnapshot(snapshot)
+    } catch (error) {
+      onError('activatePane', error)
+    }
+  }
+
+  /** 持久化分屏 weights */
+  const setPaneWeights = async (panePath: number[], weights: number[]) => {
+    if (!desktopApi || !workspace.activeTabId) {
+      return
+    }
+    const rootTabId = workspace.activeTabId
+    try {
+      const snapshot = await desktopApi.setPaneWeights(rootTabId, panePath, weights)
+      onSnapshot(snapshot)
+    } catch (error) {
+      onError('setPaneWeights', error)
+    }
+  }
+
   const closeHomeTabById = (homeTabId: string) => {
     setLocalTabs((current) => {
       const remaining = current.filter((tab) => tab.id !== homeTabId)
@@ -952,6 +1202,19 @@ export function useWorkspaceTabs({
     setActiveLocalTabId(nextId)
     onStatusMessage(null)
   }
+
+  useEffect(() => {
+    if (
+      !isMainWorkspaceWindow ||
+      newTabRequestVersion === 0 ||
+      newTabRequestVersion === handledNewTabRequestVersionRef.current
+    ) {
+      return
+    }
+
+    handledNewTabRequestVersionRef.current = newTabRequestVersion
+    addHomeTab()
+  }, [addHomeTab, isMainWorkspaceWindow, newTabRequestVersion])
 
   const openSystemInfo = () => {
     if (!activeTab) {
@@ -1027,6 +1290,22 @@ export function useWorkspaceTabs({
     }
 
     if (activeSessionTab) {
+      const paneLeafIds = activeSessionTab.paneRoot ? collectPaneLeafTabIds(activeSessionTab.paneRoot) : []
+      const activePaneTabId = workspace.activePaneTabIdByRoot?.[activeSessionTab.id] ?? activeSessionTab.id
+
+      // Cmd+W follows the terminal hierarchy: close the focused pane without
+      // interrupting the user with a dialog while its parent tab still has
+      // other panes. Once only one surface remains, fall through to the
+      // existing top-level tab confirmation flow below.
+      if (paneLeafIds.length > 1 && paneLeafIds.includes(activePaneTabId)) {
+        try {
+          await closePane(activePaneTabId)
+        } catch (error) {
+          onError('关闭当前分屏', error)
+        }
+        return
+      }
+
       const isLastSessionTab = visibleWorkspaceTabs.length === 1
       const needsDisconnectConfirm = isTabActivelyConnected(activeSessionTab)
 
@@ -1067,7 +1346,25 @@ export function useWorkspaceTabs({
 
     handledCloseActiveRequestVersionRef.current = closeActiveRequestVersion
     void closeActiveWorkspaceItem()
-  }, [closeActiveRequestVersion])
+  }, [closeActiveRequestVersion, isMainWorkspaceWindow])
+
+  useEffect(() => {
+    if (!isMainWorkspaceWindow || !splitPaneRequest || splitPaneRequest.id === handledSplitPaneRequestIdRef.current) {
+      return
+    }
+
+    handledSplitPaneRequestIdRef.current = splitPaneRequest.id
+    void splitCurrentPaneRef.current(splitPaneRequest.direction)
+  }, [splitPaneRequest, isMainWorkspaceWindow])
+
+  useEffect(() => {
+    if (!isMainWorkspaceWindow || !paneFocusRequest || paneFocusRequest.id === handledPaneFocusRequestIdRef.current) {
+      return
+    }
+
+    handledPaneFocusRequestIdRef.current = paneFocusRequest.id
+    void focusAdjacentPaneRef.current(paneFocusRequest.direction)
+  }, [paneFocusRequest, isMainWorkspaceWindow])
 
   const dismissShortcutCloseConfirm = () => {
     setShortcutCloseConfirm(null)
@@ -1255,6 +1552,9 @@ export function useWorkspaceTabs({
     activeTab,
     activeSession: activeSession as SessionSnapshot | null,
     activeProfile: activeProfile as ConnectionProfile | null,
+    activePaneTab,
+    activePaneSession: activePaneSession as SessionSnapshot | null,
+    activePaneProfile: activePaneProfile as ConnectionProfile | null,
     workspaceStageKind,
     isHomeWorkspaceVisible,
     isActiveRemoteSessionConnected,
@@ -1285,7 +1585,12 @@ export function useWorkspaceTabs({
     updateTerminalDockSendState,
     updateTerminalDockSendScope,
     updateTerminalDockSelectedTabIds,
-    sendTerminalCommand
+    sendTerminalCommand,
+    splitPane,
+    splitCurrentPane,
+    closePane,
+    activatePane,
+    setPaneWeights
   }
 }
 

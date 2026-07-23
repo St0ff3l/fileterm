@@ -411,6 +411,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     reconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_reconnect_tab', { tabId }),
     disconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_disconnect_tab', { tabId }),
     closeTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_close_tab', { tabId }),
+    splitTab: (sourceTabId: string, direction: 'row' | 'column') =>
+      invoke<WorkspaceSnapshot>('app_split_tab', { sourceTabId, direction }),
+    closePane: (rootTabId: string, paneTabId: string) =>
+      invoke<WorkspaceSnapshot>('app_close_pane', { rootTabId, paneTabId }),
+    setActivePane: (rootTabId: string, paneTabId: string) =>
+      invoke<WorkspaceSnapshot>('app_set_active_pane', { rootTabId, paneTabId }),
+    setPaneWeights: (rootTabId: string, panePath: number[], weights: number[]) =>
+      invoke<WorkspaceSnapshot>('app_set_pane_weights', { rootTabId, panePath, weights }),
 
     writeTerminal: (tabId: string, data: string) => invoke<void>('app_write_terminal', { tabId, data }),
     resizeTerminal: (tabId: string, cols: number, rows: number, width: number, height: number) =>
@@ -470,6 +478,11 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       subscribe('app:window-close-request', listener),
     onRequestCloseActiveWorkspaceItem: (listener: () => void) =>
       subscribe('app:close-active-workspace-item-request', listener),
+    onNewTabRequest: (listener: () => void) => subscribe('app:new-tab-request', listener),
+    onSplitPaneRequest: (listener: (direction: 'row' | 'column') => void) =>
+      subscribe('app:split-pane-request', listener),
+    onFocusPaneRequest: (listener: (direction: 'left' | 'right' | 'up' | 'down') => void) =>
+      subscribe('app:focus-pane-request', listener),
     confirmCloseWindow: (action: 'quit' | 'hide' | 'cancel') => {
       if (action === 'cancel') return Promise.resolve()
       if (action === 'quit') {

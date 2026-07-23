@@ -23,16 +23,26 @@ import { AppIcon } from '../common/AppIcon'
 import { FileManager } from '../files/FileManager'
 import { TerminalDock } from '../terminal/TerminalDock'
 import { t } from '../../i18n'
+import { SplitPaneLayout } from './SplitPaneLayout'
 
 const DEFAULT_FILE_PANEL_HEIGHT = 218
 
 export function SessionWorkspace({
   activeTab,
+  terminalActiveTab,
+  splitRootTab,
+  splitPaneSessions,
+  activePaneTabId,
+  onClosePane,
+  onSplitPane,
+  onActivatePane,
+  onSetPaneWeights,
   activeView,
   onActiveViewChange,
   commandPaneWidth,
   onCommandPaneWidthChange,
   activeSession,
+  terminalActiveSession,
   filePanelHeight,
   onFilePanelHeightChange,
   shouldAlignFilePanelOnMount,
@@ -88,11 +98,20 @@ export function SessionWorkspace({
   isWorkspaceFocusMode
 }: {
   activeTab: WorkspaceTab
+  terminalActiveTab: WorkspaceTab
+  splitRootTab?: WorkspaceTab
+  splitPaneSessions: Record<string, SessionSnapshot>
+  activePaneTabId?: string
+  onClosePane(paneTabId: string): void
+  onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
+  onActivatePane(paneTabId: string): void
+  onSetPaneWeights(panePath: number[], weights: number[]): void
   activeView: 'file' | 'command' | 'tunnel'
   onActiveViewChange(view: 'file' | 'command' | 'tunnel'): void
   commandPaneWidth: number
   onCommandPaneWidthChange(width: number): void
   activeSession: SessionSnapshot
+  terminalActiveSession: SessionSnapshot
   filePanelHeight: number
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
   shouldAlignFilePanelOnMount: boolean
@@ -386,11 +405,12 @@ export function SessionWorkspace({
   }
 
   const reconnectOnEnter =
-    activeSession.reconnectMode === 'enter'
+    terminalActiveSession.reconnectMode === 'enter'
       ? async () => {
-          await window.fileterm?.reconnectTab(activeTab.id)
+          await window.fileterm?.reconnectTab(terminalActiveTab.id)
         }
       : undefined
+  const canSplitTerminal = terminalActiveTab.sessionType === 'ssh'
 
   return (
     <section
@@ -399,17 +419,30 @@ export function SessionWorkspace({
       style={{ '--file-panel-height': `${effectiveFilePanelHeight}px` } as CSSProperties}
     >
       {!isFileOnly ? (
-        <div className="terminal-area has-terminal-dock">
-          <TerminalView
-            tabId={activeTab.id}
-            bootText={activeSession.terminalTranscript ?? ''}
-            connected={activeSession.connected === true}
-            connecting={activeTab.status === 'connecting'}
-            onReconnect={reconnectOnEnter}
-          />
+        <div className={`terminal-area has-terminal-dock ${splitRootTab?.paneRoot ? 'is-terminal-split' : ''}`}>
+          {splitRootTab?.paneRoot ? (
+            <SplitPaneLayout
+              rootTab={splitRootTab}
+              sessions={splitPaneSessions}
+              activePaneTabId={activePaneTabId}
+              onClosePane={onClosePane}
+              onSplitPane={onSplitPane}
+              onActivatePane={onActivatePane}
+              onResizeEnd={onSetPaneWeights}
+            />
+          ) : (
+            <TerminalView
+              tabId={terminalActiveTab.id}
+              bootText={terminalActiveSession.terminalTranscript ?? ''}
+              connected={terminalActiveSession.connected === true}
+              connecting={terminalActiveTab.status === 'connecting'}
+              onReconnect={reconnectOnEnter}
+              onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
+            />
+          )}
           <TerminalDock
-            activeTab={activeTab}
-            connected={activeSession.connected === true}
+            activeTab={terminalActiveTab}
+            connected={terminalActiveSession.connected === true}
             selectedTabIds={terminalDockSelectedTabIds}
             sendScope={terminalDockSendScope}
             sendTargets={sendTargets}

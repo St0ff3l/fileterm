@@ -44,6 +44,161 @@ pub struct WorkspaceTab {
     pub title: String,
     pub layout: String, // "terminal-file" | "file-only" | "terminal-only"
     pub status: WorkspaceTabStatus,
+    /// 分屏树根节点；普通 tab 为 None。只有分屏的根 tab 持有。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pane_root: Option<PaneNode>,
+    /// 分屏 leaf 所属的顶层 workspace tab。leaf 仍保留独立 session，但绝不作为顶栏 tab。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pane_root_tab_id: Option<String>,
+}
+
+/// 分屏方向：row = 左右分（垂直分屏），column = 上下分（水平分屏）
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SplitDirection {
+    Row,
+    Column,
+}
+
+/// 分屏树节点。leaf 引用一个真实 tab id；split 递归持有子节点。
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PaneNode {
+    Leaf {
+        // The renderer's core contract uses `tabId`. Keep accepting the
+        // previous Rust-shaped spelling so a restored in-memory snapshot does
+        // not make the layout unreadable during an upgrade.
+        #[serde(rename = "tabId", alias = "tab_id")]
+        tab_id: String,
+    },
+    Split {
+        direction: SplitDirection,
+        children: Vec<PaneNode>,
+        /// 每个子节点占比，长度与 children 一致，和为 1。
+        weights: Vec<f32>,
+    },
+}
+
+impl PaneNode {
+    /// 递归收集所有 leaf 的 tab_id。
+    pub fn leaf_tab_ids(&self) -> Vec<String> {
+        match self {
+            PaneNode::Leaf { tab_id } => vec![tab_id.clone()],
+            PaneNode::Split { children, .. } => {
+                children.iter().flat_map(|c| c.leaf_tab_ids()).collect()
+            }
+        }
+    }
+
+    /// 递归查找并替换指定 leaf 节点为新子树。返回是否替换成功。
+    /// 用于分屏：把当前 leaf 替换为 split(leaf, new_leaf)。
+    pub fn replace_leaf(&mut self, target_tab_id: &str, replacement: PaneNode) -> bool {
+        match self {
+            PaneNode::Leaf { tab_id } if tab_id == target_tab_id => {
+                *self = replacement;
+                true
+            }
+            PaneNode::Leaf { .. } => false,
+            PaneNode::Split { children, .. } => {
+                for child in children.iter_mut() {
+                    if child.replace_leaf(target_tab_id, replacement.clone()) {
+                        return true;
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    /// 递归移除指定 leaf 节点。移除后规整：
+    ///
+    /// - split 只剩一个子节点时，用唯一子节点替换该 split
+    ///
+    /// 返回 true 表示子树中发生了移除。
+    pub fn remove_leaf(&mut self, target_tab_id: &str) -> bool {
+        match self {
+            PaneNode::Leaf { tab_id } if tab_id == target_tab_id => true,
+            PaneNode::Leaf { .. } => false,
+            PaneNode::Split {
+                children, weights, ..
+            } => {
+                // 先检查直接 children 里有没有匹配的 leaf
+                let direct_idx = children.iter().position(|c| match c {
+                    PaneNode::Leaf { tab_id } => tab_id == target_tab_id,
+                    PaneNode::Split { .. } => false,
+                });
+
+                if let Some(idx) = direct_idx {
+                    children.remove(idx);
+                    if weights.len() > idx {
+                        weights.remove(idx);
+                    }
+                } else {
+                    // 递归到子 split
+                    let mut found_in_child = false;
+                    for child in children.iter_mut() {
+                        if child.remove_leaf(target_tab_id) {
+                            found_in_child = true;
+                            break;
+                        }
+                    }
+                    if !found_in_child {
+                        return false;
+                    }
+                }
+
+                normalize_weights(weights);
+                // 规整：split 只剩一个子节点时用唯一子节点替换自身
+                if children.len() == 1 {
+                    let only = children.pop().unwrap();
+                    *self = only;
+                }
+                true
+            }
+        }
+    }
+
+    /// 更新指定 split 节点的 weights。`pane_path` 使用从根节点到该 split 的 child index。
+    pub fn set_split_weights_at_path(&mut self, pane_path: &[usize], next_weights: &[f32]) -> bool {
+        let PaneNode::Split {
+            children, weights, ..
+        } = self
+        else {
+            return false;
+        };
+
+        if pane_path.is_empty() {
+            if weights.len() != next_weights.len() {
+                return false;
+            }
+            weights.clone_from_slice(next_weights);
+            normalize_weights(weights);
+            return true;
+        }
+
+        let Some(child) = children.get_mut(pane_path[0]) else {
+            return false;
+        };
+        child.set_split_weights_at_path(&pane_path[1..], next_weights)
+    }
+}
+
+/// 归一化 weights 数组：确保和为 1，且长度 >= 2 时每项 > 0。
+fn normalize_weights(weights: &mut [f32]) {
+    if weights.is_empty() {
+        return;
+    }
+    let sum: f32 = weights.iter().sum();
+    if sum <= 0.0 || !sum.is_finite() {
+        let n = weights.len() as f32;
+        for w in weights.iter_mut() {
+            *w = 1.0 / n;
+        }
+        return;
+    }
+    for w in weights.iter_mut() {
+        *w /= sum;
+    }
 }
 
 /// Rust-side mirror of `packages/core::TabStatus`. Keeping this as an enum
@@ -245,6 +400,8 @@ pub struct WorkspaceState {
     /// Serializes updater downloads and installation so a double click cannot
     /// start competing installers or overwrite a verified package in memory.
     pub update_operation: Arc<Mutex<()>>,
+    /// 分屏 root tabId -> 当前活跃 leaf tabId。用于终端输入/文件操作/命令发送定位。
+    pub active_pane_tab_id_by_root: Arc<RwLock<HashMap<String, String>>>,
     /// Windows keeps the verified updater payload in memory until the user
     /// confirms the restart. It is intentionally never persisted to user data.
     #[cfg(target_os = "windows")]
@@ -277,6 +434,7 @@ impl Default for WorkspaceState {
             update_status: Arc::new(RwLock::new(None)),
             update_check: Arc::new(Mutex::new(())),
             update_operation: Arc::new(Mutex::new(())),
+            active_pane_tab_id_by_root: Arc::new(RwLock::new(HashMap::new())),
             #[cfg(target_os = "windows")]
             windows_downloaded_update: Arc::new(Mutex::new(None)),
         }
@@ -327,7 +485,7 @@ impl WorkspaceState {
 mod tests {
     use super::{
         initial_remote_path_for_profile, reconnect_mode_for_profile, ConnectionCapabilities,
-        TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
+        PaneNode, SplitDirection, TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
     };
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
@@ -426,6 +584,61 @@ mod tests {
             assert_eq!(payload["tabId"], "tab-load");
             assert_eq!(payload["chunk"], format!("{index}\r\n"));
         }
+    }
+
+    #[test]
+    fn split_weights_update_only_the_targeted_nested_split() {
+        let mut pane_root = PaneNode::Split {
+            direction: SplitDirection::Row,
+            weights: vec![0.5, 0.5],
+            children: vec![
+                PaneNode::Leaf {
+                    tab_id: "left".to_string(),
+                },
+                PaneNode::Split {
+                    direction: SplitDirection::Column,
+                    weights: vec![0.5, 0.5],
+                    children: vec![
+                        PaneNode::Leaf {
+                            tab_id: "top-right".to_string(),
+                        },
+                        PaneNode::Leaf {
+                            tab_id: "bottom-right".to_string(),
+                        },
+                    ],
+                },
+            ],
+        };
+
+        assert!(pane_root.set_split_weights_at_path(&[1], &[0.25, 0.75]));
+
+        let PaneNode::Split {
+            weights, children, ..
+        } = pane_root
+        else {
+            panic!("root should remain a split");
+        };
+        assert_eq!(weights, vec![0.5, 0.5]);
+        let PaneNode::Split {
+            weights: nested_weights,
+            ..
+        } = &children[1]
+        else {
+            panic!("right pane should remain a split");
+        };
+        assert_eq!(nested_weights, &vec![0.25, 0.75]);
+    }
+
+    #[test]
+    fn pane_nodes_serialize_with_the_core_camel_case_shape() {
+        let value = serde_json::to_value(PaneNode::Leaf {
+            tab_id: "pane-1".to_string(),
+        })
+        .unwrap();
+
+        assert_eq!(value["kind"], "leaf");
+        assert_eq!(value["tabId"], "pane-1");
+        assert!(value.get("tab_id").is_none());
     }
 
     #[tokio::test]

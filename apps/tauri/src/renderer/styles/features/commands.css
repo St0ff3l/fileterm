@@ -419,7 +419,7 @@
   container-name: command-history-head;
   padding: 0 8px 0 12px;
   border-bottom: 1px solid var(--border-light);
-  background: #161616;
+  background: var(--command-history-head-bg);
 }
 
 .command-temporary-history-title {

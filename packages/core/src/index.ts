@@ -4,6 +4,23 @@ export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
 
+/** 分屏方向：row = 左右分（垂直分屏），column = 上下分（水平分屏） */
+export type SplitDirection = 'row' | 'column'
+
+/** 在分屏树中移动焦点的方向。 */
+export type PaneFocusDirection = 'left' | 'right' | 'up' | 'down'
+
+/** 分屏树节点。leaf 引用一个真实 WorkspaceTab id；split 递归持有子节点。 */
+export type PaneNode =
+  | { kind: 'leaf'; tabId: string }
+  | {
+      kind: 'split'
+      direction: SplitDirection
+      children: PaneNode[]
+      /** 每个子节点占比，长度与 children 一致，和为 1。拖拽 resize 时更新。 */
+      weights: number[]
+    }
+
 export type TabStatus = 'idle' | 'connecting' | 'connected' | 'error' | 'closed'
 
 export interface BaseEntity {
@@ -116,6 +133,8 @@ export interface SshProfile extends NetworkProfile {
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
+  /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
+  legacyAlgorithms?: boolean
 }
 
 export interface FtpProfile extends NetworkProfile {
@@ -187,6 +206,10 @@ export interface WorkspaceTab {
   title: string
   layout: TabLayout
   status: TabStatus
+  /** 分屏树根节点；普通 tab 无此字段。只有分屏的根 tab 持有。 */
+  paneRoot?: PaneNode
+  /** 分屏 leaf 所属的顶层 workspace tab；leaf 永不显示在顶栏。 */
+  paneRootTabId?: string
 }
 
 export type WorkspaceSessionTabEvent =
@@ -344,6 +367,8 @@ export interface DirectorySnapshot<TItem> {
 }
 
 export interface SidebarProcessItem {
+  pid: number
+  user: string
   memory: string
   cpu: string
   command: string
@@ -537,6 +562,8 @@ export interface WorkspaceSnapshot {
   activeTabId: string | null
   transfers: TransferTask[]
   sessions: Record<string, SessionSnapshot>
+  /** 分屏 root tabId -> 当前活跃 leaf tabId。用于终端输入/文件操作/命令发送定位。 */
+  activePaneTabIdByRoot?: Record<string, string>
 }
 
 export interface SessionMetricsUpdate {
@@ -687,6 +714,8 @@ export interface CreateProfileInput {
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
+  /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
+  legacyAlgorithms?: boolean
   devicePath?: string
   baudRate?: number
   dataBits?: 5 | 6 | 7 | 8
@@ -954,6 +983,10 @@ export interface FileTermDesktopApi {
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   closeTab(tabId: string): Promise<WorkspaceSnapshot>
+  splitTab(sourceTabId: string, direction: 'row' | 'column'): Promise<WorkspaceSnapshot>
+  closePane(rootTabId: string, paneTabId: string): Promise<WorkspaceSnapshot>
+  setActivePane(rootTabId: string, paneTabId: string): Promise<WorkspaceSnapshot>
+  setPaneWeights(rootTabId: string, panePath: number[], weights: number[]): Promise<WorkspaceSnapshot>
   listLocalDirectory(dirPath?: string): Promise<DirectorySnapshot<LocalFileItem>>
   connectLocalNetworkShare?(
     path: string,
@@ -1034,6 +1067,9 @@ export interface FileTermDesktopApi {
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void
+  onNewTabRequest(listener: () => void): () => void
+  onSplitPaneRequest(listener: (direction: 'row' | 'column') => void): () => void
+  onFocusPaneRequest(listener: (direction: PaneFocusDirection) => void): () => void
   confirmCloseWindow(action: 'quit' | 'hide' | 'cancel'): Promise<void>
 }
 

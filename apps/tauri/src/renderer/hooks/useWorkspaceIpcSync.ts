@@ -3,6 +3,7 @@ import {
   mergeSystemMetricsHistory,
   type FileTermDesktopApi,
   type LocalFileItem,
+  type PaneFocusDirection,
   type SessionMetricsUpdate,
   type TransferTask,
   type WorkspaceSnapshot
@@ -17,6 +18,16 @@ export type WorkspaceWindowCloseRequest = {
   isQuit: boolean
 }
 
+export type WorkspaceSplitPaneRequest = {
+  id: number
+  direction: 'row' | 'column'
+}
+
+export type WorkspacePaneFocusRequest = {
+  id: number
+  direction: PaneFocusDirection
+}
+
 export type UseWorkspaceIpcSyncOptions = {
   desktopApi?: FileTermDesktopApi
   isConnectionFormWindow: boolean
@@ -24,6 +35,7 @@ export type UseWorkspaceIpcSyncOptions = {
   isConnectionManagerWindow: boolean
   themeMode: ThemeMode
   locale: AppLocale
+  initialUiPreferencesLoaded: boolean
   onThemeModeChange(themeMode: ThemeMode): void
   onLocaleChange(locale: AppLocale): void
   onError(scope: string, error: unknown): void
@@ -45,6 +57,9 @@ export type UseWorkspaceIpcSyncResult = {
   windowCloseRequest: WorkspaceWindowCloseRequest | null
   clearWindowCloseRequest(): void
   closeActiveRequestVersion: number
+  newTabRequestVersion: number
+  splitPaneRequest: WorkspaceSplitPaneRequest | null
+  paneFocusRequest: WorkspacePaneFocusRequest | null
   closeCurrentWindow(): void
   requestQuitApp(): void
 }
@@ -72,6 +87,7 @@ export function useWorkspaceIpcSync({
   isConnectionManagerWindow,
   themeMode,
   locale,
+  initialUiPreferencesLoaded,
   onThemeModeChange,
   onLocaleChange,
   onError,
@@ -82,9 +98,18 @@ export function useWorkspaceIpcSync({
   const [localItems, setLocalItems] = useState<LocalFileItem[]>(localPreviewFiles)
   const [isLocalDirectoryLoading, setIsLocalDirectoryLoading] = useState(false)
   const [hasLoadedInitialSnapshot, setHasLoadedInitialSnapshot] = useState(false)
+  const [hasHydratedUiPreferences, setHasHydratedUiPreferences] = useState(
+    () => !desktopApi || initialUiPreferencesLoaded
+  )
+  const [canPersistUiPreferences, setCanPersistUiPreferences] = useState(() =>
+    Boolean(desktopApi && initialUiPreferencesLoaded)
+  )
   const [isMaximized, setIsMaximized] = useState(false)
   const [windowCloseRequest, setWindowCloseRequest] = useState<WorkspaceWindowCloseRequest | null>(null)
   const [closeActiveRequestVersion, setCloseActiveRequestVersion] = useState(0)
+  const [newTabRequestVersion, setNewTabRequestVersion] = useState(0)
+  const [splitPaneRequest, setSplitPaneRequest] = useState<WorkspaceSplitPaneRequest | null>(null)
+  const [paneFocusRequest, setPaneFocusRequest] = useState<WorkspacePaneFocusRequest | null>(null)
 
   const desktopApiRef = useLatestRef(desktopApi)
   const onThemeModeChangeRef = useLatestRef(onThemeModeChange)
@@ -92,6 +117,8 @@ export function useWorkspaceIpcSync({
   const onErrorRef = useLatestRef(onError)
   const onStatusMessageRef = useLatestRef(onStatusMessage)
   const nextWindowCloseRequestIdRef = useRef(0)
+  const nextSplitPaneRequestIdRef = useRef(0)
+  const nextPaneFocusRequestIdRef = useRef(0)
   const notifiedTransferFailuresRef = useRef(new Map<string, string>())
 
   const applySnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
@@ -171,13 +198,57 @@ export function useWorkspaceIpcSync({
     }
 
     return desktopApi.onUiPreferencesChanged((preferences) => {
-      onThemeModeChangeRef.current(preferences.theme)
-      onLocaleChangeRef.current(preferences.locale)
+      if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
+        onThemeModeChangeRef.current(preferences.theme)
+      }
+      if (preferences.locale === 'enUS' || preferences.locale === 'zhCN') {
+        onLocaleChangeRef.current(preferences.locale)
+      }
     })
   }, [desktopApi])
 
   useEffect(() => {
-    if (!desktopApi) {
+    if (!desktopApi || initialUiPreferencesLoaded) {
+      setHasHydratedUiPreferences(true)
+      setCanPersistUiPreferences(Boolean(desktopApi))
+      return
+    }
+
+    let canceled = false
+
+    void desktopApi
+      .getUiPreferences()
+      .then((preferences) => {
+        if (canceled) {
+          return
+        }
+        setCanPersistUiPreferences(true)
+        if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
+          onThemeModeChangeRef.current(preferences.theme)
+        }
+        if (preferences.locale === 'enUS' || preferences.locale === 'zhCN') {
+          onLocaleChangeRef.current(preferences.locale)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setCanPersistUiPreferences(false)
+          onErrorRef.current('读取界面偏好', error)
+        }
+      })
+      .finally(() => {
+        if (!canceled) {
+          setHasHydratedUiPreferences(true)
+        }
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [desktopApi, initialUiPreferencesLoaded])
+
+  useEffect(() => {
+    if (!desktopApi || !hasHydratedUiPreferences || !canPersistUiPreferences) {
       return
     }
 
@@ -191,7 +262,7 @@ export function useWorkspaceIpcSync({
     return () => {
       canceled = true
     }
-  }, [desktopApi, locale, themeMode])
+  }, [canPersistUiPreferences, desktopApi, hasHydratedUiPreferences, locale, themeMode])
 
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow) {
@@ -243,10 +314,30 @@ export function useWorkspaceIpcSync({
     const unsubscribeCloseActive = desktopApi.onRequestCloseActiveWorkspaceItem(() => {
       setCloseActiveRequestVersion((current) => current + 1)
     })
+    const unsubscribeNewTab = desktopApi.onNewTabRequest(() => {
+      setNewTabRequestVersion((current) => current + 1)
+    })
+    const unsubscribeSplitPane = desktopApi.onSplitPaneRequest((direction) => {
+      nextSplitPaneRequestIdRef.current += 1
+      setSplitPaneRequest({
+        id: nextSplitPaneRequestIdRef.current,
+        direction
+      })
+    })
+    const unsubscribePaneFocus = desktopApi.onFocusPaneRequest((direction) => {
+      nextPaneFocusRequestIdRef.current += 1
+      setPaneFocusRequest({
+        id: nextPaneFocusRequestIdRef.current,
+        direction
+      })
+    })
 
     return () => {
       unsubscribeWindowClose()
       unsubscribeCloseActive()
+      unsubscribeNewTab()
+      unsubscribeSplitPane()
+      unsubscribePaneFocus()
     }
   }, [desktopApi, isMainWorkspaceWindow])
 
@@ -452,6 +543,9 @@ export function useWorkspaceIpcSync({
     windowCloseRequest,
     clearWindowCloseRequest,
     closeActiveRequestVersion,
+    newTabRequestVersion,
+    splitPaneRequest,
+    paneFocusRequest,
     closeCurrentWindow,
     requestQuitApp
   }

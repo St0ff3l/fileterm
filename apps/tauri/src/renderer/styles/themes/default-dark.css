@@ -11,6 +11,9 @@
   --bg-active: #3a3d42;
   --manager-head-bg: #242424;
   --input-bg: #1a1a1a;
+  --command-history-head-bg: #161616;
+  --surface-panel: var(--bg-card);
+  --border-subtle: var(--border-light);
 
   --border-light: rgba(255, 255, 255, 0.08);
   --border-dark: rgba(255, 255, 255, 0.16);

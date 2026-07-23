@@ -569,14 +569,28 @@
   stroke-width: 1.9;
 }
 
-.process-table {
+.process-scroll-region {
+  position: relative;
   height: 96px;
   min-height: 96px;
   max-height: 96px;
-  border: 1px solid var(--border-light);
-  border-top: 0;
+  margin: 0 -12px;
   min-width: 0;
-  overflow: hidden auto;
+  overflow: hidden;
+}
+
+.process-table {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.process-table::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .process-row {
@@ -589,10 +603,14 @@
 }
 
 .process-row span {
-  padding: 2px 8px;
+  padding: 2px 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.process-row span:last-child {
+  padding-right: 0;
 }
 
 .process-empty {

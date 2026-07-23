@@ -4,7 +4,7 @@ import { App } from './App'
 import { ErrorBoundary } from './features/common/ErrorBoundary'
 import { createTauriApi } from '../bridge/tauri-api'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { t } from './i18n'
+import { defaultLocale, setLocale, t } from './i18n'
 import './styles/index.css'
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
@@ -56,13 +56,47 @@ void createTauriApi()
     // placeholder version, architecture, or platform fields.
     window.fileterm = api
     document.documentElement.dataset.platform = api.platform
-    root.render(
-      <React.StrictMode>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-      </React.StrictMode>
-    )
+
+    // Read durable UI preferences before mounting React. App state is then
+    // initialized from the saved values instead of briefly using defaults and
+    // writing those defaults back over the persisted file.
+    void api
+      .getUiPreferences()
+      .catch((error: unknown) => {
+        console.warn('Failed to load UI preferences:', error)
+        return undefined
+      })
+      .then((initialUiPreferences) => {
+        const searchParams = new URLSearchParams(window.location.search)
+        const queryTheme = searchParams.get('theme')
+        const initialTheme =
+          queryTheme === 'default-light' || queryTheme === 'default-dark'
+            ? queryTheme
+            : initialUiPreferences?.theme === 'default-light' || initialUiPreferences?.theme === 'default-dark'
+              ? initialUiPreferences.theme
+              : 'default-dark'
+        const queryLocale = searchParams.get('locale')
+        const initialLocale =
+          queryLocale === 'enUS' || queryLocale === 'zhCN'
+            ? queryLocale
+            : initialUiPreferences?.locale === 'enUS' || initialUiPreferences?.locale === 'zhCN'
+              ? initialUiPreferences.locale
+              : defaultLocale
+
+        // Apply the loaded values before the first React render so CSS and the
+        // proxy-backed translation table agree with App's initial state.
+        document.documentElement.dataset.theme = initialTheme
+        document.documentElement.style.colorScheme = initialTheme === 'default-light' ? 'light' : 'dark'
+        setLocale(initialLocale)
+
+        root.render(
+          <React.StrictMode>
+            <ErrorBoundary>
+              <App initialUiPreferences={initialUiPreferences} />
+            </ErrorBoundary>
+          </React.StrictMode>
+        )
+      })
   })
   .catch((error: unknown) => {
     console.error('Failed to initialize the Tauri desktop bridge:', error)

@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use russh::client::{Handle, Handler};
 use russh::keys::PrivateKeyWithHashAlg;
-use russh::{Channel, ChannelMsg, ChannelWriteHalf, Sig};
+use russh::{Channel, ChannelMsg, ChannelWriteHalf, Disconnect, Sig};
 use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::fs::Metadata as SftpMetadata;
 use russh_sftp::client::SftpSession;
@@ -47,6 +47,11 @@ const SSH_INTERACTION_TIMEOUT: Duration = Duration::from_secs(300);
 const SSH_TRANSPORT_TIMEOUT: Duration = Duration::from_secs(30);
 const SSH_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 const SSH_PASSWORD_AUTH_TIMEOUT: Duration = Duration::from_secs(30);
+/// HTTP/SOCKS5 代理单步 IO 超时。代理服务器或中间网络卡住时，TCP 连接、
+/// CONNECT 请求写入、响应逐字节读取都不能让外层 30s 超时全部消耗在
+/// 单次 read 上——慢速代理可以每 29s 发一个字节拖满整个阶段。8s 覆盖
+/// 正常代理 RTT，超时后立即给出明确错误。
+const PROXY_IO_TIMEOUT: Duration = Duration::from_secs(8);
 /// A remote PTY write must not pin the SSH worker forever when the server has
 /// stopped consuming the channel or the channel window is exhausted.
 const TERMINAL_WRITE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -1708,14 +1713,25 @@ fn fingerprint_sha256_base64(key: &russh::keys::PublicKey) -> String {
 /// accept/reject prompt when the fingerprint already matches.
 /// Load a jump host profile from the profiles.json storage by its id.
 /// Mirrors Electron's `resolveProfile(jumpProfileId)`.
+/// 校验 profile 类型必须为 ssh：UI 层已过滤，但存储层可能被篡改或残留
+/// 旧数据，FTP/Serial/ Telnet profile 无法作为 SSH 跳板，提前拒绝避免
+/// 在 russh 握手阶段才失败、错误信息不清晰。
 fn load_jump_profile(app: &AppHandle, profile_id: &str) -> Result<Value, String> {
     let profiles = crate::storage::read_json_array(app, "profiles.json")
         .map_err(|e| format!("Failed to read profiles.json for jump host: {}", e))?;
-    profiles
+    let profile = profiles
         .iter()
         .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(profile_id))
         .cloned()
-        .ok_or_else(|| format!("Jump Host profile '{}' not found", profile_id))
+        .ok_or_else(|| format!("Jump Host profile '{}' not found", profile_id))?;
+    let profile_type = profile.get("type").and_then(Value::as_str).unwrap_or("");
+    if profile_type != "ssh" {
+        return Err(format!(
+            "Jump Host profile '{}' must be an SSH profile, got '{}'",
+            profile_id, profile_type
+        ));
+    }
+    Ok(profile)
 }
 
 trait SshTransport: AsyncRead + AsyncWrite + Unpin + Send {}
@@ -1787,6 +1803,8 @@ async fn connect_ssh_transport(
         .unwrap_or("none");
 
     if proxy_type == "none" {
+        // 外层 wait_for_ssh_stage(SSH_TRANSPORT_TIMEOUT) 已提供 30s 超时保护，
+        // 此处无需再加内层 timeout。
         let stream = TcpStream::connect((host, port))
             .await
             .map_err(|error| format!("SSH connect failed: {error}"))?;
@@ -1799,6 +1817,7 @@ async fn connect_ssh_transport(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "Proxy host is required".to_string())?;
+    validate_proxy_host(proxy_host)?;
     let proxy_port = proxy
         .and_then(|value| value.get("port"))
         .and_then(Value::as_u64)
@@ -1813,21 +1832,30 @@ async fn connect_ssh_transport(
         .and_then(|value| value.get("password"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    validate_proxy_credentials(username, password)?;
 
     match proxy_type {
         "socks5" => {
             let stream = if username.is_empty() {
-                Socks5Stream::connect((proxy_host, proxy_port), (host, port))
-                    .await
-                    .map_err(|error| format!("SOCKS5 proxy connect failed: {error}"))?
-            } else {
-                Socks5Stream::connect_with_password(
-                    (proxy_host, proxy_port),
-                    (host, port),
-                    username,
-                    password,
+                timeout(
+                    PROXY_IO_TIMEOUT,
+                    Socks5Stream::connect((proxy_host, proxy_port), (host, port)),
                 )
                 .await
+                .map_err(|_| "SOCKS5 proxy connect timed out".to_string())?
+                .map_err(|error| format!("SOCKS5 proxy connect failed: {error}"))?
+            } else {
+                timeout(
+                    PROXY_IO_TIMEOUT,
+                    Socks5Stream::connect_with_password(
+                        (proxy_host, proxy_port),
+                        (host, port),
+                        username,
+                        password,
+                    ),
+                )
+                .await
+                .map_err(|_| "SOCKS5 proxy authentication timed out".to_string())?
                 .map_err(|error| format!("SOCKS5 proxy authentication failed: {error}"))?
             };
             Ok(Box::new(stream))
@@ -1839,6 +1867,41 @@ async fn connect_ssh_transport(
     }
 }
 
+/// 校验代理主机名：拒绝控制字符（含 CRLF，防止 HTTP CONNECT 头注入；
+/// SOCKS5 虽是二进制协议，但控制字符 host 对任何代理都是非法输入），
+/// 拒绝超长 host（RFC 1035 限制 253 字符，留余量到 255）。
+fn validate_proxy_host(host: &str) -> Result<(), String> {
+    if host.len() > 255 {
+        return Err("Proxy host is too long (max 255 characters)".to_string());
+    }
+    if host.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return Err("Proxy host contains control characters".to_string());
+    }
+    Ok(())
+}
+
+/// 校验代理凭据：SOCKS5 用户名/密码认证（RFC 1929）限制各 255 字节；
+/// HTTP Basic Auth 无硬限制，但超长值既无意义又可能是注入尝试。
+/// 控制字符检查防止 HTTP CONNECT 头注入（build_http_connect_request
+/// 已检查 CRLF，这里作为纵深防御覆盖 SOCKS5 路径）。
+fn validate_proxy_credentials(username: &str, password: &str) -> Result<(), String> {
+    for (field, label) in [(username, "username"), (password, "password")] {
+        if field.len() > 255 {
+            return Err(format!(
+                "Proxy {} is too long (max 255 bytes, RFC 1929)",
+                label
+            ));
+        }
+        if field.bytes().any(|b| b < 0x20 || b == 0x7f) {
+            return Err(format!(
+                "Proxy {} contains control characters",
+                label
+            ));
+        }
+    }
+    Ok(())
+}
+
 async fn connect_http_proxy(
     proxy_host: &str,
     proxy_port: u16,
@@ -1847,14 +1910,20 @@ async fn connect_http_proxy(
     username: &str,
     password: &str,
 ) -> Result<TcpStream, String> {
-    let mut stream = TcpStream::connect((proxy_host, proxy_port))
+    let mut stream = timeout(PROXY_IO_TIMEOUT, TcpStream::connect((proxy_host, proxy_port)))
         .await
+        .map_err(|_| {
+            format!(
+                "HTTP proxy connect timed out after {} seconds",
+                PROXY_IO_TIMEOUT.as_secs()
+            )
+        })?
         .map_err(|error| format!("HTTP proxy connect failed: {error}"))?;
     let _ = stream.set_nodelay(true);
     let request = build_http_connect_request(host, port, username, password)?;
-    stream
-        .write_all(&request)
+    timeout(PROXY_IO_TIMEOUT, stream.write_all(&request))
         .await
+        .map_err(|_| "HTTP proxy CONNECT write timed out".to_string())?
         .map_err(|error| format!("HTTP proxy CONNECT write failed: {error}"))?;
 
     let mut response = Vec::with_capacity(1024);
@@ -1866,9 +1935,9 @@ async fn connect_http_proxy(
         if response.len() >= 32 * 1024 {
             return Err("HTTP proxy response headers are too large".to_string());
         }
-        let read = stream
-            .read(&mut chunk)
+        let read = timeout(PROXY_IO_TIMEOUT, stream.read(&mut chunk))
             .await
+            .map_err(|_| "HTTP proxy CONNECT read timed out".to_string())?
             .map_err(|error| format!("HTTP proxy CONNECT read failed: {error}"))?;
         if read == 0 {
             return Err("HTTP proxy closed before CONNECT completed".to_string());
@@ -1885,11 +1954,34 @@ async fn connect_http_proxy(
         .lines()
         .next()
         .unwrap_or("");
-    let status = status_line.split_whitespace().nth(1).unwrap_or("");
-    if status != "200" {
+    let status = parse_http_connect_status(status_line)?;
+    if status != 200 {
         return Err(format!("HTTP proxy CONNECT failed: {status_line}"));
     }
     Ok(stream)
+}
+
+/// 从 HTTP CONNECT 响应状态行提取并校验状态码。
+/// 状态行格式：`HTTP/1.1 200 Connection established`。校验 `HTTP/` 前缀
+/// 防止恶意代理返回非 HTTP 文本伪装成功；状态码必须是 3 位 ASCII 数字，
+/// 避免 `split_whitespace().nth(1)` 在异常格式下取到非状态码字段。
+fn parse_http_connect_status(status_line: &str) -> Result<u16, String> {
+    let mut parts = status_line.split_whitespace();
+    let version = parts.next().unwrap_or("");
+    if !version.starts_with("HTTP/") {
+        return Err(format!(
+            "HTTP proxy returned a malformed status line: {status_line}"
+        ));
+    }
+    let code = parts.next().unwrap_or("");
+    if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!(
+            "HTTP proxy returned a malformed status code: {status_line}"
+        ));
+    }
+    code.parse::<u16>().map_err(|_| {
+        format!("HTTP proxy returned an invalid status code: {status_line}")
+    })
 }
 
 fn build_http_connect_request(
@@ -2027,6 +2119,40 @@ async fn ensure_password_credentials(
     Ok(())
 }
 
+/// 构造兼容老服务器的算法偏好列表。
+///
+/// russh 0.62 的 `Preferred::DEFAULT` 注释明确"SHA-1 MAC variants are
+/// excluded from defaults"，KEX 也只列出 SHA-2 系（DH_G14_SHA256 等）。
+/// 这对 OpenSSH 4.x/5.x 时代的老服务器（只支持 hmac-sha1 / diffie-hellman
+/// -group14-sha1 / diffie-hellman-group1-sha1）会导致 `NoCommonAlgo` 握手
+/// 失败。
+///
+/// 这里把 SHA-1 类算法**追加到默认列表末尾**——SHA-2 仍然优先，只有当
+/// 服务器不支持 SHA-2 时才回退到 SHA-1。RSA-SHA1 host key 已在默认列表
+/// （`Algorithm::Rsa { hash: None }` 即 ssh-rsa），无需额外追加。
+fn build_legacy_preferred() -> russh::Preferred {
+    use std::borrow::Cow;
+
+    let mut kex_list: Vec<russh::kex::Name> = russh::Preferred::DEFAULT.kex.to_vec();
+    // SHA-1 KEX（按强度降序：group14 > group1 > gex-sha1）
+    kex_list.push(russh::kex::DH_G14_SHA1);
+    kex_list.push(russh::kex::DH_G1_SHA1);
+    kex_list.push(russh::kex::DH_GEX_SHA1);
+
+    let mut mac_list: Vec<russh::mac::Name> = russh::Preferred::DEFAULT.mac.to_vec();
+    // SHA-1 MAC（ETM 优先于非 ETM，与默认列表风格一致）
+    mac_list.push(russh::mac::HMAC_SHA1_ETM);
+    mac_list.push(russh::mac::HMAC_SHA1);
+
+    russh::Preferred {
+        kex: Cow::Owned(kex_list),
+        key: russh::Preferred::DEFAULT.key.clone(),
+        cipher: russh::Preferred::DEFAULT.cipher.clone(),
+        mac: Cow::Owned(mac_list),
+        compression: russh::Preferred::DEFAULT.compression.clone(),
+    }
+}
+
 async fn open_session(
     profile: &Value,
     app: &AppHandle,
@@ -2071,6 +2197,14 @@ async fn open_session(
         .and_then(|id| id.as_str())
         .unwrap_or("")
         .to_string();
+    // 兼容老服务器（OpenSSH 4.x/5.x 时代）：默认算法列表只允许 SHA-2 类
+    // MAC/KEX，对只支持 SHA-1 的服务器握手会因 NoCommonAlgo 被拒。开启
+    // legacyAlgorithms 后追加 SHA-1 类算法到列表末尾——SHA-2 仍然优先，
+    // 只有双方没交集时才回退到 SHA-1。
+    let legacy_algorithms = profile
+        .get("legacyAlgorithms")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let config = russh::client::Config {
         inactivity_timeout: Some(Duration::from_secs(300)),
         // Keepalive：NAT/firewall 会静默掐掉空闲 TCP 连接，用户下次操作时
@@ -2081,6 +2215,11 @@ async fn open_session(
         // 30s interval + electerm 的 keepaliveCountMax 设计。
         keepalive_interval: Some(Duration::from_secs(30)),
         keepalive_max: 3,
+        preferred: if legacy_algorithms {
+            build_legacy_preferred()
+        } else {
+            russh::Preferred::default()
+        },
         ..Default::default()
     };
     let config = Arc::new(config);
@@ -2097,6 +2236,22 @@ async fn open_session(
         .map(|s| s.to_string());
 
     if let Some(jpid) = jump_profile_id {
+        // Proxy + JumpHost 互斥校验：参考 OpenSSH ProxyJump 与 ProxyCommand
+        // 互斥的设计。如果 profile 同时配了 proxy 和 jumpProfileId，proxy
+        // 会被静默忽略——目标主机是通过跳板机的 direct-tcpip 通道到达的，
+        // 不经过 SOCKS5/HTTP 代理。用户以为走了代理其实没走，既是安全隐患
+        // （流量没走预期路径）也是 UX 问题（调试困难）。
+        let proxy_type = profile
+            .get("proxy")
+            .and_then(|p| p.get("type"))
+            .and_then(Value::as_str)
+            .unwrap_or("none");
+        if proxy_type != "none" {
+            return Err(
+                "Proxy and Jump Host are mutually exclusive: the target is reached via the jump host's direct-tcpip channel, the proxy setting is ignored. Please remove one of them.".to_string()
+            );
+        }
+
         crate::services::logging::session(app, "INFO", "ssh", tab_id, "resolving jump host");
         // Load the jump profile from disk (same directory as profiles.json)
         let jump_profile = load_jump_profile(app, &jpid)?;
@@ -2136,58 +2291,116 @@ async fn open_session(
             "jump host connected; opening target channel",
         );
 
-        let mut target_handle = connect_target_through_jump(
-            &jump_handle,
-            config.clone(),
-            new_client_handler(app, tab_id, &profile_id, &host, port, trusted.clone()),
-            &host,
-            port,
-        )
-        .await?;
-        match try_authenticate(
-            &mut target_handle,
-            &username,
-            &auth_type,
-            profile,
-            app,
-            tab_id,
-        )
-        .await?
-        {
-            AuthenticationResult::Authenticated => return Ok(target_handle),
-            AuthenticationResult::NeedsFreshKeyboardInteractive => {
-                // russh cannot switch from a rejected password/public-key
-                // exchange to keyboard-interactive on the same handle. Open a
-                // new channel through the already-authenticated jump host.
-                let mut retry_handle = connect_target_through_jump(
-                    &jump_handle,
-                    config,
-                    new_client_handler(app, tab_id, &profile_id, &host, port, trusted),
-                    &host,
-                    port,
-                )
-                .await?;
-                if try_keyboard_interactive(
-                    &mut retry_handle,
-                    &username,
-                    profile
-                        .get("password")
-                        .and_then(Value::as_str)
-                        .unwrap_or(""),
-                    app,
-                    tab_id,
-                    &profile_id,
-                    &host,
-                    port,
-                )
-                .await?
-                {
-                    return Ok(retry_handle);
+        // 将跳板机目标连接 + 认证封装在 async block 中，以便在失败路径上
+        // 显式发送 SSH_MSG_DISCONNECT 清理每个 session。参考 OpenSSH
+        // 在 ProxyJump 失败时对每跳发送 disconnect 的做法——仅靠 Drop 不会
+        // 发送 disconnect 消息，服务端可能残留半开 session 直到 TCP 超时。
+        // target / retry handle 也需要显式 disconnect，否则目标机的
+        // MaxStartups 统计可能虚高，极端情况下导致后续连接被拒绝。
+        let target_result: Result<Handle<ClientHandler>, String> = async {
+            let mut target_handle = connect_target_through_jump(
+                &jump_handle,
+                config.clone(),
+                new_client_handler(app, tab_id, &profile_id, &host, port, trusted.clone()),
+                &host,
+                port,
+            )
+            .await?;
+            match try_authenticate(
+                &mut target_handle,
+                &username,
+                &auth_type,
+                profile,
+                app,
+                tab_id,
+            )
+            .await?
+            {
+                AuthenticationResult::Authenticated => Ok(target_handle),
+                AuthenticationResult::NeedsFreshKeyboardInteractive => {
+                    // russh cannot switch from a rejected password/public-key
+                    // exchange to keyboard-interactive on the same handle.
+                    // Disconnect the old handle, then open a new channel
+                    // through the already-authenticated jump host.
+                    let _ = timeout(
+                        Duration::from_secs(3),
+                        target_handle.disconnect(
+                            Disconnect::ByApplication,
+                            "switching to keyboard-interactive",
+                            "en",
+                        ),
+                    )
+                    .await;
+                    let mut retry_handle = connect_target_through_jump(
+                        &jump_handle,
+                        config,
+                        new_client_handler(app, tab_id, &profile_id, &host, port, trusted),
+                        &host,
+                        port,
+                    )
+                    .await?;
+                    if try_keyboard_interactive(
+                        &mut retry_handle,
+                        &username,
+                        profile
+                            .get("password")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        app,
+                        tab_id,
+                        &profile_id,
+                        &host,
+                        port,
+                    )
+                    .await?
+                    {
+                        Ok(retry_handle)
+                    } else {
+                        let _ = timeout(
+                            Duration::from_secs(3),
+                            retry_handle.disconnect(
+                                Disconnect::ByApplication,
+                                "keyboard-interactive authentication failed",
+                                "en",
+                            ),
+                        )
+                        .await;
+                        Err("SSH Authentication failed (via jump host)".to_string())
+                    }
+                }
+                AuthenticationResult::Rejected => {
+                    let _ = timeout(
+                        Duration::from_secs(3),
+                        target_handle.disconnect(
+                            Disconnect::ByApplication,
+                            "authentication rejected",
+                            "en",
+                        ),
+                    )
+                    .await;
+                    Err("SSH Authentication failed (via jump host)".to_string())
                 }
             }
-            AuthenticationResult::Rejected => {}
         }
-        return Err("SSH Authentication failed (via jump host)".to_string());
+        .await;
+
+        match target_result {
+            Ok(handle) => return Ok(handle),
+            Err(error) => {
+                // 显式断开跳板机 session，3s 超时防止 disconnect 本身卡住
+                // （网络已中断时 russh 可能无法发送 disconnect 消息）。
+                let _ = timeout(
+                    Duration::from_secs(3),
+                    jump_handle.disconnect(
+                        Disconnect::ByApplication,
+                        "target authentication failed",
+                        "en",
+                    ),
+                )
+                .await;
+                return Err(error);
+            }
+        }
     }
 
     let stream = wait_for_ssh_stage(
@@ -2212,6 +2425,15 @@ async fn open_session(
             // See the equivalent jump-host path above: reconnect before
             // keyboard-interactive fallback so russh never stalls on a
             // rejected authentication handle.
+            let _ = timeout(
+                Duration::from_secs(3),
+                handle.disconnect(
+                    Disconnect::ByApplication,
+                    "switching to keyboard-interactive",
+                    "en",
+                ),
+            )
+            .await;
             let stream = wait_for_ssh_stage(
                 "SSH transport reconnection",
                 SSH_TRANSPORT_TIMEOUT,
@@ -2248,10 +2470,30 @@ async fn open_session(
             {
                 Ok(retry_handle)
             } else {
+                let _ = timeout(
+                    Duration::from_secs(3),
+                    retry_handle.disconnect(
+                        Disconnect::ByApplication,
+                        "keyboard-interactive authentication failed",
+                        "en",
+                    ),
+                )
+                .await;
                 Err("SSH Authentication failed".to_string())
             }
         }
-        AuthenticationResult::Rejected => Err("SSH Authentication failed".to_string()),
+        AuthenticationResult::Rejected => {
+            let _ = timeout(
+                Duration::from_secs(3),
+                handle.disconnect(
+                    Disconnect::ByApplication,
+                    "authentication rejected",
+                    "en",
+                ),
+            )
+            .await;
+            Err("SSH Authentication failed".to_string())
+        }
     }
 }
 
@@ -6230,16 +6472,16 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_http_connect_request, capture_sudo_password_input, coalesce_terminal_input,
-        contains_interrupt_byte, default_ssh_key_paths, enqueue_tunnel_command,
-        format_sftp_unavailable_reason, is_password_prompt, looks_like_mfa_prompt,
-        looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
-        parent_remote_item, parent_remote_path, remote_bind_host_matches,
-        resolve_shell_file_access, resource_monitoring_enabled, suppress_shell_setup_echo,
-        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
-        try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
-        wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
-        TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
+        build_http_connect_request, build_legacy_preferred, capture_sudo_password_input,
+        coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
+        enqueue_tunnel_command, format_sftp_unavailable_reason, is_password_prompt,
+        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        missing_password_credential, parent_remote_item, parent_remote_path,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        suppress_shell_setup_echo, track_cwd_and_user, track_sudo_prompt_from_terminal,
+        trim_string_front, try_keyboard_interactive_with_responder, tunnel_bind_address,
+        validate_tunnel_rule, wait_for_ssh_stage, KeyboardInteractiveRequest,
+        ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -7161,5 +7403,50 @@ mod tests {
         assert!(!remote_bind_host_matches("127.0.0.1", "10.0.0.4"));
         assert!(remote_bind_host_matches("0.0.0.0", "10.0.0.4"));
         assert!(remote_bind_host_matches("::", "2001:db8::4"));
+    }
+
+    #[test]
+    fn legacy_preferred_appends_sha1_algorithms_after_sha2() {
+        use russh::{kex, mac};
+
+        let preferred = build_legacy_preferred();
+
+        // SHA-2 类 MAC 应在 SHA-1 之前（保持 SHA-2 优先）
+        let sha256_pos = preferred
+            .mac
+            .iter()
+            .position(|m| *m == mac::HMAC_SHA256)
+            .expect("SHA-256 MAC must remain in legacy list");
+        let sha1_etm_pos = preferred
+            .mac
+            .iter()
+            .position(|m| *m == mac::HMAC_SHA1_ETM)
+            .expect("SHA-1 ETM MAC must be appended for legacy servers");
+        let sha1_pos = preferred
+            .mac
+            .iter()
+            .position(|m| *m == mac::HMAC_SHA1)
+            .expect("SHA-1 MAC must be appended for legacy servers");
+        assert!(sha256_pos < sha1_etm_pos);
+        assert!(sha1_etm_pos < sha1_pos);
+
+        // SHA-2 类 KEX（DH_G14_SHA256）应在 SHA-1 类（DH_G14_SHA1）之前
+        let sha256_kex_pos = preferred
+            .kex
+            .iter()
+            .position(|k| *k == kex::DH_G14_SHA256)
+            .expect("SHA-256 KEX must remain in legacy list");
+        let sha1_kex_pos = preferred
+            .kex
+            .iter()
+            .position(|k| *k == kex::DH_G14_SHA1)
+            .expect("SHA-1 KEX must be appended for legacy servers");
+        let g1_pos = preferred
+            .kex
+            .iter()
+            .position(|k| *k == kex::DH_G1_SHA1)
+            .expect("DH-G1-SHA1 must be appended for very old servers");
+        assert!(sha256_kex_pos < sha1_kex_pos);
+        assert!(sha1_kex_pos < g1_pos);
     }
 }

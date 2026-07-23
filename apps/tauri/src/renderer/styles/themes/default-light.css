@@ -9,6 +9,9 @@
   --bg-active: #dde2e8;
   --manager-head-bg: #f3f6fa;
   --input-bg: #f7f8fa;
+  --command-history-head-bg: var(--surface-table-head);
+  --surface-panel: var(--bg-card);
+  --border-subtle: var(--border-light);
 
   --border-light: rgba(15, 23, 42, 0.16);
   --border-dark: rgba(15, 23, 42, 0.28);

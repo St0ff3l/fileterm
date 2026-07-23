@@ -39,6 +39,7 @@ export const defaultForm: CreateProfileInput = {
   enableExecChannel: true,
   enableResourceMonitoring: true,
   reconnectMode: 'none',
+  legacyAlgorithms: false,
   secure: false,
   securityMode: 'none',
   proxy: { type: 'none', host: '', port: 1080, username: '' },
@@ -74,6 +75,7 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     enableExecChannel: profile.type === 'ssh' ? (profile.enableExecChannel ?? true) : true,
     enableResourceMonitoring: profile.type === 'ssh' ? (profile.enableResourceMonitoring ?? true) : true,
     reconnectMode: profile.type === 'ssh' ? (profile.reconnectMode ?? 'none') : 'none',
+    legacyAlgorithms: profile.type === 'ssh' ? (profile.legacyAlgorithms ?? false) : false,
     secure: profile.type === 'ftp' ? profile.secure : false,
     securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
     proxy:
