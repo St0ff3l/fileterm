@@ -1379,8 +1379,16 @@ fn remove_split_pane_from_tabs(
 ) -> Result<PaneCloseOutcome, AppError> {
     let root_idx = tabs
         .iter()
-        .position(|tab| tab.id == root_tab_id)
+        .position(|tab| {
+            tab.id == root_tab_id
+                || tab
+                    .pane_root
+                    .as_ref()
+                    .map(|r| r.leaf_tab_ids().iter().any(|id| id == pane_tab_id))
+                    .unwrap_or(false)
+        })
         .ok_or_else(|| AppError::Storage(format!("Root tab not found: {root_tab_id}")))?;
+    let actual_root_tab_id = tabs[root_idx].id.clone();
     let mut next_pane_root = tabs[root_idx]
         .pane_root
         .clone()
@@ -1399,12 +1407,12 @@ fn remove_split_pane_from_tabs(
     let remaining_pane_tab_ids = next_pane_root.leaf_tab_ids();
     let keeps_split = remaining_pane_tab_ids.len() > 1;
 
-    if pane_tab_id != root_tab_id {
+    if pane_tab_id != actual_root_tab_id {
         let root_tab = &mut tabs[root_idx];
         root_tab.pane_root = keeps_split.then_some(next_pane_root);
         tabs.retain(|tab| tab.id != pane_tab_id);
         return Ok(PaneCloseOutcome {
-            root_tab_id: root_tab_id.to_string(),
+            root_tab_id: actual_root_tab_id,
             remaining_pane_tab_ids,
             keeps_split,
         });
@@ -1418,19 +1426,23 @@ fn remove_split_pane_from_tabs(
     let promoted_root_tab_id = remaining_pane_tab_ids
         .first()
         .cloned()
-        .ok_or_else(|| AppError::Storage("Split pane has no surviving leaf".to_string()))?;
-    tabs.retain(|tab| tab.id != root_tab_id);
+        .ok_or_else(|| AppError::Storage("No surviving pane to promote as root tab".to_string()))?;
 
-    let promoted_root = tabs
-        .iter_mut()
-        .find(|tab| tab.id == promoted_root_tab_id)
-        .ok_or_else(|| AppError::Storage("Surviving pane tab not found".to_string()))?;
-    promoted_root.pane_root = keeps_split.then_some(next_pane_root);
-    promoted_root.pane_root_tab_id = None;
+    let _root_tab = tabs.remove(root_idx);
+    let promoted_idx = tabs
+        .iter()
+        .position(|tab| tab.id == promoted_root_tab_id)
+        .ok_or_else(|| {
+            AppError::Storage(format!("Promoted pane tab not found: {promoted_root_tab_id}"))
+        })?;
+
+    let promoted_tab = &mut tabs[promoted_idx];
+    promoted_tab.pane_root_tab_id = None;
+    promoted_tab.pane_root = keeps_split.then_some(next_pane_root);
 
     for tab in tabs.iter_mut() {
-        if tab.id != promoted_root_tab_id && remaining_pane_tab_ids.iter().any(|id| id == &tab.id) {
-            tab.pane_root_tab_id = keeps_split.then(|| promoted_root_tab_id.clone());
+        if tab.pane_root_tab_id.as_deref() == Some(actual_root_tab_id.as_str()) {
+            tab.pane_root_tab_id = Some(promoted_root_tab_id.clone());
         }
     }
 
@@ -1453,11 +1465,18 @@ pub async fn app_close_pane(
 
     // Validate before stopping the session. Closing the final pane is a
     // top-level-tab action and must go through its confirmation flow instead.
-    {
+    let resolved_root_tab_id = {
         let tabs = state.tabs.read().await;
         let root_tab = tabs
             .iter()
-            .find(|tab| tab.id == root_tab_id)
+            .find(|tab| {
+                tab.id == root_tab_id
+                    || tab
+                        .pane_root
+                        .as_ref()
+                        .map(|r| r.leaf_tab_ids().iter().any(|id| id == &pane_tab_id))
+                        .unwrap_or(false)
+            })
             .ok_or_else(|| AppError::Storage(format!("Root tab not found: {root_tab_id}")))?;
         let leaves = root_tab
             .pane_root
@@ -1474,13 +1493,14 @@ pub async fn app_close_pane(
         if !leaves.iter().any(|id| id == &pane_tab_id) {
             return Err(AppError::Storage(format!("Pane not found: {pane_tab_id}")));
         }
-    }
+        root_tab.id.clone()
+    };
 
     let previous_active_pane = state
         .active_pane_tab_id_by_root
         .read()
         .await
-        .get(&root_tab_id)
+        .get(&resolved_root_tab_id)
         .cloned();
 
     // 暂停该 pane 关联的传输，并清理对应 worker。
@@ -1494,7 +1514,7 @@ pub async fn app_close_pane(
 
     let outcome = {
         let mut tabs = state.tabs.write().await;
-        remove_split_pane_from_tabs(&mut tabs, &root_tab_id, &pane_tab_id)?
+        remove_split_pane_from_tabs(&mut tabs, &resolved_root_tab_id, &pane_tab_id)?
     };
 
     state.sessions.write().await.remove(&pane_tab_id);

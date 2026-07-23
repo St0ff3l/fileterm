@@ -1099,10 +1099,17 @@ export function useWorkspaceTabs({
 
   /** 关闭分屏中的单个 pane */
   const closePane = async (paneTabId: string) => {
-    if (!desktopApi || !workspace.activeTabId) {
+    if (!desktopApi) {
       return
     }
-    const rootTabId = workspace.activeTabId
+    const rootTab =
+      workspace.tabs.find((tab) => tab.paneRoot && collectPaneLeafTabIds(tab.paneRoot).includes(paneTabId)) ??
+      workspace.tabs.find((tab) => tab.id === workspace.activeTabId)
+
+    const rootTabId = rootTab?.id ?? workspace.activeTabId
+    if (!rootTabId) {
+      return
+    }
     const activePaneTabId = workspace.activePaneTabIdByRoot?.[rootTabId] ?? rootTabId
     try {
       const snapshot = await desktopApi.closePane(rootTabId, paneTabId)
@@ -1115,7 +1122,7 @@ export function useWorkspaceTabs({
         })
       }
     } catch (error) {
-      onError('closePane', error)
+      onError(t.closePane, error)
     }
   }
 
