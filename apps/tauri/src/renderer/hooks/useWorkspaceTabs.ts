@@ -481,6 +481,25 @@ export function useWorkspaceTabs({
         }
       }
 
+      if (missing.length > 0) {
+        const removedKeys = previousOrder.filter((key) => !allKeySet.has(key))
+        if (removedKeys.length > 0) {
+          let missingIdx = 0
+          const replacedOrder: string[] = []
+          for (const key of previousOrder) {
+            if (allKeySet.has(key)) {
+              replacedOrder.push(key)
+            } else if (missingIdx < missing.length) {
+              replacedOrder.push(missing[missingIdx])
+              missingIdx++
+            }
+          }
+          const remainingMissing = missing.slice(missingIdx)
+          const nextOrder = uniqueStrings([...replacedOrder, ...remainingMissing])
+          return areStringArraysEqual(previousOrder, nextOrder) ? previousOrder : nextOrder
+        }
+      }
+
       const nextOrder = [...kept, ...missing]
       return areStringArraysEqual(previousOrder, nextOrder) ? previousOrder : nextOrder
     })
