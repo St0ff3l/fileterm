@@ -1,6 +1,6 @@
 {
   "name": "@fileterm/electron",
-  "version": "2.0.5",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/main.js",
@@ -38,9 +38,9 @@
     "release:win": "npm run build && npm run package:win"
   },
   "dependencies": {
-    "@fileterm/core": "2.0.5",
-    "@fileterm/shared": "2.0.5",
-    "@fileterm/storage": "2.0.5",
+    "@fileterm/core": "2.1.0",
+    "@fileterm/shared": "2.1.0",
+    "@fileterm/storage": "2.1.0",
     "@monaco-editor/react": "4.7.0",
     "@tanstack/react-virtual": "^3.14.3",
     "@xterm/addon-fit": "^0.11.0",
