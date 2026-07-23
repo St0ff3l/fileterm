@@ -34,6 +34,10 @@ export function SplitPaneLayout({
     return null
   }
 
+  // 只有 >1 个 pane 时，单个 pane 的右键菜单才显示"关闭当前分屏"；
+  // 单 pane 时关闭等价于关 tab，走平台关闭键的确认流程。
+  const canClosePane = countPaneLeaves(rootTab.paneRoot) > 1
+
   return (
     <div className="split-pane-root">
       <PaneRenderer
@@ -43,12 +47,20 @@ export function SplitPaneLayout({
         panePath={[]}
         activePaneTabId={activePaneTabId}
         onClosePane={onClosePane}
+        canClosePane={canClosePane}
         onSplitPane={onSplitPane}
         onActivatePane={onActivatePane}
         onResizeEnd={onResizeEnd}
       />
     </div>
   )
+}
+
+function countPaneLeaves(node: PaneNode): number {
+  if (node.kind === 'leaf') {
+    return 1
+  }
+  return node.children.reduce((sum, child) => sum + countPaneLeaves(child), 0)
 }
 
 interface PaneRendererProps {
@@ -58,6 +70,7 @@ interface PaneRendererProps {
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  canClosePane: boolean
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onResizeEnd(panePath: number[], weights: number[]): void
@@ -70,6 +83,7 @@ function PaneRenderer({
   panePath,
   activePaneTabId,
   onClosePane,
+  canClosePane,
   onSplitPane,
   onActivatePane,
   onResizeEnd
@@ -86,6 +100,8 @@ function PaneRenderer({
             connected={session?.connected ?? false}
             connecting={session?.connected === false}
             onSplitPane={(direction) => onSplitPane(node.tabId, direction)}
+            onClosePane={() => onClosePane(node.tabId)}
+            canClosePane={canClosePane}
             onActivate={() => {
               if (!isActive) {
                 onActivatePane(node.tabId)
@@ -119,6 +135,7 @@ function PaneRenderer({
       panePath={panePath}
       activePaneTabId={activePaneTabId}
       onClosePane={onClosePane}
+      canClosePane={canClosePane}
       onSplitPane={onSplitPane}
       onActivatePane={onActivatePane}
       onResizeEnd={onResizeEnd}
@@ -135,6 +152,7 @@ interface SplitContainerProps {
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  canClosePane: boolean
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onResizeEnd(panePath: number[], weights: number[]): void
@@ -149,6 +167,7 @@ function SplitContainer({
   panePath,
   activePaneTabId,
   onClosePane,
+  canClosePane,
   onSplitPane,
   onActivatePane,
   onResizeEnd
@@ -217,6 +236,7 @@ function SplitContainer({
           panePath={[...panePath, idx]}
           activePaneTabId={activePaneTabId}
           onClosePane={onClosePane}
+          canClosePane={canClosePane}
           onSplitPane={onSplitPane}
           onActivatePane={onActivatePane}
           onResizeEnd={onResizeEnd}

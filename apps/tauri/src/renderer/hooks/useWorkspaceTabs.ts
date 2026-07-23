@@ -1293,10 +1293,9 @@ export function useWorkspaceTabs({
       const paneLeafIds = activeSessionTab.paneRoot ? collectPaneLeafTabIds(activeSessionTab.paneRoot) : []
       const activePaneTabId = workspace.activePaneTabIdByRoot?.[activeSessionTab.id] ?? activeSessionTab.id
 
-      // Cmd+W follows the terminal hierarchy: close the focused pane without
-      // interrupting the user with a dialog while its parent tab still has
-      // other panes. Once only one surface remains, fall through to the
-      // existing top-level tab confirmation flow below.
+      // 平台关闭键（macOS Cmd+W / Windows·Linux Ctrl+Shift+W）遵循终端
+      // 层级：父 tab 还有其他 pane 时只关聚焦的 pane，不打扰用户；只剩一个
+      // pane 时回落到下面的顶层 tab 关闭确认流程。
       if (paneLeafIds.length > 1 && paneLeafIds.includes(activePaneTabId)) {
         try {
           await closePane(activePaneTabId)

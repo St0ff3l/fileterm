@@ -530,14 +530,16 @@ pub(crate) fn install_localized_application_menu(
     Ok(())
 }
 
-/// Match Electron's platform-native window shortcuts. macOS owns Cmd+Q/W;
-/// Windows and Linux keep Alt+F4 for quitting and Ctrl+W for closing the
-/// focused workspace item/window.
+/// Match platform-native window shortcuts. macOS owns Cmd+Q/W.
+/// Windows and Linux keep Alt+F4 for quitting, but the close shortcut
+/// follows Windows Terminal's default `Ctrl+Shift+W` (closePane) so users
+/// migrating from pwsh/Windows Terminal get the same key, and FileTerm's
+/// Windows/Linux `Ctrl+Shift+*` family (copy/paste/close) stays consistent.
 fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str) {
     if platform == "macos" {
         ("Cmd+Q", "Cmd+W")
     } else {
-        ("Alt+F4", "Ctrl+W")
+        ("Alt+F4", "Ctrl+Shift+W")
     }
 }
 
@@ -551,11 +553,14 @@ fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
     }
 }
 
-/// Align split shortcuts with the host terminal where a convention exists.
+/// Align split shortcuts with the host terminal's default where a convention
+/// exists. Windows matches Windows Terminal / pwsh defaults exactly:
+/// `Alt+Shift++` (vertical) and `Alt+Shift+-` (horizontal). Linux has no
+/// universal convention, so it keeps FileTerm's own `Ctrl+Shift+*` family.
 fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
     match platform {
         "macos" => ("Cmd+D", "Cmd+Shift+D"),
-        "windows" => ("Alt+Shift+D", "Alt+Shift+-"),
+        "windows" => ("Alt+Shift++", "Alt+Shift+-"),
         _ => ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D"),
     }
 }
@@ -1188,6 +1193,12 @@ pub fn run() {
         .setup(|app| {
             crate::storage::migrate_legacy_data_once(app.handle())?;
             crate::services::logging::init(app.handle());
+            // Install after `logging::init` so `LOG_DIRECTORY` is populated.
+            // Captures panic location + payload for any spawned task that
+            // panics (SSH worker, output pump, transfer service) — without
+            // this, supervision code only sees a `JoinError` with no source
+            // location and the panic site is lost.
+            crate::services::logging::install_panic_hook();
             crate::services::logging::info(
                 app.handle(),
                 "app",
@@ -1639,9 +1650,12 @@ mod tests {
         assert_eq!(application_menu_accelerators("macos"), ("Cmd+Q", "Cmd+W"));
         assert_eq!(
             application_menu_accelerators("windows"),
-            ("Alt+F4", "Ctrl+W")
+            ("Alt+F4", "Ctrl+Shift+W")
         );
-        assert_eq!(application_menu_accelerators("linux"), ("Alt+F4", "Ctrl+W"));
+        assert_eq!(
+            application_menu_accelerators("linux"),
+            ("Alt+F4", "Ctrl+Shift+W")
+        );
     }
 
     #[test]
@@ -1656,7 +1670,7 @@ mod tests {
         assert_eq!(split_pane_accelerators("macos"), ("Cmd+D", "Cmd+Shift+D"));
         assert_eq!(
             split_pane_accelerators("windows"),
-            ("Alt+Shift+D", "Alt+Shift+-")
+            ("Alt+Shift++", "Alt+Shift+-")
         );
         assert_eq!(
             split_pane_accelerators("linux"),
