@@ -118,6 +118,7 @@ export function WorkspaceStage({
   sessions,
   activePaneTabId,
   onClosePane,
+  onCloseTab,
   onSplitPane,
   onActivatePane,
   onSetPaneWeights
@@ -228,6 +229,7 @@ export function WorkspaceStage({
   sessions: Record<string, SessionSnapshot>
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  onCloseTab(): void
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onSetPaneWeights(panePath: number[], weights: number[]): void
@@ -253,6 +255,7 @@ export function WorkspaceStage({
         splitPaneSessions={sessions}
         activePaneTabId={activePaneTabId}
         onClosePane={onClosePane}
+        onCloseTab={onCloseTab}
         onSplitPane={onSplitPane}
         onActivatePane={onActivatePane}
         onSetPaneWeights={onSetPaneWeights}

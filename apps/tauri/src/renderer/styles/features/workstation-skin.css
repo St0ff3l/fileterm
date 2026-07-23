@@ -536,7 +536,12 @@ textarea:focus-visible,
   box-shadow: var(--popover-shadow);
 }
 
-.memory-meter-group .meter-track:hover .memory-hover-popover {
+.memory-meter-group {
+  position: relative;
+  cursor: pointer;
+}
+
+.memory-meter-group:hover .memory-hover-popover {
   display: flex;
 }
 

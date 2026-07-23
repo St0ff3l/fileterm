@@ -177,6 +177,7 @@
   grid-template-rows: auto 1fr;
   min-height: 0;
   height: 100%;
+  background: var(--bg-sidebar);
 }
 
 .system-sidebar-layout.is-collapsed {

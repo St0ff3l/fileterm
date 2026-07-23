@@ -1036,6 +1036,13 @@ export function useWorkspaceTabs({
       onBusyChange(true)
       const snapshot = await desktopApi.splitTab(sourceTabId, direction)
       onSnapshot(snapshot)
+      const rootTabId = workspace.activeTabId
+      const newActivePaneId = (rootTabId && snapshot.activePaneTabIdByRoot?.[rootTabId]) ?? snapshot.activeTabId
+      if (newActivePaneId) {
+        window.requestAnimationFrame(() => {
+          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: newActivePaneId }))
+        })
+      }
     } catch (error) {
       onError('splitPane', error)
     } finally {
@@ -1121,6 +1128,9 @@ export function useWorkspaceTabs({
     try {
       const snapshot = await desktopApi.setActivePane(rootTabId, paneTabId)
       onSnapshot(snapshot)
+      window.requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: paneTabId }))
+      })
     } catch (error) {
       onError('activatePane', error)
     }

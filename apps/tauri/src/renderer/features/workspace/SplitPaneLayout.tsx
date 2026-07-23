@@ -9,6 +9,7 @@ interface SplitPaneLayoutProps {
   sessions: Record<string, SessionSnapshot>
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  onCloseTab(): void
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onResizeEnd(panePath: number[], weights: number[]): void
@@ -26,6 +27,7 @@ export function SplitPaneLayout({
   sessions,
   activePaneTabId,
   onClosePane,
+  onCloseTab,
   onSplitPane,
   onActivatePane,
   onResizeEnd
@@ -47,6 +49,7 @@ export function SplitPaneLayout({
         panePath={[]}
         activePaneTabId={activePaneTabId}
         onClosePane={onClosePane}
+        onCloseTab={onCloseTab}
         canClosePane={canClosePane}
         onSplitPane={onSplitPane}
         onActivatePane={onActivatePane}
@@ -70,6 +73,7 @@ interface PaneRendererProps {
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  onCloseTab(): void
   canClosePane: boolean
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
@@ -83,6 +87,7 @@ function PaneRenderer({
   panePath,
   activePaneTabId,
   onClosePane,
+  onCloseTab,
   canClosePane,
   onSplitPane,
   onActivatePane,
@@ -99,8 +104,10 @@ function PaneRenderer({
             bootText={session?.terminalTranscript ?? ''}
             connected={session?.connected ?? false}
             connecting={session?.connected === false}
+            isActive={isActive}
             onSplitPane={(direction) => onSplitPane(node.tabId, direction)}
             onClosePane={() => onClosePane(node.tabId)}
+            onCloseTab={onCloseTab}
             canClosePane={canClosePane}
             onActivate={() => {
               if (!isActive) {
@@ -135,6 +142,7 @@ function PaneRenderer({
       panePath={panePath}
       activePaneTabId={activePaneTabId}
       onClosePane={onClosePane}
+      onCloseTab={onCloseTab}
       canClosePane={canClosePane}
       onSplitPane={onSplitPane}
       onActivatePane={onActivatePane}
@@ -152,6 +160,7 @@ interface SplitContainerProps {
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  onCloseTab(): void
   canClosePane: boolean
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
@@ -167,6 +176,7 @@ function SplitContainer({
   panePath,
   activePaneTabId,
   onClosePane,
+  onCloseTab,
   canClosePane,
   onSplitPane,
   onActivatePane,
@@ -236,6 +246,7 @@ function SplitContainer({
           panePath={[...panePath, idx]}
           activePaneTabId={activePaneTabId}
           onClosePane={onClosePane}
+          onCloseTab={onCloseTab}
           canClosePane={canClosePane}
           onSplitPane={onSplitPane}
           onActivatePane={onActivatePane}

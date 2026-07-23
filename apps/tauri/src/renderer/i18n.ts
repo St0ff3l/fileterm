@@ -452,8 +452,8 @@ const zhCN = {
   terminalDockHistoryInsertHint: '按左右方向键选择字段，Enter 插入',
   terminalDockClearList: '清空列表',
   terminalDockHistorySearchPlaceholder: '搜索历史命令...',
-  terminalDockPlaceholderMac: '命令输入（Enter 发送，Shift+Enter 换行，⌥ 打开历史，双击 Cmd 切换）',
-  terminalDockPlaceholderWin: '命令输入（Enter 发送，Shift+Enter 换行，Alt 打开历史，双击 Ctrl 切换）',
+  terminalDockPlaceholderMac: '命令输入（Enter 发送，Shift+Enter 换行，双击 Cmd 切换）',
+  terminalDockPlaceholderWin: '命令输入（Enter 发送，Shift+Enter 换行，双击 Ctrl 切换）',
   terminalDockDisconnect: '断开连接',
   terminalDockReconnect: '重新连接',
   terminalDockShowFilePanel: '显示文件面板',
@@ -1166,10 +1166,8 @@ const enUS: typeof zhCN = {
   terminalDockHistoryInsertHint: 'Use left/right to select a token, press Enter to insert',
   terminalDockClearList: 'Clear list',
   terminalDockHistorySearchPlaceholder: 'Search command history...',
-  terminalDockPlaceholderMac:
-    'Command input (Enter sends, Shift+Enter adds a line, ⌥ opens history, double Cmd toggles)',
-  terminalDockPlaceholderWin:
-    'Command input (Enter sends, Shift+Enter adds a line, Alt opens history, double Ctrl toggles)',
+  terminalDockPlaceholderMac: 'Command input (Enter sends, Shift+Enter adds a line, double Cmd toggles)',
+  terminalDockPlaceholderWin: 'Command input (Enter sends, Shift+Enter adds a line, double Ctrl toggles)',
   terminalDockDisconnect: 'Disconnect',
   terminalDockReconnect: 'Reconnect',
   terminalDockShowFilePanel: 'Show file panel',

@@ -269,6 +269,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     openSystemInfo,
     splitPane,
     closePane,
+    closeActiveWorkspaceItem,
     activatePane,
     setPaneWeights
   } = useWorkspaceTabs({
@@ -1406,6 +1407,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 sessions={workspace.sessions}
                 activePaneTabId={activePaneTab?.id}
                 onClosePane={closePane}
+                onCloseTab={closeActiveWorkspaceItem}
                 onSplitPane={splitPane}
                 onActivatePane={activatePane}
                 onSetPaneWeights={setPaneWeights}

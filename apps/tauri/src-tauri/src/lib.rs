@@ -560,7 +560,7 @@ fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
 fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
     match platform {
         "macos" => ("Cmd+D", "Cmd+Shift+D"),
-        "windows" => ("Alt+Shift++", "Alt+Shift+-"),
+        "windows" => ("Alt+Shift+Plus", "Alt+Shift+-"),
         _ => ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D"),
     }
 }
@@ -1670,7 +1670,7 @@ mod tests {
         assert_eq!(split_pane_accelerators("macos"), ("Cmd+D", "Cmd+Shift+D"));
         assert_eq!(
             split_pane_accelerators("windows"),
-            ("Alt+Shift++", "Alt+Shift+-")
+            ("Alt+Shift+Plus", "Alt+Shift+-")
         );
         assert_eq!(
             split_pane_accelerators("linux"),

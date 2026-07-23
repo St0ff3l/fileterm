@@ -216,18 +216,6 @@ export function TerminalDock({
         return
       }
 
-      if (event.key === 'Alt' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.repeat) {
-        event.preventDefault()
-        setPanel((prev) => {
-          const next = prev === 'history' ? null : 'history'
-          if (next !== 'history') {
-            focusTerminal()
-          }
-          return next
-        })
-        return
-      }
-
       if (panel === 'history') {
         if (event.key === 'Escape') {
           event.preventDefault()

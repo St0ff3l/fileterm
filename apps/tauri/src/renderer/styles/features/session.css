@@ -3292,11 +3292,18 @@
   min-width: 0;
   min-height: 0;
   background: var(--terminal-bg);
-  box-shadow: inset 0 0 0 1px transparent;
 }
 
-.split-pane-leaf--active {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 72%, transparent);
+.split-pane-leaf--active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 2px solid var(--accent-primary);
+  pointer-events: none;
+  z-index: 10;
 }
 
 .split-pane-leaf-close {

@@ -128,22 +128,26 @@ export const TerminalView = memo(function TerminalView({
   bootText,
   connected = false,
   connecting = false,
+  isActive = true,
   onStatus,
   onReconnect,
   onActivate,
   onSplitPane,
   onClosePane,
+  onCloseTab,
   canClosePane = false
 }: {
   tabId: string
   bootText: string
   connected?: boolean
   connecting?: boolean
+  isActive?: boolean
   onStatus?(message: string | null): void
   onReconnect?(): void | Promise<void>
   onActivate?(): void
   onSplitPane?(direction: SplitPaneDirection): void
   onClosePane?(): void
+  onCloseTab?(): void
   canClosePane?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -180,6 +184,10 @@ export const TerminalView = memo(function TerminalView({
   const tabIdRef = useRef(tabId)
   const onStatusRef = useRef(onStatus)
   const onReconnectRef = useRef(onReconnect)
+  const onSplitPaneRef = useRef(onSplitPane)
+  const onClosePaneRef = useRef(onClosePane)
+  const onCloseTabRef = useRef(onCloseTab)
+  const canClosePaneRef = useRef(canClosePane)
   const isReconnectingRef = useRef(false)
   const activeTerminalTabIdRef = useRef<string | null>(null)
   tabIdRef.current = tabId
@@ -187,6 +195,10 @@ export const TerminalView = memo(function TerminalView({
   connectingRef.current = Boolean(connecting)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
+  onSplitPaneRef.current = onSplitPane
+  onClosePaneRef.current = onClosePane
+  onCloseTabRef.current = onCloseTab
+  canClosePaneRef.current = canClosePane
   const [hasSelection, setHasSelection] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [findOpen, setFindOpen] = useState(false)
@@ -201,6 +213,7 @@ export const TerminalView = memo(function TerminalView({
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
   const [findRegex, setFindRegex] = useState(false)
   const isMac = window.fileterm?.platform === 'darwin'
+  const isWin = window.fileterm?.platform === 'win32'
 
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
@@ -215,7 +228,8 @@ export const TerminalView = memo(function TerminalView({
   const buildTerminalTheme = () => ({
     background: readColor('--terminal-bg', '#1e1e1e'),
     foreground: readColor('--terminal-text', '#e0e0e0'),
-    cursor: readColor('--terminal-text', '#e0e0e0'),
+    cursor: readColor('--terminal-cursor', readColor('--accent-primary', '#3b82f6')),
+    cursorAccent: readColor('--terminal-cursor-accent', readColor('--terminal-bg', '#ffffff')),
     green: readColor('--success', '#39d98a'),
     brightGreen: readColor('--success', '#52f2a0'),
     blue: readColor('--accent-text', '#c8d0da'),
@@ -387,11 +401,15 @@ export const TerminalView = memo(function TerminalView({
   }
 
   const runSplitPane = (direction: SplitPaneDirection) => {
-    onSplitPane?.(direction)
+    onSplitPaneRef.current?.(direction)
   }
 
   const runClosePane = () => {
-    onClosePane?.()
+    onClosePaneRef.current?.()
+  }
+
+  const runCloseTab = () => {
+    onCloseTabRef.current?.()
   }
 
   const flushPendingWrite = () => {
@@ -585,6 +603,8 @@ export const TerminalView = memo(function TerminalView({
       fontSize: 12,
       lineHeight: 1.05,
       cursorBlink: true,
+      cursorStyle: 'bar',
+      cursorWidth: 2,
       allowProposedApi: true,
       allowTransparency: true,
       reflowCursorLine: false,
@@ -695,6 +715,53 @@ export const TerminalView = memo(function TerminalView({
         } else {
           openFind()
         }
+        return false
+      }
+
+      const matchesClose = isMac
+        ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'w'
+        : event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'w'
+
+      if (matchesClose) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (canClosePaneRef.current) {
+          runClosePane()
+        } else {
+          runCloseTab()
+        }
+        return false
+      }
+
+      const matchesSplitVertical = isMac
+        ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'd'
+        : isWin
+          ? (event.altKey &&
+              event.shiftKey &&
+              (event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd')) ||
+            (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd')
+          : event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd'
+
+      const matchesSplitHorizontal = isMac
+        ? event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd'
+        : isWin
+          ? (event.altKey &&
+              event.shiftKey &&
+              (event.key === '-' || event.key === '_' || event.code === 'Minus' || event.code === 'NumpadSubtract')) ||
+            (event.ctrlKey && event.altKey && event.shiftKey && event.key.toLowerCase() === 'd')
+          : event.ctrlKey && event.altKey && event.shiftKey && event.key.toLowerCase() === 'd'
+
+      if (matchesSplitVertical) {
+        event.preventDefault()
+        event.stopPropagation()
+        runSplitPane('row')
+        return false
+      }
+
+      if (matchesSplitHorizontal) {
+        event.preventDefault()
+        event.stopPropagation()
+        runSplitPane('column')
         return false
       }
 
@@ -1092,6 +1159,14 @@ export const TerminalView = memo(function TerminalView({
       terminal.dispose()
     }
   }, [isMac])
+
+  useEffect(() => {
+    if (isActive) {
+      window.requestAnimationFrame(() => {
+        terminalRef.current?.focus()
+      })
+    }
+  }, [isActive])
 
   useEffect(() => {
     bootTextRef.current = bootText
