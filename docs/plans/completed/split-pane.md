@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：分屏类型、Rust 后端命令（`app_split_tab`/`app_close_pane`/`app_set_active_pane`/`app_set_pane_weights`）、bridge API、`SplitPaneLayout` 组件、拖拽 resize + weights 持久化、View 菜单快捷键及 i18n 已全部落地。本文档移至 `docs/plans/completed/`。
+
 # 分屏（Split Pane）功能计划
 
 ## 目标
