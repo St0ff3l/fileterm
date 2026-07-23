@@ -1238,6 +1238,15 @@ pub fn run() {
                 .build(app)
                 .map_err(|error| error.to_string())?;
 
+            // 启动后触发一次更新检查。延迟 1s 让前端先完成 onUpdateStatus
+            // 订阅，updates::check 内部已有 single-flight 互斥，用户在此
+            // 期间手动点击"检查更新"会复用同一次结果。错误不影响启动。
+            let startup_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let _ = crate::services::updates::check(&startup_handle).await;
+            });
+
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
