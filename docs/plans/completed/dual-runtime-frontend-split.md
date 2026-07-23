@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：Electron 与 Tauri renderer 物理拆分、CI 收敛至 Tauri、Tauri 协议夹具串行化已完成。Tauri 发布前真机启动验证和旧路径清理中部分事项因产品决策暂停。本文档移至 `docs/plans/completed/`。
+
 # 双运行时前端物理分叉计划
 
 ## 目标

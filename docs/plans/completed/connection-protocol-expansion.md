@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：SSH MFA、SOCKS5/HTTP 代理、Telnet、Serial、SSH Config 导入、Jump Host、运行时 `-L/-R/-D` 隧道、JSON 导入/导出、WebDAV 手动同步等核心交付已落地。真实设备和真实 WebDAV 服务的手工验收因外部依赖暂停。本文档移至 `docs/plans/completed/`。
+
 # 连接协议与 SSH 高级能力扩展计划
 
 > 2026-07-13 实施更新：本计划的核心交付已落地。SSH MFA、SOCKS5/HTTP 代理、Telnet、Serial、SSH Config 导入、Jump Host、运行时 SSH 隧道、两阶段 JSON 导入/单文件兼容导出，以及 WebDAV 手动同步均已接通。当前文档保留为实现与验收记录；后续仅补真实设备和真实 WebDAV 服务的手工验收结果。

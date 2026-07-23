@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：Phase 0–4 代码主体已完成并验收；Phase 5 中 Windows/Linux 安装包签名公证、性能对比、发行候选迁移演练与正式发布因外部证书/仓库 Secret 配置及产品决策暂停，不阻塞代码归档。本文档移至 `docs/plans/completed/`。
+
 # Rust + Tauri 重构路线（独立运行时）
 
 > 当前状态（2026-07-17）：Phase 0–4 代码主体已完成；Tauri 现在位于 `apps/tauri`，拥有独立 renderer 和唯一的 CI/发行路径。Electron 保留在 `apps/electron` 仅作历史实现参考，不再与 Tauri 共享 UI 源文件，也不参与 CI 或发包。

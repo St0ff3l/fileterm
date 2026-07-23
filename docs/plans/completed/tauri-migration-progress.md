@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：Phase 0–4 代码/contract 主体已完成；Phase 5 及真实服务/设备验收、三平台 socket lifecycle CI 结果因外部依赖（真实设备/服务、签名证书、仓库 Secret）和产品决策暂停。本文档移至 `docs/plans/completed/`。
+
 # Tauri 迁移进度与 Electron 历史参考差距
 
 | 项目     | 值                                                                                                                         |

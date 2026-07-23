@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：P0/P1/P2 自动化回归全部通过，renderer 交互与后端契约对齐已完成。打包态 macOS/Windows/Linux 人工验收因资源/产品决策暂停。本文档移至 `docs/plans/completed/`。
+
 # Tauri / Electron 细节功能对齐计划
 
 ## 背景

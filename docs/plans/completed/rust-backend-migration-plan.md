@@ -1,3 +1,5 @@
+> 归档状态（2026-07-23）：Phase 0–4 代码主体已完成；Phase 5 发行与切换及后续存储增强（SQLite）因外部证书/签名/产品决策暂停。本文档移至 `docs/plans/completed/`。
+
 # FileTerm Rust 后端迁移计划
 
 | 项目       | 值                                                        |
