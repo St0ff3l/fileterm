@@ -122,6 +122,8 @@
 
   --terminal-bg: #181818;
   --terminal-text: #e0e0e0;
+  --terminal-cursor: #ffffff;
+  --terminal-cursor-accent: #181818;
   --terminal-cmd-bg: rgba(148, 163, 184, 0.16);
   --terminal-search-match-bg: #4b5563;
   --terminal-search-match-ruler: #9ca3af;

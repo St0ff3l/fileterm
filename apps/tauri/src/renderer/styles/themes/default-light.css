@@ -1,79 +1,79 @@
 :root[data-theme='default-light'] {
   color-scheme: light;
 
-  --bg-main: #f4f5f7;
-  --bg-sidebar: #ffffff;
+  --bg-main: #ffffff;
+  --bg-sidebar: #f4f4f6;
   --bg-card: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-hover: #eceff3;
-  --bg-active: #dde2e8;
-  --manager-head-bg: #f3f6fa;
-  --input-bg: #f7f8fa;
+  --bg-hover: #e8e8ec;
+  --bg-active: #dddde3;
+  --manager-head-bg: #f4f4f6;
+  --input-bg: #ffffff;
   --command-history-head-bg: var(--surface-table-head);
   --surface-panel: var(--bg-card);
   --border-subtle: var(--border-light);
 
-  --border-light: rgba(15, 23, 42, 0.16);
-  --border-dark: rgba(15, 23, 42, 0.28);
+  --border-light: rgba(0, 0, 0, 0.08);
+  --border-dark: rgba(0, 0, 0, 0.16);
   --border: var(--border-light);
 
-  --text-main: #1f2933;
-  --text-muted: #66717f;
-  --text-soft: #7b8794;
+  --text-main: #18181b;
+  --text-muted: #52525b;
+  --text-soft: #71717a;
   --text-primary: var(--text-main);
   --text-secondary: var(--text-muted);
 
-  --primary: #4f7cff;
-  --primary-hover: #3d69ea;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
   --accent-primary: var(--primary);
-  --accent-text: #3f4b59;
+  --accent-text: #27272a;
   --sidebar-active-accent: var(--text-main);
-  --selection-bg: #dfe5ec;
-  --danger: #c93d3d;
-  --success: #168a53;
-  --warning: #b77900;
+  --selection-bg: #e4e4e7;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
 
-  /* 状态语义色:面/边/文本,统一替代散落的红蓝硬编码 */
-  --danger-text: #b93838;
-  --danger-surface: rgba(201, 61, 61, 0.08);
-  --danger-border: rgba(201, 61, 61, 0.26);
+  /* 状态语义色:面/边/文本 */
+  --danger-text: #dc2626;
+  --danger-surface: rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.2);
   --info: var(--primary);
-  --info-text: #2f5fef;
-  --info-surface: rgba(79, 124, 255, 0.1);
-  --info-border: rgba(79, 124, 255, 0.28);
-  --input-focus-ring: rgba(79, 124, 255, 0.18);
+  --info-text: #2563eb;
+  --info-surface: rgba(59, 130, 246, 0.08);
+  --info-border: rgba(59, 130, 246, 0.2);
+  --input-focus-ring: rgba(59, 130, 246, 0.18);
 
-  /* accent 色阶(交互高亮)与 success 面/边/文本 */
-  --accent-tint-weak: rgba(79, 124, 255, 0.1);
-  --accent-tint: rgba(79, 124, 255, 0.16);
-  --accent-focus-ring: rgba(79, 124, 255, 0.28);
-  --success-text: #168a53;
-  --success-surface: rgba(22, 138, 83, 0.12);
-  --success-border: rgba(22, 138, 83, 0.28);
+  /* accent 色阶 */
+  --accent-tint-weak: rgba(59, 130, 246, 0.08);
+  --accent-tint: rgba(59, 130, 246, 0.14);
+  --accent-focus-ring: rgba(59, 130, 246, 0.24);
+  --success-text: #16a34a;
+  --success-surface: rgba(22, 163, 74, 0.08);
+  --success-border: rgba(22, 163, 74, 0.2);
 
-  /* 中性叠层(暗色用白色微透,亮色用深色微透) */
-  --surface-hover: rgba(15, 23, 42, 0.05);
-  --surface-chip: rgba(15, 23, 42, 0.08);
-  --surface-inset: rgba(15, 23, 42, 0.03);
-  --surface-inset-border: rgba(15, 23, 42, 0.1);
-  --surface-table-head: rgba(15, 23, 42, 0.04);
-  --surface-nested: rgba(15, 23, 42, 0.035);
-  --floating-drawer-expanded-bg: rgba(255, 255, 255, 0.9);
-  --floating-drawer-expanded-border: rgba(15, 23, 42, 0.16);
-  --floating-drawer-shadow: 0 10px 26px rgba(15, 23, 42, 0.14), 0 1px 2px rgba(15, 23, 42, 0.1);
-  --floating-drawer-trigger-hover-bg: rgba(15, 23, 42, 0.06);
-  --modal-backdrop-bg: rgba(15, 23, 42, 0.28);
-  --modal-card-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
-  --control-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-  --control-focus-shadow: 0 0 0 2px var(--accent-tint), 0 1px 2px rgba(15, 23, 42, 0.08);
-  --control-inset-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
-  --terminal-dock-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
-  --terminal-dock-header-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-  --system-sidebar-toggle-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-  --system-sidebar-toggle-hover-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
-  --system-sidebar-frame: rgba(15, 23, 42, 0.32);
-  --system-sidebar-control-border: rgba(15, 23, 42, 0.26);
-  --system-sidebar-divider: rgba(15, 23, 42, 0.18);
+  /* 中性叠层 */
+  --surface-hover: rgba(0, 0, 0, 0.04);
+  --surface-chip: rgba(0, 0, 0, 0.06);
+  --surface-inset: rgba(0, 0, 0, 0.02);
+  --surface-inset-border: rgba(0, 0, 0, 0.08);
+  --surface-table-head: rgba(0, 0, 0, 0.03);
+  --surface-nested: rgba(0, 0, 0, 0.025);
+  --floating-drawer-expanded-bg: rgba(255, 255, 255, 0.94);
+  --floating-drawer-expanded-border: rgba(0, 0, 0, 0.08);
+  --floating-drawer-shadow: 0 10px 26px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --floating-drawer-trigger-hover-bg: rgba(0, 0, 0, 0.05);
+  --modal-backdrop-bg: rgba(0, 0, 0, 0.32);
+  --modal-card-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --control-focus-shadow: 0 0 0 2px var(--accent-tint), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --control-inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  --terminal-dock-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --terminal-dock-header-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  --system-sidebar-toggle-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --system-sidebar-toggle-hover-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  --system-sidebar-frame: rgba(0, 0, 0, 0.08);
+  --system-sidebar-control-border: rgba(0, 0, 0, 0.1);
+  --system-sidebar-divider: rgba(0, 0, 0, 0.06);
   --overview-hero-highlight: rgba(255, 255, 255, 0.02);
   --brand-title-shadow: none;
   --traffic-close: #ff5f57;
@@ -160,6 +160,8 @@
 
   --terminal-bg: #ffffff;
   --terminal-text: #111827;
+  --terminal-cursor: #3b82f6;
+  --terminal-cursor-accent: #ffffff;
   --terminal-cmd-bg: rgba(15, 23, 42, 0.08);
   --terminal-search-match-bg: #f6cf57;
   --terminal-search-match-ruler: #d39b16;
@@ -243,6 +245,9 @@
 :root[data-theme='default-light'] .window-menubar,
 :root[data-theme='default-light'] .standalone-window-titlebar,
 :root[data-theme='default-light'] .file-tabs,
+:root[data-theme='default-light'] .pane-title,
+:root[data-theme='default-light'] .pane-path-bar,
+:root[data-theme='default-light'] .fs-file-table th,
 :root[data-theme='default-light'] .disk-head,
 :root[data-theme='default-light'] .transfer-strip {
   background: var(--bg-sidebar);
@@ -324,15 +329,57 @@
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
 }
 
-/* Remove Process Table Outer Border */
-:root[data-theme='default-light'] .system-sidebar-layout .process-table {
-  border: none !important;
+:root[data-theme='default-light'] .system-sidebar-layout,
+:root[data-theme='default-light'] .system-sidebar-layout .sys-card,
+:root[data-theme='default-light'] .system-sidebar-layout .disk-table,
+:root[data-theme='default-light'] .system-sidebar-layout .process-table,
+:root[data-theme='default-light'] .system-sidebar-layout .disk-scroll-region,
+:root[data-theme='default-light'] .system-sidebar-layout .disk-body {
+  background: var(--bg-sidebar);
 }
 
 :root[data-theme='default-light'] .system-sidebar-layout .process-row,
-:root[data-theme='default-light'] .system-sidebar-layout .disk-head,
 :root[data-theme='default-light'] .system-sidebar-layout .disk-row {
   border-bottom-color: var(--system-sidebar-divider);
+}
+
+:root[data-theme='default-light'] .system-sidebar-layout .disk-head {
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* Light Theme Sidebar Typography Optimization */
+:root[data-theme='default-light'] .system-sidebar-layout,
+:root[data-theme='default-light'] .fs-sidebar {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme='default-light'] .system-sidebar-layout .address-line .label,
+:root[data-theme='default-light'] .system-sidebar-layout .metric-line span,
+:root[data-theme='default-light'] .system-sidebar-layout .meter-header span,
+:root[data-theme='default-light'] .system-sidebar-layout .disk-head span {
+  color: #475569;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+:root[data-theme='default-light'] .system-sidebar-layout .address-line .value,
+:root[data-theme='default-light'] .system-sidebar-layout .metric-line .value,
+:root[data-theme='default-light'] .system-sidebar-layout .metric-chip-summary,
+:root[data-theme='default-light'] .system-sidebar-layout .system-title {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+:root[data-theme='default-light'] .system-sidebar-layout .address-line .value,
+:root[data-theme='default-light'] .system-sidebar-layout .disk-row,
+:root[data-theme='default-light'] .system-sidebar-layout .process-row {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 :root[data-theme='default-light'] .window-menu-items button:hover,
@@ -359,9 +406,6 @@
   color: var(--window-control-danger-text);
 }
 
-:root[data-theme='default-light'] .sys-card,
-:root[data-theme='default-light'] .disk-table,
-:root[data-theme='default-light'] .process-table,
 :root[data-theme='default-light'] .quick-panel,
 :root[data-theme='default-light'] .modal-card,
 :root[data-theme='default-light'] .manager-table,
@@ -579,11 +623,11 @@
 
 :root[data-theme='default-light'] .network-guide {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: rgba(15, 23, 42, 0.12);
 }
 
 :root[data-theme='default-light'] .network-guide.minor {
-  stroke: rgba(255, 255, 255, 0.08);
+  stroke: rgba(15, 23, 42, 0.05);
 }
 
 :root[data-theme='default-light'] .network-path {
@@ -748,15 +792,22 @@
 }
 
 :root[data-theme='default-light'] .fs-file-table th {
-  background: #f3f6fa;
+  background: var(--manager-head-bg);
   color: var(--text-muted);
+}
+
+:root[data-theme='default-light'] .process-row:nth-child(odd),
+:root[data-theme='default-light'] .disk-row:nth-child(odd),
+:root[data-theme='default-light'] .system-table tbody tr:nth-child(odd),
+:root[data-theme='default-light'] .fs-file-table tbody tr:nth-child(odd) {
+  background: #ffffff;
 }
 
 :root[data-theme='default-light'] .process-row:nth-child(even),
 :root[data-theme='default-light'] .disk-row:nth-child(even),
 :root[data-theme='default-light'] .system-table tbody tr:nth-child(even),
 :root[data-theme='default-light'] .fs-file-table tbody tr:nth-child(even) {
-  background: rgba(148, 163, 184, 0.06);
+  background: #f6f7f9;
 }
 
 :root[data-theme='default-light'] .file-icon,

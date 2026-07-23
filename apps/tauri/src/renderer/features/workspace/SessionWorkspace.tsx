@@ -34,6 +34,7 @@ export function SessionWorkspace({
   splitPaneSessions,
   activePaneTabId,
   onClosePane,
+  onCloseTab,
   onSplitPane,
   onActivatePane,
   onSetPaneWeights,
@@ -103,6 +104,7 @@ export function SessionWorkspace({
   splitPaneSessions: Record<string, SessionSnapshot>
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
+  onCloseTab(): void
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onSetPaneWeights(panePath: number[], weights: number[]): void
@@ -426,6 +428,7 @@ export function SessionWorkspace({
               sessions={splitPaneSessions}
               activePaneTabId={activePaneTabId}
               onClosePane={onClosePane}
+              onCloseTab={onCloseTab}
               onSplitPane={onSplitPane}
               onActivatePane={onActivatePane}
               onResizeEnd={onSetPaneWeights}
@@ -438,6 +441,7 @@ export function SessionWorkspace({
               connecting={terminalActiveTab.status === 'connecting'}
               onReconnect={reconnectOnEnter}
               onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
+              onCloseTab={onCloseTab}
             />
           )}
           <TerminalDock
