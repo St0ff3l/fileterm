@@ -158,6 +158,44 @@ pub fn error_chain(error: &(dyn std::error::Error + 'static)) -> String {
     messages.join(" <- ")
 }
 
+/// Install a panic hook that mirrors the default stderr output but also
+/// appends the panic payload + location to the local session log via
+/// `write_global`.
+///
+/// Spawned tokio tasks (SSH worker, output pump, transfer service) panic
+/// silently otherwise: the JoinHandle is awaited by supervision code which
+/// only sees a `JoinError` whose `Display` carries no source location. With
+/// this hook installed, the file log captures `panic at FILE:LINE:COL:
+/// PAYLOAD` on the panicking thread before the task unwinds — so the
+/// per-tab ERROR line from the supervision layer can be cross-referenced
+/// with the exact panic site.
+///
+/// `write_global` dispatches via `spawn_blocking` when a Tokio runtime is
+/// available (the common case for worker-thread panics) and falls back to
+/// an inline `fs::write` otherwise, so the hook is safe to call from any
+/// thread including the main thread during early startup.
+///
+/// Must be called after `init` so `LOG_DIRECTORY` is populated.
+pub fn install_panic_hook() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| info.payload().downcast_ref::<String>().map(|s| s.as_str()))
+            .unwrap_or("<non-string panic payload>");
+        write_global("ERROR", "panic", format!("panic at {location}: {payload}"));
+        // Preserve default stderr behaviour so `RUST_BACKTRACE` output and
+        // the dev console still see the panic.
+        previous(info);
+    }));
+}
+
 pub fn session(
     app: &AppHandle,
     level: &str,

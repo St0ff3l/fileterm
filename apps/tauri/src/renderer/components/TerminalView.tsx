@@ -83,12 +83,14 @@ type SplitPaneDirection = 'row' | 'column'
 
 function splitPaneShortcutsForPlatform(platform: string | undefined) {
   if (platform === 'darwin') {
-    return { vertical: '⌘D', horizontal: '⇧⌘D' }
+    return { vertical: '⌘D', horizontal: '⇧⌘D', closePane: '⌘W' }
   }
   if (platform === 'win32') {
-    return { vertical: 'Alt+Shift+D', horizontal: 'Alt+Shift+-' }
+    // 与 Windows Terminal / pwsh 默认一致：Alt+Shift++ 垂直、Alt+Shift+- 水平、
+    // Ctrl+Shift+W 关闭当前 pane。
+    return { vertical: 'Alt+Shift++', horizontal: 'Alt+Shift+-', closePane: 'Ctrl+Shift+W' }
   }
-  return { vertical: 'Ctrl+Shift+D', horizontal: 'Ctrl+Alt+Shift+D' }
+  return { vertical: 'Ctrl+Shift+D', horizontal: 'Ctrl+Alt+Shift+D', closePane: 'Ctrl+Shift+W' }
 }
 
 function trimTranscript(transcript: string) {
@@ -129,7 +131,9 @@ export const TerminalView = memo(function TerminalView({
   onStatus,
   onReconnect,
   onActivate,
-  onSplitPane
+  onSplitPane,
+  onClosePane,
+  canClosePane = false
 }: {
   tabId: string
   bootText: string
@@ -139,6 +143,8 @@ export const TerminalView = memo(function TerminalView({
   onReconnect?(): void | Promise<void>
   onActivate?(): void
   onSplitPane?(direction: SplitPaneDirection): void
+  onClosePane?(): void
+  canClosePane?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -382,6 +388,10 @@ export const TerminalView = memo(function TerminalView({
 
   const runSplitPane = (direction: SplitPaneDirection) => {
     onSplitPane?.(direction)
+  }
+
+  const runClosePane = () => {
+    onClosePane?.()
   }
 
   const flushPendingWrite = () => {
@@ -825,11 +835,17 @@ export const TerminalView = memo(function TerminalView({
       // 发送失败必须可见：后端 worker 死亡（panic/断连）时 send 会 reject，
       // 静默吞掉会让终端看起来"卡死且 Ctrl+C 无效"。降级为未连接状态并
       // 给出重连提示，Enter 重连路径随之可用。
-      window.fileterm?.writeTerminal(tabIdRef.current, data)?.catch(() => {
+      window.fileterm?.writeTerminal(tabIdRef.current, data)?.catch((error: unknown) => {
         if (inputSendFailedRef.current) {
           return
         }
         inputSendFailedRef.current = true
+        // 一次性写入 devtools 控制台，便于和后端 app.log 里的 panic 行交叉
+        // 定位（后端 panic hook 写 scope=panic，前端这里写 tab id）。
+        console.warn(
+          `[TerminalView] writeTerminal rejected for tab ${tabIdRef.current}; worker likely dead, degrading to disconnected state`,
+          error
+        )
         // Do not wait for the backend's terminal:state broadcast before
         // allowing Enter to use the reconnect path. A dead worker cannot
         // consume another input packet, so retaining `connected=true` here
@@ -1290,7 +1306,18 @@ export const TerminalView = memo(function TerminalView({
                     label: t.splitHorizontally,
                     shortcut: shortcuts.horizontal,
                     action: () => runSplitPane('column')
-                  }
+                  },
+                  // 只在分屏中且还有兄弟 pane 时显示：单 pane 时关闭等价于关 tab，
+                  // 走平台关闭键（Cmd+W / Ctrl+Shift+W）的确认流程更合适。
+                  ...(onClosePane && canClosePane
+                    ? [
+                        {
+                          label: t.closePane,
+                          shortcut: shortcuts.closePane,
+                          action: runClosePane
+                        }
+                      ]
+                    : [])
                 ]
               : []),
             { separator: true },

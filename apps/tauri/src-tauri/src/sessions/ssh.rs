@@ -222,6 +222,10 @@ pub fn start_ssh_worker(
         // 收尾路径（错误日志 + transcript 提示 + 状态广播 + 自动重连判断）。
         // 关闭链路只用 CancellationToken（无 abort），所以 JoinError 一定
         // 是 panic，不是正常取消。
+        //
+        // panic 位置由 logging::install_panic_hook 在 panic 发生时即写入文件
+        // 日志（scope=panic），这里只负责把 JoinError 分类后落到 per-tab 日志
+        // 和 transcript，便于和 panic hook 那行交叉定位。
         let worker_app = app.clone();
         let worker_cancellation = cancellation.clone();
         let worker_profile = profile.clone();
@@ -238,9 +242,16 @@ pub fn start_ssh_worker(
         })
         .await
         .unwrap_or_else(|join_error| {
-            Err(format!(
-                "worker task terminated abnormally (panic): {join_error}"
-            ))
+            // JoinError.Display 不带源码位置，所以这里只输出分类 + 系统消息；
+            // 真正的 panic 位置在 panic hook 写的那行里。
+            let kind = if join_error.is_cancelled() {
+                "cancelled"
+            } else if join_error.is_panic() {
+                "panic"
+            } else {
+                "aborted"
+            };
+            Err(format!("worker task {kind}: {join_error}"))
         });
         if cancellation.is_cancelled() {
             crate::services::logging::session(&app, "INFO", "ssh", &tid, "worker cancelled");
@@ -248,6 +259,13 @@ pub fn start_ssh_worker(
         }
         let final_status = match run_result {
             Ok(()) => {
+                crate::services::logging::session(
+                    &app,
+                    "INFO",
+                    "ssh",
+                    &tid,
+                    "worker exited cleanly",
+                );
                 emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
                 WorkspaceTabStatus::Closed
             }
@@ -1357,6 +1375,48 @@ fn looks_like_shell_prompt(value: &str) -> bool {
     prompt.ends_with('$') || prompt.ends_with('#') || prompt.ends_with('%') || prompt.ends_with('>')
 }
 
+/// 在等待 shell 第一个 prompt 期间，把 chunk 里"prompt 尾部"从 forward 文本
+/// 里剥离出来——只 forward banner 部分（保留原始 escape 序列和颜色），prompt
+/// 部分由调用方暂存到 `shell_prompt_buffer` 用于触发 setup 注入。
+///
+/// 这样 shell 启动期间输出的 prompt 不会立即显示给用户；setup 注入成功后
+/// suppress 接管，新 prompt 由 suppress 释放时统一 forward，用户只看到一个
+/// prompt。群晖 DSM 的 /etc/profile 等启动脚本可能在第一个 prompt 之后还
+/// 异步执行命令并输出新 prompt，这些都会被暂存而非 forward。
+///
+/// 切分在原始 chunk 上进行：从末尾往前找第一个 prompt 结尾符（$ / # / % / >），
+/// 再从该位置往前找行首（跳过 escape 序列），行首之前是 banner（forward），
+/// 之后是 prompt 尾部（暂存）。找不到则整个 chunk 作为 banner forward。
+fn split_prompt_tail_for_setup_wait(chunk: &str) -> (String, String) {
+    let bytes = chunk.as_bytes();
+    let mut prompt_end_idx: Option<usize> = None;
+    // 从末尾往前找第一个 prompt 结尾符，遇到换行则停（说明最后一行不是 prompt）
+    for i in (0..bytes.len()).rev() {
+        let c = bytes[i] as char;
+        if c == '$' || c == '#' || c == '%' || c == '>' {
+            prompt_end_idx = Some(i);
+            break;
+        }
+        if c == '\n' {
+            break;
+        }
+    }
+    let Some(end_idx) = prompt_end_idx else {
+        return (chunk.to_string(), String::new());
+    };
+    // 从 prompt 结尾符往前找行首：跳过同行所有字符直到遇到换行或 chunk 开头。
+    // escape 序列（CSI/OSC）如果出现在 prompt 行内（比如彩色 prompt），会被
+    // 一起划入 prompt 尾部暂存，不会丢失——暂存的 prompt 尾部不 forward，
+    // setup 注入后由 shell 输出的新 prompt（含颜色）替代。
+    let mut line_start = end_idx;
+    while line_start > 0 && bytes[line_start - 1] != b'\n' {
+        line_start -= 1;
+    }
+    let banner = chunk[..line_start].to_string();
+    let prompt_tail = chunk[line_start..].to_string();
+    (banner, prompt_tail)
+}
+
 /// Track the interactive sudo exchange on the terminal channel. The password
 /// stays worker-local and is never copied into a snapshot or emitted event.
 fn capture_sudo_password_input(
@@ -1487,6 +1547,24 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
         return String::new();
     };
     if !state.preserve_visible_prefix {
+        // setup 成功执行（检测到 OSC marker）后，shell 会输出新 prompt。
+        // 第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存（不 forward），
+        // 所以这里释放新 prompt——让用户看到一个完整 prompt，而不是空白。
+        if state.marker_seen_at.is_some() {
+            // buffer 里同时含 setup echo、OSC marker 和新 prompt。用 OSC7 正则
+            // 找到最后一个 marker 的结束位置，释放它之后的部分（新 prompt），
+            // 吞掉 setup echo 和 marker。marker 后可能直接接 prompt（无换行），
+            // 所以不能用 rfind('\n') 切分。
+            if let Some(mat) = SHELL_SETUP_OSC7_RE.find(&state.buffer) {
+                let after_marker = &state.buffer[mat.end()..];
+                if looks_like_shell_prompt(after_marker) {
+                    return after_marker.to_string();
+                }
+            }
+            // 新 prompt 还没到（慢设备，settle/timeout 到期仍未见）：补换行
+            // 让晚到的新 prompt 从新行开始。
+            return "\r\n".to_string();
+        }
         return String::new();
     }
     state
@@ -1535,6 +1613,22 @@ fn suppress_shell_setup_echo(
                     .or_else(|| state.buffer.find(HOOK_MARKER))
                     .unwrap_or(0),
             );
+        }
+        // marker 已看到后，setup 命令执行完 shell 会输出新 prompt。一旦新 prompt
+        // 到达（OSC marker 之后的部分匹配 prompt 结尾），立即结束 suppress 并
+        // 释放新 prompt。第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存
+        // （不 forward），所以这里释放新 prompt 让用户看到一个完整 prompt。
+        // 慢设备（群晖）新 prompt 可能晚于 settle delay 到达，固定窗口兜不住；
+        // 改为检测到 prompt 就提前结束，无论快慢设备都只显示一个 prompt。
+        // 仅 preserve_visible_prefix == false（首次注入）路径生效；sudo 重注入
+        // 路径需要保留 visible prefix，仍走 settle delay 释放。
+        if !state.preserve_visible_prefix {
+            if let Some(mat) = SHELL_SETUP_OSC7_RE.find(&state.buffer) {
+                let after_marker = &state.buffer[mat.end()..];
+                if looks_like_shell_prompt(after_marker) {
+                    return finish_shell_setup_suppression(pending);
+                }
+            }
         }
     }
 
@@ -4433,8 +4527,18 @@ async fn run_worker_loop(
                         }
 
                         let visible = suppress_shell_setup_echo(&mut pending_shell_setup_echo, &text);
-                        if !visible.is_empty() {
-                            batch_buffer.extend_from_slice(visible.as_bytes());
+                        // shell_setup_waiting_for_prompt 期间，shell 启动输出的 prompt
+                        // 尾部不能立即 forward——否则群晖等设备会显示多个重复 prompt
+                        // （shell 启动脚本可能执行命令后再次输出 prompt）。把 prompt 尾部
+                        // 剥离暂存到 shell_prompt_buffer，只 forward banner 部分；setup
+                        // 注入成功后由 suppress 接管，新 prompt 统一释放。
+                        let (forward_text, prompt_tail) = if shell_setup_waiting_for_prompt {
+                            split_prompt_tail_for_setup_wait(&visible)
+                        } else {
+                            (visible, String::new())
+                        };
+                        if !forward_text.is_empty() {
+                            batch_buffer.extend_from_slice(forward_text.as_bytes());
                             // Hard ceiling: under sustained high-throughput output the
                             // 16ms flush timer can lose fairness to this branch; force
                             // a flush so memory stays bounded and the next emit does
@@ -4446,7 +4550,7 @@ async fn run_worker_loop(
                         }
 
                         if shell_setup_waiting_for_prompt {
-                            shell_prompt_buffer.push_str(&visible_shell_text(&text));
+                            shell_prompt_buffer.push_str(&visible_shell_text(&prompt_tail));
                             if shell_prompt_buffer.len() > 4096 {
                                 // char 边界安全裁剪，避免 panic 杀死 worker。
                                 trim_string_front(&mut shell_prompt_buffer, 2048);
@@ -4463,13 +4567,16 @@ async fn run_worker_loop(
                                 let setup_command = format!(" {setup}\r");
                                 match write_shell_data(&shell_writer, setup_command.into_bytes()).await {
                                     Ok(()) => {
-                                        // The banner and first prompt have already been forwarded.
-                                        // Everything after this write is internal setup output until
-                                        // the OSC marker settles, so no visible prefix is replayed.
+                                        // setup 注入成功，suppress 接管后续 echo 和新 prompt。
                                         pending_shell_setup_echo =
                                             Some(ShellSetupEchoSuppression::new(false));
                                     }
                                     Err(error) => {
+                                        // setup 写入失败：fail-open，把暂存的 prompt 尾部
+                                        // forward 出去，避免用户看不到任何 prompt。
+                                        if !prompt_tail.is_empty() {
+                                            batch_buffer.extend_from_slice(prompt_tail.as_bytes());
+                                        }
                                         crate::services::logging::session(app, "WARN", "ssh", tab_id, format!("shell setup write failed: {error}"));
                                     }
                                 }
@@ -6469,14 +6576,15 @@ mod tests {
     use super::{
         build_http_connect_request, build_legacy_preferred, capture_sudo_password_input,
         coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
-        enqueue_tunnel_command, format_sftp_unavailable_reason, is_password_prompt,
-        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
+        is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
         remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        suppress_shell_setup_echo, track_cwd_and_user, track_sudo_prompt_from_terminal,
-        trim_string_front, try_keyboard_interactive_with_responder, tunnel_bind_address,
-        validate_tunnel_rule, wait_for_ssh_stage, KeyboardInteractiveRequest,
-        ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
+        split_prompt_tail_for_setup_wait, suppress_shell_setup_echo, track_cwd_and_user,
+        track_sudo_prompt_from_terminal, trim_string_front,
+        try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
+        wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
+        TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -6922,6 +7030,106 @@ mod tests {
     fn detects_root_prompt_after_terminal_colours_are_removed() {
         assert!(looks_like_root_prompt("\u{1b}[01;31mroot@host\u{1b}[0m:# "));
         assert!(!looks_like_root_prompt("user@host:$ "));
+    }
+
+    #[test]
+    fn suppress_releases_new_prompt_after_marker_on_slow_device() {
+        // 慢设备（群晖）：OSC marker 后新 prompt 在 settle delay 之后才到达。
+        // 第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存（不 forward），
+        // 所以 suppress 释放时只返回新 prompt（最后一个换行符之后的部分），
+        // 吞掉 setup echo 和 OSC marker。用户最终看到一个完整 prompt。
+        let mut pending = Some(ShellSetupEchoSuppression::new(false));
+        // 喂入 setup echo + OSC marker，suppress 仍在等待新 prompt
+        assert_eq!(
+            suppress_shell_setup_echo(
+                &mut pending,
+                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7;file:///home/u\u{7}"
+            ),
+            ""
+        );
+        assert!(pending.as_ref().unwrap().marker_seen_at.is_some());
+        // 新 prompt 到达（无论 settle delay 是否到期）：只释放新 prompt
+        let visible = suppress_shell_setup_echo(&mut pending, "user@host:~$ ");
+        assert_eq!(visible, "user@host:~$ ");
+        assert!(pending.is_none());
+    }
+
+    #[test]
+    fn finish_suppression_releases_newline_when_prompt_never_arrives() {
+        // marker 已看到但新 prompt 迟迟未到（settle/timeout 到期）：
+        // 补换行让晚到的新 prompt 从新行开始，避免粘在旧 prompt 后面。
+        let mut pending = Some(ShellSetupEchoSuppression::new(false));
+        // 喂入 setup echo + OSC marker，但新 prompt 一直没来
+        assert_eq!(
+            suppress_shell_setup_echo(
+                &mut pending,
+                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7;file:///home/u\u{7}"
+            ),
+            ""
+        );
+        assert!(pending.as_ref().unwrap().marker_seen_at.is_some());
+        // 超时释放时 buffer 末尾不是 prompt，补换行
+        let visible = finish_shell_setup_suppression(&mut pending);
+        assert_eq!(visible, "\r\n");
+        assert!(pending.is_none());
+    }
+
+    #[test]
+    fn finish_suppression_no_newline_when_marker_never_seen() {
+        // setup 执行失败（没检测到 OSC marker）时不补换行，避免多余的空行
+        let mut pending = Some(ShellSetupEchoSuppression::new(false));
+        assert_eq!(
+            suppress_shell_setup_echo(&mut pending, " __tdcwd(){ broken syntax"),
+            ""
+        );
+        assert!(pending.as_ref().unwrap().marker_seen_at.is_none());
+        // 超时释放时不补换行
+        let visible = finish_shell_setup_suppression(&mut pending);
+        assert_eq!(visible, "");
+        assert!(pending.is_none());
+    }
+
+    #[test]
+    fn split_prompt_tail_separates_banner_from_prompt() {
+        // banner + prompt 在同一 chunk：banner forward，prompt 暂存
+        let (banner, tail) =
+            split_prompt_tail_for_setup_wait("Welcome to Synology\r\nStoffel@SynologyNAS-MY:~$ ");
+        assert_eq!(banner, "Welcome to Synology\r\n");
+        assert_eq!(tail, "Stoffel@SynologyNAS-MY:~$ ");
+    }
+
+    #[test]
+    fn split_prompt_tail_keeps_colored_prompt_escape_in_tail() {
+        // 彩色 prompt 的 escape 序列划入 tail（不 forward），banner 部分保留原始 escape
+        let (banner, tail) = split_prompt_tail_for_setup_wait(
+            "\u{1b}[01;32mStoffel@SynologyNAS-MY\u{1b}[0m:\u{1b}[01;34m~\u{1b}[0m$ ",
+        );
+        assert_eq!(banner, "");
+        assert_eq!(
+            tail,
+            "\u{1b}[01;32mStoffel@SynologyNAS-MY\u{1b}[0m:\u{1b}[01;34m~\u{1b}[0m$ "
+        );
+    }
+
+    #[test]
+    fn split_prompt_tail_returns_whole_chunk_when_no_prompt() {
+        // 纯 banner（无 prompt 结尾符）：整个 chunk forward
+        let (banner, tail) = split_prompt_tail_for_setup_wait(
+            "Using terminal commands to modify system configs\r\n",
+        );
+        assert_eq!(
+            banner,
+            "Using terminal commands to modify system configs\r\n"
+        );
+        assert_eq!(tail, "");
+    }
+
+    #[test]
+    fn split_prompt_tail_stops_at_newline_when_scanning_backwards() {
+        // prompt 结尾符不在最后一行（最后一行是 banner 续行）：整个 chunk forward
+        let (banner, tail) = split_prompt_tail_for_setup_wait("some $ var\r\nbanner continuation");
+        assert_eq!(banner, "some $ var\r\nbanner continuation");
+        assert_eq!(tail, "");
     }
 
     #[test]
