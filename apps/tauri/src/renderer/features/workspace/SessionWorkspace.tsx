@@ -77,6 +77,7 @@ export function SessionWorkspace({
   onOpenCommandManager,
   onOpenLocalItem,
   onOpenLocalPath,
+  onBackToLocalComputer,
   onOpenRemoteItem,
   onOpenRemotePath,
   onPasteIntoPane,
@@ -153,6 +154,7 @@ export function SessionWorkspace({
   onOpenCommandManager(): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
+  onBackToLocalComputer(): void
   onOpenRemoteItem(item: RemoteFileItem): void
   onOpenRemotePath(path: string): void
   onPasteIntoPane(pane: 'local' | 'remote'): void
@@ -531,6 +533,7 @@ export function SessionWorkspace({
             onOpenCommandManager={onOpenCommandManager}
             onOpenLocalItem={onOpenLocalItem}
             onOpenLocalPath={onOpenLocalPath}
+            onBackToLocalComputer={onBackToLocalComputer}
             onOpenRemoteItem={onOpenRemoteItem}
             onOpenRemotePath={onOpenRemotePath}
             onPasteIntoPane={onPasteIntoPane}

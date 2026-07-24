@@ -75,6 +75,7 @@ export function WorkspaceStage({
   onDropUpload,
   onOpenLocalItem,
   onOpenLocalPath,
+  onBackToLocalComputer,
   onOpenProfile,
   onOpenRemoteItem,
   onOpenRemotePath,
@@ -182,6 +183,7 @@ export function WorkspaceStage({
   onDropUpload(event: DragEvent<HTMLDivElement>): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
+  onBackToLocalComputer(): void
   onOpenProfile(profileId: string): void
   onOpenRemoteItem(item: RemoteFileItem): void
   onOpenRemotePath(path: string): void
@@ -300,6 +302,7 @@ export function WorkspaceStage({
         onDropUpload={onDropUpload}
         onOpenLocalItem={onOpenLocalItem}
         onOpenLocalPath={onOpenLocalPath}
+        onBackToLocalComputer={onBackToLocalComputer}
         onOpenRemoteItem={onOpenRemoteItem}
         onOpenRemotePath={onOpenRemotePath}
         onPasteIntoPane={onPasteIntoPane}

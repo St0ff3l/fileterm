@@ -557,6 +557,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     openLocalDirectory,
     handleOpenLocalItem,
     handleOpenLocalPath,
+    handleBackToLocalComputer,
     handleOpenRemoteItem,
     handleOpenRemotePath,
     copyItems,
@@ -1354,6 +1355,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onDropUpload={handleDropUpload}
                 onOpenLocalItem={handleOpenLocalItem}
                 onOpenLocalPath={handleOpenLocalPath}
+                onBackToLocalComputer={handleBackToLocalComputer}
                 onOpenProfile={openProfile}
                 onOpenRemoteItem={handleOpenRemoteItem}
                 onOpenRemotePath={handleOpenRemotePath}
