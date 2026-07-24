@@ -839,6 +839,15 @@ pub async fn app_window_action(
                 return Err(error);
             }
             shutdown_session_workers(&app).await;
+            // 清除持久化的 home tab UI 状态，确保下次启动只恢复一个默认新建标签页，
+            // 而不是上一次退出前残留的所有 home tab。失败仅记录警告，不阻断退出。
+            if let Err(error) = app_remove_ui_state_item(app.clone(), "main.tab-ui".to_string()) {
+                crate::services::logging::warn(
+                    &app,
+                    "workspace",
+                    format!("failed to clear home tab ui state on quit: {error}"),
+                );
+            }
             app.exit(0);
         }
         _ => {}

@@ -1,8 +1,8 @@
 :root[data-theme='default-light'] {
   color-scheme: light;
 
-  --bg-main: #ffffff;
-  --bg-sidebar: #f4f4f6;
+  --bg-main: #f4f4f6;
+  --bg-sidebar: #ffffff;
   --bg-card: #ffffff;
   --bg-elevated: #ffffff;
   --bg-hover: #e8e8ec;
@@ -158,7 +158,7 @@
     0 0 0 4px color-mix(in srgb, var(--primary) 24%, transparent);
   --dialog-warning-text: var(--danger);
 
-  --terminal-bg: #ffffff;
+  --terminal-bg: #f4f4f6;
   --terminal-text: #111827;
   --terminal-cursor: #3b82f6;
   --terminal-cursor-accent: #ffffff;
@@ -191,8 +191,12 @@
 }
 
 :root[data-theme='default-light'] .terminal-area,
+:root[data-theme='default-light'] .terminal-host,
 :root[data-theme='default-light'] .terminal-area::after {
+  border: none !important;
+  outline: none !important;
   box-shadow: none !important;
+  border-radius: 0 !important;
 }
 
 :root[data-theme='default-light'] .terminal-find {
@@ -243,24 +247,42 @@
 :root[data-theme='default-light'] .titlebar-brand,
 :root[data-theme='default-light'] .tabbar-folder-button,
 :root[data-theme='default-light'] .window-menubar,
-:root[data-theme='default-light'] .standalone-window-titlebar,
+:root[data-theme='default-light'] .standalone-window-titlebar {
+  background: var(--bg-sidebar);
+  border-color: var(--border-light);
+  color: var(--text-main);
+}
+
 :root[data-theme='default-light'] .file-tabs,
 :root[data-theme='default-light'] .pane-title,
 :root[data-theme='default-light'] .pane-path-bar,
 :root[data-theme='default-light'] .fs-file-table th,
 :root[data-theme='default-light'] .disk-head,
 :root[data-theme='default-light'] .transfer-strip {
-  background: var(--bg-sidebar);
+  background: var(--bg-main);
   border-color: var(--border-light);
   color: var(--text-main);
 }
 
 :root[data-theme='default-light'] .fs-sidebar::before {
-  background: var(--border-dark);
+  display: none !important;
 }
 
 :root[data-theme='default-light'] .fs-sidebar {
-  border-right: 1px solid var(--system-sidebar-frame) !important;
+  border-right: 1px solid var(--border-light) !important;
+}
+
+:root[data-theme='default-light'] .sidebar-resizer {
+  right: -1px !important;
+  width: 3px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:root[data-theme='default-light'] .sidebar-resizer::after {
+  display: none !important;
 }
 
 :root[data-theme='default-light'] .titlebar-brand {
@@ -269,17 +291,17 @@
 }
 
 :root[data-theme='default-light'] .fs-tabbar {
-  border-bottom: none !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  background: var(--bg-main);
 }
 
 :root[data-theme='default-light'] .fs-tabbar::after {
-  background: var(--border-light) !important;
-  z-index: 20 !important;
-  height: 1px !important;
+  display: none !important;
 }
 
 :root[data-theme='default-light'] .fs-tabs {
   bottom: 0 !important;
+  height: 47px !important;
 }
 
 :root[data-theme='default-light'] .connection-summary {
@@ -439,6 +461,7 @@
   background: #f1f3f6 !important;
   border: none !important;
   color: var(--text-soft) !important;
+  height: 47px !important;
   transition:
     background-color 0.2s,
     color 0.2s;
@@ -454,6 +477,7 @@
   background: transparent !important;
   border: none !important;
   color: var(--text-soft) !important;
+  height: 47px !important;
   transition:
     background-color 0.2s,
     color 0.2s;
@@ -491,6 +515,7 @@
   background: #ffffff !important;
   color: var(--text-main) !important;
   box-shadow: inset 0 3px 0 0 var(--primary) !important;
+  height: 47px !important;
 }
 
 :root[data-theme='default-light'] .context-menu {
@@ -657,7 +682,7 @@
 
 :root[data-theme='default-light'] .file-manager,
 :root[data-theme='default-light'] .command-center {
-  background: #fbfcfe;
+  background: #ffffff;
 }
 
 :root[data-theme='default-light'] .file-manager {
@@ -665,7 +690,7 @@
 }
 
 :root[data-theme='default-light'] .file-tabs {
-  background: #f8fafc;
+  background: #f4f4f6;
   border-bottom-color: var(--border-light);
 }
 
@@ -705,7 +730,7 @@
 }
 
 :root[data-theme='default-light'] .file-toolbar {
-  background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
+  background: #f4f4f6;
   border-bottom-color: var(--border-light);
   color: var(--text-muted);
 }
@@ -725,10 +750,6 @@
 :root[data-theme='default-light'] .remote-pane,
 :root[data-theme='default-light'] .command-pane-preview {
   background: #ffffff;
-}
-
-:root[data-theme='default-light'] .local-pane {
-  background: #fbfcfe;
 }
 
 :root[data-theme='default-light'] .command-pane-list {
@@ -753,7 +774,7 @@
 
 :root[data-theme='default-light'] .pane-title {
   border-bottom-color: var(--border-light);
-  background: linear-gradient(180deg, #fbfcfe 0%, #f3f6fa 100%);
+  background: #ffffff;
   color: var(--text-main);
 }
 
