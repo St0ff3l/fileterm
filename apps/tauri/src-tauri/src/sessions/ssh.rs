@@ -6581,11 +6581,11 @@ mod tests {
         is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
         remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
-        suppress_shell_setup_echo, track_cwd_and_user, track_sudo_prompt_from_terminal,
-        trim_string_front, try_keyboard_interactive_with_responder, tunnel_bind_address,
-        validate_tunnel_rule, wait_for_ssh_stage, KeyboardInteractiveRequest,
-        ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
+        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, suppress_shell_setup_echo,
+        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
+        try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
+        wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
+        TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};

@@ -1638,7 +1638,8 @@ mod tests {
         assert!(command.contains("head -n 40"));
         // awk 接收 logical_cpu_count 并把 pcpu 归一化为总 CPU 百分比
         assert!(command.contains(r#"awk -v logical_cpu_count="$logical_cpu_count""#));
-        assert!(command.contains(r#"cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4"#));
+        assert!(command
+            .contains(r#"cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4"#));
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n""#));
         // 不应再有进程相关的 sort 命令（cpuinfo/disk 去重可能仍用 awk）
         assert!(!command.contains("sort -t'|' -k2,2rn"));
@@ -1741,7 +1742,10 @@ mod tests {
         );
 
         let procs = metrics["topProcesses"].as_array().unwrap();
-        assert!(!procs.is_empty(), "Windows top processes should not be empty");
+        assert!(
+            !procs.is_empty(),
+            "Windows top processes should not be empty"
+        );
         assert_eq!(procs.len(), 2);
         assert_eq!(procs[0]["pid"], 1234);
         assert_eq!(procs[0]["command"], "chrome");
@@ -1817,10 +1821,7 @@ mod tests {
             classify_windows_probe_output("Microsoft Windows [Version 10.0.19045.4291]"),
             Some("windows")
         );
-        assert_eq!(
-            classify_windows_probe_output("Win32NT"),
-            Some("windows")
-        );
+        assert_eq!(classify_windows_probe_output("Win32NT"), Some("windows"));
         assert_eq!(classify_windows_probe_output("win32nt"), Some("windows"));
         assert_eq!(classify_windows_probe_output("linux\n"), None);
     }
@@ -1836,17 +1837,11 @@ mod tests {
         );
 
         // __PROCS_END__ 缺失，但 topProcesses 仍应保留两条已采集记录
-        assert_eq!(
-            metrics["topProcesses"].as_array().map(Vec::len),
-            Some(2)
-        );
+        assert_eq!(metrics["topProcesses"].as_array().map(Vec::len), Some(2));
         assert_eq!(
             metrics["topProcesses"][0]["command"],
             "/usr/lib/systemd/systemd"
         );
-        assert_eq!(
-            metrics["topProcesses"][1]["command"],
-            "/usr/sbin/sshd -D"
-        );
+        assert_eq!(metrics["topProcesses"][1]["command"], "/usr/sbin/sshd -D");
     }
 }

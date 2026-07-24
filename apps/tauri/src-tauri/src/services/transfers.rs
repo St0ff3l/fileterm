@@ -266,14 +266,7 @@ fn select_journal_tasks(tasks: &[TransferTask], limit: usize) -> Vec<TransferTas
     let mut indexed: Vec<(usize, u64)> = tasks
         .iter()
         .enumerate()
-        .map(|(idx, task)| {
-            (
-                idx,
-                task.updated_at
-                    .or(task.created_at)
-                    .unwrap_or(0),
-            )
-        })
+        .map(|(idx, task)| (idx, task.updated_at.or(task.created_at).unwrap_or(0)))
         .collect();
     // Most recent first; ties broken by append order so the later-appended
     // task (higher index) is treated as newer and survives the cut.
@@ -2990,8 +2983,7 @@ mod tests {
         let mut non_resumable_active = sample_task("non-resumable-active", 100);
         non_resumable_active.status = "queued".to_string();
         non_resumable_active.resumable = false;
-        non_resumable_active.status =
-            interrupt_status(non_resumable_active.resumable).to_string();
+        non_resumable_active.status = interrupt_status(non_resumable_active.resumable).to_string();
         assert_eq!(non_resumable_active.status, "canceled");
 
         // 转换后两者都不应再被 active() 判定为活跃，避免下次启动时
