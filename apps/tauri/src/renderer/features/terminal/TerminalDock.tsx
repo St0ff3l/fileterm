@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
@@ -66,7 +67,7 @@ export function TerminalDock({
   const reconnectFeedbackTimerRef = useRef<number | null>(null)
   const [reconnectFeedbackVisible, setReconnectFeedbackVisible] = useState(false)
   const focusTerminal = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: activeTab.id }))
+    dispatchAppEvent(APP_EVENT.focusTerminal, activeTab.id)
   }, [activeTab.id])
 
   useEffect(() => {
@@ -618,7 +619,7 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.copy}
-            onClick={() => window.dispatchEvent(new CustomEvent('fileterm:terminal-copy'))}
+            onClick={() => dispatchAppEvent(APP_EVENT.terminalCopy)}
           >
             <AppIcon name="copy" />
           </button>
@@ -626,7 +627,7 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.paste}
-            onClick={() => window.dispatchEvent(new CustomEvent('fileterm:terminal-paste'))}
+            onClick={() => dispatchAppEvent(APP_EVENT.terminalPaste)}
           >
             <AppIcon name="paste" />
           </button>
@@ -634,7 +635,7 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.find}
-            onClick={() => window.dispatchEvent(new CustomEvent('fileterm:terminal-find'))}
+            onClick={() => dispatchAppEvent(APP_EVENT.terminalFind)}
           >
             <AppIcon name="search" />
           </button>

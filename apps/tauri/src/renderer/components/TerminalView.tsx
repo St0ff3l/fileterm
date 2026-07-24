@@ -11,6 +11,7 @@ import {
   stripClinkAutosuggestPrompt,
   trimHydratedTerminalChunk
 } from '../app/terminal-transcript'
+import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { t } from '../i18n'
 import { ContextMenu } from '../features/common/ContextMenu'
 import { CloseButton } from '../features/common/CloseButton'
@@ -1074,8 +1075,7 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    const handleFocusTerminal = (event: Event) => {
-      const targetTabId = event instanceof CustomEvent && typeof event.detail === 'string' ? event.detail : null
+    const handleFocusTerminal = (targetTabId: string) => {
       if (targetTabId && targetTabId !== tabIdRef.current) {
         return
       }
@@ -1100,10 +1100,10 @@ export const TerminalView = memo(function TerminalView({
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('selectionchange', onDocumentSelectionChange)
     document.addEventListener('visibilitychange', onVisibilityChange)
-    window.addEventListener('fileterm:focus-terminal', handleFocusTerminal)
-    window.addEventListener('fileterm:terminal-copy', handleTerminalCopy)
-    window.addEventListener('fileterm:terminal-paste', handleTerminalPaste)
-    window.addEventListener('fileterm:terminal-find', handleTerminalFind)
+    const offFocusTerminal = onAppEvent(APP_EVENT.focusTerminal, handleFocusTerminal)
+    const offTerminalCopy = onAppEvent(APP_EVENT.terminalCopy, handleTerminalCopy)
+    const offTerminalPaste = onAppEvent(APP_EVENT.terminalPaste, handleTerminalPaste)
+    const offTerminalFind = onAppEvent(APP_EVENT.terminalFind, handleTerminalFind)
 
     // Ask the main process for the actual PTY size once the terminal is mounted.
     if (!bootedTabs.current.has(tabIdRef.current)) {
@@ -1112,10 +1112,10 @@ export const TerminalView = memo(function TerminalView({
     }
 
     return () => {
-      window.removeEventListener('fileterm:focus-terminal', handleFocusTerminal)
-      window.removeEventListener('fileterm:terminal-copy', handleTerminalCopy)
-      window.removeEventListener('fileterm:terminal-paste', handleTerminalPaste)
-      window.removeEventListener('fileterm:terminal-find', handleTerminalFind)
+      offFocusTerminal()
+      offTerminalCopy()
+      offTerminalPaste()
+      offTerminalFind()
       onDataDispose.dispose()
       onSelectionDispose.dispose()
       offData?.()

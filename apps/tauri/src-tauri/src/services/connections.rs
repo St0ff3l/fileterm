@@ -146,7 +146,9 @@ fn normalize_external_profile(raw: &Value, fallback_name: &str) -> Result<Value,
     }
 
     let mut profile = Value::Object(source.clone());
-    let object = profile.as_object_mut().expect("source object cloned");
+    let object = profile
+        .as_object_mut()
+        .ok_or_else(|| "配置项不是对象".to_string())?;
     object.remove("id");
     object.remove("parentId");
     object.remove("order");
@@ -404,11 +406,38 @@ fn supported_import_file(path: &Path) -> bool {
     ) || path.file_name().and_then(|name| name.to_str()) == Some("config")
 }
 
+const IMPORT_FILE_LIMIT: usize = 500;
+/// Maximum directory depth for import scans. Acts as a belt-and-suspenders
+/// guard against pathological layouts that aren't symlink loops (e.g. a
+/// deeply nested `node_modules` tree) so the recursion can't overflow the
+/// stack even when the file-count limit hasn't been hit yet.
+const IMPORT_RECURSION_DEPTH: usize = 32;
+
 fn collect_import_files(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
-    if files.len() >= 500 {
+    collect_import_files_with_depth(path, files, 0)
+}
+
+fn collect_import_files_with_depth(
+    path: &Path,
+    files: &mut Vec<PathBuf>,
+    depth: usize,
+) -> Result<(), String> {
+    if files.len() >= IMPORT_FILE_LIMIT || depth > IMPORT_RECURSION_DEPTH {
         return Ok(());
     }
-    let metadata = std::fs::metadata(path).map_err(|error| error.to_string())?;
+    // Top-level path follows symlinks (the user explicitly selected it). Deeper
+    // entries use `symlink_metadata` so symlinked directories are skipped
+    // instead of followed: a loop would otherwise overflow the stack and a
+    // symlinked escape could pull in files the user never selected.
+    let metadata = if depth == 0 {
+        std::fs::metadata(path).map_err(|error| error.to_string())?
+    } else {
+        let metadata = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+        if metadata.is_symlink() {
+            return Ok(());
+        }
+        metadata
+    };
     if metadata.is_file() {
         if supported_import_file(path) {
             files.push(path.to_path_buf());
@@ -419,10 +448,10 @@ fn collect_import_files(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), Str
         for entry in std::fs::read_dir(path).map_err(|error| error.to_string())? {
             let entry = entry.map_err(|error| error.to_string())?;
             if !entry.file_name().to_string_lossy().starts_with('.') {
-                collect_import_files(&entry.path(), files)?;
+                collect_import_files_with_depth(&entry.path(), files, depth + 1)?;
             }
 
-            if files.len() >= 500 {
+            if files.len() >= IMPORT_FILE_LIMIT {
                 break;
             }
         }
@@ -497,7 +526,7 @@ pub async fn commit_import_plan(
     let mut failed = 0_u64;
     let mut results = Vec::new();
 
-    for entry in entries {
+    for mut entry in entries {
         let id = entry
             .preview
             .get("id")
@@ -508,7 +537,10 @@ pub async fn commit_import_plan(
             results.push(entry.preview);
             continue;
         }
-        let input = entry.input.expect("checked above");
+        let input = entry
+            .input
+            .take()
+            .ok_or_else(|| command_error("导入条目缺少输入数据"))?;
         let conflict = fingerprint(&input).and_then(|needle| {
             profiles
                 .iter()
@@ -530,7 +562,10 @@ pub async fn commit_import_plan(
                 let target = merged
                     .as_object_mut()
                     .ok_or_else(|| command_error("重复连接格式无效"))?;
-                for (key, value) in input.as_object().expect("normalized input object") {
+                for (key, value) in input
+                    .as_object()
+                    .ok_or_else(|| command_error("导入条目格式无效"))?
+                {
                     target.insert(key.clone(), value.clone());
                 }
                 profile_ops::update_profile(app, &profile_id, merged)?;
@@ -648,11 +683,13 @@ pub fn export_filename(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_export_payload, export_filename, fingerprint, normalize_external_profile,
-        parse_ssh_config,
+        build_export_payload, collect_import_files, export_filename, fingerprint,
+        normalize_external_profile, parse_ssh_config, IMPORT_FILE_LIMIT,
     };
     use serde_json::json;
     use std::collections::HashSet;
+    use std::fs;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn parses_ssh_config_and_skips_wildcards() {
@@ -733,5 +770,101 @@ mod tests {
         let compatible = build_export_payload(&profiles, "compatible").unwrap();
         assert_eq!(compatible[0]["password"], "secret");
         assert_eq!(compatible[0]["passphrase"], "key-secret");
+    }
+
+    /// Build a unique scratch directory under the system temp dir. Each test
+    /// gets its own path so parallel `cargo test` runs don't stomp on each
+    /// other. The directory is intentionally not cleaned up — tests are
+    /// short-lived and the OS reaps temp files.
+    fn scratch_dir(label: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "fileterm-import-test-{}-{}-{}",
+            std::process::id(),
+            label,
+            rand::random::<u32>()
+        ));
+        fs::create_dir_all(&path).expect("create scratch dir");
+        path
+    }
+
+    fn write_file(dir: &Path, name: &str, contents: &str) -> PathBuf {
+        let path = dir.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        fs::write(&path, contents).expect("write scratch file");
+        path
+    }
+
+    #[test]
+    fn collect_import_files_skips_symlink_loops() {
+        // Regression for M2: a symlinked directory loop must not send the
+        // recursion into a stack overflow. The scan should simply skip the
+        // symlink and return the real files in the root.
+        let root = scratch_dir("loop");
+        write_file(&root, "real.json", "{}");
+        // `self` → root, creating a cycle through a symlinked directory.
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&root, root.join("self")).expect("create loop symlink");
+        }
+
+        let mut files = Vec::new();
+        collect_import_files(&root, &mut files).expect("scan must complete");
+
+        let names: Vec<String> = files
+            .iter()
+            .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
+            .collect();
+        assert!(
+            names.iter().any(|name| name == "real.json"),
+            "real file should be collected, got {:?}",
+            names
+        );
+        assert!(
+            !names.iter().any(|name| name == "self"),
+            "symlinked directory must not be followed"
+        );
+        // Sanity: the scan didn't duplicate the real file via the loop.
+        let real_count = names.iter().filter(|name| name == &"real.json").count();
+        assert_eq!(real_count, 1, "real file must only be collected once");
+    }
+
+    #[test]
+    fn collect_import_files_respects_file_limit() {
+        let root = scratch_dir("limit");
+        // Create more files than the limit to confirm the scan stops at
+        // IMPORT_FILE_LIMIT instead of growing unbounded.
+        for index in 0..(IMPORT_FILE_LIMIT + 50) {
+            write_file(&root, &format!("file-{index}.json"), "{}");
+        }
+
+        let mut files = Vec::new();
+        collect_import_files(&root, &mut files).expect("scan must complete");
+        assert!(
+            files.len() <= IMPORT_FILE_LIMIT,
+            "scan must cap at IMPORT_FILE_LIMIT, got {}",
+            files.len()
+        );
+    }
+
+    #[test]
+    fn collect_import_files_filters_unsupported_extensions() {
+        let root = scratch_dir("filter");
+        write_file(&root, "kept.json", "{}");
+        write_file(&root, "skipped.bin", "binary");
+        write_file(&root, "also-kept.txt", "notes");
+
+        let mut files = Vec::new();
+        collect_import_files(&root, &mut files).expect("scan must complete");
+
+        let names: Vec<String> = files
+            .iter()
+            .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(String::from))
+            .collect();
+        assert!(names.contains(&"kept.json".to_string()));
+        assert!(names.contains(&"also-kept.txt".to_string()));
+        assert!(!names.contains(&"skipped.bin".to_string()));
     }
 }

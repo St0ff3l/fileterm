@@ -429,7 +429,7 @@ function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
         {displayRows.map((row, i) => (
           <div className="process-row" key={rows.length ? `${row.pid}-${row.command}-${row.cpu}-${i}` : `empty-${i}`}>
             <span>{row.memory}</span>
-            <span>{row.cpu}</span>
+            <span>{row.cpu}%</span>
             <span title={row.command}>{row.command}</span>
           </div>
         ))}

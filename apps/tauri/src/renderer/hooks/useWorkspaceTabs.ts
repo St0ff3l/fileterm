@@ -17,6 +17,7 @@ import {
   sessionTabKey,
   settledResultsError
 } from '../app/app-utils'
+import { APP_EVENT, dispatchAppEvent } from '../lib/app-events'
 import { resolveSelectedTabIds, type SendScope, type SessionSendTarget } from '../features/common/session-send-targets'
 import type { OrderedTabEntry, TabContextTarget } from '../features/layout/TabBar'
 import { setLocale, t, type AppLocale } from '../i18n'
@@ -1059,7 +1060,7 @@ export function useWorkspaceTabs({
       const newActivePaneId = (rootTabId && snapshot.activePaneTabIdByRoot?.[rootTabId]) ?? snapshot.activeTabId
       if (newActivePaneId) {
         window.requestAnimationFrame(() => {
-          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: newActivePaneId }))
+          dispatchAppEvent(APP_EVENT.focusTerminal, newActivePaneId)
         })
       }
     } catch (error) {
@@ -1106,7 +1107,7 @@ export function useWorkspaceTabs({
     try {
       const snapshot = await desktopApi.setActivePane(rootTabId, targetPaneTabId)
       onSnapshot(snapshot)
-      window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: targetPaneTabId }))
+      dispatchAppEvent(APP_EVENT.focusTerminal, targetPaneTabId)
     } catch (error) {
       onError('focusAdjacentPane', error)
     }
@@ -1137,7 +1138,7 @@ export function useWorkspaceTabs({
         const nextRootTabId = snapshot.activeTabId ?? rootTabId
         const nextPaneTabId = snapshot.activePaneTabIdByRoot?.[nextRootTabId] ?? nextRootTabId
         window.requestAnimationFrame(() => {
-          window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: nextPaneTabId }))
+          dispatchAppEvent(APP_EVENT.focusTerminal, nextPaneTabId)
         })
       }
     } catch (error) {
@@ -1155,7 +1156,7 @@ export function useWorkspaceTabs({
       const snapshot = await desktopApi.setActivePane(rootTabId, paneTabId)
       onSnapshot(snapshot)
       window.requestAnimationFrame(() => {
-        window.dispatchEvent(new CustomEvent('fileterm:focus-terminal', { detail: paneTabId }))
+        dispatchAppEvent(APP_EVENT.focusTerminal, paneTabId)
       })
     } catch (error) {
       onError('activatePane', error)

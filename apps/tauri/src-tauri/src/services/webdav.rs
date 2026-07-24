@@ -629,12 +629,29 @@ async fn download_payload(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_export_bundle, client, download_payload, merge_synced_profile, normalize_remote_path,
+        build_export_bundle, download_payload, merge_synced_profile, normalize_remote_path,
         parse_bundle, sanitize_import_profile, sha256_hex, upload_payload, StoredConfig,
     };
+    use reqwest::Client;
     use serde_json::json;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+
+    /// Build a `Client` that ignores `HTTP_PROXY`/`HTTPS_PROXY` env vars.
+    ///
+    /// The real WebDAV `client()` uses reqwest's default behavior, which honors
+    /// system proxy settings. On developer machines running Clash/V2Ray (typical
+    /// `127.0.0.1:7897` setup), the loopback WebDAV fixture would be routed
+    /// through the Go-based proxy, which rewrites header capitalization
+    /// (`if-match` → `If-Match`) and breaks the assertion. The proxy is also
+    /// irrelevant for the in-process fixture, so we disable it explicitly.
+    fn test_client() -> Client {
+        Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(20))
+            .build()
+            .expect("test client must build")
+    }
 
     async fn read_request(socket: &mut tokio::net::TcpStream) -> String {
         let mut request = Vec::new();
@@ -791,7 +808,7 @@ mod tests {
             last_etag: Some("\"etag-before-write\"".to_string()),
             content_hash: None,
         };
-        let result = upload_payload(&client().unwrap(), &config, b"{}".to_vec()).await;
+        let result = upload_payload(&test_client(), &config, b"{}".to_vec()).await;
         server.await.unwrap();
         let error = result.unwrap_err();
         assert!(error.to_string().contains("ETag 冲突"), "{error}");
@@ -841,7 +858,7 @@ mod tests {
             content_hash: None,
         };
         assert_eq!(
-            upload_payload(&client().unwrap(), &config, payload)
+            upload_payload(&test_client(), &config, payload)
                 .await
                 .unwrap(),
             Some("\"etag-after-write\"".to_string())
@@ -890,7 +907,7 @@ mod tests {
             last_etag: None,
             content_hash: None,
         };
-        let (downloaded, etag) = download_payload(&client().unwrap(), &config).await.unwrap();
+        let (downloaded, etag) = download_payload(&test_client(), &config).await.unwrap();
         assert_eq!(downloaded, payload);
         assert_eq!(etag.as_deref(), Some("\"etag-download\""));
         assert_eq!(parse_bundle(&downloaded).unwrap().len(), 1);

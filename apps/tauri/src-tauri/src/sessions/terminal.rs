@@ -60,14 +60,14 @@ pub async fn set_terminal_state(
     let connected = status.is_connected();
     let transcript = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
-        if let Some(tab) = state
-            .tabs
-            .write()
-            .await
-            .iter_mut()
-            .find(|tab| tab.id == tab_id)
+        // 显式分块获取 tabs 与 sessions 锁，避免依赖 NBL 隐式释放；
+        // 与 ssh.rs::update_tab_status_and_emit 保持一致，防止未来在 if let
+        // 块内引入对 sessions 的访问导致两把写锁被同时持有。
         {
-            tab.status = status;
+            let mut tabs = state.tabs.write().await;
+            if let Some(tab) = tabs.iter_mut().find(|tab| tab.id == tab_id) {
+                tab.status = status;
+            }
         }
         let mut sessions = state.sessions.write().await;
         let Some(session) = sessions.get_mut(tab_id) else {

@@ -31,16 +31,36 @@ import type {
   SshTunnelSnapshot,
   CommandExecutionResult
 } from '@fileterm/core'
+import { APP_EVENT, dispatchAppEvent } from '../renderer/lib/app-events'
 
 let latestNativeDropPaths: string[] = []
 let latestNativeDropAt = 0
 const terminalDataListeners = new Set<(payload: TerminalDataPayload) => void>()
 let terminalDataChannel: Channel<TerminalDataPayload> | null = null
 let terminalDataRegistration: Promise<void> | null = null
+let terminalDataRetryTimer: ReturnType<typeof setTimeout> | null = null
+let terminalDataRetryBackoffMs = 1000
+const TERMINAL_DATA_RETRY_MAX_BACKOFF_MS = 30_000
 
 function clearNativeDropFallback() {
   latestNativeDropPaths = []
   latestNativeDropAt = 0
+}
+
+function scheduleTerminalDataRetry(reason: unknown) {
+  if (terminalDataRetryTimer !== null) {
+    clearTimeout(terminalDataRetryTimer)
+  }
+  const delay = terminalDataRetryBackoffMs
+  terminalDataRetryBackoffMs = Math.min(terminalDataRetryBackoffMs * 2, TERMINAL_DATA_RETRY_MAX_BACKOFF_MS)
+  // Without a retry the terminal stays blank until the window is reloaded,
+  // which looks like a hang. Log the failure so it's observable in the
+  // devtools console, then retry with exponential backoff.
+  console.warn(`[FileTerm] 终端数据订阅失败，${delay}ms 后重试`, reason)
+  terminalDataRetryTimer = setTimeout(() => {
+    terminalDataRetryTimer = null
+    ensureTerminalDataChannel()
+  }, delay)
 }
 
 function ensureTerminalDataChannel() {
@@ -56,8 +76,21 @@ function ensureTerminalDataChannel() {
   }
   terminalDataChannel = channel
   terminalDataRegistration = invoke<void>('app_subscribe_terminal_data', { channel })
-    .catch(() => {
+    .then(() => {
+      // Subscription succeeded — reset the backoff so a future transient
+      // failure starts fresh instead of inheriting the grown delay.
+      terminalDataRetryBackoffMs = 1000
+      if (terminalDataRetryTimer !== null) {
+        clearTimeout(terminalDataRetryTimer)
+        terminalDataRetryTimer = null
+      }
+    })
+    .catch((error) => {
+      // Drop the half-built channel so the next attempt creates a fresh one.
+      // Then retry with exponential backoff so a transient Rust-side failure
+      // doesn't permanently blank the terminal until the user reloads.
       terminalDataChannel = null
+      scheduleTerminalDataRetry(error)
     })
     .finally(() => {
       terminalDataRegistration = null
@@ -80,11 +113,9 @@ function subscribeTerminalData(listener: (payload: TerminalDataPayload) => void)
 void getCurrentWindow()
   .onDragDropEvent((event) => {
     if (event.payload.type === 'enter' || event.payload.type === 'over') {
-      window.dispatchEvent(
-        new CustomEvent('fileterm:tauri-native-drag-over', {
-          detail: { position: event.payload.position }
-        })
-      )
+      dispatchAppEvent(APP_EVENT.tauriNativeDragOver, {
+        position: event.payload.position
+      })
       return
     }
 
@@ -96,18 +127,14 @@ void getCurrentWindow()
       // WRY's DOM drop event often exposes File objects without native paths.
       // Publish the native event directly so the renderer can upload the
       // absolute paths without depending on the browser FileList timing.
-      window.dispatchEvent(
-        new CustomEvent('fileterm:tauri-native-drop', {
-          detail: {
-            paths,
-            consume: clearNativeDropFallback,
-            position: {
-              x: event.payload.position.x,
-              y: event.payload.position.y
-            }
-          }
-        })
-      )
+      dispatchAppEvent(APP_EVENT.tauriNativeDrop, {
+        paths,
+        consume: clearNativeDropFallback,
+        position: {
+          x: event.payload.position.x,
+          y: event.payload.position.y
+        }
+      })
 
       // Keep the fallback until the renderer confirms that the native drop
       // hit its remote-pane target. If coordinate probing or listener setup
@@ -266,6 +293,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     cancelCloseCurrentFileEditor: () => invoke<void>('app_cancel_file_editor_close'),
     showWindowMenu: (menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number) =>
       invoke<void>('app_show_window_menu', { menuType, x, y }),
+    reloadCurrentWindow: () => invoke<void>('app_window_action', { action: 'reload' }),
+    setWindowZoom: (operation: 'reset' | 'in' | 'out') =>
+      invoke<void>('app_window_action', {
+        action: operation === 'reset' ? 'zoom-reset' : operation === 'in' ? 'zoom-in' : 'zoom-out'
+      }),
+    toggleDevtools: () => invoke<void>('app_window_action', { action: 'toggle-devtools' }),
+    requestCloseCurrentWindow: () => invoke<void>('app_window_action', { action: 'request-close-window' }),
     requestQuitApp: () => invoke<void>('app_window_action', { action: 'request-quit' }),
     listLocalDirectory: (dirPath?: string) =>
       invoke<{ path: string; items: LocalFileItem[] }>('app_list_local_directory', {

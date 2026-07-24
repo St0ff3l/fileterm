@@ -730,17 +730,18 @@ pub async fn app_connect_local_network_share(
 }
 
 fn format_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        return format!("{} B", bytes);
-    }
-    let units = ["KB", "MB", "GB", "TB"];
+    // 统一使用 SI 单位（1000 进制），与 ssh.rs::format_bytes / ftp.rs::format_bytes
+    // 保持一致。units 数组必须包含 "B" 前缀，否则循环升级单位时索引会偏移：
+    // 旧实现 units=["KB",...] 下，bytes=1000 进入循环后 value=1.0、unit_idx=1，
+    // 错误地落到 "MB" 段输出 "1.0 MB"。
+    let units = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
     let mut unit_idx = 0usize;
     while value >= 1000.0 && unit_idx < units.len() - 1 {
         value /= 1000.0;
         unit_idx += 1;
     }
-    let decimals = if value >= 10.0 { 0 } else { 1 };
+    let decimals = if value >= 10.0 || unit_idx == 0 { 0 } else { 1 };
     format!("{:.*} {}", decimals, value, units[unit_idx])
 }
 
@@ -839,28 +840,50 @@ fn modified_secs(meta: &fs::Metadata) -> u64 {
         .unwrap_or(0)
 }
 
+/// List the drive-letter roots visible to the current user on Windows.
+///
+/// Uses `GetLogicalDrives` instead of probing each `X:\` with `fs::metadata`.
+/// The probe form blocks for seconds on unready removable drives (empty
+/// optical media, disconnected floppy/USB), which freezes the local file
+/// manager whenever the user navigates to "此电脑". `GetLogicalDrives` is a
+/// pure kernel32 bitmask query with no I/O, so it returns immediately and
+/// never hangs. Drives that report as present but are not actually ready
+/// surface an error when the user tries to open them, matching Windows
+/// Explorer behavior.
+#[cfg(target_os = "windows")]
+fn list_windows_drive_roots() -> Vec<LocalFileItem> {
+    use windows_sys::Win32::Storage::FileSystem::GetLogicalDrives;
+
+    // SAFETY: `GetLogicalDrives` takes no parameters, performs no I/O, and has
+    // no side effects. It returns a 32-bit bitmask where bit N (from 0)
+    // corresponds to drive letter `char::from(b'A' + N as u8)`.
+    let mask = unsafe { GetLogicalDrives() };
+    let mut items = Vec::new();
+    for index in 0u32..26 {
+        if (mask & (1u32 << index)) == 0 {
+            continue;
+        }
+        let letter = (b'A' + index as u8) as char;
+        items.push(LocalFileItem {
+            path: format!("{}:\\", letter),
+            name: format!("{}:", letter),
+            r#type: "folder".to_string(),
+            modified: String::new(),
+            size: "-".to_string(),
+            permission: String::new(),
+            owner_group: String::new(),
+        });
+    }
+    items
+}
+
 #[tauri::command]
 pub fn app_list_local_directory(dir_path: Option<String>) -> Result<DirectorySnapshot, AppError> {
     #[cfg(target_os = "windows")]
     if dir_path.as_deref() == Some(WINDOWS_DRIVES_PATH) {
-        let mut items = Vec::new();
-        for letter in b'A'..=b'Z' {
-            let drive = format!("{}:\\", letter as char);
-            if fs::metadata(&drive).is_ok() {
-                items.push(LocalFileItem {
-                    path: drive,
-                    name: format!("{}:", letter as char),
-                    r#type: "folder".to_string(),
-                    modified: String::new(),
-                    size: "-".to_string(),
-                    permission: String::new(),
-                    owner_group: String::new(),
-                });
-            }
-        }
         return Ok(DirectorySnapshot {
             path: WINDOWS_DRIVES_PATH.to_string(),
-            items,
+            items: list_windows_drive_roots(),
         });
     }
 
@@ -1034,10 +1057,17 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
         let name = entry.file_name();
         let src_child = entry.path();
         let dst_child = dst.join(&name);
-        let meta = entry
-            .metadata()
+        // Use `file_type()` (symlink-aware, does not follow) instead of
+        // `metadata()` (follows symlinks). Following a symlinked directory
+        // here would recurse into a loop and fill the disk; skipping
+        // symlinks matches `apply_permissions_recursive` below.
+        let file_type = entry
+            .file_type()
             .map_err(|e| AppError::Storage(e.to_string()))?;
-        if meta.is_dir() {
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
             copy_dir_recursive(&src_child, &dst_child)?;
         } else {
             fs::copy(&src_child, &dst_child).map_err(|e| AppError::Storage(e.to_string()))?;
@@ -1376,6 +1406,69 @@ mod permission_tests {
     }
 }
 
+#[cfg(test)]
+mod copy_tests {
+    use super::copy_dir_recursive;
+    use std::fs;
+
+    fn scratch_dir(label: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "fileterm-copy-test-{}-{}-{}",
+            std::process::id(),
+            label,
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&path).expect("create scratch dir");
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_dir_recursive_skips_symlink_loops() {
+        // Regression for M3: a symlinked directory loop must not send the
+        // copy into infinite recursion. The symlink is skipped and the real
+        // file is copied once.
+        use std::os::unix::fs::symlink;
+
+        let src = scratch_dir("src");
+        fs::write(src.join("real.txt"), b"hello").unwrap();
+        // `self` → src, creating a cycle through a symlinked directory.
+        symlink(&src, src.join("self")).unwrap();
+
+        let dst = scratch_dir("dst");
+        copy_dir_recursive(&src, &dst).expect("copy must complete");
+
+        assert_eq!(fs::read(dst.join("real.txt")).unwrap(), b"hello");
+        assert!(
+            !dst.join("self").exists(),
+            "symlinked directory must not be followed"
+        );
+    }
+
+    #[test]
+    fn copy_dir_recursive_copies_nested_real_files() {
+        let src = scratch_dir("nested-src");
+        let nested = src.join("sub");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("a.txt"), b"a").unwrap();
+        fs::write(nested.join("b.txt"), b"b").unwrap();
+
+        let dst = scratch_dir("nested-dst");
+        copy_dir_recursive(&src, &dst).expect("copy must complete");
+
+        assert_eq!(fs::read(dst.join("sub").join("a.txt")).unwrap(), b"a");
+        assert_eq!(fs::read(dst.join("sub").join("b.txt")).unwrap(), b"b");
+    }
+
+    #[test]
+    fn copy_dir_recursive_handles_empty_directory() {
+        let src = scratch_dir("empty-src");
+        let dst = scratch_dir("empty-dst");
+        copy_dir_recursive(&src, &dst).expect("copy must complete");
+        assert!(dst.is_dir());
+    }
+}
+
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 #[cfg(test)]
 mod smb_tests {
@@ -1458,5 +1551,65 @@ mod smb_tests {
             ),
             Some(PathBuf::from("/private/var/tmp/fileterm-smb"))
         );
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::{format_modified, format_size};
+
+    #[test]
+    fn format_modified_handles_epoch_zero() {
+        assert_eq!(format_modified(0), "1970/01/01 00:00");
+    }
+
+    #[test]
+    fn format_modified_renders_minute_resolution() {
+        // 1970-01-01 00:01:00 UTC
+        assert_eq!(format_modified(60), "1970/01/01 00:01");
+        // 1970-01-01 01:00:00 UTC
+        assert_eq!(format_modified(3600), "1970/01/01 01:00");
+        // 1970-01-02 00:00:00 UTC (跨日)
+        assert_eq!(format_modified(86400), "1970/01/02 00:00");
+    }
+
+    #[test]
+    fn format_modified_truncates_seconds() {
+        // 1970-01-01 00:00:59 UTC → 截断到分钟，仍为 00:00
+        assert_eq!(format_modified(59), "1970/01/01 00:00");
+    }
+
+    #[test]
+    fn format_modified_crosses_year_boundary() {
+        // 2025-01-01 00:00:00 UTC
+        assert_eq!(format_modified(1_735_689_600), "2025/01/01 00:00");
+        // 2024-12-31 23:59:00 UTC（年末，验证 12 月 31 日 23:59）
+        assert_eq!(format_modified(1_735_689_540), "2024/12/31 23:59");
+    }
+
+    #[test]
+    fn format_modified_handles_leap_day() {
+        // 2024-02-29 00:00:00 UTC（闰日，验证闰年 2 月 29 日存在）
+        assert_eq!(format_modified(1_709_164_800), "2024/02/29 00:00");
+        // 2024-03-01 00:00:00 UTC（闰日次日）
+        assert_eq!(format_modified(1_709_251_200), "2024/03/01 00:00");
+        // 2023-03-01 00:00:00 UTC（平年 2 月只有 28 天，验证不误判闰年）
+        assert_eq!(format_modified(1_677_628_800), "2023/03/01 00:00");
+    }
+
+    #[test]
+    fn format_size_uses_si_units_consistently() {
+        // 阈值与除法统一为 1000 进制，与 ssh.rs / ftp.rs 对齐。
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(999), "999 B");
+        assert_eq!(format_size(1000), "1.0 KB");
+        // 1024 字节：1000 进制下仍是 1.0 KB（旧实现错误输出 "1.0 MB"）
+        assert_eq!(format_size(1024), "1.0 KB");
+        // 10_000_000 字节 = 10 MB（value=10.0，decimals=0）
+        assert_eq!(format_size(10_000_000), "10 MB");
+        // 1_500_000 字节 = 1.5 MB
+        assert_eq!(format_size(1_500_000), "1.5 MB");
+        // 1_073_741_824 字节 = 1.07 GB（旧 binary 实现下是 "1.0 GB"）
+        assert_eq!(format_size(1_073_741_824), "1.1 GB");
     }
 }

@@ -1913,6 +1913,13 @@
   min-width: 168px;
 }
 
+/* Windows 顶部菜单栏（file/view/window）弹出的上下文菜单：与文件右键菜单
+   共用 ContextMenu 组件，宽度对齐 168px 避免长标签（如"打开日志目录"）
+   被挤压。其余样式继承基础 .context-menu，与终端右键菜单视觉一致。 */
+.window-context-menu {
+  min-width: 168px;
+}
+
 .tab-context-menu {
   min-width: 116px;
 }

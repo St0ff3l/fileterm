@@ -122,7 +122,7 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 
 1. 质量门禁三件套：ESLint/Prettier + Husky 提交门禁 + CI 测试集成
 2. `workspace-service.ts` 按 `tabs / sessions / transfers` 拆子模块
-3. `App.tsx` 拆分：7 个 hooks + ModalPortalManager + ErrorBoundary（3898 → 1337 行）
+3. `App.tsx` 拆分：7 个 hooks + ModalPortalManager + ErrorBoundary（3898 → 1698 行）
 4. SSH 与 FTP controller 物理分离
 5. 共享类型收敛到 `packages/core`
 6. 系统信息采集多平台化：Linux / BusyBox / Windows collector + parser 归一化 + CRLF 加固
@@ -133,7 +133,7 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 ### 当前重点 🔜
 
 1. 继续稳定主题系统，避免颜色、阴影、圆角散落在业务组件里
-2. 评估 Zustand 状态管理（App.tsx 已拆分 66%，hooks 方案已足够，非必须迁移）
+2. 评估 Zustand 状态管理（App.tsx 已拆分 56%，hooks 方案已足够，非必须迁移）
 3. 继续扩展 Rust SSH/FTP service 异常与协议边界测试（基础生命周期覆盖已落地）
 
 ### 可接受债务 📋

@@ -926,6 +926,10 @@ export interface FileTermDesktopApi {
   confirmCloseCurrentFileEditor(): Promise<void>
   cancelCloseCurrentFileEditor(): Promise<void>
   showWindowMenu(menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number): Promise<void>
+  reloadCurrentWindow(): Promise<void>
+  setWindowZoom(operation: 'reset' | 'in' | 'out'): Promise<void>
+  toggleDevtools(): Promise<void>
+  requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
   onUiPreferencesChanged(
     listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
