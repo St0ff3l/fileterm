@@ -76,7 +76,7 @@
 
 .hero-btn-primary {
   background: var(--text-main);
-  color: var(--bg-main) !important;
+  color: #ffffff !important;
   border-color: var(--text-main);
 }
 
