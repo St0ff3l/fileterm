@@ -195,13 +195,20 @@
   background: transparent;
 }
 
-:root:not([data-theme]) .sidebar-resizer:hover,
-:root[data-theme='default-dark'] .sidebar-resizer:hover,
-:root[data-theme='default'] .sidebar-resizer:hover,
-:root:not([data-theme]) .sidebar-resizer.is-active,
-:root[data-theme='default-dark'] .sidebar-resizer.is-active,
-:root[data-theme='default'] .sidebar-resizer.is-active {
-  background: transparent;
+:root:not([data-theme]) .sidebar-resizer::after,
+:root[data-theme='default-dark'] .sidebar-resizer::after,
+:root[data-theme='default'] .sidebar-resizer::after {
+  width: 2px;
+  left: 2px;
+}
+
+:root:not([data-theme]) .sidebar-resizer:hover::after,
+:root[data-theme='default-dark'] .sidebar-resizer:hover::after,
+:root[data-theme='default'] .sidebar-resizer:hover::after,
+:root:not([data-theme]) .sidebar-resizer.is-active::after,
+:root[data-theme='default-dark'] .sidebar-resizer.is-active::after,
+:root[data-theme='default'] .sidebar-resizer.is-active::after {
+  background: var(--accent-primary);
 }
 
 :root:not([data-theme]) .sync-dot,

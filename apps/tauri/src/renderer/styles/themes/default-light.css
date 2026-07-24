@@ -273,8 +273,8 @@
 }
 
 :root[data-theme='default-light'] .sidebar-resizer {
-  right: -1px !important;
-  width: 3px !important;
+  right: -3px !important;
+  width: 6px !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -282,7 +282,14 @@
 }
 
 :root[data-theme='default-light'] .sidebar-resizer::after {
-  display: none !important;
+  width: 2px !important;
+  left: 2px !important;
+  background: transparent !important;
+}
+
+:root[data-theme='default-light'] .sidebar-resizer:hover::after,
+:root[data-theme='default-light'] .sidebar-resizer.is-active::after {
+  background: var(--primary) !important;
 }
 
 :root[data-theme='default-light'] .titlebar-brand {
@@ -1051,6 +1058,11 @@
 :root[data-theme='default-light'] .command-folder-tabs button small {
   background: rgba(79, 124, 255, 0.14);
   color: var(--primary);
+}
+
+:root[data-theme='default-light'] .status-message {
+  color: var(--warning);
+  background: rgba(217, 119, 6, 0.1);
 }
 
 :root[data-theme='default-light'] .status-message-close:hover {

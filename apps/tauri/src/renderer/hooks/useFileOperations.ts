@@ -471,7 +471,8 @@ export function useFileOperations({
     targetPath: string,
     options?: {
       promptForSmbCredentials?: boolean
-      networkShareSource?: LocalNetworkShareSource
+      networkShareSource?: LocalNetworkShareSource | null
+      clearNetworkShare?: boolean
     }
   ) => {
     if (!desktopApi) {
@@ -480,16 +481,19 @@ export function useFileOperations({
     }
 
     setIsLocalDirectoryLoading(true)
-    const resolvedTargetPath = localNetworkShareSource
-      ? resolveNetworkSharePath(localNetworkShareSource, targetPath)
-      : targetPath
-    const networkShareSource =
-      options?.networkShareSource ??
-      (localNetworkShareSource &&
-      (isLocalPathWithin(localNetworkShareSource.mountPath, resolvedTargetPath) ||
-        isNetworkShareHostPath(localNetworkShareSource, resolvedTargetPath))
-        ? localNetworkShareSource
-        : null)
+    const clearNetworkShare = options?.clearNetworkShare === true
+    const resolvedTargetPath =
+      !clearNetworkShare && localNetworkShareSource
+        ? resolveNetworkSharePath(localNetworkShareSource, targetPath)
+        : targetPath
+    const networkShareSource = clearNetworkShare
+      ? null
+      : (options?.networkShareSource ??
+        (localNetworkShareSource &&
+        (isLocalPathWithin(localNetworkShareSource.mountPath, resolvedTargetPath) ||
+          isNetworkShareHostPath(localNetworkShareSource, resolvedTargetPath))
+          ? localNetworkShareSource
+          : null))
     setLocalNetworkShareSource(networkShareSource)
 
     try {
@@ -606,6 +610,16 @@ export function useFileOperations({
 
   const handleOpenLocalPath = (targetPath: string) => {
     void openLocalDirectory(targetPath).catch((error: unknown) => {
+      reportStatusError('打开本地路径', error, { targetPath })
+    })
+  }
+
+  // macOS 没有 Windows "此电脑" 概念，点"本地"回退到 home 目录并清理
+  // SMB 网络共享状态；Windows 保持 WINDOWS_DRIVES_PATH 列出磁盘。
+  const handleBackToLocalComputer = () => {
+    const isMac = desktopApi?.platform === 'darwin'
+    const targetPath = isMac ? '' : WINDOWS_DRIVES_PATH
+    void openLocalDirectory(targetPath, { clearNetworkShare: true }).catch((error: unknown) => {
       reportStatusError('打开本地路径', error, { targetPath })
     })
   }
@@ -1592,6 +1606,7 @@ export function useFileOperations({
     refreshCurrentPane,
     handleOpenLocalItem,
     handleOpenLocalPath,
+    handleBackToLocalComputer,
     handleOpenRemoteItem,
     handleOpenRemotePath,
     setClipboardItems,

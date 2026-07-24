@@ -177,6 +177,7 @@ export function FileManager({
   onClearCutState,
   onOpenLocalItem,
   onOpenLocalPath,
+  onBackToLocalComputer,
   onOpenRemoteItem,
   onOpenRemotePath,
   onPasteIntoPane,
@@ -240,6 +241,7 @@ export function FileManager({
   onClearCutState(): void
   onOpenLocalItem(item: LocalFileItem): void
   onOpenLocalPath(path: string): void
+  onBackToLocalComputer(): void
   onOpenRemoteItem(item: RemoteFileItem): void
   onOpenRemotePath(path: string): void
   onPasteIntoPane(pane: 'local' | 'remote'): void
@@ -821,7 +823,7 @@ export function FileManager({
                     type="button"
                     className="pane-path-bar-action"
                     title={t.backToThisPC}
-                    onClick={() => onOpenLocalPath(WINDOWS_DRIVES_PATH)}
+                    onClick={onBackToLocalComputer}
                   >
                     {t.localComputer}
                   </button>

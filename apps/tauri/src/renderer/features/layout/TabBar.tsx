@@ -61,15 +61,21 @@ export function TabBar({
       suppressTabClickRef.current = false
     }, 0)
   }
+  const hoverTargetRef = useRef<string | null>(null)
+
   const startPointerSort = usePointerSortFallback<string>({
     onStart: (tabKey) => {
       suppressTabClickRef.current = true
+      hoverTargetRef.current = null
       onDragStart(tabKey)
     },
-    onTarget: (_source, target) => onDragEnter(target.id),
-    onDrop: (_source, target) => {
-      if (target) {
-        onDragEnter(target.id)
+    onTarget: (_source, target) => {
+      hoverTargetRef.current = target.id
+    },
+    onDrop: (_source, _target) => {
+      const finalTarget = hoverTargetRef.current
+      if (finalTarget) {
+        onDragEnter(finalTarget)
       }
       onDragEnd()
       releaseSuppressedClick()
