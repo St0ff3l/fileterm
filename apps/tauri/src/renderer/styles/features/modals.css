@@ -461,6 +461,7 @@
   -webkit-appearance: none;
   background-image: none !important;
   padding-right: 34px !important;
+  font-weight: 400;
 }
 
 .ft-select-shell__icon {

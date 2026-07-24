@@ -76,6 +76,9 @@
 
 .hero-btn-primary {
   background: var(--text-main);
+  /* 字色用 --bg-main 与 --text-main 互为反色，保证两个主题下都可见。
+     之前固定 #ffffff 在 dark 主题下会与浅色 --text-main 背景重合，
+     导致白底白字。 */
   color: var(--bg-main) !important;
   border-color: var(--text-main);
 }

@@ -298,6 +298,7 @@
   background: var(--bg-main);
   color: var(--text-main);
   box-sizing: border-box;
+  font-weight: 400;
 }
 
 .ssh-key-note-dialog__field input:focus-visible,

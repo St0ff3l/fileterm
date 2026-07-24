@@ -1420,6 +1420,7 @@
   padding: 7px;
   font: inherit;
   font-size: 12px;
+  font-weight: 400;
 }
 .connection-import-list {
   overflow: auto;

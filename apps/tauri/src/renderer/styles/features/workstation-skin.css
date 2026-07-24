@@ -655,6 +655,7 @@ textarea:focus-visible,
   height: 22px;
   padding: 0 6px;
   font-size: 10px;
+  font-weight: 400;
 }
 
 .network-history {
