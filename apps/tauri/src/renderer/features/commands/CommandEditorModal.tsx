@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { extractCommandParams, sortByOrder } from './command-utils'
 import { CommandCodeEditor } from './CommandCodeEditor'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 
 export const emptyCommandForm: CommandTemplateInput = {
   name: '',
@@ -141,25 +142,15 @@ export function CommandEditorModal({
           </label>
           <label className="command-editor-field">
             <span>{t.commandCategory}</span>
-            <span className="ft-select-shell command-select-shell">
-              <select
-                value={form.parentId ?? ''}
-                onChange={(event) => {
-                  const { value } = event.target
-                  setForm((prev) => ({ ...prev, parentId: value || undefined }))
-                }}
-              >
-                <option value="">{t.commandUncategorized}</option>
-                {orderedFolders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                expand_more
-              </span>
-            </span>
+            <DropdownSelect
+              className="command-select-shell"
+              value={form.parentId ?? ''}
+              options={[
+                { value: '', label: t.commandUncategorized },
+                ...orderedFolders.map((folder) => ({ value: folder.id, label: folder.name }))
+              ]}
+              onChange={(value) => setForm((prev) => ({ ...prev, parentId: value || undefined }))}
+            />
           </label>
         </div>
         <label className="command-editor-field full">

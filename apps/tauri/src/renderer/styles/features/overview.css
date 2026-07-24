@@ -76,7 +76,7 @@
 
 .hero-btn-primary {
   background: var(--text-main);
-  color: #ffffff !important;
+  color: var(--bg-main) !important;
   border-color: var(--text-main);
 }
 
@@ -85,6 +85,9 @@
 }
 
 .hero-btn-primary:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-main);
+  border-color: var(--border-light);
   box-shadow: none;
   transform: none;
 }

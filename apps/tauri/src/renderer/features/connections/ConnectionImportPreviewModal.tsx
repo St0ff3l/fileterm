@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { ConnectionImportConflictStrategy, ConnectionImportPlan } from '@fileterm/core'
 import { formatMessage, t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 
 export function ConnectionImportPreviewModal({
   plan,
@@ -54,15 +55,16 @@ export function ConnectionImportPreviewModal({
         <p className="connection-import-preview-hint">{t.connectionImportPreviewHint}</p>
         <label className="connection-import-strategy">
           {t.connectionImportConflictLabel}
-          <select
+          <DropdownSelect
             disabled={isSubmitting}
             value={strategy}
-            onChange={(event) => setStrategy(event.target.value as ConnectionImportConflictStrategy)}
-          >
-            <option value="skip">{t.connectionImportSkip}</option>
-            <option value="overwrite">{t.connectionImportOverwrite}</option>
-            <option value="create">{t.connectionImportCreate}</option>
-          </select>
+            options={[
+              { value: 'skip', label: t.connectionImportSkip },
+              { value: 'overwrite', label: t.connectionImportOverwrite },
+              { value: 'create', label: t.connectionImportCreate }
+            ]}
+            onChange={(value) => setStrategy(value as ConnectionImportConflictStrategy)}
+          />
         </label>
         <div className="connection-import-list">
           {plan.items.map((item) => (

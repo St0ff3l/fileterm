@@ -9,6 +9,7 @@ import type {
 import { normalizeConnectionHost } from '@fileterm/shared'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 export function ConnectionModal({
@@ -88,51 +89,37 @@ export function ConnectionModal({
                   <div className="ssh-grid ssh-grid-general">
                     <label>
                       {t.connectionType}:
-                      <span className="ft-select-shell">
-                        <select
-                          value={form.type}
-                          onChange={(event) => {
-                            const nextType = event.target.value as SessionType
-                            const defaults: Record<SessionType, number> = { ssh: 22, ftp: 21, telnet: 23, serial: 0 }
-                            setForm((prev) => ({
-                              ...prev,
-                              type: nextType,
-                              port:
-                                prev.port === 22 || prev.port === 21 || prev.port === 23 || !prev.port
-                                  ? defaults[nextType]
-                                  : prev.port,
-                              authType: nextType === 'ssh' ? (prev.authType ?? 'system') : 'password',
-                              remotePath: nextType === 'ssh' || nextType === 'ftp' ? prev.remotePath || '/' : ''
-                            }))
-                          }}
-                        >
-                          <option value="ssh">SSH / SFTP</option>
-                          <option value="ftp">FTP / FTPS</option>
-                          <option value="telnet">Telnet</option>
-                          <option value="serial">Serial</option>
-                        </select>
-                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                          expand_more
-                        </span>
-                      </span>
+                      <DropdownSelect
+                        value={form.type}
+                        options={[
+                          { value: 'ssh', label: 'SSH / SFTP' },
+                          { value: 'ftp', label: 'FTP / FTPS' },
+                          { value: 'telnet', label: 'Telnet' },
+                          { value: 'serial', label: 'Serial' }
+                        ]}
+                        onChange={(value) => {
+                          const nextType = value as SessionType
+                          const defaults: Record<SessionType, number> = { ssh: 22, ftp: 21, telnet: 23, serial: 0 }
+                          setForm((prev) => ({
+                            ...prev,
+                            type: nextType,
+                            port:
+                              prev.port === 22 || prev.port === 21 || prev.port === 23 || !prev.port
+                                ? defaults[nextType]
+                                : prev.port,
+                            authType: nextType === 'ssh' ? (prev.authType ?? 'system') : 'password',
+                            remotePath: nextType === 'ssh' || nextType === 'ftp' ? prev.remotePath || '/' : ''
+                          }))
+                        }}
+                      />
                     </label>
                     <label>
                       {t.group}:
-                      <span className="ft-select-shell">
-                        <select
-                          value={form.group}
-                          onChange={(event) => setForm((prev) => ({ ...prev, group: event.target.value }))}
-                        >
-                          {groupOptions.map((group) => (
-                            <option key={group} value={group}>
-                              {group}
-                            </option>
-                          ))}
-                        </select>
-                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                          expand_more
-                        </span>
-                      </span>
+                      <DropdownSelect
+                        value={form.group ?? ''}
+                        options={groupOptions.map((group) => ({ value: group, label: group }))}
+                        onChange={(value) => setForm((prev) => ({ ...prev, group: value }))}
+                      />
                     </label>
                     <label className="span-2">
                       {t.name}:
@@ -204,63 +191,62 @@ export function ConnectionModal({
                         </label>
                         <label>
                           Data bits:
-                          <select
-                            value={form.dataBits ?? 8}
-                            onChange={(event) =>
-                              setForm((prev) => ({ ...prev, dataBits: Number(event.target.value) as 5 | 6 | 7 | 8 }))
+                          <DropdownSelect
+                            value={String(form.dataBits ?? 8)}
+                            options={[
+                              { value: '5', label: '5' },
+                              { value: '6', label: '6' },
+                              { value: '7', label: '7' },
+                              { value: '8', label: '8' }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({ ...prev, dataBits: Number(value) as 5 | 6 | 7 | 8 }))
                             }
-                          >
-                            <option value="5">5</option>
-                            <option value="6">6</option>
-                            <option value="7">7</option>
-                            <option value="8">8</option>
-                          </select>
+                          />
                         </label>
                         <label>
                           Stop bits:
-                          <select
-                            value={form.stopBits ?? 1}
-                            onChange={(event) =>
-                              setForm((prev) => ({ ...prev, stopBits: Number(event.target.value) as 1 | 2 }))
-                            }
-                          >
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                          </select>
+                          <DropdownSelect
+                            value={String(form.stopBits ?? 1)}
+                            options={[
+                              { value: '1', label: '1' },
+                              { value: '2', label: '2' }
+                            ]}
+                            onChange={(value) => setForm((prev) => ({ ...prev, stopBits: Number(value) as 1 | 2 }))}
+                          />
                         </label>
                         <label>
                           Parity:
-                          <select
+                          <DropdownSelect
                             value={form.parity ?? 'none'}
-                            onChange={(event) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                parity: event.target.value as CreateProfileInput['parity']
-                              }))
+                            options={[
+                              { value: 'none', label: 'None' },
+                              { value: 'odd', label: 'Odd' },
+                              { value: 'even', label: 'Even' },
+                              { value: 'mark', label: 'Mark' },
+                              { value: 'space', label: 'Space' }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({ ...prev, parity: value as CreateProfileInput['parity'] }))
                             }
-                          >
-                            <option value="none">None</option>
-                            <option value="odd">Odd</option>
-                            <option value="even">Even</option>
-                            <option value="mark">Mark</option>
-                            <option value="space">Space</option>
-                          </select>
+                          />
                         </label>
                         <label>
                           Flow control:
-                          <select
+                          <DropdownSelect
                             value={form.flowControl ?? 'none'}
-                            onChange={(event) =>
+                            options={[
+                              { value: 'none', label: 'None' },
+                              { value: 'hardware', label: 'Hardware' },
+                              { value: 'software', label: 'Software' }
+                            ]}
+                            onChange={(value) =>
                               setForm((prev) => ({
                                 ...prev,
-                                flowControl: event.target.value as CreateProfileInput['flowControl']
+                                flowControl: value as CreateProfileInput['flowControl']
                               }))
                             }
-                          >
-                            <option value="none">None</option>
-                            <option value="hardware">Hardware</option>
-                            <option value="software">Software</option>
-                          </select>
+                          />
                         </label>
                       </div>
                     ) : null}
@@ -279,25 +265,18 @@ export function ConnectionModal({
                     {form.type === 'ssh' ? (
                       <label>
                         {t.method}:
-                        <span className="ft-select-shell">
-                          <select
-                            value={form.authType ?? 'password'}
-                            onChange={(event) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                authType: event.target.value as CreateProfileInput['authType']
-                              }))
-                            }
-                          >
-                            <option value="password">{t.password}</option>
-                            <option value="privateKey">{t.privateKey}</option>
-                            <option value="keyboard-interactive">Keyboard-interactive / MFA</option>
-                            <option value="system">System / SSH agent</option>
-                          </select>
-                          <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                            expand_more
-                          </span>
-                        </span>
+                        <DropdownSelect
+                          value={form.authType ?? 'password'}
+                          options={[
+                            { value: 'password', label: t.password },
+                            { value: 'privateKey', label: t.privateKey },
+                            { value: 'keyboard-interactive', label: 'Keyboard-interactive / MFA' },
+                            { value: 'system', label: 'System / SSH agent' }
+                          ]}
+                          onChange={(value) =>
+                            setForm((prev) => ({ ...prev, authType: value as CreateProfileInput['authType'] }))
+                          }
+                        />
                       </label>
                     ) : null}
                     {form.type !== 'telnet' && form.type !== 'serial' ? (
@@ -332,32 +311,28 @@ export function ConnectionModal({
                       <>
                         <label className="span-2">
                           {t.ftpSecurityMode}:
-                          <span className="ft-select-shell">
-                            <select
-                              value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
-                              onChange={(event) => {
-                                const securityMode = event.target.value as FtpSecurityMode
-                                setForm((prev) => ({
-                                  ...prev,
-                                  securityMode,
-                                  secure: securityMode !== 'none',
-                                  port:
-                                    securityMode === 'implicit' && prev.port === 21
-                                      ? 990
-                                      : securityMode !== 'implicit' && prev.port === 990
-                                        ? 21
-                                        : prev.port
-                                }))
-                              }}
-                            >
-                              <option value="none">{t.ftpSecurityNone}</option>
-                              <option value="explicit">{t.ftpSecurityExplicit}</option>
-                              <option value="implicit">{t.ftpSecurityImplicit}</option>
-                            </select>
-                            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                              expand_more
-                            </span>
-                          </span>
+                          <DropdownSelect
+                            value={form.securityMode ?? (form.secure ? 'explicit' : 'none')}
+                            options={[
+                              { value: 'none', label: t.ftpSecurityNone },
+                              { value: 'explicit', label: t.ftpSecurityExplicit },
+                              { value: 'implicit', label: t.ftpSecurityImplicit }
+                            ]}
+                            onChange={(value) => {
+                              const securityMode = value as FtpSecurityMode
+                              setForm((prev) => ({
+                                ...prev,
+                                securityMode,
+                                secure: securityMode !== 'none',
+                                port:
+                                  securityMode === 'implicit' && prev.port === 21
+                                    ? 990
+                                    : securityMode !== 'implicit' && prev.port === 990
+                                      ? 21
+                                      : prev.port
+                              }))
+                            }}
+                          />
                         </label>
                         <div className="span-2 ssh-auth-hint">{t.ftpAuthHint}</div>
                       </>
@@ -473,26 +448,19 @@ export function ConnectionModal({
                         {t.proxyJump}
                       </span>
                       <span className="jump-host-card__hint">{t.proxyJumpHint}</span>
-                      <span className="ft-select-shell">
-                        <select
-                          value={form.jumpProfileId ?? ''}
-                          onChange={(event) =>
-                            setForm((prev) => ({ ...prev, jumpProfileId: event.target.value || undefined }))
-                          }
-                        >
-                          <option value="">{t.noProxyJump}</option>
-                          {profiles
+                      <DropdownSelect
+                        value={form.jumpProfileId ?? ''}
+                        options={[
+                          { value: '', label: t.noProxyJump },
+                          ...profiles
                             .filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
-                            .map((profile) => (
-                              <option key={profile.id} value={profile.id}>
-                                {profile.name} ({profile.host})
-                              </option>
-                            ))}
-                        </select>
-                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                          expand_more
-                        </span>
-                      </span>
+                            .map((profile) => ({
+                              value: profile.id,
+                              label: `${profile.name} (${profile.host})`
+                            }))
+                        ]}
+                        onChange={(value) => setForm((prev) => ({ ...prev, jumpProfileId: value || undefined }))}
+                      />
                     </label>
                   </fieldset>
                 ) : null}
@@ -505,50 +473,38 @@ export function ConnectionModal({
                   <div className="ssh-grid single">
                     <label>
                       {t.characterEncoding}:
-                      <span className="ft-select-shell">
-                        <select
-                          value={form.encoding}
-                          onChange={(event) => setForm((prev) => ({ ...prev, encoding: event.target.value }))}
-                        >
-                          <option value="UTF-8">UTF-8</option>
-                          <option value="GBK">GBK</option>
-                        </select>
-                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                          expand_more
-                        </span>
-                      </span>
+                      <DropdownSelect
+                        value={form.encoding ?? 'UTF-8'}
+                        options={[
+                          { value: 'UTF-8', label: 'UTF-8' },
+                          { value: 'GBK', label: 'GBK' }
+                        ]}
+                        onChange={(value) => setForm((prev) => ({ ...prev, encoding: value }))}
+                      />
                     </label>
                     <div className="terminal-key-box">
                       <strong>{t.keySequence}</strong>
                       <label>
                         {t.backspaceKey}
-                        <span className="ft-select-shell">
-                          <select
-                            value={form.backspaceKey}
-                            onChange={(event) => setForm((prev) => ({ ...prev, backspaceKey: event.target.value }))}
-                          >
-                            <option value="ASCII">ASCII - Backspace</option>
-                            <option value="DEL">DEL - Backspace</option>
-                          </select>
-                          <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                            expand_more
-                          </span>
-                        </span>
+                        <DropdownSelect
+                          value={form.backspaceKey ?? 'ASCII'}
+                          options={[
+                            { value: 'ASCII', label: 'ASCII - Backspace' },
+                            { value: 'DEL', label: 'DEL - Backspace' }
+                          ]}
+                          onChange={(value) => setForm((prev) => ({ ...prev, backspaceKey: value }))}
+                        />
                       </label>
                       <label>
                         {t.deleteKey}
-                        <span className="ft-select-shell">
-                          <select
-                            value={form.deleteKey}
-                            onChange={(event) => setForm((prev) => ({ ...prev, deleteKey: event.target.value }))}
-                          >
-                            <option value="VT220">VT220 - Delete</option>
-                            <option value="ASCII">ASCII - Delete</option>
-                          </select>
-                          <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                            expand_more
-                          </span>
-                        </span>
+                        <DropdownSelect
+                          value={form.deleteKey ?? 'VT220'}
+                          options={[
+                            { value: 'VT220', label: 'VT220 - Delete' },
+                            { value: 'ASCII', label: 'ASCII - Delete' }
+                          ]}
+                          onChange={(value) => setForm((prev) => ({ ...prev, deleteKey: value }))}
+                        />
                       </label>
                     </div>
                   </div>
@@ -562,27 +518,23 @@ export function ConnectionModal({
                   <div className="ssh-grid">
                     <label>
                       Type:
-                      <span className="ft-select-shell">
-                        <select
-                          value={form.proxy?.type ?? 'none'}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              proxy: {
-                                ...(prev.proxy ?? { host: '', port: 1080 }),
-                                type: event.target.value as 'none' | 'socks5' | 'http'
-                              }
-                            }))
-                          }
-                        >
-                          <option value="none">Direct</option>
-                          <option value="socks5">SOCKS5</option>
-                          <option value="http">HTTP CONNECT</option>
-                        </select>
-                        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                          expand_more
-                        </span>
-                      </span>
+                      <DropdownSelect
+                        value={form.proxy?.type ?? 'none'}
+                        options={[
+                          { value: 'none', label: 'Direct' },
+                          { value: 'socks5', label: 'SOCKS5' },
+                          { value: 'http', label: 'HTTP CONNECT' }
+                        ]}
+                        onChange={(value) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            proxy: {
+                              ...(prev.proxy ?? { host: '', port: 1080 }),
+                              type: value as 'none' | 'socks5' | 'http'
+                            }
+                          }))
+                        }
+                      />
                     </label>
                     {form.proxy?.type && form.proxy.type !== 'none' ? (
                       <>
@@ -744,24 +696,20 @@ function TunnelRuleEditor({
       <div className="tunnel-rule-grid">
         <label>
           {t.tunnelType}
-          <span className="ft-select-shell">
-            <select
-              value={rule.kind}
-              onChange={(event) =>
-                onChange({
-                  kind: event.target.value as SshForwardRule['kind'],
-                  ...(event.target.value === 'dynamic' ? { targetHost: undefined, targetPort: undefined } : {})
-                })
-              }
-            >
-              <option value="local">{t.localForwardShort}</option>
-              <option value="remote">{t.remoteForwardShort}</option>
-              <option value="dynamic">{t.dynamicForwardShort}</option>
-            </select>
-            <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-              expand_more
-            </span>
-          </span>
+          <DropdownSelect
+            value={rule.kind}
+            options={[
+              { value: 'local', label: t.localForwardShort },
+              { value: 'remote', label: t.remoteForwardShort },
+              { value: 'dynamic', label: t.dynamicForwardShort }
+            ]}
+            onChange={(value) =>
+              onChange({
+                kind: value as SshForwardRule['kind'],
+                ...(value === 'dynamic' ? { targetHost: undefined, targetPort: undefined } : {})
+              })
+            }
+          />
         </label>
         <label>
           {t.tunnelBindHost}
