@@ -4,6 +4,7 @@ import type { SshForwardRule, SshTunnelSnapshot } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import { t, formatMessage } from '../../i18n'
 
@@ -163,21 +164,17 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
                 <div className="ssh-tunnel-field-grid">
                   <label>
                     {t.tunnelType}
-                    <span className="ft-select-shell">
-                      <select
-                        value={draft.kind}
-                        onChange={(event) =>
-                          setDraft((value) => ({ ...value, kind: event.target.value as SshForwardRule['kind'] }))
-                        }
-                      >
-                        <option value="local">{t.tunnelLocal}</option>
-                        <option value="remote">{t.tunnelRemote}</option>
-                        <option value="dynamic">{t.tunnelDynamic}</option>
-                      </select>
-                      <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                        expand_more
-                      </span>
-                    </span>
+                    <DropdownSelect
+                      value={draft.kind}
+                      options={[
+                        { value: 'local', label: t.tunnelLocal },
+                        { value: 'remote', label: t.tunnelRemote },
+                        { value: 'dynamic', label: t.tunnelDynamic }
+                      ]}
+                      onChange={(value) =>
+                        setDraft((draftValue) => ({ ...draftValue, kind: value as SshForwardRule['kind'] }))
+                      }
+                    />
                   </label>
                   <p className="ssh-tunnel-kind-hint">{tunnelKindHint}</p>
                   <label className="ssh-tunnel-field-grid__full">

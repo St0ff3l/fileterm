@@ -1162,11 +1162,14 @@ fn join_remote_path(directory: &str, name: &str) -> String {
 }
 
 fn format_bytes(bytes: u64) -> String {
+    // 统一使用 SI 单位（1000 进制），与 ssh.rs::format_bytes 和
+    // local_files.rs::format_size 保持一致；同一文件在 SFTP / FTP / 本地
+    // 三个视图下显示的大小必须一致，否则用户会认为是不同文件。
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
     let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
+    while value >= 1000.0 && unit < UNITS.len() - 1 {
+        value /= 1000.0;
         unit += 1;
     }
     if unit == 0 {

@@ -569,14 +569,14 @@ fn tray_icon_should_be_template(platform: &str) -> bool {
     platform == "macos"
 }
 
-fn focused_webview_window(app: &AppHandle<Wry>) -> Option<WebviewWindow<Wry>> {
+pub(crate) fn focused_webview_window(app: &AppHandle<Wry>) -> Option<WebviewWindow<Wry>> {
     app.webview_windows()
         .into_values()
         .find(|window| window.is_focused().unwrap_or(false))
         .or_else(|| app.get_webview_window("main"))
 }
 
-fn update_focused_window_zoom(app: &AppHandle<Wry>, operation: ZoomOperation) {
+pub(crate) fn update_focused_window_zoom(app: &AppHandle<Wry>, operation: ZoomOperation) {
     let Some(window) = focused_webview_window(app) else {
         return;
     };
@@ -597,13 +597,13 @@ fn update_focused_window_zoom(app: &AppHandle<Wry>, operation: ZoomOperation) {
     }
 }
 
-enum ZoomOperation {
+pub(crate) enum ZoomOperation {
     Reset,
     In,
     Out,
 }
 
-fn request_close_focused_window(app: &AppHandle<Wry>) {
+pub(crate) fn request_close_focused_window(app: &AppHandle<Wry>) {
     let Some(window) = focused_webview_window(app) else {
         return;
     };

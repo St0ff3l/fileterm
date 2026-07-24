@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { t } from '../../i18n'
 
 export function SmbSharePickerModal({
@@ -49,27 +50,19 @@ export function SmbSharePickerModal({
 
             <label className="file-action-field">
               <span>{t.networkShareSelectFolder}</span>
-              <span className="ft-select-shell network-share-select-shell">
-                <select
-                  autoFocus
-                  value={selectedShare}
-                  onChange={(event) => setSelectedShare(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !isSubmitting) {
-                      onSubmit(selectedShare)
-                    }
-                  }}
-                >
-                  {shares.map((share) => (
-                    <option key={share} value={share}>
-                      {share}
-                    </option>
-                  ))}
-                </select>
-                <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                  expand_more
-                </span>
-              </span>
+              <DropdownSelect
+                autoFocus
+                className="network-share-select-shell"
+                disabled={isSubmitting}
+                value={selectedShare}
+                options={shares.map((share) => ({ value: share, label: share }))}
+                onChange={(value) => setSelectedShare(value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !isSubmitting) {
+                    onSubmit(selectedShare)
+                  }
+                }}
+              />
             </label>
           </fieldset>
 

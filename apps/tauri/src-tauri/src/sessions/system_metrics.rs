@@ -45,13 +45,9 @@ pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
             output.chars().take(300).collect::<String>()
         );
         if let Some(body) = extract_probe_body(&output) {
-            let normalized = body.to_lowercase();
-            eprintln!("[SSH probe] body='{}' normalized='{}'", body, normalized);
-            if normalized.contains("openwrt") || normalized.contains("busybox") {
-                return "busybox".to_string();
-            }
-            if normalized.contains("linux") {
-                return "linux".to_string();
+            eprintln!("[SSH probe] body='{}'", body);
+            if let Some(platform) = classify_posix_probe_body(&body) {
+                return platform.to_string();
             }
         }
     }
@@ -65,20 +61,58 @@ pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
     for cmd in &windows_cmds {
         if let Ok(output) = exec_command(handle, cmd).await {
             let output = output.replace("\r\n", "\n").replace('\r', "\n");
-            let normalized = output.to_lowercase();
             eprintln!(
                 "[SSH probe] windows cmd='{}' output='{}'",
                 cmd,
                 output.chars().take(100).collect::<String>()
             );
-            if normalized.contains("windows") || normalized.contains("win32nt") {
-                return "windows".to_string();
+            if let Some(platform) = classify_windows_probe_output(&output) {
+                return platform.to_string();
             }
         }
     }
 
     eprintln!("[SSH probe] all probes failed — returning 'unknown'");
     "unknown".to_string()
+}
+
+/// Classify the body of the POSIX probe (the text between
+/// `__FILETERM_PROBE_START__` and `__FILETERM_PROBE_END__`) into a platform
+/// label. Returns `None` when no known marker is present so the caller can
+/// fall through to the Windows probes.
+///
+/// Extracted as a pure function so platform detection can be unit-tested
+/// without a live SSH handle.
+fn classify_posix_probe_body(body: &str) -> Option<&'static str> {
+    let normalized = body.to_lowercase();
+    if normalized.contains("openwrt") || normalized.contains("busybox") {
+        return Some("busybox");
+    }
+    if normalized.contains("linux") {
+        return Some("linux");
+    }
+    // macOS / Darwin: `uname -s` returns "Darwin". Bash/zsh on macOS support
+    // the same PROMPT_COMMAND / precmd hooks as Linux, so we surface a
+    // distinct `darwin` label and let the CWD-setup gate reuse the Linux
+    // hook. Without this branch macOS remotes fall through to the Windows
+    // probes and end up as `unknown`, losing CWD tracking and sudo/root
+    // synchronization on the primary development platform.
+    if normalized.contains("darwin") {
+        return Some("darwin");
+    }
+    None
+}
+
+/// Classify the output of a Windows probe command. `cmd /c ver` and
+/// `[Environment]::OSVersion.Platform` both surface the word "windows" or
+/// "win32nt" on Windows remotes.
+fn classify_windows_probe_output(output: &str) -> Option<&'static str> {
+    let normalized = output.to_lowercase();
+    if normalized.contains("windows") || normalized.contains("win32nt") {
+        Some("windows")
+    } else {
+        None
+    }
 }
 
 /// Run a command via the exec channel and collect its combined stdout/stderr.
@@ -330,12 +364,14 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
             Some(idx) => idx,
             None => return Vec::new(),
         };
-        let end_index = match normalized_raw[start_index + start.len()..].find(end) {
-            Some(idx) => start_index + start.len() + idx,
-            None => return Vec::new(),
+        let body_start = start_index + start.len();
+        // 起始标记存在但结束标记缺失时，远端脚本可能被截断；
+        // 取到字符串结尾作为容错，避免静默丢弃已采集到的数据。
+        let body = match normalized_raw[body_start..].find(end) {
+            Some(idx) => &normalized_raw[body_start..body_start + idx],
+            None => &normalized_raw[body_start..],
         };
-        normalized_raw[start_index + start.len()..end_index]
-            .trim()
+        body.trim()
             .split('\n')
             .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty())
@@ -1158,10 +1194,12 @@ filesystems=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK|%sK|%s|%sK
 # 2. 每个 PID 一行，能看到同名进程的不同实例（如 nginx 多个 worker）；
 # 3. 用 args 而不是 comm，命令列信息量更大，能区分同名进程的不同启动参数。
 # 输出格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留，cut 截断到 200 字符）
+# pcpu 已在 awk 中除以 logical_cpu_count，归一化为「占总 CPU 资源百分比」，
+# 与 Windows 端语义对齐（0-100，单核满载不再 >100）。
 if has_bounded_runner; then
-  procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; printf "%s|%s|%.1fM|%s|%s|%s\n", $1, $2, rss, $4, $5, substr(args,1,200)}}')
+  procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu_pct, $5, substr(args,1,200)}}')
 else
-  procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; printf "%s|%s|%.1fM|%s|%s|%s\n", $1, $2, rss, $4, $5, substr(args,1,200)}}')
+  procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu_pct, $5, substr(args,1,200)}}')
 fi
 if [ -z "$procs" ]; then
   # fallback：极简 ps（如某些 BusyBox 不支持 --sort 或 -o args=）
@@ -1329,8 +1367,7 @@ $procs = Get-Process | Sort-Object -Property WS -Descending | Select-Object -Fir
 $procLines = @()
 foreach ($p in $procs) {
     $memMB = [Math]::Round($p.WorkingSet64 / 1MB, 1)
-    $cpuT  = if ($p.CPU) { [Math]::Round($p.CPU, 1) } else { 0 }
-    $procLines += ('{0}M|{1}|0|{2}' -f $memMB, $cpuT, $p.ProcessName)
+    $procLines += ('{0}||{1}M|0|0|{2}' -f $p.Id, $memMB, $p.ProcessName)
 }
 
 $ifaces = (Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' } | Select-Object -ExpandProperty Name) -join ','
@@ -1423,8 +1460,10 @@ foreach ($item in @(Get-NetAdapterStatistics -ErrorAction SilentlyContinue)) {
         tx = [double]$item.SentBytes
     }
 }
+$previousProcCpuTimes = @{}
 $sampleClock = [Diagnostics.Stopwatch]::StartNew()
 $previousNetworkSampleMs = [double]$sampleClock.ElapsedMilliseconds
+$previousProcSampleMs = [double]$sampleClock.ElapsedMilliseconds
 $nextEmitMs = [double]$sampleClock.ElapsedMilliseconds + 1000
 Write-Output '__FILETERM_METRICS_BLOCK__'
 
@@ -1471,15 +1510,25 @@ while ($true) {
         $ifRates += ('{0}|{1}|{2}|{3}|{4}' -f $name, $rxTotal, $txTotal, [Math]::Round($itemRxRate), [Math]::Round($itemTxRate))
     }
 
+    $procSampleMs = [double]$sampleClock.ElapsedMilliseconds
+    $procElapsedSeconds = [Math]::Max(0.001, ($procSampleMs - $previousProcSampleMs) / 1000)
+    $previousProcSampleMs = $procSampleMs
+
     $procLines = @()
+    $currentProcCpuTimes = @{}
     Get-Process -ErrorAction SilentlyContinue |
         Sort-Object -Property WorkingSet64 -Descending |
         Select-Object -First 20 |
         ForEach-Object {
             $memMB = [Math]::Round($_.WorkingSet64 / 1MB, 1)
-            $cpuTime = if ($_.CPU) { [Math]::Round($_.CPU, 1) } else { 0 }
-            $procLines += ('{0}M|{1}|0|{2}' -f $memMB, $cpuTime, $_.ProcessName)
+            $currentCpu = if ($_.CPU) { [double]$_.CPU } else { 0 }
+            $procId = [string]$_.Id
+            $currentProcCpuTimes[$procId] = $currentCpu
+            $prevCpu = $previousProcCpuTimes[$procId]
+            $cpuPct = if ($null -ne $prevCpu) { [Math]::Max(0, [Math]::Round((([double]$currentCpu - [double]$prevCpu) / $procElapsedSeconds) * 100 / $logicalProcessorCount, 1)) } else { 0 }
+            $procLines += ('{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $cpuPct, $_.ProcessName)
         }
+    $previousProcCpuTimes = $currentProcCpuTimes
 
     $waitMs = [Math]::Round($nextEmitMs - [double]$sampleClock.ElapsedMilliseconds)
     if ($waitMs -gt 0) { Start-Sleep -Milliseconds $waitMs }
@@ -1561,7 +1610,7 @@ mod tests {
     use super::{
         build_posix_metrics_command, build_windows_metrics_command,
         build_windows_streaming_metrics_command, build_windows_streaming_metrics_exec_command,
-        parse_system_metrics,
+        classify_posix_probe_body, classify_windows_probe_output, parse_system_metrics,
     };
 
     #[test]
@@ -1569,8 +1618,8 @@ mod tests {
         let command = build_posix_metrics_command("linux");
 
         assert!(command.contains(r#"printf "%s|%sK/%sK\n"#));
-        // 进程输出格式：pid|user|rss(M)|pcpu|pmem|args
-        assert!(command.contains(r#"printf "%s|%s|%.1fM|%s|%s|%s\n"#));
+        // 进程输出格式：pid|user|rss(M)|pcpu(已归一化)|pmem|args
+        assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n"#));
         assert!(command.contains("getconf _NPROCESSORS_ONLN"));
         assert!(command.contains("for (row_index = 1; row_index <= model_count; row_index++)"));
         assert!(!command.contains("for (index = 1; index <= model_count; index++)"));
@@ -1587,8 +1636,11 @@ mod tests {
         // ps 直接按 pcpu 降序取 top 40
         assert!(command.contains("ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu"));
         assert!(command.contains("head -n 40"));
-        // 输出格式：pid|user|rss(M)|pcpu|pmem|args
-        assert!(command.contains(r#"printf "%s|%s|%.1fM|%s|%s|%s\n""#));
+        // awk 接收 logical_cpu_count 并把 pcpu 归一化为总 CPU 百分比
+        assert!(command.contains(r#"awk -v logical_cpu_count="$logical_cpu_count""#));
+        assert!(command
+            .contains(r#"cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4"#));
+        assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n""#));
         // 不应再有进程相关的 sort 命令（cpuinfo/disk 去重可能仍用 awk）
         assert!(!command.contains("sort -t'|' -k2,2rn"));
         assert!(!command.contains("sort -t'|' -k1,1rn"));
@@ -1678,5 +1730,118 @@ mod tests {
         let exec_command = build_windows_streaming_metrics_exec_command().unwrap();
         assert!(exec_command.len() < 8000);
         assert!(exec_command.contains("IO.Compression.GzipStream"));
+    }
+
+    #[test]
+    fn parser_parses_windows_process_lines() {
+        // Windows 发射端格式：pid||rss(M)|pcpu|pmem|ProcessName
+        // 6 字段，user 为空，pmem 为 0
+        let metrics = parse_system_metrics(
+            "__PLATFORM__windows\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__PROCS_START__\n1234||256.5M|12.3|0|chrome\n5678||128.0M|5.0|0|code\n__PROCS_END__\n",
+            "windows",
+        );
+
+        let procs = metrics["topProcesses"].as_array().unwrap();
+        assert!(
+            !procs.is_empty(),
+            "Windows top processes should not be empty"
+        );
+        assert_eq!(procs.len(), 2);
+        assert_eq!(procs[0]["pid"], 1234);
+        assert_eq!(procs[0]["command"], "chrome");
+        assert_eq!(procs[0]["cpu"], "12.3");
+        assert_eq!(procs[1]["pid"], 5678);
+        assert_eq!(procs[1]["command"], "code");
+    }
+
+    #[test]
+    fn parser_rejects_malformed_windows_process_lines() {
+        // Regression for S1: the original Windows emitter produced 4-field
+        // rows (memMB|cpuT|0|ProcessName) while the parser required ≥6
+        // fields (pid|user|rss|pcpu|pmem|args). Malformed rows must be
+        // dropped silently rather than crash the parser, and well-formed
+        // rows in the same block must still come through.
+        let metrics = parse_system_metrics(
+            "__PLATFORM__windows\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__PROCS_START__\n256.5|12.3|0|chrome\n1234||256.5M|12.3|0|code\n__PROCS_END__\n",
+            "windows",
+        );
+
+        let procs = metrics["topProcesses"].as_array().unwrap();
+        assert_eq!(
+            procs.len(),
+            1,
+            "malformed 4-field row must be dropped, well-formed 6-field row must survive"
+        );
+        assert_eq!(procs[0]["pid"], 1234);
+        assert_eq!(procs[0]["command"], "code");
+    }
+
+    #[test]
+    fn parser_handles_empty_windows_process_block() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__windows\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__PROCS_START__\n__PROCS_END__\n",
+            "windows",
+        );
+        assert_eq!(
+            metrics["topProcesses"].as_array().map(Vec::len),
+            Some(0),
+            "empty process block must parse to an empty list, not null"
+        );
+    }
+
+    #[test]
+    fn posix_probe_classifies_linux_and_busybox_variants() {
+        assert_eq!(classify_posix_probe_body("Linux\n"), Some("linux"));
+        // CRLF pollution is normalized by the caller, but the classifier is
+        // tolerant of stray case differences.
+        assert_eq!(classify_posix_probe_body("LINUX\n"), Some("linux"));
+        assert_eq!(classify_posix_probe_body("busybox\n"), Some("busybox"));
+        assert_eq!(classify_posix_probe_body("OpenWrt\n"), Some("busybox"));
+    }
+
+    #[test]
+    fn posix_probe_classifies_darwin_so_macos_keeps_cwd_tracking() {
+        // Regression for M1: without a darwin branch macOS remotes fell through
+        // to the Windows probes and ended up as `unknown`, skipping the
+        // POSIX CWD hook on the primary development platform.
+        assert_eq!(classify_posix_probe_body("Darwin\n"), Some("darwin"));
+        assert_eq!(classify_posix_probe_body("darwin\n"), Some("darwin"));
+    }
+
+    #[test]
+    fn posix_probe_returns_none_for_unrecognized_bodies() {
+        assert_eq!(classify_posix_probe_body(""), None);
+        assert_eq!(classify_posix_probe_body("freebsd\n"), None);
+        assert_eq!(classify_posix_probe_body("sunos\n"), None);
+    }
+
+    #[test]
+    fn windows_probe_recognizes_ver_and_powershell_outputs() {
+        assert_eq!(
+            classify_windows_probe_output("Microsoft Windows [Version 10.0.19045.4291]"),
+            Some("windows")
+        );
+        assert_eq!(classify_windows_probe_output("Win32NT"), Some("windows"));
+        assert_eq!(classify_windows_probe_output("win32nt"), Some("windows"));
+        assert_eq!(classify_windows_probe_output("linux\n"), None);
+    }
+
+    #[test]
+    fn parser_tolerates_missing_block_end_marker() {
+        // 远端脚本被截断、网络中断或 PTY 缓冲区超限时，结束标记可能丢失。
+        // read_block 应取从起始标记到字符串结尾的内容作为容错数据，
+        // 而不是静默返回空，导致整段采集结果丢失。
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__DISK_START__\n/|10K/20K\n/dev|30K/40K\n__DISK_END__\n__PROCS_START__\n1|root|1.0M|0.1|0.5|/usr/lib/systemd/systemd\n2|root|2.0M|0.2|1.0|/usr/sbin/sshd -D\n",
+            "linux",
+        );
+
+        // __PROCS_END__ 缺失，但 topProcesses 仍应保留两条已采集记录
+        assert_eq!(metrics["topProcesses"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            metrics["topProcesses"][0]["command"],
+            "/usr/lib/systemd/systemd"
+        );
+        assert_eq!(metrics["topProcesses"][1]["command"], "/usr/sbin/sshd -D");
     }
 }

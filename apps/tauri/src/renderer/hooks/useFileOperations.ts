@@ -10,6 +10,7 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { WINDOWS_DRIVES_PATH, withParentRow } from '../app/app-utils'
+import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { formatMessage, t, type AppLocale } from '../i18n'
 
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
@@ -409,24 +410,21 @@ export function useFileOperations({
       nativeRemoteDropTargetAtRef.current = Date.now()
     }
 
-    const markNativeRemoteDropTarget = (event: Event) => {
-      const position = (event as CustomEvent<{ position?: { x?: number; y?: number } }>).detail?.position
-      if (typeof position?.x !== 'number' || typeof position.y !== 'number') return
+    const markNativeRemoteDropTarget = (detail: { position: { x: number; y: number } }) => {
+      const { x, y } = detail.position
+      if (typeof x !== 'number' || typeof y !== 'number') return
       const ratio = window.devicePixelRatio || 1
-      const targets = [
-        document.elementFromPoint(position.x, position.y),
-        document.elementFromPoint(position.x / ratio, position.y / ratio)
-      ]
+      const targets = [document.elementFromPoint(x, y), document.elementFromPoint(x / ratio, y / ratio)]
       if (targets.some((target) => target?.closest('.remote-pane'))) {
         nativeRemoteDropTargetAtRef.current = Date.now()
       }
     }
 
-    window.addEventListener('fileterm:tauri-remote-dragover', markRemoteDropTarget)
-    window.addEventListener('fileterm:tauri-native-drag-over', markNativeRemoteDropTarget)
+    const offRemoteDragOver = onAppEvent(APP_EVENT.tauriRemoteDragOver, markRemoteDropTarget)
+    const offNativeDragOver = onAppEvent(APP_EVENT.tauriNativeDragOver, markNativeRemoteDropTarget)
     return () => {
-      window.removeEventListener('fileterm:tauri-remote-dragover', markRemoteDropTarget)
-      window.removeEventListener('fileterm:tauri-native-drag-over', markNativeRemoteDropTarget)
+      offRemoteDragOver()
+      offNativeDragOver()
     }
   }, [])
 
@@ -1089,17 +1087,10 @@ export function useFileOperations({
   }
 
   useEffect(() => {
-    const handleNativeDrop = (event: Event) => {
-      const detail = (event as CustomEvent).detail as {
-        paths?: unknown
-        consume?: unknown
-        position?: { x?: unknown; y?: unknown } | null
-      }
-      const paths = Array.isArray(detail?.paths)
-        ? detail.paths.filter((path): path is string => typeof path === 'string' && path.length > 0)
-        : []
-      const position = detail?.position
-      if (!paths.length || !position || typeof position.x !== 'number' || typeof position.y !== 'number') {
+    const handleNativeDrop = (detail: { paths: string[]; consume: () => void; position: { x: number; y: number } }) => {
+      const paths = detail.paths.filter((path) => typeof path === 'string' && path.length > 0)
+      const position = detail.position
+      if (!paths.length || typeof position.x !== 'number' || typeof position.y !== 'number') {
         return
       }
 
@@ -1133,8 +1124,7 @@ export function useFileOperations({
       })()
     }
 
-    window.addEventListener('fileterm:tauri-native-drop', handleNativeDrop)
-    return () => window.removeEventListener('fileterm:tauri-native-drop', handleNativeDrop)
+    return onAppEvent(APP_EVENT.tauriNativeDrop, handleNativeDrop)
   }, [activeSession, activeTab, desktopApi, onBusyChange, reportStatusError, uploadLocalPaths])
 
   const handleDropUpload = async (event: DragEvent<HTMLDivElement>) => {

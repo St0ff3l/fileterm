@@ -1644,7 +1644,8 @@ fn suppress_shell_setup_echo(
 /// Mirrors Electron's `shellCwdSetupForPlatform`:
 /// - `busybox` → compact ash-compatible one-liner (≤256 bytes to avoid
 ///   BusyBox line-editor truncation)
-/// - `linux` → bash/zsh/posix-aware hook via PROMPT_COMMAND / precmd / PS1
+/// - `linux` / `darwin` → bash/zsh/posix-aware hook via PROMPT_COMMAND /
+///   precmd / PS1 (macOS bash/zsh support the same hooks as Linux)
 /// - `windows` / unknown → `None` (fail-closed, no injection)
 ///
 /// The injected hook defines `__tdcwd` which emits OSC7 (`file://<path>`) and
@@ -1653,7 +1654,7 @@ fn suppress_shell_setup_echo(
 fn shell_cwd_setup_for_platform(platform: &str) -> Option<&'static str> {
     match platform {
         "busybox" => Some(BUSYBOX_SHELL_CWD_SETUP),
-        "linux" => Some(SHELL_CWD_SETUP),
+        "linux" | "darwin" => Some(SHELL_CWD_SETUP),
         _ => None,
     }
 }
@@ -6580,8 +6581,8 @@ mod tests {
         is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
         remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        split_prompt_tail_for_setup_wait, suppress_shell_setup_echo, track_cwd_and_user,
-        track_sudo_prompt_from_terminal, trim_string_front,
+        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, suppress_shell_setup_echo,
+        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
         wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
         TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
@@ -6610,6 +6611,25 @@ mod tests {
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
         })));
+    }
+
+    #[test]
+    fn shell_cwd_setup_reuses_linux_hook_for_darwin() {
+        // Regression for M1: macOS remotes must keep CWD + sudo tracking.
+        // `darwin` reuses the Linux hook; `windows` / unknown fail closed.
+        assert!(shell_cwd_setup_for_platform("linux").is_some());
+        assert!(shell_cwd_setup_for_platform("darwin").is_some());
+        assert_eq!(
+            shell_cwd_setup_for_platform("darwin"),
+            shell_cwd_setup_for_platform("linux")
+        );
+        assert!(shell_cwd_setup_for_platform("busybox").is_some());
+        assert_ne!(
+            shell_cwd_setup_for_platform("busybox"),
+            shell_cwd_setup_for_platform("linux"),
+        );
+        assert!(shell_cwd_setup_for_platform("windows").is_none());
+        assert!(shell_cwd_setup_for_platform("unknown").is_none());
     }
 
     #[tokio::test]
@@ -7359,8 +7379,8 @@ mod tests {
         assert_eq!(platform, "linux");
         #[cfg(target_os = "macos")]
         assert_eq!(
-            platform, "unknown",
-            "macOS metrics collection is not implemented yet"
+            platform, "darwin",
+            "macOS remotes must be detected as `darwin` so CWD tracking stays active"
         );
 
         let channel = handle.channel_open_session().await.unwrap();

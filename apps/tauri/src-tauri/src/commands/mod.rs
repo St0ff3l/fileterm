@@ -814,6 +814,29 @@ pub async fn app_window_action(
         "request-quit" => {
             crate::request_main_window_close(&app, true);
         }
+        "reload" => {
+            window
+                .reload()
+                .map_err(|error| AppError::Window(error.to_string()))?;
+        }
+        "zoom-reset" => crate::update_focused_window_zoom(&app, crate::ZoomOperation::Reset),
+        "zoom-in" => crate::update_focused_window_zoom(&app, crate::ZoomOperation::In),
+        "zoom-out" => crate::update_focused_window_zoom(&app, crate::ZoomOperation::Out),
+        "toggle-devtools" => {
+            #[cfg(debug_assertions)]
+            {
+                if window.is_devtools_open() {
+                    window.close_devtools();
+                } else {
+                    window.open_devtools();
+                }
+            }
+            #[cfg(not(debug_assertions))]
+            {
+                let _ = window;
+            }
+        }
+        "request-close-window" => crate::request_close_focused_window(&app),
         "quit" => {
             let quit_registry = app.state::<crate::QuitPreparationRegistry>();
             if !quit_registry.try_begin() {

@@ -31,6 +31,7 @@ import {
   setFileDragPreview,
   WINDOWS_DRIVES_PATH
 } from '../../app/app-utils'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
@@ -951,7 +952,7 @@ export function FileManager({
               // Native Tauri drop events do not reliably share DOM coordinates
               // with WKWebView. Record the pane that the Finder drag is over so
               // the bridge can route its absolute paths to the correct target.
-              window.dispatchEvent(new Event('fileterm:tauri-remote-dragover'))
+              dispatchAppEvent(APP_EVENT.tauriRemoteDragOver)
               if (canUseRemoteFiles) {
                 event.dataTransfer.dropEffect = 'copy'
               }

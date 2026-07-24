@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { SshKeyFileSelection } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { formatMessage, t } from '../../i18n'
 
 export function SshKeyNoteDialog({
@@ -84,19 +85,15 @@ export function SshKeyNoteDialog({
           {folders.length > 0 ? (
             <label className="ssh-key-note-dialog__field">
               <span>{t.sshKeyNoteFolder}</span>
-              <span className="ft-select-shell ssh-key-select-shell">
-                <select value={folderId} onChange={(event) => setFolderId(event.target.value)}>
-                  <option value="">{t.sshKeyNoteAllKeys}</option>
-                  {folders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>
-                      {folder.name}
-                    </option>
-                  ))}
-                </select>
-                <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-                  expand_more
-                </span>
-              </span>
+              <DropdownSelect
+                className="ssh-key-select-shell"
+                value={folderId}
+                options={[
+                  { value: '', label: t.sshKeyNoteAllKeys },
+                  ...folders.map((folder) => ({ value: folder.id, label: folder.name }))
+                ]}
+                onChange={(value) => setFolderId(value)}
+              />
               <small>{t.sshKeyNoteFolderHint}</small>
             </label>
           ) : null}

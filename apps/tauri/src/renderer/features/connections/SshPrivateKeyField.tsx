@@ -1,6 +1,7 @@
 import type { CreateProfileInput } from '@fileterm/core'
 import { useState } from 'react'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { SshKeyNoteDialog } from '../ssh-keys/SshKeyNoteDialog'
 import { formatMessage, t } from '../../i18n'
 
@@ -56,19 +57,17 @@ export function SshPrivateKeyField({
     <div className="span-2 ssh-private-key-field">
       <label>
         {t.privateKeyLabel}
-        <span className="ft-select-shell">
-          <select value={form.privateKeyId ?? ''} onChange={(event) => selectKey(event.target.value)}>
-            <option value="">{t.privateKeyChooseImported}</option>
-            {keys.map((key) => (
-              <option key={key.id} value={key.id}>
-                {key.note ? `${key.note} · ${key.name}` : key.name} · {shortFingerprint(key.fingerprint)}
-              </option>
-            ))}
-          </select>
-          <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-            expand_more
-          </span>
-        </span>
+        <DropdownSelect
+          value={form.privateKeyId ?? ''}
+          options={[
+            { value: '', label: t.privateKeyChooseImported },
+            ...keys.map((key) => ({
+              value: key.id,
+              label: `${key.note ? `${key.note} · ${key.name}` : key.name} · ${shortFingerprint(key.fingerprint)}`
+            }))
+          ]}
+          onChange={(value) => selectKey(value)}
+        />
       </label>
       <button
         className="primary-button compact ssh-private-key-action-button"
