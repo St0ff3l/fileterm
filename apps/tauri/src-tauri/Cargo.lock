@@ -1333,7 +1333,7 @@ dependencies = [
 
 [[package]]
 name = "fileterm"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "arboard",
  "async-trait",
