@@ -202,6 +202,9 @@ const zhCN = {
   passwordAuthHint:
     '为保护凭据，已保存密码不会在编辑页回显。留空保存会保留原密码；输入新密码才会覆盖。若没有已保存密码，连接时会提示补充。',
   passwordSavedHint: '本机已保存密码。为保护凭据不会回显；留空保存会保留原密码，输入新密码才会覆盖。',
+  useEmptyPassword: '使用空密码认证',
+  useEmptyPasswordHint: '仅适用于明确允许空密码的可信测试服务器。启用后不会发送或保留已保存密码。',
+  emptyPasswordAuthEnabledHint: '已启用空密码认证：连接时会明确发送空密码，且不会保留此连接之前保存的密码。',
   sshAuthPromptTitle: 'SSH 登录',
   sshAuthPromptDescription: '当前连接缺少可直接使用的登录信息，请先补充用户名和密码。',
   sshAuthPromptPasswordRequired: '请输入远程主机的 SSH 登录密码。',
@@ -424,6 +427,7 @@ const zhCN = {
   commandTemporaryHistoryEmpty: '还没有临时命令历史',
   commandTemporaryHistoryNew: '新增',
   commandTemporaryHistoryNewHint: '先在右侧输入命令，再点击“新增”保存到历史。',
+  commandSaveToManager: '保存到命令管理器',
   commandSendToCurrentSession: '命令会发送到当前 SSH 会话',
   commandSshOnly: '当前仅 SSH 会话支持快捷命令',
   commandCategory: '命令分类',
@@ -934,6 +938,11 @@ const enUS: typeof zhCN = {
     'Saved passwords are never shown again in this form. Saving with this field empty keeps the existing password; enter a new value only to replace it. If no password is saved, FileTerm will ask for one when connecting.',
   passwordSavedHint:
     'A password is saved on this computer. It is never shown again in this form; saving with this field empty keeps it, while entering a new value replaces it.',
+  useEmptyPassword: 'Use empty password authentication',
+  useEmptyPasswordHint:
+    'Only use this with trusted test servers that explicitly allow empty passwords. Enabling it sends and retains no saved password.',
+  emptyPasswordAuthEnabledHint:
+    'Empty password authentication is enabled. FileTerm will explicitly send an empty password and discard any previously saved password for this connection.',
   sshAuthPromptTitle: 'SSH Sign In',
   sshAuthPromptDescription:
     'This connection does not yet have usable login credentials. Enter a username and password to continue.',
@@ -1162,6 +1171,7 @@ const enUS: typeof zhCN = {
   commandTemporaryHistoryEmpty: 'No temporary command history yet',
   commandTemporaryHistoryNew: 'New',
   commandTemporaryHistoryNewHint: 'Enter a command on the right before clicking “New” to save it to history.',
+  commandSaveToManager: 'Save to Command Manager',
   commandSendToCurrentSession: 'Commands are sent to the current SSH session.',
   commandSshOnly: 'Quick commands are only available for SSH sessions.',
   commandCategory: 'Category',

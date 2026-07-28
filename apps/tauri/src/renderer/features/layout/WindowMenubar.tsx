@@ -11,8 +11,8 @@ interface OpenMenu {
   position: { x: number; y: number }
 }
 
-// Windows 平台快捷键文本。WindowMenubar 仅在 Windows 渲染（见 App.tsx
-// `isWindowsDesktop` 判定），故这里固定使用 Windows 风格的修饰键。
+// Windows/Linux 共用自绘菜单栏（见 App.tsx 的 `usesCustomWindowChrome`
+// 判定），两端均使用 Ctrl/Alt 风格的快捷键文案。
 const SHORTCUT_NEW_CONNECTION = 'Ctrl+N'
 const SHORTCUT_CONNECTION_MANAGER = 'Ctrl+Shift+C'
 const SHORTCUT_COMMAND_MANAGER = 'Ctrl+Shift+M'

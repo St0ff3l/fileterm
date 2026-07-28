@@ -110,6 +110,7 @@ export function ConnectionModal({
                                 ? defaults[nextType]
                                 : prev.port,
                             authType: nextType === 'ssh' ? (prev.authType ?? 'system') : 'password',
+                            useEmptyPassword: nextType === 'ssh' ? prev.useEmptyPassword : false,
                             remotePath: nextType === 'ssh' || nextType === 'ftp' ? prev.remotePath || '/' : ''
                           }))
                         }}
@@ -294,9 +295,18 @@ export function ConnectionModal({
                       <label className="span-2">
                         {t.password}:
                         <input
+                          disabled={
+                            form.type === 'ssh' && form.authType === 'password' && Boolean(form.useEmptyPassword)
+                          }
                           type="password"
                           value={form.password ?? ''}
-                          onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              password: event.target.value,
+                              useEmptyPassword: event.target.value ? false : prev.useEmptyPassword
+                            }))
+                          }
                         />
                       </label>
                     ) : null}
@@ -305,7 +315,11 @@ export function ConnectionModal({
                     ) : null}
                     {form.type === 'ssh' && form.authType === 'password' ? (
                       <div className="span-2 ssh-auth-hint">
-                        {mode === 'edit' && hasSavedPassword ? t.passwordSavedHint : t.passwordAuthHint}
+                        {form.useEmptyPassword
+                          ? t.emptyPasswordAuthEnabledHint
+                          : mode === 'edit' && hasSavedPassword
+                            ? t.passwordSavedHint
+                            : t.passwordAuthHint}
                       </div>
                     ) : form.type === 'ssh' && form.authType === 'keyboard-interactive' ? (
                       <div className="span-2 ssh-auth-hint">{t.keyboardInteractiveHint}</div>
@@ -366,6 +380,25 @@ export function ConnectionModal({
                   <fieldset className="ssh-fieldset">
                     <legend>{t.advanced}</legend>
                     <div className="advanced-toggle-list">
+                      {form.authType === 'password' ? (
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={Boolean(form.useEmptyPassword)}
+                              type="checkbox"
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  password: event.target.checked ? '' : prev.password,
+                                  useEmptyPassword: event.target.checked
+                                }))
+                              }
+                            />
+                            <span className="advanced-toggle-name">{t.useEmptyPassword}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.useEmptyPasswordHint}</p>
+                        </div>
+                      ) : null}
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
                           <input

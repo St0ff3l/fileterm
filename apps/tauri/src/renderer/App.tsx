@@ -148,6 +148,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
   const desktopApi = window.fileterm
   const isWindowsDesktop = desktopApi?.platform === 'win32'
+  // Linux uses the same renderer-owned chrome as Windows. macOS remains on
+  // AppKit chrome because its traffic lights are intentionally native.
+  const usesCustomWindowChrome = isWindowsDesktop || desktopApi?.platform === 'linux'
   const hasRevealedStandaloneWindowRef = useRef(false)
 
   const openConnectionImportPreview = (source: 'files' | 'folder' = 'files') => {
@@ -1249,7 +1252,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${isWindowsDesktop ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -1257,7 +1260,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           } as CSSProperties
         }
       >
-        {isWindowsDesktop ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
+        {usesCustomWindowChrome ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
         {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
 
         {showSidebar ? (

@@ -709,7 +709,7 @@ export function FileManager({
           {activeView === 'file'
             ? clipboardStatusText || activeSession.remotePath
             : activeView === 'command'
-              ? `${t.commandQuickLaunch} (${isSshSession ? t.send : t.commandSshOnly})`
+              ? t.commandPreview
               : t.runtimeTunnelTab}
         </span>
         {activeView === 'file' ? (

@@ -120,6 +120,8 @@ export interface SshProfile extends NetworkProfile {
   authType: SshAuthType
   note?: string
   password?: string
+  /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
+  useEmptyPassword?: boolean
   privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
@@ -700,6 +702,8 @@ export interface CreateProfileInput {
   remotePath: string
   note?: string
   password?: string
+  /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
+  useEmptyPassword?: boolean
   privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
@@ -881,6 +885,7 @@ export interface TerminalStatePayload {
   summary: string
   transcript: string
   connected: boolean
+  status: TabStatus
 }
 
 export interface RemoteFileAccessOptions {

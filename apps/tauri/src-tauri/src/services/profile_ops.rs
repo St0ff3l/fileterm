@@ -142,10 +142,14 @@ fn strip_secret_fields(profile: &Value) -> Value {
 /// non-secret presence bit lets an editor explain why its password input is
 /// intentionally empty without disclosing the credential itself.
 pub fn strip_secret_fields_public(profile: &Value) -> Value {
-    let has_saved_password = profile
-        .get("password")
-        .and_then(Value::as_str)
-        .is_some_and(|password| !password.is_empty());
+    let has_saved_password = !profile
+        .get("useEmptyPassword")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && profile
+            .get("password")
+            .and_then(Value::as_str)
+            .is_some_and(|password| !password.is_empty());
     let mut public = strip_secret_fields(profile);
     if let Some(object) = public.as_object_mut() {
         object.insert(
@@ -169,7 +173,17 @@ fn normalize_profile_secret_input(
     previous: Option<&Value>,
 ) -> bool {
     let mut changed = false;
+    let use_empty_password = profile
+        .get("useEmptyPassword")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     for key in ["password", "passphrase", "privateKeyPath"] {
+        if key == "password" && use_empty_password {
+            if profile.remove(key).is_some() {
+                changed = true;
+            }
+            continue;
+        }
         let should_preserve = match profile.get(key) {
             None => true,
             Some(Value::String(value)) => value.is_empty(),
@@ -1314,6 +1328,30 @@ mod tests {
         assert!(public.get("proxyPassword").is_none());
         assert!(public["proxy"].get("password").is_none());
         assert_eq!(public["hasSavedPassword"], true);
+    }
+
+    #[test]
+    fn empty_password_mode_discards_any_saved_password() {
+        let previous = json!({
+            "id": "profile-1",
+            "password": "stored-password"
+        });
+        let mut edit = json!({
+            "id": "profile-1",
+            "password": "",
+            "useEmptyPassword": true
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        assert!(normalize_profile_secret_input(&mut edit, Some(&previous)));
+        assert!(!edit.contains_key("password"));
+        assert_eq!(edit["useEmptyPassword"], true);
+        assert_eq!(
+            strip_secret_fields_public(&Value::Object(edit))["hasSavedPassword"],
+            false
+        );
     }
 
     #[test]

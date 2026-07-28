@@ -9,7 +9,7 @@
   --bg-active: #dddde3;
   --manager-head-bg: #f4f4f6;
   --input-bg: #ffffff;
-  --command-history-head-bg: var(--surface-table-head);
+  --command-history-head-bg: var(--manager-head-bg);
   --surface-panel: var(--bg-card);
   --border-subtle: var(--border-light);
 

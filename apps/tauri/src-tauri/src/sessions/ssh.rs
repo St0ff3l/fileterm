@@ -1158,6 +1158,7 @@ async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: Works
         "summary": summary,
         "transcript": transcript,
         "connected": connected,
+        "status": status,
     });
     let _ = app.emit("terminal:state", payload);
 
@@ -2138,6 +2139,13 @@ fn missing_password_credential(profile: &Value) -> Option<&'static str> {
         return Some("missing-username");
     }
     if profile
+        .get("useEmptyPassword")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    if profile
         .get("password")
         .and_then(Value::as_str)
         .unwrap_or("")
@@ -2146,6 +2154,20 @@ fn missing_password_credential(profile: &Value) -> Option<&'static str> {
         return Some("missing-password");
     }
     None
+}
+
+fn password_for_authentication(profile: &Value) -> Option<&str> {
+    if profile
+        .get("useEmptyPassword")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Some("");
+    }
+    profile
+        .get("password")
+        .and_then(Value::as_str)
+        .filter(|password| !password.is_empty())
 }
 
 async fn ensure_password_credentials(
@@ -2448,10 +2470,7 @@ async fn open_session(
                     if try_keyboard_interactive(
                         &mut retry_handle,
                         &username,
-                        profile
-                            .get("password")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
+                        password_for_authentication(profile),
                         app,
                         tab_id,
                         &profile_id,
@@ -2562,10 +2581,7 @@ async fn open_session(
             if try_keyboard_interactive(
                 &mut retry_handle,
                 &username,
-                profile
-                    .get("password")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
+                password_for_authentication(profile),
                 app,
                 tab_id,
                 &profile_id,
@@ -2861,13 +2877,9 @@ async fn try_authenticate(
         .to_string();
     match auth_type {
         "password" => {
-            let password = profile
-                .get("password")
-                .and_then(|p| p.as_str())
-                .unwrap_or("");
-            if password.is_empty() {
+            let Some(password) = password_for_authentication(profile) else {
                 return Err("SSH password is missing".to_string());
-            }
+            };
             // Some embedded SSH servers do not reply to a direct password
             // request until the client has first sent the RFC-standard
             // `none` probe. Electron's ssh2 client always performs this
@@ -2978,30 +2990,24 @@ async fn try_authenticate(
                 AuthenticationResult::Rejected
             })
         }
-        "keyboard-interactive" => {
-            let password = profile
-                .get("password")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            Ok(
-                if try_keyboard_interactive(
-                    handle,
-                    username,
-                    password,
-                    app,
-                    tab_id,
-                    &profile_id,
-                    &host,
-                    port,
-                )
-                .await?
-                {
-                    AuthenticationResult::Authenticated
-                } else {
-                    AuthenticationResult::Rejected
-                },
+        "keyboard-interactive" => Ok(
+            if try_keyboard_interactive(
+                handle,
+                username,
+                password_for_authentication(profile),
+                app,
+                tab_id,
+                &profile_id,
+                &host,
+                port,
             )
-        }
+            .await?
+            {
+                AuthenticationResult::Authenticated
+            } else {
+                AuthenticationResult::Rejected
+            },
+        ),
         _ => try_system_authenticate(handle, username, profile, app, tab_id).await,
     }
 }
@@ -3109,7 +3115,7 @@ async fn request_key_passphrase(
 async fn try_keyboard_interactive(
     handle: &mut Handle<ClientHandler>,
     username: &str,
-    password: &str,
+    password: Option<&str>,
     app: &AppHandle,
     tab_id: &str,
     profile_id: &str,
@@ -3180,7 +3186,7 @@ async fn try_keyboard_interactive(
 async fn try_keyboard_interactive_with_responder<H, F, Fut>(
     handle: &mut Handle<H>,
     username: &str,
-    password: &str,
+    password: Option<&str>,
     mut request_answers: F,
 ) -> Result<bool, String>
 where
@@ -3235,8 +3241,8 @@ where
         let mut pending_indexes = Vec::new();
         let mut pending_prompts = Vec::new();
         for (index, prompt) in current.prompts.iter().enumerate() {
-            if !password_used && !password.is_empty() && is_password_prompt(&prompt.prompt) {
-                answers[index] = password.to_string();
+            if !password_used && password.is_some() && is_password_prompt(&prompt.prompt) {
+                answers[index] = password.unwrap_or_default().to_string();
                 password_used = true;
             } else {
                 pending_indexes.push(index);
@@ -6595,10 +6601,10 @@ mod tests {
         enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
         is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        resource_monitoring_interval_seconds, shell_cwd_setup_for_platform,
-        split_prompt_tail_for_setup_wait, suppress_shell_setup_echo, track_cwd_and_user,
-        track_sudo_prompt_from_terminal, trim_string_front,
+        password_for_authentication, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds,
+        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, suppress_shell_setup_echo,
+        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
         wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
         TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
@@ -6627,6 +6633,28 @@ mod tests {
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
         })));
+    }
+
+    #[test]
+    fn empty_password_mode_is_explicit_and_backwards_compatible() {
+        let unset_password = serde_json::json!({
+            "authType": "password",
+            "username": "ops"
+        });
+        assert_eq!(
+            missing_password_credential(&unset_password),
+            Some("missing-password")
+        );
+        assert_eq!(password_for_authentication(&unset_password), None);
+
+        let empty_password = serde_json::json!({
+            "authType": "password",
+            "username": "ops",
+            "password": "stale-password",
+            "useEmptyPassword": true
+        });
+        assert_eq!(missing_password_credential(&empty_password), None);
+        assert_eq!(password_for_authentication(&empty_password), Some(""));
     }
 
     #[test]
@@ -7364,7 +7392,7 @@ mod tests {
         let authenticated = try_keyboard_interactive_with_responder(
             &mut handle,
             "alice",
-            "saved-password",
+            Some("saved-password"),
             move |request| {
                 let requested_prompts = requested_prompts.clone();
                 async move {
