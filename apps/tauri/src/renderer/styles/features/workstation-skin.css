@@ -9,7 +9,7 @@ body,
    compact controls a little leading so their glyphs sit on the same optical
    baseline as the Windows layout. */
 :root[data-platform='linux'] {
-  --font-ui: 'Inter', 'Noto Sans CJK SC', 'Noto Sans', 'DejaVu Sans', sans-serif;
+  --font-ui: 'Noto Sans SC', 'Inter', 'Noto Sans CJK SC', 'Noto Sans', 'DejaVu Sans', sans-serif;
   --button-line-height: 1.2;
   line-height: 1.2;
 }
