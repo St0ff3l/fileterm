@@ -95,10 +95,11 @@
 }
 
 .hero-btn-primary:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-main) !important;
-  border-color: var(--border-light);
-  transform: none;
+  opacity: 0.88;
+  background: var(--text-main);
+  color: var(--bg-main) !important;
+  border-color: var(--text-main);
+  transform: translateY(-2px);
 }
 
 .hero-btn-primary:active:not(:disabled) {
@@ -117,7 +118,7 @@
   background: var(--bg-hover);
   color: var(--text-main);
   border-color: var(--text-muted);
-  transform: none;
+  transform: translateY(-2px);
 }
 
 .hero-btn-secondary:active:not(:disabled) {
