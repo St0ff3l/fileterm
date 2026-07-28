@@ -67,42 +67,53 @@ body,
 }
 
 /* File path bar input, labels, and top subheader path on Linux.
-   Ensure explicit UI/mono font variables for Linux CJK font stacks. */
+   Match button's inline-flex vertical centering and line-height. */
 :root[data-platform='linux'] .pane-path-bar input {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-mono);
-  line-height: 1.3;
+  line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .pane-path-bar strong,
 :root[data-platform='linux'] .pane-path-bar span,
 :root[data-platform='linux'] .pane-path-bar-action {
-  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .file-current-path {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-ui) !important;
-  line-height: 1.3;
+  line-height: var(--button-line-height, 1.2);
 }
 
 /* Command Center empty state, title headers, tab buttons, and table headers on Linux */
 :root[data-platform='linux'] .command-empty-state,
 :root[data-platform='linux'] .command-empty-state > span {
-  line-height: 1.4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .command-pane-head > strong,
 :root[data-platform='linux'] .command-runner-head > strong {
-  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .command-filter-group button,
 :root[data-platform='linux'] .command-tab-item,
 :root[data-platform='linux'] .command-folder-tabs button {
-  line-height: 1.3;
+  line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .command-table th {
-  line-height: 1.3;
+  line-height: var(--button-line-height, 1.2);
 }
 
 /* SSH Tunnel panel headers, purpose box, and empty state labels on Linux */
@@ -113,7 +124,9 @@ body,
 :root[data-platform='linux'] .ssh-tunnel-purpose span,
 :root[data-platform='linux'] .ssh-tunnel-empty strong,
 :root[data-platform='linux'] .ssh-tunnel-empty span {
-  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  line-height: var(--button-line-height, 1.2);
 }
 
 button:focus-visible,
