@@ -1615,6 +1615,7 @@
   color: var(--text-main);
   border-radius: var(--radius-sm);
   text-align: left;
+  justify-content: flex-start;
   padding: 0 8px;
   font-size: 11px;
   cursor: pointer;

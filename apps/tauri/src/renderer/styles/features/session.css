@@ -1954,7 +1954,7 @@
   border-radius: 5px;
   font-size: 12px;
   font-weight: 500;
-  line-height: 28px;
+  line-height: 1.25;
 }
 
 .tools-menu button > span:first-child {

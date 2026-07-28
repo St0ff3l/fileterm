@@ -253,7 +253,9 @@
 }
 
 .file-editor-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   width: 100%;
   height: 26px;
   min-height: 26px;
@@ -262,7 +264,7 @@
   border-radius: 7px;
   text-align: left;
   font-size: 12px;
-  line-height: 26px;
+  line-height: 1.25;
 }
 
 .file-editor-menu button:disabled {
