@@ -88,6 +88,14 @@
   color: inherit;
 }
 
+.hero-btn .material-symbols-outlined,
+.stat-icon .material-symbols-outlined,
+.recent-icon .material-symbols-outlined,
+.action-icon .material-symbols-outlined {
+  display: block;
+  line-height: 1;
+}
+
 .hero-btn-primary:hover:not(:disabled) {
   background: transparent;
   color: var(--text-main);

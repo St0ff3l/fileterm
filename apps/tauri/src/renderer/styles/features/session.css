@@ -1945,6 +1945,12 @@
   border-radius: 7px;
   text-align: left;
   font-size: 12px;
+  line-height: normal;
+}
+
+.context-menu button > span {
+  display: block;
+  min-width: 0;
   line-height: 1.25;
 }
 
@@ -1954,7 +1960,7 @@
   border-radius: 5px;
   font-size: 12px;
   font-weight: 500;
-  line-height: 1.25;
+  line-height: normal;
 }
 
 .tools-menu button > span:first-child {
