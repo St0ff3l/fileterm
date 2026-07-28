@@ -10,8 +10,48 @@ body,
    baseline as the Windows layout. */
 :root[data-platform='linux'] {
   --font-ui: 'Noto Sans SC', 'Inter', 'Noto Sans CJK SC', 'Noto Sans', 'DejaVu Sans', sans-serif;
-  --button-line-height: 1.2;
+  --font-mono: 'JetBrains Mono', 'Noto Sans SC', monospace;
+  --button-line-height: 1;
   line-height: 1.2;
+}
+
+/* Keep the renderer-owned version label on the same optical baseline as the
+   Outfit wordmark when Linux uses the bundled CJK face. */
+:root[data-platform='linux'] .titlebar-home-brand span {
+  font-family: var(--font-mono);
+  line-height: 1.1;
+}
+
+/* Linux system metrics mix CJK labels, numbers and process paths. Give every
+   row a deliberate line box so fallback font ascent cannot pull text upward. */
+:root[data-platform='linux'] .system-sidebar-layout {
+  line-height: 1.3;
+}
+
+:root[data-platform='linux'] .system-sidebar-layout .address-row,
+:root[data-platform='linux'] .system-sidebar-layout .metric-line,
+:root[data-platform='linux'] .system-sidebar-layout .meter-header,
+:root[data-platform='linux'] .system-sidebar-layout .metric-chip-summary,
+:root[data-platform='linux'] .system-sidebar-layout .network-panel,
+:root[data-platform='linux'] .system-sidebar-layout .network-rate,
+:root[data-platform='linux'] .system-sidebar-layout .mini-tabs span,
+:root[data-platform='linux'] .system-sidebar-layout .disk-head span,
+:root[data-platform='linux'] .system-sidebar-layout .disk-row span {
+  line-height: 1.3;
+}
+
+:root[data-platform='linux'] .system-sidebar-layout .address-row strong,
+:root[data-platform='linux'] .system-sidebar-layout .process-row,
+:root[data-platform='linux'] .system-sidebar-layout .network-panel,
+:root[data-platform='linux'] .system-sidebar-layout .disk-head,
+:root[data-platform='linux'] .system-sidebar-layout .disk-row {
+  font-family: var(--font-mono);
+}
+
+:root[data-platform='linux'] .system-sidebar-layout .process-row span {
+  display: flex;
+  align-items: center;
+  line-height: 1.3;
 }
 
 button:focus-visible,
