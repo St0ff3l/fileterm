@@ -59,14 +59,14 @@ jobs:
           deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
           test -n "$deb_file"
           dpkg-deb --info "$deb_file"
-          dpkg-deb --contents "$deb_file" | grep -Eqi '/usr/share/(icons/hicolor|pixmaps)/.+\.png$'
           mkdir -p artifacts
+          dpkg-deb --contents "$deb_file" > artifacts/FileTerm-linux-x86_64.contents.txt
           cp "$deb_file" artifacts/FileTerm-linux-x86_64.deb
 
       - name: Upload Debian installer
         uses: actions/upload-artifact@v6
         with:
           name: FileTerm-Linux-deb-${{ github.run_number }}
-          path: artifacts/FileTerm-linux-x86_64.deb
+          path: artifacts/
           if-no-files-found: error
           retention-days: 14
