@@ -1,7 +1,8 @@
 [Desktop Entry]
 Name=FileTerm
 Comment=Remote terminal and file management workspace
-Exec=fileterm %U
+Exec=/usr/bin/fileterm %U
+TryExec=/usr/bin/fileterm
 Icon=fileterm
 Terminal=false
 Type=Application

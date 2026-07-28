@@ -97,8 +97,8 @@
 }
 
 .hero-btn-primary:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-main);
+  background: var(--bg-hover);
+  color: var(--text-main) !important;
   border-color: var(--border-light);
   box-shadow: none;
   transform: none;
@@ -111,7 +111,8 @@
 }
 
 .hero-btn-secondary:hover:not(:disabled) {
-  background: transparent;
+  background: var(--bg-hover);
+  color: var(--text-main);
   border-color: var(--text-muted);
   transform: none;
 }
