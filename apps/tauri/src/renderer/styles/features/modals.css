@@ -190,6 +190,7 @@
 .ssh-form-shell {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
   min-height: 0;
   padding: 20px 24px;
 }
@@ -198,6 +199,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -369,36 +371,125 @@
   font-size: 16px;
 }
 
-.jump-host-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 12px;
-  padding: 11px 12px;
-  border: 1px solid var(--border-dark);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-hover));
+.network-routing-list {
+  margin-bottom: 0;
 }
-.jump-host-card__title {
+
+.network-routing-group__label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+}
+
+.network-routing-group__label .material-symbols-outlined {
+  color: var(--copy-link);
+  font-size: 15px;
+}
+
+.advanced-toggle-row.network-routing-row {
+  display: grid;
+  grid-template-columns: minmax(84px, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.network-routing-row__name {
   color: var(--text-main);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
 }
-.jump-host-card__title .material-symbols-outlined {
-  color: var(--primary);
-  font-size: 17px;
+
+.network-routing-modes {
+  display: inline-flex;
+  justify-self: end;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--bg-hover);
 }
-.jump-host-card__hint {
-  grid-column: 1 / -1;
+
+.network-routing-modes button {
+  min-width: 76px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.network-routing-modes button:hover {
+  color: var(--text-main);
+}
+
+.network-routing-modes button.is-active {
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+}
+
+.network-routing-modes button.is-active:hover {
+  background: var(--button-primary-hover);
+}
+
+.network-routing-row .ft-select-shell,
+.network-routing-row .dropdown-select-trigger {
+  min-width: 0;
+  width: min(260px, 100%);
+}
+
+/* macOS keeps the native menu; explicitly size and inset this select so its
+   trigger and native option sheet do not inherit the modal's larger text. */
+.network-routing-select,
+.network-routing-select select {
+  font-size: 12px !important;
+}
+
+.network-routing-select select {
+  min-height: 28px;
+  padding-left: 10px !important;
+}
+
+.network-routing-select.dropdown-select-trigger {
+  min-height: 28px;
+}
+
+.network-routing-hint {
+  margin: 0;
+  padding: 6px 12px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.network-routing-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-dark);
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
-.jump-host-card .ft-select-shell {
-  grid-column: 1 / -1;
-  width: 100%;
+
+@media (max-width: 420px) {
+  .network-routing-row {
+    grid-template-columns: 1fr;
+  }
+
+  .network-routing-modes,
+  .network-routing-row .ft-select-shell,
+  .network-routing-row .dropdown-select-trigger {
+    justify-self: start;
+    width: 100%;
+  }
+
+  .network-routing-modes button {
+    flex: 1;
+  }
 }
 
 .ssh-grid {
@@ -440,8 +531,7 @@
 
 .ssh-grid input,
 .ssh-grid select,
-.ssh-grid textarea,
-.jump-host-card select {
+.ssh-grid textarea {
   width: 100%;
   min-height: 32px;
   padding: 5px 10px;
@@ -595,6 +685,7 @@
 .advanced-toggle-row {
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding: 10px 12px;
   transition: background 0.15s ease;
 }
@@ -622,10 +713,52 @@
 .advanced-toggle-hint {
   margin: 0;
   margin-left: 22px;
+  min-width: 0;
   font-size: 12px;
   line-height: 1.6;
   letter-spacing: 0.01em;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.resource-monitoring-interval {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 132px);
+  align-items: center;
+  gap: 8px;
+  margin-left: 22px;
+  min-width: 0;
+  max-width: calc(100% - 22px);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.resource-monitoring-interval__select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* macOS keeps the shared native-select shell; give its short labels the same
+   leading inset as the Windows/Linux trigger so "1 秒" is not flush left. */
+.resource-monitoring-interval__select select {
+  padding-left: 10px;
+}
+
+.resource-monitoring-interval:has(.ft-select-shell select:disabled),
+.resource-monitoring-interval:has(.dropdown-select-trigger:disabled) {
+  opacity: 0.55;
+}
+
+@media (max-width: 420px) {
+  .resource-monitoring-interval {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .resource-monitoring-interval__select {
+    width: min(100%, 180px);
+  }
 }
 
 /* Reconnect mode: labelled group wrapping the three-way radio list */
@@ -717,8 +850,7 @@
 
 .ssh-grid input,
 .ssh-grid select,
-.ssh-grid textarea,
-.jump-host-card select {
+.ssh-grid textarea {
   width: 100%;
   min-height: 38px;
   padding: 8px 12px;
@@ -732,8 +864,7 @@
 
 .ssh-grid input:focus,
 .ssh-grid select:focus,
-.ssh-grid textarea:focus,
-.jump-host-card select:focus {
+.ssh-grid textarea:focus {
   outline: none;
   border-color: var(--text-muted);
   box-shadow: 0 0 0 3px var(--input-focus-ring);

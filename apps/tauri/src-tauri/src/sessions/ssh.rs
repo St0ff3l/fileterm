@@ -127,6 +127,18 @@ fn resource_monitoring_enabled(profile: &Value) -> bool {
         != Some(false)
 }
 
+const DEFAULT_RESOURCE_MONITORING_INTERVAL_SECONDS: u64 = 1;
+
+fn resource_monitoring_interval_seconds(profile: &Value) -> u64 {
+    match profile
+        .get("resourceMonitoringIntervalSeconds")
+        .and_then(Value::as_u64)
+    {
+        Some(interval @ (1 | 5 | 15 | 30 | 60)) => interval,
+        _ => DEFAULT_RESOURCE_MONITORING_INTERVAL_SECONDS,
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public entry point
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3888,6 +3900,7 @@ async fn run_worker_loop(
         let metrics_app = app.clone();
         let metrics_tid = tab_id.to_string();
         let metrics_plat = platform.clone();
+        let metrics_interval_seconds = resource_monitoring_interval_seconds(profile);
         let metrics_cancellation = cancellation.clone();
         tokio::spawn(async move {
             crate::services::logging::session(
@@ -3895,7 +3908,7 @@ async fn run_worker_loop(
                 "INFO",
                 "metrics",
                 &metrics_tid,
-                format!("collector starting platform={metrics_plat}"),
+                format!("collector starting platform={metrics_plat} interval_seconds={metrics_interval_seconds}"),
             );
 
             // Build the infinite-loop script. Each iteration emits a
@@ -3904,7 +3917,9 @@ async fn run_worker_loop(
             let marker = "__FILETERM_METRICS_BLOCK__";
             let (windows_command, script_body) = if metrics_plat == "windows" {
                 let command =
-                    match super::system_metrics::build_windows_streaming_metrics_exec_command() {
+                    match super::system_metrics::build_windows_streaming_metrics_exec_command(
+                        metrics_interval_seconds,
+                    ) {
                         Ok(command) => command,
                         Err(error) => {
                             crate::services::logging::ssh_debug(
@@ -3925,8 +3940,8 @@ async fn run_worker_loop(
                 };
                 let metrics = super::system_metrics::build_posix_metrics_command(raw);
                 let script = format!(
-                    "{}\nwhile true; do\n{}\necho '{}'\nsleep 1\ndone\n",
-                    "cd / >/dev/null 2>&1 || true", metrics, marker
+                    "{}\nwhile true; do\n{}\necho '{}'\nsleep {}\ndone\n",
+                    "cd / >/dev/null 2>&1 || true", metrics, marker, metrics_interval_seconds
                 );
                 (None, Some(script))
             };
@@ -6581,8 +6596,9 @@ mod tests {
         is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
         remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, suppress_shell_setup_echo,
-        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
+        resource_monitoring_interval_seconds, shell_cwd_setup_for_platform,
+        split_prompt_tail_for_setup_wait, suppress_shell_setup_echo, track_cwd_and_user,
+        track_sudo_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
         wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
         TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
@@ -6611,6 +6627,26 @@ mod tests {
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
         })));
+    }
+
+    #[test]
+    fn resource_monitoring_uses_only_supported_intervals() {
+        assert_eq!(
+            resource_monitoring_interval_seconds(&serde_json::json!({})),
+            1
+        );
+        assert_eq!(
+            resource_monitoring_interval_seconds(&serde_json::json!({
+                "resourceMonitoringIntervalSeconds": 30
+            })),
+            30
+        );
+        assert_eq!(
+            resource_monitoring_interval_seconds(&serde_json::json!({
+                "resourceMonitoringIntervalSeconds": 1
+            })),
+            1
+        );
     }
 
     #[test]

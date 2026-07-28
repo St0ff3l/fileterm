@@ -1030,10 +1030,22 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    const onContextMenu = (event: MouseEvent) => {
+    const openContextMenu = (event: MouseEvent) => {
       event.preventDefault()
+      event.stopPropagation()
       setHasSelection(terminal.hasSelection())
       setContextMenu({ x: event.clientX, y: event.clientY })
+    }
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) {
+        return
+      }
+      // Vim and other TUI programs enable xterm mouse reporting. Intercept
+      // the secondary-button press before it reaches xterm so that a local
+      // context menu remains available instead of sending a mouse sequence
+      // to the remote program.
+      openContextMenu(event)
     }
 
     const onDocumentSelectionChange = () => {
@@ -1095,7 +1107,8 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    hostRef.current.addEventListener('contextmenu', onContextMenu)
+    hostRef.current.addEventListener('mousedown', onMouseDown, true)
+    hostRef.current.addEventListener('contextmenu', openContextMenu, true)
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('selectionchange', onDocumentSelectionChange)
@@ -1149,7 +1162,8 @@ export const TerminalView = memo(function TerminalView({
       osc52Disposable.dispose()
       disposeCanvasTextMetrics()
       resizeObserver.disconnect()
-      hostRef.current?.removeEventListener('contextmenu', onContextMenu)
+      hostRef.current?.removeEventListener('mousedown', onMouseDown, true)
+      hostRef.current?.removeEventListener('contextmenu', openContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('selectionchange', onDocumentSelectionChange)

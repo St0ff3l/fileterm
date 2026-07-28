@@ -111,6 +111,9 @@ export interface ConnectionCapabilities {
 
 export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive'
 
+/** 资源监控采集间隔，单位为秒。 */
+export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
+
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
   username: string
@@ -128,6 +131,7 @@ export interface SshProfile extends NetworkProfile {
   deleteKey?: string
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
+  resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
   reconnectMode?: 'none' | 'enter' | 'auto'
   proxy?: ProxyConfig
   jumpProfileId?: string
@@ -708,6 +712,7 @@ export interface CreateProfileInput {
   deleteKey?: string
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
+  resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
   reconnectMode?: 'none' | 'enter' | 'auto'
   proxy?: ProxyConfig
   proxyPassword?: string
