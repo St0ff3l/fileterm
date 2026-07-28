@@ -6,22 +6,39 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <developer_name>St0ff3l</developer_name>
-  <bundle type="package">fileterm</bundle>
+  <developer id="com.fileterm.desktop">
+    <name>St0ff3l</name>
+  </developer>
+  <bundle type="package">file-term</bundle>
   <launchable type="desktop-id">FileTerm.desktop</launchable>
+  <icon type="stock">fileterm</icon>
   <provides>
     <binary>fileterm</binary>
   </provides>
   <categories>
     <category>Utility</category>
     <category>Network</category>
+    <category>Development</category>
   </categories>
   <description>
     <p>Connect to SSH, SFTP and FTP hosts from one multi-tab desktop workspace.</p>
   </description>
   <url type="homepage">https://github.com/St0ff3l/fileterm</url>
   <url type="bugtracker">https://github.com/St0ff3l/fileterm/issues</url>
-  <content_rating type="oars-1.1" />
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="money-purchases">none</content_attribute>
+    <content_attribute id="money-gambling">none</content_attribute>
+  </content_rating>
   <releases>
-    <release version="2.1.2" date="2026-07-28" />
+    <release version="2.1.2" date="2026-07-28">
+      <description>
+        <p>Official release with multi-tab remote terminal and file management workspace.</p>
+      </description>
+    </release>
   </releases>
 </component>
