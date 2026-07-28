@@ -115,6 +115,7 @@
 .sidebar-nav-link {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   width: 100%;
   min-height: 40px;
@@ -136,13 +137,16 @@
 }
 
 .sidebar-nav-link span.material-symbols-outlined {
+  display: block;
+  flex: 0 0 18px;
   font-size: 18px;
+  line-height: 1;
 }
 
 .sidebar-nav-link:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
-  padding-left: 18px; /* 平滑向右微滑动 */
+  padding-left: 14px;
 }
 
 .sidebar-nav-link:focus-visible {

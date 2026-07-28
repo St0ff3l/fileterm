@@ -617,6 +617,9 @@
 }
 
 .manager-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 38px;
   padding: 0 16px;
   border: 1px solid var(--border-light);
@@ -625,6 +628,7 @@
   border-radius: 10px;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -906,17 +910,17 @@
 }
 
 .settings-modal .connection-manager-sidebar-item:hover {
-  padding-left: 18px;
+  padding-left: 12px;
 }
 
 .settings-modal .connection-manager-sidebar-item.active {
   border-left: 2px solid var(--text-main);
   border-radius: 0 8px 8px 0;
-  padding-left: 12px;
+  padding-left: 10px;
 }
 
 .settings-modal .connection-manager-sidebar-item.active:hover {
-  padding-left: 16px;
+  padding-left: 10px;
 }
 
 .settings-modal .connection-manager-sidebar-icon .material-symbols-outlined {

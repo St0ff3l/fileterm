@@ -2339,7 +2339,7 @@
 .connection-manager-sidebar-item:hover {
   background: var(--bg-hover) !important;
   color: var(--text-main) !important;
-  padding-left: 16px;
+  padding-left: 12px;
 }
 
 .connection-manager-sidebar-item.active {
@@ -2362,7 +2362,14 @@
 .connection-manager-sidebar-icon {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  line-height: 1;
   color: inherit;
+}
+
+.connection-manager-sidebar-icon .material-symbols-outlined {
+  display: block;
+  line-height: 1;
 }
 
 .connection-manager-sidebar-label {
@@ -2828,6 +2835,7 @@
 .drawer-option-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   height: 26px;
   padding: 0 6px;
@@ -2842,6 +2850,10 @@
     border-color 0.2s ease,
     color 0.2s ease;
   white-space: nowrap;
+}
+.drawer-option-btn .app-icon {
+  display: block;
+  line-height: 1;
 }
 .drawer-option-btn .material-symbols-outlined {
   font-size: 13px;
