@@ -10,8 +10,10 @@ use std::{
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::image::Image;
+#[cfg(not(target_os = "linux"))]
+use tauri::menu::{PredefinedMenuItem, SubmenuBuilder};
 use tauri::{
-    menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    menu::{Menu, MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::Color,
     AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
@@ -532,7 +534,7 @@ pub(crate) fn install_localized_application_menu(
     #[cfg(target_os = "linux")]
     {
         let _ = (app, is_english);
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -559,6 +561,7 @@ fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str)
 
 /// Keep Cmd+T on macOS, while avoiding Ctrl+T collisions with terminals and
 /// WebViews on Windows/Linux.
+#[cfg(any(not(target_os = "linux"), test))]
 fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
     if platform == "macos" {
         "Cmd+T"
@@ -571,6 +574,7 @@ fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
 /// exists. Windows matches Windows Terminal / pwsh defaults exactly:
 /// `Alt+Shift++` (vertical) and `Alt+Shift+-` (horizontal). Linux has no
 /// universal convention, so it keeps FileTerm's own `Ctrl+Shift+*` family.
+#[cfg(any(not(target_os = "linux"), test))]
 fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
     match platform {
         "macos" => ("Cmd+D", "Cmd+Shift+D"),
