@@ -16,6 +16,14 @@
   "bundle": {
     "targets": ["deb", "appimage"],
     "category": "Utility",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/256x256.png"]
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/256x256.png"],
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/applications/FileTerm.desktop": "linux/FileTerm.desktop",
+          "/usr/share/metainfo/com.fileterm.desktop.metainfo.xml": "linux/com.fileterm.desktop.metainfo.xml"
+        }
+      }
+    }
   }
 }
