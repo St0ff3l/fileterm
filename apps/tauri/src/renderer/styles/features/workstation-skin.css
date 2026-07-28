@@ -79,6 +79,41 @@ body,
   padding-bottom: 0;
 }
 
+/* A few compact workspace labels are plain text inside grid/flex containers.
+   The bundled Linux CJK face has a taller ascent, so its baseline appears
+   slightly high even when the parent is centered. Nudge only the glyphs down
+   without moving their borders or surrounding layout. */
+:root[data-platform='linux'] .file-current-path {
+  line-height: 1.3;
+  position: relative;
+  top: 1px;
+}
+
+:root[data-platform='linux'] .command-empty-state > span {
+  display: block;
+  line-height: 1.3;
+  position: relative;
+  top: 1px;
+}
+
+:root[data-platform='linux'] .command-pane-head > strong {
+  line-height: 1.3;
+  position: relative;
+  top: 1px;
+}
+
+:root[data-platform='linux'] .ssh-tunnel-panel-header .ssh-tunnel-kicker,
+:root[data-platform='linux'] .ssh-tunnel-panel-header h2,
+:root[data-platform='linux'] .ssh-tunnel-panel-header p,
+:root[data-platform='linux'] .ssh-tunnel-purpose strong,
+:root[data-platform='linux'] .ssh-tunnel-purpose span,
+:root[data-platform='linux'] .ssh-tunnel-empty strong,
+:root[data-platform='linux'] .ssh-tunnel-empty span {
+  line-height: 1.3;
+  position: relative;
+  top: 1px;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

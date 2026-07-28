@@ -618,7 +618,11 @@ export function CommandCenter({
                         ))}
                       </tbody>
                     </table>
-                    {!visibleTemplates.length ? <div className="command-empty-state">{t.commandEmpty}</div> : null}
+                    {!visibleTemplates.length ? (
+                      <div className="command-empty-state">
+                        <span>{t.commandEmpty}</span>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -851,7 +855,9 @@ export function CommandCenter({
                   ) : null}
                 </>
               ) : (
-                <div className="command-empty-state">{t.commandEmpty}</div>
+                <div className="command-empty-state">
+                  <span>{t.commandEmpty}</span>
+                </div>
               )}
             </div>
           </section>
