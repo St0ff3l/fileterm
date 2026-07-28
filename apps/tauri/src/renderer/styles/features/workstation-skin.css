@@ -11,7 +11,7 @@ body,
 :root[data-platform='linux'] {
   --font-ui: 'Noto Sans SC', 'Inter', 'Noto Sans CJK SC', 'Noto Sans', 'DejaVu Sans', sans-serif;
   --font-mono: 'JetBrains Mono', 'Noto Sans SC', monospace;
-  --button-line-height: 1;
+  --button-line-height: 1.2;
   line-height: 1.2;
 }
 
