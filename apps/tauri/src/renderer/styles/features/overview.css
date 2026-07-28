@@ -46,9 +46,10 @@
 .hero-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 12px 24px;
+  height: 44px;
+  padding: 0 24px;
   border-radius: 0;
   font-family: var(--font-ui);
   font-size: var(--button-font-size-prominent);

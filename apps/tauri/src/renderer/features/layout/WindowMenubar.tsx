@@ -110,13 +110,31 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
       }}
     >
       <div className="window-menu-items">
-        <button type="button" onClick={(event) => openMenuAt('file', event.currentTarget)}>
+        <button
+          aria-expanded={openMenu?.kind === 'file'}
+          aria-haspopup="menu"
+          className={openMenu?.kind === 'file' ? 'is-open' : undefined}
+          type="button"
+          onClick={(event) => openMenuAt('file', event.currentTarget)}
+        >
           {t.nativeMenuFile}
         </button>
-        <button type="button" onClick={(event) => openMenuAt('view', event.currentTarget)}>
+        <button
+          aria-expanded={openMenu?.kind === 'view'}
+          aria-haspopup="menu"
+          className={openMenu?.kind === 'view' ? 'is-open' : undefined}
+          type="button"
+          onClick={(event) => openMenuAt('view', event.currentTarget)}
+        >
           {t.nativeMenuView}
         </button>
-        <button type="button" onClick={(event) => openMenuAt('window', event.currentTarget)}>
+        <button
+          aria-expanded={openMenu?.kind === 'window'}
+          aria-haspopup="menu"
+          className={openMenu?.kind === 'window' ? 'is-open' : undefined}
+          type="button"
+          onClick={(event) => openMenuAt('window', event.currentTarget)}
+        >
           {t.nativeMenuWindow}
         </button>
       </div>

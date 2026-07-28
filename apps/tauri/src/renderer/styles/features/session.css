@@ -1945,7 +1945,7 @@
   border-radius: 7px;
   text-align: left;
   font-size: 12px;
-  line-height: 26px;
+  line-height: 1.25;
 }
 
 .tools-menu button {
@@ -2044,7 +2044,7 @@
   min-height: 26px;
   padding: 0 8px;
   border-radius: 7px;
-  line-height: 26px;
+  line-height: 1.25;
   text-align: left;
 }
 
@@ -2063,7 +2063,11 @@
 }
 
 .dropdown-select-label {
+  display: flex;
+  align-items: center;
   flex: 1;
+  min-height: 16px;
+  line-height: 1.25;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
