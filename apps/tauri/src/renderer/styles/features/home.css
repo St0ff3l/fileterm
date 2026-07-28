@@ -16,13 +16,7 @@
   height: 100%;
   background-color: var(--bg-main) !important;
   color: var(--text-main);
-  font-family:
-    'PingFang SC',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Helvetica Neue',
-    'Microsoft YaHei',
-    sans-serif;
+  font-family: var(--font-ui);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -132,7 +126,7 @@
     background-color 0.2s ease,
     color 0.2s ease,
     padding-left 0.2s ease;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-ui);
   box-sizing: border-box;
 }
 

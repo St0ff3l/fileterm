@@ -1,7 +1,17 @@
 html,
 body,
 #root {
-  font-family: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
+}
+
+/* Linux does not ship the Apple/Windows UI fonts used by the other desktop
+   targets. Use the bundled Latin face plus common CJK fallbacks and give
+   compact controls a little leading so their glyphs sit on the same optical
+   baseline as the Windows layout. */
+:root[data-platform='linux'] {
+  --font-ui: 'Inter', 'Noto Sans CJK SC', 'Noto Sans', 'DejaVu Sans', sans-serif;
+  --button-line-height: 1.2;
+  line-height: 1.2;
 }
 
 button:focus-visible,

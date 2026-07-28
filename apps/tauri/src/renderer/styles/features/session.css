@@ -1905,7 +1905,7 @@
   padding: 5px;
   border-radius: 10px;
   backdrop-filter: blur(18px);
-  font-family: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
 }
 
@@ -2157,13 +2157,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden !important;
   background-color: var(--bg-main) !important;
-  font-family:
-    'PingFang SC',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Helvetica Neue',
-    'Microsoft YaHei',
-    sans-serif;
+  font-family: var(--font-ui);
 }
 
 /* Thinned stroke for SVG icons in connection manager */
