@@ -5,7 +5,7 @@
   <summary>Remote terminal and file management workspace</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <developer_name>FileTerm Team</developer_name>
+  <developer_name>St0ff3l</developer_name>
   <bundle type="package">fileterm</bundle>
   <launchable type="desktop-id">FileTerm.desktop</launchable>
   <provides>
