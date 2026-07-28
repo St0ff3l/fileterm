@@ -67,10 +67,8 @@ body,
 }
 
 /* File path bar input, labels, and top subheader path on Linux.
-   Match button's inline-flex vertical centering and line-height. */
+   Apply Linux font stack and compact button line height without altering display mode. */
 :root[data-platform='linux'] .pane-path-bar input {
-  display: inline-flex;
-  align-items: center;
   font-family: var(--font-mono);
   line-height: var(--button-line-height, 1.2);
 }
@@ -78,14 +76,10 @@ body,
 :root[data-platform='linux'] .pane-path-bar strong,
 :root[data-platform='linux'] .pane-path-bar span,
 :root[data-platform='linux'] .pane-path-bar-action {
-  display: inline-flex;
-  align-items: center;
   line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .file-current-path {
-  display: inline-flex;
-  align-items: center;
   font-family: var(--font-ui) !important;
   line-height: var(--button-line-height, 1.2);
 }
@@ -93,16 +87,11 @@ body,
 /* Command Center empty state, title headers, tab buttons, and table headers on Linux */
 :root[data-platform='linux'] .command-empty-state,
 :root[data-platform='linux'] .command-empty-state > span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   line-height: var(--button-line-height, 1.2);
 }
 
 :root[data-platform='linux'] .command-pane-head > strong,
 :root[data-platform='linux'] .command-runner-head > strong {
-  display: inline-flex;
-  align-items: center;
   line-height: var(--button-line-height, 1.2);
 }
 
@@ -124,8 +113,6 @@ body,
 :root[data-platform='linux'] .ssh-tunnel-purpose span,
 :root[data-platform='linux'] .ssh-tunnel-empty strong,
 :root[data-platform='linux'] .ssh-tunnel-empty span {
-  display: inline-flex;
-  align-items: center;
   line-height: var(--button-line-height, 1.2);
 }
 
