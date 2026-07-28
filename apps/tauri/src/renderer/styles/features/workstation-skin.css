@@ -67,86 +67,53 @@ body,
 }
 
 /* File path bar input, labels, and top subheader path on Linux.
-   Use explicit UI/mono font variables and optical transform nudges
-   to offset Linux CJK font ascent without pushing text too low. */
+   Ensure explicit UI/mono font variables for Linux CJK font stacks. */
 :root[data-platform='linux'] .pane-path-bar input {
   font-family: var(--font-mono);
   line-height: 1.3;
-  padding-top: 1px;
-  padding-bottom: 0;
 }
 
 :root[data-platform='linux'] .pane-path-bar strong,
 :root[data-platform='linux'] .pane-path-bar span,
 :root[data-platform='linux'] .pane-path-bar-action {
-  display: inline-block;
   line-height: 1.3;
-  transform: translateY(0.5px);
 }
 
 :root[data-platform='linux'] .file-current-path {
   font-family: var(--font-ui) !important;
   line-height: 1.3;
-  transform: translateY(0.5px);
 }
 
 /* Command Center empty state, title headers, tab buttons, and table headers on Linux */
 :root[data-platform='linux'] .command-empty-state,
 :root[data-platform='linux'] .command-empty-state > span {
   line-height: 1.4;
-  transform: translateY(0.5px);
 }
 
 :root[data-platform='linux'] .command-pane-head > strong,
 :root[data-platform='linux'] .command-runner-head > strong {
-  display: inline-block;
   line-height: 1.3;
-  transform: translateY(0.5px);
 }
 
 :root[data-platform='linux'] .command-filter-group button,
 :root[data-platform='linux'] .command-tab-item,
 :root[data-platform='linux'] .command-folder-tabs button {
-  transform: translateY(0.5px);
+  line-height: 1.3;
 }
 
 :root[data-platform='linux'] .command-table th {
-  transform: translateY(0.5px);
+  line-height: 1.3;
 }
 
 /* SSH Tunnel panel headers, purpose box, and empty state labels on Linux */
-:root[data-platform='linux'] .ssh-tunnel-panel-header .ssh-tunnel-kicker {
-  display: inline-block;
-  line-height: 1.3;
-  transform: translateY(0.5px);
-}
-
-:root[data-platform='linux'] .ssh-tunnel-panel-header h2 {
-  line-height: 1.3;
-  transform: translateY(0.5px);
-}
-
-:root[data-platform='linux'] .ssh-tunnel-panel-header p {
-  line-height: 1.3;
-  transform: translateY(0.5px);
-}
-
-:root[data-platform='linux'] .ssh-tunnel-purpose p {
-  padding-top: 0;
-}
-
+:root[data-platform='linux'] .ssh-tunnel-panel-header .ssh-tunnel-kicker,
+:root[data-platform='linux'] .ssh-tunnel-panel-header h2,
+:root[data-platform='linux'] .ssh-tunnel-panel-header p,
 :root[data-platform='linux'] .ssh-tunnel-purpose strong,
-:root[data-platform='linux'] .ssh-tunnel-purpose span {
-  display: inline-block;
-  line-height: 1.3;
-  transform: translateY(0.5px);
-}
-
+:root[data-platform='linux'] .ssh-tunnel-purpose span,
 :root[data-platform='linux'] .ssh-tunnel-empty strong,
 :root[data-platform='linux'] .ssh-tunnel-empty span {
-  display: inline-block;
   line-height: 1.3;
-  transform: translateY(0.5px);
 }
 
 button:focus-visible,
