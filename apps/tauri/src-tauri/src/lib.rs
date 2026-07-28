@@ -10,8 +10,10 @@ use std::{
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::image::Image;
+#[cfg(not(target_os = "linux"))]
+use tauri::menu::{PredefinedMenuItem, SubmenuBuilder};
 use tauri::{
-    menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder},
+    menu::{Menu, MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::Color,
     AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
@@ -291,6 +293,7 @@ pub(crate) fn install_localized_tray_menu(
         .map_err(|error| AppError::Window(error.to_string()))
 }
 
+#[cfg(not(target_os = "linux"))]
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
     let (quit_accelerator, close_accelerator) = application_menu_accelerators(platform);
@@ -524,10 +527,23 @@ pub(crate) fn install_localized_application_menu(
     app: &AppHandle<Wry>,
     is_english: bool,
 ) -> Result<(), AppError> {
-    let menu = build_application_menu(app, is_english)?;
-    app.set_menu(menu)
-        .map_err(|error| AppError::Window(error.to_string()))?;
-    Ok(())
+    // Linux uses the renderer-owned menu bar to match the Windows shell and
+    // keep it in sync with FileTerm themes. An app-wide GTK menu is attached
+    // to every standalone window, which creates an unwanted second menu row
+    // in connection, command and file-editor windows.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (app, is_english);
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let menu = build_application_menu(app, is_english)?;
+        app.set_menu(menu)
+            .map_err(|error| AppError::Window(error.to_string()))?;
+        Ok(())
+    }
 }
 
 /// Match platform-native window shortcuts. macOS owns Cmd+Q/W.
@@ -545,6 +561,7 @@ fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str)
 
 /// Keep Cmd+T on macOS, while avoiding Ctrl+T collisions with terminals and
 /// WebViews on Windows/Linux.
+#[cfg(any(not(target_os = "linux"), test))]
 fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
     if platform == "macos" {
         "Cmd+T"
@@ -557,6 +574,7 @@ fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
 /// exists. Windows matches Windows Terminal / pwsh defaults exactly:
 /// `Alt+Shift++` (vertical) and `Alt+Shift+-` (horizontal). Linux has no
 /// universal convention, so it keeps FileTerm's own `Ctrl+Shift+*` family.
+#[cfg(any(not(target_os = "linux"), test))]
 fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
     match platform {
         "macos" => ("Cmd+D", "Cmd+Shift+D"),
@@ -1223,11 +1241,16 @@ pub fn run() {
             // macOS: keep decorations + Overlay titleBarStyle so the traffic
             //        lights float over renderer content. AppKit control size
             //        and frames are calibrated after the first page load.
-            // Windows: drop the OS frame so the renderer owns the title bar.
-            // Linux: keep native decorations.
-            #[cfg(target_os = "windows")]
+            // Windows/Linux: drop the OS frame so the renderer owns the
+            // compact menu/title row. This also avoids a GTK titlebar above
+            // the themed renderer menu on Linux.
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
                 let _ = main_window.set_decorations(false);
+            }
+
+            #[cfg(target_os = "windows")]
+            {
                 prefer_windows_native_rounded_corners(&main_window);
                 main_window
                     .set_icon(windows_icon_image().map_err(|error| error.to_string())?)

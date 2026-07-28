@@ -1,7 +1,119 @@
 html,
 body,
 #root {
-  font-family: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
+}
+
+/* Linux does not ship the Apple/Windows UI fonts used by the other desktop
+   targets. Use the bundled Latin face plus common CJK fallbacks and give
+   compact controls a little leading so their glyphs sit on the same optical
+   baseline as the Windows layout. */
+:root[data-platform='linux'] {
+  --font-ui: 'Noto Sans SC', 'Inter', 'Noto Sans CJK SC', 'Noto Sans', 'DejaVu Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Noto Sans SC', monospace;
+  --button-line-height: 1.2;
+  line-height: 1.2;
+}
+
+/* Keep the renderer-owned version label on the same optical baseline as the
+   Outfit wordmark when Linux uses the bundled CJK face. */
+:root[data-platform='linux'] .titlebar-home-brand span {
+  font-family: var(--font-mono);
+  line-height: 1.1;
+}
+
+/* Linux system metrics mix CJK labels, numbers and process paths. Give every
+   row a deliberate line box so fallback font ascent cannot pull text upward. */
+:root[data-platform='linux'] .system-sidebar-layout {
+  line-height: 1.3;
+}
+
+:root[data-platform='linux'] .system-sidebar-layout .address-row,
+:root[data-platform='linux'] .system-sidebar-layout .metric-line,
+:root[data-platform='linux'] .system-sidebar-layout .meter-header,
+:root[data-platform='linux'] .system-sidebar-layout .metric-chip-summary,
+:root[data-platform='linux'] .system-sidebar-layout .network-panel,
+:root[data-platform='linux'] .system-sidebar-layout .network-rate,
+:root[data-platform='linux'] .system-sidebar-layout .mini-tabs span,
+:root[data-platform='linux'] .system-sidebar-layout .disk-head span,
+:root[data-platform='linux'] .system-sidebar-layout .disk-row span {
+  line-height: 1.3;
+}
+
+:root[data-platform='linux'] .system-sidebar-layout .address-row strong,
+:root[data-platform='linux'] .system-sidebar-layout .process-row,
+:root[data-platform='linux'] .system-sidebar-layout .network-panel,
+:root[data-platform='linux'] .system-sidebar-layout .disk-head,
+:root[data-platform='linux'] .system-sidebar-layout .disk-row {
+  font-family: var(--font-mono);
+}
+
+:root[data-platform='linux'] .system-sidebar-layout .process-row span {
+  display: flex;
+  align-items: center;
+  line-height: 1.3;
+}
+
+/* Noto Sans SC has a taller ascent than the platform UI fonts. Keep the
+   prominent overview labels optically centered instead of relying on the
+   font's default baseline. */
+:root[data-platform='linux'] .overview-page .hero-btn {
+  line-height: 1;
+  padding-bottom: 2px;
+}
+
+:root[data-platform='linux'] .overview-page .hero-btn > span:last-child {
+  transform: translateY(-1px);
+}
+
+/* File path bar input, labels, and top subheader path on Linux.
+   Apply Linux font stack and compact button line height without altering display mode. */
+:root[data-platform='linux'] .pane-path-bar input {
+  font-family: var(--font-mono);
+  line-height: var(--button-line-height, 1.2);
+}
+
+:root[data-platform='linux'] .pane-path-bar strong,
+:root[data-platform='linux'] .pane-path-bar span,
+:root[data-platform='linux'] .pane-path-bar-action {
+  line-height: var(--button-line-height, 1.2);
+}
+
+:root[data-platform='linux'] .file-current-path {
+  font-family: var(--font-ui) !important;
+  line-height: var(--button-line-height, 1.2);
+}
+
+/* Command Center empty state, title headers, tab buttons, and table headers on Linux */
+:root[data-platform='linux'] .command-empty-state,
+:root[data-platform='linux'] .command-empty-state > span {
+  line-height: var(--button-line-height, 1.2);
+}
+
+:root[data-platform='linux'] .command-pane-head > strong,
+:root[data-platform='linux'] .command-runner-head > strong {
+  line-height: var(--button-line-height, 1.2);
+}
+
+:root[data-platform='linux'] .command-filter-group button,
+:root[data-platform='linux'] .command-tab-item,
+:root[data-platform='linux'] .command-folder-tabs button {
+  line-height: var(--button-line-height, 1.2);
+}
+
+:root[data-platform='linux'] .command-table th {
+  line-height: var(--button-line-height, 1.2);
+}
+
+/* SSH Tunnel panel headers, purpose box, and empty state labels on Linux */
+:root[data-platform='linux'] .ssh-tunnel-panel-header .ssh-tunnel-kicker,
+:root[data-platform='linux'] .ssh-tunnel-panel-header h2,
+:root[data-platform='linux'] .ssh-tunnel-panel-header p,
+:root[data-platform='linux'] .ssh-tunnel-purpose strong,
+:root[data-platform='linux'] .ssh-tunnel-purpose span,
+:root[data-platform='linux'] .ssh-tunnel-empty strong,
+:root[data-platform='linux'] .ssh-tunnel-empty span {
+  line-height: var(--button-line-height, 1.2);
 }
 
 button:focus-visible,
@@ -245,7 +357,9 @@ textarea:focus-visible,
 }
 
 .system-title {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 28px;
   margin: 0 0 10px;
@@ -253,6 +367,7 @@ textarea:focus-visible,
   border-radius: 5px;
   font-size: 11px;
   font-weight: 500;
+  line-height: 1;
   text-align: center;
   transition: background 0.2s;
 }

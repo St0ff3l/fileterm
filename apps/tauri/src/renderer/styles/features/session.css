@@ -1905,7 +1905,7 @@
   padding: 5px;
   border-radius: 10px;
   backdrop-filter: blur(18px);
-  font-family: 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
 }
 
@@ -1945,7 +1945,13 @@
   border-radius: 7px;
   text-align: left;
   font-size: 12px;
-  line-height: 26px;
+  line-height: normal;
+}
+
+.context-menu button > span {
+  display: block;
+  min-width: 0;
+  line-height: 1.25;
 }
 
 .tools-menu button {
@@ -1954,7 +1960,7 @@
   border-radius: 5px;
   font-size: 12px;
   font-weight: 500;
-  line-height: 28px;
+  line-height: normal;
 }
 
 .tools-menu button > span:first-child {
@@ -2044,7 +2050,7 @@
   min-height: 26px;
   padding: 0 8px;
   border-radius: 7px;
-  line-height: 26px;
+  line-height: 1.25;
   text-align: left;
 }
 
@@ -2063,7 +2069,11 @@
 }
 
 .dropdown-select-label {
+  display: flex;
+  align-items: center;
   flex: 1;
+  min-height: 16px;
+  line-height: 1.25;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2147,13 +2157,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden !important;
   background-color: var(--bg-main) !important;
-  font-family:
-    'PingFang SC',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Helvetica Neue',
-    'Microsoft YaHei',
-    sans-serif;
+  font-family: var(--font-ui);
 }
 
 /* Thinned stroke for SVG icons in connection manager */
@@ -2335,7 +2339,7 @@
 .connection-manager-sidebar-item:hover {
   background: var(--bg-hover) !important;
   color: var(--text-main) !important;
-  padding-left: 16px;
+  padding-left: 12px;
 }
 
 .connection-manager-sidebar-item.active {
@@ -2358,7 +2362,14 @@
 .connection-manager-sidebar-icon {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  line-height: 1;
   color: inherit;
+}
+
+.connection-manager-sidebar-icon .material-symbols-outlined {
+  display: block;
+  line-height: 1;
 }
 
 .connection-manager-sidebar-label {
@@ -2824,6 +2835,7 @@
 .drawer-option-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   height: 26px;
   padding: 0 6px;
@@ -2838,6 +2850,10 @@
     border-color 0.2s ease,
     color 0.2s ease;
   white-space: nowrap;
+}
+.drawer-option-btn .app-icon {
+  display: block;
+  line-height: 1;
 }
 .drawer-option-btn .material-symbols-outlined {
   font-size: 13px;

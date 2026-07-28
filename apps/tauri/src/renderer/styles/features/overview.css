@@ -46,9 +46,10 @@
 .hero-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 12px 24px;
+  height: 44px;
+  padding: 0 24px;
   border-radius: 0;
   font-family: var(--font-ui);
   font-size: var(--button-font-size-prominent);
@@ -58,7 +59,8 @@
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
-    box-shadow 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
     transform 0.2s ease;
   border: 1px solid transparent;
 }
@@ -76,9 +78,6 @@
 
 .hero-btn-primary {
   background: var(--text-main);
-  /* 字色用 --bg-main 与 --text-main 互为反色，保证两个主题下都可见。
-     之前固定 #ffffff 在 dark 主题下会与浅色 --text-main 背景重合，
-     导致白底白字。 */
   color: var(--bg-main) !important;
   border-color: var(--text-main);
 }
@@ -87,12 +86,26 @@
   color: inherit;
 }
 
+.hero-btn .material-symbols-outlined,
+.stat-icon .material-symbols-outlined,
+.recent-icon .material-symbols-outlined,
+.action-icon .material-symbols-outlined {
+  display: block;
+  line-height: 1;
+}
+
 .hero-btn-primary:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-main);
-  border-color: var(--border-light);
-  box-shadow: none;
-  transform: none;
+  opacity: 0.88;
+  background: var(--text-main);
+  color: var(--bg-main) !important;
+  border-color: var(--text-main);
+  transform: translateY(-2px);
+}
+
+.hero-btn-primary:active:not(:disabled) {
+  background: var(--bg-active);
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .hero-btn-secondary {
@@ -102,9 +115,16 @@
 }
 
 .hero-btn-secondary:hover:not(:disabled) {
-  background: transparent;
+  background: var(--bg-hover);
+  color: var(--text-main);
   border-color: var(--text-muted);
-  transform: none;
+  transform: translateY(-2px);
+}
+
+.hero-btn-secondary:active:not(:disabled) {
+  background: var(--bg-hover);
+  opacity: 0.8;
+  transform: translateY(0);
 }
 
 /* Stats */

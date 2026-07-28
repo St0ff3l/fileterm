@@ -59,7 +59,11 @@ table {
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-ui);
+  line-height: var(--button-line-height);
   letter-spacing: 0;
   cursor: pointer;
   transition: all 0.2s ease;

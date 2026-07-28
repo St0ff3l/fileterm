@@ -78,6 +78,15 @@ function updateTauriConfigVersion(raw) {
   return raw.replace(/("version"\s*:\s*")[^"]+("\s*,)/, `$1${nextVersion}$2`)
 }
 
+function updateLinuxMetainfoVersion(raw) {
+  const today = new Date().toISOString().slice(0, 10)
+  const releasePattern = /<release\s+version="[^"]*"\s+date="[^"]*">/
+  if (!releasePattern.test(raw)) {
+    return raw.replace(/<release\s+version="[^"]*"/, `<release version="${nextVersion}"`)
+  }
+  return raw.replace(releasePattern, `<release version="${nextVersion}" date="${today}">`)
+}
+
 await Promise.all(
   packageJsonPaths.map((relativePath) =>
     updateJsonFile(relativePath, (pkg) => {
@@ -124,5 +133,6 @@ await updateJsonFile('package-lock.json', (lockfile) => {
 await updateTextFile('apps/tauri/src-tauri/tauri.conf.json', updateTauriConfigVersion)
 await updateTextFile('apps/tauri/src-tauri/Cargo.toml', updateCargoPackageVersion)
 await updateTextFile('apps/tauri/src-tauri/Cargo.lock', updateCargoLockVersion)
+await updateTextFile('apps/tauri/src-tauri/linux/com.fileterm.desktop.metainfo.xml', updateLinuxMetainfoVersion)
 
 console.log(`Synced workspace and Tauri bundle versions from root: ${nextVersion}`)

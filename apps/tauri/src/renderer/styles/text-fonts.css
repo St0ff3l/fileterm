@@ -429,3 +429,16 @@
   font-display: swap;
   src: url('../assets/fonts/text/inter/Inter-italic-900.ttf') format('truetype');
 }
+
+/*
+ * Noto Sans SC is bundled for Linux so CJK glyphs do not fall back to an
+ * arbitrary distribution font with different ascent/descent metrics. The
+ * variable face keeps the existing 100–900 UI weight range available.
+ */
+@font-face {
+  font-family: 'Noto Sans SC';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../assets/fonts/text/noto-sans-sc/NotoSansSC-Variable.ttf') format('truetype');
+}

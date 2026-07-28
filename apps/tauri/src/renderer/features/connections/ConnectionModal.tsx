@@ -40,7 +40,9 @@ export function ConnectionModal({
   profiles?: import('@fileterm/core').ConnectionProfile[]
 }) {
   const [section, setSection] = useState<'ssh' | 'terminal' | 'proxy' | 'tunnel'>('ssh')
+  const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet'
+  const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
 
   const content = (
     <div className={`modal-card ssh-modal ${standalone ? 'standalone' : ''}`}>
@@ -108,6 +110,7 @@ export function ConnectionModal({
                                 ? defaults[nextType]
                                 : prev.port,
                             authType: nextType === 'ssh' ? (prev.authType ?? 'system') : 'password',
+                            useEmptyPassword: nextType === 'ssh' ? prev.useEmptyPassword : false,
                             remotePath: nextType === 'ssh' || nextType === 'ftp' ? prev.remotePath || '/' : ''
                           }))
                         }}
@@ -292,9 +295,18 @@ export function ConnectionModal({
                       <label className="span-2">
                         {t.password}:
                         <input
+                          disabled={
+                            form.type === 'ssh' && form.authType === 'password' && Boolean(form.useEmptyPassword)
+                          }
                           type="password"
                           value={form.password ?? ''}
-                          onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              password: event.target.value,
+                              useEmptyPassword: event.target.value ? false : prev.useEmptyPassword
+                            }))
+                          }
                         />
                       </label>
                     ) : null}
@@ -303,7 +315,11 @@ export function ConnectionModal({
                     ) : null}
                     {form.type === 'ssh' && form.authType === 'password' ? (
                       <div className="span-2 ssh-auth-hint">
-                        {mode === 'edit' && hasSavedPassword ? t.passwordSavedHint : t.passwordAuthHint}
+                        {form.useEmptyPassword
+                          ? t.emptyPasswordAuthEnabledHint
+                          : mode === 'edit' && hasSavedPassword
+                            ? t.passwordSavedHint
+                            : t.passwordAuthHint}
                       </div>
                     ) : form.type === 'ssh' && form.authType === 'keyboard-interactive' ? (
                       <div className="span-2 ssh-auth-hint">{t.keyboardInteractiveHint}</div>
@@ -364,6 +380,25 @@ export function ConnectionModal({
                   <fieldset className="ssh-fieldset">
                     <legend>{t.advanced}</legend>
                     <div className="advanced-toggle-list">
+                      {form.authType === 'password' ? (
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={Boolean(form.useEmptyPassword)}
+                              type="checkbox"
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  password: event.target.checked ? '' : prev.password,
+                                  useEmptyPassword: event.target.checked
+                                }))
+                              }
+                            />
+                            <span className="advanced-toggle-name">{t.useEmptyPassword}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.useEmptyPasswordHint}</p>
+                        </div>
+                      ) : null}
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
                           <input
@@ -389,6 +424,27 @@ export function ConnectionModal({
                           <span className="advanced-toggle-name">{t.resourceMonitoring}</span>
                         </label>
                         <p className="advanced-toggle-hint">{t.resourceMonitoringDescription}</p>
+                        <label className="resource-monitoring-interval">
+                          <span>{t.resourceMonitoringInterval}</span>
+                          <DropdownSelect
+                            className="resource-monitoring-interval__select"
+                            disabled={form.enableResourceMonitoring === false}
+                            options={[
+                              { value: '1', label: t.resourceMonitoringEverySecond },
+                              { value: '5', label: t.resourceMonitoringEvery5Seconds },
+                              { value: '15', label: t.resourceMonitoringEvery15Seconds },
+                              { value: '30', label: t.resourceMonitoringEvery30Seconds },
+                              { value: '60', label: t.resourceMonitoringEvery60Seconds }
+                            ]}
+                            value={String(form.resourceMonitoringIntervalSeconds ?? 1)}
+                            onChange={(value) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                resourceMonitoringIntervalSeconds: Number(value) as 1 | 5 | 15 | 30 | 60
+                              }))
+                            }
+                          />
+                        </label>
                       </div>
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
@@ -442,26 +498,68 @@ export function ConnectionModal({
                         </div>
                       </div>
                     </div>
-                    <label className="jump-host-card">
-                      <span className="jump-host-card__title">
-                        <span className="material-symbols-outlined">account_tree</span>
-                        {t.proxyJump}
-                      </span>
-                      <span className="jump-host-card__hint">{t.proxyJumpHint}</span>
-                      <DropdownSelect
-                        value={form.jumpProfileId ?? ''}
-                        options={[
-                          { value: '', label: t.noProxyJump },
-                          ...profiles
-                            .filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
-                            .map((profile) => ({
-                              value: profile.id,
-                              label: `${profile.name} (${profile.host})`
-                            }))
-                        ]}
-                        onChange={(value) => setForm((prev) => ({ ...prev, jumpProfileId: value || undefined }))}
-                      />
-                    </label>
+                    <div className="reconnect-mode-group network-routing-group">
+                      <div className="reconnect-mode-group__label network-routing-group__label">
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          account_tree
+                        </span>
+                        {t.networkRouting}
+                      </div>
+                      <div className="advanced-toggle-list network-routing-list">
+                        <div className="advanced-toggle-row network-routing-row">
+                          <span className="network-routing-row__name">{t.route}</span>
+                          <div className="network-routing-modes" role="radiogroup" aria-label={t.route}>
+                            <button
+                              aria-checked={routingMode === 'direct'}
+                              className={routingMode === 'direct' ? 'is-active' : undefined}
+                              onClick={() => {
+                                setRoutingMode('direct')
+                                setForm((prev) => ({ ...prev, jumpProfileId: undefined }))
+                              }}
+                              role="radio"
+                              type="button"
+                            >
+                              {t.direct}
+                            </button>
+                            <button
+                              aria-checked={routingMode === 'jump'}
+                              className={routingMode === 'jump' ? 'is-active' : undefined}
+                              onClick={() => setRoutingMode('jump')}
+                              role="radio"
+                              type="button"
+                            >
+                              {t.viaJumpHost}
+                            </button>
+                          </div>
+                        </div>
+                        {routingMode === 'jump' && jumpHosts.length ? (
+                          <>
+                            <label className="advanced-toggle-row network-routing-row">
+                              <span className="network-routing-row__name">{t.jumpHost}</span>
+                              <DropdownSelect
+                                className="network-routing-select"
+                                placeholder={t.selectJumpHost}
+                                value={form.jumpProfileId ?? ''}
+                                options={[
+                                  { value: '', label: t.selectJumpHost, disabled: true },
+                                  ...jumpHosts.map((profile) => ({
+                                    value: profile.id,
+                                    label: `${profile.name} (${profile.host})`
+                                  }))
+                                ]}
+                                onChange={(value) =>
+                                  setForm((prev) => ({ ...prev, jumpProfileId: value || undefined }))
+                                }
+                              />
+                            </label>
+                            <p className="network-routing-hint">{t.jumpHostHint}</p>
+                          </>
+                        ) : null}
+                        {routingMode === 'jump' && !jumpHosts.length ? (
+                          <p className="network-routing-empty">{t.noAvailableJumpHost}</p>
+                        ) : null}
+                      </div>
+                    </div>
                   </fieldset>
                 ) : null}
               </div>

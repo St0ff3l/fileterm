@@ -1,7 +1,38 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "FileTerm",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1150,
+        "minHeight": 790,
+        "dragDropEnabled": true,
+        "decorations": false
+      }
+    ]
+  },
   "bundle": {
     "targets": ["deb", "appimage"],
-    "category": "Utility"
+    "category": "Utility",
+    "shortDescription": "Remote terminal and file management workspace",
+    "longDescription": "Connect to SSH, SFTP and FTP hosts from one multi-tab desktop workspace.",
+    "copyright": "Copyright © 2026 St0ff3l",
+    "license": "MIT",
+    "publisher": "St0ff3l",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/256x256.png"],
+    "linux": {
+      "deb": {
+        "section": "utils",
+        "priority": "optional",
+        "files": {
+          "/usr/share/applications/FileTerm.desktop": "linux/FileTerm.desktop",
+          "/usr/share/metainfo/com.fileterm.desktop.metainfo.xml": "linux/com.fileterm.desktop.metainfo.xml",
+          "/usr/share/pixmaps/com.fileterm.desktop.png": "icons/128x128.png",
+          "/usr/share/pixmaps/fileterm.png": "icons/128x128.png"
+        }
+      }
+    }
   }
 }

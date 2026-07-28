@@ -1,0 +1,72 @@
+name: Linux package test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'beta/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-package-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-deb:
+    name: Package Debian installer
+    # 22.04 keeps the generated binary compatible with Debian 12 and common
+    # Ubuntu LTS installations while providing Tauri's WebKitGTK 4.1 runtime.
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared packages and typecheck Tauri
+        run: |
+          npm run build:packages
+          npm run typecheck -w @fileterm/tauri
+
+      - name: Package Linux deb
+        run: npm run release:linux -w @fileterm/tauri
+
+      - name: Verify and collect Debian installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_root="apps/tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          deb_file="$(find "$bundle_root/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb_file"
+          dpkg-deb --info "$deb_file"
+          mkdir -p artifacts
+          dpkg-deb --contents "$deb_file" > artifacts/FileTerm-linux-x86_64.contents.txt
+          cp "$deb_file" artifacts/FileTerm-linux-x86_64.deb
+
+      - name: Upload Debian installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: FileTerm-Linux-deb-${{ github.run_number }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14

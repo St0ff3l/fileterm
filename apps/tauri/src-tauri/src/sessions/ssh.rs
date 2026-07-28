@@ -127,6 +127,18 @@ fn resource_monitoring_enabled(profile: &Value) -> bool {
         != Some(false)
 }
 
+const DEFAULT_RESOURCE_MONITORING_INTERVAL_SECONDS: u64 = 1;
+
+fn resource_monitoring_interval_seconds(profile: &Value) -> u64 {
+    match profile
+        .get("resourceMonitoringIntervalSeconds")
+        .and_then(Value::as_u64)
+    {
+        Some(interval @ (1 | 5 | 15 | 30 | 60)) => interval,
+        _ => DEFAULT_RESOURCE_MONITORING_INTERVAL_SECONDS,
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Public entry point
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1146,6 +1158,7 @@ async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: Works
         "summary": summary,
         "transcript": transcript,
         "connected": connected,
+        "status": status,
     });
     let _ = app.emit("terminal:state", payload);
 
@@ -2126,6 +2139,13 @@ fn missing_password_credential(profile: &Value) -> Option<&'static str> {
         return Some("missing-username");
     }
     if profile
+        .get("useEmptyPassword")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    if profile
         .get("password")
         .and_then(Value::as_str)
         .unwrap_or("")
@@ -2134,6 +2154,20 @@ fn missing_password_credential(profile: &Value) -> Option<&'static str> {
         return Some("missing-password");
     }
     None
+}
+
+fn password_for_authentication(profile: &Value) -> Option<&str> {
+    if profile
+        .get("useEmptyPassword")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Some("");
+    }
+    profile
+        .get("password")
+        .and_then(Value::as_str)
+        .filter(|password| !password.is_empty())
 }
 
 async fn ensure_password_credentials(
@@ -2436,10 +2470,7 @@ async fn open_session(
                     if try_keyboard_interactive(
                         &mut retry_handle,
                         &username,
-                        profile
-                            .get("password")
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
+                        password_for_authentication(profile),
                         app,
                         tab_id,
                         &profile_id,
@@ -2550,10 +2581,7 @@ async fn open_session(
             if try_keyboard_interactive(
                 &mut retry_handle,
                 &username,
-                profile
-                    .get("password")
-                    .and_then(Value::as_str)
-                    .unwrap_or(""),
+                password_for_authentication(profile),
                 app,
                 tab_id,
                 &profile_id,
@@ -2849,13 +2877,9 @@ async fn try_authenticate(
         .to_string();
     match auth_type {
         "password" => {
-            let password = profile
-                .get("password")
-                .and_then(|p| p.as_str())
-                .unwrap_or("");
-            if password.is_empty() {
+            let Some(password) = password_for_authentication(profile) else {
                 return Err("SSH password is missing".to_string());
-            }
+            };
             // Some embedded SSH servers do not reply to a direct password
             // request until the client has first sent the RFC-standard
             // `none` probe. Electron's ssh2 client always performs this
@@ -2966,30 +2990,24 @@ async fn try_authenticate(
                 AuthenticationResult::Rejected
             })
         }
-        "keyboard-interactive" => {
-            let password = profile
-                .get("password")
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            Ok(
-                if try_keyboard_interactive(
-                    handle,
-                    username,
-                    password,
-                    app,
-                    tab_id,
-                    &profile_id,
-                    &host,
-                    port,
-                )
-                .await?
-                {
-                    AuthenticationResult::Authenticated
-                } else {
-                    AuthenticationResult::Rejected
-                },
+        "keyboard-interactive" => Ok(
+            if try_keyboard_interactive(
+                handle,
+                username,
+                password_for_authentication(profile),
+                app,
+                tab_id,
+                &profile_id,
+                &host,
+                port,
             )
-        }
+            .await?
+            {
+                AuthenticationResult::Authenticated
+            } else {
+                AuthenticationResult::Rejected
+            },
+        ),
         _ => try_system_authenticate(handle, username, profile, app, tab_id).await,
     }
 }
@@ -3097,7 +3115,7 @@ async fn request_key_passphrase(
 async fn try_keyboard_interactive(
     handle: &mut Handle<ClientHandler>,
     username: &str,
-    password: &str,
+    password: Option<&str>,
     app: &AppHandle,
     tab_id: &str,
     profile_id: &str,
@@ -3168,7 +3186,7 @@ async fn try_keyboard_interactive(
 async fn try_keyboard_interactive_with_responder<H, F, Fut>(
     handle: &mut Handle<H>,
     username: &str,
-    password: &str,
+    password: Option<&str>,
     mut request_answers: F,
 ) -> Result<bool, String>
 where
@@ -3223,8 +3241,8 @@ where
         let mut pending_indexes = Vec::new();
         let mut pending_prompts = Vec::new();
         for (index, prompt) in current.prompts.iter().enumerate() {
-            if !password_used && !password.is_empty() && is_password_prompt(&prompt.prompt) {
-                answers[index] = password.to_string();
+            if !password_used && password.is_some() && is_password_prompt(&prompt.prompt) {
+                answers[index] = password.unwrap_or_default().to_string();
                 password_used = true;
             } else {
                 pending_indexes.push(index);
@@ -3888,6 +3906,7 @@ async fn run_worker_loop(
         let metrics_app = app.clone();
         let metrics_tid = tab_id.to_string();
         let metrics_plat = platform.clone();
+        let metrics_interval_seconds = resource_monitoring_interval_seconds(profile);
         let metrics_cancellation = cancellation.clone();
         tokio::spawn(async move {
             crate::services::logging::session(
@@ -3895,7 +3914,7 @@ async fn run_worker_loop(
                 "INFO",
                 "metrics",
                 &metrics_tid,
-                format!("collector starting platform={metrics_plat}"),
+                format!("collector starting platform={metrics_plat} interval_seconds={metrics_interval_seconds}"),
             );
 
             // Build the infinite-loop script. Each iteration emits a
@@ -3904,7 +3923,9 @@ async fn run_worker_loop(
             let marker = "__FILETERM_METRICS_BLOCK__";
             let (windows_command, script_body) = if metrics_plat == "windows" {
                 let command =
-                    match super::system_metrics::build_windows_streaming_metrics_exec_command() {
+                    match super::system_metrics::build_windows_streaming_metrics_exec_command(
+                        metrics_interval_seconds,
+                    ) {
                         Ok(command) => command,
                         Err(error) => {
                             crate::services::logging::ssh_debug(
@@ -3925,8 +3946,8 @@ async fn run_worker_loop(
                 };
                 let metrics = super::system_metrics::build_posix_metrics_command(raw);
                 let script = format!(
-                    "{}\nwhile true; do\n{}\necho '{}'\nsleep 1\ndone\n",
-                    "cd / >/dev/null 2>&1 || true", metrics, marker
+                    "{}\nwhile true; do\n{}\necho '{}'\nsleep {}\ndone\n",
+                    "cd / >/dev/null 2>&1 || true", metrics, marker, metrics_interval_seconds
                 );
                 (None, Some(script))
             };
@@ -6580,7 +6601,8 @@ mod tests {
         enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
         is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
         missing_password_credential, parent_remote_item, parent_remote_path,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        password_for_authentication, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds,
         shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, suppress_shell_setup_echo,
         track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
@@ -6611,6 +6633,48 @@ mod tests {
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
         })));
+    }
+
+    #[test]
+    fn empty_password_mode_is_explicit_and_backwards_compatible() {
+        let unset_password = serde_json::json!({
+            "authType": "password",
+            "username": "ops"
+        });
+        assert_eq!(
+            missing_password_credential(&unset_password),
+            Some("missing-password")
+        );
+        assert_eq!(password_for_authentication(&unset_password), None);
+
+        let empty_password = serde_json::json!({
+            "authType": "password",
+            "username": "ops",
+            "password": "stale-password",
+            "useEmptyPassword": true
+        });
+        assert_eq!(missing_password_credential(&empty_password), None);
+        assert_eq!(password_for_authentication(&empty_password), Some(""));
+    }
+
+    #[test]
+    fn resource_monitoring_uses_only_supported_intervals() {
+        assert_eq!(
+            resource_monitoring_interval_seconds(&serde_json::json!({})),
+            1
+        );
+        assert_eq!(
+            resource_monitoring_interval_seconds(&serde_json::json!({
+                "resourceMonitoringIntervalSeconds": 30
+            })),
+            30
+        );
+        assert_eq!(
+            resource_monitoring_interval_seconds(&serde_json::json!({
+                "resourceMonitoringIntervalSeconds": 1
+            })),
+            1
+        );
     }
 
     #[test]
@@ -7328,7 +7392,7 @@ mod tests {
         let authenticated = try_keyboard_interactive_with_responder(
             &mut handle,
             "alice",
-            "saved-password",
+            Some("saved-password"),
             move |request| {
                 let requested_prompts = requested_prompts.clone();
                 async move {

@@ -84,6 +84,7 @@ pub async fn set_terminal_state(
             "summary": summary,
             "transcript": transcript,
             "connected": connected,
+            "status": status,
         }),
     );
     if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {

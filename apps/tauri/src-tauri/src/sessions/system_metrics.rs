@@ -1438,9 +1438,9 @@ Write-Output '__FILETERM_METRICS_COMPLETE__'
 
 /// Builds a long-lived Windows collector. The first block is the full system
 /// snapshot; later blocks reuse cached static data and warm performance
-/// counters so CPU/memory/network samples are emitted on a fixed one-second
-/// clock without paying PowerShell/CIM startup cost on every refresh.
-pub fn build_windows_streaming_metrics_command() -> String {
+/// counters so CPU/memory/network samples are emitted on a fixed clock without
+/// paying PowerShell/CIM startup cost on every refresh.
+pub fn build_windows_streaming_metrics_command(interval_seconds: u64) -> String {
     let mut script = build_windows_metrics_command();
     script.push_str(
         r#"
@@ -1579,11 +1579,22 @@ while ($true) {
 }
 "#,
     );
+    let interval_ms = interval_seconds.saturating_mul(1_000);
     script
+        .replace(
+            "$nextEmitMs = [double]$sampleClock.ElapsedMilliseconds + 1000",
+            &format!("$nextEmitMs = [double]$sampleClock.ElapsedMilliseconds + {interval_ms}"),
+        )
+        .replace(
+            "$nextEmitMs += 1000",
+            &format!("$nextEmitMs += {interval_ms}"),
+        )
 }
 
-pub fn build_windows_streaming_metrics_exec_command() -> Result<String, String> {
-    let script = build_windows_streaming_metrics_command();
+pub fn build_windows_streaming_metrics_exec_command(
+    interval_seconds: u64,
+) -> Result<String, String> {
+    let script = build_windows_streaming_metrics_command(interval_seconds);
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     encoder
         .write_all(script.as_bytes())
@@ -1719,7 +1730,7 @@ mod tests {
 
     #[test]
     fn windows_streaming_metrics_reuses_warm_counters_on_a_fixed_clock() {
-        let command = build_windows_streaming_metrics_command();
+        let command = build_windows_streaming_metrics_command(1);
 
         assert!(command.contains("Diagnostics.PerformanceCounter('Processor'"));
         assert!(command.contains("$nextEmitMs += 1000"));
@@ -1727,7 +1738,10 @@ mod tests {
         assert!(command.matches("__FILETERM_METRICS_BLOCK__").count() >= 2);
         assert!(!command.contains("while ($true) {\n\n$ErrorActionPreference"));
 
-        let exec_command = build_windows_streaming_metrics_exec_command().unwrap();
+        let low_frequency_command = build_windows_streaming_metrics_command(30);
+        assert!(low_frequency_command.contains("$nextEmitMs += 30000"));
+
+        let exec_command = build_windows_streaming_metrics_exec_command(1).unwrap();
         assert!(exec_command.len() < 8000);
         assert!(exec_command.contains("IO.Compression.GzipStream"));
     }

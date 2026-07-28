@@ -190,6 +190,7 @@ export const TerminalView = memo(function TerminalView({
   const onCloseTabRef = useRef(onCloseTab)
   const canClosePaneRef = useRef(canClosePane)
   const isReconnectingRef = useRef(false)
+  const reconnectHintShownRef = useRef(false)
   const activeTerminalTabIdRef = useRef<string | null>(null)
   tabIdRef.current = tabId
   connectedRef.current = Boolean(connected)
@@ -633,6 +634,14 @@ export const TerminalView = memo(function TerminalView({
     terminal.loadAddon(webLinksAddon)
     terminal.unicode.activeVersion = '11'
     terminal.open(hostRef.current)
+    const writeReconnectHint = () => {
+      if (!onReconnectRef.current || reconnectHintShownRef.current) {
+        return
+      }
+
+      reconnectHintShownRef.current = true
+      terminal.write(`\r\n${t.pressEnterToReconnect}\r\n`)
+    }
     const requestReconnect = () => {
       if (wasConnectedRef.current || connectingRef.current || isReconnectingRef.current) {
         return false
@@ -644,6 +653,7 @@ export const TerminalView = memo(function TerminalView({
       }
 
       isReconnectingRef.current = true
+      reconnectHintShownRef.current = false
       // Give immediate feedback before the IPC call starts. The connection
       // result may arrive seconds later, so waiting for terminal:state makes
       // a successful Enter look like a swallowed keypress.
@@ -651,7 +661,8 @@ export const TerminalView = memo(function TerminalView({
       void Promise.resolve(reconnect())
         .catch((cause) => {
           const message = cause instanceof Error ? cause.message : String(cause)
-          terminal.write(`\r\n${t.connectionFailedPrefix}${message}\r\n${t.pressEnterToReconnect}\r\n`)
+          terminal.write(`\r\n${t.connectionFailedPrefix}${message}\r\n`)
+          writeReconnectHint()
         })
         .finally(() => {
           if (!wasConnectedRef.current) {
@@ -920,8 +931,8 @@ export const TerminalView = memo(function TerminalView({
         // would make the first retry look swallowed.
         connectedRef.current = false
         wasConnectedRef.current = false
-        const reconnectHint = onReconnectRef.current ? `\r\n${t.pressEnterToReconnect}` : ''
-        terminal.write(`\r\n${t.terminalConnectionClosed}${reconnectHint}\r\n`)
+        terminal.write(`\r\n${t.terminalConnectionClosed}\r\n`)
+        writeReconnectHint()
       })
     })
 
@@ -954,40 +965,51 @@ export const TerminalView = memo(function TerminalView({
       }
     })
 
-    const offState = window.fileterm?.onTerminalState(({ tabId: nextTabId, summary, transcript, connected }) => {
-      if (nextTabId === tabIdRef.current) {
-        onStatusRef.current?.(localizeTerminalText(summary))
-        const isDisconnecting = wasConnectedRef.current && !connected
-        if (isDisconnecting) {
-          preserveVisibleBufferRef.current = true
-        }
-        if (shouldHydrateTranscript(renderedTranscriptRef.current, transcript, connected)) {
-          replaceTerminalWithTranscript(terminal, transcript)
-        }
-        if (!wasConnectedRef.current && connected) {
-          lastSyncedSizeRef.current = null
-          preserveVisibleBufferRef.current = false
-          awaitingCommandCompletionRef.current = false
-          pendingPromptResizeRef.current = false
-          window.requestAnimationFrame(() => scheduleResize(true))
-        }
-        if (isDisconnecting) {
-          terminal.write(buildExitAlternateScreenSequence(), () => {
-            const visibleTranscript = snapshotTerminalBuffer(terminal)
-            const reconnectHint = onReconnectRef.current ? `\r\n${t.pressEnterToReconnect}` : ''
-            const disconnectedTranscript = visibleTranscript
-              ? `${visibleTranscript}\r\n${t.terminalConnectionClosed}${reconnectHint}\r\n`
-              : `${t.terminalConnectionClosed}${reconnectHint}\r\n`
-            replaceTerminalWithTranscript(terminal, disconnectedTranscript)
-          })
-        }
-        wasConnectedRef.current = connected
-        if (connected) {
-          isReconnectingRef.current = false
-          inputSendFailedRef.current = false
+    const offState = window.fileterm?.onTerminalState(
+      ({ tabId: nextTabId, summary, transcript, connected, status }) => {
+        if (nextTabId === tabIdRef.current) {
+          onStatusRef.current?.(localizeTerminalText(summary))
+          const isDisconnecting = wasConnectedRef.current && !connected
+          if (isDisconnecting) {
+            preserveVisibleBufferRef.current = true
+          }
+          if (shouldHydrateTranscript(renderedTranscriptRef.current, transcript, connected)) {
+            replaceTerminalWithTranscript(terminal, transcript)
+          }
+          if (!wasConnectedRef.current && connected) {
+            lastSyncedSizeRef.current = null
+            preserveVisibleBufferRef.current = false
+            awaitingCommandCompletionRef.current = false
+            pendingPromptResizeRef.current = false
+            window.requestAnimationFrame(() => scheduleResize(true))
+          }
+          if (isDisconnecting) {
+            terminal.write(buildExitAlternateScreenSequence(), () => {
+              const visibleTranscript = snapshotTerminalBuffer(terminal)
+              const reconnectHint = onReconnectRef.current ? `\r\n${t.pressEnterToReconnect}` : ''
+              if (reconnectHint) {
+                reconnectHintShownRef.current = true
+              }
+              const disconnectedTranscript = visibleTranscript
+                ? `${visibleTranscript}\r\n${t.terminalConnectionClosed}${reconnectHint}\r\n`
+                : `${t.terminalConnectionClosed}${reconnectHint}\r\n`
+              replaceTerminalWithTranscript(terminal, disconnectedTranscript)
+            })
+          } else if (!connected && status === 'error') {
+            // A reconnect command only starts the worker, so its Promise resolves
+            // before a failed TCP/SSH handshake is known. The terminal state is
+            // the authoritative failure signal for both initial and retry attempts.
+            writeReconnectHint()
+          }
+          wasConnectedRef.current = connected
+          if (connected) {
+            isReconnectingRef.current = false
+            inputSendFailedRef.current = false
+            reconnectHintShownRef.current = false
+          }
         }
       }
-    })
+    )
 
     const resizeObserver = new ResizeObserver(() => {
       const host = hostRef.current
@@ -1030,10 +1052,22 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    const onContextMenu = (event: MouseEvent) => {
+    const openContextMenu = (event: MouseEvent) => {
       event.preventDefault()
+      event.stopPropagation()
       setHasSelection(terminal.hasSelection())
       setContextMenu({ x: event.clientX, y: event.clientY })
+    }
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) {
+        return
+      }
+      // Vim and other TUI programs enable xterm mouse reporting. Intercept
+      // the secondary-button press before it reaches xterm so that a local
+      // context menu remains available instead of sending a mouse sequence
+      // to the remote program.
+      openContextMenu(event)
     }
 
     const onDocumentSelectionChange = () => {
@@ -1095,7 +1129,8 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
-    hostRef.current.addEventListener('contextmenu', onContextMenu)
+    hostRef.current.addEventListener('mousedown', onMouseDown, true)
+    hostRef.current.addEventListener('contextmenu', openContextMenu, true)
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('selectionchange', onDocumentSelectionChange)
@@ -1149,7 +1184,8 @@ export const TerminalView = memo(function TerminalView({
       osc52Disposable.dispose()
       disposeCanvasTextMetrics()
       resizeObserver.disconnect()
-      hostRef.current?.removeEventListener('contextmenu', onContextMenu)
+      hostRef.current?.removeEventListener('mousedown', onMouseDown, true)
+      hostRef.current?.removeEventListener('contextmenu', openContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('selectionchange', onDocumentSelectionChange)

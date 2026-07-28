@@ -108,7 +108,9 @@ export function HomeWorkspace({
   }
 
   const desktopApi = window.fileterm
-  const isWindows = desktopApi?.platform === 'win32'
+  // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
+  // its sidebar wordmark because it has native traffic lights above it.
+  const usesWindowsHomeLayout = desktopApi?.platform === 'win32' || desktopApi?.platform === 'linux'
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
 
@@ -132,7 +134,7 @@ export function HomeWorkspace({
     return desktopApi.onUpdateStatus(setUpdateStatus)
   }, [desktopApi, updatePreviewState])
 
-  const homeBrandContent = isWindows ? (
+  const homeBrandContent = usesWindowsHomeLayout ? (
     <>
       <strong>{desktopApi?.appName ?? 'FileTerm'}</strong>
       <span>v{desktopApi?.appVersion ?? '0.0.0'}</span>
@@ -192,7 +194,7 @@ export function HomeWorkspace({
 
       {/* SideNavBar Component */}
       <aside className={`home-sidebar ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
-        {!isWindows ? (
+        {!usesWindowsHomeLayout ? (
           <div className="sidebar-brand">
             <h2 className="brand-title">FileTerm</h2>
             <span className="brand-version">v{desktopApi?.appVersion ?? '—'}</span>

@@ -111,12 +111,17 @@ export interface ConnectionCapabilities {
 
 export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive'
 
+/** 资源监控采集间隔，单位为秒。 */
+export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
+
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
   username: string
   authType: SshAuthType
   note?: string
   password?: string
+  /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
+  useEmptyPassword?: boolean
   privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
@@ -128,6 +133,7 @@ export interface SshProfile extends NetworkProfile {
   deleteKey?: string
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
+  resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
   reconnectMode?: 'none' | 'enter' | 'auto'
   proxy?: ProxyConfig
   jumpProfileId?: string
@@ -696,6 +702,8 @@ export interface CreateProfileInput {
   remotePath: string
   note?: string
   password?: string
+  /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
+  useEmptyPassword?: boolean
   privateKeyId?: string
   privateKeyPath?: string
   passphrase?: string
@@ -708,6 +716,7 @@ export interface CreateProfileInput {
   deleteKey?: string
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
+  resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
   reconnectMode?: 'none' | 'enter' | 'auto'
   proxy?: ProxyConfig
   proxyPassword?: string
@@ -876,6 +885,7 @@ export interface TerminalStatePayload {
   summary: string
   transcript: string
   connected: boolean
+  status: TabStatus
 }
 
 export interface RemoteFileAccessOptions {
