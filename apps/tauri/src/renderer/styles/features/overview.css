@@ -469,3 +469,52 @@
   margin: 0;
   line-height: 1.4;
 }
+
+/* Community QR card */
+.overview-community {
+  margin-top: 34px;
+}
+
+.community-card {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  padding: 24px 0;
+}
+
+.community-qr {
+  display: block;
+  width: 168px;
+  height: 260px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #171717;
+}
+
+.community-content {
+  max-width: 520px;
+}
+
+.community-title {
+  margin: 0 0 8px;
+  color: var(--text-main);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.community-description {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .community-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

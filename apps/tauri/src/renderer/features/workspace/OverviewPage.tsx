@@ -1,5 +1,6 @@
 import type { ConnectionProfile, ConnectionFolder } from '@fileterm/core'
 import { t } from '../../i18n'
+import communityQrImage from '../../assets/community/wechat-group.jpg'
 
 export function OverviewPage({
   profiles,
@@ -178,6 +179,20 @@ export function OverviewPage({
               <p className="action-desc">{t.overviewDocsDescription}</p>
             </div>
           </button>
+        </div>
+      </section>
+
+      {/* Community */}
+      <section className="overview-community">
+        <div className="section-header">
+          <h2 className="section-title">{t.communityTitle}</h2>
+        </div>
+        <div className="community-card">
+          <img className="community-qr" src={communityQrImage} alt={t.communityQrAlt} />
+          <div className="community-content">
+            <h3 className="community-title">{t.communityTitle}</h3>
+            <p className="community-description">{t.communityDescription}</p>
+          </div>
         </div>
       </section>
     </div>
