@@ -4,9 +4,11 @@ pub mod sessions;
 pub mod storage;
 
 use crate::commands::OpenWindowInput;
+#[cfg(target_os = "macos")]
+use std::sync::atomic::AtomicU64;
 use std::{
     collections::{HashMap, HashSet},
-    sync::{atomic::AtomicBool, atomic::AtomicU64, atomic::Ordering, Mutex},
+    sync::{atomic::AtomicBool, atomic::Ordering, Mutex},
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::image::Image;
