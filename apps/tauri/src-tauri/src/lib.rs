@@ -6,7 +6,7 @@ pub mod storage;
 use crate::commands::OpenWindowInput;
 use std::{
     collections::{HashMap, HashSet},
-    sync::{atomic::AtomicBool, atomic::Ordering, Mutex},
+    sync::{atomic::AtomicBool, atomic::AtomicU64, atomic::Ordering, Mutex},
 };
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::image::Image;
@@ -79,6 +79,13 @@ struct HiddenWithMainRegistry {
 #[cfg(target_os = "macos")]
 static MACOS_TRAFFIC_LIGHTS_CALIBRATED: AtomicBool = AtomicBool::new(false);
 
+/// A fullscreen transition emits several resize notifications while AppKit is
+/// still rebuilding the title-bar hierarchy. Only the final notification may
+/// position the traffic lights, otherwise they retain an obsolete y-coordinate
+/// when the window returns from fullscreen.
+#[cfg(target_os = "macos")]
+static MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+
 #[cfg(target_os = "macos")]
 const MACOS_RENDERER_TITLEBAR_HEIGHT: f64 = 48.0;
 #[cfg(target_os = "macos")]
@@ -89,6 +96,8 @@ const MACOS_TRAFFIC_LIGHT_DRAWN_SIZE: f64 = 12.0;
 const MACOS_TRAFFIC_LIGHT_LEFT_INSET: f64 = 20.0;
 #[cfg(target_os = "macos")]
 const MACOS_TRAFFIC_LIGHT_CENTER_SPACING: f64 = 23.0;
+#[cfg(target_os = "macos")]
+const MACOS_TRAFFIC_LIGHT_RECALIBRATION_DELAY_MS: u64 = 140;
 
 #[cfg(target_os = "macos")]
 fn macos_traffic_light_target_center(window_height: f64, index: usize) -> (f64, f64) {
@@ -204,13 +213,6 @@ pub(crate) async fn request_file_editors_for_quit(app: &AppHandle<Wry>) -> Resul
         }
     }
     Ok(true)
-}
-
-/// Per-window zoom is not exposed by Wry as a getter. Store the scale we last
-/// applied so the View menu can provide deterministic reset/in/out behavior.
-#[derive(Default)]
-struct WindowMenuState {
-    zoom_scales: Mutex<HashMap<String, f64>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -418,6 +420,41 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     let view_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "View", "视图"))
         .item(&view_split_vertical)
         .item(&view_split_horizontal);
+    // The macOS native menubar owns its displayed shortcuts. These dispatch
+    // terminal-only zoom requests back through the Tauri bridge instead of
+    // applying an application/WebView zoom level.
+    #[cfg(target_os = "macos")]
+    let view_submenu_builder = {
+        let terminal_zoom_in = MenuItemBuilder::with_id(
+            "view-terminal-zoom-in",
+            localized(is_english, "Zoom Terminal In", "终端放大"),
+        )
+        // `+` is Shift+Equal on the physical keyboard. The native accelerator
+        // uses the logical Equal key so macOS presents and accepts standard
+        // Cmd+ without asking for an additional Shift modifier.
+        .accelerator("Cmd+Equal")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_out = MenuItemBuilder::with_id(
+            "view-terminal-zoom-out",
+            localized(is_english, "Zoom Terminal Out", "终端缩小"),
+        )
+        .accelerator("Cmd+Minus")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_reset = MenuItemBuilder::with_id(
+            "view-terminal-zoom-reset",
+            localized(is_english, "Reset Terminal Zoom", "终端实际大小"),
+        )
+        .accelerator("Cmd+0")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        view_submenu_builder
+            .separator()
+            .item(&terminal_zoom_in)
+            .item(&terminal_zoom_out)
+            .item(&terminal_zoom_reset)
+    };
     // macOS uses this native menu instead of the renderer-owned Windows/Linux
     // menu bar, so expose the requested debug-only F12 entry here.
     #[cfg(all(debug_assertions, target_os = "macos"))]
@@ -536,33 +573,6 @@ pub(crate) fn focused_webview_window(app: &AppHandle<Wry>) -> Option<WebviewWind
         .or_else(|| app.get_webview_window("main"))
 }
 
-pub(crate) fn update_focused_window_zoom(app: &AppHandle<Wry>, operation: ZoomOperation) {
-    let Some(window) = focused_webview_window(app) else {
-        return;
-    };
-    let label = window.label().to_string();
-    let state = app.state::<WindowMenuState>();
-    let mut zoom_scales = state
-        .zoom_scales
-        .lock()
-        .expect("window menu zoom state lock poisoned");
-    let current = zoom_scales.get(&label).copied().unwrap_or(1.0);
-    let next = match operation {
-        ZoomOperation::Reset => 1.0,
-        ZoomOperation::In => (current * 1.1).min(3.0),
-        ZoomOperation::Out => (current / 1.1).max(0.5),
-    };
-    if window.set_zoom(next).is_ok() {
-        zoom_scales.insert(label, next);
-    }
-}
-
-pub(crate) enum ZoomOperation {
-    Reset,
-    In,
-    Out,
-}
-
 pub(crate) fn request_close_focused_window(app: &AppHandle<Wry>) {
     let Some(window) = focused_webview_window(app) else {
         return;
@@ -658,22 +668,6 @@ pub(crate) fn show_window_context_menu(
             )
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
-            let reset_zoom = MenuItemBuilder::with_id(
-                "view-reset-zoom",
-                localized(is_english, "Actual Size", "实际大小"),
-            )
-            .build(app)
-            .map_err(|error| AppError::Window(error.to_string()))?;
-            let zoom_in =
-                MenuItemBuilder::with_id("view-zoom-in", localized(is_english, "Zoom In", "放大"))
-                    .build(app)
-                    .map_err(|error| AppError::Window(error.to_string()))?;
-            let zoom_out = MenuItemBuilder::with_id(
-                "view-zoom-out",
-                localized(is_english, "Zoom Out", "缩小"),
-            )
-            .build(app)
-            .map_err(|error| AppError::Window(error.to_string()))?;
 
             let builder = MenuBuilder::new(app).item(&reload);
             #[cfg(all(debug_assertions, target_os = "macos"))]
@@ -688,10 +682,6 @@ pub(crate) fn show_window_context_menu(
                 builder.item(&devtools)
             };
             builder
-                .separator()
-                .item(&reset_zoom)
-                .item(&zoom_in)
-                .item(&zoom_out)
                 .build()
                 .map_err(|error| AppError::Window(error.to_string()))?
         }
@@ -936,6 +926,30 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     true
 }
 
+#[cfg(target_os = "macos")]
+fn schedule_macos_traffic_light_recalibration(app: &AppHandle<Wry>) {
+    let generation =
+        MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(
+            MACOS_TRAFFIC_LIGHT_RECALIBRATION_DELAY_MS,
+        ))
+        .await;
+        if MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION.load(Ordering::Acquire) != generation {
+            return;
+        }
+
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        let calibration_window = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            let _ = calibrate_macos_traffic_lights(&calibration_window);
+        });
+    });
+}
+
 pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
     if input.kind == "file-editor"
         && input.source.as_deref() == Some("remote")
@@ -1170,7 +1184,6 @@ pub fn run() {
             app.manage(FileEditorCloseRegistry::default());
             app.manage(QuitPreparationRegistry::default());
             app.manage(HiddenWithMainRegistry::default());
-            app.manage(WindowMenuState::default());
 
             let main_window = app
                 .get_webview_window("main")
@@ -1203,13 +1216,15 @@ pub fn run() {
                     api.prevent_close();
                     request_main_window_close(&app_handle, false);
                 }
-                WindowEvent::Resized(_) => {
+                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = app_handle.emit(
                             "app:window-maximized-change",
                             window.is_maximized().unwrap_or(false),
                         );
                     }
+                    #[cfg(target_os = "macos")]
+                    schedule_macos_traffic_light_recalibration(&app_handle);
                 }
                 _ => {}
             });
@@ -1378,9 +1393,6 @@ pub fn run() {
                     let _ = window.reload();
                 }
             }
-            "view-reset-zoom" => update_focused_window_zoom(app, ZoomOperation::Reset),
-            "view-zoom-in" => update_focused_window_zoom(app, ZoomOperation::In),
-            "view-zoom-out" => update_focused_window_zoom(app, ZoomOperation::Out),
             "view-toggle-devtools" =>
             {
                 #[cfg(debug_assertions)]
@@ -1390,6 +1402,21 @@ pub fn run() {
                     } else {
                         window.open_devtools();
                     }
+                }
+            }
+            "view-terminal-zoom-in" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:terminal-zoom-request", "in");
+                }
+            }
+            "view-terminal-zoom-out" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:terminal-zoom-request", "out");
+                }
+            }
+            "view-terminal-zoom-reset" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:terminal-zoom-request", "reset");
                 }
             }
             "workspace-new-tab" => {

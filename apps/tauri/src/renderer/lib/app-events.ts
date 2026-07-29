@@ -10,6 +10,8 @@
 // 注意：这是 UI 层 pub/sub，不替代 Rust commands/events 边界（硬边界 #6
 // 针对的是系统能力走 Rust 的链路，UI 内部事件不在此列）。
 
+import type { TerminalZoomOperation } from '@fileterm/core'
+
 export const APP_EVENT = {
   /** Tauri 原生拖拽悬停（Finder/Explorer 拖入窗口时持续触发）。 */
   tauriNativeDragOver: 'fileterm:tauri-native-drag-over',
@@ -24,7 +26,9 @@ export const APP_EVENT = {
   /** 请求当前终端执行粘贴。 */
   terminalPaste: 'fileterm:terminal-paste',
   /** 请求当前终端切换查找栏。 */
-  terminalFind: 'fileterm:terminal-find'
+  terminalFind: 'fileterm:terminal-find',
+  /** 请求最后聚焦的终端调整字号。 */
+  terminalZoom: 'fileterm:terminal-zoom'
 } as const
 
 export type AppEventName = (typeof APP_EVENT)[keyof typeof APP_EVENT]
@@ -42,6 +46,7 @@ export interface AppEventDetailMap {
   [APP_EVENT.terminalCopy]: never
   [APP_EVENT.terminalPaste]: never
   [APP_EVENT.terminalFind]: never
+  [APP_EVENT.terminalZoom]: TerminalZoomOperation
 }
 
 /** 派发一个类型化的应用事件。`detail` 为 `never` 的事件不需要传第二参。 */

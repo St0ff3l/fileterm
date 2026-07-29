@@ -10,6 +10,9 @@ export type SplitDirection = 'row' | 'column'
 /** 在分屏树中移动焦点的方向。 */
 export type PaneFocusDirection = 'left' | 'right' | 'up' | 'down'
 
+/** 焦点终端的字号操作，不涉及 WebView 页面缩放。 */
+export type TerminalZoomOperation = 'in' | 'out' | 'reset'
+
 /** 分屏树节点。leaf 引用一个真实 WorkspaceTab id；split 递归持有子节点。 */
 export type PaneNode =
   | { kind: 'leaf'; tabId: string }
@@ -937,7 +940,6 @@ export interface FileTermDesktopApi {
   cancelCloseCurrentFileEditor(): Promise<void>
   showWindowMenu(menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number): Promise<void>
   reloadCurrentWindow(): Promise<void>
-  setWindowZoom(operation: 'reset' | 'in' | 'out'): Promise<void>
   toggleDevtools(): Promise<void>
   requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
@@ -1084,6 +1086,7 @@ export interface FileTermDesktopApi {
   onNewTabRequest(listener: () => void): () => void
   onSplitPaneRequest(listener: (direction: 'row' | 'column') => void): () => void
   onFocusPaneRequest(listener: (direction: PaneFocusDirection) => void): () => void
+  onTerminalZoomRequest(listener: (operation: TerminalZoomOperation) => void): () => void
   confirmCloseWindow(action: 'quit' | 'hide' | 'cancel'): Promise<void>
 }
 

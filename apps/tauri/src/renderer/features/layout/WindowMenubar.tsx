@@ -3,6 +3,7 @@ import type { FileTermDesktopApi } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
 import { ContextMenu, type ContextMenuEntry } from '../common/ContextMenu'
 import { t } from '../../i18n'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 
 type WindowMenuKind = 'file' | 'view' | 'window'
 
@@ -12,10 +13,13 @@ interface OpenMenu {
 }
 
 // Windows/Linux 共用自绘菜单栏（见 App.tsx 的 `usesCustomWindowChrome`
-// 判定）。除 Alt+F4 外，不给窗口菜单功能分配全局快捷键，以免与终端或
-// 操作系统保留键冲突。
+// 判定）。窗口动作只保留 Alt+F4；终端字号快捷键交给最后聚焦的 xterm，
+// 不占用 WebView 页面缩放。
 const SHORTCUT_EXIT = 'Alt+F4'
 const SHORTCUT_CLOSE_WINDOW = 'Alt+F4'
+const SHORTCUT_TERMINAL_ZOOM_IN = 'Ctrl+Shift++'
+const SHORTCUT_TERMINAL_ZOOM_OUT = 'Ctrl+Shift+-'
+const SHORTCUT_TERMINAL_ZOOM_RESET = 'Ctrl+Shift+0'
 
 // dev 构建才显示"开发者工具"项，与 Rust 端 `#[cfg(debug_assertions)]`
 // 行为一致：生产构建不暴露 devtools 入口。
@@ -63,11 +67,20 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
       items.push(
         { separator: true },
         {
-          label: t.windowMenuActualSize,
-          action: () => void desktopApi?.setWindowZoom('reset')
+          label: t.terminalZoomIn,
+          shortcut: SHORTCUT_TERMINAL_ZOOM_IN,
+          action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'in')
         },
-        { label: t.windowMenuZoomIn, action: () => void desktopApi?.setWindowZoom('in') },
-        { label: t.windowMenuZoomOut, action: () => void desktopApi?.setWindowZoom('out') }
+        {
+          label: t.terminalZoomOut,
+          shortcut: SHORTCUT_TERMINAL_ZOOM_OUT,
+          action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'out')
+        },
+        {
+          label: t.terminalZoomReset,
+          shortcut: SHORTCUT_TERMINAL_ZOOM_RESET,
+          action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'reset')
+        }
       )
       return items
     }

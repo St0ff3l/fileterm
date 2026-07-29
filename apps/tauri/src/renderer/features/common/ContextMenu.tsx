@@ -13,6 +13,7 @@ export type ContextMenuEntry = {
 
 export function ContextMenu({
   align = 'start',
+  autoFocus = true,
   className,
   items,
   onClose,
@@ -20,6 +21,8 @@ export function ContextMenu({
   viewportMargin = 8
 }: {
   align?: 'start' | 'end'
+  /** Pointer-opened menus should not draw an initial keyboard focus ring. */
+  autoFocus?: boolean
   className?: string
   items: ContextMenuEntry[]
   onClose(): void
@@ -92,9 +95,12 @@ export function ContextMenu({
   }, [onClose])
 
   useEffect(() => {
+    if (!autoFocus) {
+      return
+    }
     const frame = window.requestAnimationFrame(() => focusMenuItem('first'))
     return () => window.cancelAnimationFrame(frame)
-  }, [focusMenuItem, items, position])
+  }, [autoFocus, focusMenuItem, items, position])
 
   useLayoutEffect(() => {
     const menu = menuRef.current

@@ -819,9 +819,6 @@ pub async fn app_window_action(
                 .reload()
                 .map_err(|error| AppError::Window(error.to_string()))?;
         }
-        "zoom-reset" => crate::update_focused_window_zoom(&app, crate::ZoomOperation::Reset),
-        "zoom-in" => crate::update_focused_window_zoom(&app, crate::ZoomOperation::In),
-        "zoom-out" => crate::update_focused_window_zoom(&app, crate::ZoomOperation::Out),
         "toggle-devtools" => {
             #[cfg(debug_assertions)]
             {

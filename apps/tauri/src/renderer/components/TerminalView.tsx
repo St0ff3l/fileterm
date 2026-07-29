@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import type { TerminalZoomOperation } from '@fileterm/core'
 import '@xterm/xterm/css/xterm.css'
 import { copyText } from '../app/app-utils'
 import {
@@ -79,8 +80,18 @@ const TERMINAL_RESIZE_SETTLE_MS = 140
 const TERMINAL_RESIZE_OUTPUT_QUIET_MS = 260
 // Bound one xterm parse pass without serializing the native input path.
 const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
+const TERMINAL_DEFAULT_FONT_SIZE = 12
+const TERMINAL_MIN_FONT_SIZE = 8
+const TERMINAL_MAX_FONT_SIZE = 28
+const TERMINAL_WHEEL_ZOOM_THRESHOLD = 40
+const TERMINAL_GESTURE_ZOOM_THRESHOLD = Math.log(1.08)
 
 type SplitPaneDirection = 'row' | 'column'
+
+// Native macOS menu events and the Windows/Linux menubar are dispatched to
+// every mounted terminal. Keep the last terminal focus here so only one pane
+// consumes a shared zoom request after a menu click moves DOM focus away.
+let lastFocusedTerminal: Terminal | null = null
 
 function splitPaneShortcutsForPlatform(platform: string | undefined) {
   if (platform === 'darwin') {
@@ -142,6 +153,133 @@ type HighlightedBufferRow = {
   lastColumn: number
 }
 
+type PinchGestureEvent = Event & { scale?: number }
+
+// Vim translates the mode label through gettext. These are the current UTF-8
+// labels from Vim's official `src/po/*.po` catalogs, plus the legacy Central
+// European forms shipped by Vim. Do not treat an arbitrary `-- <mode> --`
+// message as Visual: `-- INSERT --` uses the same framing.
+const VIM_VISUAL_MODE_LABELS: Readonly<Record<VimVisualSelection['mode'], readonly string[]>> = {
+  character: [
+    'VISUAL',
+    'VISUELE',
+    'VIZUÁLNÍ',
+    'VISUEL',
+    'VISUELL',
+    'VIDUMA',
+    'VALINTA',
+    'RADHARCACH',
+    'VIZUÁLIS',
+    'ԶՆՆԱԿԱՆ ՌԵԺԻՄ',
+    'VISUALE',
+    'ビジュアル',
+    '비주얼',
+    'VISUEEL',
+    'WIZUALNY',
+    'РЕЖИМ ВИЗУАЛЬНЫЙ ПОСИМВОЛЬНЫЙ',
+    'VIZUÁLNE',
+    'ВИЗУЕЛНО',
+    'காட்சி',
+    'GÖRSEL',
+    'ВИБІР',
+    'CHẾ ĐỘ VISUAL',
+    '可视',
+    '選取'
+  ],
+  line: [
+    'VISUAL LINE',
+    'VISUELE REËL',
+    'VIZUÁLNÍ ŘÁDEK',
+    'VISUAL LÍNIA',
+    'VISUEL LINJE',
+    'VISUELL ZEILE',
+    'VIDUMA LINIO',
+    'LÍNEA VISUAL',
+    'VALINTARIVI',
+    'VISUEL LIGNE',
+    'LÍNE RADHARCACH',
+    'VIZUÁLIS SOR',
+    'ԶՆՆԱԿԱՆ ՏՈՂ',
+    'VISUALE RIGA',
+    'ビジュアル 行',
+    '비주얼 라인',
+    'VISUELL LINJE',
+    'VISUELE REGEL',
+    'WIZUALNY LINIOWY',
+    'VISUAL/LINHA',
+    'РЕЖИМ ВИЗУАЛЬНЫЙ ПОСТРОЧНЫЙ',
+    'VIZUÁLNE RIADKY',
+    'ВИЗУЕЛНА ЛИНИЈА',
+    'VISUELL RAD',
+    'காட்சி வரி',
+    'GÖRSEL SATIR',
+    'ВИБІР РЯДКІВ',
+    'DÒNG VISUAL',
+    '可视 行',
+    '[行]'
+  ],
+  block: [
+    'VISUAL BLOCK',
+    'VISUELE BLOK',
+    'VIZUÁLNÍ BLOK',
+    'VISUAL BLOC',
+    'VISUEL BLOK',
+    'VISUELL BLOCK',
+    'VIDUMA BLOKO',
+    'BLOQUE VISUAL',
+    'VALINTALOHKO',
+    'VISUEL BLOC',
+    'BLOC RADHARCACH',
+    'VIZUÁLIS BLOKK',
+    'ԶՆՆԱԿԱՆ ԲԼՈԿ',
+    'VISUALE BLOCCO',
+    'ビジュアル 矩形',
+    '비주얼 블록',
+    'VISUELL BLOKK',
+    'VISUEEL BLOK',
+    'WIZUALNY BLOKOWY',
+    'VISUAL/BLOCO',
+    'РЕЖИМ ВИЗУАЛЬНЫЙ БЛОЧНЫЙ',
+    'VIZUÁLNY BLOK',
+    'ВИЗУЕЛНИ БЛОК',
+    'VISUELLT BLOCK',
+    'விசுவல் பிளாக்',
+    'GÖRSEL BLOK',
+    'ВИБІР БЛОКУ',
+    'KHỐI VISUAL',
+    '可视 块',
+    '[區塊]'
+  ]
+}
+
+function logVimVisualDiagnostic(stage: string, details: Record<string, unknown>) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  // Keep this as a string, rather than a console object, so a screenshot of
+  // Web Inspector contains the actual values without having to expand rows.
+  console.debug(`[TerminalView][vim-visual] ${stage} ${JSON.stringify(details)}`)
+}
+
+function getVimVisualModeIndicator(lineText: string): VimVisualSelection['mode'] | null {
+  // The terminal's own status overlay can be appended to Vim's final buffer
+  // line (for example `-- VISUAL --\n 5-15 …`), so the mode marker is not
+  // necessarily the entire translated row.
+  const indicator = lineText.match(/--\s+(.+?)\s+--/)
+  if (!indicator || indicator[1].length > 64) {
+    return null
+  }
+
+  const label = indicator[1].trim().replace(/\s+/g, ' ')
+  for (const mode of ['character', 'line', 'block'] as const) {
+    if (VIM_VISUAL_MODE_LABELS[mode].includes(label)) {
+      return mode
+    }
+  }
+  return null
+}
+
 /**
  * Vim enables DEC mouse tracking while it is running. That deliberately makes
  * xterm stop maintaining a local selection, so `terminal.getSelection()` is
@@ -149,12 +287,20 @@ type HighlightedBufferRow = {
  * either SGR inverse or a non-default background; recover the corresponding
  * buffer text as a copy-only fallback.
  *
- * This is intentionally gated by Vim's own `-- VISUAL --` mode indicator and
- * the active mouse protocol. Other TUIs with coloured panels must not become
+ * This is intentionally gated by Vim's locale-independent `-- <mode> --`
+ * status-line framing, the active mouse protocol, and highlighted cells around
+ * the active cursor. Other TUIs with coloured panels must not become
  * accidentally copyable selections.
  */
-function getVimVisualSelection(terminal: Terminal): VimVisualSelection | null {
+function getVimVisualSelection(terminal: Terminal, diagnostics = false): VimVisualSelection | null {
+  const diagnose = (stage: string, details: Record<string, unknown>) => {
+    if (diagnostics) {
+      logVimVisualDiagnostic(stage, details)
+    }
+  }
+
   if (terminal.modes.mouseTrackingMode === 'none') {
+    diagnose('mouse-tracking-disabled', {})
     return null
   }
 
@@ -162,23 +308,30 @@ function getVimVisualSelection(terminal: Terminal): VimVisualSelection | null {
   const viewportStart = buffer.viewportY
   const viewportEnd = Math.min(buffer.viewportY + terminal.rows, buffer.length)
   let mode: VimVisualSelection['mode'] | null = null
+  const modeIndicators: Array<{ row: number; text: string; mode: VimVisualSelection['mode'] }> = []
 
-  for (let row = viewportStart; row < viewportEnd; row += 1) {
+  // Vim renders its mode indicator on the final status line. Search upward so
+  // a matching string in the file contents cannot shadow the actual mode.
+  for (let row = viewportEnd - 1; row >= viewportStart; row -= 1) {
     const lineText = buffer.getLine(row)?.translateToString(true) ?? ''
-    if (/--\s+VISUAL\s+BLOCK\s+--/.test(lineText)) {
-      mode = 'block'
+    const indicatorMode = getVimVisualModeIndicator(lineText)
+    if (indicatorMode) {
+      modeIndicators.push({ row, text: lineText, mode: indicatorMode })
+      mode = indicatorMode
       break
-    }
-    if (/--\s+VISUAL\s+LINE\s+--/.test(lineText)) {
-      mode = 'line'
-      break
-    }
-    if (/--\s+VISUAL\s+--/.test(lineText)) {
-      mode = 'character'
     }
   }
 
   if (!mode) {
+    diagnose('mode-not-found', {
+      bufferType: buffer.type,
+      viewportStart,
+      viewportEnd,
+      bottomLines: Array.from({ length: Math.min(3, viewportEnd - viewportStart) }, (_, index) => {
+        const row = viewportEnd - 1 - index
+        return { row, text: buffer.getLine(row)?.translateToString(true) ?? '' }
+      })
+    })
     return null
   }
 
@@ -214,11 +367,54 @@ function getVimVisualSelection(terminal: Terminal): VimVisualSelection | null {
 
   const cursorRow = buffer.baseY + buffer.cursorY
   const cursorColumn = buffer.cursorX
-  const cursorRowIndex = highlightedRows.findIndex(
+  const cursorCell = buffer.getLine(cursorRow)?.getCell(cursorColumn)
+  const cursorCellWidth = cursorCell && cursorCell.getWidth() > 0 ? cursorCell.getWidth() : 1
+  const cursorCellDetails = cursorCell
+    ? {
+        chars: cursorCell.getChars(),
+        width: cursorCell.getWidth(),
+        inverse: Boolean(cursorCell.isInverse()),
+        backgroundDefault: cursorCell.isBgDefault(),
+        foregroundDefault: cursorCell.isFgDefault()
+      }
+    : null
+  let cursorRowIndex = highlightedRows.findIndex(
     ({ row, firstColumn, lastColumn }) => row === cursorRow && cursorColumn >= firstColumn && cursorColumn <= lastColumn
   )
+
   if (cursorRowIndex === -1) {
-    return null
+    // Vim's active Visual endpoint is drawn by xterm's cursor layer. That
+    // overlay is not part of the buffer cell attributes, so the endpoint can
+    // sit immediately before or after the inverse/background run even though
+    // it is part of the same Vim selection.
+    cursorRowIndex = highlightedRows.findIndex(
+      ({ row, firstColumn, lastColumn }) =>
+        row === cursorRow && (cursorColumn === firstColumn - 1 || cursorColumn === lastColumn)
+    )
+    if (cursorRowIndex !== -1) {
+      const cursorRowHighlight = highlightedRows[cursorRowIndex]
+      cursorRowHighlight.firstColumn = Math.min(cursorRowHighlight.firstColumn, cursorColumn)
+      cursorRowHighlight.lastColumn = Math.max(cursorRowHighlight.lastColumn, cursorColumn + cursorCellWidth)
+    }
+  }
+
+  if (cursorRowIndex === -1) {
+    // A one-character Visual selection has no separately styled cells at all:
+    // its only cell is covered by the cursor layer. The status marker and
+    // mouse protocol already establish that this is Vim Visual mode, so copy
+    // that current cell rather than incorrectly disabling Copy.
+    const cursorLine = buffer.getLine(cursorRow)
+    const text = cursorLine?.translateToString(false, cursorColumn, cursorColumn + cursorCellWidth) ?? ''
+    diagnose('cursor-only', {
+      mode,
+      modeIndicators,
+      cursorRow,
+      cursorColumn,
+      cursorCell: cursorCellDetails,
+      highlightedRows,
+      text
+    })
+    return text ? { text, mode, startRow: cursorRow, endRow: cursorRow } : null
   }
 
   // A Visual range is contiguous by row and always contains Vim's cursor.
@@ -258,6 +454,16 @@ function getVimVisualSelection(terminal: Terminal): VimVisualSelection | null {
     return line.translateToString(true, selectionStart, selectionEnd)
   })
   const text = lines.join('\n')
+  diagnose('highlighted-range', {
+    mode,
+    modeIndicators,
+    cursorRow,
+    cursorColumn,
+    cursorCell: cursorCellDetails,
+    highlightedRows,
+    selectionRows,
+    text
+  })
   if (!text) {
     return null
   }
@@ -275,6 +481,17 @@ function logTerminalClipboard(terminal: Terminal, action: string, details: Recor
     hasSelection: terminal.hasSelection(),
     mouseTrackingMode: terminal.modes.mouseTrackingMode,
     selectionLength: selection.length,
+    ...details
+  })
+}
+
+function logTerminalZoom(terminal: Terminal, action: string, details: Record<string, unknown> = {}) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  console.debug(`[TerminalView][zoom] ${action}`, {
+    fontSize: terminal.options.fontSize,
     ...details
   })
 }
@@ -465,7 +682,7 @@ export const TerminalView = memo(function TerminalView({
       return
     }
     const xtermSelection = terminal.getSelection()
-    const vimVisualSelection = xtermSelection ? null : getVimVisualSelection(terminal)
+    const vimVisualSelection = xtermSelection ? null : getVimVisualSelection(terminal, true)
     const selection = xtermSelection || vimVisualSelection?.text || ''
     if (!selection) {
       logTerminalClipboard(terminal, 'copy-skipped-empty-selection')
@@ -772,7 +989,7 @@ export const TerminalView = memo(function TerminalView({
 
     const terminal = new Terminal({
       fontFamily: FILETERM_MONO_FONT_FAMILY,
-      fontSize: 12,
+      fontSize: TERMINAL_DEFAULT_FONT_SIZE,
       lineHeight: 1.05,
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -808,6 +1025,37 @@ export const TerminalView = memo(function TerminalView({
     terminal.loadAddon(webLinksAddon)
     terminal.unicode.activeVersion = '11'
     terminal.open(hostRef.current)
+    const terminalTextarea = terminal.textarea
+    const adjustTerminalFontSize = (change: number) => {
+      const currentSize = terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE
+      const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, currentSize + change))
+      if (nextSize === currentSize) {
+        return false
+      }
+
+      terminal.options.fontSize = nextSize
+      terminal.clearTextureAtlas()
+      // Font metrics change the visible grid, so keep the remote PTY's size
+      // in lockstep with this terminal rather than applying webview zoom.
+      syncTerminalSize(fitAddon, terminal, { force: true })
+      return true
+    }
+    const resetTerminalFontSize = () =>
+      adjustTerminalFontSize(TERMINAL_DEFAULT_FONT_SIZE - (terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE))
+    const applyTerminalZoom = (
+      operation: TerminalZoomOperation,
+      source: 'menu' | 'shortcut' | 'gesture',
+      steps = 1
+    ) => {
+      const changed =
+        operation === 'reset' ? resetTerminalFontSize() : adjustTerminalFontSize((operation === 'in' ? 1 : -1) * steps)
+      logTerminalZoom(terminal, `${source}-${operation}`, { changed, steps })
+      return changed
+    }
+    const markTerminalFocused = () => {
+      lastFocusedTerminal = terminal
+    }
+    terminalTextarea?.addEventListener('focus', markTerminalFocused)
     const writeReconnectHint = () => {
       if (!onReconnectRef.current || reconnectHintShownRef.current) {
         return
@@ -878,6 +1126,28 @@ export const TerminalView = memo(function TerminalView({
       const matchesFind = isMac
         ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'f'
         : event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f'
+      const isZoomInKey = event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd'
+      const isZoomOutKey =
+        event.key === '-' || event.key === '_' || event.code === 'Minus' || event.code === 'NumpadSubtract'
+      // Keep app/window zoom out of the way of remote programs. Cmd± on macOS
+      // and Ctrl+Shift± on Windows/Linux adjust only this terminal.
+      const matchesZoomIn = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomInKey
+        : event.ctrlKey && event.shiftKey && !event.altKey && isZoomInKey
+      const matchesZoomOut = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomOutKey
+        : event.ctrlKey && event.shiftKey && !event.altKey && isZoomOutKey
+      // Keep the browser-standard Cmd+0 reset on macOS; Windows/Linux use
+      // Ctrl+Shift+0 to avoid taking over their WebView reset shortcut.
+      const matchesZoomReset = isMac
+        ? event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          (event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0')
+        : event.ctrlKey &&
+          event.shiftKey &&
+          !event.altKey &&
+          (event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0')
 
       if (matchesCopy) {
         event.preventDefault()
@@ -902,6 +1172,13 @@ export const TerminalView = memo(function TerminalView({
         } else {
           openFind()
         }
+        return false
+      }
+
+      if (matchesZoomIn || matchesZoomOut || matchesZoomReset) {
+        event.preventDefault()
+        event.stopPropagation()
+        applyTerminalZoom(matchesZoomReset ? 'reset' : matchesZoomIn ? 'in' : 'out', 'shortcut')
         return false
       }
 
@@ -1248,7 +1525,7 @@ export const TerminalView = memo(function TerminalView({
       // Read selection state when the menu is about to show: xterm.js finishes
       // its selection on pointerup, so at contextmenu time terminal.hasSelection()
       // is authoritative. Pointerdown/mousedown are too early.
-      const vimVisualSelection = getVimVisualSelection(terminal)
+      const vimVisualSelection = getVimVisualSelection(terminal, true)
       const nextHasSelection = terminal.hasSelection() || Boolean(vimVisualSelection)
       setHasSelection(nextHasSelection)
       logTerminalClipboard(terminal, 'context-menu-opened', {
@@ -1269,6 +1546,20 @@ export const TerminalView = memo(function TerminalView({
       const host = hostRef.current
       const target = event.target
       return Boolean(host && target instanceof Node && host.contains(target))
+    }
+
+    const isTerminalGestureTarget = (event: Event) => {
+      if (isEventInsideTerminal(event)) {
+        return true
+      }
+
+      // WKWebView can dispatch GestureEvents at document/body instead of the
+      // element beneath the pinch. In that case retain the last xterm focus
+      // target, but never consume a gesture intended for another pane.
+      return (
+        lastFocusedTerminal === terminal &&
+        (event.target === document || event.target === document.body || event.target === document.documentElement)
+      )
     }
 
     const onMouseDown = (event: MouseEvent) => {
@@ -1293,6 +1584,79 @@ export const TerminalView = memo(function TerminalView({
       // break xterm.js text selection. Do not set menu state here: selection is
       // not final until pointerup/contextmenu.
       event.stopImmediatePropagation()
+    }
+
+    let wheelZoomDelta = 0
+    const onWheel = (event: WheelEvent) => {
+      // Chromium/WebKit surface both Ctrl+wheel and trackpad pinch as a wheel
+      // event with ctrlKey=true. This deliberately gives the same terminal-only
+      // zoom gesture on macOS, Windows and Linux.
+      if (!event.ctrlKey) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      const delta = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY
+      wheelZoomDelta += delta
+      const steps = Math.floor(Math.abs(wheelZoomDelta) / TERMINAL_WHEEL_ZOOM_THRESHOLD)
+      if (steps === 0) {
+        return
+      }
+
+      const direction = wheelZoomDelta < 0 ? 1 : -1
+      wheelZoomDelta -= Math.sign(wheelZoomDelta) * steps * TERMINAL_WHEEL_ZOOM_THRESHOLD
+      const changed = adjustTerminalFontSize(direction * steps)
+      logTerminalZoom(terminal, 'wheel', { changed, direction, steps })
+    }
+
+    let previousGestureScale = 1
+    let gestureZoomDelta = 0
+    const onGestureStart = (event: Event) => {
+      if (!isTerminalGestureTarget(event)) {
+        return
+      }
+      // WKWebView reports trackpad pinch through WebKit GestureEvents rather
+      // than Chromium's ctrlKey wheel path. Cancelling it prevents WebView
+      // page zoom and keeps the gesture local to this terminal.
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      previousGestureScale = (event as PinchGestureEvent).scale ?? 1
+      gestureZoomDelta = 0
+      logTerminalZoom(terminal, 'gesture-start', { scale: previousGestureScale })
+    }
+    const onGestureChange = (event: Event) => {
+      if (!isTerminalGestureTarget(event)) {
+        return
+      }
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      const scale = (event as PinchGestureEvent).scale ?? previousGestureScale
+      if (!Number.isFinite(scale) || scale <= 0 || scale === previousGestureScale) {
+        return
+      }
+
+      gestureZoomDelta += Math.log(scale / previousGestureScale)
+      previousGestureScale = scale
+      const steps = Math.floor(Math.abs(gestureZoomDelta) / TERMINAL_GESTURE_ZOOM_THRESHOLD)
+      if (steps === 0) {
+        return
+      }
+
+      const direction = gestureZoomDelta > 0 ? 1 : -1
+      gestureZoomDelta -= direction * steps * TERMINAL_GESTURE_ZOOM_THRESHOLD
+      applyTerminalZoom(direction > 0 ? 'in' : 'out', 'gesture', steps)
+      logTerminalZoom(terminal, 'gesture-change', { direction, scale, steps })
+    }
+    const onGestureEnd = (event: Event) => {
+      if (!isTerminalGestureTarget(event)) {
+        return
+      }
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      logTerminalZoom(terminal, 'gesture-end')
+      previousGestureScale = 1
+      gestureZoomDelta = 0
     }
 
     const onDocumentContextMenu = (event: MouseEvent) => {
@@ -1323,7 +1687,7 @@ export const TerminalView = memo(function TerminalView({
         ? event.metaKey && !event.shiftKey && key === 'c'
         : event.ctrlKey && event.shiftKey && key === 'c'
 
-      if (matchesCopy && (terminal.hasSelection() || Boolean(getVimVisualSelection(terminal)))) {
+      if (matchesCopy && (terminal.hasSelection() || Boolean(getVimVisualSelection(terminal, true)))) {
         const target = event.target
         const editableTarget =
           target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target : null
@@ -1367,9 +1731,21 @@ export const TerminalView = memo(function TerminalView({
         openFind()
       }
     }
+    const handleTerminalZoom = (operation: TerminalZoomOperation) => {
+      if (lastFocusedTerminal !== terminal) {
+        return
+      }
+      applyTerminalZoom(operation, 'menu')
+    }
 
     hostRef.current.addEventListener('mousedown', onMouseDown, true)
     hostRef.current.addEventListener('pointerdown', onPointerDown, true)
+    hostRef.current.addEventListener('wheel', onWheel, { capture: true, passive: false })
+    // GestureEvents can target document/body in WKWebView, so listen at the
+    // window capture phase and scope the handler with isTerminalGestureTarget.
+    window.addEventListener('gesturestart', onGestureStart, { capture: true, passive: false })
+    window.addEventListener('gesturechange', onGestureChange, { capture: true, passive: false })
+    window.addEventListener('gestureend', onGestureEnd, { capture: true, passive: false })
     document.addEventListener('contextmenu', onDocumentContextMenu, true)
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('focus', onWindowFocus)
@@ -1379,6 +1755,8 @@ export const TerminalView = memo(function TerminalView({
     const offTerminalCopy = onAppEvent(APP_EVENT.terminalCopy, handleTerminalCopy)
     const offTerminalPaste = onAppEvent(APP_EVENT.terminalPaste, handleTerminalPaste)
     const offTerminalFind = onAppEvent(APP_EVENT.terminalFind, handleTerminalFind)
+    const offTerminalZoom = onAppEvent(APP_EVENT.terminalZoom, handleTerminalZoom)
+    const offNativeTerminalZoom = window.fileterm?.onTerminalZoomRequest(handleTerminalZoom)
 
     // Ask the main process for the actual PTY size once the terminal is mounted.
     if (!bootedTabs.current.has(tabIdRef.current)) {
@@ -1391,6 +1769,8 @@ export const TerminalView = memo(function TerminalView({
       offTerminalCopy()
       offTerminalPaste()
       offTerminalFind()
+      offTerminalZoom()
+      offNativeTerminalZoom?.()
       onDataDispose.dispose()
       onSelectionDispose.dispose()
       offData?.()
@@ -1426,11 +1806,19 @@ export const TerminalView = memo(function TerminalView({
       resizeObserver.disconnect()
       hostRef.current?.removeEventListener('mousedown', onMouseDown, true)
       hostRef.current?.removeEventListener('pointerdown', onPointerDown, true)
+      hostRef.current?.removeEventListener('wheel', onWheel, true)
+      terminalTextarea?.removeEventListener('focus', markTerminalFocused)
+      window.removeEventListener('gesturestart', onGestureStart, true)
+      window.removeEventListener('gesturechange', onGestureChange, true)
+      window.removeEventListener('gestureend', onGestureEnd, true)
       document.removeEventListener('contextmenu', onDocumentContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('selectionchange', onDocumentSelectionChange)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      if (lastFocusedTerminal === terminal) {
+        lastFocusedTerminal = null
+      }
       searchAddonRef.current = null
       terminalRef.current = null
       terminal.dispose()
@@ -1642,6 +2030,7 @@ export const TerminalView = memo(function TerminalView({
       ) : null}
       {contextMenu ? (
         <ContextMenu
+          autoFocus={false}
           className="terminal-context-menu"
           items={[
             { label: t.copy, shortcut: shortcuts.copy, disabled: !hasSelection, action: runCopy },

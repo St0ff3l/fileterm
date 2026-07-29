@@ -29,7 +29,8 @@ import type {
   LocalNetworkShareConnectionResult,
   SshForwardRule,
   SshTunnelSnapshot,
-  CommandExecutionResult
+  CommandExecutionResult,
+  TerminalZoomOperation
 } from '@fileterm/core'
 import { APP_EVENT, dispatchAppEvent } from '../renderer/lib/app-events'
 
@@ -294,10 +295,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     showWindowMenu: (menuType: 'app' | 'file' | 'view' | 'window', x: number, y: number) =>
       invoke<void>('app_show_window_menu', { menuType, x, y }),
     reloadCurrentWindow: () => invoke<void>('app_window_action', { action: 'reload' }),
-    setWindowZoom: (operation: 'reset' | 'in' | 'out') =>
-      invoke<void>('app_window_action', {
-        action: operation === 'reset' ? 'zoom-reset' : operation === 'in' ? 'zoom-in' : 'zoom-out'
-      }),
     toggleDevtools: () => invoke<void>('app_window_action', { action: 'toggle-devtools' }),
     requestCloseCurrentWindow: () => invoke<void>('app_window_action', { action: 'request-close-window' }),
     requestQuitApp: () => invoke<void>('app_window_action', { action: 'request-quit' }),
@@ -517,6 +514,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       subscribe('app:split-pane-request', listener),
     onFocusPaneRequest: (listener: (direction: 'left' | 'right' | 'up' | 'down') => void) =>
       subscribe('app:focus-pane-request', listener),
+    onTerminalZoomRequest: (listener: (operation: TerminalZoomOperation) => void) =>
+      subscribe('app:terminal-zoom-request', listener),
     confirmCloseWindow: (action: 'quit' | 'hide' | 'cancel') => {
       if (action === 'cancel') return Promise.resolve()
       if (action === 'quit') {
