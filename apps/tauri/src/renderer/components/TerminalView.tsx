@@ -124,6 +124,161 @@ function looksLikeShellPrompt(line: string) {
   )
 }
 
+function isFocusTrackingSequence(data: string) {
+  const escape = String.fromCharCode(27)
+  return data === `${escape}[I` || data === `${escape}[O`
+}
+
+type VimVisualSelection = {
+  text: string
+  mode: 'character' | 'line' | 'block'
+  startRow: number
+  endRow: number
+}
+
+type HighlightedBufferRow = {
+  row: number
+  firstColumn: number
+  lastColumn: number
+}
+
+/**
+ * Vim enables DEC mouse tracking while it is running. That deliberately makes
+ * xterm stop maintaining a local selection, so `terminal.getSelection()` is
+ * empty even though Vim is visibly in Visual mode. Vim renders that range with
+ * either SGR inverse or a non-default background; recover the corresponding
+ * buffer text as a copy-only fallback.
+ *
+ * This is intentionally gated by Vim's own `-- VISUAL --` mode indicator and
+ * the active mouse protocol. Other TUIs with coloured panels must not become
+ * accidentally copyable selections.
+ */
+function getVimVisualSelection(terminal: Terminal): VimVisualSelection | null {
+  if (terminal.modes.mouseTrackingMode === 'none') {
+    return null
+  }
+
+  const buffer = terminal.buffer.active
+  const viewportStart = buffer.viewportY
+  const viewportEnd = Math.min(buffer.viewportY + terminal.rows, buffer.length)
+  let mode: VimVisualSelection['mode'] | null = null
+
+  for (let row = viewportStart; row < viewportEnd; row += 1) {
+    const lineText = buffer.getLine(row)?.translateToString(true) ?? ''
+    if (/--\s+VISUAL\s+BLOCK\s+--/.test(lineText)) {
+      mode = 'block'
+      break
+    }
+    if (/--\s+VISUAL\s+LINE\s+--/.test(lineText)) {
+      mode = 'line'
+      break
+    }
+    if (/--\s+VISUAL\s+--/.test(lineText)) {
+      mode = 'character'
+    }
+  }
+
+  if (!mode) {
+    return null
+  }
+
+  const highlightedRows: HighlightedBufferRow[] = []
+  for (let row = viewportStart; row < viewportEnd; row += 1) {
+    const line = buffer.getLine(row)
+    if (!line) {
+      continue
+    }
+
+    let firstColumn = -1
+    let lastColumn = -1
+    for (let column = 0; column < terminal.cols; column += 1) {
+      const cell = line.getCell(column)
+      // Wide characters have a zero-width continuation cell. It has no text
+      // of its own and must not move a selection boundary one column forward.
+      if (!cell || cell.getWidth() === 0) {
+        continue
+      }
+      if (!cell.isInverse() && cell.isBgDefault()) {
+        continue
+      }
+      if (firstColumn === -1) {
+        firstColumn = column
+      }
+      lastColumn = column + cell.getWidth()
+    }
+
+    if (firstColumn !== -1) {
+      highlightedRows.push({ row, firstColumn, lastColumn })
+    }
+  }
+
+  const cursorRow = buffer.baseY + buffer.cursorY
+  const cursorColumn = buffer.cursorX
+  const cursorRowIndex = highlightedRows.findIndex(
+    ({ row, firstColumn, lastColumn }) => row === cursorRow && cursorColumn >= firstColumn && cursorColumn <= lastColumn
+  )
+  if (cursorRowIndex === -1) {
+    return null
+  }
+
+  // A Visual range is contiguous by row and always contains Vim's cursor.
+  // Restricting the candidate to that contiguous run avoids status bars and
+  // syntax groups elsewhere in the terminal buffer.
+  let startIndex = cursorRowIndex
+  while (startIndex > 0 && highlightedRows[startIndex - 1].row === highlightedRows[startIndex].row - 1) {
+    startIndex -= 1
+  }
+  let endIndex = cursorRowIndex
+  while (
+    endIndex < highlightedRows.length - 1 &&
+    highlightedRows[endIndex + 1].row === highlightedRows[endIndex].row + 1
+  ) {
+    endIndex += 1
+  }
+
+  const selectionRows = highlightedRows.slice(startIndex, endIndex + 1)
+  const startRow = selectionRows[0]
+  const endRow = selectionRows.at(-1)
+  if (!endRow) {
+    return null
+  }
+
+  const lines = selectionRows.map(({ row, firstColumn, lastColumn }, index) => {
+    const line = buffer.getLine(row)
+    if (!line) {
+      return ''
+    }
+
+    if (mode === 'block') {
+      return line.translateToString(true, firstColumn, lastColumn)
+    }
+
+    const selectionStart = index === 0 ? firstColumn : 0
+    const selectionEnd = index === selectionRows.length - 1 ? lastColumn : terminal.cols
+    return line.translateToString(true, selectionStart, selectionEnd)
+  })
+  const text = lines.join('\n')
+  if (!text) {
+    return null
+  }
+
+  return { text, mode, startRow: startRow.row, endRow: endRow.row }
+}
+
+function logTerminalClipboard(terminal: Terminal, action: string, details: Record<string, unknown> = {}) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  const selection = terminal.getSelection()
+  console.debug(`[TerminalView][clipboard] ${action}`, {
+    hasSelection: terminal.hasSelection(),
+    mouseTrackingMode: terminal.modes.mouseTrackingMode,
+    selectionLength: selection.length,
+    ...details
+  })
+}
+
 export const TerminalView = memo(function TerminalView({
   tabId,
   bootText,
@@ -309,14 +464,29 @@ export const TerminalView = memo(function TerminalView({
     if (!terminal) {
       return
     }
-    const selection = terminal.getSelection()
+    const xtermSelection = terminal.getSelection()
+    const vimVisualSelection = xtermSelection ? null : getVimVisualSelection(terminal)
+    const selection = xtermSelection || vimVisualSelection?.text || ''
     if (!selection) {
+      logTerminalClipboard(terminal, 'copy-skipped-empty-selection')
       return
     }
+    logTerminalClipboard(terminal, 'copy-requested', {
+      source: vimVisualSelection ? 'vim-visual' : 'xterm',
+      vimVisualMode: vimVisualSelection?.mode
+    })
     if (window.fileterm?.writeClipboardText) {
-      void window.fileterm.writeClipboardText(selection)
+      void window.fileterm.writeClipboardText(selection).then(
+        () => logTerminalClipboard(terminal, 'copy-succeeded'),
+        (error: unknown) => {
+          if (import.meta.env.DEV) {
+            console.warn('[TerminalView][clipboard] copy-failed', error)
+          }
+        }
+      )
     } else {
       copyText(selection)
+      logTerminalClipboard(terminal, 'copy-requested-browser-fallback')
     }
     terminal.focus()
   }
@@ -609,6 +779,10 @@ export const TerminalView = memo(function TerminalView({
       cursorWidth: 2,
       allowProposedApi: true,
       allowTransparency: true,
+      // Vim enables mouse reporting, which disables xterm's normal selection
+      // service. On macOS, Option+drag is the standard xterm escape hatch for
+      // making a local selection without sending that drag to Vim.
+      macOptionClickForcesSelection: true,
       reflowCursorLine: false,
       scrollback: 6000,
       linkHandler: {
@@ -708,6 +882,7 @@ export const TerminalView = memo(function TerminalView({
       if (matchesCopy) {
         event.preventDefault()
         event.stopPropagation()
+        logTerminalClipboard(terminal, 'copy-shortcut-xterm', { key: event.key })
         runCopy()
         return false
       }
@@ -909,8 +1084,17 @@ export const TerminalView = memo(function TerminalView({
       if (data.includes('\r') || data.includes('\n')) {
         awaitingCommandCompletionRef.current = true
       }
-      clearEphemeralHighlight()
-      setContextMenu(null)
+      // xterm.js focus tracking emits "\u001b[I" (focus in) and "\u001b[O" (focus
+      // out) as data events when the webview focus changes. Closing the context
+      // menu or clearing the selection on these sequences makes a right-click
+      // in Vim/nano immediately disable the Copy menu item.
+      const isFocusTrackingEvent = isFocusTrackingSequence(data)
+      if (!isFocusTrackingEvent) {
+        clearEphemeralHighlight()
+        setContextMenu(null)
+      } else {
+        logTerminalClipboard(terminal, 'focus-tracking-preserved-selection', { data })
+      }
       // 发送失败必须可见：后端 worker 死亡（panic/断连）时 send 会 reject，
       // 静默吞掉会让终端看起来"卡死且 Ctrl+C 无效"。降级为未连接状态并
       // 给出重连提示，Enter 重连路径随之可用。
@@ -937,7 +1121,9 @@ export const TerminalView = memo(function TerminalView({
     })
 
     const onSelectionDispose = terminal.onSelectionChange(() => {
-      setHasSelection(terminal.hasSelection())
+      const nextHasSelection = terminal.hasSelection() || Boolean(getVimVisualSelection(terminal))
+      setHasSelection(nextHasSelection)
+      logTerminalClipboard(terminal, 'selection-changed', { nextHasSelection })
     })
 
     const offData = window.fileterm?.onTerminalData(({ tabId: nextTabId, chunk }) => {
@@ -1054,19 +1240,71 @@ export const TerminalView = memo(function TerminalView({
 
     const openContextMenu = (event: MouseEvent) => {
       event.preventDefault()
-      event.stopPropagation()
-      setHasSelection(terminal.hasSelection())
+      // This is a document-capture handler, so prevent xterm.js and any native
+      // context-menu handler from observing the canonical event after us.
+      // The earlier pointerdown/mousedown capture handlers are responsible for
+      // stopping xterm's mouse-reporting handlers.
+      event.stopImmediatePropagation()
+      // Read selection state when the menu is about to show: xterm.js finishes
+      // its selection on pointerup, so at contextmenu time terminal.hasSelection()
+      // is authoritative. Pointerdown/mousedown are too early.
+      const vimVisualSelection = getVimVisualSelection(terminal)
+      const nextHasSelection = terminal.hasSelection() || Boolean(vimVisualSelection)
+      setHasSelection(nextHasSelection)
+      logTerminalClipboard(terminal, 'context-menu-opened', {
+        nextHasSelection,
+        source: vimVisualSelection ? 'vim-visual' : 'xterm',
+        vimVisualMode: vimVisualSelection?.mode,
+        vimVisualRows: vimVisualSelection ? `${vimVisualSelection.startRow}-${vimVisualSelection.endRow}` : undefined
+      })
       setContextMenu({ x: event.clientX, y: event.clientY })
     }
 
+    const isSecondaryButton = (event: MouseEvent | PointerEvent) => {
+      // macOS Ctrl+Click synthesizes a context menu with button 0 + ctrlKey.
+      return event.button === 2 || (event.button === 0 && event.ctrlKey && isMac)
+    }
+
+    const isEventInsideTerminal = (event: Event) => {
+      const host = hostRef.current
+      const target = event.target
+      return Boolean(host && target instanceof Node && host.contains(target))
+    }
+
     const onMouseDown = (event: MouseEvent) => {
-      if (event.button !== 2) {
+      if (!isSecondaryButton(event)) {
         return
       }
-      // Vim and other TUI programs enable xterm mouse reporting. Intercept
-      // the secondary-button press before it reaches xterm so that a local
-      // context menu remains available instead of sending a mouse sequence
-      // to the remote program.
+      // Vim and other TUI programs enable xterm mouse reporting. xterm.js
+      // registers its own mousedown listener that calls ev.preventDefault() +
+      // this.focus(), suppressing the contextmenu event and sending a mouse
+      // sequence to the remote program. Stop it here so the native contextmenu
+      // event still fires and our menu can open.
+      event.stopImmediatePropagation()
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isSecondaryButton(event)) {
+        return
+      }
+      // xterm.js 5.x uses Pointer Events for mouse reporting. Intercept the
+      // right button in the capture phase before xterm converts it into an
+      // escape sequence for Vim/nano. Do not call preventDefault(): that would
+      // break xterm.js text selection. Do not set menu state here: selection is
+      // not final until pointerup/contextmenu.
+      event.stopImmediatePropagation()
+    }
+
+    const onDocumentContextMenu = (event: MouseEvent) => {
+      // Final safety net for Vim/nano with mouse reporting enabled: pointerdown
+      // and mousedown may be consumed by xterm's mouse handler before our
+      // hostRef capture runs in some WKWebView configurations. The contextmenu
+      // event is the canonical right-click event and always fires at document
+      // level, so we catch it here and verify the click landed inside our
+      // terminal before showing the menu.
+      if (!isEventInsideTerminal(event)) {
+        return
+      }
       openContextMenu(event)
     }
 
@@ -1085,7 +1323,7 @@ export const TerminalView = memo(function TerminalView({
         ? event.metaKey && !event.shiftKey && key === 'c'
         : event.ctrlKey && event.shiftKey && key === 'c'
 
-      if (matchesCopy && terminal.hasSelection()) {
+      if (matchesCopy && (terminal.hasSelection() || Boolean(getVimVisualSelection(terminal)))) {
         const target = event.target
         const editableTarget =
           target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target : null
@@ -1098,6 +1336,7 @@ export const TerminalView = memo(function TerminalView({
         if (!editableSelection && !hasDocumentSelection) {
           event.preventDefault()
           event.stopPropagation()
+          logTerminalClipboard(terminal, 'copy-shortcut-window', { key: event.key })
           runCopy()
         }
         return
@@ -1130,7 +1369,8 @@ export const TerminalView = memo(function TerminalView({
     }
 
     hostRef.current.addEventListener('mousedown', onMouseDown, true)
-    hostRef.current.addEventListener('contextmenu', openContextMenu, true)
+    hostRef.current.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('contextmenu', onDocumentContextMenu, true)
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('selectionchange', onDocumentSelectionChange)
@@ -1185,7 +1425,8 @@ export const TerminalView = memo(function TerminalView({
       disposeCanvasTextMetrics()
       resizeObserver.disconnect()
       hostRef.current?.removeEventListener('mousedown', onMouseDown, true)
-      hostRef.current?.removeEventListener('contextmenu', openContextMenu, true)
+      hostRef.current?.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('contextmenu', onDocumentContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('selectionchange', onDocumentSelectionChange)

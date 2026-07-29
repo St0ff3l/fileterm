@@ -12,16 +12,9 @@ interface OpenMenu {
 }
 
 // Windows/Linux 共用自绘菜单栏（见 App.tsx 的 `usesCustomWindowChrome`
-// 判定），两端均使用 Ctrl/Alt 风格的快捷键文案。
-const SHORTCUT_NEW_CONNECTION = 'Ctrl+N'
-const SHORTCUT_CONNECTION_MANAGER = 'Ctrl+Shift+C'
-const SHORTCUT_COMMAND_MANAGER = 'Ctrl+Shift+M'
+// 判定）。除 Alt+F4 外，不给窗口菜单功能分配全局快捷键，以免与终端或
+// 操作系统保留键冲突。
 const SHORTCUT_EXIT = 'Alt+F4'
-const SHORTCUT_RELOAD = 'F5'
-const SHORTCUT_ACTUAL_SIZE = 'Ctrl+0'
-const SHORTCUT_ZOOM_IN = 'Ctrl+Plus'
-const SHORTCUT_ZOOM_OUT = 'Ctrl+-'
-const SHORTCUT_TOGGLE_DEVTOOLS = 'F12'
 const SHORTCUT_CLOSE_WINDOW = 'Alt+F4'
 
 // dev 构建才显示"开发者工具"项，与 Rust 端 `#[cfg(debug_assertions)]`
@@ -41,17 +34,14 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
       return [
         {
           label: t.windowMenuNewConnection,
-          shortcut: SHORTCUT_NEW_CONNECTION,
           action: () => void desktopApi?.openConnectionFormWindow('create')
         },
         {
           label: t.windowMenuConnectionManager,
-          shortcut: SHORTCUT_CONNECTION_MANAGER,
           action: () => void desktopApi?.openConnectionManagerWindow()
         },
         {
           label: t.windowMenuCommandManager,
-          shortcut: SHORTCUT_COMMAND_MANAGER,
           action: () => void desktopApi?.openCommandManagerWindow()
         },
         { separator: true },
@@ -62,12 +52,11 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
     }
     if (kind === 'view') {
       const items: ContextMenuEntry[] = [
-        { label: t.windowMenuReload, shortcut: SHORTCUT_RELOAD, action: () => void desktopApi?.reloadCurrentWindow() }
+        { label: t.windowMenuReload, action: () => void desktopApi?.reloadCurrentWindow() }
       ]
       if (isDevBuild) {
         items.push({
           label: t.windowMenuToggleDevtools,
-          shortcut: SHORTCUT_TOGGLE_DEVTOOLS,
           action: () => void desktopApi?.toggleDevtools()
         })
       }
@@ -75,11 +64,10 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
         { separator: true },
         {
           label: t.windowMenuActualSize,
-          shortcut: SHORTCUT_ACTUAL_SIZE,
           action: () => void desktopApi?.setWindowZoom('reset')
         },
-        { label: t.windowMenuZoomIn, shortcut: SHORTCUT_ZOOM_IN, action: () => void desktopApi?.setWindowZoom('in') },
-        { label: t.windowMenuZoomOut, shortcut: SHORTCUT_ZOOM_OUT, action: () => void desktopApi?.setWindowZoom('out') }
+        { label: t.windowMenuZoomIn, action: () => void desktopApi?.setWindowZoom('in') },
+        { label: t.windowMenuZoomOut, action: () => void desktopApi?.setWindowZoom('out') }
       )
       return items
     }

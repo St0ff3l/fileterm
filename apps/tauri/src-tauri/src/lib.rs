@@ -296,34 +296,29 @@ pub(crate) fn install_localized_tray_menu(
 #[cfg(not(target_os = "linux"))]
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
-    let (quit_accelerator, close_accelerator) = application_menu_accelerators(platform);
-    let new_tab_accelerator = workspace_new_tab_accelerator(platform);
+    let quit_accelerator = application_quit_accelerator(platform);
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
         localized(is_english, "New Connection", "新建连接"),
     )
-    .accelerator("CmdOrCtrl+N")
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let new_tab_menu = MenuItemBuilder::with_id(
         "workspace-new-tab",
         localized(is_english, "New Tab", "新建标签页"),
     )
-    .accelerator(new_tab_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let connection_manager_menu = MenuItemBuilder::with_id(
         "connection-manager",
         localized(is_english, "Connection Manager", "连接管理器"),
     )
-    .accelerator("CmdOrCtrl+Shift+C")
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let command_manager_menu = MenuItemBuilder::with_id(
         "command-manager",
         localized(is_english, "Command Manager", "命令管理器"),
     )
-    .accelerator("CmdOrCtrl+Shift+M")
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
 
@@ -384,10 +379,14 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     let window_close_menu = MenuItemBuilder::with_id(
         "window-request-close",
         localized(is_english, "Close Window", "关闭窗口"),
-    )
-    .accelerator(close_accelerator)
-    .build(app)
-    .map_err(|error| AppError::Window(error.to_string()))?;
+    );
+    // Cmd+W is macOS's standard close-window affordance. Windows/Linux retain
+    // only Alt+F4 for exit, with no competing menu accelerator here.
+    #[cfg(target_os = "macos")]
+    let window_close_menu = window_close_menu.accelerator("Cmd+W");
+    let window_close_menu = window_close_menu
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
     let window_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "Window", "窗口"))
         .item(&window_minimize_menu)
         .separator()
@@ -404,63 +403,33 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .build()
         .map_err(|error| AppError::Window(error.to_string()))?;
 
-    // View 菜单：分屏快捷键。终端聚焦时前端键盘事件会被 xterm 拦截，
-    // 原生菜单 accelerator 全局有效，与现有 Cmd+W 一致。
-    let (split_vertical_accelerator, split_horizontal_accelerator) =
-        split_pane_accelerators(platform);
     let view_split_vertical = MenuItemBuilder::with_id(
         "view-split-vertical",
         localized(is_english, "Split Vertically", "垂直分屏"),
     )
-    .accelerator(split_vertical_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let view_split_horizontal = MenuItemBuilder::with_id(
         "view-split-horizontal",
         localized(is_english, "Split Horizontally", "水平分屏"),
     )
-    .accelerator(split_horizontal_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let view_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "View", "视图"))
         .item(&view_split_vertical)
         .item(&view_split_horizontal);
-    #[cfg(target_os = "windows")]
+    // macOS uses this native menu instead of the renderer-owned Windows/Linux
+    // menu bar, so expose the requested debug-only F12 entry here.
+    #[cfg(all(debug_assertions, target_os = "macos"))]
     let view_submenu_builder = {
-        let focus_pane_left = MenuItemBuilder::with_id(
-            "view-focus-pane-left",
-            localized(is_english, "Focus Pane Left", "聚焦左侧窗格"),
+        let devtools = MenuItemBuilder::with_id(
+            "view-toggle-devtools",
+            localized(is_english, "Toggle Developer Tools", "开发者工具"),
         )
-        .accelerator("Alt+Left")
+        .accelerator("F12")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let focus_pane_right = MenuItemBuilder::with_id(
-            "view-focus-pane-right",
-            localized(is_english, "Focus Pane Right", "聚焦右侧窗格"),
-        )
-        .accelerator("Alt+Right")
-        .build(app)
-        .map_err(|error| AppError::Window(error.to_string()))?;
-        let focus_pane_up = MenuItemBuilder::with_id(
-            "view-focus-pane-up",
-            localized(is_english, "Focus Pane Up", "聚焦上方窗格"),
-        )
-        .accelerator("Alt+Up")
-        .build(app)
-        .map_err(|error| AppError::Window(error.to_string()))?;
-        let focus_pane_down = MenuItemBuilder::with_id(
-            "view-focus-pane-down",
-            localized(is_english, "Focus Pane Down", "聚焦下方窗格"),
-        )
-        .accelerator("Alt+Down")
-        .build(app)
-        .map_err(|error| AppError::Window(error.to_string()))?;
-        view_submenu_builder
-            .separator()
-            .item(&focus_pane_left)
-            .item(&focus_pane_right)
-            .item(&focus_pane_up)
-            .item(&focus_pane_down)
+        view_submenu_builder.separator().item(&devtools)
     };
     let view_submenu = view_submenu_builder
         .build()
@@ -546,40 +515,13 @@ pub(crate) fn install_localized_application_menu(
     }
 }
 
-/// Match platform-native window shortcuts. macOS owns Cmd+Q/W.
-/// Windows and Linux keep Alt+F4 for quitting, but the close shortcut
-/// follows Windows Terminal's default `Ctrl+Shift+W` (closePane) so users
-/// migrating from pwsh/Windows Terminal get the same key, and FileTerm's
-/// Windows/Linux `Ctrl+Shift+*` family (copy/paste/close) stays consistent.
-fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str) {
+/// Preserve the standard app-quit accelerator on macOS and Alt+F4 elsewhere.
+/// All other window-menu accelerators are intentionally left unbound.
+fn application_quit_accelerator(platform: &str) -> &'static str {
     if platform == "macos" {
-        ("Cmd+Q", "Cmd+W")
+        "Cmd+Q"
     } else {
-        ("Alt+F4", "Ctrl+Shift+W")
-    }
-}
-
-/// Keep Cmd+T on macOS, while avoiding Ctrl+T collisions with terminals and
-/// WebViews on Windows/Linux.
-#[cfg(any(not(target_os = "linux"), test))]
-fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
-    if platform == "macos" {
-        "Cmd+T"
-    } else {
-        "Ctrl+Shift+T"
-    }
-}
-
-/// Align split shortcuts with the host terminal's default where a convention
-/// exists. Windows matches Windows Terminal / pwsh defaults exactly:
-/// `Alt+Shift++` (vertical) and `Alt+Shift+-` (horizontal). Linux has no
-/// universal convention, so it keeps FileTerm's own `Ctrl+Shift+*` family.
-#[cfg(any(not(target_os = "linux"), test))]
-fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
-    match platform {
-        "macos" => ("Cmd+D", "Cmd+Shift+D"),
-        "windows" => ("Alt+Shift+Plus", "Alt+Shift+-"),
-        _ => ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D"),
+        "Alt+F4"
     }
 }
 
@@ -649,7 +591,7 @@ pub(crate) fn show_window_context_menu(
     let is_english = crate::commands::app_get_ui_preferences(app.clone())
         .map(|preferences| preferences.locale == "enUS")
         .unwrap_or(false);
-    let (quit_accelerator, close_accelerator) = application_menu_accelerators(std::env::consts::OS);
+    let quit_accelerator = application_quit_accelerator(std::env::consts::OS);
 
     let menu = match kind {
         WindowMenuKind::App => {
@@ -674,21 +616,18 @@ pub(crate) fn show_window_context_menu(
                 "new-connection",
                 localized(is_english, "New Connection", "新建连接"),
             )
-            .accelerator("CmdOrCtrl+N")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let connection_manager = MenuItemBuilder::with_id(
                 "connection-manager",
                 localized(is_english, "Connection Manager", "连接管理"),
             )
-            .accelerator("CmdOrCtrl+Shift+C")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let command_manager = MenuItemBuilder::with_id(
                 "command-manager",
                 localized(is_english, "Command Manager", "命令管理"),
             )
-            .accelerator("CmdOrCtrl+Shift+M")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let logs = MenuItemBuilder::with_id(
@@ -717,31 +656,27 @@ pub(crate) fn show_window_context_menu(
                 "view-reload",
                 localized(is_english, "Reload", "重新加载"),
             )
-            .accelerator("F5")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let reset_zoom = MenuItemBuilder::with_id(
                 "view-reset-zoom",
                 localized(is_english, "Actual Size", "实际大小"),
             )
-            .accelerator("CmdOrCtrl+0")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let zoom_in =
                 MenuItemBuilder::with_id("view-zoom-in", localized(is_english, "Zoom In", "放大"))
-                    .accelerator("CmdOrCtrl+Plus")
                     .build(app)
                     .map_err(|error| AppError::Window(error.to_string()))?;
             let zoom_out = MenuItemBuilder::with_id(
                 "view-zoom-out",
                 localized(is_english, "Zoom Out", "缩小"),
             )
-            .accelerator("CmdOrCtrl+-")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
 
             let builder = MenuBuilder::new(app).item(&reload);
-            #[cfg(debug_assertions)]
+            #[cfg(all(debug_assertions, target_os = "macos"))]
             let builder = {
                 let devtools = MenuItemBuilder::with_id(
                     "view-toggle-devtools",
@@ -779,7 +714,11 @@ pub(crate) fn show_window_context_menu(
                 "window-request-close",
                 localized(is_english, "Close Window", "关闭窗口"),
             )
-            .accelerator(close_accelerator)
+            .accelerator(if cfg!(target_os = "macos") {
+                "Cmd+W"
+            } else {
+                "Alt+F4"
+            })
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             MenuBuilder::new(app)
@@ -1643,9 +1582,9 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        application_menu_accelerators, child_window_should_be_transparent, split_pane_accelerators,
-        tray_icon_should_be_template, tray_menu_labels, workspace_new_tab_accelerator,
-        FileEditorCloseRegistry, QuitPreparationRegistry, WindowMenuKind,
+        application_quit_accelerator, child_window_should_be_transparent,
+        tray_icon_should_be_template, tray_menu_labels, FileEditorCloseRegistry,
+        QuitPreparationRegistry, WindowMenuKind,
     };
 
     #[cfg(target_os = "windows")]
@@ -1669,36 +1608,10 @@ mod tests {
     }
 
     #[test]
-    fn keeps_mac_and_non_mac_window_shortcuts_distinct() {
-        assert_eq!(application_menu_accelerators("macos"), ("Cmd+Q", "Cmd+W"));
-        assert_eq!(
-            application_menu_accelerators("windows"),
-            ("Alt+F4", "Ctrl+Shift+W")
-        );
-        assert_eq!(
-            application_menu_accelerators("linux"),
-            ("Alt+F4", "Ctrl+Shift+W")
-        );
-    }
-
-    #[test]
-    fn uses_a_non_conflicting_new_tab_shortcut_outside_macos() {
-        assert_eq!(workspace_new_tab_accelerator("macos"), "Cmd+T");
-        assert_eq!(workspace_new_tab_accelerator("windows"), "Ctrl+Shift+T");
-        assert_eq!(workspace_new_tab_accelerator("linux"), "Ctrl+Shift+T");
-    }
-
-    #[test]
-    fn matches_windows_terminal_split_shortcuts_on_windows() {
-        assert_eq!(split_pane_accelerators("macos"), ("Cmd+D", "Cmd+Shift+D"));
-        assert_eq!(
-            split_pane_accelerators("windows"),
-            ("Alt+Shift+Plus", "Alt+Shift+-")
-        );
-        assert_eq!(
-            split_pane_accelerators("linux"),
-            ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D")
-        );
+    fn retains_only_platform_quit_accelerators() {
+        assert_eq!(application_quit_accelerator("macos"), "Cmd+Q");
+        assert_eq!(application_quit_accelerator("windows"), "Alt+F4");
+        assert_eq!(application_quit_accelerator("linux"), "Alt+F4");
     }
 
     #[test]
