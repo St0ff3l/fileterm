@@ -19,7 +19,7 @@ const SHORTCUT_EXIT = 'Alt+F4'
 const SHORTCUT_CLOSE_WINDOW = 'Alt+F4'
 const SHORTCUT_TERMINAL_ZOOM_IN = 'Ctrl+Shift++'
 const SHORTCUT_TERMINAL_ZOOM_OUT = 'Ctrl+Shift+-'
-const SHORTCUT_TERMINAL_ZOOM_RESET = 'Ctrl+Shift+0'
+const SHORTCUT_TERMINAL_ZOOM_RESET = 'Ctrl+0'
 
 // dev 构建才显示"开发者工具"项，与 Rust 端 `#[cfg(debug_assertions)]`
 // 行为一致：生产构建不暴露 devtools 入口。

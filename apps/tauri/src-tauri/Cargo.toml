@@ -40,6 +40,8 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 raw-window-handle = "0.6"
+webview2-com = "0.38"
+windows = "0.61"
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Dwm",

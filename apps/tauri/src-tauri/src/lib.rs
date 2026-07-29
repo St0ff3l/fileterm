@@ -24,6 +24,13 @@ use tauri::{
 use thiserror::Error;
 use tokio::sync::oneshot;
 use url::form_urlencoded::Serializer;
+#[cfg(target_os = "windows")]
+use webview2_com::{
+    Microsoft::Web::WebView2::Win32::{ICoreWebView2Settings3, ICoreWebView2Settings5},
+    ZoomFactorChangedEventHandler,
+};
+#[cfg(target_os = "windows")]
+use windows::core::Interface;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -457,6 +464,39 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
             .item(&terminal_zoom_out)
             .item(&terminal_zoom_reset)
     };
+    // Windows/Linux use a renderer-owned menubar, but native accelerators are
+    // still the only path that reaches us before WebView2/WebKitGTK consumes a
+    // browser-style zoom shortcut. They emit the same terminal-only request as
+    // the macOS menu and never alter the WebView zoom level.
+    #[cfg(not(target_os = "macos"))]
+    let view_submenu_builder = {
+        let terminal_zoom_in = MenuItemBuilder::with_id(
+            "view-terminal-zoom-in",
+            localized(is_english, "Zoom Terminal In", "终端放大"),
+        )
+        .accelerator("Ctrl+Shift+Equal")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_out = MenuItemBuilder::with_id(
+            "view-terminal-zoom-out",
+            localized(is_english, "Zoom Terminal Out", "终端缩小"),
+        )
+        .accelerator("Ctrl+Shift+Minus")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_reset = MenuItemBuilder::with_id(
+            "view-terminal-zoom-reset",
+            localized(is_english, "Reset Terminal Zoom", "终端实际大小"),
+        )
+        .accelerator("Ctrl+0")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        view_submenu_builder
+            .separator()
+            .item(&terminal_zoom_in)
+            .item(&terminal_zoom_out)
+            .item(&terminal_zoom_reset)
+    };
     // macOS uses this native menu instead of the renderer-owned Windows/Linux
     // menu bar, so expose the requested debug-only F12 entry here.
     #[cfg(all(debug_assertions, target_os = "macos"))]
@@ -837,6 +877,72 @@ fn prefer_windows_native_rounded_corners(window: &WebviewWindow<Wry>) {
     }
 }
 
+/// WebView2 consumes precision-touchpad pinch gestures before they become DOM
+/// wheel events. Let WebView2 recognize the native gesture, immediately reset
+/// its page zoom, and relay only the direction back to the focused xterm pane.
+/// This keeps application/WebView zoom fixed at 100% while giving touchpad
+/// pinch the same terminal-only semantics as Ctrl+wheel.
+#[cfg(target_os = "windows")]
+fn install_windows_terminal_zoom_interceptor(window: &WebviewWindow<Wry>) {
+    let event_window = window.clone();
+    let install_result = window.with_webview(move |webview| {
+        let controller = webview.controller();
+        let callback_controller = controller.clone();
+        let callback_window = event_window.clone();
+
+        unsafe {
+            let Ok(core_webview) = controller.CoreWebView2() else {
+                return;
+            };
+            let Ok(settings) = core_webview.Settings() else {
+                return;
+            };
+
+            // WebView2 otherwise swallows Ctrl+wheel and precision-touchpad
+            // pinch before the renderer can observe either input. The
+            // ZoomFactorChanged handler below converts them to terminal events
+            // and restores the page to 100% immediately.
+            let _ = settings.SetIsZoomControlEnabled(true);
+            if let Ok(settings3) = settings.cast::<ICoreWebView2Settings3>() {
+                // Keep Ctrl+0 available to the renderer/native menu for
+                // terminal reset instead of allowing WebView2 to consume it.
+                let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+            }
+            if let Ok(settings5) = settings.cast::<ICoreWebView2Settings5>() {
+                let _ = settings5.SetIsPinchZoomEnabled(true);
+            }
+
+            let callback =
+                ZoomFactorChangedEventHandler::create(Box::new(move |_sender, _args| {
+                    let mut zoom_factor = 1.0;
+                    callback_controller.ZoomFactor(&mut zoom_factor)?;
+                    if (zoom_factor - 1.0).abs() < f64::EPSILON {
+                        return Ok(());
+                    }
+
+                    // Reset before emitting: SetZoomFactor emits its own
+                    // ZoomFactorChanged event, which is ignored at exactly 1.0.
+                    callback_controller.SetZoomFactor(1.0)?;
+                    let operation = if zoom_factor > 1.0 { "in" } else { "out" };
+                    // The renderer only applies this gesture event while the pointer is over a
+                    // terminal. Menu shortcuts continue to use app:terminal-zoom-request.
+                    let _ = callback_window.emit("app:terminal-gesture-zoom-request", operation);
+                    Ok(())
+                }));
+            let mut token = 0;
+            let _ = controller.add_ZoomFactorChanged(&callback, &mut token);
+        }
+    });
+
+    if let Err(error) = install_result {
+        crate::services::logging::warn(
+            window.app_handle(),
+            "window",
+            format!("failed to install WebView2 terminal zoom interceptor: {error}"),
+        );
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     use objc2::MainThreadMarker;
@@ -1206,6 +1312,7 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 prefer_windows_native_rounded_corners(&main_window);
+                install_windows_terminal_zoom_interceptor(&main_window);
                 main_window
                     .set_icon(windows_icon_image().map_err(|error| error.to_string())?)
                     .map_err(|error| error.to_string())?;

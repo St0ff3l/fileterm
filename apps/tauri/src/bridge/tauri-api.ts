@@ -516,6 +516,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       subscribe('app:focus-pane-request', listener),
     onTerminalZoomRequest: (listener: (operation: TerminalZoomOperation) => void) =>
       subscribe('app:terminal-zoom-request', listener),
+    onTerminalGestureZoomRequest: (listener: (operation: TerminalZoomOperation) => void) =>
+      subscribe('app:terminal-gesture-zoom-request', listener),
     confirmCloseWindow: (action: 'quit' | 'hide' | 'cancel') => {
       if (action === 'cancel') return Promise.resolve()
       if (action === 'quit') {
