@@ -13,7 +13,6 @@ if (!nextVersion) {
 
 const packageJsonPaths = [
   'apps/tauri/package.json',
-  'apps/electron/package.json',
   'packages/core/package.json',
   'packages/shared/package.json',
   'packages/storage/package.json'
@@ -114,7 +113,6 @@ await updateJsonFile('package-lock.json', (lockfile) => {
 
       if (
         packagePath === 'apps/tauri' ||
-        packagePath === 'apps/electron' ||
         packagePath === 'packages/core' ||
         packagePath === 'packages/shared' ||
         packagePath === 'packages/storage'

@@ -3,6 +3,7 @@ import type { FileTermDesktopApi } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
 import { ContextMenu, type ContextMenuEntry } from '../common/ContextMenu'
 import { t } from '../../i18n'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 
 type WindowMenuKind = 'file' | 'view' | 'window'
 
@@ -12,17 +13,13 @@ interface OpenMenu {
 }
 
 // Windows/Linux 共用自绘菜单栏（见 App.tsx 的 `usesCustomWindowChrome`
-// 判定），两端均使用 Ctrl/Alt 风格的快捷键文案。
-const SHORTCUT_NEW_CONNECTION = 'Ctrl+N'
-const SHORTCUT_CONNECTION_MANAGER = 'Ctrl+Shift+C'
-const SHORTCUT_COMMAND_MANAGER = 'Ctrl+Shift+M'
+// 判定）。窗口动作只保留 Alt+F4；终端字号快捷键交给最后聚焦的 xterm，
+// 不占用 WebView 页面缩放。
 const SHORTCUT_EXIT = 'Alt+F4'
-const SHORTCUT_RELOAD = 'F5'
-const SHORTCUT_ACTUAL_SIZE = 'Ctrl+0'
-const SHORTCUT_ZOOM_IN = 'Ctrl+Plus'
-const SHORTCUT_ZOOM_OUT = 'Ctrl+-'
-const SHORTCUT_TOGGLE_DEVTOOLS = 'F12'
 const SHORTCUT_CLOSE_WINDOW = 'Alt+F4'
+const SHORTCUT_TERMINAL_ZOOM_IN = 'Ctrl+Shift++'
+const SHORTCUT_TERMINAL_ZOOM_OUT = 'Ctrl+Shift+-'
+const SHORTCUT_TERMINAL_ZOOM_RESET = 'Ctrl+Shift+0'
 
 // dev 构建才显示"开发者工具"项，与 Rust 端 `#[cfg(debug_assertions)]`
 // 行为一致：生产构建不暴露 devtools 入口。
@@ -41,17 +38,14 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
       return [
         {
           label: t.windowMenuNewConnection,
-          shortcut: SHORTCUT_NEW_CONNECTION,
           action: () => void desktopApi?.openConnectionFormWindow('create')
         },
         {
           label: t.windowMenuConnectionManager,
-          shortcut: SHORTCUT_CONNECTION_MANAGER,
           action: () => void desktopApi?.openConnectionManagerWindow()
         },
         {
           label: t.windowMenuCommandManager,
-          shortcut: SHORTCUT_COMMAND_MANAGER,
           action: () => void desktopApi?.openCommandManagerWindow()
         },
         { separator: true },
@@ -62,24 +56,31 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
     }
     if (kind === 'view') {
       const items: ContextMenuEntry[] = [
-        { label: t.windowMenuReload, shortcut: SHORTCUT_RELOAD, action: () => void desktopApi?.reloadCurrentWindow() }
+        { label: t.windowMenuReload, action: () => void desktopApi?.reloadCurrentWindow() }
       ]
       if (isDevBuild) {
         items.push({
           label: t.windowMenuToggleDevtools,
-          shortcut: SHORTCUT_TOGGLE_DEVTOOLS,
           action: () => void desktopApi?.toggleDevtools()
         })
       }
       items.push(
         { separator: true },
         {
-          label: t.windowMenuActualSize,
-          shortcut: SHORTCUT_ACTUAL_SIZE,
-          action: () => void desktopApi?.setWindowZoom('reset')
+          label: t.terminalZoomIn,
+          shortcut: SHORTCUT_TERMINAL_ZOOM_IN,
+          action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'in')
         },
-        { label: t.windowMenuZoomIn, shortcut: SHORTCUT_ZOOM_IN, action: () => void desktopApi?.setWindowZoom('in') },
-        { label: t.windowMenuZoomOut, shortcut: SHORTCUT_ZOOM_OUT, action: () => void desktopApi?.setWindowZoom('out') }
+        {
+          label: t.terminalZoomOut,
+          shortcut: SHORTCUT_TERMINAL_ZOOM_OUT,
+          action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'out')
+        },
+        {
+          label: t.terminalZoomReset,
+          shortcut: SHORTCUT_TERMINAL_ZOOM_RESET,
+          action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'reset')
+        }
       )
       return items
     }

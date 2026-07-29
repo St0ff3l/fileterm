@@ -4,6 +4,8 @@ pub mod sessions;
 pub mod storage;
 
 use crate::commands::OpenWindowInput;
+#[cfg(target_os = "macos")]
+use std::sync::atomic::AtomicU64;
 use std::{
     collections::{HashMap, HashSet},
     sync::{atomic::AtomicBool, atomic::Ordering, Mutex},
@@ -79,6 +81,13 @@ struct HiddenWithMainRegistry {
 #[cfg(target_os = "macos")]
 static MACOS_TRAFFIC_LIGHTS_CALIBRATED: AtomicBool = AtomicBool::new(false);
 
+/// A fullscreen transition emits several resize notifications while AppKit is
+/// still rebuilding the title-bar hierarchy. Only the final notification may
+/// position the traffic lights, otherwise they retain an obsolete y-coordinate
+/// when the window returns from fullscreen.
+#[cfg(target_os = "macos")]
+static MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+
 #[cfg(target_os = "macos")]
 const MACOS_RENDERER_TITLEBAR_HEIGHT: f64 = 48.0;
 #[cfg(target_os = "macos")]
@@ -89,6 +98,8 @@ const MACOS_TRAFFIC_LIGHT_DRAWN_SIZE: f64 = 12.0;
 const MACOS_TRAFFIC_LIGHT_LEFT_INSET: f64 = 20.0;
 #[cfg(target_os = "macos")]
 const MACOS_TRAFFIC_LIGHT_CENTER_SPACING: f64 = 23.0;
+#[cfg(target_os = "macos")]
+const MACOS_TRAFFIC_LIGHT_RECALIBRATION_DELAY_MS: u64 = 140;
 
 #[cfg(target_os = "macos")]
 fn macos_traffic_light_target_center(window_height: f64, index: usize) -> (f64, f64) {
@@ -206,13 +217,6 @@ pub(crate) async fn request_file_editors_for_quit(app: &AppHandle<Wry>) -> Resul
     Ok(true)
 }
 
-/// Per-window zoom is not exposed by Wry as a getter. Store the scale we last
-/// applied so the View menu can provide deterministic reset/in/out behavior.
-#[derive(Default)]
-struct WindowMenuState {
-    zoom_scales: Mutex<HashMap<String, f64>>,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WindowMenuKind {
     App,
@@ -296,34 +300,29 @@ pub(crate) fn install_localized_tray_menu(
 #[cfg(not(target_os = "linux"))]
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
-    let (quit_accelerator, close_accelerator) = application_menu_accelerators(platform);
-    let new_tab_accelerator = workspace_new_tab_accelerator(platform);
+    let quit_accelerator = application_quit_accelerator(platform);
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
         localized(is_english, "New Connection", "新建连接"),
     )
-    .accelerator("CmdOrCtrl+N")
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let new_tab_menu = MenuItemBuilder::with_id(
         "workspace-new-tab",
         localized(is_english, "New Tab", "新建标签页"),
     )
-    .accelerator(new_tab_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let connection_manager_menu = MenuItemBuilder::with_id(
         "connection-manager",
         localized(is_english, "Connection Manager", "连接管理器"),
     )
-    .accelerator("CmdOrCtrl+Shift+C")
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let command_manager_menu = MenuItemBuilder::with_id(
         "command-manager",
         localized(is_english, "Command Manager", "命令管理器"),
     )
-    .accelerator("CmdOrCtrl+Shift+M")
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
 
@@ -384,10 +383,14 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
     let window_close_menu = MenuItemBuilder::with_id(
         "window-request-close",
         localized(is_english, "Close Window", "关闭窗口"),
-    )
-    .accelerator(close_accelerator)
-    .build(app)
-    .map_err(|error| AppError::Window(error.to_string()))?;
+    );
+    // Cmd+W is macOS's standard close-window affordance. Windows/Linux retain
+    // only Alt+F4 for exit, with no competing menu accelerator here.
+    #[cfg(target_os = "macos")]
+    let window_close_menu = window_close_menu.accelerator("Cmd+W");
+    let window_close_menu = window_close_menu
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
     let window_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "Window", "窗口"))
         .item(&window_minimize_menu)
         .separator()
@@ -404,63 +407,68 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .build()
         .map_err(|error| AppError::Window(error.to_string()))?;
 
-    // View 菜单：分屏快捷键。终端聚焦时前端键盘事件会被 xterm 拦截，
-    // 原生菜单 accelerator 全局有效，与现有 Cmd+W 一致。
-    let (split_vertical_accelerator, split_horizontal_accelerator) =
-        split_pane_accelerators(platform);
     let view_split_vertical = MenuItemBuilder::with_id(
         "view-split-vertical",
         localized(is_english, "Split Vertically", "垂直分屏"),
     )
-    .accelerator(split_vertical_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let view_split_horizontal = MenuItemBuilder::with_id(
         "view-split-horizontal",
         localized(is_english, "Split Horizontally", "水平分屏"),
     )
-    .accelerator(split_horizontal_accelerator)
     .build(app)
     .map_err(|error| AppError::Window(error.to_string()))?;
     let view_submenu_builder = SubmenuBuilder::new(app, localized(is_english, "View", "视图"))
         .item(&view_split_vertical)
         .item(&view_split_horizontal);
-    #[cfg(target_os = "windows")]
+    // The macOS native menubar owns its displayed shortcuts. These dispatch
+    // terminal-only zoom requests back through the Tauri bridge instead of
+    // applying an application/WebView zoom level.
+    #[cfg(target_os = "macos")]
     let view_submenu_builder = {
-        let focus_pane_left = MenuItemBuilder::with_id(
-            "view-focus-pane-left",
-            localized(is_english, "Focus Pane Left", "聚焦左侧窗格"),
+        let terminal_zoom_in = MenuItemBuilder::with_id(
+            "view-terminal-zoom-in",
+            localized(is_english, "Zoom Terminal In", "终端放大"),
         )
-        .accelerator("Alt+Left")
+        // `+` is Shift+Equal on the physical keyboard. The native accelerator
+        // uses the logical Equal key so macOS presents and accepts standard
+        // Cmd+ without asking for an additional Shift modifier.
+        .accelerator("Cmd+Equal")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let focus_pane_right = MenuItemBuilder::with_id(
-            "view-focus-pane-right",
-            localized(is_english, "Focus Pane Right", "聚焦右侧窗格"),
+        let terminal_zoom_out = MenuItemBuilder::with_id(
+            "view-terminal-zoom-out",
+            localized(is_english, "Zoom Terminal Out", "终端缩小"),
         )
-        .accelerator("Alt+Right")
+        .accelerator("Cmd+Minus")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
-        let focus_pane_up = MenuItemBuilder::with_id(
-            "view-focus-pane-up",
-            localized(is_english, "Focus Pane Up", "聚焦上方窗格"),
+        let terminal_zoom_reset = MenuItemBuilder::with_id(
+            "view-terminal-zoom-reset",
+            localized(is_english, "Reset Terminal Zoom", "终端实际大小"),
         )
-        .accelerator("Alt+Up")
-        .build(app)
-        .map_err(|error| AppError::Window(error.to_string()))?;
-        let focus_pane_down = MenuItemBuilder::with_id(
-            "view-focus-pane-down",
-            localized(is_english, "Focus Pane Down", "聚焦下方窗格"),
-        )
-        .accelerator("Alt+Down")
+        .accelerator("Cmd+0")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
-            .item(&focus_pane_left)
-            .item(&focus_pane_right)
-            .item(&focus_pane_up)
-            .item(&focus_pane_down)
+            .item(&terminal_zoom_in)
+            .item(&terminal_zoom_out)
+            .item(&terminal_zoom_reset)
+    };
+    // macOS uses this native menu instead of the renderer-owned Windows/Linux
+    // menu bar, so expose the requested debug-only F12 entry here.
+    #[cfg(all(debug_assertions, target_os = "macos"))]
+    let view_submenu_builder = {
+        let devtools = MenuItemBuilder::with_id(
+            "view-toggle-devtools",
+            localized(is_english, "Toggle Developer Tools", "开发者工具"),
+        )
+        .accelerator("F12")
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
+        view_submenu_builder.separator().item(&devtools)
     };
     let view_submenu = view_submenu_builder
         .build()
@@ -546,40 +554,13 @@ pub(crate) fn install_localized_application_menu(
     }
 }
 
-/// Match platform-native window shortcuts. macOS owns Cmd+Q/W.
-/// Windows and Linux keep Alt+F4 for quitting, but the close shortcut
-/// follows Windows Terminal's default `Ctrl+Shift+W` (closePane) so users
-/// migrating from pwsh/Windows Terminal get the same key, and FileTerm's
-/// Windows/Linux `Ctrl+Shift+*` family (copy/paste/close) stays consistent.
-fn application_menu_accelerators(platform: &str) -> (&'static str, &'static str) {
+/// Preserve the standard app-quit accelerator on macOS and Alt+F4 elsewhere.
+/// All other window-menu accelerators are intentionally left unbound.
+fn application_quit_accelerator(platform: &str) -> &'static str {
     if platform == "macos" {
-        ("Cmd+Q", "Cmd+W")
+        "Cmd+Q"
     } else {
-        ("Alt+F4", "Ctrl+Shift+W")
-    }
-}
-
-/// Keep Cmd+T on macOS, while avoiding Ctrl+T collisions with terminals and
-/// WebViews on Windows/Linux.
-#[cfg(any(not(target_os = "linux"), test))]
-fn workspace_new_tab_accelerator(platform: &str) -> &'static str {
-    if platform == "macos" {
-        "Cmd+T"
-    } else {
-        "Ctrl+Shift+T"
-    }
-}
-
-/// Align split shortcuts with the host terminal's default where a convention
-/// exists. Windows matches Windows Terminal / pwsh defaults exactly:
-/// `Alt+Shift++` (vertical) and `Alt+Shift+-` (horizontal). Linux has no
-/// universal convention, so it keeps FileTerm's own `Ctrl+Shift+*` family.
-#[cfg(any(not(target_os = "linux"), test))]
-fn split_pane_accelerators(platform: &str) -> (&'static str, &'static str) {
-    match platform {
-        "macos" => ("Cmd+D", "Cmd+Shift+D"),
-        "windows" => ("Alt+Shift+Plus", "Alt+Shift+-"),
-        _ => ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D"),
+        "Alt+F4"
     }
 }
 
@@ -592,33 +573,6 @@ pub(crate) fn focused_webview_window(app: &AppHandle<Wry>) -> Option<WebviewWind
         .into_values()
         .find(|window| window.is_focused().unwrap_or(false))
         .or_else(|| app.get_webview_window("main"))
-}
-
-pub(crate) fn update_focused_window_zoom(app: &AppHandle<Wry>, operation: ZoomOperation) {
-    let Some(window) = focused_webview_window(app) else {
-        return;
-    };
-    let label = window.label().to_string();
-    let state = app.state::<WindowMenuState>();
-    let mut zoom_scales = state
-        .zoom_scales
-        .lock()
-        .expect("window menu zoom state lock poisoned");
-    let current = zoom_scales.get(&label).copied().unwrap_or(1.0);
-    let next = match operation {
-        ZoomOperation::Reset => 1.0,
-        ZoomOperation::In => (current * 1.1).min(3.0),
-        ZoomOperation::Out => (current / 1.1).max(0.5),
-    };
-    if window.set_zoom(next).is_ok() {
-        zoom_scales.insert(label, next);
-    }
-}
-
-pub(crate) enum ZoomOperation {
-    Reset,
-    In,
-    Out,
 }
 
 pub(crate) fn request_close_focused_window(app: &AppHandle<Wry>) {
@@ -649,7 +603,7 @@ pub(crate) fn show_window_context_menu(
     let is_english = crate::commands::app_get_ui_preferences(app.clone())
         .map(|preferences| preferences.locale == "enUS")
         .unwrap_or(false);
-    let (quit_accelerator, close_accelerator) = application_menu_accelerators(std::env::consts::OS);
+    let quit_accelerator = application_quit_accelerator(std::env::consts::OS);
 
     let menu = match kind {
         WindowMenuKind::App => {
@@ -674,21 +628,18 @@ pub(crate) fn show_window_context_menu(
                 "new-connection",
                 localized(is_english, "New Connection", "新建连接"),
             )
-            .accelerator("CmdOrCtrl+N")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let connection_manager = MenuItemBuilder::with_id(
                 "connection-manager",
                 localized(is_english, "Connection Manager", "连接管理"),
             )
-            .accelerator("CmdOrCtrl+Shift+C")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let command_manager = MenuItemBuilder::with_id(
                 "command-manager",
                 localized(is_english, "Command Manager", "命令管理"),
             )
-            .accelerator("CmdOrCtrl+Shift+M")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             let logs = MenuItemBuilder::with_id(
@@ -717,31 +668,11 @@ pub(crate) fn show_window_context_menu(
                 "view-reload",
                 localized(is_english, "Reload", "重新加载"),
             )
-            .accelerator("F5")
-            .build(app)
-            .map_err(|error| AppError::Window(error.to_string()))?;
-            let reset_zoom = MenuItemBuilder::with_id(
-                "view-reset-zoom",
-                localized(is_english, "Actual Size", "实际大小"),
-            )
-            .accelerator("CmdOrCtrl+0")
-            .build(app)
-            .map_err(|error| AppError::Window(error.to_string()))?;
-            let zoom_in =
-                MenuItemBuilder::with_id("view-zoom-in", localized(is_english, "Zoom In", "放大"))
-                    .accelerator("CmdOrCtrl+Plus")
-                    .build(app)
-                    .map_err(|error| AppError::Window(error.to_string()))?;
-            let zoom_out = MenuItemBuilder::with_id(
-                "view-zoom-out",
-                localized(is_english, "Zoom Out", "缩小"),
-            )
-            .accelerator("CmdOrCtrl+-")
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
 
             let builder = MenuBuilder::new(app).item(&reload);
-            #[cfg(debug_assertions)]
+            #[cfg(all(debug_assertions, target_os = "macos"))]
             let builder = {
                 let devtools = MenuItemBuilder::with_id(
                     "view-toggle-devtools",
@@ -753,10 +684,6 @@ pub(crate) fn show_window_context_menu(
                 builder.item(&devtools)
             };
             builder
-                .separator()
-                .item(&reset_zoom)
-                .item(&zoom_in)
-                .item(&zoom_out)
                 .build()
                 .map_err(|error| AppError::Window(error.to_string()))?
         }
@@ -779,7 +706,11 @@ pub(crate) fn show_window_context_menu(
                 "window-request-close",
                 localized(is_english, "Close Window", "关闭窗口"),
             )
-            .accelerator(close_accelerator)
+            .accelerator(if cfg!(target_os = "macos") {
+                "Cmd+W"
+            } else {
+                "Alt+F4"
+            })
             .build(app)
             .map_err(|error| AppError::Window(error.to_string()))?;
             MenuBuilder::new(app)
@@ -995,6 +926,30 @@ fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     CATransaction::commit();
 
     true
+}
+
+#[cfg(target_os = "macos")]
+fn schedule_macos_traffic_light_recalibration(app: &AppHandle<Wry>) {
+    let generation =
+        MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(
+            MACOS_TRAFFIC_LIGHT_RECALIBRATION_DELAY_MS,
+        ))
+        .await;
+        if MACOS_TRAFFIC_LIGHT_RECALIBRATION_GENERATION.load(Ordering::Acquire) != generation {
+            return;
+        }
+
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        let calibration_window = window.clone();
+        let _ = window.run_on_main_thread(move || {
+            let _ = calibrate_macos_traffic_lights(&calibration_window);
+        });
+    });
 }
 
 pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), AppError> {
@@ -1231,7 +1186,6 @@ pub fn run() {
             app.manage(FileEditorCloseRegistry::default());
             app.manage(QuitPreparationRegistry::default());
             app.manage(HiddenWithMainRegistry::default());
-            app.manage(WindowMenuState::default());
 
             let main_window = app
                 .get_webview_window("main")
@@ -1264,13 +1218,15 @@ pub fn run() {
                     api.prevent_close();
                     request_main_window_close(&app_handle, false);
                 }
-                WindowEvent::Resized(_) => {
+                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = app_handle.emit(
                             "app:window-maximized-change",
                             window.is_maximized().unwrap_or(false),
                         );
                     }
+                    #[cfg(target_os = "macos")]
+                    schedule_macos_traffic_light_recalibration(&app_handle);
                 }
                 _ => {}
             });
@@ -1439,9 +1395,6 @@ pub fn run() {
                     let _ = window.reload();
                 }
             }
-            "view-reset-zoom" => update_focused_window_zoom(app, ZoomOperation::Reset),
-            "view-zoom-in" => update_focused_window_zoom(app, ZoomOperation::In),
-            "view-zoom-out" => update_focused_window_zoom(app, ZoomOperation::Out),
             "view-toggle-devtools" =>
             {
                 #[cfg(debug_assertions)]
@@ -1451,6 +1404,21 @@ pub fn run() {
                     } else {
                         window.open_devtools();
                     }
+                }
+            }
+            "view-terminal-zoom-in" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:terminal-zoom-request", "in");
+                }
+            }
+            "view-terminal-zoom-out" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:terminal-zoom-request", "out");
+                }
+            }
+            "view-terminal-zoom-reset" => {
+                if let Some(window) = focused_webview_window(app) {
+                    let _ = window.emit("app:terminal-zoom-request", "reset");
                 }
             }
             "workspace-new-tab" => {
@@ -1643,9 +1611,9 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        application_menu_accelerators, child_window_should_be_transparent, split_pane_accelerators,
-        tray_icon_should_be_template, tray_menu_labels, workspace_new_tab_accelerator,
-        FileEditorCloseRegistry, QuitPreparationRegistry, WindowMenuKind,
+        application_quit_accelerator, child_window_should_be_transparent,
+        tray_icon_should_be_template, tray_menu_labels, FileEditorCloseRegistry,
+        QuitPreparationRegistry, WindowMenuKind,
     };
 
     #[cfg(target_os = "windows")]
@@ -1669,36 +1637,10 @@ mod tests {
     }
 
     #[test]
-    fn keeps_mac_and_non_mac_window_shortcuts_distinct() {
-        assert_eq!(application_menu_accelerators("macos"), ("Cmd+Q", "Cmd+W"));
-        assert_eq!(
-            application_menu_accelerators("windows"),
-            ("Alt+F4", "Ctrl+Shift+W")
-        );
-        assert_eq!(
-            application_menu_accelerators("linux"),
-            ("Alt+F4", "Ctrl+Shift+W")
-        );
-    }
-
-    #[test]
-    fn uses_a_non_conflicting_new_tab_shortcut_outside_macos() {
-        assert_eq!(workspace_new_tab_accelerator("macos"), "Cmd+T");
-        assert_eq!(workspace_new_tab_accelerator("windows"), "Ctrl+Shift+T");
-        assert_eq!(workspace_new_tab_accelerator("linux"), "Ctrl+Shift+T");
-    }
-
-    #[test]
-    fn matches_windows_terminal_split_shortcuts_on_windows() {
-        assert_eq!(split_pane_accelerators("macos"), ("Cmd+D", "Cmd+Shift+D"));
-        assert_eq!(
-            split_pane_accelerators("windows"),
-            ("Alt+Shift+Plus", "Alt+Shift+-")
-        );
-        assert_eq!(
-            split_pane_accelerators("linux"),
-            ("Ctrl+Shift+D", "Ctrl+Alt+Shift+D")
-        );
+    fn retains_only_platform_quit_accelerators() {
+        assert_eq!(application_quit_accelerator("macos"), "Cmd+Q");
+        assert_eq!(application_quit_accelerator("windows"), "Alt+F4");
+        assert_eq!(application_quit_accelerator("linux"), "Alt+F4");
     }
 
     #[test]

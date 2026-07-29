@@ -4,11 +4,8 @@ node_modules/
 dist/
 dist-electron/
 apps/tauri/dist/
-apps/electron/dist/
-apps/electron/dist-electron/
 release/
 apps/tauri/release/
-apps/electron/release/
 apps/tauri/src-tauri/target/
 apps/tauri/src-tauri/gen/
 .github/fixtures/tauri-socket-lifecycle/target/
