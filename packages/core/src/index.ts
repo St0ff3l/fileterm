@@ -1087,6 +1087,7 @@ export interface FileTermDesktopApi {
   onSplitPaneRequest(listener: (direction: 'row' | 'column') => void): () => void
   onFocusPaneRequest(listener: (direction: PaneFocusDirection) => void): () => void
   onTerminalZoomRequest(listener: (operation: TerminalZoomOperation) => void): () => void
+  onTerminalGestureZoomRequest(listener: (operation: TerminalZoomOperation) => void): () => void
   confirmCloseWindow(action: 'quit' | 'hide' | 'cancel'): Promise<void>
 }
 

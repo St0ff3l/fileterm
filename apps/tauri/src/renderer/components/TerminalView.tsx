@@ -83,7 +83,11 @@ const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
 const TERMINAL_DEFAULT_FONT_SIZE = 12
 const TERMINAL_MIN_FONT_SIZE = 8
 const TERMINAL_MAX_FONT_SIZE = 28
-const TERMINAL_WHEEL_ZOOM_THRESHOLD = 40
+// WebView2 and WebKitGTK report high-resolution touchpad input in small pixel
+// deltas, while a traditional mouse wheel commonly reports a large line/pixel
+// delta in one event. Normalize and cap each event before accumulating so both
+// inputs have a predictable one-notch / one-pinch-step feel.
+const TERMINAL_WHEEL_ZOOM_THRESHOLD = 12
 const TERMINAL_GESTURE_ZOOM_THRESHOLD = Math.log(1.08)
 
 type SplitPaneDirection = 'row' | 'column'
@@ -92,6 +96,7 @@ type SplitPaneDirection = 'row' | 'column'
 // every mounted terminal. Keep the last terminal focus here so only one pane
 // consumes a shared zoom request after a menu click moves DOM focus away.
 let lastFocusedTerminal: Terminal | null = null
+let terminalUnderPointer: Terminal | null = null
 
 function splitPaneShortcutsForPlatform(platform: string | undefined) {
   if (platform === 'darwin') {
@@ -490,10 +495,27 @@ function logTerminalZoom(terminal: Terminal, action: string, details: Record<str
     return
   }
 
-  console.debug(`[TerminalView][zoom] ${action}`, {
+  console.info(`[TerminalView][zoom] ${action}`, {
     fontSize: terminal.options.fontSize,
     ...details
   })
+}
+
+function describeTerminalInput(event: KeyboardEvent | WheelEvent) {
+  const target = event.target
+  return {
+    type: event.type,
+    target: target instanceof Element ? `${target.tagName}.${target.className}` : String(target),
+    key: 'key' in event ? event.key : undefined,
+    code: 'code' in event ? event.code : undefined,
+    deltaY: 'deltaY' in event ? event.deltaY : undefined,
+    deltaMode: 'deltaMode' in event ? event.deltaMode : undefined,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    metaKey: event.metaKey,
+    altKey: event.altKey,
+    defaultPrevented: event.defaultPrevented
+  }
 }
 
 export const TerminalView = memo(function TerminalView({
@@ -1029,7 +1051,9 @@ export const TerminalView = memo(function TerminalView({
     const adjustTerminalFontSize = (change: number) => {
       const currentSize = terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE
       const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, currentSize + change))
+      logTerminalZoom(terminal, 'font-size-requested', { change, currentSize, nextSize, tabId: tabIdRef.current })
       if (nextSize === currentSize) {
+        logTerminalZoom(terminal, 'font-size-unchanged-at-boundary', { tabId: tabIdRef.current })
         return false
       }
 
@@ -1038,6 +1062,13 @@ export const TerminalView = memo(function TerminalView({
       // Font metrics change the visible grid, so keep the remote PTY's size
       // in lockstep with this terminal rather than applying webview zoom.
       syncTerminalSize(fitAddon, terminal, { force: true })
+      logTerminalZoom(terminal, 'font-size-applied', {
+        currentSize,
+        nextSize: terminal.options.fontSize,
+        cols: terminal.cols,
+        rows: terminal.rows,
+        tabId: tabIdRef.current
+      })
       return true
     }
     const resetTerminalFontSize = () =>
@@ -1054,6 +1085,19 @@ export const TerminalView = memo(function TerminalView({
     }
     const markTerminalFocused = () => {
       lastFocusedTerminal = terminal
+      logTerminalZoom(terminal, 'terminal-focused', { tabId: tabIdRef.current })
+    }
+    const markTerminalUnderPointer = () => {
+      terminalUnderPointer = terminal
+      logTerminalZoom(terminal, 'terminal-pointer-entered', { tabId: tabIdRef.current })
+    }
+    const clearTerminalUnderPointer = () => {
+      if (terminalUnderPointer !== terminal) {
+        return
+      }
+
+      terminalUnderPointer = null
+      logTerminalZoom(terminal, 'terminal-pointer-left', { tabId: tabIdRef.current })
     }
     terminalTextarea?.addEventListener('focus', markTerminalFocused)
     const writeReconnectHint = () => {
@@ -1093,6 +1137,31 @@ export const TerminalView = memo(function TerminalView({
         })
       return true
     }
+    const getTerminalZoomOperation = (event: KeyboardEvent): TerminalZoomOperation | null => {
+      const isZoomInKey = event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd'
+      const isZoomOutKey =
+        event.key === '-' || event.key === '_' || event.code === 'Minus' || event.code === 'NumpadSubtract'
+      const isZoomResetKey =
+        event.code === 'Digit0' || event.code === 'Numpad0' || event.key === '0' || event.key === ')'
+
+      // Keep app/window zoom out of the way of remote programs. Cmd± on macOS
+      // and Ctrl+Shift± on Windows/Linux adjust only this terminal.
+      const matchesZoomIn = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomInKey
+        : event.ctrlKey && event.shiftKey && !event.altKey && isZoomInKey
+      const matchesZoomOut = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomOutKey
+        : event.ctrlKey && event.shiftKey && !event.altKey && isZoomOutKey
+      // Keep the browser-standard Cmd+0 reset on macOS. Windows/Linux use
+      // Ctrl+0: Ctrl+Shift+0 is intercepted by Windows IME/layout switching
+      // before WebView2 ever forwards the physical zero key. Some keyboard
+      // layouts report Shift+0 as ')', so always prefer code too.
+      const matchesZoomReset = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomResetKey
+        : event.ctrlKey && !event.altKey && isZoomResetKey
+
+      return matchesZoomReset ? 'reset' : matchesZoomIn ? 'in' : matchesZoomOut ? 'out' : null
+    }
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') {
         return true
@@ -1126,28 +1195,14 @@ export const TerminalView = memo(function TerminalView({
       const matchesFind = isMac
         ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'f'
         : event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f'
-      const isZoomInKey = event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd'
-      const isZoomOutKey =
-        event.key === '-' || event.key === '_' || event.code === 'Minus' || event.code === 'NumpadSubtract'
-      // Keep app/window zoom out of the way of remote programs. Cmd± on macOS
-      // and Ctrl+Shift± on Windows/Linux adjust only this terminal.
-      const matchesZoomIn = isMac
-        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomInKey
-        : event.ctrlKey && event.shiftKey && !event.altKey && isZoomInKey
-      const matchesZoomOut = isMac
-        ? event.metaKey && !event.ctrlKey && !event.altKey && isZoomOutKey
-        : event.ctrlKey && event.shiftKey && !event.altKey && isZoomOutKey
-      // Keep the browser-standard Cmd+0 reset on macOS; Windows/Linux use
-      // Ctrl+Shift+0 to avoid taking over their WebView reset shortcut.
-      const matchesZoomReset = isMac
-        ? event.metaKey &&
-          !event.ctrlKey &&
-          !event.altKey &&
-          (event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0')
-        : event.ctrlKey &&
-          event.shiftKey &&
-          !event.altKey &&
-          (event.key === '0' || event.code === 'Digit0' || event.code === 'Numpad0')
+      const terminalZoomOperation = getTerminalZoomOperation(event)
+      if (event.ctrlKey || event.metaKey || terminalZoomOperation) {
+        logTerminalZoom(terminal, 'key-xterm-received', {
+          ...describeTerminalInput(event),
+          operation: terminalZoomOperation,
+          tabId: tabIdRef.current
+        })
+      }
 
       if (matchesCopy) {
         event.preventDefault()
@@ -1175,10 +1230,10 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
-      if (matchesZoomIn || matchesZoomOut || matchesZoomReset) {
+      if (terminalZoomOperation) {
         event.preventDefault()
         event.stopPropagation()
-        applyTerminalZoom(matchesZoomReset ? 'reset' : matchesZoomIn ? 'in' : 'out', 'shortcut')
+        applyTerminalZoom(terminalZoomOperation, 'shortcut')
         return false
       }
 
@@ -1545,22 +1600,45 @@ export const TerminalView = memo(function TerminalView({
     const isEventInsideTerminal = (event: Event) => {
       const host = hostRef.current
       const target = event.target
-      return Boolean(host && target instanceof Node && host.contains(target))
-    }
+      if (!host) {
+        return false
+      }
 
-    const isTerminalGestureTarget = (event: Event) => {
-      if (isEventInsideTerminal(event)) {
+      if (target instanceof Node && host.contains(target)) {
         return true
       }
 
-      // WKWebView can dispatch GestureEvents at document/body instead of the
-      // element beneath the pinch. In that case retain the last xterm focus
-      // target, but never consume a gesture intended for another pane.
-      return (
-        lastFocusedTerminal === terminal &&
-        (event.target === document || event.target === document.body || event.target === document.documentElement)
-      )
+      // In WebView2 and WebKitGTK, compositor-backed terminal canvases can
+      // retarget a wheel event during capture. The composed path still retains
+      // the terminal host, so use it as the platform-safe fallback.
+      return event.composedPath().includes(host)
     }
+
+    const isEventOverTerminal = (event: Event) => {
+      const host = hostRef.current
+      const { clientX, clientY } = event as MouseEvent
+      if (!host || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+        return false
+      }
+
+      const bounds = host.getBoundingClientRect()
+      return clientX >= bounds.left && clientX <= bounds.right && clientY >= bounds.top && clientY <= bounds.bottom
+    }
+
+    const isTerminalGestureTarget = (event: Event) => {
+      if (isEventInsideTerminal(event) || isEventOverTerminal(event)) {
+        return true
+      }
+
+      // WebView2, WebKitGTK and WKWebView can dispatch a compositor gesture
+      // at the document root rather than the element beneath the pinch. The
+      // xterm textarea is the authoritative focus owner in that case; a click
+      // into another pane updates lastFocusedTerminal before its next gesture.
+      return lastFocusedTerminal === terminal && document.activeElement === terminalTextarea
+    }
+
+    const isTerminalShortcutTarget = (event: KeyboardEvent) =>
+      lastFocusedTerminal === terminal && (document.activeElement === terminalTextarea || isEventInsideTerminal(event))
 
     const onMouseDown = (event: MouseEvent) => {
       if (!isSecondaryButton(event)) {
@@ -1586,29 +1664,102 @@ export const TerminalView = memo(function TerminalView({
       event.stopImmediatePropagation()
     }
 
+    let controlKeyActive = false
     let wheelZoomDelta = 0
-    const onWheel = (event: WheelEvent) => {
-      // Chromium/WebKit surface both Ctrl+wheel and trackpad pinch as a wheel
-      // event with ctrlKey=true. This deliberately gives the same terminal-only
-      // zoom gesture on macOS, Windows and Linux.
-      if (!event.ctrlKey) {
-        return
+    const normalizeWheelZoomDelta = (event: WheelEvent) => {
+      const rawDelta = event.deltaY
+      if (!Number.isFinite(rawDelta) || rawDelta === 0) {
+        return 0
       }
 
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      const delta = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY
+      const delta =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? rawDelta * 4
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? rawDelta * TERMINAL_WHEEL_ZOOM_THRESHOLD
+            : rawDelta
+      return Math.max(-TERMINAL_WHEEL_ZOOM_THRESHOLD, Math.min(TERMINAL_WHEEL_ZOOM_THRESHOLD, delta))
+    }
+    const consumeTerminalWheelZoom = (event: WheelEvent, source: 'window' | 'xterm') => {
+      // Chromium/WebKit surface both Ctrl+wheel and trackpad pinch as a wheel
+      // event with ctrlKey=true. Some Windows/Linux WebViews lose ctrlKey on
+      // compositor-retargeted wheel events, so retain the key state captured
+      // by the window as a fallback. Keep this terminal-scoped: unmodified
+      // two-finger scrolling continues to scroll the terminal normally.
+      const hasZoomModifier = isMac
+        ? event.ctrlKey || event.metaKey || event.getModifierState('Control') || event.getModifierState('Meta')
+        : event.ctrlKey || event.getModifierState('Control') || controlKeyActive
+      if (!hasZoomModifier) {
+        logTerminalZoom(terminal, `wheel-${source}-ignored-no-modifier`, {
+          ...describeTerminalInput(event),
+          controlKeyActive,
+          tabId: tabIdRef.current
+        })
+        return false
+      }
+
+      const delta = normalizeWheelZoomDelta(event)
+      if (delta === 0) {
+        logTerminalZoom(terminal, `wheel-${source}-ignored-zero-delta`, {
+          ...describeTerminalInput(event),
+          tabId: tabIdRef.current
+        })
+        return true
+      }
+
       wheelZoomDelta += delta
       const steps = Math.floor(Math.abs(wheelZoomDelta) / TERMINAL_WHEEL_ZOOM_THRESHOLD)
       if (steps === 0) {
-        return
+        logTerminalZoom(terminal, `wheel-${source}-accumulating`, {
+          ...describeTerminalInput(event),
+          delta,
+          wheelZoomDelta,
+          tabId: tabIdRef.current
+        })
+        return true
       }
 
       const direction = wheelZoomDelta < 0 ? 1 : -1
       wheelZoomDelta -= Math.sign(wheelZoomDelta) * steps * TERMINAL_WHEEL_ZOOM_THRESHOLD
       const changed = adjustTerminalFontSize(direction * steps)
-      logTerminalZoom(terminal, 'wheel', { changed, direction, steps })
+      logTerminalZoom(terminal, `wheel-${source}-applied`, {
+        ...describeTerminalInput(event),
+        changed,
+        direction,
+        steps,
+        tabId: tabIdRef.current
+      })
+      return true
     }
+    const onWheel = (event: WheelEvent) => {
+      const matchesTerminal = isTerminalGestureTarget(event)
+      if (!matchesTerminal) {
+        logTerminalZoom(terminal, 'wheel-window-ignored-not-terminal', {
+          ...describeTerminalInput(event),
+          tabId: tabIdRef.current
+        })
+        return
+      }
+
+      if (!consumeTerminalWheelZoom(event, 'window')) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+    // xterm sees the terminal canvas' wheel event before it turns it into
+    // scrollback or a remote mouse-reporting sequence. This is the primary
+    // path; the window listener above remains for platform-retargeted events.
+    terminal.attachCustomWheelEventHandler((event) => {
+      if (!consumeTerminalWheelZoom(event, 'xterm')) {
+        return true
+      }
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      return false
+    })
 
     let previousGestureScale = 1
     let gestureZoomDelta = 0
@@ -1682,6 +1833,29 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Control') {
+        controlKeyActive = true
+      }
+
+      const terminalZoomOperation = getTerminalZoomOperation(event)
+      if (event.ctrlKey || event.metaKey || terminalZoomOperation) {
+        logTerminalZoom(terminal, 'key-window-received', {
+          ...describeTerminalInput(event),
+          operation: terminalZoomOperation,
+          isTerminalShortcutTarget: isTerminalShortcutTarget(event),
+          tabId: tabIdRef.current
+        })
+      }
+      if (terminalZoomOperation && isTerminalShortcutTarget(event)) {
+        // Tauri's WebViews can consume browser-style zoom shortcuts before
+        // xterm sees them. Capture the terminal-scoped fallback at window
+        // level, including Ctrl+Shift+0 on Windows/Linux.
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        applyTerminalZoom(terminalZoomOperation, 'shortcut')
+        return
+      }
+
       const key = event.key.toLowerCase()
       const matchesCopy = isMac
         ? event.metaKey && !event.shiftKey && key === 'c'
@@ -1712,6 +1886,18 @@ export const TerminalView = memo(function TerminalView({
       }
     }
 
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Control') {
+        controlKeyActive = false
+      }
+    }
+    const onWindowBlur = () => {
+      // A keyup can be delivered to a different native surface after the app
+      // loses focus. Do not let a stale Ctrl state turn later touchpad scrolls
+      // into zoom gestures.
+      controlKeyActive = false
+    }
+
     const handleFocusTerminal = (targetTabId: string) => {
       if (targetTabId && targetTabId !== tabIdRef.current) {
         return
@@ -1733,14 +1919,41 @@ export const TerminalView = memo(function TerminalView({
     }
     const handleTerminalZoom = (operation: TerminalZoomOperation) => {
       if (lastFocusedTerminal !== terminal) {
+        logTerminalZoom(terminal, 'native-zoom-request-ignored-not-focused', {
+          operation,
+          tabId: tabIdRef.current
+        })
         return
       }
+      logTerminalZoom(terminal, 'native-zoom-request-received', { operation, tabId: tabIdRef.current })
       applyTerminalZoom(operation, 'menu')
     }
+    const handleTerminalGestureZoom = (operation: TerminalZoomOperation) => {
+      if (terminalUnderPointer !== terminal) {
+        logTerminalZoom(terminal, 'native-gesture-zoom-ignored-not-hovered', {
+          operation,
+          hoveredTerminal: terminalUnderPointer === null ? null : 'another-terminal'
+        })
+        return
+      }
 
+      logTerminalZoom(terminal, 'native-gesture-zoom-received', { operation, tabId: tabIdRef.current })
+      applyTerminalZoom(operation, 'gesture')
+    }
+
+    // xterm's textarea focus event is not consistently forwarded after a
+    // compositor-backed pointer interaction. Record the active pane from the
+    // host's capture phase as well, before xterm consumes the event.
+    hostRef.current.addEventListener('focusin', markTerminalFocused)
+    hostRef.current.addEventListener('pointerdown', markTerminalFocused, true)
+    hostRef.current.addEventListener('pointerenter', markTerminalUnderPointer)
+    hostRef.current.addEventListener('pointerleave', clearTerminalUnderPointer)
     hostRef.current.addEventListener('mousedown', onMouseDown, true)
     hostRef.current.addEventListener('pointerdown', onPointerDown, true)
-    hostRef.current.addEventListener('wheel', onWheel, { capture: true, passive: false })
+    // Register at window capture so Windows WebView2 and Linux WebKitGTK
+    // compositor events cannot bypass a listener attached below xterm's DOM.
+    // onWheel scopes the event back to this terminal before consuming it.
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false })
     // GestureEvents can target document/body in WKWebView, so listen at the
     // window capture phase and scope the handler with isTerminalGestureTarget.
     window.addEventListener('gesturestart', onGestureStart, { capture: true, passive: false })
@@ -1748,6 +1961,8 @@ export const TerminalView = memo(function TerminalView({
     window.addEventListener('gestureend', onGestureEnd, { capture: true, passive: false })
     document.addEventListener('contextmenu', onDocumentContextMenu, true)
     window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('blur', onWindowBlur)
     window.addEventListener('focus', onWindowFocus)
     document.addEventListener('selectionchange', onDocumentSelectionChange)
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -1757,6 +1972,7 @@ export const TerminalView = memo(function TerminalView({
     const offTerminalFind = onAppEvent(APP_EVENT.terminalFind, handleTerminalFind)
     const offTerminalZoom = onAppEvent(APP_EVENT.terminalZoom, handleTerminalZoom)
     const offNativeTerminalZoom = window.fileterm?.onTerminalZoomRequest(handleTerminalZoom)
+    const offNativeTerminalGestureZoom = window.fileterm?.onTerminalGestureZoomRequest(handleTerminalGestureZoom)
 
     // Ask the main process for the actual PTY size once the terminal is mounted.
     if (!bootedTabs.current.has(tabIdRef.current)) {
@@ -1771,6 +1987,7 @@ export const TerminalView = memo(function TerminalView({
       offTerminalFind()
       offTerminalZoom()
       offNativeTerminalZoom?.()
+      offNativeTerminalGestureZoom?.()
       onDataDispose.dispose()
       onSelectionDispose.dispose()
       offData?.()
@@ -1804,20 +2021,29 @@ export const TerminalView = memo(function TerminalView({
       osc52Disposable.dispose()
       disposeCanvasTextMetrics()
       resizeObserver.disconnect()
+      hostRef.current?.removeEventListener('focusin', markTerminalFocused)
+      hostRef.current?.removeEventListener('pointerdown', markTerminalFocused, true)
+      hostRef.current?.removeEventListener('pointerenter', markTerminalUnderPointer)
+      hostRef.current?.removeEventListener('pointerleave', clearTerminalUnderPointer)
       hostRef.current?.removeEventListener('mousedown', onMouseDown, true)
       hostRef.current?.removeEventListener('pointerdown', onPointerDown, true)
-      hostRef.current?.removeEventListener('wheel', onWheel, true)
+      window.removeEventListener('wheel', onWheel, true)
       terminalTextarea?.removeEventListener('focus', markTerminalFocused)
       window.removeEventListener('gesturestart', onGestureStart, true)
       window.removeEventListener('gesturechange', onGestureChange, true)
       window.removeEventListener('gestureend', onGestureEnd, true)
       document.removeEventListener('contextmenu', onDocumentContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('blur', onWindowBlur)
       window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('selectionchange', onDocumentSelectionChange)
       document.removeEventListener('visibilitychange', onVisibilityChange)
       if (lastFocusedTerminal === terminal) {
         lastFocusedTerminal = null
+      }
+      if (terminalUnderPointer === terminal) {
+        terminalUnderPointer = null
       }
       searchAddonRef.current = null
       terminalRef.current = null
