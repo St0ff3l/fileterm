@@ -1,15 +1,15 @@
-const js = require('@eslint/js')
-const tsParser = require('@typescript-eslint/parser')
-const tsPlugin = require('@typescript-eslint/eslint-plugin')
-const prettierConfig = require('eslint-config-prettier')
-const prettierPlugin = require('eslint-plugin-prettier')
-const reactPlugin = require('eslint-plugin-react')
-const reactHooksPlugin = require('eslint-plugin-react-hooks')
-const globals = require('globals')
+import js from '@eslint/js'
+import tsParser from '@typescript-eslint/parser'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
+import eslintReact from '@eslint-react/eslint-plugin'
+import prettierConfig from 'eslint-config-prettier'
+import prettierPlugin from 'eslint-plugin-prettier'
+import reactHooksPlugin from 'eslint-plugin-react-hooks'
+import globals from 'globals'
 
 const sourceFiles = ['**/*.{js,cjs,mjs,ts,tsx,cts,mts}']
 
-module.exports = [
+export default [
   {
     ignores: [
       '**/node_modules/**',
@@ -69,7 +69,8 @@ module.exports = [
       ],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'off',
-      '@typescript-eslint/no-require-imports': 'off'
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-useless-assignment': 'off'
     }
   },
   {
@@ -86,7 +87,7 @@ module.exports = [
       }
     },
     plugins: {
-      react: reactPlugin,
+      '@eslint-react': eslintReact,
       'react-hooks': reactHooksPlugin
     },
     settings: {
@@ -95,12 +96,19 @@ module.exports = [
       }
     },
     rules: {
-      ...reactPlugin.configs.recommended.rules,
+      ...eslintReact.configs['recommended-typescript'].rules,
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'off',
-      'react/jsx-uses-react': 'off',
-      'react/prop-types': 'off',
-      'react/react-in-jsx-scope': 'off'
+      '@eslint-react/set-state-in-effect': 'off',
+      '@eslint-react/exhaustive-deps': 'off',
+      '@eslint-react/preserve-caught-error': 'off',
+      '@eslint-react/naming-convention-ref-name': 'off',
+      '@eslint-react/no-array-index-key': 'off',
+      '@eslint-react/use-state': 'off',
+      '@eslint-react/no-unnecessary-use-prefix': 'off',
+      '@eslint-react/no-clone-element': 'off',
+      '@eslint-react/no-children-map': 'off',
+      'preserve-caught-error': 'off'
     }
   },
   {
