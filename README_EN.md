@@ -14,7 +14,9 @@
   <p>
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-111827?style=for-the-badge"></a>
     <a href="https://github.com/St0ff3l/fileterm/releases/latest"><img alt="Status" src="https://img.shields.io/badge/status-Official%20Release-22C55E?style=for-the-badge"></a>
-    <img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-6366F1?style=for-the-badge">
+    <img alt="macOS" src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-000000?style=for-the-badge&logo=apple&logoColor=white">
+    <img alt="Windows" src="https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white">
+    <img alt="Debian" src="https://img.shields.io/badge/Debian-deb-A80030?style=for-the-badge&logo=debian&logoColor=white">
     <a href="https://github.com/St0ff3l/fileterm/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/St0ff3l/fileterm?style=for-the-badge&logo=github&label=stars"></a>
   </p>
 </div>
@@ -27,8 +29,9 @@ Download the latest release from [GitHub Releases](https://github.com/St0ff3l/fi
 
 - **macOS**: packages for Apple Silicon (arm64) and Intel (x64).
 - **Windows**: x64 NSIS installer; installed production builds download, verify, and install updates after restart.
+- **Linux**: x64 `.deb` packages and `.AppImage` binaries.
 
-macOS update checks open the matching GitHub Release page for a user-selected download. Signed in-app updates are used by installed Windows releases.
+macOS and Linux update checks open the matching GitHub Release page for a user-selected download. Signed in-app updates are used by installed Windows releases.
 
 Want to run from source or contribute? Continue to [Getting Started from Source](#getting-started-from-source).
 
@@ -137,11 +140,12 @@ npm run typecheck
 npm run build
 npm run release:mac
 npm run release:win
+npm run release:linux
 ```
 
 ### Releases and Updates
 
-- A `vX.Y.Z` tag on a `release/*` commit runs the Tauri-only Release Action and publishes macOS arm64/x64 DMGs plus the Windows x64 NSIS installer.
+- A `vX.Y.Z` tag on a `release/*` commit runs the Tauri-only Release Action and publishes macOS arm64/x64 DMGs, the Windows x64 NSIS installer, and Linux x64 `.deb` / `.AppImage` packages.
 - The Windows job also publishes the signed NSIS installer, its `.sig` signature, and `latest.json`; installed Windows clients verify that manifest before updating.
 - Configure the repository Actions Secret `TAURI_SIGNING_PRIVATE_KEY` with the Tauri updater private-key contents. Never commit that private key.
 - macOS release bundles use ad-hoc signing (without an Apple Developer certificate or notarization) and deliberately keep the GitHub Release download flow rather than using the in-app updater. First-run users may still need to whitelist the app in Privacy & Security.
@@ -177,7 +181,7 @@ Post-release priorities:
 2. Keep refining the Tauri workspace, session service, and renderer boundaries.
 3. Continue consolidating domain types in `packages/core`.
 4. Improve transfer tasks, errors, themes, terminal input, file drawers, and the desktop shell.
-5. Maintain release quality and distribution for macOS and Windows.
+5. Maintain release quality and distribution for macOS, Windows, and Linux.
 
 See [docs/roadmap.md](./docs/roadmap.md) for the full plan.
 
