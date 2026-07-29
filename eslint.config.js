@@ -73,35 +73,13 @@ module.exports = [
     }
   },
   {
-    files: [
-      'apps/electron/src/main/**/*.{ts,tsx}',
-      'apps/electron/src/preload/**/*.{ts,tsx,cts,mts}',
-      'apps/electron/test/**/*.{ts,tsx,cts,mts}'
-    ],
-    languageOptions: {
-      globals: {
-        ...globals.node
-      }
-    }
-  },
-  {
-    files: [
-      'apps/electron/src/main/services/sessions/shell-cwd-integration.ts',
-      'apps/electron/src/main/services/sessions/ssh-session-controller.ts'
-    ],
-    rules: {
-      // These modules intentionally parse ANSI/OSC control sequences from a shell stream.
-      'no-control-regex': 'off'
-    }
-  },
-  {
     files: ['**/*.cts'],
     languageOptions: {
       sourceType: 'commonjs'
     }
   },
   {
-    files: ['apps/{tauri,electron}/src/renderer/**/*.{ts,tsx}'],
+    files: ['apps/tauri/src/renderer/**/*.{ts,tsx}'],
     languageOptions: {
       globals: {
         ...globals.browser
