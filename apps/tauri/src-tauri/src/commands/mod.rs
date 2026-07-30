@@ -67,19 +67,28 @@ async fn send_terminal_input(
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub theme: String,
     pub locale: String,
+    #[serde(default = "default_auto_check_updates")]
+    pub auto_check_updates: bool,
 }
 
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
+    pub auto_check_updates: Option<bool>,
 }
 
 const DEFAULT_UI_THEME: &str = "default-dark";
 const DEFAULT_UI_LOCALE: &str = "zhCN";
+
+fn default_auto_check_updates() -> bool {
+    true
+}
 
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     if !matches!(preferences.theme.as_str(), "default-dark" | "default-light") {
@@ -260,6 +269,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
         Ok(UiPreferences {
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
+            auto_check_updates: default_auto_check_updates(),
         })
     }
 }
@@ -276,6 +286,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(locale) = input.locale {
         preferences.locale = locale;
+    }
+    if let Some(auto_check_updates) = input.auto_check_updates {
+        preferences.auto_check_updates = auto_check_updates;
     }
     let preferences = normalize_ui_preferences(preferences);
     let content = serde_json::to_string_pretty(&preferences)
@@ -665,6 +678,11 @@ pub fn app_set_webdav_sync_config(
 }
 
 #[tauri::command]
+pub async fn app_test_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::test_connection(&app).await
+}
+
+#[tauri::command]
 pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
     crate::services::webdav::upload(&app).await
 }
@@ -673,6 +691,43 @@ pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value,
 pub async fn app_download_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
     let result = crate::services::webdav::download(&app).await?;
+    let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
+        + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
+    if changed > 0 {
+        if let Ok(snapshot) = get_workspace_snapshot_unlocked(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn app_get_s3_backup_config(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::get_config(&app)
+}
+
+#[tauri::command]
+pub fn app_set_s3_backup_config(
+    app: AppHandle,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::save_config(&app, input)
+}
+
+#[tauri::command]
+pub async fn app_test_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::test_connection(&app).await
+}
+
+#[tauri::command]
+pub async fn app_upload_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::upload(&app).await
+}
+
+#[tauri::command]
+pub async fn app_download_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    let result = crate::services::s3_backup::download(&app).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
     if changed > 0 {
@@ -773,6 +828,16 @@ pub async fn app_window_action(
 ) -> Result<(), AppError> {
     match action.as_str() {
         "show" => {
+            if let Err(error) = window.unminimize() {
+                crate::services::logging::warn(
+                    &app,
+                    "window",
+                    format!(
+                        "unminimize before show failed label={}: {error}",
+                        window.label()
+                    ),
+                );
+            }
             window
                 .show()
                 .map_err(|error| AppError::Window(error.to_string()))?;
@@ -2974,13 +3039,14 @@ mod ui_state_tests {
 
 #[cfg(test)]
 mod ui_preferences_tests {
-    use super::{normalize_ui_preferences, UiPreferences};
+    use super::{normalize_ui_preferences, UiPreferences, UiPreferencesInput};
 
     #[test]
     fn falls_back_to_safe_values_for_unknown_preferences() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
+            auto_check_updates: false,
         });
 
         assert_eq!(preferences.theme, "default-dark");
@@ -2992,10 +3058,40 @@ mod ui_preferences_tests {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
+            auto_check_updates: false,
         });
 
         assert_eq!(preferences.theme, "default-light");
         assert_eq!(preferences.locale, "enUS");
+        assert!(!preferences.auto_check_updates);
+    }
+
+    #[test]
+    fn defaults_auto_update_checks_for_existing_preferences() {
+        let preferences: UiPreferences = serde_json::from_value(serde_json::json!({
+            "theme": "default-dark",
+            "locale": "zhCN"
+        }))
+        .expect("legacy UI preferences should still deserialize");
+
+        assert!(preferences.auto_check_updates);
+    }
+
+    #[test]
+    fn uses_camel_case_for_the_update_check_preference_contract() {
+        let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({
+            "autoCheckUpdates": false
+        }))
+        .expect("renderer preference input should deserialize");
+        assert_eq!(input.auto_check_updates, Some(false));
+
+        let preferences = serde_json::to_value(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            auto_check_updates: false,
+        })
+        .expect("preferences should serialize");
+        assert_eq!(preferences["autoCheckUpdates"], false);
     }
 }
 

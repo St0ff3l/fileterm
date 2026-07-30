@@ -256,6 +256,24 @@ fn localized<'a>(is_english: bool, english: &'a str, chinese: &'a str) -> &'a st
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrayMenuAction {
+    ShowMain,
+    OpenConnectionManager,
+    OpenCommandManager,
+    RequestQuit,
+}
+
+fn tray_menu_action(id: &str) -> Option<TrayMenuAction> {
+    match id {
+        "tray-show-main" => Some(TrayMenuAction::ShowMain),
+        "tray-connection-manager" => Some(TrayMenuAction::OpenConnectionManager),
+        "tray-command-manager" => Some(TrayMenuAction::OpenCommandManager),
+        "tray-quit" => Some(TrayMenuAction::RequestQuit),
+        _ => None,
+    }
+}
+
 fn tray_menu_labels(is_english: bool) -> [&'static str; 4] {
     [
         localized(is_english, "Show Main Window", "显示主窗口"),
@@ -1084,12 +1102,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
                 "window",
                 format!("focus existing label={label} kind={}", input.kind),
             );
-            window
-                .show()
-                .map_err(|error| AppError::Window(error.to_string()))?;
-            window
-                .set_focus()
-                .map_err(|error| AppError::Window(error.to_string()))?;
+            restore_window(app, &window, true);
             return Ok(());
         }
     }
@@ -1183,6 +1196,37 @@ fn open_child_window_from_native_event(app: &AppHandle, input: OpenWindowInput) 
     });
 }
 
+/// Restores a window from either the hidden or minimized state. `show()` alone
+/// does not reliably deminiaturize a GTK window, which leaves renderer-owned
+/// confirmation dialogs invisible after a tray action on Linux.
+fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
+    let label = window.label();
+    if let Err(error) = window.unminimize() {
+        crate::services::logging::warn(
+            app,
+            "window",
+            format!("unminimize failed label={label}: {error}"),
+        );
+    }
+    if let Err(error) = window.show() {
+        crate::services::logging::warn(
+            app,
+            "window",
+            format!("show failed label={label}: {error}"),
+        );
+        return;
+    }
+    if focus {
+        if let Err(error) = window.set_focus() {
+            crate::services::logging::warn(
+                app,
+                "window",
+                format!("focus failed label={label}: {error}"),
+            );
+        }
+    }
+}
+
 fn show_main_window(app: &AppHandle<Wry>) {
     let hidden_labels = {
         let state = app.state::<HiddenWithMainRegistry>();
@@ -1194,14 +1238,15 @@ fn show_main_window(app: &AppHandle<Wry>) {
     };
 
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
+        restore_window(app, &window, true);
+    } else {
+        crate::services::logging::warn(app, "tray", "show requested without a main window");
     }
 
     for label in hidden_labels {
         if label != "main" {
             if let Some(window) = app.get_webview_window(&label) {
-                let _ = window.show();
+                restore_window(app, &window, false);
             }
         }
     }
@@ -1211,8 +1256,16 @@ pub(crate) fn hide_main_window_and_children(app: &AppHandle<Wry>) {
     let mut hidden_labels = HashSet::new();
     for (label, window) in app.webview_windows() {
         if window.is_visible().unwrap_or(false) {
-            let _ = window.hide();
-            hidden_labels.insert(label);
+            match window.hide() {
+                Ok(()) => {
+                    hidden_labels.insert(label);
+                }
+                Err(error) => crate::services::logging::warn(
+                    app,
+                    "tray",
+                    format!("hide failed label={label}: {error}"),
+                ),
+            }
         }
     }
 
@@ -1235,11 +1288,26 @@ fn toggle_main_window_visibility(app: &AppHandle<Wry>) {
 }
 
 pub(crate) fn request_main_window_close(app: &AppHandle<Wry>, is_quit: bool) {
+    if is_quit {
+        // A tray action can arrive while every FileTerm window is hidden. The
+        // renderer owns the quit confirmation and dirty-editor prompts, so
+        // make those surfaces visible before emitting the request instead of
+        // leaving a modal active in an invisible WebView.
+        show_main_window(app);
+    }
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit(
+        if let Err(error) = window.emit(
             "app:window-close-request",
             serde_json::json!({ "isQuit": is_quit }),
-        );
+        ) {
+            crate::services::logging::error(
+                app,
+                "tray",
+                format!("close request delivery failed is_quit={is_quit}: {error}"),
+            );
+        }
+    } else {
+        crate::services::logging::error(app, "tray", "close requested without a main window");
     }
 }
 
@@ -1372,46 +1440,51 @@ pub fn run() {
                 .tooltip("FileTerm")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "tray-connection-manager" => {
-                        open_child_window_from_native_event(
-                            app,
-                            OpenWindowInput {
-                                kind: "connection-manager".to_string(),
-                                mode: None,
-                                profile_id: None,
-                                command_id: None,
-                                folder_id: None,
-                                command: None,
-                                source: None,
-                                path: None,
-                                name: None,
-                                tab_id: None,
-                                encoding: None,
-                            },
-                        );
+                .on_menu_event(|app, event| {
+                    let Some(action) = tray_menu_action(event.id().as_ref()) else {
+                        return;
+                    };
+                    crate::services::logging::info(app, "tray", format!("menu action={action:?}"));
+                    match action {
+                        TrayMenuAction::OpenConnectionManager => {
+                            open_child_window_from_native_event(
+                                app,
+                                OpenWindowInput {
+                                    kind: "connection-manager".to_string(),
+                                    mode: None,
+                                    profile_id: None,
+                                    command_id: None,
+                                    folder_id: None,
+                                    command: None,
+                                    source: None,
+                                    path: None,
+                                    name: None,
+                                    tab_id: None,
+                                    encoding: None,
+                                },
+                            );
+                        }
+                        TrayMenuAction::OpenCommandManager => {
+                            open_child_window_from_native_event(
+                                app,
+                                OpenWindowInput {
+                                    kind: "command-manager".to_string(),
+                                    mode: None,
+                                    profile_id: None,
+                                    command_id: None,
+                                    folder_id: None,
+                                    command: None,
+                                    source: None,
+                                    path: None,
+                                    name: None,
+                                    tab_id: None,
+                                    encoding: None,
+                                },
+                            );
+                        }
+                        TrayMenuAction::ShowMain => show_main_window(app),
+                        TrayMenuAction::RequestQuit => request_main_window_close(app, true),
                     }
-                    "tray-command-manager" => {
-                        open_child_window_from_native_event(
-                            app,
-                            OpenWindowInput {
-                                kind: "command-manager".to_string(),
-                                mode: None,
-                                profile_id: None,
-                                command_id: None,
-                                folder_id: None,
-                                command: None,
-                                source: None,
-                                path: None,
-                                name: None,
-                                tab_id: None,
-                                encoding: None,
-                            },
-                        );
-                    }
-                    "tray-show-main" => show_main_window(app),
-                    "tray-quit" => request_main_window_close(app, true),
-                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     if matches!(
@@ -1422,20 +1495,31 @@ pub fn run() {
                             ..
                         }
                     ) {
+                        crate::services::logging::info(
+                            tray.app_handle(),
+                            "tray",
+                            "left click toggle main window",
+                        );
                         toggle_main_window_visibility(tray.app_handle());
                     }
                 })
                 .build(app)
                 .map_err(|error| error.to_string())?;
 
-            // 启动后触发一次更新检查。延迟 1s 让前端先完成 onUpdateStatus
-            // 订阅，updates::check 内部已有 single-flight 互斥，用户在此
-            // 期间手动点击"检查更新"会复用同一次结果。错误不影响启动。
-            let startup_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                let _ = crate::services::updates::check(&startup_handle).await;
-            });
+            // 启动后仅在用户允许时触发更新检查。延迟 1s 让前端先完成
+            // onUpdateStatus 订阅；updates::check 内部已有 single-flight
+            // 互斥，用户在此期间手动点击"检查更新"会复用同一次结果。
+            // 无法读取旧偏好时维持既有行为，默认检查更新。
+            let auto_check_updates = crate::commands::app_get_ui_preferences(app.handle().clone())
+                .map(|preferences| preferences.auto_check_updates)
+                .unwrap_or(true);
+            if auto_check_updates {
+                let startup_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    let _ = crate::services::updates::check(&startup_handle).await;
+                });
+            }
 
             Ok(())
         })
@@ -1620,8 +1704,14 @@ pub fn run() {
             crate::commands::app_export_connections_as_files,
             crate::commands::app_get_webdav_sync_config,
             crate::commands::app_set_webdav_sync_config,
+            crate::commands::app_test_webdav_sync,
             crate::commands::app_upload_webdav_sync,
             crate::commands::app_download_webdav_sync,
+            crate::commands::app_get_s3_backup_config,
+            crate::commands::app_set_s3_backup_config,
+            crate::commands::app_test_s3_backup,
+            crate::commands::app_upload_s3_backup,
+            crate::commands::app_download_s3_backup,
             crate::commands::app_workspace_mutation,
             crate::commands::app_open_window,
             crate::commands::app_window_action,
@@ -1719,8 +1809,8 @@ pub fn run() {
 mod tests {
     use super::{
         application_quit_accelerator, child_window_should_be_transparent,
-        tray_icon_should_be_template, tray_menu_labels, FileEditorCloseRegistry,
-        QuitPreparationRegistry, WindowMenuKind,
+        tray_icon_should_be_template, tray_menu_action, tray_menu_labels, FileEditorCloseRegistry,
+        QuitPreparationRegistry, TrayMenuAction, WindowMenuKind,
     };
 
     #[cfg(target_os = "windows")]
@@ -1780,6 +1870,27 @@ mod tests {
                 "Quit FileTerm"
             ]
         );
+    }
+
+    #[test]
+    fn tray_menu_ids_cover_every_visible_action() {
+        assert_eq!(
+            tray_menu_action("tray-show-main"),
+            Some(TrayMenuAction::ShowMain)
+        );
+        assert_eq!(
+            tray_menu_action("tray-connection-manager"),
+            Some(TrayMenuAction::OpenConnectionManager)
+        );
+        assert_eq!(
+            tray_menu_action("tray-command-manager"),
+            Some(TrayMenuAction::OpenCommandManager)
+        );
+        assert_eq!(
+            tray_menu_action("tray-quit"),
+            Some(TrayMenuAction::RequestQuit)
+        );
+        assert_eq!(tray_menu_action("unknown"), None);
     }
 
     #[test]

@@ -4,6 +4,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppUpdateStatus,
   FileTermDesktopApi,
+  S3BackupConfig,
+  S3BackupConfigInput,
+  S3BackupResult,
   WebDavSyncConfig,
   WebDavSyncResult,
   ConnectionImportPlan,
@@ -248,9 +251,21 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     readClipboardText: () => invoke<string>('app_read_clipboard_text'),
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () =>
-      invoke<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>('app_get_ui_preferences'),
-    setUiPreferences: (input: { theme?: 'default-dark' | 'default-light'; locale?: 'zhCN' | 'enUS' }) =>
-      invoke<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>('app_set_ui_preferences', { input }),
+      invoke<{
+        theme: 'default-dark' | 'default-light'
+        locale: 'zhCN' | 'enUS'
+        autoCheckUpdates: boolean
+      }>('app_get_ui_preferences'),
+    setUiPreferences: (input: {
+      theme?: 'default-dark' | 'default-light'
+      locale?: 'zhCN' | 'enUS'
+      autoCheckUpdates?: boolean
+    }) =>
+      invoke<{
+        theme: 'default-dark' | 'default-light'
+        locale: 'zhCN' | 'enUS'
+        autoCheckUpdates: boolean
+      }>('app_set_ui_preferences', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),
@@ -387,8 +402,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       allowInsecureTls?: boolean
       password?: string
     }) => invoke<WebDavSyncConfig>('app_set_webdav_sync_config', { input }),
+    testWebDavSync: () => invoke<WebDavSyncResult>('app_test_webdav_sync'),
     uploadWebDavSync: () => invoke<WebDavSyncResult>('app_upload_webdav_sync'),
     downloadWebDavSync: () => invoke<WebDavSyncResult>('app_download_webdav_sync'),
+    getS3BackupConfig: () => invoke<S3BackupConfig>('app_get_s3_backup_config'),
+    saveS3BackupConfig: (input: S3BackupConfigInput) => invoke<S3BackupConfig>('app_set_s3_backup_config', { input }),
+    testS3Backup: () => invoke<S3BackupResult>('app_test_s3_backup'),
+    uploadS3Backup: () => invoke<S3BackupResult>('app_upload_s3_backup'),
+    downloadS3Backup: () => invoke<S3BackupResult>('app_download_s3_backup'),
     createProfile: (input: unknown) => invoke<WorkspaceSnapshot>('app_create_profile', { input }),
     createFolder: (name: string, parentId?: string) =>
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-folder', payload: { name, parentId } }),
@@ -492,7 +513,11 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
 
     getDroppedFilePaths: (files: File[]) => takeNativeDropPaths(files),
     onUiPreferencesChanged: (
-      listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
+      listener: (preferences: {
+        theme: 'default-dark' | 'default-light'
+        locale: 'zhCN' | 'enUS'
+        autoCheckUpdates: boolean
+      }) => void
     ) => subscribe('app:ui-preferences-changed', listener),
     onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) =>
       subscribe('app:window-maximized-change', listener),

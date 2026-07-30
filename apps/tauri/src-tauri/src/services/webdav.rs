@@ -163,13 +163,18 @@ fn lock_down_config_file(_path: &std::path::Path) -> Result<(), AppError> {
     Ok(())
 }
 
-fn configured(app: &AppHandle) -> Result<StoredConfig, AppError> {
-    let config = read_config(app)?;
-    if !config.enabled {
+fn validate_config(config: &StoredConfig, require_enabled: bool) -> Result<(), AppError> {
+    if require_enabled && !config.enabled {
         return Err(command_error("请先启用 WebDAV 配置同步"));
     }
     normalize_base_url(&config.url, config.allow_insecure_tls == Some(true))?;
     normalize_remote_path(&config.remote_path)?;
+    Ok(())
+}
+
+fn configured(app: &AppHandle, require_enabled: bool) -> Result<StoredConfig, AppError> {
+    let config = read_config(app)?;
+    validate_config(&config, require_enabled)?;
     Ok(config)
 }
 
@@ -229,7 +234,10 @@ pub fn export_timestamp() -> String {
     )
 }
 
-fn export_bundle(app: &AppHandle) -> Result<(Vec<u8>, String), AppError> {
+/// Serializes the complete connection bundle for an explicit user-initiated
+/// backup. S3 backup shares this payload format with WebDAV so both targets
+/// preserve the same secret-handling and integrity semantics.
+pub(crate) fn export_bundle(app: &AppHandle) -> Result<(Vec<u8>, String), AppError> {
     let (profiles, _) = profile_ops::read_and_heal_profiles(app)?;
     build_export_bundle(&profiles)
 }
@@ -366,6 +374,74 @@ fn parse_bundle(bytes: &[u8]) -> Result<Vec<Value>, AppError> {
     Ok(profiles)
 }
 
+pub(crate) struct ProfileImportSummary {
+    pub imported: u64,
+    pub updated: u64,
+    pub skipped: u64,
+}
+
+/// Imports a verified FileTerm profile bundle. Transport services call this
+/// only after their own authenticated download has completed, which keeps the
+/// merge and secret persistence rules identical across WebDAV and S3.
+pub(crate) fn import_bundle(
+    app: &AppHandle,
+    bytes: &[u8],
+) -> Result<ProfileImportSummary, AppError> {
+    let profiles = parse_bundle(bytes)?;
+    let (existing, _) = profile_ops::read_and_heal_profiles(app)?;
+    let mut known = existing
+        .iter()
+        .filter_map(|profile| {
+            profile_fingerprint(profile).map(|fingerprint| (fingerprint, profile.clone()))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut imported = 0_u64;
+    let mut updated = 0_u64;
+    let mut skipped = 0_u64;
+    for profile in profiles {
+        let sanitized = match sanitize_import_profile(&profile) {
+            Ok(profile) => profile,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
+        };
+        let Some(fingerprint) = profile_fingerprint(&sanitized) else {
+            skipped += 1;
+            continue;
+        };
+        if let Some(existing_profile) = known.get(&fingerprint).cloned() {
+            let Some(profile_id) = existing_profile
+                .get("id")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+            else {
+                skipped += 1;
+                continue;
+            };
+            let merged = match merge_synced_profile(&existing_profile, &sanitized) {
+                Ok(profile) => profile,
+                Err(_) => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            let saved = profile_ops::update_profile(app, &profile_id, merged)?;
+            known.insert(fingerprint, saved);
+            updated += 1;
+            continue;
+        }
+        let created = profile_ops::create_profile(app, sanitized)?;
+        known.insert(fingerprint, created);
+        imported += 1;
+    }
+    Ok(ProfileImportSummary {
+        imported,
+        updated,
+        skipped,
+    })
+}
+
 pub fn get_config(app: &AppHandle) -> Result<Value, AppError> {
     Ok(public_config(&read_config(app)?))
 }
@@ -428,6 +504,33 @@ pub fn save_config(app: &AppHandle, input: Value) -> Result<Value, AppError> {
     Ok(public_config(&next))
 }
 
+/// Checks the saved endpoint and credentials without enabling synchronization
+/// or changing the remote backup object.
+pub async fn test_connection(app: &AppHandle) -> Result<Value, AppError> {
+    crate::services::logging::info(app, "webdav", "connection test started");
+    let result = async {
+        let config = configured(app, false)?;
+        let response = authenticated(client()?.head(remote_url(&config)?), &config)
+            .send()
+            .await
+            .map_err(|error| command_error(format!("WebDAV 预检失败: {error}")))?;
+        if !response.status().is_success() && response.status() != StatusCode::NOT_FOUND {
+            return Err(response_error("预检", response.status()));
+        }
+        Ok(serde_json::json!({ "action": "test", "message": "WebDAV 连接成功。" }))
+    }
+    .await;
+    match &result {
+        Ok(_) => crate::services::logging::info(app, "webdav", "connection test completed"),
+        Err(error) => crate::services::logging::error(
+            app,
+            "webdav",
+            format!("connection test failed: {error}"),
+        ),
+    }
+    result
+}
+
 pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
     crate::services::logging::info(app, "webdav", "upload started");
     let result = upload_inner(app).await;
@@ -441,7 +544,7 @@ pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
 }
 
 async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
-    let mut config = configured(app)?;
+    let mut config = configured(app, true)?;
     let client = client()?;
     let (payload, content_hash) = export_bundle(app)?;
     let next_etag = upload_payload(&client, &config, payload).await?;
@@ -531,67 +634,20 @@ pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
 }
 
 async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
-    let mut config = configured(app)?;
+    let mut config = configured(app, true)?;
     let client = client()?;
     let (bytes, remote_etag) = download_payload(&client, &config).await?;
-    let profiles = parse_bundle(&bytes)?;
-    let (existing, _) = profile_ops::read_and_heal_profiles(app)?;
-    let mut known = existing
-        .iter()
-        .filter_map(|profile| {
-            profile_fingerprint(profile).map(|fingerprint| (fingerprint, profile.clone()))
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    let mut imported = 0_u64;
-    let mut updated = 0_u64;
-    let mut skipped = 0_u64;
-    for profile in profiles {
-        let sanitized = match sanitize_import_profile(&profile) {
-            Ok(profile) => profile,
-            Err(_) => {
-                skipped += 1;
-                continue;
-            }
-        };
-        let Some(fingerprint) = profile_fingerprint(&sanitized) else {
-            skipped += 1;
-            continue;
-        };
-        if let Some(existing_profile) = known.get(&fingerprint).cloned() {
-            let Some(profile_id) = existing_profile
-                .get("id")
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned)
-            else {
-                skipped += 1;
-                continue;
-            };
-            let merged = match merge_synced_profile(&existing_profile, &sanitized) {
-                Ok(profile) => profile,
-                Err(_) => {
-                    skipped += 1;
-                    continue;
-                }
-            };
-            let saved = profile_ops::update_profile(app, &profile_id, merged)?;
-            known.insert(fingerprint, saved);
-            updated += 1;
-            continue;
-        }
-        let created = profile_ops::create_profile(app, sanitized)?;
-        known.insert(fingerprint, created);
-        imported += 1;
-    }
+    let summary = import_bundle(app, &bytes)?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
     write_config(app, &config)?;
     Ok(serde_json::json!({
         "action": "download",
-        "message": format!("已从 WebDAV 导入 {imported} 个连接，更新 {updated} 个现有连接；跳过 {skipped} 个无效项。"),
-        "imported": imported,
-        "updated": updated,
-        "skipped": skipped,
+        "message": format!("已从 WebDAV 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。", summary.imported, summary.updated, summary.skipped),
+        "imported": summary.imported,
+        "updated": summary.updated,
+        "skipped": summary.skipped,
     }))
 }
 
@@ -630,7 +686,8 @@ async fn download_payload(
 mod tests {
     use super::{
         build_export_bundle, download_payload, merge_synced_profile, normalize_remote_path,
-        parse_bundle, sanitize_import_profile, sha256_hex, upload_payload, StoredConfig,
+        parse_bundle, sanitize_import_profile, sha256_hex, upload_payload, validate_config,
+        StoredConfig,
     };
     use reqwest::Client;
     use serde_json::json;
@@ -688,6 +745,18 @@ mod tests {
             normalize_remote_path("sync/profiles.json").unwrap(),
             "sync/profiles.json"
         );
+    }
+
+    #[test]
+    fn allows_connection_tests_without_enabling_webdav_sync() {
+        let config = StoredConfig {
+            enabled: false,
+            url: "https://dav.example.test/remote.php/dav/files/fileterm".to_string(),
+            remote_path: "fileterm/connections.json".to_string(),
+            ..StoredConfig::default()
+        };
+        assert!(validate_config(&config, false).is_ok());
+        assert!(validate_config(&config, true).is_err());
     }
 
     #[test]

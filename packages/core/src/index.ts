@@ -661,7 +661,38 @@ export interface WebDavSyncConfig {
 }
 
 export interface WebDavSyncResult {
-  action: 'upload' | 'download'
+  action: 'test' | 'upload' | 'download'
+  message: string
+  imported?: number
+  updated?: number
+  skipped?: number
+}
+
+export type S3BackupProvider = 'custom' | 'cloudflare-r2' | 'bitiful-s4'
+
+export interface S3BackupConfig {
+  enabled: boolean
+  provider: S3BackupProvider
+  endpoint: string
+  region: string
+  bucket: string
+  remotePath: string
+  pathStyleAccessEnabled: boolean
+  accessKeyId?: string
+  hasSavedSecret: boolean
+  lastSyncedAt?: string
+  lastEtag?: string
+}
+
+export type S3BackupConfigInput = Pick<
+  S3BackupConfig,
+  'enabled' | 'provider' | 'endpoint' | 'region' | 'bucket' | 'remotePath' | 'pathStyleAccessEnabled' | 'accessKeyId'
+> & {
+  secretAccessKey?: string
+}
+
+export interface S3BackupResult {
+  action: 'test' | 'upload' | 'download'
   message: string
   imported?: number
   updated?: number
@@ -911,11 +942,20 @@ export interface FileTermDesktopApi {
   onUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): Promise<void>
-  getUiPreferences(): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
+  getUiPreferences(): Promise<{
+    theme: 'default-dark' | 'default-light'
+    locale: 'zhCN' | 'enUS'
+    autoCheckUpdates: boolean
+  }>
   setUiPreferences(input: {
     theme?: 'default-dark' | 'default-light'
     locale?: 'zhCN' | 'enUS'
-  }): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
+    autoCheckUpdates?: boolean
+  }): Promise<{
+    theme: 'default-dark' | 'default-light'
+    locale: 'zhCN' | 'enUS'
+    autoCheckUpdates: boolean
+  }>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -944,7 +984,11 @@ export interface FileTermDesktopApi {
   requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
   onUiPreferencesChanged(
-    listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
+    listener: (preferences: {
+      theme: 'default-dark' | 'default-light'
+      locale: 'zhCN' | 'enUS'
+      autoCheckUpdates: boolean
+    }) => void
   ): () => void
   onFileEditorCloseRequest(listener: () => void): () => void
   requestQuitApp(): Promise<void>
@@ -967,8 +1011,14 @@ export interface FileTermDesktopApi {
   deleteSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]>
   getWebDavSyncConfig(): Promise<WebDavSyncConfig>
   saveWebDavSyncConfig(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig>
+  testWebDavSync(): Promise<WebDavSyncResult>
   uploadWebDavSync(): Promise<WebDavSyncResult>
   downloadWebDavSync(): Promise<WebDavSyncResult>
+  getS3BackupConfig(): Promise<S3BackupConfig>
+  saveS3BackupConfig(input: S3BackupConfigInput): Promise<S3BackupConfig>
+  testS3Backup(): Promise<S3BackupResult>
+  uploadS3Backup(): Promise<S3BackupResult>
+  downloadS3Backup(): Promise<S3BackupResult>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>
   updateFolder(folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot>
   deleteFolder(folderId: string): Promise<WorkspaceSnapshot>

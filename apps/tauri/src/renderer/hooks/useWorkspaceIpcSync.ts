@@ -11,6 +11,7 @@ import {
 import { emptyState, localPreviewFiles, previewLocalPath, previewState } from '../app/app-data'
 import { withParentRow } from '../app/app-utils'
 import { t, type AppLocale } from '../i18n'
+import { resolveRendererPlatform } from '../lib/renderer-platform'
 import type { ThemeMode } from './useThemeMode'
 
 export type WorkspaceWindowCloseRequest = {
@@ -182,7 +183,7 @@ export function useWorkspaceIpcSync({
   }, [])
 
   useEffect(() => {
-    const platform = desktopApi?.platform ?? 'browser'
+    const platform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
     document.documentElement.dataset.platform = platform
 
     return () => {

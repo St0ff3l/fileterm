@@ -52,6 +52,7 @@ import { TransferCenterHost } from './features/transfers/TransferCenterHost'
 import { WorkspaceStage } from './features/workspace/WorkspaceStage'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
 import { defaultLocale, localizeErrorScope, setLocale, t, type AppLocale } from './i18n'
+import { resolveRendererPlatform } from './lib/renderer-platform'
 
 import { useWorkspaceIpcSync } from './hooks/useWorkspaceIpcSync'
 import { useWorkspaceTabs } from './hooks/useWorkspaceTabs'
@@ -147,10 +148,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
 
   const desktopApi = window.fileterm
-  const isWindowsDesktop = desktopApi?.platform === 'win32'
+  const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
+  const isWindowsDesktop = rendererPlatform === 'win32'
   // Linux uses the same renderer-owned chrome as Windows. macOS remains on
   // AppKit chrome because its traffic lights are intentionally native.
-  const usesCustomWindowChrome = isWindowsDesktop || desktopApi?.platform === 'linux'
+  const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux'
   const hasRevealedStandaloneWindowRef = useRef(false)
 
   const openConnectionImportPreview = (source: 'files' | 'folder' = 'files') => {

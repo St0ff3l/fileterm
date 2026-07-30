@@ -50,6 +50,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - 单一连接导入入口同时支持 `~/.ssh/config`、SSH 配置文本和外部 JSON；导入统一采用 main-process preview plan，renderer 不接收导入 secret。
 - Telnet（RFC 854 基础协商）和 Serial（main-process device handle）终端会话；两者不进入 SFTP、CWD、sudo 或系统指标链路。
 - 设置页的 WebDAV 手动配置同步：完整包包含连接密码、私钥口令和代理密码，上传使用 ETag 检测冲突；renderer 仍不接触明文 payload，界面明确要求仅使用可信 HTTPS WebDAV。
+- 设置页的 S3 兼容配置备份：完整包复用 WebDAV 的安全导入、hash 校验和 ETag 冲突策略；S3 签名、Access Key、Secret Access Key 与含凭据 payload 全部停留在 Rust 服务层。Cloudflare R2 作为预设，固定使用 `region=auto` 与 path-style 地址。
 
 ### 2.1 Rust/Tauri 迁移边界
 

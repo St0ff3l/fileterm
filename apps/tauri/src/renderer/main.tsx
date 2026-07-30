@@ -5,6 +5,7 @@ import { ErrorBoundary } from './features/common/ErrorBoundary'
 import { createTauriApi } from '../bridge/tauri-api'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { defaultLocale, setLocale, t } from './i18n'
+import { resolveRendererPlatform } from './lib/renderer-platform'
 import './styles/index.css'
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
@@ -55,7 +56,7 @@ void createTauriApi()
     // only after native metadata resolves so first-read consumers never see
     // placeholder version, architecture, or platform fields.
     window.fileterm = api
-    document.documentElement.dataset.platform = api.platform
+    document.documentElement.dataset.platform = resolveRendererPlatform(api.platform)
 
     // Read durable UI preferences before mounting React. App state is then
     // initialized from the saved values instead of briefly using defaults and

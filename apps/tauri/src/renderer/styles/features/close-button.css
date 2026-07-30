@@ -67,6 +67,17 @@
   color: var(--danger-text);
 }
 
+:root[data-platform='linux'] .window-control-buttons .app-close-button--window {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+:root[data-platform='linux'] .window-control-buttons .app-close-button--window:hover:not(:disabled) {
+  background: var(--window-control-danger-bg);
+  color: var(--window-control-danger-text);
+}
+
 :root:not([data-theme]) .terminal-find .app-close-button,
 :root[data-theme='default-dark'] .terminal-find .app-close-button,
 :root[data-theme='default'] .terminal-find .app-close-button,
