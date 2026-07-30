@@ -820,7 +820,10 @@ textarea:focus-visible,
 }
 
 .terminal-host {
-  padding: 10px 14px 10px 12px;
+  /* Keep a small left safety gutter so the first glyph is never painted
+   * directly against the xterm canvas edge. The inner mount box remains
+   * unpadded, so FitAddon and the PTY continue to use the same dimensions. */
+  padding: 10px 6px 10px 14px;
   background: transparent;
   box-shadow: none;
 }
