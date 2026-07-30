@@ -1,6 +1,6 @@
 [package]
 name = "fileterm"
-version = "2.1.4"
+version = "2.1.5"
 description = "FileTerm desktop workspace"
 authors = ["FileTerm"]
 edition = "2021"
@@ -31,6 +31,7 @@ regex = "1"
 encoding_rs = "0.8"
 rfd = "0.17"
 sha2 = "0.10"
+hmac = "0.12"
 base64 = "0.22"
 flate2 = "1"
 tokio-socks = "0.5"

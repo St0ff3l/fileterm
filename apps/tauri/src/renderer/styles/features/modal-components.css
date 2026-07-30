@@ -1377,6 +1377,8 @@
 }
 
 .webdav-sync-form {
+  --settings-form-control-height: 38px;
+  --settings-form-control-inline-padding: 12px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 16px;
@@ -1392,13 +1394,46 @@
 }
 .webdav-sync-form input:not([type='checkbox']) {
   width: 100%;
+  height: var(--settings-form-control-height);
+  min-height: var(--settings-form-control-height);
   box-sizing: border-box;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--bg-input, var(--bg-primary));
   color: var(--text-main);
-  padding: 8px 9px;
+  padding: 0 var(--settings-form-control-inline-padding);
   font: inherit;
+}
+
+/* Keep native macOS selects and the Windows/Linux custom DropdownSelect on the
+   same 38px form-control rhythm used by the New Connection form. */
+.webdav-sync-form .dropdown-select-trigger,
+.webdav-sync-form .ft-select-shell select {
+  width: 100%;
+  height: var(--settings-form-control-height);
+  min-height: var(--settings-form-control-height);
+  box-sizing: border-box;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-input, var(--bg-primary));
+  color: var(--text-main);
+  font: inherit;
+}
+
+.webdav-sync-form .dropdown-select-trigger {
+  padding: 0 var(--settings-form-control-inline-padding);
+}
+
+.webdav-sync-form .ft-select-shell {
+  width: 100%;
+}
+
+.webdav-sync-form .ft-select-shell select {
+  padding: 0 34px 0 var(--settings-form-control-inline-padding) !important;
+}
+
+.webdav-sync-form .ft-select-shell__icon {
+  right: var(--settings-form-control-inline-padding);
 }
 .webdav-sync-form .webdav-checkbox {
   display: flex;

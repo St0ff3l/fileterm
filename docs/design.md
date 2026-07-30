@@ -113,6 +113,13 @@ FileTerm 的层级主要靠边界，不靠重装饰。
 
 ## 6. Core Components
 
+### Form Controls
+
+- 同一个表单网格中的 input、原生 select 和 `DropdownSelect` 必须使用相同的外框高度、圆角、边框与左右内边距；不能让平台分支造成下拉框比相邻输入框矮，或文字贴边。
+- 常规桌面表单控件以“新建连接”作为基线：`38px` 高、`12px` 左右内边距、`6-8px` 圆角和 `1px` 主题边框。紧凑工具栏控件可以更小，但不得与同一表单行混用。
+- macOS 原生 select 与 Windows/Linux 自绘 `DropdownSelect` 必须为同一语义控件提供等高的外框和等效文字/箭头留白；平台差异只保留菜单呈现方式。
+- 新增表单区块前，先复用现有控件基线；若确需变体，应在组件容器上声明局部 CSS 变量，避免在单个 input 或 select 上散落尺寸。
+
 ### Top Tabs
 
 - tab 高度约 48px。

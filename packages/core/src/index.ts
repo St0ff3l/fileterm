@@ -661,7 +661,38 @@ export interface WebDavSyncConfig {
 }
 
 export interface WebDavSyncResult {
-  action: 'upload' | 'download'
+  action: 'test' | 'upload' | 'download'
+  message: string
+  imported?: number
+  updated?: number
+  skipped?: number
+}
+
+export type S3BackupProvider = 'custom' | 'cloudflare-r2' | 'bitiful-s4'
+
+export interface S3BackupConfig {
+  enabled: boolean
+  provider: S3BackupProvider
+  endpoint: string
+  region: string
+  bucket: string
+  remotePath: string
+  pathStyleAccessEnabled: boolean
+  accessKeyId?: string
+  hasSavedSecret: boolean
+  lastSyncedAt?: string
+  lastEtag?: string
+}
+
+export type S3BackupConfigInput = Pick<
+  S3BackupConfig,
+  'enabled' | 'provider' | 'endpoint' | 'region' | 'bucket' | 'remotePath' | 'pathStyleAccessEnabled' | 'accessKeyId'
+> & {
+  secretAccessKey?: string
+}
+
+export interface S3BackupResult {
+  action: 'test' | 'upload' | 'download'
   message: string
   imported?: number
   updated?: number
@@ -980,8 +1011,14 @@ export interface FileTermDesktopApi {
   deleteSshTunnel(tabId: string, ruleId: string): Promise<SshTunnelSnapshot[]>
   getWebDavSyncConfig(): Promise<WebDavSyncConfig>
   saveWebDavSyncConfig(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig>
+  testWebDavSync(): Promise<WebDavSyncResult>
   uploadWebDavSync(): Promise<WebDavSyncResult>
   downloadWebDavSync(): Promise<WebDavSyncResult>
+  getS3BackupConfig(): Promise<S3BackupConfig>
+  saveS3BackupConfig(input: S3BackupConfigInput): Promise<S3BackupConfig>
+  testS3Backup(): Promise<S3BackupResult>
+  uploadS3Backup(): Promise<S3BackupResult>
+  downloadS3Backup(): Promise<S3BackupResult>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>
   updateFolder(folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot>
   deleteFolder(folderId: string): Promise<WorkspaceSnapshot>

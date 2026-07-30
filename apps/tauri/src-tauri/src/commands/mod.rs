@@ -678,6 +678,11 @@ pub fn app_set_webdav_sync_config(
 }
 
 #[tauri::command]
+pub async fn app_test_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::test_connection(&app).await
+}
+
+#[tauri::command]
 pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
     crate::services::webdav::upload(&app).await
 }
@@ -686,6 +691,43 @@ pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value,
 pub async fn app_download_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
     let result = crate::services::webdav::download(&app).await?;
+    let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
+        + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
+    if changed > 0 {
+        if let Ok(snapshot) = get_workspace_snapshot_unlocked(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn app_get_s3_backup_config(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::get_config(&app)
+}
+
+#[tauri::command]
+pub fn app_set_s3_backup_config(
+    app: AppHandle,
+    input: serde_json::Value,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::save_config(&app, input)
+}
+
+#[tauri::command]
+pub async fn app_test_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::test_connection(&app).await
+}
+
+#[tauri::command]
+pub async fn app_upload_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::upload(&app).await
+}
+
+#[tauri::command]
+pub async fn app_download_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    let result = crate::services::s3_backup::download(&app).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
     if changed > 0 {

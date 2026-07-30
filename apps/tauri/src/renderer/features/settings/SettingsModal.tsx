@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AppUpdateStatus, WebDavSyncConfig } from '@fileterm/core'
+import type { AppUpdateStatus, S3BackupConfig, WebDavSyncConfig } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
@@ -35,7 +35,12 @@ export function SettingsModal({
   const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
   const [syncPassword, setSyncPassword] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
-  const [syncOperation, setSyncOperation] = useState<'load' | 'save' | 'upload' | 'download' | null>(null)
+  const [s3Config, setS3Config] = useState<S3BackupConfig | null>(null)
+  const [s3SecretAccessKey, setS3SecretAccessKey] = useState('')
+  const [s3Message, setS3Message] = useState<string | null>(null)
+  const [syncOperation, setSyncOperation] = useState<
+    'load' | 'save' | 'test' | 'upload' | 'download' | 's3-save' | 's3-test' | 's3-upload' | 's3-download' | null
+  >(null)
   const syncOperationRef = useRef<typeof syncOperation>(null)
   const desktopApi = window.fileterm
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
@@ -99,7 +104,10 @@ export function SettingsModal({
     setSyncOperation('load')
     void desktopApi
       .getWebDavSyncConfig()
-      .then(setSyncConfig)
+      .then(async (webDavConfig) => {
+        setSyncConfig(webDavConfig)
+        setS3Config(await desktopApi.getS3BackupConfig())
+      })
       .catch((error: unknown) => setSyncMessage(error instanceof Error ? error.message : String(error)))
       .finally(() => {
         if (syncOperationRef.current === 'load') {
@@ -109,15 +117,27 @@ export function SettingsModal({
       })
   }, [activeTab, desktopApi])
 
-  const runSyncOperation = async (operation: 'save' | 'upload' | 'download', action: () => Promise<void>) => {
+  const runSyncOperation = async (
+    operation: Exclude<typeof syncOperation, 'load' | null>,
+    action: () => Promise<void>
+  ) => {
     if (syncOperationRef.current) return
     syncOperationRef.current = operation
     setSyncOperation(operation)
-    setSyncMessage(null)
+    if (operation.startsWith('s3-')) {
+      setS3Message(null)
+    } else {
+      setSyncMessage(null)
+    }
     try {
       await action()
     } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : String(error))
+      const message = error instanceof Error ? error.message : String(error)
+      if (operation.startsWith('s3-')) {
+        setS3Message(message)
+      } else {
+        setSyncMessage(message)
+      }
     } finally {
       if (syncOperationRef.current === operation) {
         syncOperationRef.current = null
@@ -411,6 +431,21 @@ export function SettingsModal({
                     </button>
                     <button
                       className="flat-button compact"
+                      disabled={syncOperation !== null}
+                      type="button"
+                      onClick={() => {
+                        if (!desktopApi) return
+                        void runSyncOperation('test', async () => {
+                          const result = await desktopApi.testWebDavSync()
+                          setSyncMessage(result.message)
+                        })
+                      }}
+                    >
+                      {syncOperation === 'test' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                      <span>{t.webdavTestConnection}</span>
+                    </button>
+                    <button
+                      className="flat-button compact"
                       disabled={!syncConfig.enabled || syncOperation !== null}
                       type="button"
                       onClick={() => {
@@ -448,6 +483,195 @@ export function SettingsModal({
                 ) : null}
                 {syncMessage ? <p className="settings-tools-hint">{syncMessage}</p> : null}
               </section>
+
+              {s3Config ? (
+                <section className="settings-section">
+                  <h3>{t.s3Backup}</h3>
+                  <p className="settings-tools-hint">{t.s3BackupDescription}</p>
+                  <fieldset disabled={syncOperation !== null} style={{ border: 0, margin: 0, padding: 0 }}>
+                    <div className="webdav-sync-form">
+                      <label>
+                        <span>{t.s3Provider}</span>
+                        <DropdownSelect
+                          value={s3Config.provider}
+                          options={[
+                            { value: 'cloudflare-r2', label: t.s3ProviderCloudflareR2 },
+                            { value: 'bitiful-s4', label: t.s3ProviderBitifulS4 },
+                            { value: 'custom', label: t.s3ProviderCustom }
+                          ]}
+                          onChange={(provider) => {
+                            const isR2 = provider === 'cloudflare-r2'
+                            const isBitiful = provider === 'bitiful-s4'
+                            setS3Config({
+                              ...s3Config,
+                              provider: isR2 ? 'cloudflare-r2' : isBitiful ? 'bitiful-s4' : 'custom',
+                              endpoint: isBitiful ? 'https://s3.bitiful.net' : s3Config.endpoint,
+                              region: isR2
+                                ? 'auto'
+                                : isBitiful
+                                  ? 'cn-east-1'
+                                  : s3Config.region === 'auto'
+                                    ? 'us-east-1'
+                                    : s3Config.region,
+                              pathStyleAccessEnabled: isR2 ? true : isBitiful ? false : s3Config.pathStyleAccessEnabled
+                            })
+                          }}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.s3Endpoint}</span>
+                        <input
+                          readOnly={s3Config.provider === 'bitiful-s4'}
+                          value={s3Config.endpoint}
+                          placeholder={
+                            s3Config.provider === 'bitiful-s4'
+                              ? 'https://s3.bitiful.net'
+                              : 'https://&lt;account-id&gt;.r2.cloudflarestorage.com'
+                          }
+                          onChange={(event) => setS3Config({ ...s3Config, endpoint: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.s3Region}</span>
+                        <input
+                          disabled={s3Config.provider === 'cloudflare-r2' || s3Config.provider === 'bitiful-s4'}
+                          value={s3Config.region}
+                          placeholder="auto"
+                          onChange={(event) => setS3Config({ ...s3Config, region: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.s3Bucket}</span>
+                        <input
+                          value={s3Config.bucket}
+                          onChange={(event) => setS3Config({ ...s3Config, bucket: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.s3ObjectKey}</span>
+                        <input
+                          value={s3Config.remotePath}
+                          placeholder="fileterm/connections.json"
+                          onChange={(event) => setS3Config({ ...s3Config, remotePath: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.s3AccessKeyId}</span>
+                        <input
+                          autoComplete="off"
+                          value={s3Config.accessKeyId ?? ''}
+                          onChange={(event) => setS3Config({ ...s3Config, accessKeyId: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.s3SecretAccessKey}</span>
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          value={s3SecretAccessKey}
+                          placeholder={s3Config.hasSavedSecret ? t.s3SecretAccessKeyPlaceholder : undefined}
+                          onChange={(event) => setS3SecretAccessKey(event.target.value)}
+                        />
+                      </label>
+                      <div className="webdav-sync-options">
+                        <label className="webdav-checkbox ssh-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={s3Config.enabled}
+                            onChange={(event) => setS3Config({ ...s3Config, enabled: event.target.checked })}
+                          />
+                          {t.enableS3Backup}
+                        </label>
+                        <label className="webdav-checkbox ssh-checkbox">
+                          <input
+                            type="checkbox"
+                            disabled={s3Config.provider === 'cloudflare-r2' || s3Config.provider === 'bitiful-s4'}
+                            checked={s3Config.pathStyleAccessEnabled}
+                            onChange={(event) =>
+                              setS3Config({ ...s3Config, pathStyleAccessEnabled: event.target.checked })
+                            }
+                          />
+                          {t.s3PathStyle}
+                        </label>
+                      </div>
+                    </div>
+                    <div className="settings-update-actions webdav-sync-actions">
+                      <button
+                        className="primary-button compact"
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('s3-save', async () => {
+                            const config = await desktopApi.saveS3BackupConfig({
+                              ...s3Config,
+                              ...(s3SecretAccessKey ? { secretAccessKey: s3SecretAccessKey } : {})
+                            })
+                            setS3Config(config)
+                            setS3SecretAccessKey('')
+                            setS3Message(t.s3BackupSaved)
+                          })
+                        }}
+                      >
+                        {syncOperation === 's3-save' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.save}</span>
+                      </button>
+                      <button
+                        className="flat-button compact"
+                        disabled={syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('s3-test', async () => {
+                            const result = await desktopApi.testS3Backup()
+                            setS3Message(result.message)
+                          })
+                        }}
+                      >
+                        {syncOperation === 's3-test' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.s3TestConnection}</span>
+                      </button>
+                      <button
+                        className="flat-button compact"
+                        disabled={!s3Config.enabled || syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('s3-upload', async () => {
+                            const result = await desktopApi.uploadS3Backup()
+                            setS3Message(result.message)
+                          })
+                        }}
+                      >
+                        {syncOperation === 's3-upload' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.syncUpload}</span>
+                      </button>
+                      <button
+                        className="flat-button compact"
+                        disabled={!s3Config.enabled || syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('s3-download', async () => {
+                            const result = await desktopApi.downloadS3Backup()
+                            setS3Message(result.message)
+                          })
+                        }}
+                      >
+                        {syncOperation === 's3-download' ? (
+                          <span aria-hidden="true" className="button-spinner" />
+                        ) : null}
+                        <span>{t.syncDownload}</span>
+                      </button>
+                    </div>
+                  </fieldset>
+                  {s3Config.lastSyncedAt ? (
+                    <p className="settings-tools-hint">
+                      {t.lastSync.replace('{time}', new Date(s3Config.lastSyncedAt).toLocaleString())}
+                    </p>
+                  ) : null}
+                  {s3Message ? <p className="settings-tools-hint">{s3Message}</p> : null}
+                </section>
+              ) : null}
             </div>
           ) : null}
 
