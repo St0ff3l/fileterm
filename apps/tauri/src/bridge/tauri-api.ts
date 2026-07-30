@@ -248,9 +248,21 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     readClipboardText: () => invoke<string>('app_read_clipboard_text'),
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () =>
-      invoke<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>('app_get_ui_preferences'),
-    setUiPreferences: (input: { theme?: 'default-dark' | 'default-light'; locale?: 'zhCN' | 'enUS' }) =>
-      invoke<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>('app_set_ui_preferences', { input }),
+      invoke<{
+        theme: 'default-dark' | 'default-light'
+        locale: 'zhCN' | 'enUS'
+        autoCheckUpdates: boolean
+      }>('app_get_ui_preferences'),
+    setUiPreferences: (input: {
+      theme?: 'default-dark' | 'default-light'
+      locale?: 'zhCN' | 'enUS'
+      autoCheckUpdates?: boolean
+    }) =>
+      invoke<{
+        theme: 'default-dark' | 'default-light'
+        locale: 'zhCN' | 'enUS'
+        autoCheckUpdates: boolean
+      }>('app_set_ui_preferences', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),
@@ -492,7 +504,11 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
 
     getDroppedFilePaths: (files: File[]) => takeNativeDropPaths(files),
     onUiPreferencesChanged: (
-      listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
+      listener: (preferences: {
+        theme: 'default-dark' | 'default-light'
+        locale: 'zhCN' | 'enUS'
+        autoCheckUpdates: boolean
+      }) => void
     ) => subscribe('app:ui-preferences-changed', listener),
     onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) =>
       subscribe('app:window-maximized-change', listener),

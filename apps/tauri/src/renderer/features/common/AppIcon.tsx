@@ -42,13 +42,21 @@ export type AppIconName =
   | 'play'
   | 'close'
 
-export function AppIcon({ name, size = 14 }: { name: AppIconName; size?: number }) {
+export function AppIcon({
+  name,
+  size = 14,
+  strokeWidth = 1.8
+}: {
+  name: AppIconName
+  size?: number
+  strokeWidth?: number
+}) {
   const commonProps = {
     fill: 'none',
     stroke: 'currentColor',
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
-    strokeWidth: 1.8
+    strokeWidth
   }
 
   return (

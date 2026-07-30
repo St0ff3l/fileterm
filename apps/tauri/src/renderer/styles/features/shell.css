@@ -121,6 +121,28 @@
   line-height: 1;
 }
 
+/* Linux uses renderer-provided chrome, so mirror GNOME's compact circular
+ * controls without changing the native-looking Windows control geometry. */
+:root[data-platform='linux'] .window-control-buttons {
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+}
+
+:root[data-platform='linux'] .window-control-buttons button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--window-control-surface);
+  color: var(--window-control-foreground);
+}
+
+:root[data-platform='linux'] .window-control-buttons button:hover:not(:disabled) {
+  background: var(--window-control-hover-surface);
+  color: var(--window-control-hover-foreground);
+}
+
 .fs-sidebar {
   position: relative;
   grid-column: 1;

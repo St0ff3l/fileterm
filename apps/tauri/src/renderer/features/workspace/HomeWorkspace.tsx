@@ -8,6 +8,7 @@ import type {
 } from '@fileterm/core'
 import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
+import { resolveRendererPlatform } from '../../lib/renderer-platform'
 import { OverviewPage } from './OverviewPage'
 import { QuickLinksPage } from './QuickLinksPage'
 import { ConnectionManagerModal } from '../connections/ConnectionManagerModal'
@@ -110,7 +111,8 @@ export function HomeWorkspace({
   const desktopApi = window.fileterm
   // Keep Linux on the same compact home-shell layout as Windows. macOS keeps
   // its sidebar wordmark because it has native traffic lights above it.
-  const usesWindowsHomeLayout = desktopApi?.platform === 'win32' || desktopApi?.platform === 'linux'
+  const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
+  const usesWindowsHomeLayout = rendererPlatform === 'win32' || rendererPlatform === 'linux'
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
 

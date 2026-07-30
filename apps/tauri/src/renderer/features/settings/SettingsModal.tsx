@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AppUpdateStatus, WebDavSyncConfig } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 
 export function SettingsModal({
   theme,
@@ -28,6 +29,9 @@ export function SettingsModal({
 }) {
   const [activeTab, setActiveTab] = useState<'general' | 'sync' | 'tools' | 'updates' | 'system'>('general')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
+  const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
+  const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
   const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
   const [syncPassword, setSyncPassword] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -56,6 +60,37 @@ export function SettingsModal({
     void desktopApi.getUpdateStatus().then(setUpdateStatus)
     return desktopApi.onUpdateStatus(setUpdateStatus)
   }, [desktopApi, updatePreviewState])
+
+  useEffect(() => {
+    if (!desktopApi) {
+      return
+    }
+
+    let canceled = false
+    void desktopApi
+      .getUiPreferences()
+      .then((preferences) => {
+        if (!canceled) {
+          setAutoCheckUpdates(preferences.autoCheckUpdates)
+        }
+      })
+      .catch(() => {
+        if (!canceled) {
+          setUpdatePreferenceError(t.updatePreferenceLoadFailed)
+        }
+      })
+
+    const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
+      if (!canceled) {
+        setAutoCheckUpdates(preferences.autoCheckUpdates)
+      }
+    })
+
+    return () => {
+      canceled = true
+      unsubscribe()
+    }
+  }, [desktopApi])
 
   useEffect(() => {
     if (activeTab !== 'sync' || !desktopApi) return
@@ -110,6 +145,25 @@ export function SettingsModal({
 
   const managerToolsHint = inline ? t.settingsManagersInlineHint : t.settingsManagersWindowHint
   const managerToolsActionLabel = inline ? t.switchToManagerPage : t.openInSeparateWindow
+
+  const setUpdateCheckPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingUpdatePreference || nextValue === autoCheckUpdates) {
+      return
+    }
+
+    const previousValue = autoCheckUpdates
+    setAutoCheckUpdates(nextValue)
+    setUpdatePreferenceError(null)
+    setIsSavingUpdatePreference(true)
+    void desktopApi
+      .setUiPreferences({ autoCheckUpdates: nextValue })
+      .then((preferences) => setAutoCheckUpdates(preferences.autoCheckUpdates))
+      .catch(() => {
+        setAutoCheckUpdates(previousValue)
+        setUpdatePreferenceError(t.updatePreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingUpdatePreference(false))
+  }
 
   const content = (
     <div
@@ -413,10 +467,27 @@ export function SettingsModal({
             <div className="settings-panel">
               <section className="settings-section">
                 <h3>{t.appUpdates}</h3>
+                <div className="update-check-preference">
+                  <div>
+                    <strong>{t.updateCheckPreference}</strong>
+                    <p>{t.updateCheckPreferenceHint}</p>
+                  </div>
+                  <DropdownSelect
+                    className="update-check-preference-select"
+                    disabled={!desktopApi || isSavingUpdatePreference}
+                    onChange={(value) => setUpdateCheckPreference(value === 'auto')}
+                    value={autoCheckUpdates ? 'auto' : 'manual'}
+                    options={[
+                      { value: 'auto', label: t.autoCheckUpdates },
+                      { value: 'manual', label: t.doNotAutoUpdate }
+                    ]}
+                  />
+                </div>
+                {updatePreferenceError ? <p className="modal-error">{updatePreferenceError}</p> : null}
                 <div className="update-status-card" aria-live="polite">
                   <div>
                     <strong>{t.updateStatus}</strong>
-                    <p>{getUpdateStatusLabel(updateStatus, t)}</p>
+                    <p>{getUpdateStatusLabel(updateStatus, t, autoCheckUpdates)}</p>
                   </div>
                   <span className={`update-status-indicator ${updateStatus?.state ?? 'idle'}`} />
                 </div>
@@ -524,8 +595,8 @@ export function SettingsModal({
   )
 }
 
-function getUpdateStatusLabel(status: AppUpdateStatus | null, labels: typeof t) {
-  if (!status) return labels.updateStatusIdle
+function getUpdateStatusLabel(status: AppUpdateStatus | null, labels: typeof t, autoCheckUpdates: boolean) {
+  if (!status) return autoCheckUpdates ? labels.updateStatusIdle : labels.updateStatusManual
   if (status.state === 'available') {
     const label = status.updateMode === 'release-page' ? labels.updateAvailableManual : labels.updateAvailable
     return label.replace('{version}', status.availableVersion ?? '—')

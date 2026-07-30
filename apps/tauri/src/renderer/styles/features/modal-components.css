@@ -992,6 +992,78 @@
   line-height: 1.5;
 }
 
+.update-check-preference {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-card);
+}
+
+.update-check-preference strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.update-check-preference p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.update-check-preference-select {
+  min-width: 144px;
+}
+
+.update-check-preference-select.dropdown-select-trigger,
+.update-check-preference-select.ft-select-shell select {
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--bg-main);
+  color: var(--text-main);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.update-check-preference-select.dropdown-select-trigger {
+  width: auto;
+}
+
+.update-check-preference-select.ft-select-shell {
+  width: auto;
+}
+
+.update-check-preference-select.ft-select-shell select {
+  min-width: 144px;
+}
+
+.update-check-preference-select:hover:not(:disabled),
+.update-check-preference-select.ft-select-shell select:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+
+.update-check-preference-select:focus-visible,
+.update-check-preference-select.ft-select-shell select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.update-check-preference-select:disabled,
+.update-check-preference-select.ft-select-shell:has(select:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .update-status-indicator {
   width: 9px;
   height: 9px;

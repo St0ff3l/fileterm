@@ -911,11 +911,20 @@ export interface FileTermDesktopApi {
   onUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): Promise<void>
-  getUiPreferences(): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
+  getUiPreferences(): Promise<{
+    theme: 'default-dark' | 'default-light'
+    locale: 'zhCN' | 'enUS'
+    autoCheckUpdates: boolean
+  }>
   setUiPreferences(input: {
     theme?: 'default-dark' | 'default-light'
     locale?: 'zhCN' | 'enUS'
-  }): Promise<{ theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }>
+    autoCheckUpdates?: boolean
+  }): Promise<{
+    theme: 'default-dark' | 'default-light'
+    locale: 'zhCN' | 'enUS'
+    autoCheckUpdates: boolean
+  }>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -944,7 +953,11 @@ export interface FileTermDesktopApi {
   requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
   onUiPreferencesChanged(
-    listener: (preferences: { theme: 'default-dark' | 'default-light'; locale: 'zhCN' | 'enUS' }) => void
+    listener: (preferences: {
+      theme: 'default-dark' | 'default-light'
+      locale: 'zhCN' | 'enUS'
+      autoCheckUpdates: boolean
+    }) => void
   ): () => void
   onFileEditorCloseRequest(listener: () => void): () => void
   requestQuitApp(): Promise<void>

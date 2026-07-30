@@ -633,7 +633,7 @@ export const TerminalView = memo(function TerminalView({
     selectionBackground:
       findOpen && findQuery
         ? readColor('--terminal-search-active-bg', '#ffd43b')
-        : readColor('--terminal-cmd-bg', 'rgba(148, 163, 184, 0.24)'),
+        : readColor('--terminal-selection-bg', 'rgba(56, 139, 253, 0.52)'),
     selectionForeground:
       findOpen && findQuery
         ? readColor('--terminal-search-active-text', '#111111')
