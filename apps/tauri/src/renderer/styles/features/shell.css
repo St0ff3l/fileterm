@@ -7,6 +7,14 @@
   overflow: hidden;
 }
 
+:root[data-platform='linux'] .fs-shell {
+  border-radius: var(--window-corner-radius);
+}
+
+:root[data-platform='linux'] .fs-shell.is-window-maximized {
+  border-radius: 0;
+}
+
 .fs-shell.has-window-menubar {
   grid-template-rows: 32px 48px minmax(0, 1fr) 24px;
 }

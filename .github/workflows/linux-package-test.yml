@@ -62,6 +62,10 @@ jobs:
           mkdir -p artifacts
           dpkg-deb --contents "$deb_file" > artifacts/FileTerm-linux-x86_64.contents.txt
           cp "$deb_file" artifacts/FileTerm-linux-x86_64.deb
+          dpkg-deb --fsys-tarfile "$deb_file" | tar -xOf - usr/share/applications/FileTerm.desktop > artifacts/FileTerm.desktop
+          dpkg-deb --fsys-tarfile "$deb_file" | tar -xOf - usr/share/applications/com.fileterm.desktop.desktop > artifacts/com.fileterm.desktop.desktop
+          grep -qx 'Icon=fileterm' artifacts/FileTerm.desktop artifacts/com.fileterm.desktop.desktop
+          grep -qx 'NoDisplay=true' artifacts/com.fileterm.desktop.desktop
 
       - name: Upload Debian installer
         uses: actions/upload-artifact@v6
@@ -70,3 +74,4 @@ jobs:
           path: artifacts/
           if-no-files-found: error
           retention-days: 14
+        if: always()

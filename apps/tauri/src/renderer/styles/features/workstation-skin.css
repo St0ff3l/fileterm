@@ -966,6 +966,12 @@ textarea:focus-visible,
   font-size: 11px;
 }
 
+/* The macOS/Windows monospace stack is absent on Ubuntu. Use the UI stack
+ * there so CJK glyph metrics stay consistent with the rest of the window. */
+:root[data-platform='linux'] .fs-file-table {
+  font-family: var(--font-ui);
+}
+
 .fs-file-table th,
 .fs-file-table td {
   height: 24px;
@@ -977,6 +983,23 @@ textarea:focus-visible,
 .fs-file-table.compact td {
   height: 24px;
   padding: 0 10px;
+}
+
+:root[data-platform='linux'] .fs-file-table th,
+:root[data-platform='linux'] .fs-file-table td {
+  line-height: 24px;
+  vertical-align: middle;
+}
+
+:root[data-platform='linux'] .fs-file-table .file-name-cell,
+:root[data-platform='linux'] .fs-file-table .file-row-text {
+  height: 24px;
+}
+
+:root[data-platform='linux'] .fs-file-table .file-row-text {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .fs-file-table th {

@@ -10,7 +10,10 @@
         "minHeight": 790,
         "dragDropEnabled": true,
         "zoomHotkeysEnabled": false,
-        "decorations": false
+        "decorations": false,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "visible": false
       }
     ]
   },

@@ -8,4 +8,4 @@ Terminal=false
 Type=Application
 Categories=Utility;Network;
 Keywords=SSH;SFTP;FTP;Terminal;
-StartupWMClass=FileTerm
+StartupWMClass=fileterm

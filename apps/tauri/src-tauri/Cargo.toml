@@ -73,5 +73,11 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
 ] }
 raw-window-handle = "0.6"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Tauri exposes the native GTK window on Linux. Keep this target-scoped so the
+# tray restore path can request a real desktop activation without affecting
+# macOS or Windows builds.
+gtk = { version = "0.18", features = ["v3_24"] }
+
 [dev-dependencies]
 rand = "0.10"

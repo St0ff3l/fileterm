@@ -20,13 +20,42 @@ body,
 
 html[data-platform='darwin'].tauri-standalone-window,
 html[data-platform='darwin'].tauri-standalone-window body,
-html[data-platform='darwin'].tauri-standalone-window #root {
+html[data-platform='darwin'].tauri-standalone-window #root,
+html[data-platform='linux'].tauri-standalone-window,
+html[data-platform='linux'].tauri-standalone-window body,
+html[data-platform='linux'].tauri-standalone-window #root {
   background: transparent !important;
 }
 
-html[data-platform='darwin'].tauri-standalone-window #root {
+html[data-platform='darwin'].tauri-standalone-window #root,
+html[data-platform='linux'].tauri-standalone-window #root {
   overflow: hidden;
   border-radius: var(--window-corner-radius);
+}
+
+/* GNOME/libadwaita uses a 15px window radius. The Linux main window owns its
+ * chrome, so the native surface must stay transparent for the compositor to
+ * see the rounded renderer edge. Maximized windows intentionally return to a
+ * square edge because they touch the monitor bounds. */
+html[data-platform='linux'],
+html[data-platform='linux'] body,
+html[data-platform='linux'] #root {
+  /* Theme skins also color these three roots. They sit behind the clipped
+   * fs-shell, so any opaque color becomes visible as square corner wedges. */
+  background: transparent !important;
+}
+
+html[data-platform='linux'] {
+  --window-corner-radius: 15px;
+}
+
+html[data-platform='linux'] #root {
+  overflow: hidden;
+  border-radius: var(--window-corner-radius);
+}
+
+html[data-platform='linux'][data-window-maximized='true'] #root {
+  border-radius: 0;
 }
 
 input,

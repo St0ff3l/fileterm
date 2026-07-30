@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=FileTerm
+Comment=Remote terminal and file management workspace
+Exec=/usr/bin/fileterm %U
+TryExec=/usr/bin/fileterm
+Icon=fileterm
+Terminal=false
+Type=Application
+Categories=Utility;Network;
+Keywords=SSH;SFTP;FTP;Terminal;
+# Tauri's stable Linux application ID is `com.fileterm.desktop`. GNOME uses
+# the desktop-file ID (filename without its final `.desktop`) to group a
+# Wayland window with its launcher, so this companion entry must retain the
+# second suffix. The visible FileTerm.desktop entry remains the app launcher.
+NoDisplay=true
+StartupWMClass=fileterm

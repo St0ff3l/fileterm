@@ -4,6 +4,8 @@ pub mod sessions;
 pub mod storage;
 
 use crate::commands::OpenWindowInput;
+#[cfg(target_os = "linux")]
+use gtk::prelude::GtkWindowExt;
 #[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicU64;
 use std::{
@@ -848,7 +850,7 @@ fn window_url(input: &OpenWindowInput) -> WebviewUrl {
 }
 
 fn child_window_should_be_transparent(platform: &str, decorations: bool) -> bool {
-    platform == "macos" && !decorations
+    matches!(platform, "macos" | "linux") && !decorations
 }
 
 #[cfg(target_os = "windows")]
@@ -1118,10 +1120,10 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
         _ => return Ok(()),
     };
 
-    // Frameless macOS windows use a transparent native surface so the
-    // renderer's rounded standalone frame can clip the four corners. Keep
-    // Windows opaque: WebView2 otherwise exposes the desktop through those
-    // corners when the renderer applies its rounded frame.
+    // Frameless macOS and Linux windows use a transparent native surface so
+    // the renderer's rounded standalone frame can clip all four corners.
+    // Keep Windows opaque: WebView2 otherwise exposes the desktop through
+    // those corners when the renderer applies its rounded frame.
     let transparent = child_window_should_be_transparent(std::env::consts::OS, decorations);
     let background_color = if transparent {
         Color(0, 0, 0, 0)
@@ -1199,8 +1201,34 @@ fn open_child_window_from_native_event(app: &AppHandle, input: OpenWindowInput) 
 /// Restores a window from either the hidden or minimized state. `show()` alone
 /// does not reliably deminiaturize a GTK window, which leaves renderer-owned
 /// confirmation dialogs invisible after a tray action on Linux.
-fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
+#[cfg(target_os = "linux")]
+fn restore_linux_gtk_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
     let label = window.label();
+    match window.gtk_window() {
+        Ok(gtk_window) => {
+            // `present()` is only an activation request. Under GNOME/Wayland
+            // it can be ignored for an iconified window when a tray menu does
+            // not provide an activation token, so undo iconification first.
+            // This is a native minimize restore, not a hide-to-tray path: the
+            // application remains represented in the Dock throughout.
+            gtk_window.deiconify();
+            if focus {
+                gtk_window.present_with_time(gtk::gdk::ffi::GDK_CURRENT_TIME as u32);
+            }
+        }
+        Err(error) => crate::services::logging::warn(
+            app,
+            "window",
+            format!("native GTK restore failed label={label}: {error}"),
+        ),
+    }
+}
+
+fn restore_window_on_main_thread(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
+    let label = window.label();
+    #[cfg(target_os = "linux")]
+    restore_linux_gtk_window(app, window, focus);
+
     if let Err(error) = window.unminimize() {
         crate::services::logging::warn(
             app,
@@ -1224,6 +1252,24 @@ fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool
                 format!("focus failed label={label}: {error}"),
             );
         }
+    }
+}
+
+fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
+    let label = window.label().to_string();
+    let restore_app = app.clone();
+    let restore_window = window.clone();
+    // GTK activation must happen on its main loop. Tray menu callbacks can
+    // arrive on another thread; restoring there races with a minimized window
+    // and leaves it hidden until the desktop shell activates it from the dock.
+    if let Err(error) = window.run_on_main_thread(move || {
+        restore_window_on_main_thread(&restore_app, &restore_window, focus);
+    }) {
+        crate::services::logging::warn(
+            app,
+            "window",
+            format!("schedule restore failed label={label}: {error}"),
+        );
     }
 }
 
@@ -1894,12 +1940,13 @@ mod tests {
     }
 
     #[test]
-    fn only_frameless_macos_child_windows_use_transparency() {
+    fn frameless_macos_and_linux_child_windows_use_transparency() {
         assert!(child_window_should_be_transparent("macos", false));
         assert!(!child_window_should_be_transparent("macos", true));
         assert!(!child_window_should_be_transparent("windows", false));
         assert!(!child_window_should_be_transparent("windows", true));
-        assert!(!child_window_should_be_transparent("linux", false));
+        assert!(child_window_should_be_transparent("linux", false));
+        assert!(!child_window_should_be_transparent("linux", true));
     }
 
     #[test]
