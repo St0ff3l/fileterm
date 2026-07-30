@@ -29,6 +29,20 @@ html[data-platform='darwin'].tauri-standalone-window #root {
   border-radius: var(--window-corner-radius);
 }
 
+/* GNOME/libadwaita uses a 15px window radius. The Linux main window owns its
+ * chrome, so the native surface must stay transparent for the compositor to
+ * see the rounded renderer edge. Maximized windows intentionally return to a
+ * square edge because they touch the monitor bounds. */
+html[data-platform='linux'],
+html[data-platform='linux'] body,
+html[data-platform='linux'] #root {
+  background: transparent;
+}
+
+html[data-platform='linux'] {
+  --window-corner-radius: 15px;
+}
+
 input,
 textarea,
 [contenteditable='true'],
