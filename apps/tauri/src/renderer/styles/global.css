@@ -36,7 +36,9 @@ html[data-platform='darwin'].tauri-standalone-window #root {
 html[data-platform='linux'],
 html[data-platform='linux'] body,
 html[data-platform='linux'] #root {
-  background: transparent;
+  /* Theme skins also color these three roots. They sit behind the clipped
+   * fs-shell, so any opaque color becomes visible as square corner wedges. */
+  background: transparent !important;
 }
 
 html[data-platform='linux'] {
