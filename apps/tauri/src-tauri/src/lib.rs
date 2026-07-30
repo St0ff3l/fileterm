@@ -1201,8 +1201,34 @@ fn open_child_window_from_native_event(app: &AppHandle, input: OpenWindowInput) 
 /// Restores a window from either the hidden or minimized state. `show()` alone
 /// does not reliably deminiaturize a GTK window, which leaves renderer-owned
 /// confirmation dialogs invisible after a tray action on Linux.
+#[cfg(target_os = "linux")]
+fn restore_linux_gtk_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
+    let label = window.label();
+    match window.gtk_window() {
+        Ok(gtk_window) => {
+            // `present()` is only an activation request. Under GNOME/Wayland
+            // it can be ignored for an iconified window when a tray menu does
+            // not provide an activation token, so undo iconification first.
+            // This is a native minimize restore, not a hide-to-tray path: the
+            // application remains represented in the Dock throughout.
+            gtk_window.deiconify();
+            if focus {
+                gtk_window.present_with_time(gtk::gdk::ffi::GDK_CURRENT_TIME as u32);
+            }
+        }
+        Err(error) => crate::services::logging::warn(
+            app,
+            "window",
+            format!("native GTK restore failed label={label}: {error}"),
+        ),
+    }
+}
+
 fn restore_window_on_main_thread(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool) {
     let label = window.label();
+    #[cfg(target_os = "linux")]
+    restore_linux_gtk_window(app, window, focus);
+
     if let Err(error) = window.unminimize() {
         crate::services::logging::warn(
             app,
@@ -1225,25 +1251,6 @@ fn restore_window_on_main_thread(app: &AppHandle<Wry>, window: &WebviewWindow<Wr
                 "window",
                 format!("focus failed label={label}: {error}"),
             );
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-            // The Tauri window methods above are dispatched through Tao's
-            // event queue. A GNOME tray-menu callback does not always carry
-            // an activation token, so the queued focus request can be ignored
-            // for a minimized window. We are already on GTK's main thread:
-            // present the same native ApplicationWindow directly. This keeps
-            // the window minimized/visible state owned by the desktop (and
-            // therefore keeps its Dock entry) rather than hiding it to tray.
-            match window.gtk_window() {
-                Ok(gtk_window) => gtk_window.present(),
-                Err(error) => crate::services::logging::warn(
-                    app,
-                    "window",
-                    format!("native GTK present failed label={label}: {error}"),
-                ),
-            }
         }
     }
 }
