@@ -2,6 +2,7 @@
   display: grid;
   position: relative;
   grid-template-rows: minmax(160px, 1fr) minmax(0, var(--file-panel-height, 300px));
+  grid-template-columns: 1fr auto;
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -19,6 +20,8 @@
 
 .terminal-area {
   position: relative;
+  grid-column: 1;
+  grid-row: 1;
   min-height: 0;
   overflow: hidden;
 }
@@ -30,9 +33,27 @@
   left: 0;
   right: 0;
   bottom: 0;
+  background: var(--terminal-frame-gradient, none);
   box-shadow: var(--terminal-frame-shadow);
   pointer-events: none;
   z-index: 5;
+}
+
+.terminal-right-frame {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  width: 12px;
+  min-height: 0;
+  background: linear-gradient(
+    to left,
+    var(--terminal-right-frame-outer) 0px,
+    var(--terminal-right-frame-outer) 11px,
+    var(--terminal-right-frame-accent) 11px,
+    var(--terminal-right-frame-accent) 12px
+  );
+  pointer-events: none;
+  z-index: 6;
 }
 
 .session-split-resizer {
@@ -90,7 +111,6 @@
 
 .terminal-host .xterm {
   min-height: 0;
-  padding-right: 15px;
 }
 
 .terminal-host .xterm .xterm-selection div {
@@ -109,8 +129,8 @@
 }
 
 .terminal-host .xterm-viewport::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .terminal-host .xterm .xterm-scrollable-element > .scrollbar {
@@ -222,8 +242,8 @@
   --terminal-dock-border: color-mix(in srgb, var(--border) 76%, transparent);
   --terminal-dock-text-muted: var(--text-muted);
   position: absolute;
-  left: 48px;
-  right: 48px;
+  left: 44px;
+  right: 60px;
   bottom: 10px;
   z-index: 32;
   pointer-events: none;
@@ -553,7 +573,7 @@
   gap: 12px;
   align-items: center;
   min-height: 30px;
-  padding: 2px 10px;
+  padding: 2px 2px 2px 10px;
   border: 1px solid var(--terminal-dock-border);
   border-radius: 10px;
   background: linear-gradient(
@@ -699,7 +719,7 @@
   .terminal-dock-bar {
     grid-template-columns: 1fr;
     min-height: auto;
-    padding: 6px 10px;
+    padding: 6px 2px 6px 10px;
   }
 
   .terminal-dock-actions {
@@ -719,10 +739,12 @@
 
 .session-workspace:not(.file-only) .session-bottom-panel {
   grid-row: 2;
+  grid-column: 1 / -1;
 }
 
 .session-workspace.file-only .session-bottom-panel {
   grid-row: 1;
+  grid-column: 1 / -1;
 }
 
 .session-bottom-panel .file-manager {
@@ -758,8 +780,8 @@
 
 .file-panel-drawer-toggle {
   position: absolute;
-  right: 10px;
-  bottom: calc(var(--file-panel-height, 218px) + 10px);
+  right: 20px;
+  bottom: 10px;
   z-index: 34;
   display: inline-flex;
   align-items: center;
@@ -777,6 +799,7 @@
   cursor: pointer;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  pointer-events: auto;
   transition:
     background 0.18s ease,
     border-color 0.18s ease,
@@ -791,7 +814,7 @@
 }
 
 .file-panel-drawer-toggle.is-collapsed {
-  right: 10px;
+  right: 20px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1017,7 +1040,7 @@
 .vertical-scrollbar {
   position: absolute;
   top: calc(2px + var(--vertical-scrollbar-inset-top, 0px));
-  right: 2px;
+  right: 18px;
   bottom: 2px;
   z-index: 12;
   width: 8px;
@@ -1037,7 +1060,8 @@
 }
 
 .vertical-scrollbar__thumb {
-  width: 8px;
+  width: 4px;
+  margin-left: auto;
   border-radius: 999px;
   background: var(--border, var(--border-light));
   cursor: grab;

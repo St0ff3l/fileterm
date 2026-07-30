@@ -174,7 +174,10 @@
   --terminal-search-active-border: #8a5a00;
   --terminal-search-active-ruler: #f0b400;
   --terminal-cmd-text: #111827;
+  --terminal-frame-gradient: none;
   --terminal-frame-shadow: none;
+  --terminal-right-frame-outer: transparent;
+  --terminal-right-frame-accent: transparent;
   --button-primary-bg: #4f7cff;
   --button-primary-hover: #3d69ea;
   --button-primary-border: rgba(17, 24, 39, 0.08);
@@ -691,16 +694,8 @@
 }
 
 :root[data-theme='default-light'] .terminal-area::after {
-  inset: 0;
-  background:
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.42), rgba(148, 163, 184, 0.08)) top / 100% 1px no-repeat,
-    linear-gradient(to top, rgba(148, 163, 184, 0.38), rgba(148, 163, 184, 0.06)) bottom / 100% 1px no-repeat,
-    linear-gradient(to right, rgba(148, 163, 184, 0.38), rgba(148, 163, 184, 0.08)) left / 1px 100% no-repeat,
-    linear-gradient(to left, rgba(148, 163, 184, 0.38), rgba(148, 163, 184, 0.08)) right / 1px 100% no-repeat;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 0 0 1px rgba(148, 163, 184, 0.16),
-    inset 0 0 18px rgba(15, 23, 42, 0.06);
+  background: none;
+  box-shadow: none;
 }
 
 :root[data-theme='default-light'] .file-manager,

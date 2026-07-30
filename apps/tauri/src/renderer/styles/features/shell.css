@@ -741,7 +741,7 @@
 .disk-head {
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-  height: 24px;
+  height: 25px;
   border-bottom: 1px solid var(--border-light);
   font-size: 13px;
 }
@@ -756,7 +756,7 @@
 
 .disk-head {
   font-weight: 600;
-  height: 26px;
+  height: 25px;
 }
 
 .disk-head span,
@@ -820,7 +820,6 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
-  border-bottom: 1px solid var(--border-light);
   position: relative;
   -webkit-app-region: drag;
 }
