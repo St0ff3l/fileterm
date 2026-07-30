@@ -4,6 +4,8 @@ pub mod sessions;
 pub mod storage;
 
 use crate::commands::OpenWindowInput;
+#[cfg(target_os = "linux")]
+use gtk::prelude::GtkWindowExt;
 #[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicU64;
 use std::{
@@ -1223,6 +1225,25 @@ fn restore_window_on_main_thread(app: &AppHandle<Wry>, window: &WebviewWindow<Wr
                 "window",
                 format!("focus failed label={label}: {error}"),
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // The Tauri window methods above are dispatched through Tao's
+            // event queue. A GNOME tray-menu callback does not always carry
+            // an activation token, so the queued focus request can be ignored
+            // for a minimized window. We are already on GTK's main thread:
+            // present the same native ApplicationWindow directly. This keeps
+            // the window minimized/visible state owned by the desktop (and
+            // therefore keeps its Dock entry) rather than hiding it to tray.
+            match window.gtk_window() {
+                Ok(gtk_window) => gtk_window.present(),
+                Err(error) => crate::services::logging::warn(
+                    app,
+                    "window",
+                    format!("native GTK present failed label={label}: {error}"),
+                ),
+            }
         }
     }
 }
