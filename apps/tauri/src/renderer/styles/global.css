@@ -20,11 +20,15 @@ body,
 
 html[data-platform='darwin'].tauri-standalone-window,
 html[data-platform='darwin'].tauri-standalone-window body,
-html[data-platform='darwin'].tauri-standalone-window #root {
+html[data-platform='darwin'].tauri-standalone-window #root,
+html[data-platform='linux'].tauri-standalone-window,
+html[data-platform='linux'].tauri-standalone-window body,
+html[data-platform='linux'].tauri-standalone-window #root {
   background: transparent !important;
 }
 
-html[data-platform='darwin'].tauri-standalone-window #root {
+html[data-platform='darwin'].tauri-standalone-window #root,
+html[data-platform='linux'].tauri-standalone-window #root {
   overflow: hidden;
   border-radius: var(--window-corner-radius);
 }
@@ -43,6 +47,15 @@ html[data-platform='linux'] #root {
 
 html[data-platform='linux'] {
   --window-corner-radius: 15px;
+}
+
+html[data-platform='linux'] #root {
+  overflow: hidden;
+  border-radius: var(--window-corner-radius);
+}
+
+html[data-platform='linux'][data-window-maximized='true'] #root {
+  border-radius: 0;
 }
 
 input,

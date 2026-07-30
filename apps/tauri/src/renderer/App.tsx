@@ -233,6 +233,16 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     void desktopApi.showCurrentWindow().catch((cause) => reportError(setError, '显示窗口', cause))
   }, [desktopApi, hasLoadedInitialSnapshot, isMainWorkspaceWindow, rendererPlatform])
 
+  useEffect(() => {
+    if (rendererPlatform !== 'linux') {
+      return
+    }
+    document.documentElement.dataset.windowMaximized = String(isMaximized)
+    return () => {
+      delete document.documentElement.dataset.windowMaximized
+    }
+  }, [isMaximized, rendererPlatform])
+
   // 2. Workspace Tabs Hook
   const {
     localTabs,
