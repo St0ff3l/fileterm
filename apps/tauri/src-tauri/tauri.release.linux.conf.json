@@ -12,7 +12,8 @@
         "zoomHotkeysEnabled": false,
         "decorations": false,
         "transparent": true,
-        "backgroundColor": "#00000000"
+        "backgroundColor": "#00000000",
+        "visible": false
       }
     ]
   },

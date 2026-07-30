@@ -220,16 +220,18 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onStatusMessage: (msg) => setError(msg)
   })
 
-  // Child windows remain hidden until their route's first data fetch has
-  // settled. This is the Tauri equivalent of Electron's `ready-to-show` and
-  // prevents a blank/transparent first paint from being visible to the user.
+  // Child windows and the transparent Linux main window remain hidden until
+  // their route's first data fetch has settled. This is the Tauri equivalent
+  // of Electron's `ready-to-show` and prevents a blank/transparent first
+  // paint from being visible to the user.
   useEffect(() => {
-    if (isMainWorkspaceWindow || !desktopApi || !hasLoadedInitialSnapshot || hasRevealedStandaloneWindowRef.current) {
+    const waitsForFirstPaint = !isMainWorkspaceWindow || rendererPlatform === 'linux'
+    if (!waitsForFirstPaint || !desktopApi || !hasLoadedInitialSnapshot || hasRevealedStandaloneWindowRef.current) {
       return
     }
     hasRevealedStandaloneWindowRef.current = true
     void desktopApi.showCurrentWindow().catch((cause) => reportError(setError, '显示窗口', cause))
-  }, [desktopApi, hasLoadedInitialSnapshot, isMainWorkspaceWindow])
+  }, [desktopApi, hasLoadedInitialSnapshot, isMainWorkspaceWindow, rendererPlatform])
 
   // 2. Workspace Tabs Hook
   const {
