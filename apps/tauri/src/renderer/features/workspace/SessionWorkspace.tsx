@@ -389,6 +389,8 @@ export function SessionWorkspace({
       return
     }
 
+    let themeTimer: number | null = null
+
     const syncAfterLayout = () => {
       if (layoutFrameRef.current !== null) {
         window.cancelAnimationFrame(layoutFrameRef.current)
@@ -405,6 +407,24 @@ export function SessionWorkspace({
     })
     resizeObserver.observe(workspaceRef.current)
 
+    const themeObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'attributes' && ['data-theme', 'class', 'style'].includes(mutation.attributeName || '')) {
+          syncAfterLayout()
+          if (themeTimer !== null) {
+            window.clearTimeout(themeTimer)
+          }
+          themeTimer = window.setTimeout(syncAfterLayout, 60)
+          break
+        }
+      }
+    })
+
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class', 'style']
+    })
+
     window.addEventListener('resize', syncAfterLayout)
 
     return () => {
@@ -412,7 +432,12 @@ export function SessionWorkspace({
         window.cancelAnimationFrame(layoutFrameRef.current)
         layoutFrameRef.current = null
       }
+      if (themeTimer !== null) {
+        window.clearTimeout(themeTimer)
+        themeTimer = null
+      }
       resizeObserver.disconnect()
+      themeObserver.disconnect()
       window.removeEventListener('resize', syncAfterLayout)
     }
   }, [isFileOnly, isFilePanelCollapsed, setFilePanelHeight])
