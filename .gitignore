@@ -22,6 +22,8 @@ pnpm-debug.log*
 
 coverage/
 *.tsbuildinfo
+__pycache__/
+*.pyc
 
 .trae/
 .idea/

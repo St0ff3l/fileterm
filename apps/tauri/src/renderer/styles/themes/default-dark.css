@@ -2051,13 +2051,14 @@
 :root:not([data-theme]) .file-manager,
 :root[data-theme='default-dark'] .file-manager,
 :root[data-theme='default'] .file-manager {
-  border-top: 1px solid #363636;
+  border-top: 0;
 }
 
 :root:not([data-theme]) .file-tabs,
 :root[data-theme='default-dark'] .file-tabs,
 :root[data-theme='default'] .file-tabs {
   background: #242424;
+  border-top: 1px solid #363636;
   border-bottom: 1px solid #303030;
 }
 

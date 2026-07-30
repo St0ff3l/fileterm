@@ -75,7 +75,7 @@
   left: 0;
   height: 1px;
   content: '';
-  background: var(--border-light);
+  background: transparent;
   transform: translateY(-50%);
   transition:
     height 0.16s ease,

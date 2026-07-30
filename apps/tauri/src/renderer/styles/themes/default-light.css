@@ -704,11 +704,12 @@
 }
 
 :root[data-theme='default-light'] .file-manager {
-  border-top: 1px solid var(--border-light);
+  border-top: 0;
 }
 
 :root[data-theme='default-light'] .file-tabs {
   background: #f4f4f6;
+  border-top: 1px solid var(--border-light);
   border-bottom-color: var(--border-light);
 }
 
