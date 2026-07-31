@@ -11,11 +11,11 @@
   --input-bg: #ffffff;
   --command-history-head-bg: var(--manager-head-bg);
   --surface-panel: var(--bg-card);
-  --border-subtle: var(--border-light);
+  --border-subtle: #ebebeb;
 
-  --border-light: rgba(0, 0, 0, 0.08);
-  --border-dark: rgba(0, 0, 0, 0.16);
-  --border: var(--border-light);
+  --border-light: #ebebeb;
+  --border-dark: #ebebeb;
+  --border: #ebebeb;
 
   --text-main: #18181b;
   --text-muted: #52525b;
@@ -55,11 +55,11 @@
   --surface-hover: rgba(0, 0, 0, 0.04);
   --surface-chip: rgba(0, 0, 0, 0.06);
   --surface-inset: rgba(0, 0, 0, 0.02);
-  --surface-inset-border: rgba(0, 0, 0, 0.08);
+  --surface-inset-border: #ebebeb;
   --surface-table-head: rgba(0, 0, 0, 0.03);
   --surface-nested: rgba(0, 0, 0, 0.025);
   --floating-drawer-expanded-bg: rgba(255, 255, 255, 0.94);
-  --floating-drawer-expanded-border: rgba(0, 0, 0, 0.08);
+  --floating-drawer-expanded-border: #ebebeb;
   --floating-drawer-shadow: 0 10px 26px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
   --floating-drawer-trigger-hover-bg: rgba(0, 0, 0, 0.05);
   --modal-backdrop-bg: rgba(0, 0, 0, 0.32);
@@ -71,9 +71,9 @@
   --terminal-dock-header-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
   --system-sidebar-toggle-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
   --system-sidebar-toggle-hover-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-  --system-sidebar-frame: rgba(0, 0, 0, 0.08);
-  --system-sidebar-control-border: rgba(0, 0, 0, 0.1);
-  --system-sidebar-divider: rgba(0, 0, 0, 0.06);
+  --system-sidebar-frame: #ebebeb;
+  --system-sidebar-control-border: #ebebeb;
+  --system-sidebar-divider: #ebebeb;
   --overview-hero-highlight: rgba(255, 255, 255, 0.02);
   --brand-title-shadow: none;
   --traffic-close: #ff5f57;
@@ -136,11 +136,11 @@
   --popover-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
   --confirm-dialog-text: #475569;
   --dialog-surface: var(--bg-card);
-  --dialog-border: color-mix(in srgb, var(--border-light) 82%, transparent);
+  --dialog-border: #ebebeb;
   --dialog-shadow: 0 22px 70px rgba(15, 23, 42, 0.16), 0 1px 0 rgba(255, 255, 255, 0.82) inset;
   --dialog-title: var(--text-main);
   --dialog-description: var(--text-muted);
-  --dialog-footer-border: color-mix(in srgb, var(--border-light) 84%, transparent);
+  --dialog-footer-border: #ebebeb;
   --dialog-button-secondary-bg: transparent;
   --dialog-button-secondary-border: var(--border-light);
   --dialog-button-secondary-text: var(--text-main);
@@ -180,7 +180,7 @@
   --terminal-right-frame-accent: transparent;
   --button-primary-bg: #4f7cff;
   --button-primary-hover: #3d69ea;
-  --button-primary-border: rgba(17, 24, 39, 0.08);
+  --button-primary-border: #ebebeb;
 }
 
 :root[data-theme='default-light'] .fs-shell,
@@ -828,7 +828,7 @@
 
 :root[data-theme='default-light'] .fs-file-table th,
 :root[data-theme='default-light'] .fs-file-table td {
-  border-bottom-color: rgba(148, 163, 184, 0.18);
+  border-bottom-color: var(--border-light);
 }
 
 :root[data-theme='default-light'] .fs-file-table th {
@@ -948,12 +948,12 @@
 }
 
 :root[data-theme='default-light'] .file-editor-modal {
-  border-color: rgba(148, 163, 184, 0.2);
+  border-color: var(--border-light);
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
 }
 
 :root[data-theme='default-light'] .file-editor-modal .modal-header {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid var(--border-light);
 }
 
 :root[data-theme='default-light'] .file-editor-title span,
@@ -972,7 +972,7 @@
 }
 
 :root[data-theme='default-light'] .file-editor-menubar {
-  border-bottom-color: rgba(148, 163, 184, 0.18);
+  border-bottom-color: var(--border-light);
 }
 
 :root[data-theme='default-light'] .file-editor-menubar-button,
@@ -992,13 +992,13 @@
 }
 
 :root[data-theme='default-light'] .file-editor-body {
-  border-color: rgba(148, 163, 184, 0.18);
+  border-color: var(--border-light);
   background: #ffffff;
 }
 
 :root[data-theme='default-light'] .file-editor-menu {
   background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--border-light);
   box-shadow: 0 16px 42px rgba(15, 23, 42, 0.14);
 }
 
@@ -1008,11 +1008,11 @@
 }
 
 :root[data-theme='default-light'] .file-editor-menu-separator {
-  background: rgba(148, 163, 184, 0.18);
+  background: var(--border-light);
 }
 
 :root[data-theme='default-light'] .file-editor-statusbar {
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  border-top: 1px solid var(--border-light);
 }
 
 :root[data-theme='default-light'] .modal-card.manager-modal.standalone,
@@ -1059,7 +1059,7 @@
 :root[data-theme='default-light'] .command-manager-item code,
 :root[data-theme='default-light'] .command-preview code {
   background: #f8fafc;
-  border-color: rgba(148, 163, 184, 0.16);
+  border-color: var(--border-light);
   color: var(--text-main);
 }
 
