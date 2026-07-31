@@ -136,7 +136,12 @@
   --terminal-search-active-border: #8a5a00;
   --terminal-search-active-ruler: #f0b400;
   --terminal-cmd-text: #f1f5f9;
+  --terminal-frame-gradient:
+    linear-gradient(to left, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px),
+    linear-gradient(to right, rgba(18, 18, 18, 1) 0px, rgba(18, 18, 18, 0) 10px);
   --terminal-frame-shadow: inset 0 0 14px rgba(0, 0, 0, 0.3);
+  --terminal-right-frame-outer: rgba(36, 36, 36, 1);
+  --terminal-right-frame-accent: rgba(59, 59, 59, 1);
   --button-primary-bg: #1687e8;
   --button-primary-hover: #1179d4;
   --button-primary-border: rgba(255, 255, 255, 0.12);
@@ -1552,7 +1557,7 @@
 :root[data-theme='default'] .fs-tabbar {
   background: #272727;
   --titlebar-divider: #3b3b3b;
-  border-bottom: 1px solid #363636;
+  border-bottom: 0;
   box-shadow: none;
 }
 
@@ -2046,13 +2051,14 @@
 :root:not([data-theme]) .file-manager,
 :root[data-theme='default-dark'] .file-manager,
 :root[data-theme='default'] .file-manager {
-  border-top: 1px solid #363636;
+  border-top: 0;
 }
 
 :root:not([data-theme]) .file-tabs,
 :root[data-theme='default-dark'] .file-tabs,
 :root[data-theme='default'] .file-tabs {
   background: #242424;
+  border-top: 1px solid #363636;
   border-bottom: 1px solid #303030;
 }
 

@@ -575,7 +575,6 @@ export function TerminalDock({
     <section ref={rootRef} className="terminal-dock">
       {panel === 'history' ? renderHistoryPanel() : null}
       {panel === 'options' ? renderOptionsPanel() : null}
-      {null}
       <div className="terminal-dock-bar">
         <label className="terminal-dock-input-shell">
           <textarea

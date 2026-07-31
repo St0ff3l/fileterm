@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -333,37 +334,62 @@ export function SessionWorkspace({
     if (isFileOnly || isFilePanelCollapsed) {
       return
     }
+
     if (alignmentInitializedTabRef.current === activeTab.id) {
       return
     }
-    if (shouldAlignFilePanelOnMount) {
-      // Mark the default state synchronously. Updating the initial height can
-      // flip `shouldAlignFilePanelOnMount` before the animation frame runs;
-      // the follow state must survive that render.
-      isFilePanelAlignedRef.current = true
-    }
-    alignmentInitializedTabRef.current = activeTab.id
 
-    const frame = window.requestAnimationFrame(() => {
-      if (shouldAlignFilePanelOnMount) {
-        syncFilePanelHeight('align')
-        return
-      }
+    let checkTimer: number | null = null
+    let retries = 0
 
-      const fileTabsRect = workspaceRef.current?.querySelector('.file-tabs')?.getBoundingClientRect()
+    const tryAlign = () => {
+      if (!workspaceRef.current) return false
+
       const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
-      isFilePanelAlignedRef.current = Boolean(
-        fileTabsRect && diskHeadRect && Math.abs(fileTabsRect.top - diskHeadRect.top) <= 2
-      )
-    })
+      const workspaceRect = workspaceRef.current.getBoundingClientRect()
 
-    return () => window.cancelAnimationFrame(frame)
-  }, [activeTab.id, isFileOnly, isFilePanelCollapsed, shouldAlignFilePanelOnMount])
+      if (diskHeadRect && diskHeadRect.top > 0 && workspaceRect.height > 0) {
+        const nextHeight = workspaceRect.bottom - diskHeadRect.top
+        const minHeight = 25
+        const maxHeight = Math.max(minHeight, workspaceRect.height - 160)
+        const clampedHeight = Math.min(maxHeight, Math.max(minHeight, nextHeight))
+
+        setFilePanelHeight((prev) => (prev === clampedHeight ? prev : clampedHeight))
+        isFilePanelAlignedRef.current = true
+        alignmentInitializedTabRef.current = activeTab.id
+        return true
+      }
+      return false
+    }
+
+    if (shouldAlignFilePanelOnMount) {
+      const runCheck = () => {
+        const success = tryAlign()
+        if (!success && retries < 10) {
+          retries++
+          checkTimer = window.setTimeout(runCheck, 60)
+        } else if (!success) {
+          alignmentInitializedTabRef.current = activeTab.id
+        }
+      }
+      runCheck()
+    } else {
+      alignmentInitializedTabRef.current = activeTab.id
+    }
+
+    return () => {
+      if (checkTimer !== null) {
+        window.clearTimeout(checkTimer)
+      }
+    }
+  }, [activeTab.id, isFileOnly, isFilePanelCollapsed, shouldAlignFilePanelOnMount, setFilePanelHeight])
 
   useEffect(() => {
     if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current) {
       return
     }
+
+    let themeTimer: number | null = null
 
     const syncAfterLayout = () => {
       if (layoutFrameRef.current !== null) {
@@ -381,6 +407,24 @@ export function SessionWorkspace({
     })
     resizeObserver.observe(workspaceRef.current)
 
+    const themeObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'attributes' && ['data-theme', 'class', 'style'].includes(mutation.attributeName || '')) {
+          syncAfterLayout()
+          if (themeTimer !== null) {
+            window.clearTimeout(themeTimer)
+          }
+          themeTimer = window.setTimeout(syncAfterLayout, 60)
+          break
+        }
+      }
+    })
+
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class', 'style']
+    })
+
     window.addEventListener('resize', syncAfterLayout)
 
     return () => {
@@ -388,7 +432,12 @@ export function SessionWorkspace({
         window.cancelAnimationFrame(layoutFrameRef.current)
         layoutFrameRef.current = null
       }
+      if (themeTimer !== null) {
+        window.clearTimeout(themeTimer)
+        themeTimer = null
+      }
       resizeObserver.disconnect()
+      themeObserver.disconnect()
       window.removeEventListener('resize', syncAfterLayout)
     }
   }, [isFileOnly, isFilePanelCollapsed, setFilePanelHeight])
@@ -423,53 +472,56 @@ export function SessionWorkspace({
       style={{ '--file-panel-height': `${effectiveFilePanelHeight}px` } as CSSProperties}
     >
       {!isFileOnly ? (
-        <div className={`terminal-area has-terminal-dock ${splitRootTab?.paneRoot ? 'is-terminal-split' : ''}`}>
-          {splitRootTab?.paneRoot ? (
-            <SplitPaneLayout
-              rootTab={splitRootTab}
-              sessions={splitPaneSessions}
-              activePaneTabId={activePaneTabId}
-              onClosePane={onClosePane}
-              onCloseTab={onCloseTab}
-              onSplitPane={onSplitPane}
-              onActivatePane={onActivatePane}
-              onResizeEnd={onSetPaneWeights}
-            />
-          ) : (
-            <TerminalView
-              tabId={terminalActiveTab.id}
-              bootText={terminalActiveSession.terminalTranscript ?? ''}
+        <Fragment>
+          <div className={`terminal-area has-terminal-dock ${splitRootTab?.paneRoot ? 'is-terminal-split' : ''}`}>
+            {splitRootTab?.paneRoot ? (
+              <SplitPaneLayout
+                rootTab={splitRootTab}
+                sessions={splitPaneSessions}
+                activePaneTabId={activePaneTabId}
+                onClosePane={onClosePane}
+                onCloseTab={onCloseTab}
+                onSplitPane={onSplitPane}
+                onActivatePane={onActivatePane}
+                onResizeEnd={onSetPaneWeights}
+              />
+            ) : (
+              <TerminalView
+                tabId={terminalActiveTab.id}
+                bootText={terminalActiveSession.terminalTranscript ?? ''}
+                connected={terminalActiveSession.connected === true}
+                connecting={terminalActiveTab.status === 'connecting'}
+                onReconnect={reconnectOnEnter}
+                onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
+                onCloseTab={onCloseTab}
+              />
+            )}
+            <TerminalDock
+              activeTab={terminalActiveTab}
               connected={terminalActiveSession.connected === true}
-              connecting={terminalActiveTab.status === 'connecting'}
+              selectedTabIds={terminalDockSelectedTabIds}
+              sendScope={terminalDockSendScope}
+              sendTargets={sendTargets}
+              onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
+              onSendCommand={onSendTerminalCommand}
+              onSendScopeChange={onTerminalDockSendScopeChange}
               onReconnect={reconnectOnEnter}
-              onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
-              onCloseTab={onCloseTab}
             />
-          )}
-          <TerminalDock
-            activeTab={terminalActiveTab}
-            connected={terminalActiveSession.connected === true}
-            selectedTabIds={terminalDockSelectedTabIds}
-            sendScope={terminalDockSendScope}
-            sendTargets={sendTargets}
-            onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
-            onSendCommand={onSendTerminalCommand}
-            onSendScopeChange={onTerminalDockSendScopeChange}
-            onReconnect={reconnectOnEnter}
-          />
-        </div>
-      ) : null}
-      {!isFileOnly && !isTerminalOnly ? (
-        <button
-          aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
-          aria-pressed={isFilePanelCollapsed}
-          className={`file-panel-drawer-toggle ${isFilePanelCollapsed ? 'is-collapsed' : ''}`}
-          title={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
-          type="button"
-          onClick={handleToggleFilePanelCollapsed}
-        >
-          <AppIcon name={isFilePanelCollapsed ? 'chevron-up' : 'chevron-down'} size={15} />
-        </button>
+            {!isFileOnly && !isTerminalOnly ? (
+              <button
+                aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
+                aria-pressed={isFilePanelCollapsed}
+                className={`file-panel-drawer-toggle ${isFilePanelCollapsed ? 'is-collapsed' : ''}`}
+                title={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
+                type="button"
+                onClick={handleToggleFilePanelCollapsed}
+              >
+                <AppIcon name={isFilePanelCollapsed ? 'chevron-up' : 'chevron-down'} size={15} />
+              </button>
+            ) : null}
+          </div>
+          <div className="terminal-right-frame" aria-hidden="true" />
+        </Fragment>
       ) : null}
       {!isFileOnly && !isTerminalOnly && !isFilePanelCollapsed ? (
         <div

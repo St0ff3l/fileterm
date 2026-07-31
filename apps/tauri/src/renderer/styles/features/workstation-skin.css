@@ -808,7 +808,7 @@ textarea:focus-visible,
 }
 
 .disk-head {
-  height: 26px;
+  height: 25px;
 }
 
 .session-workspace {
@@ -820,7 +820,7 @@ textarea:focus-visible,
 }
 
 .terminal-host {
-  padding: 10px 14px 10px 12px;
+  padding: 10px 14px;
   background: transparent;
   box-shadow: none;
 }
@@ -831,7 +831,6 @@ textarea:focus-visible,
 
 .terminal-host .xterm {
   padding-top: 0;
-  padding-right: 0;
 }
 
 .file-manager {

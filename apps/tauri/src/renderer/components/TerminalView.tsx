@@ -17,6 +17,7 @@ import { t } from '../i18n'
 import { ContextMenu } from '../features/common/ContextMenu'
 import { CloseButton } from '../features/common/CloseButton'
 import { AppIcon } from '../features/common/AppIcon'
+import { VerticalScrollbar } from '../features/common/VerticalScrollbar'
 import { FILETERM_MONO_FONT_FAMILY, observeCanvasTextMetrics } from '../app/font-metrics'
 
 function localizeTerminalText(value: string) {
@@ -73,7 +74,7 @@ function encodeBase64Utf8(value: string) {
 }
 
 const TERMINAL_TRANSCRIPT_LIMIT = 200_000
-const TERMINAL_REMOTE_GUARD_COLS = 2
+const TERMINAL_REMOTE_GUARD_COLS = 0
 const TERMINAL_FIT_GUARD_ROWS = 0
 const TERMINAL_RESIZE_PIXEL_EPSILON = 2
 const TERMINAL_RESIZE_SETTLE_MS = 140
@@ -546,6 +547,7 @@ export const TerminalView = memo(function TerminalView({
   canClosePane?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
@@ -958,10 +960,6 @@ export const TerminalView = memo(function TerminalView({
       return
     }
 
-    // Keep xterm and the remote PTY on the exact same column count. Readline,
-    // vim, nano and progress bars all depend on that agreement for wrapping
-    // and cursor-addressing. During an active horizontal resize we temporarily
-    // freeze cols, then sync the true width once the drag settles.
     const displayCols = Math.max(1, proposed.cols)
     const rows = Math.max(1, proposed.rows - TERMINAL_FIT_GUARD_ROWS)
     const previousSize = lastSyncedSizeRef.current
@@ -1012,6 +1010,7 @@ export const TerminalView = memo(function TerminalView({
     const terminal = new Terminal({
       fontFamily: FILETERM_MONO_FONT_FAMILY,
       fontSize: TERMINAL_DEFAULT_FONT_SIZE,
+      letterSpacing: 0.5,
       lineHeight: 1.05,
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -1024,6 +1023,7 @@ export const TerminalView = memo(function TerminalView({
       macOptionClickForcesSelection: true,
       reflowCursorLine: false,
       scrollback: 6000,
+      overviewRuler: { width: 0 },
       linkHandler: {
         activate: (_event, uri) => {
           if (!isClinkAutosuggestHelpUrl(uri)) {
@@ -1047,6 +1047,10 @@ export const TerminalView = memo(function TerminalView({
     terminal.loadAddon(webLinksAddon)
     terminal.unicode.activeVersion = '11'
     terminal.open(hostRef.current)
+    const xtermViewport = hostRef.current.querySelector('.xterm-viewport') as HTMLElement | null
+    if (xtermViewport) {
+      setViewportElement(xtermViewport)
+    }
     const terminalTextarea = terminal.textarea
     const adjustTerminalFontSize = (change: number) => {
       const currentSize = terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE
@@ -2195,6 +2199,7 @@ export const TerminalView = memo(function TerminalView({
       <div className="terminal-host">
         <div className="terminal-inner" ref={hostRef} />
       </div>
+      <VerticalScrollbar scrollRef={{ current: viewportElement }} />
       {findOpen ? (
         <div className="terminal-find" onClick={(event) => event.stopPropagation()}>
           <input
