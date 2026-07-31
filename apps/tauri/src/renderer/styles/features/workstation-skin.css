@@ -121,9 +121,11 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 .fs-tab:focus-visible,
-.quick-row:focus-visible {
+.quick-row:focus-visible,
+.pane-filter-input-wrapper:focus-within {
   outline: 1px solid var(--primary);
   outline-offset: -1px;
+  border-color: var(--primary);
 }
 
 .fs-shell {

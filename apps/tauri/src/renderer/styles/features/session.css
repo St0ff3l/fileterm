@@ -1022,9 +1022,15 @@
     background 0.15s ease;
 }
 
-.pane-filter-input-wrapper:hover,
-.pane-filter-input-wrapper:focus-within {
+.pane-filter-input-wrapper:hover {
   border-color: var(--border-light);
+  background: var(--bg-main);
+}
+
+.pane-filter-input-wrapper:focus-within {
+  outline: 1px solid var(--primary, #3b82f6);
+  outline-offset: -1px;
+  border-color: var(--primary, #3b82f6);
   background: var(--bg-main);
 }
 
