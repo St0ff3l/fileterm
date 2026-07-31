@@ -1145,10 +1145,6 @@
   white-space: nowrap;
 }
 
-.fs-file-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
 .fs-file-table th {
   position: sticky;
   top: 0;

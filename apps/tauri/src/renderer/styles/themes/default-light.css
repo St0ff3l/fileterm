@@ -826,14 +826,14 @@
   color: var(--text-main);
 }
 
-:root[data-theme='default-light'] .fs-file-table th,
-:root[data-theme='default-light'] .fs-file-table td {
-  border-bottom-color: var(--border-light);
-}
-
 :root[data-theme='default-light'] .fs-file-table th {
+  border-bottom-color: var(--border-light);
   background: var(--manager-head-bg);
   color: var(--text-muted);
+}
+
+:root[data-theme='default-light'] .fs-file-table td {
+  border-bottom-color: rgba(0, 0, 0, 0.05);
 }
 
 :root[data-theme='default-light'] .process-row:nth-child(odd),
