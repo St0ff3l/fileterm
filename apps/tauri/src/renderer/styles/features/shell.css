@@ -858,7 +858,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  bottom: 1px;
+  bottom: 0;
   width: 1px;
   background: var(--titlebar-brand-divider);
   pointer-events: none;

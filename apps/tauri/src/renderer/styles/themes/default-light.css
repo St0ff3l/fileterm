@@ -11,11 +11,11 @@
   --input-bg: #ffffff;
   --command-history-head-bg: var(--manager-head-bg);
   --surface-panel: var(--bg-card);
-  --border-subtle: #ebebeb;
+  --border-subtle: #e0e0e0;
 
-  --border-light: #ebebeb;
-  --border-dark: #ebebeb;
-  --border: #ebebeb;
+  --border-light: #e0e0e0;
+  --border-dark: #e0e0e0;
+  --border: #e0e0e0;
 
   --text-main: #18181b;
   --text-muted: #52525b;
@@ -55,11 +55,11 @@
   --surface-hover: rgba(0, 0, 0, 0.04);
   --surface-chip: rgba(0, 0, 0, 0.06);
   --surface-inset: rgba(0, 0, 0, 0.02);
-  --surface-inset-border: #ebebeb;
+  --surface-inset-border: #e0e0e0;
   --surface-table-head: rgba(0, 0, 0, 0.03);
   --surface-nested: rgba(0, 0, 0, 0.025);
   --floating-drawer-expanded-bg: rgba(255, 255, 255, 0.94);
-  --floating-drawer-expanded-border: #ebebeb;
+  --floating-drawer-expanded-border: #e0e0e0;
   --floating-drawer-shadow: 0 10px 26px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
   --floating-drawer-trigger-hover-bg: rgba(0, 0, 0, 0.05);
   --modal-backdrop-bg: rgba(0, 0, 0, 0.32);
@@ -71,9 +71,9 @@
   --terminal-dock-header-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
   --system-sidebar-toggle-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
   --system-sidebar-toggle-hover-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-  --system-sidebar-frame: #ebebeb;
-  --system-sidebar-control-border: #ebebeb;
-  --system-sidebar-divider: #ebebeb;
+  --system-sidebar-frame: #e0e0e0;
+  --system-sidebar-control-border: #e0e0e0;
+  --system-sidebar-divider: #e0e0e0;
   --overview-hero-highlight: rgba(255, 255, 255, 0.02);
   --brand-title-shadow: none;
   --traffic-close: #ff5f57;
@@ -136,11 +136,11 @@
   --popover-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
   --confirm-dialog-text: #475569;
   --dialog-surface: var(--bg-card);
-  --dialog-border: #ebebeb;
+  --dialog-border: #e0e0e0;
   --dialog-shadow: 0 22px 70px rgba(15, 23, 42, 0.16), 0 1px 0 rgba(255, 255, 255, 0.82) inset;
   --dialog-title: var(--text-main);
   --dialog-description: var(--text-muted);
-  --dialog-footer-border: #ebebeb;
+  --dialog-footer-border: #e0e0e0;
   --dialog-button-secondary-bg: transparent;
   --dialog-button-secondary-border: var(--border-light);
   --dialog-button-secondary-text: var(--text-main);
@@ -180,7 +180,7 @@
   --terminal-right-frame-accent: transparent;
   --button-primary-bg: #4f7cff;
   --button-primary-hover: #3d69ea;
-  --button-primary-border: #ebebeb;
+  --button-primary-border: #e0e0e0;
 }
 
 :root[data-theme='default-light'] .fs-shell,
