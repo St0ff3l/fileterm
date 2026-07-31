@@ -28,6 +28,7 @@ export function SettingsModal({
   inline?: boolean
 }) {
   const [activeTab, setActiveTab] = useState<'general' | 'sync' | 'tools' | 'updates' | 'system'>('general')
+  const [syncSubTab, setSyncSubTab] = useState<'webdav' | 's3'>('webdav')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
@@ -351,140 +352,163 @@ export function SettingsModal({
 
           {activeTab === 'sync' && syncConfig ? (
             <div className="settings-panel">
-              <section className="settings-section">
-                <h3>{t.webdavConfigSync}</h3>
-                <p className="settings-tools-hint">{t.webdavConfigSyncDescription}</p>
-                <fieldset disabled={syncOperation !== null} style={{ border: 0, margin: 0, padding: 0 }}>
-                  <div className="webdav-sync-form">
-                    <label>
-                      <span>{t.webdavUrl}</span>
-                      <input
-                        value={syncConfig.url}
-                        placeholder="https://dav.example.com/remote.php/dav/files/me"
-                        onChange={(event) => setSyncConfig({ ...syncConfig, url: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>{t.webdavRemoteFile}</span>
-                      <input
-                        value={syncConfig.remotePath}
-                        placeholder="fileterm-connections.json"
-                        onChange={(event) => setSyncConfig({ ...syncConfig, remotePath: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>{t.webdavUsername}</span>
-                      <input
-                        value={syncConfig.username ?? ''}
-                        onChange={(event) => setSyncConfig({ ...syncConfig, username: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      <span>{t.webdavPassword}</span>
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={syncPassword}
-                        placeholder={t.webdavPasswordPlaceholder}
-                        onChange={(event) => setSyncPassword(event.target.value)}
-                      />
-                    </label>
-                    <div className="webdav-sync-options">
-                      <label className="webdav-checkbox ssh-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={syncConfig.enabled}
-                          onChange={(event) => setSyncConfig({ ...syncConfig, enabled: event.target.checked })}
-                        />
-                        {t.enableWebdavSync}
-                      </label>
-                      <label className="webdav-checkbox ssh-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={syncConfig.allowInsecureTls === true}
-                          onChange={(event) => setSyncConfig({ ...syncConfig, allowInsecureTls: event.target.checked })}
-                        />
-                        {t.allowInsecureHttp}
-                      </label>
-                    </div>
-                  </div>
-                  <div className="settings-update-actions webdav-sync-actions">
-                    <button
-                      className="primary-button compact"
-                      disabled={syncOperation !== null}
-                      type="button"
-                      onClick={() => {
-                        if (!desktopApi) return
-                        void runSyncOperation('save', async () => {
-                          const config = await desktopApi.saveWebDavSyncConfig({
-                            ...syncConfig,
-                            ...(syncPassword ? { password: syncPassword } : {})
-                          })
-                          setSyncConfig(config)
-                          setSyncPassword('')
-                          setSyncMessage(t.syncConfigSaved)
-                        })
-                      }}
-                    >
-                      {syncOperation === 'save' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>{t.save}</span>
-                    </button>
-                    <button
-                      className="flat-button compact"
-                      disabled={syncOperation !== null}
-                      type="button"
-                      onClick={() => {
-                        if (!desktopApi) return
-                        void runSyncOperation('test', async () => {
-                          const result = await desktopApi.testWebDavSync()
-                          setSyncMessage(result.message)
-                        })
-                      }}
-                    >
-                      {syncOperation === 'test' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>{t.webdavTestConnection}</span>
-                    </button>
-                    <button
-                      className="flat-button compact"
-                      disabled={!syncConfig.enabled || syncOperation !== null}
-                      type="button"
-                      onClick={() => {
-                        if (!desktopApi) return
-                        void runSyncOperation('upload', async () => {
-                          const result = await desktopApi.uploadWebDavSync()
-                          setSyncMessage(result.message)
-                        })
-                      }}
-                    >
-                      {syncOperation === 'upload' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>{t.syncUpload}</span>
-                    </button>
-                    <button
-                      className="flat-button compact"
-                      disabled={!syncConfig.enabled || syncOperation !== null}
-                      type="button"
-                      onClick={() => {
-                        if (!desktopApi) return
-                        void runSyncOperation('download', async () => {
-                          const result = await desktopApi.downloadWebDavSync()
-                          setSyncMessage(result.message)
-                        })
-                      }}
-                    >
-                      {syncOperation === 'download' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      <span>{t.syncDownload}</span>
-                    </button>
-                  </div>
-                </fieldset>
-                {syncConfig.lastSyncedAt ? (
-                  <p className="settings-tools-hint">
-                    {t.lastSync.replace('{time}', new Date(syncConfig.lastSyncedAt).toLocaleString())}
-                  </p>
-                ) : null}
-                {syncMessage ? <p className="settings-tools-hint">{syncMessage}</p> : null}
-              </section>
+              <div className="sync-subtabs">
+                <button
+                  type="button"
+                  className={`sync-subtab-button ${syncSubTab === 'webdav' ? 'active' : ''}`}
+                  onClick={() => setSyncSubTab('webdav')}
+                >
+                  <span className="material-symbols-outlined">cloud_sync</span>
+                  <span>WebDAV</span>
+                </button>
+                <button
+                  type="button"
+                  className={`sync-subtab-button ${syncSubTab === 's3' ? 'active' : ''}`}
+                  onClick={() => setSyncSubTab('s3')}
+                >
+                  <span className="material-symbols-outlined">database</span>
+                  <span>S3</span>
+                </button>
+              </div>
 
-              {s3Config ? (
+              {syncSubTab === 'webdav' && (
+                <section className="settings-section">
+                  <h3>{t.webdavConfigSync}</h3>
+                  <p className="settings-tools-hint">{t.webdavConfigSyncDescription}</p>
+                  <fieldset disabled={syncOperation !== null} style={{ border: 0, margin: 0, padding: 0 }}>
+                    <div className="webdav-sync-form">
+                      <label>
+                        <span>{t.webdavUrl}</span>
+                        <input
+                          value={syncConfig.url}
+                          placeholder="https://dav.example.com/remote.php/dav/files/me"
+                          onChange={(event) => setSyncConfig({ ...syncConfig, url: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.webdavRemoteFile}</span>
+                        <input
+                          value={syncConfig.remotePath}
+                          placeholder="fileterm-connections.json"
+                          onChange={(event) => setSyncConfig({ ...syncConfig, remotePath: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.webdavUsername}</span>
+                        <input
+                          value={syncConfig.username ?? ''}
+                          onChange={(event) => setSyncConfig({ ...syncConfig, username: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>{t.webdavPassword}</span>
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          value={syncPassword}
+                          placeholder={t.webdavPasswordPlaceholder}
+                          onChange={(event) => setSyncPassword(event.target.value)}
+                        />
+                      </label>
+                      <div className="webdav-sync-options">
+                        <label className="webdav-checkbox ssh-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={syncConfig.enabled}
+                            onChange={(event) => setSyncConfig({ ...syncConfig, enabled: event.target.checked })}
+                          />
+                          {t.enableWebdavSync}
+                        </label>
+                        <label className="webdav-checkbox ssh-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={syncConfig.allowInsecureTls === true}
+                            onChange={(event) =>
+                              setSyncConfig({ ...syncConfig, allowInsecureTls: event.target.checked })
+                            }
+                          />
+                          {t.allowInsecureHttp}
+                        </label>
+                      </div>
+                    </div>
+                    <div className="settings-update-actions webdav-sync-actions">
+                      <button
+                        className="primary-button compact"
+                        disabled={syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('save', async () => {
+                            const config = await desktopApi.saveWebDavSyncConfig({
+                              ...syncConfig,
+                              ...(syncPassword ? { password: syncPassword } : {})
+                            })
+                            setSyncConfig(config)
+                            setSyncPassword('')
+                            setSyncMessage(t.syncConfigSaved)
+                          })
+                        }}
+                      >
+                        {syncOperation === 'save' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.save}</span>
+                      </button>
+                      <button
+                        className="flat-button compact"
+                        disabled={syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('test', async () => {
+                            const result = await desktopApi.testWebDavSync()
+                            setSyncMessage(result.message)
+                          })
+                        }}
+                      >
+                        {syncOperation === 'test' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.webdavTestConnection}</span>
+                      </button>
+                      <button
+                        className="flat-button compact"
+                        disabled={!syncConfig.enabled || syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('upload', async () => {
+                            const result = await desktopApi.uploadWebDavSync()
+                            setSyncMessage(result.message)
+                          })
+                        }}
+                      >
+                        {syncOperation === 'upload' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.syncUpload}</span>
+                      </button>
+                      <button
+                        className="flat-button compact"
+                        disabled={!syncConfig.enabled || syncOperation !== null}
+                        type="button"
+                        onClick={() => {
+                          if (!desktopApi) return
+                          void runSyncOperation('download', async () => {
+                            const result = await desktopApi.downloadWebDavSync()
+                            setSyncMessage(result.message)
+                          })
+                        }}
+                      >
+                        {syncOperation === 'download' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                        <span>{t.syncDownload}</span>
+                      </button>
+                    </div>
+                  </fieldset>
+                  {syncConfig.lastSyncedAt ? (
+                    <p className="settings-tools-hint">
+                      {t.lastSync.replace('{time}', new Date(syncConfig.lastSyncedAt).toLocaleString())}
+                    </p>
+                  ) : null}
+                  {syncMessage ? <p className="settings-tools-hint">{syncMessage}</p> : null}
+                </section>
+              )}
+
+              {syncSubTab === 's3' && s3Config && (
                 <section className="settings-section">
                   <h3>{t.s3Backup}</h3>
                   <p className="settings-tools-hint">{t.s3BackupDescription}</p>
@@ -526,7 +550,7 @@ export function SettingsModal({
                           placeholder={
                             s3Config.provider === 'bitiful-s4'
                               ? 'https://s3.bitiful.net'
-                              : 'https://&lt;account-id&gt;.r2.cloudflarestorage.com'
+                              : 'https://<account-id>.r2.cloudflarestorage.com'
                           }
                           onChange={(event) => setS3Config({ ...s3Config, endpoint: event.target.value })}
                         />
@@ -671,7 +695,7 @@ export function SettingsModal({
                   ) : null}
                   {s3Message ? <p className="settings-tools-hint">{s3Message}</p> : null}
                 </section>
-              ) : null}
+              )}
             </div>
           ) : null}
 

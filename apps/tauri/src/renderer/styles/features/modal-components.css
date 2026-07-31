@@ -881,7 +881,8 @@
 /* Settings Modal Styles */
 .modal-card.manager-modal.connection-manager-modal.settings-modal {
   width: min(1040px, calc(100vw - 56px));
-  min-height: min(680px, calc(100vh - 56px));
+  height: min(680px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px);
   padding: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -894,6 +895,10 @@
 }
 
 .settings-modal .connection-manager-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -940,7 +945,51 @@
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
+}
+
+.sync-subtabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-sidebar, rgba(0, 0, 0, 0.2));
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  width: fit-content;
+  margin-bottom: 16px;
+}
+
+.sync-subtab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+.sync-subtab-button .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.sync-subtab-button:hover {
+  color: var(--text-main);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+}
+
+.sync-subtab-button.active {
+  background: var(--bg-card, #2b2b2b) !important;
+  color: var(--text-main) !important;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 .settings-section {

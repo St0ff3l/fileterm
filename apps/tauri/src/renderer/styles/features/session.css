@@ -2182,11 +2182,12 @@
 }
 
 .modal-card.manager-modal.connection-manager-modal {
-  width: min(900px, calc(100vw - 56px));
-  min-height: min(640px, calc(100vh - 56px));
+  width: min(1040px, calc(100vw - 56px));
+  height: min(680px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px);
   padding: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden !important;
   background-color: var(--bg-main) !important;
   font-family: var(--font-ui);
@@ -2334,7 +2335,10 @@
 .connection-manager-layout {
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--bg-main);
 }
 
