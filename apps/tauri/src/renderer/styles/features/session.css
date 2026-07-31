@@ -1040,7 +1040,7 @@
 .vertical-scrollbar {
   position: absolute;
   top: calc(2px + var(--vertical-scrollbar-inset-top, 0px));
-  right: 18px;
+  right: 2px;
   bottom: 2px;
   z-index: 12;
   width: 8px;
@@ -1048,6 +1048,10 @@
   outline: none;
   opacity: 0;
   transition: opacity 160ms ease;
+}
+
+.terminal-area .vertical-scrollbar {
+  right: 18px;
 }
 
 .vertical-scrollbar.is-visible,
@@ -1060,11 +1064,15 @@
 }
 
 .vertical-scrollbar__thumb {
-  width: 4px;
-  margin-left: auto;
+  width: 8px;
   border-radius: 999px;
   background: var(--border, var(--border-light));
   cursor: grab;
+}
+
+.terminal-area .vertical-scrollbar__thumb {
+  width: 4px;
+  margin-left: auto;
 }
 
 .vertical-scrollbar__thumb:hover,
