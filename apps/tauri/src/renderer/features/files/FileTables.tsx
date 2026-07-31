@@ -5,8 +5,6 @@ import { formatMessage, t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { getDisplayFileIconName, getDisplayFileTypeLabel } from './file-kind'
 
-import type { FileFilterConfig } from './file-filter'
-
 export type RemoteFileSortField = 'name' | 'size' | 'type' | 'modified' | 'permission' | 'ownerGroup'
 
 export interface RemoteFileSortState {
@@ -43,101 +41,6 @@ export function PanePathBar({
       {action}
       {hint ? <span>{hint}</span> : null}
     </form>
-  )
-}
-
-export function PaneFilterBar({
-  filter,
-  matchCount,
-  totalCount,
-  disabled = false,
-  onFilterChange,
-  onClear
-}: {
-  filter: FileFilterConfig
-  matchCount: number
-  totalCount: number
-  disabled?: boolean
-  onFilterChange(nextFilter: FileFilterConfig): void
-  onClear(): void
-}) {
-  const placeholder =
-    filter.mode === 'glob'
-      ? t.filterPlaceholderGlob
-      : filter.mode === 'regex'
-        ? t.filterPlaceholderRegex
-        : t.filterPlaceholderText
-
-  return (
-    <div className={`pane-filter-bar ${disabled ? 'is-disabled' : ''}`}>
-      <div className="pane-filter-input-wrapper">
-        <span className="pane-filter-search-icon">
-          <AppIcon name="search" size={13} />
-        </span>
-        <input
-          aria-label={t.filterFiles}
-          className="pane-filter-input"
-          disabled={disabled}
-          placeholder={placeholder}
-          value={filter.query}
-          onChange={(event) => onFilterChange({ ...filter, query: event.target.value })}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              onClear()
-            }
-          }}
-        />
-        {filter.query ? (
-          <button
-            aria-label={t.clearFilter}
-            className="pane-filter-clear-button"
-            disabled={disabled}
-            type="button"
-            onClick={onClear}
-            title={t.clearFilter}
-          >
-            <AppIcon name="close" size={12} />
-          </button>
-        ) : null}
-      </div>
-
-      {filter.query.trim() ? (
-        <span className="pane-filter-badge">
-          {matchCount}/{totalCount}
-        </span>
-      ) : null}
-
-      <div className="pane-filter-mode-toggles" role="group" aria-label="Filter Mode">
-        <button
-          className={`pane-filter-mode-btn ${filter.mode === 'text' ? 'active' : ''}`}
-          disabled={disabled}
-          type="button"
-          onClick={() => onFilterChange({ ...filter, mode: 'text' })}
-          title={t.filterModeText}
-        >
-          Aa
-        </button>
-        <button
-          className={`pane-filter-mode-btn ${filter.mode === 'glob' ? 'active' : ''}`}
-          disabled={disabled}
-          type="button"
-          onClick={() => onFilterChange({ ...filter, mode: 'glob' })}
-          title={t.filterModeGlob}
-        >
-          *?
-        </button>
-        <button
-          className={`pane-filter-mode-btn ${filter.mode === 'regex' ? 'active' : ''}`}
-          disabled={disabled}
-          type="button"
-          onClick={() => onFilterChange({ ...filter, mode: 'regex' })}
-          title={t.filterModeRegex}
-        >
-          .*
-        </button>
-      </div>
-    </div>
   )
 }
 
