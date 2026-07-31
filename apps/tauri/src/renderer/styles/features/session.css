@@ -1011,12 +1011,21 @@
   align-items: center;
   flex: 1;
   min-width: 0;
-  height: 20px;
+  height: 22px;
   padding: 0 6px;
-  border: 1px solid var(--border-light);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--bg-card);
+  background: transparent;
   gap: 6px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.pane-filter-input-wrapper:hover,
+.pane-filter-input-wrapper:focus-within {
+  border-color: var(--border-light);
+  background: var(--bg-main);
 }
 
 .pane-filter-search-icon {
@@ -1029,12 +1038,21 @@
   flex: 1;
   min-width: 0;
   height: 100%;
-  border: 0;
-  background: transparent;
+  border: none !important;
+  background: transparent !important;
   color: var(--text-main);
   font-size: 11px;
   font-family: inherit;
-  outline: none;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+}
+
+.pane-filter-input:focus,
+.pane-filter-input:focus-visible {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .pane-filter-clear-button {

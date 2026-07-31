@@ -812,7 +812,9 @@
 }
 
 :root[data-theme='default-light'] .pane-path-bar input:hover,
-:root[data-theme='default-light'] .pane-path-bar input:focus {
+:root[data-theme='default-light'] .pane-path-bar input:focus,
+:root[data-theme='default-light'] .pane-filter-input-wrapper:hover,
+:root[data-theme='default-light'] .pane-filter-input-wrapper:focus-within {
   border-color: var(--border-light);
   background: #f8fafc;
   color: var(--text-main);

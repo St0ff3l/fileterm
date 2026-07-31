@@ -931,7 +931,13 @@
 :root[data-theme='default'] .pane-path-bar input:hover,
 :root:not([data-theme]) .pane-path-bar input:focus,
 :root[data-theme='default-dark'] .pane-path-bar input:focus,
-:root[data-theme='default'] .pane-path-bar input:focus {
+:root[data-theme='default'] .pane-path-bar input:focus,
+:root:not([data-theme]) .pane-filter-input-wrapper:hover,
+:root[data-theme='default-dark'] .pane-filter-input-wrapper:hover,
+:root[data-theme='default'] .pane-filter-input-wrapper:hover,
+:root:not([data-theme]) .pane-filter-input-wrapper:focus-within,
+:root[data-theme='default-dark'] .pane-filter-input-wrapper:focus-within,
+:root[data-theme='default'] .pane-filter-input-wrapper:focus-within {
   border-color: var(--border-light);
   background: var(--bg-main);
   color: var(--text-main);
