@@ -176,8 +176,8 @@
   --terminal-cmd-text: #111827;
   --terminal-frame-gradient: none;
   --terminal-frame-shadow: none;
-  --terminal-right-frame-outer: transparent;
-  --terminal-right-frame-accent: transparent;
+  --terminal-right-frame-outer: var(--bg-main);
+  --terminal-right-frame-accent: var(--border-light);
   --button-primary-bg: #4f7cff;
   --button-primary-hover: #3d69ea;
   --button-primary-border: #e0e0e0;
