@@ -1557,7 +1557,7 @@
 :root[data-theme='default'] .fs-tabbar {
   background: #272727;
   --titlebar-divider: #3b3b3b;
-  border-bottom: 1px solid #363636;
+  border-bottom: 0;
   box-shadow: none;
 }
 
