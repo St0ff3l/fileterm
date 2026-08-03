@@ -1194,9 +1194,19 @@ async fn follow_shell_cwd(
     sftp: Arc<RwLock<SftpSession>>,
     handle: Arc<Handle<ClientHandler>>,
     file_access_mode: String,
+    root_file_access_method: RootFileAccessMethod,
     sudo_user: Option<String>,
     sudo_password: Option<String>,
 ) {
+    crate::services::logging::ssh_debug(
+        &app,
+        &tab_id,
+        format!(
+            "CWD follow scheduled cwd={cwd} mode={file_access_mode} method={root_file_access_method:?} target_user={} password_cached={}",
+            sudo_user.as_deref().unwrap_or("root"),
+            sudo_password.is_some(),
+        ),
+    );
     {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
         let mut sessions = state.sessions.write().await;
@@ -1217,7 +1227,14 @@ async fn follow_shell_cwd(
     // the old user's view. Electron switches to its sudo shell path here.
     let files = match timeout(FILE_OPERATION_TIMEOUT, async {
         if file_access_mode == "root" {
-            exec_list_dir_via_shell(&handle, &cwd, &sudo_user, &sudo_password).await
+            exec_list_dir_via_shell(
+                &handle,
+                &cwd,
+                root_file_access_method,
+                &sudo_user,
+                &sudo_password,
+            )
+            .await
         } else {
             // russh-sftp's client is one request stream. Serialise access to it:
             // concurrent read locks let multiple list/delete/upload requests
@@ -1341,7 +1358,28 @@ fn track_cwd_and_user(chunk: &str, buffer: &mut String) -> (Option<String>, Opti
     for cap in USER_OSC_PATTERN.captures_iter(buffer) {
         user = Some(cap[1].to_string());
     }
+    // The rolling buffer only exists to join an OSC sequence split across SSH
+    // packets. Once complete markers have been consumed, discard them so a
+    // later packet does not look like a fresh CWD/user event. Keeping only a
+    // trailing, unterminated OSC sequence also lets the worker correlate a
+    // CWD marker with the following RemoteUser marker when the two are split
+    // across packets.
+    retain_incomplete_osc_suffix(buffer);
     (cwd, user)
+}
+
+fn retain_incomplete_osc_suffix(buffer: &mut String) {
+    let Some(start) = buffer.rfind("\x1b]") else {
+        buffer.clear();
+        return;
+    };
+    let suffix = &buffer[start + 2..];
+    let terminated = suffix.contains('\u{7}') || suffix.contains("\x1b\\");
+    if terminated {
+        buffer.clear();
+    } else {
+        buffer.drain(..start);
+    }
 }
 
 /// Map the identity reported by the interactive shell to the file pane access
@@ -1356,6 +1394,25 @@ fn resolve_shell_file_access(login_user: &str, shell_user: &str) -> (&'static st
     } else {
         ("root", Some(shell_user.to_string()))
     }
+}
+
+fn root_access_method_for_shell_user(
+    shell_user: &str,
+    last_authenticated_access: Option<&PendingRootAccessAuth>,
+    pending_access_command: Option<&PendingRootAccessAuth>,
+) -> RootFileAccessMethod {
+    // The command that just produced the new shell identity is authoritative.
+    // This matters for passwordless sudo and for switching from `sudo -i` to
+    // `su -` (or vice versa), where no new password prompt may be available to
+    // overwrite the previous cached method.
+    pending_access_command
+        .filter(|auth| auth.interactive_shell && auth.target_user == shell_user)
+        .or_else(|| {
+            last_authenticated_access
+                .filter(|auth| auth.interactive_shell && auth.target_user == shell_user)
+        })
+        .map(|auth| auth.method)
+        .unwrap_or(RootFileAccessMethod::Sudo)
 }
 
 /// Remove CSI/OSC control sequences before inspecting a prompt. This mirrors
@@ -1430,38 +1487,166 @@ fn split_prompt_tail_for_setup_wait(chunk: &str) -> (String, String) {
     (banner, prompt_tail)
 }
 
-/// Track the interactive sudo exchange on the terminal channel. The password
-/// stays worker-local and is never copied into a snapshot or emitted event.
-fn capture_sudo_password_input(
+/// Separate file operations run in a fresh SSH exec channel, so they need to
+/// reproduce the privilege transition performed in the interactive shell.
+/// Keep the transition method worker-local: neither it nor its password is
+/// serialized into a workspace snapshot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RootFileAccessMethod {
+    Sudo,
+    Su,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PendingRootAccessAuth {
+    method: RootFileAccessMethod,
+    target_user: String,
+    interactive_shell: bool,
+}
+
+fn privilege_command_from_terminal_input(input: &str) -> Option<PendingRootAccessAuth> {
+    let command = input
+        .trim_end_matches(['\r', '\n'])
+        .rsplit(['\r', '\n'])
+        .next()?
+        .trim();
+    let mut parts = command.split_whitespace();
+    let executable = parts.next()?;
+    let args = parts.collect::<Vec<_>>();
+
+    let method = match executable {
+        "sudo" => RootFileAccessMethod::Sudo,
+        "su" => RootFileAccessMethod::Su,
+        _ => return None,
+    };
+
+    let mut target_user = None;
+    let mut interactive_shell = method == RootFileAccessMethod::Su;
+    let mut skip_next = false;
+    let mut next_is_user = false;
+    for arg in args {
+        if skip_next {
+            if next_is_user {
+                target_user = Some(arg);
+            }
+            skip_next = false;
+            next_is_user = false;
+            continue;
+        }
+        if arg == "-u" || arg == "--user" {
+            skip_next = true;
+            next_is_user = true;
+            continue;
+        }
+        if arg == "-c" || arg == "--command" {
+            interactive_shell = false;
+            skip_next = true;
+            next_is_user = false;
+            continue;
+        }
+        if arg == "-s" || arg == "--shell" {
+            interactive_shell = true;
+            skip_next = true;
+            next_is_user = false;
+            continue;
+        }
+        if arg == "-i" || arg == "--login" || (method == RootFileAccessMethod::Su && arg == "-l") {
+            interactive_shell = true;
+            continue;
+        }
+        if !arg.starts_with('-') {
+            target_user = Some(arg);
+        }
+    }
+
+    Some(PendingRootAccessAuth {
+        method,
+        target_user: target_user.unwrap_or("root").to_string(),
+        interactive_shell,
+    })
+}
+
+/// Track an interactive sudo or su exchange on the terminal channel. The
+/// password stays worker-local and is never copied into a snapshot or emitted
+/// event.
+fn capture_root_access_password_input(
     input: &str,
-    awaiting_password: &mut bool,
+    awaiting_auth: &mut Option<PendingRootAccessAuth>,
     pending_password: &mut String,
     recent_input: &mut String,
     sudo_password: &mut Option<String>,
+    last_authenticated_access: &mut Option<PendingRootAccessAuth>,
+    pending_command: &mut Option<PendingRootAccessAuth>,
 ) -> bool {
     let mut changed = false;
     for ch in input.chars() {
+        if awaiting_auth.is_none() && matches!(ch, '\r' | '\n') {
+            let current_line = recent_input
+                .rsplit(['\r', '\n'])
+                .next()
+                .unwrap_or("")
+                .trim();
+            // Do not erase the last interactive privilege command when the
+            // next line is an ordinary terminal input (most commonly the
+            // password itself).  The shell can deliver the `su` password
+            // prompt after the input channel has already received the user's
+            // password, so replacing `Some(su)` with `None` here makes the
+            // subsequent RemoteUser=root marker fall back to sudo.
+            if let Some(command) = privilege_command_from_terminal_input(recent_input) {
+                *pending_command = Some(command);
+                // Reuse this worker-local buffer as a pre-prompt password
+                // candidate. It is only promoted after a matching password
+                // prompt is observed, so a passwordless `su` cannot turn an
+                // arbitrary later shell command into credentials.
+                pending_password.clear();
+            } else if !current_line.is_empty()
+                && pending_command
+                    .as_ref()
+                    .is_some_and(|auth| auth.interactive_shell)
+            {
+                pending_password.clear();
+                pending_password.push_str(current_line);
+            }
+        }
         recent_input.push(ch);
         if recent_input.len() > 512 {
             // 用户输入可含 CJK，滚动窗口必须 char 边界安全，否则此分支
             // panic 会无声杀死 worker（输入通道随之失效，Ctrl+C 无响应）。
             trim_string_front(recent_input, 256);
         }
-        if !*awaiting_password {
+        let Some(auth) = awaiting_auth.clone() else {
+            // Keep a worker-local pre-prompt line while the network is
+            // delivering the password prompt. If the prompt arrives midway
+            // through typing, the already received prefix must not be lost.
+            if pending_command
+                .as_ref()
+                .is_some_and(|command| command.interactive_shell)
+            {
+                match ch {
+                    '\u{8}' | '\u{7f}' => {
+                        pending_password.pop();
+                    }
+                    '\u{3}' => pending_password.clear(),
+                    _ if !ch.is_control() => pending_password.push(ch),
+                    _ => {}
+                }
+            }
             continue;
-        }
+        };
         match ch {
             '\r' | '\n' => {
                 if !pending_password.is_empty() {
                     changed = sudo_password.as_deref() != Some(pending_password.as_str());
                     *sudo_password = Some(std::mem::take(pending_password));
+                    *last_authenticated_access = Some(auth);
                 }
-                *awaiting_password = false;
+                *awaiting_auth = None;
             }
             '\u{3}' => {
                 changed = sudo_password.take().is_some();
                 pending_password.clear();
-                *awaiting_password = false;
+                *awaiting_auth = None;
+                *last_authenticated_access = None;
             }
             '\u{8}' | '\u{7f}' => {
                 pending_password.pop();
@@ -1483,13 +1668,16 @@ fn coalesce_terminal_input(
     first
 }
 
-fn track_sudo_prompt_from_terminal(
+fn track_root_access_prompt_from_terminal(
     output: &str,
     prompt_buffer: &mut String,
-    awaiting_password: &mut bool,
+    awaiting_auth: &mut Option<PendingRootAccessAuth>,
     pending_password: &mut String,
     sudo_password: &mut Option<String>,
+    last_authenticated_access: &mut Option<PendingRootAccessAuth>,
+    pending_command: &mut Option<PendingRootAccessAuth>,
 ) -> bool {
+    let mut changed = false;
     prompt_buffer.push_str(&visible_shell_text(output));
     if prompt_buffer.len() > 2048 {
         // shell 输出含中文时直接字节切片会 panic 杀死 worker，
@@ -1497,23 +1685,45 @@ fn track_sudo_prompt_from_terminal(
         trim_string_front(prompt_buffer, 1024);
     }
     let lower = prompt_buffer.to_ascii_lowercase();
-    let auth_failed = lower.contains("sorry, try again")
-        || lower.contains("incorrect password")
-        || lower.contains("authentication failure");
+    let auth_failed = root_access_auth_failed(&lower);
     if auth_failed {
-        *awaiting_password = false;
+        *awaiting_auth = None;
         pending_password.clear();
         prompt_buffer.clear();
+        *last_authenticated_access = None;
+        *pending_command = None;
         return sudo_password.take().is_some();
     }
     if lower.contains("password") || prompt_buffer.contains("密码") {
-        *awaiting_password = true;
-        pending_password.clear();
-        // Consume this prompt; otherwise the historical word "password"
-        // would mark every later terminal keystroke as a sudo password.
-        prompt_buffer.clear();
+        if let Some(auth) = pending_command.clone() {
+            if !pending_password.is_empty() {
+                // The user may have entered the password before this output
+                // packet reached the worker. Promote the deferred line now
+                // that the prompt proves it was an authentication exchange.
+                changed = sudo_password.as_deref() != Some(pending_password.as_str());
+                *sudo_password = Some(std::mem::take(pending_password));
+                *last_authenticated_access = Some(auth);
+                *awaiting_auth = None;
+            } else {
+                *awaiting_auth = Some(auth);
+            }
+            // Consume this prompt; otherwise the historical word "password"
+            // would mark every later terminal keystroke as a root password.
+            prompt_buffer.clear();
+        }
     }
-    false
+    changed
+}
+
+fn root_access_auth_failed(output: &str) -> bool {
+    output.contains("sorry, try again")
+        || output.contains("incorrect password")
+        || output.contains("authentication failure")
+        || output.contains("authentication failed")
+        || output.contains("密码错误")
+        || output.contains("密码不正确")
+        || output.contains("身份验证失败")
+        || output.contains("认证失败")
 }
 
 /// Buffered output produced while injecting the internal CWD hook.
@@ -1528,6 +1738,7 @@ struct ShellSetupEchoSuppression {
     visible_prefix_length: Option<usize>,
     marker_seen_at: Option<Instant>,
     preserve_visible_prefix: bool,
+    fallback_visible: Option<String>,
 }
 
 impl ShellSetupEchoSuppression {
@@ -1538,7 +1749,14 @@ impl ShellSetupEchoSuppression {
             visible_prefix_length: None,
             marker_seen_at: None,
             preserve_visible_prefix,
+            fallback_visible: None,
         }
+    }
+
+    fn with_fallback(fallback_visible: String) -> Self {
+        let mut state = Self::new(false);
+        state.fallback_visible = Some(fallback_visible);
+        state
     }
 }
 
@@ -1578,7 +1796,10 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
             // 让晚到的新 prompt 从新行开始。
             return "\r\n".to_string();
         }
-        return String::new();
+        // Root-shell injection keeps the prompt that was withheld before the
+        // write as a fail-open fallback. The initial login setup has no such
+        // fallback and therefore releases nothing when the marker is absent.
+        return state.fallback_visible.unwrap_or_default();
     }
     state
         .visible_prefix_length
@@ -3390,6 +3611,10 @@ const SSH_TUNNEL_OP_TIMEOUT: Duration = Duration::from_secs(5);
 /// 阻塞。这里强制 10 秒收口，让前端 RootAccessModal 的 loading 状态能
 /// 在合理时间内解除。
 const SUDO_VERIFY_TIMEOUT: Duration = Duration::from_secs(10);
+/// `su` 在独立 exec 通道里需要一个可用的控制终端来完成 PAM 密码交互。
+/// 这个标记由提权后的 shell 打印，位于密码提示之后，用来从 PTY 合并
+/// 输出中剥离 `Password:` / `密码:` 等前缀，避免污染 stat/base64 结果。
+const SU_EXEC_OUTPUT_MARKER: &str = "__FILETERM_SU_EXEC_OUTPUT__";
 /// Inline `SetRemoteFileAccessMode` verification budget. The full
 /// `SUDO_VERIFY_TIMEOUT` (10s) is appropriate for spawned file operations,
 /// but `SetRemoteFileAccessMode` runs inline on the worker loop — waiting
@@ -4170,6 +4395,11 @@ async fn run_worker_loop(
 
     // ── Main event loop: terminal reads + command dispatch ─────────────────
     let mut cwd_buffer = String::new();
+    // `__tdcwd` prints OSC7 (CWD) immediately before OSC1337 (user). SSH can
+    // split those two markers into separate packets; defer a CWD-only event
+    // until its matching user marker arrives so a root transition cannot
+    // briefly browse through the stale sudo method.
+    let mut pending_cwd_marker_without_user: Option<String> = None;
     let mut batch_buffer: Vec<u8> = Vec::new();
     let mut last_emit = Instant::now();
 
@@ -4195,9 +4425,12 @@ async fn run_worker_loop(
     let mut sudo_user: Option<String> = None;
     let mut sudo_password: Option<String> = None;
     let mut sudo_prompt_buffer = String::new();
-    let mut awaiting_sudo_password = false;
+    let mut awaiting_root_access_auth: Option<PendingRootAccessAuth> = None;
     let mut pending_sudo_password = String::new();
     let mut recent_terminal_input = String::new();
+    let mut pending_root_access_command: Option<PendingRootAccessAuth> = None;
+    let mut last_authenticated_root_access: Option<PendingRootAccessAuth> = None;
+    let mut root_file_access_method = RootFileAccessMethod::Sudo;
     // A new `sudo -i` shell discards the login shell's PROMPT_COMMAND.  Keep
     // Electron's two-second guard so a root prompt causes one safe reinject
     // of the OSC CWD/RemoteUser hook, not an injection loop.
@@ -4286,16 +4519,34 @@ async fn run_worker_loop(
                     return Ok(());
                 };
                 let data = coalesce_terminal_input(data, terminal_input_rx);
-                if capture_sudo_password_input(
+                let previous_pending_command = pending_root_access_command.clone();
+                if capture_root_access_password_input(
                     &data,
-                    &mut awaiting_sudo_password,
+                    &mut awaiting_root_access_auth,
                     &mut pending_sudo_password,
                     &mut recent_terminal_input,
                     &mut sudo_password,
+                    &mut last_authenticated_root_access,
+                    &mut pending_root_access_command,
                 ) {
                     let mut sessions = state.sessions.write().await;
                     if let Some(session) = sessions.get_mut(tab_id) {
-                        session.has_reusable_sudo_auth = sudo_password.is_some();
+                        session.has_reusable_sudo_auth = matches!(
+                            last_authenticated_root_access.as_ref(),
+                            Some(auth) if auth.method == RootFileAccessMethod::Sudo
+                        ) && sudo_password.is_some();
+                    }
+                }
+                if pending_root_access_command != previous_pending_command {
+                    if let Some(auth) = pending_root_access_command.as_ref() {
+                        crate::services::logging::ssh_debug(
+                            app,
+                            tab_id,
+                            format!(
+                                "interactive privilege command tracked method={:?} target_user={} interactive_shell={}",
+                                auth.method, auth.target_user, auth.interactive_shell
+                            ),
+                        );
                     }
                 }
                 if contains_interrupt_byte(&data) {
@@ -4353,16 +4604,34 @@ async fn run_worker_loop(
                 match cmd {
                     Some(cmd) => {
                         if let WorkerCmd::WriteTerminal(data) = &cmd {
-                            if capture_sudo_password_input(
+                            let previous_pending_command = pending_root_access_command.clone();
+                            if capture_root_access_password_input(
                                 data,
-                                &mut awaiting_sudo_password,
+                                &mut awaiting_root_access_auth,
                                 &mut pending_sudo_password,
                                 &mut recent_terminal_input,
                                 &mut sudo_password,
+                                &mut last_authenticated_root_access,
+                                &mut pending_root_access_command,
                             ) {
                                 let mut sessions = state.sessions.write().await;
                                 if let Some(session) = sessions.get_mut(tab_id) {
-                                    session.has_reusable_sudo_auth = sudo_password.is_some();
+                                    session.has_reusable_sudo_auth = matches!(
+                                        last_authenticated_root_access.as_ref(),
+                                        Some(auth) if auth.method == RootFileAccessMethod::Sudo
+                                    ) && sudo_password.is_some();
+                                }
+                            }
+                            if pending_root_access_command != previous_pending_command {
+                                if let Some(auth) = pending_root_access_command.as_ref() {
+                                    crate::services::logging::ssh_debug(
+                                        app,
+                                        tab_id,
+                                        format!(
+                                            "interactive privilege command tracked method={:?} target_user={} interactive_shell={}",
+                                            auth.method, auth.target_user, auth.interactive_shell
+                                        ),
+                                    );
                                 }
                             }
                         }
@@ -4374,6 +4643,7 @@ async fn run_worker_loop(
                                 sftp,
                                 &transfer_sftp_slot,
                                 &mut file_access_mode,
+                                &mut root_file_access_method,
                                 &mut sudo_user,
                                 &mut sudo_password,
                                 tab_id,
@@ -4387,6 +4657,7 @@ async fn run_worker_loop(
                                 &handle,
                                 &shell_writer,
                                 &mut file_access_mode,
+                                &mut root_file_access_method,
                                 &mut sudo_user,
                                 &mut sudo_password,
                                 tab_id,
@@ -4434,26 +4705,57 @@ async fn run_worker_loop(
                     Some(ChannelMsg::Data { data }) => {
                         let bytes = data.as_ref();
                         let text = String::from_utf8_lossy(bytes);
-                        if track_sudo_prompt_from_terminal(
+                        let previous_awaiting_auth = awaiting_root_access_auth.clone();
+                        if track_root_access_prompt_from_terminal(
                             &text,
                             &mut sudo_prompt_buffer,
-                            &mut awaiting_sudo_password,
+                            &mut awaiting_root_access_auth,
                             &mut pending_sudo_password,
                             &mut sudo_password,
+                            &mut last_authenticated_root_access,
+                            &mut pending_root_access_command,
                         ) {
                             let mut sessions = state.sessions.write().await;
                             if let Some(session) = sessions.get_mut(tab_id) {
                                 session.has_reusable_sudo_auth = false;
                             }
                         }
+                        if awaiting_root_access_auth != previous_awaiting_auth {
+                            if let Some(auth) = awaiting_root_access_auth.as_ref() {
+                                crate::services::logging::ssh_debug(
+                                    app,
+                                    tab_id,
+                                    format!(
+                                        "root auth prompt tracked method={:?} target_user={} pending_command={:?}",
+                                        auth.method,
+                                        auth.target_user,
+                                        pending_root_access_command
+                                            .as_ref()
+                                            .map(|pending| pending.method)
+                                    ),
+                                );
+                            }
+                        }
                         let (new_cwd, new_user) = track_cwd_and_user(&text, &mut cwd_buffer);
+                        let deferred_cwd_to_follow = if new_user.is_some() {
+                            pending_cwd_marker_without_user.take()
+                        } else {
+                            if let Some(cwd) = new_cwd.as_ref() {
+                                pending_cwd_marker_without_user = Some(cwd.clone());
+                            }
+                            None
+                        };
                         let mut cwd_to_follow = None;
-                        let mut file_mode_switch: Option<(String, Option<String>)> = None;
+                        let mut file_mode_switch: Option<(
+                            String,
+                            Option<String>,
+                            RootFileAccessMethod,
+                        )> = None;
                         let mut session_state_changed = false;
                         if new_cwd.is_some() || new_user.is_some() {
                             let mut sessions = state.sessions.write().await;
                             if let Some(s) = sessions.get_mut(tab_id) {
-                                if let Some(cwd) = new_cwd {
+                                if let Some(cwd) = new_cwd.as_ref() {
                                     if s.shell_cwd.as_deref() != Some(cwd.as_str()) {
                                         crate::services::logging::ssh_debug(
                                             app,
@@ -4462,8 +4764,11 @@ async fn run_worker_loop(
                                         );
                                         s.shell_cwd = Some(cwd.clone());
                                         session_state_changed = true;
-                                        if s.follow_shell_cwd {
-                                            cwd_to_follow = Some(cwd);
+                                        // When the user marker is in a later
+                                        // packet, wait for that packet before
+                                        // opening the root exec channel.
+                                        if s.follow_shell_cwd && new_user.is_some() {
+                                            cwd_to_follow = Some(cwd.clone());
                                         }
                                     }
                                 }
@@ -4473,42 +4778,106 @@ async fn run_worker_loop(
                                     if s.login_user.is_none() {
                                         s.login_user = Some(user.clone());
                                     }
-                                    // shell_user 始终更新为最新观察值
-                                    if s.shell_user.as_deref() != Some(user.as_str()) {
+                                    let shell_user_changed =
+                                        s.shell_user.as_deref() != Some(user.as_str());
+                                    if shell_user_changed {
                                         s.shell_user = Some(user.clone());
                                         session_state_changed = true;
-                                        // 对照 Electron resolveShellFileAccess：
-                                        // shell user != login user ⇒ 自动切 root 视角
-                                        // shell user == login user ⇒ 切回 user 视角
-                                        let login = s.login_user.clone();
-                                        if let Some(login_user) = login {
-                                            let (target_mode, observed_sudo_user) =
-                                                resolve_shell_file_access(&login_user, user);
-                                            if s.file_access_mode != target_mode {
-                                                s.file_access_mode = target_mode.to_string();
-                                                if let Some(observed_sudo_user) = observed_sudo_user {
-                                                    // sudo -i / su 切到其他用户：用实际 shell
-                                                    // 身份作为 root 文件视角的目标用户。
-                                                    s.sudo_user = Some(observed_sudo_user.clone());
-                                                    s.has_reusable_sudo_auth =
-                                                        sudo_password.is_some();
-                                                    file_mode_switch = Some((
-                                                        target_mode.to_string(),
-                                                        Some(observed_sudo_user),
-                                                    ));
-                                                } else {
-                                                    // `exit` 回到登录用户时必须立即恢复 user
-                                                    // 视角。保留 sudo_user / 密码缓存只用于下次
-                                                    // 手动切 root，不得让工具栏继续显示 root。
-                                                    file_mode_switch = Some((
-                                                        target_mode.to_string(),
-                                                        s.sudo_user.clone(),
-                                                    ));
+                                    }
+                                    // 对照 Electron resolveShellFileAccess：
+                                    // shell user != login user ⇒ 自动切 root 视角
+                                    // shell user == login user ⇒ 切回 user 视角。
+                                    // 即使 RemoteUser 没变化也要重新同步提权方式：连续
+                                    // sudo/su 都可能上报 root，但独立 exec 必须采用本次方法。
+                                    let login = s.login_user.clone();
+                                    if let Some(login_user) = login {
+                                        let (target_mode, observed_sudo_user) =
+                                            resolve_shell_file_access(&login_user, user);
+                                        if new_cwd.is_none() {
+                                            if let Some(deferred_cwd) =
+                                                deferred_cwd_to_follow.as_ref()
+                                            {
+                                                if s.follow_shell_cwd {
+                                                    cwd_to_follow = Some(deferred_cwd.clone());
                                                 }
-                                                // 身份变化即使没有伴随 CWD 变化也要刷新当前
-                                                // 目录，确保列表内容和访问模型同步切换。
-                                                cwd_to_follow = s.shell_cwd.clone();
                                             }
+                                        }
+                                        // Only a shell identity transition may auto-switch the
+                                        // visible file mode. Repeated RemoteUser markers from the
+                                        // same root shell must not undo a manual user/root choice.
+                                        let mode_changed =
+                                            shell_user_changed && s.file_access_mode != target_mode;
+                                        if mode_changed {
+                                            s.file_access_mode = target_mode.to_string();
+                                        }
+                                        if let Some(observed_sudo_user) = observed_sudo_user {
+                                            let access_method = root_access_method_for_shell_user(
+                                                &observed_sudo_user,
+                                                last_authenticated_root_access.as_ref(),
+                                                pending_root_access_command.as_ref(),
+                                            );
+                                            crate::services::logging::ssh_debug(
+                                                app,
+                                                tab_id,
+                                                format!(
+                                                    "RemoteUser sync login_user={} shell_user={} target_mode={} method={:?} pending_method={:?} authenticated_method={:?} password_cached={}",
+                                                    login_user,
+                                                    user,
+                                                    target_mode,
+                                                    access_method,
+                                                    pending_root_access_command
+                                                        .as_ref()
+                                                        .map(|auth| auth.method),
+                                                    last_authenticated_root_access
+                                                        .as_ref()
+                                                        .map(|auth| auth.method),
+                                                    sudo_password.is_some(),
+                                                ),
+                                            );
+                                            let access_changed =
+                                                root_file_access_method != access_method
+                                                    || sudo_user.as_deref()
+                                                        != Some(observed_sudo_user.as_str());
+                                            s.sudo_user = Some(observed_sudo_user.clone());
+                                            s.has_reusable_sudo_auth =
+                                                access_method == RootFileAccessMethod::Sudo
+                                                    && sudo_password.is_some();
+                                            if access_changed {
+                                                session_state_changed = true;
+                                            }
+                                            if mode_changed || access_changed {
+                                                let next_mode = if mode_changed {
+                                                    target_mode.to_string()
+                                                } else {
+                                                    file_access_mode.clone()
+                                                };
+                                                file_mode_switch = Some((
+                                                    next_mode,
+                                                    Some(observed_sudo_user),
+                                                    access_method,
+                                                ));
+                                            }
+                                        } else if mode_changed {
+                                            // `exit` 回到登录用户时必须立即恢复 user
+                                            // 视角。保留 sudo_user / 密码缓存只用于下次
+                                            // 手动切 root，不得让工具栏继续显示 root。
+                                            file_mode_switch = Some((
+                                                target_mode.to_string(),
+                                                s.sudo_user.clone(),
+                                                RootFileAccessMethod::Sudo,
+                                            ));
+                                        }
+                                        if shell_user_changed && target_mode == "user" {
+                                            // The interactive root shell ended. Do not let the
+                                            // previous `su -` command influence a later root
+                                            // marker that belongs to a new transition.
+                                            pending_root_access_command = None;
+                                            pending_sudo_password.clear();
+                                        }
+                                        if mode_changed || file_mode_switch.is_some() {
+                                            // 身份或提权方式变化即使没有伴随 CWD 变化也要刷新
+                                            // 当前目录，确保列表内容和访问模型同步切换。
+                                            cwd_to_follow = s.shell_cwd.clone();
                                         }
                                     }
                                 }
@@ -4516,9 +4885,10 @@ async fn run_worker_loop(
                             drop(sessions);
                             // Keep worker-local auth/access state in lockstep
                             // before dispatching the follow task below.
-                            if let Some((mode, su_user)) = file_mode_switch {
+                            if let Some((mode, su_user, access_method)) = file_mode_switch {
                                 file_access_mode = mode;
                                 sudo_user = su_user;
+                                root_file_access_method = access_method;
                             }
                             if let (Some(cwd), Some(sftp)) = (cwd_to_follow, sftp_arc.as_ref()) {
                                 tokio::spawn(follow_shell_cwd(
@@ -4528,6 +4898,7 @@ async fn run_worker_loop(
                                     Arc::clone(sftp),
                                     Arc::clone(&handle),
                                     file_access_mode.clone(),
+                                    root_file_access_method,
                                     sudo_user.clone(),
                                     sudo_password.clone(),
                                 ));
@@ -4548,7 +4919,63 @@ async fn run_worker_loop(
                             }
                         }
 
-                        let visible = suppress_shell_setup_echo(&mut pending_shell_setup_echo, &text);
+                        let mut visible = suppress_shell_setup_echo(&mut pending_shell_setup_echo, &text);
+                        // A newly-created root login shell prints its first
+                        // prompt before FileTerm can inject the CWD hook. Do
+                        // not forward that prompt yet: the hook intentionally
+                        // causes the shell to print a replacement prompt, so
+                        // forwarding both would render `root# root#` on one
+                        // line. Keep the original as a fail-open fallback in
+                        // case the injection cannot be completed.
+                        if pending_shell_setup_echo.is_none()
+                            && !shell_setup_waiting_for_prompt
+                            && shell_cwd_setup_for_platform(&platform).is_some()
+                            && looks_like_root_prompt(&visible)
+                            && last_shell_setup_injection.elapsed() > Duration::from_secs(2)
+                        {
+                            let shell_is_root = state
+                                .sessions
+                                .read()
+                                .await
+                                .get(tab_id)
+                                .and_then(|session| session.shell_user.as_deref())
+                                == Some("root");
+                            if !shell_is_root {
+                                if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
+                                    let (banner, prompt_tail) =
+                                        split_prompt_tail_for_setup_wait(&visible);
+                                    last_shell_setup_injection = Instant::now();
+                                    match write_shell_data(
+                                        &shell_writer,
+                                        format!(" {setup}\r").into_bytes(),
+                                    )
+                                    .await
+                                    {
+                                        Ok(()) => {
+                                            visible = banner;
+                                            pending_shell_setup_echo = Some(
+                                                ShellSetupEchoSuppression::with_fallback(
+                                                    prompt_tail,
+                                                ),
+                                            );
+                                        }
+                                        Err(error) => {
+                                            // Fail open: retain the original
+                                            // prompt if the hook cannot be
+                                            // written to the shell channel.
+                                            visible = format!("{banner}{prompt_tail}");
+                                            crate::services::logging::session(
+                                                app,
+                                                "WARN",
+                                                "ssh",
+                                                tab_id,
+                                                format!("root shell setup write failed: {error}"),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         // shell_setup_waiting_for_prompt 期间，shell 启动输出的 prompt
                         // 尾部不能立即 forward——否则群晖等设备会显示多个重复 prompt
                         // （shell 启动脚本可能执行命令后再次输出 prompt）。把 prompt 尾部
@@ -4605,29 +5032,28 @@ async fn run_worker_loop(
                             }
                         }
 
-                        if pending_shell_setup_echo.is_none()
-                            && shell_cwd_setup_for_platform(&platform).is_some()
-                            && looks_like_root_prompt(&text)
-                            && last_shell_setup_injection.elapsed() > Duration::from_secs(2)
-                        {
-                            let shell_is_root = state
-                                .sessions
-                                .read()
-                                .await
-                                .get(tab_id)
-                                .and_then(|session| session.shell_user.as_deref())
-                                == Some("root");
-                            if !shell_is_root {
-                                if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
-                                    last_shell_setup_injection = Instant::now();
-                                    if write_shell_data(&shell_writer, format!(" {setup}\r").into_bytes()).await.is_ok() {
-                                        pending_shell_setup_echo = Some(ShellSetupEchoSuppression::new(false));
-                                    }
-                                }
-                            }
-                        }
                     }
                     Some(ChannelMsg::ExtendedData { data, .. }) => {
+                        // PTY implementations normally merge stderr into Data,
+                        // but some SSH servers still deliver the password
+                        // prompt as ExtendedData. Feed both streams through
+                        // the auth detector so `su -` credentials are captured
+                        // before the file exec channel is opened.
+                        let text = String::from_utf8_lossy(data.as_ref());
+                        if track_root_access_prompt_from_terminal(
+                            &text,
+                            &mut sudo_prompt_buffer,
+                            &mut awaiting_root_access_auth,
+                            &mut pending_sudo_password,
+                            &mut sudo_password,
+                            &mut last_authenticated_root_access,
+                            &mut pending_root_access_command,
+                        ) {
+                            let mut sessions = state.sessions.write().await;
+                            if let Some(session) = sessions.get_mut(tab_id) {
+                                session.has_reusable_sudo_auth = false;
+                            }
+                        }
                         batch_buffer.extend_from_slice(data.as_ref());
                         if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {
                             flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
@@ -4669,6 +5095,7 @@ async fn handle_worker_cmd_without_sftp(
     handle: &Handle<ClientHandler>,
     shell_writer: &SshShellWriteHalf,
     file_access_mode: &mut String,
+    root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
     tab_id: &str,
@@ -4790,7 +5217,7 @@ async fn handle_worker_cmd_without_sftp(
         } => {
             // root 模式走 exec channel（handle.channel_open_session().exec()），
             // 不依赖 SFTP subsystem。即使用户的服务器拒绝 SFTP（Timeout /
-            // disabled），root 视角的文件操作仍可通过 sudo + exec 完成。
+            // disabled），root 视角的文件操作仍可通过 sudo/su + exec 完成。
             // 对照 Electron verifyRootFileAccess 先验证凭据。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
@@ -4806,12 +5233,18 @@ async fn handle_worker_cmd_without_sftp(
             }
 
             if mode == "root" {
-                // 与主路径一致：用 ROOT_ACCESS_VERIFY_TIMEOUT 包裹 sudo
-                // 验证，避免 `exec_shell_file_command` 内部 10s 超时把
+                // 与原有手动 root 视图流程一致：弹窗输入始终验证 sudo 凭据。
+                // 用外层短超时避免 `exec_shell_file_command` 内部 10s 超时把
                 // worker 主循环卡死，导致终端 select! 无法响应 Ctrl+C。
                 let verify = match timeout(
                     ROOT_ACCESS_VERIFY_TIMEOUT,
-                    exec_shell_file_command(handle, "true", sudo_user, sudo_password),
+                    exec_shell_file_command(
+                        handle,
+                        "true",
+                        RootFileAccessMethod::Sudo,
+                        sudo_user,
+                        sudo_password,
+                    ),
                 )
                 .await
                 {
@@ -4825,10 +5258,12 @@ async fn handle_worker_cmd_without_sftp(
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
+                *root_file_access_method = RootFileAccessMethod::Sudo;
             }
 
             *file_access_mode = mode.clone();
-            let has_reusable = sudo_password.is_some();
+            let has_reusable =
+                *root_file_access_method == RootFileAccessMethod::Sudo && sudo_password.is_some();
             let su_user = sudo_user.clone();
             let mut sessions = state.sessions.write().await;
             if let Some(s) = sessions.get_mut(tab_id) {
@@ -4858,6 +5293,7 @@ async fn handle_worker_cmd(
     sftp: &SharedSftpSession,
     transfer_sftp_slot: &TransferSftpSlot,
     file_access_mode: &mut String,
+    root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
     tab_id: &str,
@@ -4962,11 +5398,12 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
                 let result = if fam == "root" {
-                    stat_root_remote_file(&handle, &path, &su, &sp).await
+                    stat_root_remote_file(&handle, &path, method, &su, &sp).await
                 } else {
                     let sftp_guard = sftp.write().await;
                     match sftp_guard.metadata(&path).await {
@@ -4998,24 +5435,56 @@ async fn handle_worker_cmd(
             let transfer_sftp_slot = Arc::clone(transfer_sftp_slot);
             let app = app.clone();
             let tab_id = tab_id.to_string();
+            let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
             tokio::spawn(async move {
-                let transfer_sftp =
-                    acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id).await;
-                let sftp_guard = transfer_sftp.write().await;
-                let result = upload_local_file(
-                    &sftp_guard,
-                    &local_path,
-                    &remote_path,
-                    resume_offset,
-                    &transfer_id,
-                    cancel,
-                    &app,
-                )
-                .await;
-                drop(sftp_guard);
-                if result.is_err() {
-                    invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
-                }
+                // Root uploads are deliberately staged under /tmp first. The
+                // login user's SFTP channel transfers the bulk bytes there,
+                // then CommitRemoteStaging performs one short sudo/su command
+                // to create the protected .fileterm-part. This keeps su out
+                // of the data stream; its PTY/password semantics only apply
+                // to the final privileged filesystem operation.
+                let use_login_sftp_staging =
+                    fam == "root" && is_root_upload_staging_path(&remote_path);
+                let result = if use_login_sftp_staging || fam != "root" {
+                    let transfer_sftp =
+                        acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id)
+                            .await;
+                    let sftp_guard = transfer_sftp.write().await;
+                    let result = upload_local_file(
+                        &sftp_guard,
+                        &local_path,
+                        &remote_path,
+                        resume_offset,
+                        &transfer_id,
+                        cancel,
+                        &app,
+                    )
+                    .await;
+                    drop(sftp_guard);
+                    if result.is_err() {
+                        invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
+                    }
+                    result
+                } else {
+                    // Defensive fallback for legacy callers that do not use
+                    // the root staging contract.
+                    upload_root_local_file(
+                        &handle,
+                        &local_path,
+                        &remote_path,
+                        resume_offset,
+                        &transfer_id,
+                        cancel,
+                        &app,
+                        method,
+                        &su,
+                        &sp,
+                    )
+                    .await
+                };
                 let _ = respond_to.send(result);
             });
             Ok(false)
@@ -5035,6 +5504,7 @@ async fn handle_worker_cmd(
             let app = app.clone();
             let tab_id = tab_id.to_string();
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5047,6 +5517,7 @@ async fn handle_worker_cmd(
                         &transfer_id,
                         cancel,
                         &app,
+                        method,
                         &su,
                         &sp,
                     )
@@ -5081,7 +5552,7 @@ async fn handle_worker_cmd(
             destination_path,
             respond_to,
         } => {
-            // root 模式下需要 exec sudo mv，可能因 sudo 验证或大文件 rename 慢，
+            // root 模式下需要 exec sudo/su mv，可能因认证或大文件 rename 慢，
             // spawn 避免阻塞主循环。
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
@@ -5089,12 +5560,20 @@ async fn handle_worker_cmd(
             let app = app.clone();
             let tab_id = tab_id.to_string();
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
                 let result = if fam == "root" {
-                    replace_root_remote_file(&handle, &partial_path, &destination_path, &su, &sp)
-                        .await
+                    replace_root_remote_file(
+                        &handle,
+                        &partial_path,
+                        &destination_path,
+                        method,
+                        &su,
+                        &sp,
+                    )
+                    .await
                 } else {
                     let transfer_sftp =
                         acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id)
@@ -5119,11 +5598,20 @@ async fn handle_worker_cmd(
         } => {
             let handle = Arc::clone(handle);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
                 let result = if fam == "root" {
-                    commit_root_staging_file(&handle, &staging_path, &partial_path, &su, &sp).await
+                    commit_root_staging_file(
+                        &handle,
+                        &staging_path,
+                        &partial_path,
+                        method,
+                        &su,
+                        &sp,
+                    )
+                    .await
                 } else {
                     Err("root staging 只能在 SSH root 文件模式下提交".to_string())
                 };
@@ -5137,6 +5625,7 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5146,6 +5635,7 @@ async fn handle_worker_cmd(
                         exec_shell_file_command(
                             &handle,
                             &format!("rm -f -- {}", shell_quote(&path)),
+                            method,
                             &su,
                             &sp,
                         ),
@@ -5179,13 +5669,14 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_list_dir_via_shell(&handle, &path, &su, &sp),
+                        exec_list_dir_via_shell(&handle, &path, method, &su, &sp),
                     )
                     .await
                     {
@@ -5211,13 +5702,14 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_read_file_via_shell(&handle, &path, &encoding, &su, &sp),
+                        exec_read_file_via_shell(&handle, &path, &encoding, method, &su, &sp),
                     )
                     .await
                     {
@@ -5249,13 +5741,16 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_write_file_via_shell(&handle, &path, &content, &encoding, &su, &sp),
+                        exec_write_file_via_shell(
+                            &handle, &path, &content, &encoding, method, &su, &sp,
+                        ),
                     )
                     .await
                     {
@@ -5286,6 +5781,7 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5296,6 +5792,7 @@ async fn handle_worker_cmd(
                         exec_shell_file_command(
                             &handle,
                             &format!("mkdir -p {}", shell_quote(&full_path)),
+                            method,
                             &su,
                             &sp,
                         ),
@@ -5325,6 +5822,7 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5332,7 +5830,9 @@ async fn handle_worker_cmd(
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_write_file_via_shell(&handle, &full_path, "", "utf-8", &su, &sp),
+                        exec_write_file_via_shell(
+                            &handle, &full_path, "", "utf-8", method, &su, &sp,
+                        ),
                     )
                     .await
                     {
@@ -5363,6 +5863,7 @@ async fn handle_worker_cmd(
         } => {
             let handle = Arc::clone(handle);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5385,7 +5886,7 @@ async fn handle_worker_cmd(
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_shell_file_command(&handle, &cmd_str, &su, &sp),
+                        exec_shell_file_command(&handle, &cmd_str, method, &su, &sp),
                     )
                     .await
                     {
@@ -5415,6 +5916,7 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5428,6 +5930,7 @@ async fn handle_worker_cmd(
                                 shell_quote(&target_path),
                                 shell_quote(&destination_path)
                             ),
+                            method,
                             &su,
                             &sp,
                         ),
@@ -5461,6 +5964,7 @@ async fn handle_worker_cmd(
             let handle = Arc::clone(handle);
             let sftp = Arc::clone(sftp);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5475,6 +5979,7 @@ async fn handle_worker_cmd(
                         exec_shell_file_command(
                             &handle,
                             &format!("mv {} {}", shell_quote(&target_path), shell_quote(&dest)),
+                            method,
                             &su,
                             &sp,
                         ),
@@ -5507,6 +6012,7 @@ async fn handle_worker_cmd(
         } => {
             let handle = Arc::clone(handle);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5518,7 +6024,7 @@ async fn handle_worker_cmd(
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_shell_file_command(&handle, &cmd_str, &su, &sp),
+                        exec_shell_file_command(&handle, &cmd_str, method, &su, &sp),
                     )
                     .await
                     {
@@ -5553,6 +6059,7 @@ async fn handle_worker_cmd(
             // - `apply_to='directories'` → `chmod <mode> <path>` + `find <path> -type d -exec chmod <mode> {} +`
             let handle = Arc::clone(handle);
             let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
@@ -5583,7 +6090,7 @@ async fn handle_worker_cmd(
                 let res = if fam == "root" {
                     match timeout(
                         FILE_OPERATION_TIMEOUT,
-                        exec_shell_file_command(&handle, &cmd_str, &su, &sp),
+                        exec_shell_file_command(&handle, &cmd_str, method, &su, &sp),
                     )
                     .await
                     {
@@ -5630,7 +6137,7 @@ async fn handle_worker_cmd(
             }
 
             if mode == "root" {
-                // 先验证 sudo 凭据，失败则回滚。`exec_shell_file_command`
+                // 手动弹窗流程始终验证 sudo 凭据，失败则回滚。`exec_shell_file_command`
                 // 内部最长会等 SUDO_VERIFY_TIMEOUT（10s）才放弃，对 worker
                 // 主循环来说太长——一旦 sudo 提示卡住或网络抖动，整个
                 // 终端 select! 都停在这里，连 Ctrl+C 都进不去。这里用
@@ -5639,7 +6146,13 @@ async fn handle_worker_cmd(
                 // 让 worker loop 沉默地阻塞数秒。
                 let verify = match timeout(
                     ROOT_ACCESS_VERIFY_TIMEOUT,
-                    exec_shell_file_command(handle, "true", sudo_user, sudo_password),
+                    exec_shell_file_command(
+                        handle,
+                        "true",
+                        RootFileAccessMethod::Sudo,
+                        sudo_user,
+                        sudo_password,
+                    ),
                 )
                 .await
                 {
@@ -5654,10 +6167,12 @@ async fn handle_worker_cmd(
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
+                *root_file_access_method = RootFileAccessMethod::Sudo;
             }
 
             *file_access_mode = mode.clone();
-            let has_reusable = sudo_password.is_some();
+            let has_reusable =
+                *root_file_access_method == RootFileAccessMethod::Sudo && sudo_password.is_some();
             let su_user = sudo_user.clone();
             let mut sessions = state.sessions.write().await;
             if let Some(s) = sessions.get_mut(tab_id) {
@@ -5858,6 +6373,231 @@ async fn write_local_transfer_chunk(
         _ = cancel.cancelled() => Err(TRANSFER_CANCELED.to_string()),
         result = file.write_all(bytes) => result.map_err(|error| error.to_string()),
     }
+}
+
+#[allow(clippy::too_many_arguments)] // Root transfer context mirrors the resumable worker contract.
+async fn upload_root_local_file(
+    handle: &Handle<ClientHandler>,
+    local_path: &str,
+    remote_path: &str,
+    resume_offset: u64,
+    transfer_id: &str,
+    cancel: tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    access_method: RootFileAccessMethod,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<(), String> {
+    if access_method == RootFileAccessMethod::Su {
+        return upload_root_local_file_via_su_pty(
+            handle,
+            local_path,
+            remote_path,
+            resume_offset,
+            transfer_id,
+            cancel,
+            app,
+            sudo_user,
+            sudo_password,
+        )
+        .await;
+    }
+    let metadata = tokio::fs::metadata(local_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    let total = metadata.len();
+    if resume_offset > total {
+        return Err("上传断点大于源文件".to_string());
+    }
+    let mut source = tokio::fs::File::open(local_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    source
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let shell_command = root_upload_shell_command(remote_path, resume_offset);
+    let (command, password) =
+        root_file_command(access_method, sudo_user, sudo_password, &shell_command);
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    channel
+        .exec(true, command.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Some(password) = password.as_deref() {
+        channel
+            .data_bytes(format!("{password}\n").into_bytes())
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+
+    let mut transferred = resume_offset;
+    let mut buffer = vec![0_u8; 64 * 1024];
+    crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    loop {
+        let read = read_local_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
+        if read == 0 {
+            break;
+        }
+        if cancel.is_cancelled() {
+            return Err(TRANSFER_CANCELED.to_string());
+        }
+        channel
+            .data_bytes(buffer[..read].to_vec())
+            .await
+            .map_err(|error| error.to_string())?;
+        transferred += read as u64;
+        crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    }
+    channel.eof().await.map_err(|error| error.to_string())?;
+
+    let mut stderr = String::new();
+    let mut exit_status = None;
+    loop {
+        let message = match timeout(SUDO_VERIFY_TIMEOUT, channel.wait()).await {
+            Ok(message) => message,
+            Err(_) => return Err("root 上传完成后远端命令未退出，已超时".to_string()),
+        };
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::ExtendedData { data, .. } => {
+                if stderr.len() < 4096 {
+                    stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
+                }
+            }
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => {
+                exit_status = Some(status);
+            }
+            ChannelMsg::Eof | ChannelMsg::Close => break,
+            _ => {}
+        }
+    }
+    if exit_status.is_some_and(|status| status != 0) {
+        let detail = stderr.trim();
+        let detail = if detail.is_empty() {
+            String::new()
+        } else {
+            format!("：{detail}")
+        };
+        return Err(format!(
+            "root 上传命令失败（exit={}）{detail}",
+            exit_status.unwrap_or(1)
+        ));
+    }
+    let lower = stderr.to_lowercase();
+    if root_access_auth_failed(&lower) {
+        return Err(match access_method {
+            RootFileAccessMethod::Sudo => "sudo authentication failed".to_string(),
+            RootFileAccessMethod::Su => "su authentication failed".to_string(),
+        });
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn upload_root_local_file_via_su_pty(
+    handle: &Handle<ClientHandler>,
+    local_path: &str,
+    remote_path: &str,
+    resume_offset: u64,
+    transfer_id: &str,
+    cancel: tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<(), String> {
+    let metadata = tokio::fs::metadata(local_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    let total = metadata.len();
+    if resume_offset > total {
+        return Err("上传断点大于源文件".to_string());
+    }
+    let mut source = tokio::fs::File::open(local_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    source
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let shell_command = root_upload_base64_shell_command(remote_path, resume_offset);
+    let command = su_exec_command(&shell_command);
+    let (command, password) =
+        root_file_command(RootFileAccessMethod::Su, sudo_user, sudo_password, &command);
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    request_root_exec_pty(&channel).await?;
+    channel
+        .exec(true, command.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+    let _ = wait_for_su_output_marker(&mut channel, password.as_deref()).await?;
+
+    let mut transferred = resume_offset;
+    // 3,000 raw bytes become 4,000 base64 characters, below the usual
+    // canonical-PTY line limit while retaining a 3-byte boundary.
+    let mut buffer = vec![0_u8; 3000];
+    crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    loop {
+        let read = read_local_transfer_chunk(&mut source, &mut buffer, &cancel).await?;
+        if read == 0 {
+            break;
+        }
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&buffer[..read]);
+        channel
+            .data_bytes(format!("{encoded}\n").into_bytes())
+            .await
+            .map_err(|error| error.to_string())?;
+        transferred += read as u64;
+        crate::services::transfers::report_progress(app, transfer_id, transferred, total).await;
+    }
+    // The PTY-backed base64 decoder needs a terminal VEOF (Ctrl+D), not only
+    // an SSH channel EOF, to finish decoding and let the su command exit.
+    channel
+        .data_bytes(vec![0x04])
+        .await
+        .map_err(|error| error.to_string())?;
+    wait_for_root_stream_exit(&mut channel).await?;
+    Ok(())
+}
+
+fn root_upload_shell_command(remote_path: &str, resume_offset: u64) -> String {
+    let parent = std::path::Path::new(remote_path)
+        .parent()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "/".to_string());
+    let write_operator = if resume_offset == 0 { ">" } else { ">>" };
+    format!(
+        "set -e\nmkdir -p {}\ncat {} {}",
+        shell_quote(&parent),
+        write_operator,
+        shell_quote(remote_path),
+    )
+}
+
+fn root_upload_base64_shell_command(remote_path: &str, resume_offset: u64) -> String {
+    let parent = std::path::Path::new(remote_path)
+        .parent()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "/".to_string());
+    let write_operator = if resume_offset == 0 { ">" } else { ">>" };
+    format!(
+        "set -e\nmkdir -p {}\nbase64 -d {} {}",
+        shell_quote(&parent),
+        write_operator,
+        shell_quote(remote_path),
+    )
 }
 
 async fn upload_local_file(
@@ -6071,22 +6811,35 @@ async fn replace_remote_file(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// sudo / root-mode helpers (exec channel + `sudo -S` / `sudo -n`)
+// root-mode helpers (exec channel + `sudo` / `su`)
 // ─────────────────────────────────────────────────────────────────────────────
+
+fn is_root_upload_staging_path(path: &str) -> bool {
+    path.starts_with("/tmp/fileterm-root-upload-")
+}
+
+fn root_stat_shell_command(path: &str) -> String {
+    format!(
+        "if [ -e {} ] && [ ! -d {} ]; then stat -c '%s|%Y' -- {}; fi",
+        shell_quote(path),
+        shell_quote(path),
+        shell_quote(path),
+    )
+}
 
 async fn stat_root_remote_file(
     handle: &Handle<ClientHandler>,
     path: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<Option<TransferFileStat>, String> {
-    let output = exec_shell_file_command(
-        handle,
-        &format!("stat -c '%s|%Y' -- {}", shell_quote(path)),
-        sudo_user,
-        sudo_password,
-    )
-    .await?;
+    // A missing .fileterm-part means a fresh upload, not a failed stat.
+    // Keep the shell command successful in that case so exec status handling
+    // can distinguish it from an actual root/su failure.
+    let command = root_stat_shell_command(path);
+    let output =
+        exec_shell_file_command(handle, &command, access_method, sudo_user, sudo_password).await?;
     let Some((size, modified_at)) = output
         .trim()
         .lines()
@@ -6111,6 +6864,7 @@ async fn replace_root_remote_file(
     handle: &Handle<ClientHandler>,
     partial_path: &str,
     destination_path: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
@@ -6133,7 +6887,7 @@ async fn replace_root_remote_file(
         shell_quote(partial_path),
         shell_quote(destination_path),
     );
-    exec_shell_file_command(handle, &command, sudo_user, sudo_password)
+    exec_shell_file_command(handle, &command, access_method, sudo_user, sudo_password)
         .await
         .map(|_| ())
 }
@@ -6142,6 +6896,7 @@ async fn commit_root_staging_file(
     handle: &Handle<ClientHandler>,
     staging_path: &str,
     partial_path: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
@@ -6150,13 +6905,14 @@ async fn commit_root_staging_file(
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| "/".to_string());
     let command = format!(
-        "set -e\nmkdir -p {}\nrm -f -- {}\nmv -f -- {} {}",
+        "set -e\nmkdir -p {}\nrm -f -- {}\ncat -- {} > {}\nrm -f -- {}",
         shell_quote(&parent),
         shell_quote(partial_path),
         shell_quote(staging_path),
         shell_quote(partial_path),
+        shell_quote(staging_path),
     );
-    exec_shell_file_command(handle, &command, sudo_user, sudo_password)
+    exec_shell_file_command(handle, &command, access_method, sudo_user, sudo_password)
         .await
         .map(|_| ())
 }
@@ -6170,14 +6926,31 @@ async fn download_root_remote_file(
     transfer_id: &str,
     cancel: tokio_util::sync::CancellationToken,
     app: &AppHandle,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
-    let source = stat_root_remote_file(handle, remote_path, sudo_user, sudo_password)
-        .await?
-        .ok_or_else(|| "root 下载源文件不存在或无法读取".to_string())?;
+    let source =
+        stat_root_remote_file(handle, remote_path, access_method, sudo_user, sudo_password)
+            .await?
+            .ok_or_else(|| "root 下载源文件不存在或无法读取".to_string())?;
     if resume_offset > source.size {
         return Err("root 下载断点大于源文件".to_string());
+    }
+    if access_method == RootFileAccessMethod::Su {
+        return download_root_remote_file_via_su_pty(
+            handle,
+            remote_path,
+            local_path,
+            resume_offset,
+            transfer_id,
+            cancel,
+            app,
+            &source,
+            sudo_user,
+            sudo_password,
+        )
+        .await;
     }
     if let Some(parent) = std::path::Path::new(local_path).parent() {
         tokio::fs::create_dir_all(parent)
@@ -6207,20 +6980,8 @@ async fn download_root_remote_file(
             shell_quote(remote_path)
         )
     };
-    let user = sudo_user.as_deref().unwrap_or("root");
-    let command = if sudo_password.is_some() {
-        format!(
-            "sudo -S -p '' -u {} sh -lc {}",
-            shell_quote(user),
-            shell_quote(&shell_command)
-        )
-    } else {
-        format!(
-            "sudo -n -u {} sh -lc {}",
-            shell_quote(user),
-            shell_quote(&shell_command)
-        )
-    };
+    let (command, password) =
+        root_file_command(access_method, sudo_user, sudo_password, &shell_command);
     let mut channel = handle
         .channel_open_session()
         .await
@@ -6229,7 +6990,7 @@ async fn download_root_remote_file(
         .exec(true, command.as_str())
         .await
         .map_err(|error| error.to_string())?;
-    if let Some(password) = sudo_password {
+    if let Some(password) = password.as_deref() {
         channel
             .data(format!("{password}\n").as_bytes())
             .await
@@ -6284,85 +7045,576 @@ async fn download_root_remote_file(
     Ok(())
 }
 
+fn append_base64_stream_bytes(encoded: &mut Vec<u8>, bytes: &[u8]) {
+    encoded.extend(
+        bytes
+            .iter()
+            .copied()
+            .filter(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'+' | b'/' | b'=')),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn write_base64_stream_blocks(
+    encoded: &mut Vec<u8>,
+    local: &mut tokio::fs::File,
+    transferred: &mut u64,
+    transfer_id: &str,
+    total: u64,
+    cancel: &tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+) -> Result<(), String> {
+    let complete_length = encoded.len() / 4 * 4;
+    if complete_length == 0 {
+        return Ok(());
+    }
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&encoded[..complete_length])
+        .map_err(|error| format!("root 下载 base64 解码失败: {error}"))?;
+    tokio::select! {
+        _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+        result = local.write_all(&decoded) => result.map_err(|error| error.to_string())?,
+    }
+    encoded.drain(..complete_length);
+    *transferred += decoded.len() as u64;
+    crate::services::transfers::report_progress(app, transfer_id, *transferred, total).await;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn download_root_remote_file_via_su_pty(
+    handle: &Handle<ClientHandler>,
+    remote_path: &str,
+    local_path: &str,
+    resume_offset: u64,
+    transfer_id: &str,
+    cancel: tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    source: &TransferFileStat,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(local_path).parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true).create(true);
+    if resume_offset == 0 {
+        options.truncate(true);
+    }
+    let mut local = options
+        .open(local_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    local
+        .seek(std::io::SeekFrom::Start(resume_offset))
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let shell_command = if resume_offset == 0 {
+        format!("base64 {}", shell_quote(remote_path))
+    } else {
+        format!(
+            "tail -c +{} -- {} | base64",
+            resume_offset + 1,
+            shell_quote(remote_path)
+        )
+    };
+    let command = su_exec_command(&shell_command);
+    let (command, password) =
+        root_file_command(RootFileAccessMethod::Su, sudo_user, sudo_password, &command);
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    request_root_exec_pty(&channel).await?;
+    channel
+        .exec(true, command.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let mut encoded = Vec::new();
+    let initial_data = wait_for_su_output_marker(&mut channel, password.as_deref()).await?;
+    append_base64_stream_bytes(&mut encoded, &initial_data);
+
+    let mut transferred = resume_offset;
+    crate::services::transfers::report_progress(app, transfer_id, transferred, source.size).await;
+    write_base64_stream_blocks(
+        &mut encoded,
+        &mut local,
+        &mut transferred,
+        transfer_id,
+        source.size,
+        &cancel,
+        app,
+    )
+    .await?;
+
+    let mut exit_status = None;
+    loop {
+        let next = tokio::select! {
+            _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+            message = channel.wait() => message,
+        };
+        match next {
+            Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                append_base64_stream_bytes(&mut encoded, data.as_ref());
+                write_base64_stream_blocks(
+                    &mut encoded,
+                    &mut local,
+                    &mut transferred,
+                    transfer_id,
+                    source.size,
+                    &cancel,
+                    app,
+                )
+                .await?;
+            }
+            Some(ChannelMsg::ExitStatus {
+                exit_status: status,
+            }) => {
+                exit_status = Some(status);
+            }
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+            _ => {}
+        }
+    }
+
+    if !encoded.is_empty() {
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .map_err(|error| format!("root 下载 base64 解码失败: {error}"))?;
+        tokio::select! {
+            _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+            result = local.write_all(&decoded) => result.map_err(|error| error.to_string())?,
+        }
+        transferred += decoded.len() as u64;
+        crate::services::transfers::report_progress(app, transfer_id, transferred, source.size)
+            .await;
+    }
+    local.flush().await.map_err(|error| error.to_string())?;
+
+    let status = exit_status.ok_or_else(|| "root 下载命令未返回退出状态".to_string())?;
+    if status != 0 {
+        return Err(format!("root 下载命令失败（exit={status}）"));
+    }
+    if transferred != source.size {
+        return Err(format!(
+            "root 下载未完成（{transferred}/{} bytes）",
+            source.size
+        ));
+    }
+    Ok(())
+}
+
 /// POSIX shell quoting: wrap in single quotes, escape embedded single quotes.
 fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// Run a shell command via the exec channel, with sudo when credentials are
-/// present. Returns the combined stdout. Detects sudo auth failures and
-/// returns an error so the caller can clear cached credentials.
+fn root_file_command(
+    access_method: RootFileAccessMethod,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+    command: &str,
+) -> (String, Option<String>) {
+    let user = sudo_user.as_deref().unwrap_or("root");
+    match access_method {
+        RootFileAccessMethod::Sudo => {
+            let full_command = if sudo_password.is_some() {
+                format!(
+                    "sudo -S -p '' -u {} sh -lc {}",
+                    shell_quote(user),
+                    shell_quote(command)
+                )
+            } else {
+                format!(
+                    "sudo -n -u {} sh -lc {}",
+                    shell_quote(user),
+                    shell_quote(command)
+                )
+            };
+            (full_command, sudo_password.clone())
+        }
+        RootFileAccessMethod::Su => (
+            format!(
+                "su -s /bin/sh -c {} {}",
+                shell_quote(command),
+                shell_quote(user)
+            ),
+            sudo_password.clone(),
+        ),
+    }
+}
+
+/// Add a post-authentication frame to commands executed through `su`.
+///
+/// A PTY combines the password prompt and command output into one stream. The
+/// marker is printed only after `su` has accepted the password, so consumers
+/// can discard the prompt without guessing at localized text or corrupting a
+/// `stat`/`base64` payload.
+fn su_exec_command(command: &str) -> String {
+    format!(
+        "printf '%s\\n' {}; {}",
+        shell_quote(SU_EXEC_OUTPUT_MARKER),
+        command
+    )
+}
+
+fn strip_su_exec_output(output: &str) -> Result<String, String> {
+    let Some(marker_start) = output.find(SU_EXEC_OUTPUT_MARKER) else {
+        return Err("su root 文件命令未返回认证后的输出标记".to_string());
+    };
+    let body = &output[marker_start + SU_EXEC_OUTPUT_MARKER.len()..];
+    // PTY line discipline may translate LF to CRLF. Normalize it before
+    // parsing `find -printf` rows or other line-oriented root command output.
+    Ok(body
+        .trim_start_matches(['\r', '\n'])
+        .replace("\r\n", "\n")
+        .replace('\r', "\n"))
+}
+
+async fn request_root_exec_pty(channel: &Channel<russh::client::Msg>) -> Result<(), String> {
+    timeout(
+        SUDO_VERIFY_TIMEOUT,
+        channel.request_pty(
+            true,
+            "xterm-256color",
+            80,
+            24,
+            0,
+            0,
+            &[
+                (russh::Pty::ECHO, 0),
+                (russh::Pty::ECHOE, 0),
+                (russh::Pty::ECHOK, 0),
+                (russh::Pty::ECHONL, 0),
+                (russh::Pty::TTY_OP_ISPEED, 115200),
+                (russh::Pty::TTY_OP_OSPEED, 115200),
+            ],
+        ),
+    )
+    .await
+    .map_err(|_| "su 认证超时：服务器未响应 PTY 请求".to_string())?
+    .map_err(|error| format!("su 文件通道无法申请 PTY: {error}"))
+}
+
+/// Authenticate a `su` exec channel and return any bytes that followed the
+/// post-authentication marker in the same SSH packet.  Streaming upload and
+/// download use this handshake before sending/decoding their payload.
+async fn wait_for_su_output_marker(
+    channel: &mut Channel<russh::client::Msg>,
+    password: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    let marker = SU_EXEC_OUTPUT_MARKER.as_bytes();
+    let mut output = Vec::new();
+    let mut password_sent = password.is_none();
+    loop {
+        let message = timeout(SUDO_VERIFY_TIMEOUT, channel.wait())
+            .await
+            .map_err(|_| "su 认证超时：服务器未在 10 秒内响应".to_string())?;
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
+                if output.len() < 64 * 1024 {
+                    output.extend_from_slice(data.as_ref());
+                }
+                let visible = visible_shell_text(&String::from_utf8_lossy(&output));
+                let lower = visible.to_ascii_lowercase();
+                let marker_seen = output.windows(marker.len()).any(|window| window == marker);
+                if !password_sent
+                    && !marker_seen
+                    && (lower.contains("password") || visible.contains("密码"))
+                {
+                    if let Some(password) = password {
+                        channel
+                            .data_bytes(format!("{password}\n").into_bytes())
+                            .await
+                            .map_err(|error| error.to_string())?;
+                    }
+                    password_sent = true;
+                }
+                if let Some(start) = output
+                    .windows(marker.len())
+                    .position(|window| window == marker)
+                {
+                    return Ok(output[start + marker.len()..].to_vec());
+                }
+            }
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => {
+                let detail = String::from_utf8_lossy(&output).trim().to_string();
+                if root_access_auth_failed(&detail.to_lowercase())
+                    || detail.to_lowercase().contains("password")
+                    || detail.contains("密码")
+                {
+                    return Err("su 认证失败：密码错误或未授予 su 权限".to_string());
+                }
+                let detail = if detail.is_empty() {
+                    String::new()
+                } else {
+                    format!("：{}", detail.chars().take(512).collect::<String>())
+                };
+                return Err(format!("su 文件命令失败（exit={status}）{detail}"));
+            }
+            ChannelMsg::Eof | ChannelMsg::Close => break,
+            _ => {}
+        }
+    }
+    let detail = String::from_utf8_lossy(&output).trim().to_string();
+    if root_access_auth_failed(&detail.to_lowercase())
+        || detail.to_lowercase().contains("password")
+        || detail.contains("密码")
+    {
+        Err("su 认证失败：密码错误或未授予 su 权限".to_string())
+    } else {
+        Err("su root 文件命令未返回认证后的输出标记".to_string())
+    }
+}
+
+async fn wait_for_root_stream_exit(
+    channel: &mut Channel<russh::client::Msg>,
+) -> Result<u32, String> {
+    let mut exit_status = None;
+    let mut detail = String::new();
+    loop {
+        let message = timeout(SUDO_VERIFY_TIMEOUT, channel.wait())
+            .await
+            .map_err(|_| "root 文件传输完成后远端命令未退出，已超时".to_string())?;
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
+                if detail.len() < 4096 {
+                    detail.push_str(&String::from_utf8_lossy(data.as_ref()));
+                }
+            }
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => {
+                exit_status = Some(status);
+            }
+            ChannelMsg::Eof | ChannelMsg::Close if exit_status.is_some() => break,
+            ChannelMsg::Eof | ChannelMsg::Close => {}
+            _ => {}
+        }
+    }
+    let status = exit_status.ok_or_else(|| "root 文件传输未返回退出状态".to_string())?;
+    if status != 0 {
+        let detail = detail.trim();
+        let detail = if detail.is_empty() {
+            String::new()
+        } else {
+            format!("：{}", detail.chars().take(512).collect::<String>())
+        };
+        return Err(format!("root 文件传输命令失败（exit={status}）{detail}"));
+    }
+    Ok(status)
+}
+
+/// Execute a `su -c` command through a PTY and complete the password
+/// handshake before sending any command input. Some PAM/su combinations drop
+/// bytes that arrive before the password prompt, even though a normal shell
+/// accepts them from the PTY input queue. The marker printed by
+/// `su_exec_command` also gives passwordless/root callers a safe point at
+/// which to send payload data.
+#[allow(clippy::too_many_arguments)]
+async fn exec_su_command_with_pty_input(
+    handle: &Handle<ClientHandler>,
+    command: &str,
+    password: Option<&str>,
+    input: Option<&[u8]>,
+    send_eof: bool,
+) -> Result<(String, Option<u32>), String> {
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    request_root_exec_pty(&channel).await?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let marker = SU_EXEC_OUTPUT_MARKER.as_bytes();
+    let mut output = Vec::new();
+    let mut password_sent = password.is_none();
+    let mut input_sent = input.is_none();
+    let mut exit_status = None;
+    let mut marker_seen = false;
+    let mut password_prompt_seen = false;
+
+    loop {
+        let message = timeout(SUDO_VERIFY_TIMEOUT, channel.wait())
+            .await
+            .map_err(|_| "su 认证超时：服务器未在 10 秒内响应".to_string())?;
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
+                let bytes = data.as_ref();
+                if output.len() < 64 * 1024 {
+                    let remaining = 64 * 1024 - output.len();
+                    output.extend_from_slice(&bytes[..bytes.len().min(remaining)]);
+                }
+                if output.windows(marker.len()).any(|window| window == marker) {
+                    marker_seen = true;
+                }
+                let visible = visible_shell_text(&String::from_utf8_lossy(&output));
+                let lower = visible.to_ascii_lowercase();
+                if !marker_seen && (lower.contains("password") || visible.contains("密码")) {
+                    password_prompt_seen = true;
+                }
+
+                if !password_sent && (password_prompt_seen || marker_seen) {
+                    if let Some(password) = password {
+                        if password_prompt_seen {
+                            channel
+                                .data_bytes(format!("{password}\n").into_bytes())
+                                .await
+                                .map_err(|error| error.to_string())?;
+                        }
+                    }
+                    password_sent = true;
+                }
+                if marker_seen && !input_sent {
+                    if let Some(input) = input {
+                        channel
+                            .data_bytes(input.to_vec())
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        if send_eof {
+                            channel
+                                .data_bytes(vec![0x04])
+                                .await
+                                .map_err(|error| error.to_string())?;
+                        }
+                    }
+                    input_sent = true;
+                }
+            }
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => {
+                exit_status = Some(status);
+            }
+            ChannelMsg::Eof | ChannelMsg::Close if exit_status.is_some() => break,
+            ChannelMsg::Eof | ChannelMsg::Close => {}
+            _ => {}
+        }
+    }
+
+    Ok((String::from_utf8_lossy(&output).into_owned(), exit_status))
+}
+
+/// Run a shell command through the independent exec channel with the same
+/// root strategy observed in the interactive terminal.
 async fn exec_shell_file_command(
     handle: &Handle<ClientHandler>,
     command: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<String, String> {
-    let user = sudo_user.as_deref().unwrap_or("root");
-    // Electron only uses `-n` when no password is available. `sudo -n -S`
-    // rejects stdin authentication on several sudo versions, making a valid
-    // password look like a timeout. With a password, `-S -p ''` consumes one
-    // line from stdin; the outer timeout still bounds a retrying sudo prompt.
-    let full_cmd = if sudo_password.is_some() {
-        format!(
-            "sudo -S -p '' -u {} sh -lc {}",
-            shell_quote(user),
-            shell_quote(command)
-        )
+    let command = if access_method == RootFileAccessMethod::Su {
+        su_exec_command(command)
     } else {
-        format!(
-            "sudo -n -u {} sh -lc {}",
-            shell_quote(user),
-            shell_quote(command)
-        )
+        command.to_string()
     };
+    let (full_cmd, password) = root_file_command(access_method, sudo_user, sudo_password, &command);
 
-    // 整个 exec 包超时：PTY 模式下 sudo 错误密码可能 retry 多次，channel
+    // 整个 exec 包超时：PTY 模式下 root 错误密码可能 retry 多次，channel
     // 不会自然退出。超时后返回错误，前端 loading 能在 10 秒内解除。
-    let output = if let Some(pwd) = sudo_password {
-        let stdin = format!("{}\n", pwd);
+    let (output, exit_status) = if access_method == RootFileAccessMethod::Su {
         match timeout(
             SUDO_VERIFY_TIMEOUT,
-            super::system_metrics::exec_command_with_stdin(handle, &full_cmd, &stdin),
+            exec_su_command_with_pty_input(handle, &full_cmd, password.as_deref(), None, false),
         )
         .await
         {
             Ok(inner) => inner?,
             Err(_) => {
                 return Err(
-                    "sudo 验证超时：服务器未在 10 秒内响应，可能密码错误或网络中断".to_string(),
+                    "root 认证超时：服务器未在 10 秒内响应，可能密码错误或网络中断".to_string(),
+                )
+            }
+        }
+    } else if let Some(pwd) = password {
+        let stdin = format!("{pwd}\n");
+        match timeout(
+            SUDO_VERIFY_TIMEOUT,
+            super::system_metrics::exec_command_with_stdin_status(handle, &full_cmd, &stdin),
+        )
+        .await
+        {
+            Ok(inner) => inner?,
+            Err(_) => {
+                return Err(
+                    "root 认证超时：服务器未在 10 秒内响应，可能密码错误或网络中断".to_string(),
                 )
             }
         }
     } else {
         match timeout(
             SUDO_VERIFY_TIMEOUT,
-            super::system_metrics::exec_command(handle, &full_cmd),
+            super::system_metrics::exec_command_with_status(handle, &full_cmd),
         )
         .await
         {
             Ok(inner) => inner?,
-            Err(_) => return Err("sudo 验证超时：服务器未在 10 秒内响应".to_string()),
+            Err(_) => return Err("root 认证超时：服务器未在 10 秒内响应".to_string()),
         }
     };
 
     let lower = output.to_lowercase();
-    if lower.contains("incorrect password")
-        || lower.contains("authentication failure")
+    if root_access_auth_failed(&lower)
         || lower.contains("a password is required")
         || lower.contains("no password was provided")
         || lower.contains("sudo: permission denied")
-        || lower.contains("sorry, try again")
+        || (access_method == RootFileAccessMethod::Su
+            && (lower.contains("password") || output.contains("密码"))
+            && !output.contains(SU_EXEC_OUTPUT_MARKER))
     {
-        return Err("sudo 认证失败：密码错误或未授予 sudo 权限".to_string());
+        return Err(match access_method {
+            RootFileAccessMethod::Sudo => "sudo 认证失败：密码错误或未授予 sudo 权限".to_string(),
+            RootFileAccessMethod::Su => "su 认证失败：密码错误或未授予 su 权限".to_string(),
+        });
     }
-    Ok(output)
+
+    let command_output = if access_method == RootFileAccessMethod::Su {
+        strip_su_exec_output(&output).unwrap_or_else(|_| output.clone())
+    } else {
+        output.clone()
+    };
+    let status = exit_status.ok_or_else(|| "root 文件命令未返回退出状态".to_string())?;
+    if status != 0 {
+        let detail = command_output.trim();
+        let detail = if detail.is_empty() {
+            String::new()
+        } else {
+            format!("：{}", detail.chars().take(512).collect::<String>())
+        };
+        return Err(format!("root 文件命令失败（exit={status}）{detail}"));
+    }
+    if access_method == RootFileAccessMethod::Su {
+        strip_su_exec_output(&output)
+    } else {
+        Ok(output)
+    }
 }
 
-/// List a directory via `find -printf` under sudo (GNU coreutils, BusyBox).
+/// List a directory via `find -printf` under the active root strategy.
 async fn exec_list_dir_via_shell(
     handle: &Handle<ClientHandler>,
     path: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<Vec<Value>, String> {
@@ -6370,7 +7622,8 @@ async fn exec_list_dir_via_shell(
         "find {} -maxdepth 1 -mindepth 1 -printf '%y|%s|%T@|%u:%g|%m|%f\\n' 2>/dev/null",
         shell_quote(path)
     );
-    let output = exec_shell_file_command(handle, &cmd, sudo_user, sudo_password).await?;
+    let output =
+        exec_shell_file_command(handle, &cmd, access_method, sudo_user, sudo_password).await?;
     let path_norm = path.trim_end_matches('/');
 
     let mut items = Vec::new();
@@ -6446,18 +7699,20 @@ async fn exec_list_dir_via_shell(
     Ok(items)
 }
 
-/// Read a file via `sudo cat` + base64 (binary-safe over the exec channel).
+/// Read a file via the active root strategy + base64 (binary-safe over exec).
 /// Decodes the result using the given encoding (mirrors Electron's
 /// `readRemoteFileViaShell` + `decodeBuffer`).
 async fn exec_read_file_via_shell(
     handle: &Handle<ClientHandler>,
     path: &str,
     encoding: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<String, String> {
     let cmd = format!("base64 {}", shell_quote(path));
-    let output = exec_shell_file_command(handle, &cmd, sudo_user, sudo_password).await?;
+    let output =
+        exec_shell_file_command(handle, &cmd, access_method, sudo_user, sudo_password).await?;
     let trimmed: String = output.chars().filter(|c| !c.is_whitespace()).collect();
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&trimmed)
@@ -6465,7 +7720,7 @@ async fn exec_read_file_via_shell(
     decode_bytes(&bytes, encoding)
 }
 
-/// Write a file via `sudo tee` + base64 (binary-safe). Encodes the content
+/// Write a file via the active root strategy + base64 (binary-safe). Encodes the content
 /// using the given encoding before base64-wrapping (mirrors Electron's
 /// `writeRemoteFileViaShell` + `encodeText`).
 async fn exec_write_file_via_shell(
@@ -6473,35 +7728,72 @@ async fn exec_write_file_via_shell(
     path: &str,
     content: &str,
     encoding: &str,
+    access_method: RootFileAccessMethod,
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
     let bytes = encode_text(content, encoding);
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let cmd = format!("base64 -d | tee {} > /dev/null", shell_quote(path));
-    let user = sudo_user.as_deref().unwrap_or("root");
-    let full_cmd = if sudo_password.is_some() {
-        format!(
-            "sudo -S -p '' -u {} sh -lc {}",
-            shell_quote(user),
-            shell_quote(&cmd)
-        )
+    let command = if access_method == RootFileAccessMethod::Su {
+        su_exec_command(&cmd)
+    } else {
+        cmd
+    };
+    let (full_cmd, password) = root_file_command(access_method, sudo_user, sudo_password, &command);
+    let encoded_input = if access_method == RootFileAccessMethod::Su {
+        // A PTY normally runs in canonical mode, whose input line limit is
+        // commonly 4096 bytes. Keep every base64 line below that limit while
+        // preserving 3-byte block boundaries so concatenated lines decode to
+        // the original bytes exactly.
+        let mut lines = String::new();
+        for chunk in bytes.chunks(3000) {
+            lines.push_str(&base64::engine::general_purpose::STANDARD.encode(chunk));
+            lines.push('\n');
+        }
+        if lines.is_empty() {
+            lines.push('\n');
+        }
+        lines
     } else {
         format!(
-            "sudo -n -u {} sh -lc {}",
-            shell_quote(user),
-            shell_quote(&cmd)
+            "{}\n",
+            base64::engine::general_purpose::STANDARD.encode(&bytes)
         )
     };
-    let stdin = if let Some(pwd) = sudo_password {
-        format!("{}\n{}\n", pwd, encoded)
+    let (output, exit_status) = if access_method == RootFileAccessMethod::Su {
+        exec_su_command_with_pty_input(
+            handle,
+            &full_cmd,
+            password.as_deref(),
+            Some(encoded_input.as_bytes()),
+            true,
+        )
+        .await?
     } else {
-        format!("{}\n", encoded)
+        let stdin = if let Some(pwd) = password {
+            format!("{}\n{}", pwd, encoded_input)
+        } else {
+            encoded_input
+        };
+        super::system_metrics::exec_command_with_stdin_status(handle, &full_cmd, &stdin).await?
     };
-    let output = super::system_metrics::exec_command_with_stdin(handle, &full_cmd, &stdin).await?;
     let lower = output.to_lowercase();
-    if lower.contains("incorrect password") || lower.contains("authentication failure") {
-        return Err("sudo authentication failed".to_string());
+    if root_access_auth_failed(&lower)
+        || (access_method == RootFileAccessMethod::Su
+            && (lower.contains("password") || output.contains("密码"))
+            && !output.contains(SU_EXEC_OUTPUT_MARKER))
+    {
+        return Err(match access_method {
+            RootFileAccessMethod::Sudo => "sudo authentication failed".to_string(),
+            RootFileAccessMethod::Su => "su authentication failed".to_string(),
+        });
+    }
+    let status = exit_status.ok_or_else(|| "root 写入命令未返回退出状态".to_string())?;
+    if status != 0 {
+        return Err(format!("root 写入命令失败（exit={status}）"));
+    }
+    if access_method == RootFileAccessMethod::Su {
+        strip_su_exec_output(&output)?;
     }
     Ok(())
 }
@@ -6596,18 +7888,22 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_http_connect_request, build_legacy_preferred, capture_sudo_password_input,
+        build_http_connect_request, build_legacy_preferred, capture_root_access_password_input,
         coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
         enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
-        is_password_prompt, looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
-        missing_password_credential, parent_remote_item, parent_remote_path,
-        password_for_authentication, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds,
-        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, suppress_shell_setup_echo,
-        track_cwd_and_user, track_sudo_prompt_from_terminal, trim_string_front,
+        is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
+        looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
+        parent_remote_item, parent_remote_path, password_for_authentication,
+        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
+        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
+        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
+        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        track_root_access_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
-        wait_for_ssh_stage, KeyboardInteractiveRequest, ShellSetupEchoSuppression, SshTunnelRule,
-        TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
+        wait_for_ssh_stage, KeyboardInteractiveRequest, RootFileAccessMethod,
+        ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
+        SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -6739,23 +8035,27 @@ mod tests {
     #[test]
     fn rolling_buffers_survive_cjk_flood_without_panic() {
         // 回归：模拟高吞吐中文脚本输出冲刷 track_cwd_and_user 与
-        // track_sudo_prompt_from_terminal 的滚动窗口。修复前窗口裁剪
+        // track_root_access_prompt_from_terminal 的滚动窗口。修复前窗口裁剪
         // 落在多字节字符内部直接 panic，SSH worker 任务随之死亡。
         let flood = "[ ✓ success ] 检查点 重建分区表 running\r\n".repeat(400);
         let mut cwd_buffer = String::new();
         let mut prompt_buffer = String::new();
-        let mut awaiting = false;
+        let mut awaiting = None;
         let mut pending = String::new();
         let mut sudo_password = None;
+        let mut last_authenticated = None;
+        let mut pending_command = None;
         for chunk in flood.as_bytes().chunks(97) {
             let text = String::from_utf8_lossy(chunk);
             let _ = track_cwd_and_user(&text, &mut cwd_buffer);
-            let _ = track_sudo_prompt_from_terminal(
+            let _ = track_root_access_prompt_from_terminal(
                 &text,
                 &mut prompt_buffer,
                 &mut awaiting,
                 &mut pending,
                 &mut sudo_password,
+                &mut last_authenticated,
+                &mut pending_command,
             );
         }
         assert!(cwd_buffer.len() < 16384);
@@ -7108,6 +8408,10 @@ mod tests {
             track_cwd_and_user("tc\u{7}\u{1b}]1337;RemoteUser=Stoffel\u{7}", &mut buffer),
             (Some("/etc".to_string()), Some("Stoffel".to_string()))
         );
+        assert_eq!(
+            track_cwd_and_user("root@host:~# ", &mut buffer),
+            (None, None)
+        );
     }
 
     #[test]
@@ -7174,6 +8478,39 @@ mod tests {
     }
 
     #[test]
+    fn root_setup_suppression_restores_original_prompt_when_injection_fails() {
+        let mut pending = Some(ShellSetupEchoSuppression::with_fallback(
+            "root@host:~# ".to_string(),
+        ));
+        assert_eq!(
+            suppress_shell_setup_echo(&mut pending, "setup command rejected"),
+            ""
+        );
+        assert_eq!(
+            finish_shell_setup_suppression(&mut pending),
+            "root@host:~# "
+        );
+    }
+
+    #[test]
+    fn root_setup_suppression_discards_original_prompt_after_new_prompt() {
+        let mut pending = Some(ShellSetupEchoSuppression::with_fallback(
+            "root@host:~# ".to_string(),
+        ));
+        assert_eq!(
+            suppress_shell_setup_echo(
+                &mut pending,
+                " __tdcwd(){ printf '\\033]7;file:///root\\007';};__tdcwd\r\n\u{1b}]7;file:///root\u{7}"
+            ),
+            ""
+        );
+        assert_eq!(
+            suppress_shell_setup_echo(&mut pending, "root@host:~# "),
+            "root@host:~# "
+        );
+    }
+
+    #[test]
     fn split_prompt_tail_separates_banner_from_prompt() {
         // banner + prompt 在同一 chunk：banner forward，prompt 暂存
         let (banner, tail) =
@@ -7233,38 +8570,301 @@ mod tests {
     }
 
     #[test]
+    fn su_method_is_synced_when_file_pane_is_already_in_root_mode() {
+        let authenticated = super::PendingRootAccessAuth {
+            method: RootFileAccessMethod::Su,
+            target_user: "root".to_string(),
+            interactive_shell: true,
+        };
+        let method = super::root_access_method_for_shell_user("root", Some(&authenticated), None);
+
+        assert_eq!(method, RootFileAccessMethod::Su);
+        assert_ne!(RootFileAccessMethod::Sudo, method);
+    }
+
+    #[test]
+    fn latest_privilege_command_wins_over_an_older_authenticated_method() {
+        let old_sudo = super::PendingRootAccessAuth {
+            method: RootFileAccessMethod::Sudo,
+            target_user: "root".to_string(),
+            interactive_shell: true,
+        };
+        let latest_su = super::PendingRootAccessAuth {
+            method: RootFileAccessMethod::Su,
+            target_user: "root".to_string(),
+            interactive_shell: true,
+        };
+
+        assert_eq!(
+            super::root_access_method_for_shell_user("root", Some(&old_sudo), Some(&latest_su)),
+            RootFileAccessMethod::Su
+        );
+
+        let noninteractive_sudo = super::PendingRootAccessAuth {
+            method: RootFileAccessMethod::Sudo,
+            target_user: "root".to_string(),
+            interactive_shell: false,
+        };
+        assert_eq!(
+            super::root_access_method_for_shell_user(
+                "root",
+                Some(&latest_su),
+                Some(&noninteractive_sudo),
+            ),
+            RootFileAccessMethod::Su
+        );
+    }
+
+    #[test]
     fn terminal_sudo_password_cache_is_cleared_after_auth_failure() {
         let mut prompt_buffer = String::new();
-        let mut awaiting = false;
+        let mut awaiting = None;
         let mut pending = String::new();
         let mut recent = String::new();
         let mut cached = None;
+        let mut last_authenticated = None;
+        let mut pending_command = None;
 
-        assert!(!track_sudo_prompt_from_terminal(
+        assert!(!capture_root_access_password_input(
+            "sudo -i\r",
+            &mut awaiting,
+            &mut pending,
+            &mut recent,
+            &mut cached,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        assert!(!track_root_access_prompt_from_terminal(
             "[sudo] user 的密码：",
             &mut prompt_buffer,
             &mut awaiting,
             &mut pending,
             &mut cached,
+            &mut last_authenticated,
+            &mut pending_command,
         ));
-        assert!(awaiting);
-        assert!(capture_sudo_password_input(
+        assert_eq!(
+            awaiting.as_ref().map(|auth| auth.method),
+            Some(RootFileAccessMethod::Sudo)
+        );
+        assert!(capture_root_access_password_input(
             "wrong\r",
             &mut awaiting,
             &mut pending,
             &mut recent,
             &mut cached,
+            &mut last_authenticated,
+            &mut pending_command,
         ));
         assert_eq!(cached.as_deref(), Some("wrong"));
-        assert!(track_sudo_prompt_from_terminal(
+        assert!(track_root_access_prompt_from_terminal(
             "Sorry, try again.\r\n",
             &mut prompt_buffer,
             &mut awaiting,
             &mut pending,
             &mut cached,
+            &mut last_authenticated,
+            &mut pending_command,
         ));
         assert!(cached.is_none());
-        assert!(!awaiting);
+        assert!(awaiting.is_none());
+    }
+
+    #[test]
+    fn recognizes_localized_root_authentication_failures() {
+        assert!(root_access_auth_failed("su: 身份验证失败"));
+        assert!(root_access_auth_failed("sudo: 密码不正确"));
+        assert!(!root_access_auth_failed("root@debian:~# "));
+    }
+
+    #[test]
+    fn recognizes_su_and_sudo_transitions_from_terminal_input() {
+        assert_eq!(
+            privilege_command_from_terminal_input("su -\r"),
+            Some(super::PendingRootAccessAuth {
+                method: RootFileAccessMethod::Su,
+                target_user: "root".to_string(),
+                interactive_shell: true,
+            })
+        );
+        assert_eq!(
+            privilege_command_from_terminal_input("sudo -u postgres -i\r"),
+            Some(super::PendingRootAccessAuth {
+                method: RootFileAccessMethod::Sudo,
+                target_user: "postgres".to_string(),
+                interactive_shell: true,
+            })
+        );
+        assert_eq!(
+            privilege_command_from_terminal_input("sudo -u postgres cat /etc/hosts\r")
+                .map(|auth| auth.interactive_shell),
+            Some(false)
+        );
+        assert_eq!(
+            privilege_command_from_terminal_input("sudo -l\r").map(|auth| auth.interactive_shell),
+            Some(false)
+        );
+        assert_eq!(
+            privilege_command_from_terminal_input("echo password\r"),
+            None
+        );
+    }
+
+    #[test]
+    fn captures_su_password_and_reuses_su_for_file_commands() {
+        let mut prompt_buffer = String::new();
+        let mut awaiting = None;
+        let mut pending_password = String::new();
+        let mut recent_input = String::new();
+        let mut cached_password = None;
+        let mut last_authenticated = None;
+        let mut pending_command = None;
+
+        assert!(!capture_root_access_password_input(
+            "su -\r",
+            &mut awaiting,
+            &mut pending_password,
+            &mut recent_input,
+            &mut cached_password,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        assert!(!track_root_access_prompt_from_terminal(
+            "Password: ",
+            &mut prompt_buffer,
+            &mut awaiting,
+            &mut pending_password,
+            &mut cached_password,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        assert!(capture_root_access_password_input(
+            "root-password\r",
+            &mut awaiting,
+            &mut pending_password,
+            &mut recent_input,
+            &mut cached_password,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        assert_eq!(
+            last_authenticated.as_ref().map(|auth| auth.method),
+            Some(RootFileAccessMethod::Su)
+        );
+
+        let (command, password) = root_file_command(
+            RootFileAccessMethod::Su,
+            &Some("root".to_string()),
+            &cached_password,
+            "touch /etc/fileterm-test",
+        );
+        assert!(command.starts_with("su -s /bin/sh -c "));
+        assert!(!command.contains("sudo"));
+        assert_eq!(password.as_deref(), Some("root-password"));
+    }
+
+    #[test]
+    fn preserves_su_method_when_password_input_arrives_before_prompt_output() {
+        let mut awaiting = None;
+        let mut pending_password = String::new();
+        let mut recent_input = String::new();
+        let mut cached_password = None;
+        let mut last_authenticated = None;
+        let mut pending_command = None;
+
+        assert!(!capture_root_access_password_input(
+            "su -\r",
+            &mut awaiting,
+            &mut pending_password,
+            &mut recent_input,
+            &mut cached_password,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        // The SSH shell may echo the password prompt after the frontend has
+        // already forwarded the password line. Ordinary input must not erase
+        // the command that established the root shell.
+        assert!(!capture_root_access_password_input(
+            "root-password\r",
+            &mut awaiting,
+            &mut pending_password,
+            &mut recent_input,
+            &mut cached_password,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        assert_eq!(
+            pending_command.as_ref().map(|auth| auth.method),
+            Some(RootFileAccessMethod::Su)
+        );
+        assert!(last_authenticated.is_none());
+
+        let mut prompt_buffer = String::new();
+        assert!(track_root_access_prompt_from_terminal(
+            "密码：",
+            &mut prompt_buffer,
+            &mut awaiting,
+            &mut pending_password,
+            &mut cached_password,
+            &mut last_authenticated,
+            &mut pending_command,
+        ));
+        assert_eq!(
+            last_authenticated.as_ref().map(|auth| auth.method),
+            Some(RootFileAccessMethod::Su)
+        );
+        assert_eq!(cached_password.as_deref(), Some("root-password"));
+    }
+
+    #[test]
+    fn root_upload_command_preserves_resume_offset_and_target_parent() {
+        assert_eq!(
+            root_upload_shell_command("/etc/fileterm/config.toml", 0),
+            "set -e\nmkdir -p '/etc/fileterm'\ncat > '/etc/fileterm/config.toml'"
+        );
+        assert_eq!(
+            root_upload_shell_command("/etc/fileterm/config.toml", 12),
+            "set -e\nmkdir -p '/etc/fileterm'\ncat >> '/etc/fileterm/config.toml'"
+        );
+    }
+
+    #[test]
+    fn root_stat_treats_a_missing_partial_as_an_empty_checkpoint() {
+        assert_eq!(
+            root_stat_shell_command("/opt/applications/墙纸.JPG.fileterm-part"),
+            "if [ -e '/opt/applications/墙纸.JPG.fileterm-part' ] && [ ! -d '/opt/applications/墙纸.JPG.fileterm-part' ]; then stat -c '%s|%Y' -- '/opt/applications/墙纸.JPG.fileterm-part'; fi"
+        );
+    }
+
+    #[test]
+    fn root_upload_staging_is_transferred_through_login_sftp() {
+        assert!(is_root_upload_staging_path(
+            "/tmp/fileterm-root-upload-a57f-example.part"
+        ));
+        assert!(!is_root_upload_staging_path(
+            "/opt/applications/墙纸.JPG.fileterm-part"
+        ));
+    }
+
+    #[test]
+    fn su_pty_streaming_commands_frame_output_and_use_base64() {
+        let command = su_exec_command("base64 -d > '/etc/fileterm/config.toml'");
+        assert!(command.contains(SU_EXEC_OUTPUT_MARKER));
+        assert_eq!(
+            strip_su_exec_output(&format!(
+                "Password: \r\n{SU_EXEC_OUTPUT_MARKER}\r\n12|34\r\n"
+            ))
+            .as_deref(),
+            Ok("12|34\n")
+        );
+        assert_eq!(
+            root_upload_base64_shell_command("/etc/fileterm/config.toml", 0),
+            "set -e\nmkdir -p '/etc/fileterm'\nbase64 -d > '/etc/fileterm/config.toml'"
+        );
+        assert_eq!(
+            root_upload_base64_shell_command("/etc/fileterm/config.toml", 12),
+            "set -e\nmkdir -p '/etc/fileterm'\nbase64 -d >> '/etc/fileterm/config.toml'"
+        );
     }
 
     #[test]

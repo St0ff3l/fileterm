@@ -41,7 +41,8 @@ import { CommandCenter } from '../commands/CommandCenter'
 import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
 import { getDisplayFileTypeSortKey } from './file-kind'
-import { FileTable, LocalFileTable, PanePathBar, type RemoteFileSortState } from './FileTables'
+import { matchesFileFilter, type FileFilterConfig } from './file-filter'
+import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
 
 const VIEW_TRANSITION_LOADING_MS = 180
 
@@ -371,13 +372,41 @@ export function FileManager({
     onOpenLocalPath(localPath)
   }, [activeView, isLocalDirectoryLoading, localItems.length, localPath, onOpenLocalPath])
 
+  const [localFilter, setLocalFilter] = useState<FileFilterConfig>({ query: '', mode: 'text' })
+  const [remoteFilter, setRemoteFilter] = useState<FileFilterConfig>({ query: '', mode: 'text' })
+
+  useEffect(() => {
+    setLocalFilter((prev) => (prev.query ? { ...prev, query: '' } : prev))
+  }, [localPanePath])
+
+  useEffect(() => {
+    setRemoteFilter((prev) => (prev.query ? { ...prev, query: '' } : prev))
+  }, [activeSession.remotePath])
+
+  const filteredLocalItems = useMemo(() => {
+    if (!localFilter.query.trim()) {
+      return localItems
+    }
+    return localItems.filter((item) => matchesFileFilter(item.name, localFilter))
+  }, [localItems, localFilter])
+
+  const filteredRemoteFiles = useMemo(() => {
+    if (!canUseRemoteFiles) {
+      return []
+    }
+    if (!remoteFilter.query.trim()) {
+      return activeSession.remoteFiles
+    }
+    return activeSession.remoteFiles.filter((item) => matchesFileFilter(item.name, remoteFilter))
+  }, [activeSession.remoteFiles, canUseRemoteFiles, remoteFilter])
+
   const sortedRemoteRows = useMemo(() => {
     if (!canUseRemoteFiles) {
       return []
     }
 
-    return sortRemoteFiles(activeSession.remoteFiles, remoteSort)
-  }, [activeSession.remoteFiles, canUseRemoteFiles, remoteSort])
+    return sortRemoteFiles(filteredRemoteFiles, remoteSort)
+  }, [canUseRemoteFiles, filteredRemoteFiles, remoteSort])
 
   const selectedRemoteItems = activeSession.remoteFiles.filter((item) => selectedRemotePaths.includes(item.path))
   const selectedRemoteDownloadItems = selectedRemoteItems.filter((item) => item.name !== '..')
@@ -508,7 +537,7 @@ export function FileManager({
       currentSelection: selectedLocalPaths,
       event,
       itemPath: item.path,
-      rows: localItems
+      rows: filteredLocalItems
     })
     setSelectedLocalPaths(selected)
     setLocalAnchorPath(item.path)
@@ -524,7 +553,7 @@ export function FileManager({
       currentSelection: selectedRemotePaths,
       event,
       itemPath: item.path,
-      rows: activeSession.remoteFiles
+      rows: sortedRemoteRows
     })
     setSelectedRemotePaths(selected)
     setRemoteAnchorPath(item.path)
@@ -540,7 +569,9 @@ export function FileManager({
       setLocalAnchorPath(item.path)
       return
     }
-    setSelectedLocalPaths(mergeUnique([...session.basePaths, ...rangePaths(localItems, session.startPath, item.path)]))
+    setSelectedLocalPaths(
+      mergeUnique([...session.basePaths, ...rangePaths(filteredLocalItems, session.startPath, item.path)])
+    )
   }
 
   const extendRemoteDragSelection = (item: RemoteFileItem) => {
@@ -554,7 +585,7 @@ export function FileManager({
       return
     }
     setSelectedRemotePaths(
-      mergeUnique([...session.basePaths, ...rangePaths(activeSession.remoteFiles, session.startPath, item.path)])
+      mergeUnique([...session.basePaths, ...rangePaths(sortedRemoteRows, session.startPath, item.path)])
     )
   }
 
@@ -831,6 +862,13 @@ export function FileManager({
                 ) : null
               }
             />
+            <PaneFilterBar
+              filter={localFilter}
+              matchCount={filteredLocalItems.filter((i) => i.name !== '..').length}
+              totalCount={localItems.filter((i) => i.name !== '..').length}
+              onFilterChange={setLocalFilter}
+              onClear={() => setLocalFilter((prev) => ({ ...prev, query: '' }))}
+            />
             <div className="file-table-scroll-region">
               <div
                 className="file-table-shell local-file-table-shell"
@@ -865,7 +903,7 @@ export function FileManager({
                 <LocalFileTable
                   scrollRef={localScrollRef}
                   cutPaths={localCutPaths}
-                  rows={localItems}
+                  rows={filteredLocalItems}
                   selectedPaths={selectedLocalPaths}
                   onDragItem={(event, item) => {
                     event.dataTransfer.effectAllowed = 'copy'
@@ -910,7 +948,7 @@ export function FileManager({
                         currentSelection: selectedLocalPaths,
                         event,
                         itemPath: item.path,
-                        rows: localItems
+                        rows: filteredLocalItems
                       })
                     )
                     setLocalAnchorPath(startPath)
@@ -985,6 +1023,14 @@ export function FileManager({
                 }
                 onChange={setRemotePathInput}
                 onSubmit={submitRemotePath}
+              />
+              <PaneFilterBar
+                disabled={!canUseRemoteFiles}
+                filter={remoteFilter}
+                matchCount={filteredRemoteFiles.filter((i) => i.name !== '..').length}
+                totalCount={activeSession.remoteFiles.filter((i) => i.name !== '..').length}
+                onFilterChange={setRemoteFilter}
+                onClear={() => setRemoteFilter((prev) => ({ ...prev, query: '' }))}
               />
               <div className="remote-file-table-region">
                 <div
