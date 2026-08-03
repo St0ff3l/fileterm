@@ -81,6 +81,25 @@ function isUploadPermissionFailure(transfer: TransferTask) {
   )
 }
 
+function isRootUploadCommandFailure(transfer: TransferTask) {
+  if (transfer.direction !== 'upload' || !['failed', 'paused', 'interrupted'].includes(transfer.status)) {
+    return false
+  }
+
+  return /root\s+(?:文件|上传|写入)|(?:^|\b)(?:su|sudo)\s+|密码|password/i.test(transfer.message ?? '')
+}
+
+function uploadFailureBanner(transfer: TransferTask) {
+  if (isUploadPermissionFailure(transfer)) {
+    return t.uploadPermissionDenied
+  }
+  if (isRootUploadCommandFailure(transfer)) {
+    const detail = transfer.message?.replace(/^command error:\s*/i, '').trim()
+    return detail ? `${t.uploadFailed}: ${detail}` : t.uploadFailed
+  }
+  return null
+}
+
 export function useWorkspaceIpcSync({
   desktopApi,
   isConnectionFormWindow,
@@ -366,11 +385,12 @@ export function useWorkspaceIpcSync({
     const pendingTransfers: TransferTask[] = []
 
     const processTransferUpdate = (transfer: TransferTask) => {
-      if (isMainWorkspaceWindow && isUploadPermissionFailure(transfer)) {
+      const banner = uploadFailureBanner(transfer)
+      if (isMainWorkspaceWindow && banner) {
         const notificationKey = `${transfer.status}:${transfer.updatedAt ?? ''}:${transfer.message ?? ''}`
         if (notifiedTransferFailuresRef.current.get(transfer.id) !== notificationKey) {
           notifiedTransferFailuresRef.current.set(transfer.id, notificationKey)
-          onStatusMessageRef.current(t.uploadPermissionDenied)
+          onStatusMessageRef.current(banner)
         }
       } else if (!['failed', 'paused', 'interrupted'].includes(transfer.status)) {
         notifiedTransferFailuresRef.current.delete(transfer.id)

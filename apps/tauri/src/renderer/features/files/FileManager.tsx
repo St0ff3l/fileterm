@@ -537,7 +537,7 @@ export function FileManager({
       currentSelection: selectedLocalPaths,
       event,
       itemPath: item.path,
-      rows: localItems
+      rows: filteredLocalItems
     })
     setSelectedLocalPaths(selected)
     setLocalAnchorPath(item.path)
@@ -553,7 +553,7 @@ export function FileManager({
       currentSelection: selectedRemotePaths,
       event,
       itemPath: item.path,
-      rows: activeSession.remoteFiles
+      rows: sortedRemoteRows
     })
     setSelectedRemotePaths(selected)
     setRemoteAnchorPath(item.path)
@@ -569,7 +569,9 @@ export function FileManager({
       setLocalAnchorPath(item.path)
       return
     }
-    setSelectedLocalPaths(mergeUnique([...session.basePaths, ...rangePaths(localItems, session.startPath, item.path)]))
+    setSelectedLocalPaths(
+      mergeUnique([...session.basePaths, ...rangePaths(filteredLocalItems, session.startPath, item.path)])
+    )
   }
 
   const extendRemoteDragSelection = (item: RemoteFileItem) => {
@@ -583,7 +585,7 @@ export function FileManager({
       return
     }
     setSelectedRemotePaths(
-      mergeUnique([...session.basePaths, ...rangePaths(activeSession.remoteFiles, session.startPath, item.path)])
+      mergeUnique([...session.basePaths, ...rangePaths(sortedRemoteRows, session.startPath, item.path)])
     )
   }
 
@@ -946,7 +948,7 @@ export function FileManager({
                         currentSelection: selectedLocalPaths,
                         event,
                         itemPath: item.path,
-                        rows: localItems
+                        rows: filteredLocalItems
                       })
                     )
                     setLocalAnchorPath(startPath)

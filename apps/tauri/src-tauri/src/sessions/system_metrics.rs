@@ -117,13 +117,109 @@ fn classify_windows_probe_output(output: &str) -> Option<&'static str> {
 
 /// Run a command via the exec channel and collect its combined stdout/stderr.
 pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<String, String> {
+    exec_command_with_status(handle, cmd)
+        .await
+        .map(|(output, _)| output)
+}
+
+/// Run a command via the exec channel and retain the SSH-level exit status.
+///
+/// The regular `exec_command` API intentionally returns output only because
+/// most callers are best-effort probes. File operations need the status to
+/// distinguish an empty successful result from a failed command, especially
+/// when the command output itself reaches the collection cap.
+pub async fn exec_command_with_status<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+) -> Result<(String, Option<u32>), String> {
+    exec_command_internal(handle, cmd, None, false).await
+}
+
+/// Run a command via the exec channel, write `stdin`, and retain the SSH
+/// channel's exit status.
+pub async fn exec_command_with_stdin_status<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    stdin: &str,
+) -> Result<(String, Option<u32>), String> {
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false).await
+}
+
+/// Run an exec command with a requested PTY and retain its SSH-level exit
+/// status.  This is the no-input counterpart to
+/// [`exec_command_with_stdin_status_pty`].
+pub async fn exec_command_with_status_pty<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+) -> Result<(String, Option<u32>), String> {
+    exec_command_internal(handle, cmd, None, true).await
+}
+
+/// Run an exec command with a requested PTY, write `stdin`, and retain the
+/// SSH channel's exit status.  `su` authenticates through the controlling
+/// terminal on many PAM setups, while a plain exec channel has no terminal at
+/// all; callers that reproduce an interactive `su -` exchange use this path.
+pub async fn exec_command_with_stdin_status_pty<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    stdin: &str,
+) -> Result<(String, Option<u32>), String> {
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true).await
+}
+
+async fn exec_command_internal<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    stdin: Option<&[u8]>,
+    request_pty: bool,
+) -> Result<(String, Option<u32>), String> {
     let mut channel = handle
         .channel_open_session()
         .await
         .map_err(|e| e.to_string())?;
+    if request_pty {
+        channel
+            .request_pty(
+                true,
+                "xterm-256color",
+                80,
+                24,
+                0,
+                0,
+                &[
+                    // Do not echo the password (or a base64 payload written
+                    // by a future PTY-backed file transfer) back into the
+                    // collected command output.
+                    (russh::Pty::ECHO, 0),
+                    (russh::Pty::ECHOE, 0),
+                    (russh::Pty::ECHOK, 0),
+                    (russh::Pty::ECHONL, 0),
+                    (russh::Pty::TTY_OP_ISPEED, 115200),
+                    (russh::Pty::TTY_OP_OSPEED, 115200),
+                ],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     channel.exec(true, cmd).await.map_err(|e| e.to_string())?;
+    if let Some(stdin) = stdin {
+        channel.data(stdin).await.map_err(|e| e.to_string())?;
+        if request_pty {
+            // A PTY is a terminal, not a pipe: SSH channel EOF does not
+            // reliably become stdin EOF for programs such as base64 -d.
+            // Send the terminal's VEOF byte at the start of a fresh line so
+            // the remote process observes the same end-of-input as Ctrl+D.
+            channel
+                .data_bytes(vec![0x04])
+                .await
+                .map_err(|e| e.to_string())?;
+        } else {
+            channel.eof().await.map_err(|e| e.to_string())?;
+        }
+    }
 
     let mut output: Vec<u8> = Vec::new();
+    let mut exit_status = None;
     let mut draining_after_close = false;
     let mut capped = false;
     loop {
@@ -146,16 +242,20 @@ pub async fn exec_command<H: Handler>(handle: &Handle<H>, cmd: &str) -> Result<S
                     extend_with_cap(&mut output, data.as_ref(), &mut capped);
                 }
             }
-            Some(ChannelMsg::ExitStatus { .. })
-            | Some(ChannelMsg::Eof)
-            | Some(ChannelMsg::Close) => {
+            Some(ChannelMsg::ExitStatus {
+                exit_status: status,
+            }) => {
+                exit_status = Some(status);
+                draining_after_close = true;
+            }
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
                 draining_after_close = true;
             }
             None => break,
             _ => {}
         }
     }
-    Ok(String::from_utf8_lossy(&output).into_owned())
+    Ok((String::from_utf8_lossy(&output).into_owned(), exit_status))
 }
 
 /// Run a command via the exec channel, write `stdin` to the channel, then
@@ -165,51 +265,9 @@ pub async fn exec_command_with_stdin<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<String, String> {
-    let mut channel = handle
-        .channel_open_session()
+    exec_command_with_stdin_status(handle, cmd, stdin)
         .await
-        .map_err(|e| e.to_string())?;
-    channel.exec(true, cmd).await.map_err(|e| e.to_string())?;
-    let stdin_bytes = stdin.as_bytes().to_vec();
-    channel
-        .data(&stdin_bytes[..])
-        .await
-        .map_err(|e| e.to_string())?;
-    channel.eof().await.map_err(|e| e.to_string())?;
-
-    let mut output: Vec<u8> = Vec::new();
-    let mut draining_after_close = false;
-    let mut capped = false;
-    loop {
-        let message = if draining_after_close {
-            match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
-                Ok(message) => message,
-                Err(_) => break,
-            }
-        } else {
-            channel.wait().await
-        };
-        match message {
-            Some(ChannelMsg::Data { data }) => {
-                if !capped {
-                    extend_with_cap(&mut output, data.as_ref(), &mut capped);
-                }
-            }
-            Some(ChannelMsg::ExtendedData { data, .. }) => {
-                if !capped {
-                    extend_with_cap(&mut output, data.as_ref(), &mut capped);
-                }
-            }
-            Some(ChannelMsg::ExitStatus { .. })
-            | Some(ChannelMsg::Eof)
-            | Some(ChannelMsg::Close) => {
-                draining_after_close = true;
-            }
-            None => break,
-            _ => {}
-        }
-    }
-    Ok(String::from_utf8_lossy(&output).into_owned())
+        .map(|(output, _)| output)
 }
 
 fn extract_probe_body(raw: &str) -> Option<String> {
