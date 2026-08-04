@@ -547,6 +547,18 @@ fn remote_bind_host_matches(bind_host: &str, connected_address: &str) -> bool {
     bind_host == connected_address || matches!(bind_host, "0.0.0.0" | "::" | "*")
 }
 
+fn effective_remote_forward_port(requested_port: u16, returned_port: u32) -> Result<u32, String> {
+    if requested_port != 0 {
+        return Ok(u32::from(requested_port));
+    }
+    if returned_port == 0 || returned_port > u32::from(u16::MAX) {
+        return Err(format!(
+            "SSH server returned an invalid remote forward port: {returned_port}"
+        ));
+    }
+    Ok(returned_port)
+}
+
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SshTunnelRule {
@@ -828,7 +840,7 @@ impl TunnelManager {
     async fn start_remote(&mut self, rule: &SshTunnelRule) -> Result<(), String> {
         // 加 timeout：tcpip_forward 在 inline await 路径上，服务器卡住会
         // 阻塞 worker 主循环，导致终端 select! 无法响应 Ctrl+C。
-        let actual_port = timeout(
+        let returned_port = timeout(
             SSH_TUNNEL_OP_TIMEOUT,
             self.handle
                 .tcpip_forward(rule.bind_host.clone(), rule.bind_port as u32),
@@ -838,6 +850,11 @@ impl TunnelManager {
             "Remote tunnel request timed out: 服务器未在 5 秒内响应 tcpip_forward".to_string()
         })?
         .map_err(|error| format!("Remote tunnel request failed: {error}"))?;
+        // RFC 4254 only returns an allocated port when the client requests
+        // port 0. russh represents a successful fixed-port reply as 0 because
+        // OpenSSH sends REQUEST_SUCCESS without a payload. Keep the requested
+        // port for lookup and cancellation in that case.
+        let actual_port = effective_remote_forward_port(rule.bind_port, returned_port)?;
         let target = crate::services::workspace::RemoteForwardTarget {
             bind_host: rule.bind_host.clone(),
             bind_port: actual_port,
@@ -7993,16 +8010,16 @@ mod tests {
     use super::{
         build_http_connect_request, build_legacy_preferred, capture_root_access_password_input,
         coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
-        enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
-        is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
-        looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
-        parent_remote_item, parent_remote_path, parse_root_file_access_method,
-        password_for_authentication, privilege_command_from_terminal_input,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        resource_monitoring_interval_seconds, root_access_auth_failed, root_file_command,
-        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
-        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, strip_su_exec_output,
-        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        effective_remote_forward_port, enqueue_tunnel_command, finish_shell_setup_suppression,
+        format_sftp_unavailable_reason, is_password_prompt, is_root_upload_staging_path,
+        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        missing_password_credential, parent_remote_item, parent_remote_path,
+        parse_root_file_access_method, password_for_authentication,
+        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
+        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
+        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
+        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule, wait_for_ssh_stage,
@@ -9304,6 +9321,36 @@ mod tests {
             .unwrap()
             .unwrap()
             .unwrap();
+
+        let remote_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let remote_port = remote_listener.local_addr().unwrap().port();
+        drop(remote_listener);
+        let returned_port = tunnel_handle
+            .tcpip_forward("127.0.0.1", u32::from(remote_port))
+            .await
+            .unwrap();
+        assert_eq!(
+            returned_port, 0,
+            "OpenSSH fixed-port success has no allocated-port payload"
+        );
+        let effective_port = effective_remote_forward_port(remote_port, returned_port).unwrap();
+        assert_eq!(effective_port, u32::from(remote_port));
+        let remote_client = timeout(
+            Duration::from_secs(2),
+            tokio::net::TcpStream::connect(("127.0.0.1", remote_port)),
+        )
+        .await
+        .expect("remote forward did not begin listening")
+        .unwrap();
+        drop(remote_client);
+        tunnel_handle
+            .cancel_tcpip_forward("127.0.0.1", effective_port)
+            .await
+            .unwrap();
+        let rebound = TcpListener::bind(("127.0.0.1", remote_port))
+            .await
+            .expect("cancel remote forward did not release the requested port");
+        drop(rebound);
     }
 
     #[cfg(unix)]
@@ -9429,6 +9476,14 @@ mod tests {
         assert!(!remote_bind_host_matches("127.0.0.1", "10.0.0.4"));
         assert!(remote_bind_host_matches("0.0.0.0", "10.0.0.4"));
         assert!(remote_bind_host_matches("::", "2001:db8::4"));
+    }
+
+    #[test]
+    fn remote_forward_keeps_fixed_port_when_server_reply_has_no_port() {
+        assert_eq!(effective_remote_forward_port(15432, 0).unwrap(), 15432);
+        assert_eq!(effective_remote_forward_port(0, 49152).unwrap(), 49152);
+        assert!(effective_remote_forward_port(0, 0).is_err());
+        assert!(effective_remote_forward_port(0, 65536).is_err());
     }
 
     #[test]
