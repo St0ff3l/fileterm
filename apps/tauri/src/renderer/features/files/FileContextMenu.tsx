@@ -87,5 +87,7 @@ export function FileContextMenu({
     { label: t.permissionMore, disabled: !canChangePermissions, action: onChangePermissions }
   ]
 
-  return <ContextMenu className="file-context-menu" items={items} onClose={onClose} position={position} />
+  return (
+    <ContextMenu autoFocus={false} className="file-context-menu" items={items} onClose={onClose} position={position} />
+  )
 }

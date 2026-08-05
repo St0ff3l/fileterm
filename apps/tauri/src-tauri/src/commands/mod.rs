@@ -2378,8 +2378,14 @@ pub async fn app_set_remote_file_access_mode(
         .and_then(|o| o.get("sudoPassword"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+    let root_access_method = options
+        .as_ref()
+        .and_then(|o| o.get("rootAccessMethod"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::SetRemoteFileAccessMode {
         mode,
+        root_access_method,
         sudo_user,
         sudo_password,
         respond_to: tx,

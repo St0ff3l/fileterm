@@ -159,30 +159,33 @@
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 360px;
-  padding: 8px;
-  border-radius: 8px;
+  gap: 2px;
+  min-width: 340px;
+  padding: 4px;
+  border-radius: 7px;
 }
 
 .terminal-find input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 5px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
+  line-height: 1;
+  caret-color: var(--text-main);
 }
 
 .terminal-find button {
   flex: 0 0 auto;
-  height: 28px;
-  min-width: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 7px;
+  border-radius: 4px;
   font-size: 12px;
   border: 0;
+  line-height: 1;
 }
 
 .terminal-find-actions {
@@ -190,32 +193,39 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 1px;
-  padding: 2px;
+  gap: 2px;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--terminal-find-action-divider);
-  border-radius: 8px;
-  background: var(--terminal-find-action-divider);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--text-main) 7%, transparent) inset;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .terminal-find .terminal-find-actions > button {
-  height: 26px;
-  min-width: 30px;
-  padding: 0 9px;
-  border-radius: 5px;
+  height: 22px;
+  min-width: 24px;
+  padding: 0 5px;
+  border-radius: 4px;
 }
 
 .terminal-find .terminal-find-actions > button:focus-visible {
   position: relative;
   z-index: 1;
-  outline: 2px solid color-mix(in srgb, var(--primary) 58%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--text-main) 72%, transparent);
   outline-offset: -2px;
 }
 
+.terminal-find input:focus,
+.terminal-find input:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--border-dark);
+}
+
 .terminal-find .terminal-find-actions > .terminal-find-submit {
-  min-width: 48px;
-  margin-left: 2px;
+  min-width: 42px;
+  margin-left: 0;
   font-weight: 600;
 }
 
@@ -225,10 +235,14 @@
 
 .terminal-find-count {
   flex: 0 0 auto;
-  min-width: 40px;
-  font-size: 12px;
+  min-width: 26px;
+  font-size: 11px;
   text-align: center;
   white-space: nowrap;
+}
+
+.terminal-find-count:empty {
+  display: none;
 }
 
 .terminal-find-status {
@@ -1579,7 +1593,8 @@
 
 .transfer-row-main strong,
 .transfer-row-main span,
-.transfer-row small {
+.transfer-row small,
+.transfer-row time {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -1594,12 +1609,19 @@
 
 .transfer-row-main span,
 .transfer-row small,
+.transfer-row time,
 .transfer-row-meta span {
   font-size: 11px;
 }
 
 .transfer-row-main span {
   color: var(--text-soft);
+}
+
+.transfer-row time {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
 }
 
 .transfer-row-meta {
@@ -1711,6 +1733,12 @@
   overflow: hidden;
 }
 
+.modal-card.root-access-modal {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
 .network-share-modal__header {
   display: flex;
   align-items: center;
@@ -1798,7 +1826,11 @@
   display: grid;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px 16px 16px;
+  scrollbar-gutter: stable;
 }
 
 .ssh-fieldset.network-share-fieldset {
@@ -1810,9 +1842,9 @@
 
 .ssh-fieldset.root-access-fieldset {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding: 12px 24px 14px;
+  padding: 10px 20px 12px;
 }
 
 .network-share-fieldset > legend {
@@ -1846,7 +1878,8 @@
 
 .network-share-credentials-modal .file-action-field input,
 .network-share-picker-modal .file-action-field select,
-.root-access-modal .file-action-field input {
+.root-access-modal .file-action-field input,
+.root-access-modal .file-action-field select {
   box-sizing: border-box;
   width: 100%;
   height: 42px;
@@ -1862,7 +1895,8 @@
 
 .network-share-credentials-modal .file-action-field input:focus,
 .network-share-picker-modal .file-action-field select:focus,
-.root-access-modal .file-action-field input:focus {
+.root-access-modal .file-action-field input:focus,
+.root-access-modal .file-action-field select:focus {
   outline: none;
   border-color: var(--text-muted);
   box-shadow: 0 0 0 3px var(--input-focus-ring);
@@ -1870,8 +1904,41 @@
 
 .network-share-credentials-modal .file-action-field input:hover,
 .network-share-picker-modal .file-action-field select:hover,
-.root-access-modal .file-action-field input:hover {
+.root-access-modal .file-action-field input:hover,
+.root-access-modal .file-action-field select:hover {
   border-color: var(--text-muted);
+}
+
+.root-access-modal .file-action-field .ft-select-shell,
+.root-access-modal .file-action-field .dropdown-select-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  height: 42px;
+}
+
+.root-access-modal .file-action-field .dropdown-select-trigger {
+  padding: 0 14px;
+  border-color: var(--border-light);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.root-access-modal .file-action-field .dropdown-select-trigger:focus-visible {
+  outline: none;
+  border-color: var(--text-muted);
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+.root-access-modal .file-action-field .dropdown-select-trigger:hover {
+  border-color: var(--text-muted);
+}
+
+.root-access-modal .root-access-method-hint {
+  margin: -4px 0 0;
 }
 
 .network-share-picker-modal .file-action-field select {
@@ -1913,8 +1980,8 @@
 .root-access-modal .root-access-note {
   margin: 0;
   display: grid;
-  gap: 6px;
-  padding: 12px 14px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-light));
   border-radius: 0;
   background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
@@ -1929,8 +1996,15 @@
 
 .root-access-modal .root-access-note-body {
   font-size: 12px;
-  line-height: 1.65;
+  line-height: 1.5;
   color: var(--text-secondary);
+}
+
+.root-access-modal__actions {
+  margin: 0;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-card);
 }
 
 .ssh-verification-box {

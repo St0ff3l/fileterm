@@ -76,6 +76,7 @@ export type LocalNetworkShareSource = {
 }
 
 export type RootAccessCredentials = {
+  rootAccessMethod: 'sudo' | 'su'
   sudoUser: string
   sudoPassword: string
 }
@@ -1319,7 +1320,7 @@ export function useFileOperations({
         setRootAccessDialog({
           tabId: activeTab.id,
           sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
-          sudoUser: activeSession.sudoUser || 'root'
+          sudoUser: 'root'
         })
         return
       }
@@ -1330,12 +1331,13 @@ export function useFileOperations({
           setRootAccessDialogError(null)
           const snapshot = await desktopApi.setRemoteFileAccessMode(activeTab.id, nextMode)
           onApplySnapshot(snapshot)
+          await refreshCurrentPane('remote')
         } catch (error) {
           if (shouldPromptForRootAccess(error)) {
             setRootAccessDialog({
               tabId: activeTab.id,
               sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
-              sudoUser: activeSession.sudoUser || 'root'
+              sudoUser: 'root'
             })
             reportOperationError(setRootAccessDialogError, '切换到 root 视角', error)
             return
@@ -1353,6 +1355,7 @@ export function useFileOperations({
         onBusyChange(true)
         const snapshot = await desktopApi.setRemoteFileAccessMode(activeTab.id, nextMode)
         onApplySnapshot(snapshot)
+        await refreshCurrentPane('remote')
       } catch (error) {
         reportStatusError('切换到普通视角', error)
       } finally {
@@ -1382,7 +1385,7 @@ export function useFileOperations({
     })()
   }
 
-  const handleConfirmRootAccess = ({ sudoUser, sudoPassword }: RootAccessCredentials) => {
+  const handleConfirmRootAccess = ({ rootAccessMethod, sudoUser, sudoPassword }: RootAccessCredentials) => {
     if (!desktopApi || !rootAccessDialog || rootAccessSubmittingRef.current) {
       return
     }
@@ -1398,10 +1401,12 @@ export function useFileOperations({
         setIsRootAccessSubmitting(true)
         setRootAccessDialogError(null)
         const snapshot = await desktopApi.setRemoteFileAccessMode(rootAccessDialog.tabId, 'root', {
+          rootAccessMethod,
           sudoUser,
           sudoPassword
         })
         onApplySnapshot(snapshot)
+        await refreshCurrentPane('remote')
         setRootAccessDialog(null)
         setRootAccessDialogError(null)
       } catch (error) {

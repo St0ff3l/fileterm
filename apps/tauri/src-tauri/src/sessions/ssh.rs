@@ -1497,6 +1497,21 @@ enum RootFileAccessMethod {
     Su,
 }
 
+fn parse_root_file_access_method(value: Option<&str>) -> Result<RootFileAccessMethod, String> {
+    match value.unwrap_or("sudo") {
+        "sudo" => Ok(RootFileAccessMethod::Sudo),
+        "su" => Ok(RootFileAccessMethod::Su),
+        other => Err(format!("不支持的 root 文件访问方式: {other}")),
+    }
+}
+
+fn root_file_access_method_label(method: RootFileAccessMethod) -> &'static str {
+    match method {
+        RootFileAccessMethod::Sudo => "sudo",
+        RootFileAccessMethod::Su => "su",
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PendingRootAccessAuth {
     method: RootFileAccessMethod,
@@ -5211,10 +5226,19 @@ async fn handle_worker_cmd_without_sftp(
         }
         WorkerCmd::SetRemoteFileAccessMode {
             mode,
+            root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
             respond_to,
         } => {
+            let requested_access_method =
+                match parse_root_file_access_method(new_root_access_method.as_deref()) {
+                    Ok(method) => method,
+                    Err(error) => {
+                        let _ = respond_to.send(Err(error));
+                        return Ok(false);
+                    }
+                };
             // root 模式走 exec channel（handle.channel_open_session().exec()），
             // 不依赖 SFTP subsystem。即使用户的服务器拒绝 SFTP（Timeout /
             // disabled），root 视角的文件操作仍可通过 sudo/su + exec 完成。
@@ -5222,9 +5246,13 @@ async fn handle_worker_cmd_without_sftp(
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
             let prev_mode = file_access_mode.clone();
+            let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
+            }
+            if mode == "root" && requested_access_method != prev_access_method {
+                *sudo_password = None;
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
@@ -5233,7 +5261,7 @@ async fn handle_worker_cmd_without_sftp(
             }
 
             if mode == "root" {
-                // 与原有手动 root 视图流程一致：弹窗输入始终验证 sudo 凭据。
+                // 与原有手动 root 视图流程一致：验证弹窗选择的 sudo/su 凭据。
                 // 用外层短超时避免 `exec_shell_file_command` 内部 10s 超时把
                 // worker 主循环卡死，导致终端 select! 无法响应 Ctrl+C。
                 let verify = match timeout(
@@ -5241,7 +5269,7 @@ async fn handle_worker_cmd_without_sftp(
                     exec_shell_file_command(
                         handle,
                         "true",
-                        RootFileAccessMethod::Sudo,
+                        requested_access_method,
                         sudo_user,
                         sudo_password,
                     ),
@@ -5249,16 +5277,20 @@ async fn handle_worker_cmd_without_sftp(
                 .await
                 {
                     Ok(inner) => inner,
-                    Err(_) => Err("sudo 验证超时：服务器未在 1.5 秒内响应".to_string()),
+                    Err(_) => Err(format!(
+                        "{} 验证超时：服务器未在 1.5 秒内响应",
+                        root_file_access_method_label(requested_access_method)
+                    )),
                 };
                 if let Err(err) = verify {
                     *file_access_mode = prev_mode;
+                    *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
-                *root_file_access_method = RootFileAccessMethod::Sudo;
+                *root_file_access_method = requested_access_method;
             }
 
             *file_access_mode = mode.clone();
@@ -6115,19 +6147,32 @@ async fn handle_worker_cmd(
         }
         WorkerCmd::SetRemoteFileAccessMode {
             mode,
+            root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
             respond_to,
         } => {
+            let requested_access_method =
+                match parse_root_file_access_method(new_root_access_method.as_deref()) {
+                    Ok(method) => method,
+                    Err(error) => {
+                        let _ = respond_to.send(Err(error));
+                        return Ok(false);
+                    }
+                };
             // 对照 Electron verifyRootFileAccess：切到 root 前先验证 sudo 凭据
             // 可用，失败则回滚状态并返回错误，让用户在弹窗里立即看到反馈，
             // 而不是等到第一次文件操作才失败（用户会以为"root 切换没接入"）。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
             let prev_mode = file_access_mode.clone();
+            let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
+            }
+            if mode == "root" && requested_access_method != prev_access_method {
+                *sudo_password = None;
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
@@ -6137,7 +6182,7 @@ async fn handle_worker_cmd(
             }
 
             if mode == "root" {
-                // 手动弹窗流程始终验证 sudo 凭据，失败则回滚。`exec_shell_file_command`
+                // 手动弹窗流程验证选择的 sudo/su 凭据，失败则回滚。`exec_shell_file_command`
                 // 内部最长会等 SUDO_VERIFY_TIMEOUT（10s）才放弃，对 worker
                 // 主循环来说太长——一旦 sudo 提示卡住或网络抖动，整个
                 // 终端 select! 都停在这里，连 Ctrl+C 都进不去。这里用
@@ -6149,7 +6194,7 @@ async fn handle_worker_cmd(
                     exec_shell_file_command(
                         handle,
                         "true",
-                        RootFileAccessMethod::Sudo,
+                        requested_access_method,
                         sudo_user,
                         sudo_password,
                     ),
@@ -6157,17 +6202,21 @@ async fn handle_worker_cmd(
                 .await
                 {
                     Ok(inner) => inner,
-                    Err(_) => Err("sudo 验证超时：服务器未在 1.5 秒内响应".to_string()),
+                    Err(_) => Err(format!(
+                        "{} 验证超时：服务器未在 1.5 秒内响应",
+                        root_file_access_method_label(requested_access_method)
+                    )),
                 };
                 if let Err(err) = verify {
                     // 回滚到切换前的状态
                     *file_access_mode = prev_mode;
+                    *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
-                *root_file_access_method = RootFileAccessMethod::Sudo;
+                *root_file_access_method = requested_access_method;
             }
 
             *file_access_mode = mode.clone();
@@ -7947,12 +7996,13 @@ mod tests {
         enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
         is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
         looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
-        parent_remote_item, parent_remote_path, password_for_authentication,
-        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
-        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
-        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
-        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        parent_remote_item, parent_remote_path, parse_root_file_access_method,
+        password_for_authentication, privilege_command_from_terminal_input,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        resource_monitoring_interval_seconds, root_access_auth_failed, root_file_command,
+        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
+        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, strip_su_exec_output,
+        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule, wait_for_ssh_stage,
@@ -8621,6 +8671,23 @@ mod tests {
             resolve_shell_file_access("stoffel", "stoffel"),
             ("user", None)
         );
+    }
+
+    #[test]
+    fn parses_file_manager_root_access_methods_with_sudo_compatibility() {
+        assert_eq!(
+            parse_root_file_access_method(None),
+            Ok(RootFileAccessMethod::Sudo)
+        );
+        assert_eq!(
+            parse_root_file_access_method(Some("sudo")),
+            Ok(RootFileAccessMethod::Sudo)
+        );
+        assert_eq!(
+            parse_root_file_access_method(Some("su")),
+            Ok(RootFileAccessMethod::Su)
+        );
+        assert!(parse_root_file_access_method(Some("doas")).is_err());
     }
 
     #[test]
