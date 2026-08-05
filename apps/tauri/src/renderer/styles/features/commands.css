@@ -1374,8 +1374,10 @@
 /* General checkboxes styled as circular dot selectors (toggles / editor options) */
 .command-toggle input,
 .command-editor-checkbox-row input,
+.overview-preference-toggle input,
 .command-toggle input[type='checkbox'],
-.command-editor-checkbox-row input[type='checkbox'] {
+.command-editor-checkbox-row input[type='checkbox'],
+.overview-preference-toggle input[type='checkbox'] {
   appearance: none;
   -webkit-appearance: none;
   width: 14px !important;
@@ -1397,8 +1399,10 @@
 
 .command-toggle input::after,
 .command-editor-checkbox-row input::after,
+.overview-preference-toggle input::after,
 .command-toggle input[type='checkbox']::after,
-.command-editor-checkbox-row input[type='checkbox']::after {
+.command-editor-checkbox-row input[type='checkbox']::after,
+.overview-preference-toggle input[type='checkbox']::after {
   content: '';
   position: absolute;
   inset: 2.5px;
@@ -1410,22 +1414,28 @@
 
 .command-toggle input:checked,
 .command-editor-checkbox-row input:checked,
+.overview-preference-toggle input:checked,
 .command-toggle input[type='checkbox']:checked,
-.command-editor-checkbox-row input[type='checkbox']:checked {
+.command-editor-checkbox-row input[type='checkbox']:checked,
+.overview-preference-toggle input[type='checkbox']:checked {
   border-color: var(--copy-link);
 }
 
 .command-toggle input:checked::after,
 .command-editor-checkbox-row input:checked::after,
+.overview-preference-toggle input:checked::after,
 .command-toggle input[type='checkbox']:checked::after,
-.command-editor-checkbox-row input[type='checkbox']:checked::after {
+.command-editor-checkbox-row input[type='checkbox']:checked::after,
+.overview-preference-toggle input[type='checkbox']:checked::after {
   transform: scale(1);
 }
 
 .command-toggle input:focus-visible,
 .command-editor-checkbox-row input:focus-visible,
+.overview-preference-toggle input:focus-visible,
 .command-toggle input[type='checkbox']:focus-visible,
-.command-editor-checkbox-row input[type='checkbox']:focus-visible {
+.command-editor-checkbox-row input[type='checkbox']:focus-visible,
+.overview-preference-toggle input[type='checkbox']:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--input-focus-ring);
 }

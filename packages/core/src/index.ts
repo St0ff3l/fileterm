@@ -120,6 +120,28 @@ export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-inter
 /** 资源监控采集间隔，单位为秒。 */
 export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
 
+/** SSH connection behavior shared by newly created connections. */
+export interface SshConnectionDefaults {
+  useEmptyPassword: boolean
+  enableExecChannel: boolean
+  enableResourceMonitoring: boolean
+  resourceMonitoringIntervalSeconds: ResourceMonitoringIntervalSeconds
+  reconnectMode: 'none' | 'enter' | 'auto'
+  legacyAlgorithms: boolean
+}
+
+/** Legacy per-connection override metadata retained for persisted profile compatibility. */
+export type SshConnectionOverrides = Partial<SshConnectionDefaults>
+
+export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
+  useEmptyPassword: false,
+  enableExecChannel: true,
+  enableResourceMonitoring: true,
+  resourceMonitoringIntervalSeconds: 1,
+  reconnectMode: 'none',
+  legacyAlgorithms: false
+}
+
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
   username: string
@@ -141,6 +163,7 @@ export interface SshProfile extends NetworkProfile {
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
   reconnectMode?: 'none' | 'enter' | 'auto'
+  connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
   jumpProfileId?: string
   forwards?: SshForwardRule[]
@@ -755,6 +778,7 @@ export interface CreateProfileInput {
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
   reconnectMode?: 'none' | 'enter' | 'auto'
+  connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
   proxyPassword?: string
   jumpProfileId?: string
@@ -916,6 +940,39 @@ export interface TerminalCommandHistoryEntry {
   createdAt: number
 }
 
+export type OverviewSectionId = 'stats' | 'recent' | 'allConnections' | 'quickActions'
+
+export const DEFAULT_OVERVIEW_SECTION_ORDER = [
+  'stats',
+  'recent',
+  'allConnections',
+  'quickActions'
+] as const satisfies readonly OverviewSectionId[]
+
+export interface UiPreferences {
+  theme: 'default-dark' | 'default-light'
+  locale: 'zhCN' | 'enUS'
+  autoCheckUpdates: boolean
+  connectionDefaults: SshConnectionDefaults
+  overviewShowStats: boolean
+  overviewShowRecent: boolean
+  overviewShowAllConnections: boolean
+  overviewShowQuickActions: boolean
+  overviewSectionOrder: OverviewSectionId[]
+}
+
+export interface UiPreferencesInput {
+  theme?: UiPreferences['theme']
+  locale?: UiPreferences['locale']
+  autoCheckUpdates?: boolean
+  connectionDefaults?: Partial<SshConnectionDefaults>
+  overviewShowStats?: boolean
+  overviewShowRecent?: boolean
+  overviewShowAllConnections?: boolean
+  overviewShowQuickActions?: boolean
+  overviewSectionOrder?: OverviewSectionId[]
+}
+
 export interface CommandSendPreferences {
   rememberSelection: boolean
   sendScope: 'current' | 'all-ssh' | 'selected-ssh'
@@ -956,20 +1013,8 @@ export interface FileTermDesktopApi {
   onUpdateStatus(listener: (status: AppUpdateStatus) => void): () => void
   readClipboardText(): Promise<string>
   writeClipboardText(text: string): Promise<void>
-  getUiPreferences(): Promise<{
-    theme: 'default-dark' | 'default-light'
-    locale: 'zhCN' | 'enUS'
-    autoCheckUpdates: boolean
-  }>
-  setUiPreferences(input: {
-    theme?: 'default-dark' | 'default-light'
-    locale?: 'zhCN' | 'enUS'
-    autoCheckUpdates?: boolean
-  }): Promise<{
-    theme: 'default-dark' | 'default-light'
-    locale: 'zhCN' | 'enUS'
-    autoCheckUpdates: boolean
-  }>
+  getUiPreferences(): Promise<UiPreferences>
+  setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -997,13 +1042,7 @@ export interface FileTermDesktopApi {
   toggleDevtools(): Promise<void>
   requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
-  onUiPreferencesChanged(
-    listener: (preferences: {
-      theme: 'default-dark' | 'default-light'
-      locale: 'zhCN' | 'enUS'
-      autoCheckUpdates: boolean
-    }) => void
-  ): () => void
+  onUiPreferencesChanged(listener: (preferences: UiPreferences) => void): () => void
   onFileEditorCloseRequest(listener: () => void): () => void
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>

@@ -127,6 +127,10 @@ fn resource_monitoring_enabled(profile: &Value) -> bool {
         != Some(false)
 }
 
+fn exec_channel_enabled(profile: &Value) -> bool {
+    profile.get("enableExecChannel").and_then(Value::as_bool) != Some(false)
+}
+
 const DEFAULT_RESOURCE_MONITORING_INTERVAL_SECONDS: u64 = 1;
 
 fn resource_monitoring_interval_seconds(profile: &Value) -> u64 {
@@ -3794,6 +3798,7 @@ async fn run_worker_loop(
         .and_then(|u| u.as_str())
         .unwrap_or("root")
         .to_string();
+    let exec_channel_enabled = exec_channel_enabled(profile);
 
     // ── Main session (single SSH session multiplexes shell + SFTP + metrics) ─
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
@@ -3911,23 +3916,34 @@ async fn run_worker_loop(
     // channel.wait() 循环读取且无内层 timeout。服务器在 exec 模式下卡住
     // 时整个 probe 会永久 await，worker 永远起不来。超时后回落到
     // "unknown"，shell CWD 注入会被 fail-closed 门控跳过，终端仍可用。
-    let platform = match timeout(
-        PLATFORM_PROBE_TIMEOUT,
-        super::system_metrics::probe_remote_platform(&handle),
-    )
-    .await
-    {
-        Ok(p) => p,
-        Err(_) => {
-            crate::services::logging::session(
-                app,
-                "WARN",
-                "metrics",
-                tab_id,
-                "platform probe timed out, falling back to unknown",
-            );
-            "unknown".to_string()
+    let platform = if exec_channel_enabled {
+        match timeout(
+            PLATFORM_PROBE_TIMEOUT,
+            super::system_metrics::probe_remote_platform(&handle),
+        )
+        .await
+        {
+            Ok(p) => p,
+            Err(_) => {
+                crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "metrics",
+                    tab_id,
+                    "platform probe timed out, falling back to unknown",
+                );
+                "unknown".to_string()
+            }
         }
+    } else {
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "metrics",
+            tab_id,
+            "exec channel disabled; skipping platform probe",
+        );
+        "unknown".to_string()
     };
     crate::services::logging::session(
         app,
@@ -3942,10 +3958,15 @@ async fn run_worker_loop(
     // double gate. Only `linux` / `busybox` get the OSC7/RemoteUser hook
     // injected; Windows / unknown are left untouched so we never push a
     // POSIX script into a non-POSIX shell.
+    let shell_setup_script = if exec_channel_enabled {
+        shell_cwd_setup_for_platform(&platform)
+    } else {
+        None
+    };
     let mut pending_shell_setup_echo = None;
-    let mut shell_setup_waiting_for_prompt = shell_cwd_setup_for_platform(&platform).is_some();
+    let mut shell_setup_waiting_for_prompt = shell_setup_script.is_some();
     let mut shell_prompt_buffer = String::new();
-    if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
+    if let Some(setup) = shell_setup_script {
         crate::services::logging::session(
             app,
             "DEBUG",
@@ -3992,6 +4013,12 @@ async fn run_worker_loop(
         let existing_shell_cwd = sessions
             .get(tab_id)
             .and_then(|session| session.shell_cwd.clone());
+        let mut capabilities =
+            crate::services::workspace::ConnectionCapabilities::for_session_type("ssh");
+        if !exec_channel_enabled {
+            capabilities.resource_monitoring = false;
+            capabilities.shell_integration = false;
+        }
         sessions.insert(
             tab_id.to_string(),
             crate::services::SessionSnapshot {
@@ -4005,7 +4032,7 @@ async fn run_worker_loop(
                 terminal_transcript: existing_transcript,
                 remote_path: existing_remote_path,
                 shell_cwd: existing_shell_cwd,
-                follow_shell_cwd: true,
+                follow_shell_cwd: exec_channel_enabled,
                 remote_files_loading: false,
                 remote_files: Vec::new(),
                 sftp_unavailable_reason: None,
@@ -4019,9 +4046,7 @@ async fn run_worker_loop(
                 shell_user: None,
                 connected: true,
                 system_metrics: None,
-                capabilities: crate::services::workspace::ConnectionCapabilities::for_session_type(
-                    "ssh",
-                ),
+                capabilities,
                 reconnect_mode: existing_reconnect_mode
                     .or_else(|| crate::services::workspace::reconnect_mode_for_profile(profile)),
             },
@@ -4157,7 +4182,7 @@ async fn run_worker_loop(
     // The remote side controls the 1s cadence via `sleep 1`, so data arrives
     // at a rock-steady interval regardless of SSH RTT.
     let metrics_shutdown = Arc::new(tokio::sync::Notify::new());
-    if resource_monitoring_enabled(profile) {
+    if exec_channel_enabled && resource_monitoring_enabled(profile) {
         let metrics_shutdown_clone = metrics_shutdown.clone();
         let metrics_handle = Arc::clone(&handle);
         let metrics_app = app.clone();
@@ -4682,6 +4707,7 @@ async fn run_worker_loop(
                                 app,
                                 &state,
                                 &tunnel_command_tx,
+                                exec_channel_enabled,
                             ).await
                         } else {
                             handle_worker_cmd_without_sftp(
@@ -4696,6 +4722,7 @@ async fn run_worker_loop(
                                 &state,
                                 &tunnel_command_tx,
                                 sftp_unavailable_reason.as_deref().unwrap_or(SFTP_UNAVAILABLE_FALLBACK),
+                                exec_channel_enabled,
                             ).await
                         };
                         match result {
@@ -4961,7 +4988,7 @@ async fn run_worker_loop(
                         // case the injection cannot be completed.
                         if pending_shell_setup_echo.is_none()
                             && !shell_setup_waiting_for_prompt
-                            && shell_cwd_setup_for_platform(&platform).is_some()
+                            && shell_setup_script.is_some()
                             && looks_like_root_prompt(&visible)
                             && last_shell_setup_injection.elapsed() > Duration::from_secs(2)
                         {
@@ -4973,7 +5000,7 @@ async fn run_worker_loop(
                                 .and_then(|session| session.shell_user.as_deref())
                                 == Some("root");
                             if !shell_is_root {
-                                if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
+                                if let Some(setup) = shell_setup_script {
                                     let (banner, prompt_tail) =
                                         split_prompt_tail_for_setup_wait(&visible);
                                     last_shell_setup_injection = Instant::now();
@@ -5043,7 +5070,7 @@ async fn run_worker_loop(
                         {
                             shell_setup_waiting_for_prompt = false;
                             shell_prompt_buffer.clear();
-                            if let Some(setup) = shell_cwd_setup_for_platform(&platform) {
+                            if let Some(setup) = shell_setup_script {
                                 last_shell_setup_injection = Instant::now();
                                 let setup_command = format!(" {setup}\r");
                                 match write_shell_data(&shell_writer, setup_command.into_bytes()).await {
@@ -5173,6 +5200,7 @@ async fn handle_worker_cmd_without_sftp(
     state: &crate::services::workspace::WorkspaceState,
     tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     unavailable_reason: &str,
+    exec_channel_enabled: bool,
 ) -> Result<bool, String> {
     match cmd {
         WorkerCmd::WriteTerminal(data) => {
@@ -5203,7 +5231,11 @@ async fn handle_worker_cmd_without_sftp(
             timeout_ms,
             respond_to,
         } => {
-            spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+            if exec_channel_enabled {
+                spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+            } else {
+                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
+            }
             Ok(false)
         }
         WorkerCmd::ListSshTunnels { respond_to } => {
@@ -5296,6 +5328,12 @@ async fn handle_worker_cmd_without_sftp(
             sudo_password: new_sudo_password,
             respond_to,
         } => {
+            if mode == "root" && !exec_channel_enabled {
+                let _ = respond_to.send(Err(
+                    "SSH Exec 通道已关闭，无法启用 root 文件视图。".to_string()
+                ));
+                return Ok(false);
+            }
             let requested_access_method =
                 match parse_root_file_access_method(new_root_access_method.as_deref()) {
                     Ok(method) => method,
@@ -5397,6 +5435,7 @@ async fn handle_worker_cmd(
     app: &AppHandle,
     state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
     tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
+    exec_channel_enabled: bool,
 ) -> Result<bool, String> {
     match cmd {
         WorkerCmd::WriteTerminal(data) => {
@@ -5441,7 +5480,11 @@ async fn handle_worker_cmd(
             timeout_ms,
             respond_to,
         } => {
-            spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+            if exec_channel_enabled {
+                spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+            } else {
+                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
+            }
             Ok(false)
         }
         WorkerCmd::ListSshTunnels { respond_to } => {
@@ -6226,6 +6269,12 @@ async fn handle_worker_cmd(
             sudo_password: new_sudo_password,
             respond_to,
         } => {
+            if mode == "root" && !exec_channel_enabled {
+                let _ = respond_to.send(Err(
+                    "SSH Exec 通道已关闭，无法启用 root 文件视图。".to_string()
+                ));
+                return Ok(false);
+            }
             let requested_access_method =
                 match parse_root_file_access_method(new_root_access_method.as_deref()) {
                     Ok(method) => method,
@@ -8067,11 +8116,11 @@ mod tests {
     use super::{
         build_http_connect_request, build_legacy_preferred, capture_root_access_password_input,
         coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
-        effective_remote_forward_port, enqueue_tunnel_command, finish_shell_setup_suppression,
-        format_sftp_unavailable_reason, is_password_prompt, is_root_upload_staging_path,
-        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
-        missing_password_credential, parent_remote_item, parent_remote_path,
-        parse_root_file_access_method, password_for_authentication,
+        effective_remote_forward_port, enqueue_tunnel_command, exec_channel_enabled,
+        finish_shell_setup_suppression, format_sftp_unavailable_reason, is_password_prompt,
+        is_root_upload_staging_path, looks_like_mfa_prompt, looks_like_root_prompt,
+        looks_like_shell_prompt, missing_password_credential, parent_remote_item,
+        parent_remote_path, parse_root_file_access_method, password_for_authentication,
         privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
         resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
         root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
@@ -8106,6 +8155,17 @@ mod tests {
         })));
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
+        })));
+    }
+
+    #[test]
+    fn exec_channel_defaults_to_enabled_and_respects_explicit_disable() {
+        assert!(exec_channel_enabled(&serde_json::json!({})));
+        assert!(exec_channel_enabled(&serde_json::json!({
+            "enableExecChannel": true
+        })));
+        assert!(!exec_channel_enabled(&serde_json::json!({
+            "enableExecChannel": false
         })));
     }
 

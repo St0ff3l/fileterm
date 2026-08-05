@@ -1,4 +1,13 @@
-import type { ConnectionProfile, CreateProfileInput, LocalFileItem, WorkspaceSnapshot } from '@fileterm/core'
+import { DEFAULT_SSH_CONNECTION_DEFAULTS } from '@fileterm/core'
+import type {
+  ConnectionProfile,
+  CreateProfileInput,
+  LocalFileItem,
+  SshConnectionDefaults,
+  SshConnectionOverrides,
+  SshProfile,
+  WorkspaceSnapshot
+} from '@fileterm/core'
 import { t } from '../i18n'
 
 export const emptyState: WorkspaceSnapshot = {
@@ -55,7 +64,50 @@ export const defaultForm: CreateProfileInput = {
   flowControl: 'none'
 }
 
-export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
+function connectionOverridesForProfile(profile: SshProfile): SshConnectionOverrides {
+  if (profile.connectionOverrides) {
+    return { ...profile.connectionOverrides }
+  }
+
+  // Profiles written before global defaults existed stored these values
+  // directly. Treat present legacy fields as explicit local overrides so
+  // introducing global defaults does not silently change existing hosts.
+  const overrides: SshConnectionOverrides = {}
+  if (profile.useEmptyPassword !== undefined) overrides.useEmptyPassword = profile.useEmptyPassword
+  if (profile.enableExecChannel !== undefined) overrides.enableExecChannel = profile.enableExecChannel
+  if (profile.enableResourceMonitoring !== undefined) {
+    overrides.enableResourceMonitoring = profile.enableResourceMonitoring
+  }
+  if (profile.resourceMonitoringIntervalSeconds !== undefined) {
+    overrides.resourceMonitoringIntervalSeconds = profile.resourceMonitoringIntervalSeconds
+  }
+  if (profile.reconnectMode !== undefined) overrides.reconnectMode = profile.reconnectMode
+  if (profile.legacyAlgorithms !== undefined) overrides.legacyAlgorithms = profile.legacyAlgorithms
+  return overrides
+}
+
+function connectionSettingsForProfile(profile: SshProfile, defaults: SshConnectionDefaults): SshConnectionDefaults {
+  const overrides = connectionOverridesForProfile(profile)
+  return {
+    useEmptyPassword: overrides.useEmptyPassword ?? profile.useEmptyPassword ?? defaults.useEmptyPassword,
+    enableExecChannel: overrides.enableExecChannel ?? profile.enableExecChannel ?? defaults.enableExecChannel,
+    enableResourceMonitoring:
+      overrides.enableResourceMonitoring ?? profile.enableResourceMonitoring ?? defaults.enableResourceMonitoring,
+    resourceMonitoringIntervalSeconds:
+      overrides.resourceMonitoringIntervalSeconds ??
+      profile.resourceMonitoringIntervalSeconds ??
+      defaults.resourceMonitoringIntervalSeconds,
+    reconnectMode: overrides.reconnectMode ?? profile.reconnectMode ?? defaults.reconnectMode,
+    legacyAlgorithms: overrides.legacyAlgorithms ?? profile.legacyAlgorithms ?? defaults.legacyAlgorithms
+  }
+}
+
+export function profileToForm(
+  profile: ConnectionProfile,
+  connectionDefaults: SshConnectionDefaults = DEFAULT_SSH_CONNECTION_DEFAULTS
+): CreateProfileInput {
+  const sshConnectionSettings =
+    profile.type === 'ssh' ? connectionSettingsForProfile(profile, connectionDefaults) : DEFAULT_SSH_CONNECTION_DEFAULTS
   return {
     type: profile.type,
     name: profile.name,
@@ -66,7 +118,7 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     remotePath: profile.remotePath,
     note: profile.note ?? '',
     password: profile.type === 'ssh' || profile.type === 'ftp' ? (profile.password ?? '') : '',
-    useEmptyPassword: profile.type === 'ssh' ? Boolean(profile.useEmptyPassword) : false,
+    useEmptyPassword: profile.type === 'ssh' ? sshConnectionSettings.useEmptyPassword : false,
     trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',
     authType: profile.type === 'ssh' ? (profile.authType === 'system' ? 'password' : profile.authType) : 'password',
     privateKeyId: profile.type === 'ssh' ? (profile.privateKeyId ?? '') : '',
@@ -75,11 +127,12 @@ export function profileToForm(profile: ConnectionProfile): CreateProfileInput {
     encoding: profile.type === 'ssh' ? (profile.encoding ?? 'UTF-8') : 'UTF-8',
     backspaceKey: profile.type === 'ssh' ? (profile.backspaceKey ?? 'ASCII') : 'ASCII',
     deleteKey: profile.type === 'ssh' ? (profile.deleteKey ?? 'VT220') : 'VT220',
-    enableExecChannel: profile.type === 'ssh' ? (profile.enableExecChannel ?? true) : true,
-    enableResourceMonitoring: profile.type === 'ssh' ? (profile.enableResourceMonitoring ?? true) : true,
-    resourceMonitoringIntervalSeconds: profile.type === 'ssh' ? (profile.resourceMonitoringIntervalSeconds ?? 1) : 1,
-    reconnectMode: profile.type === 'ssh' ? (profile.reconnectMode ?? 'none') : 'none',
-    legacyAlgorithms: profile.type === 'ssh' ? (profile.legacyAlgorithms ?? false) : false,
+    enableExecChannel: profile.type === 'ssh' ? sshConnectionSettings.enableExecChannel : true,
+    enableResourceMonitoring: profile.type === 'ssh' ? sshConnectionSettings.enableResourceMonitoring : true,
+    resourceMonitoringIntervalSeconds:
+      profile.type === 'ssh' ? sshConnectionSettings.resourceMonitoringIntervalSeconds : 1,
+    reconnectMode: profile.type === 'ssh' ? sshConnectionSettings.reconnectMode : 'none',
+    legacyAlgorithms: profile.type === 'ssh' ? sshConnectionSettings.legacyAlgorithms : false,
     secure: profile.type === 'ftp' ? profile.secure : false,
     securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
     proxy:

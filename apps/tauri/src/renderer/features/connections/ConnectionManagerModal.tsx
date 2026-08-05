@@ -8,9 +8,7 @@ import { ManagerInlineFolderRow } from '../common/ManagerInlineFolderRow'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 import { managerDropClass, resolveManagerDropPosition } from '../common/manager-drag'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
-
-type ConnectionTreeNode =
-  (ConnectionFolder & { children: ConnectionTreeNode[] }) | (ConnectionProfile & { children?: never })
+import { buildConnectionTree, type ConnectionTreeNode } from './connection-tree'
 
 export function ConnectionManagerModal({
   profiles,
@@ -126,44 +124,7 @@ export function ConnectionManagerModal({
     }
   }
 
-  const tree = useMemo(() => {
-    const items: ConnectionTreeNode[] = [
-      ...profiles.map((profile, index) => ({
-        ...profile,
-        order: typeof profile.order === 'number' ? profile.order : index * 1000
-      })),
-      ...folders.map((folder, index) => ({
-        ...folder,
-        order: typeof folder.order === 'number' ? folder.order : (profiles.length + index) * 1000,
-        children: []
-      }))
-    ]
-
-    const roots: ConnectionTreeNode[] = []
-    const map = new Map<string, ConnectionTreeNode>()
-
-    items.forEach((item) => {
-      map.set(item.id, item)
-    })
-
-    items.forEach((item) => {
-      const parent = item.parentId ? map.get(item.parentId) : undefined
-      if (parent?.type === 'folder') {
-        parent.children.push(item)
-      } else {
-        roots.push(item)
-      }
-    })
-
-    const sortNodes = (nodes: ConnectionTreeNode[]) => {
-      nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      nodes.forEach((n) => {
-        if (n.type === 'folder') sortNodes(n.children)
-      })
-    }
-    sortNodes(roots)
-    return { roots, map }
-  }, [profiles, folders])
+  const tree = useMemo(() => buildConnectionTree(profiles, folders), [profiles, folders])
 
   const countProfilesInNodes = (nodes: ConnectionTreeNode[]): number => {
     return nodes.reduce((total, node) => {

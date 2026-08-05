@@ -748,9 +748,25 @@
   padding-left: 10px;
 }
 
-.resource-monitoring-interval:has(.ft-select-shell select:disabled),
-.resource-monitoring-interval:has(.dropdown-select-trigger:disabled) {
-  opacity: 0.55;
+/* Match the connection editor's select skin without changing the interval
+   control's existing width or height. */
+.settings-connection-defaults .resource-monitoring-interval__select.dropdown-select-trigger,
+.settings-connection-defaults .resource-monitoring-interval__select.ft-select-shell select {
+  box-sizing: border-box;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-main);
+}
+
+/* The global default interval should keep the neutral control border even
+   while it has focus; it is a preference selector, not an invalid field. */
+.settings-connection-defaults .resource-monitoring-interval__select.dropdown-select-trigger:focus,
+.settings-connection-defaults .resource-monitoring-interval__select .dropdown-select-trigger:focus,
+.settings-connection-defaults .resource-monitoring-interval__select select:focus {
+  outline: none;
+  border-color: var(--border-light);
+  box-shadow: none;
 }
 
 @media (max-width: 420px) {
@@ -762,6 +778,11 @@
   .resource-monitoring-interval__select {
     width: min(100%, 180px);
   }
+}
+
+.resource-monitoring-interval:has(.ft-select-shell select:disabled),
+.resource-monitoring-interval:has(.dropdown-select-trigger:disabled) {
+  opacity: 0.55;
 }
 
 /* Reconnect mode: labelled group wrapping the three-way radio list */
