@@ -20,8 +20,8 @@ use tauri::{
     menu::{Menu, MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     window::Color,
-    AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent, Wry,
+    AppHandle, Emitter, LogicalPosition, Manager, PhysicalPosition, PhysicalSize, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry,
 };
 use thiserror::Error;
 use tokio::sync::oneshot;
@@ -853,6 +853,130 @@ fn child_window_should_be_transparent(platform: &str, decorations: bool) -> bool
     matches!(platform, "macos" | "linux") && !decorations
 }
 
+/// Calculates a child window position centered over the main window's native
+/// frame. Tauri's builder-level `center()` centers on the current monitor, so
+/// it is not enough for the standalone windows that should follow the main
+/// FileTerm window instead.
+fn center_child_window_position(
+    main_position: PhysicalPosition<i32>,
+    main_size: PhysicalSize<u32>,
+    child_size: PhysicalSize<u32>,
+    work_area: Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>,
+) -> PhysicalPosition<i32> {
+    let desired_x =
+        i64::from(main_position.x) + (i64::from(main_size.width) - i64::from(child_size.width)) / 2;
+    let desired_y = i64::from(main_position.y)
+        + (i64::from(main_size.height) - i64::from(child_size.height)) / 2;
+
+    let clamp_to_work_area = |desired: i64, start: i32, available: u32, child: u32| {
+        let min = i64::from(start);
+        let max = min + i64::from(available) - i64::from(child);
+        if max < min {
+            min
+        } else {
+            desired.clamp(min, max)
+        }
+    };
+
+    let (x, y) = if let Some((work_area_position, work_area_size)) = work_area {
+        (
+            clamp_to_work_area(
+                desired_x,
+                work_area_position.x,
+                work_area_size.width,
+                child_size.width,
+            ),
+            clamp_to_work_area(
+                desired_y,
+                work_area_position.y,
+                work_area_size.height,
+                child_size.height,
+            ),
+        )
+    } else {
+        (desired_x, desired_y)
+    };
+
+    PhysicalPosition::new(
+        x.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        y.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+    )
+}
+
+/// Repositions an existing or newly-created standalone window over the main
+/// window. Failures are deliberately non-fatal: the builder-level monitor
+/// centering remains the safe fallback when a desktop backend cannot expose
+/// native bounds (for example, some Wayland compositors).
+fn center_child_window_on_main(app: &AppHandle<Wry>, child: &WebviewWindow<Wry>) {
+    let label = child.label();
+    let Some(main) = app.get_webview_window("main") else {
+        crate::services::logging::warn(
+            app,
+            "window",
+            format!("center skipped label={label}: main window unavailable"),
+        );
+        return;
+    };
+
+    let main_position = match main.outer_position() {
+        Ok(position) => position,
+        Err(error) => {
+            crate::services::logging::warn(
+                app,
+                "window",
+                format!("center skipped label={label}: main position unavailable: {error}"),
+            );
+            return;
+        }
+    };
+    let main_size = match main.outer_size() {
+        Ok(size) => size,
+        Err(error) => {
+            crate::services::logging::warn(
+                app,
+                "window",
+                format!("center skipped label={label}: main size unavailable: {error}"),
+            );
+            return;
+        }
+    };
+    let child_size = match child.outer_size() {
+        Ok(size) => size,
+        Err(error) => {
+            crate::services::logging::warn(
+                app,
+                "window",
+                format!("center skipped label={label}: child size unavailable: {error}"),
+            );
+            return;
+        }
+    };
+    let work_area = match main.current_monitor() {
+        Ok(Some(monitor)) => {
+            let area = monitor.work_area();
+            Some((area.position, area.size))
+        }
+        Ok(None) => None,
+        Err(error) => {
+            crate::services::logging::warn(
+                app,
+                "window",
+                format!("work area unavailable label={label}: {error}"),
+            );
+            None
+        }
+    };
+
+    let position = center_child_window_position(main_position, main_size, child_size, work_area);
+    if let Err(error) = child.set_position(position) {
+        crate::services::logging::warn(
+            app,
+            "window",
+            format!("center failed label={label} position={position:?}: {error}"),
+        );
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn windows_icon_image() -> Result<Image<'static>, AppError> {
     // Keep the Windows runtime on the same source as Electron: the original
@@ -1104,6 +1228,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
                 "window",
                 format!("focus existing label={label} kind={}", input.kind),
             );
+            center_child_window_on_main(app, &window);
             restore_window(app, &window, true);
             return Ok(());
         }
@@ -1156,6 +1281,7 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
             );
             AppError::Window(error.to_string())
         })?;
+    center_child_window_on_main(app, &window);
     #[cfg(target_os = "windows")]
     window
         .set_icon(windows_icon_image()?)
@@ -1854,10 +1980,12 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        application_quit_accelerator, child_window_should_be_transparent,
-        tray_icon_should_be_template, tray_menu_action, tray_menu_labels, FileEditorCloseRegistry,
-        QuitPreparationRegistry, TrayMenuAction, WindowMenuKind,
+        application_quit_accelerator, center_child_window_position,
+        child_window_should_be_transparent, tray_icon_should_be_template, tray_menu_action,
+        tray_menu_labels, FileEditorCloseRegistry, QuitPreparationRegistry, TrayMenuAction,
+        WindowMenuKind,
     };
+    use tauri::{PhysicalPosition, PhysicalSize};
 
     #[cfg(target_os = "windows")]
     use super::windows_icon_image;
@@ -1947,6 +2075,30 @@ mod tests {
         assert!(!child_window_should_be_transparent("windows", true));
         assert!(child_window_should_be_transparent("linux", false));
         assert!(!child_window_should_be_transparent("linux", true));
+    }
+
+    #[test]
+    fn centers_child_window_relative_to_main_window() {
+        let position = center_child_window_position(
+            PhysicalPosition::new(100, 200),
+            PhysicalSize::new(1000, 800),
+            PhysicalSize::new(400, 300),
+            None,
+        );
+
+        assert_eq!((position.x, position.y), (400, 450));
+    }
+
+    #[test]
+    fn keeps_centered_child_window_inside_monitor_work_area() {
+        let position = center_child_window_position(
+            PhysicalPosition::new(1800, 900),
+            PhysicalSize::new(800, 600),
+            PhysicalSize::new(1000, 700),
+            Some((PhysicalPosition::new(0, 0), PhysicalSize::new(1920, 1080))),
+        );
+
+        assert_eq!((position.x, position.y), (920, 380));
     }
 
     #[test]
