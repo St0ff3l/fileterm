@@ -7,6 +7,10 @@ pub fn run_mcp_stdio(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_stdio(arguments)
 }
 
+pub fn run_cli(arguments: &[String]) -> Result<(), String> {
+    crate::services::mcp::run_cli(arguments)
+}
+
 use crate::commands::OpenWindowInput;
 #[cfg(target_os = "linux")]
 use gtk::prelude::GtkWindowExt;
@@ -1911,6 +1915,7 @@ pub fn run() {
             crate::commands::app_resize_terminal,
             crate::commands::app_open_remote_path,
             crate::commands::app_set_follow_shell_cwd,
+            crate::commands::app_execute_remote_command,
             crate::commands::app_read_remote_file,
             crate::commands::app_write_remote_file,
             crate::commands::app_create_remote_directory,
@@ -1949,6 +1954,7 @@ pub fn run() {
             crate::commands::app_update_command_template,
             crate::commands::app_delete_command_template,
             crate::commands::app_execute_command_template,
+            crate::commands::app_resolve_mcp_approval,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
             crate::sessions::local_files::app_connect_local_network_share,

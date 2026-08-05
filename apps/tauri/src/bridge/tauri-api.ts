@@ -33,7 +33,8 @@ import type {
   SshForwardRule,
   SshTunnelSnapshot,
   CommandExecutionResult,
-  TerminalZoomOperation
+  TerminalZoomOperation,
+  McpApprovalRequest
 } from '@fileterm/core'
 import { APP_EVENT, dispatchAppEvent } from '../renderer/lib/app-events'
 
@@ -457,6 +458,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         args,
         options: options ?? null
       }),
+    executeRemoteCommand: (tabId: string, command: string, cwd?: string, timeoutMs?: number) =>
+      invoke<{ output: string; exitCode: number | null; timedOut: boolean }>('app_execute_remote_command', {
+        tabId,
+        command,
+        cwd: cwd ?? null,
+        timeoutMs: timeoutMs ?? null
+      }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
@@ -500,6 +508,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>
       invoke<void>('app_resolve_ssh_interaction', { requestId, response }),
+    resolveMcpApproval: (requestId: string, approved: boolean) =>
+      invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
     setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
       invoke<WorkspaceSnapshot>('app_set_remote_file_access_mode', { tabId, mode, options }),
     listSshTunnels: (tabId: string) => invoke<SshTunnelSnapshot[]>('app_list_ssh_tunnels', { tabId }),
@@ -530,6 +540,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
+    onMcpApprovalRequest: (listener: (request: McpApprovalRequest) => void) =>
+      subscribe('mcp:approval-request', listener),
     onSshKeysChanged: (listener: (keys: SshKeyMetadata[]) => void) => subscribe('sshKeys:changed', listener),
     onWindowCloseRequest: (listener: (event: { isQuit: boolean }) => void) =>
       subscribe('app:window-close-request', listener),

@@ -16,6 +16,12 @@ pub enum WorkerCmd {
         width: u32,
         height: u32,
     },
+    ExecuteRemoteCommand {
+        command: String,
+        cwd: Option<String>,
+        timeout_ms: u64,
+        respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
+    },
     ListRemoteFiles {
         path: String,
         respond_to: tokio::sync::oneshot::Sender<Result<Vec<serde_json::Value>, String>>,

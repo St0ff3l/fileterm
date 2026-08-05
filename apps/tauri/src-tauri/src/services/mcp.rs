@@ -1,15 +1,15 @@
 //! Local MCP bridge for FileTerm.
 //!
 //! Codex and Claude launch the `fileterm mcp` subprocess over stdio. That
-//! process has no credentials and only forwards a small, validated read-only
-//! request set to the running desktop application over an authenticated
-//! loopback socket. SSH/SFTP workers and connection secrets remain inside the
-//! desktop process.
+//! process has no credentials and forwards a validated request set to the
+//! running desktop application over an authenticated loopback socket. SSH,
+//! SFTP workers and connection secrets remain inside the desktop process.
 
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     env, fs,
     io::{self, BufRead, BufReader, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
@@ -18,11 +18,11 @@ use std::{
     time::Duration,
 };
 use subtle::ConstantTimeEq;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     net::{TcpListener, TcpStream},
-    sync::Semaphore,
+    sync::{oneshot, Semaphore},
     time::timeout,
 };
 
@@ -30,10 +30,13 @@ const MCP_RUNTIME_FILE: &str = "mcp-runtime.json";
 const MCP_PROTOCOL_VERSION: u32 = 1;
 const MCP_JSONRPC_PROTOCOL_VERSION: &str = "2025-06-18";
 const MCP_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
-const MCP_MAX_MESSAGE_BYTES: usize = 64 * 1024;
+const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(130);
+const MCP_APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
 const MCP_DEFAULT_PAGE_SIZE: usize = 20;
 const MCP_MAX_PAGE_SIZE: usize = 100;
+const MCP_MAX_FILE_CONTENT_BYTES: usize = 512 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +59,8 @@ struct BridgeRequest {
     action: String,
     #[serde(default)]
     params: Value,
+    #[serde(default)]
+    requires_approval: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -116,7 +121,7 @@ pub fn start_runtime(app: &AppHandle) -> Result<(), AppError> {
         };
         run_runtime_listener(listener, app_handle, descriptor, limiter).await;
     });
-    crate::services::logging::info(app, "mcp", "local read-only MCP bridge started");
+    crate::services::logging::info(app, "mcp", "local MCP bridge started");
     Ok(())
 }
 
@@ -191,8 +196,15 @@ async fn handle_runtime_connection(
         return Err("invalid MCP bridge token".to_string());
     }
 
+    let request_timeout = if envelope.request.requires_approval
+        && action_requires_approval(&envelope.request.action)
+    {
+        MCP_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
+    } else {
+        MCP_BRIDGE_TIMEOUT
+    };
     let response = match timeout(
-        MCP_BRIDGE_TIMEOUT,
+        request_timeout,
         dispatch_bridge_request(&app, envelope.request),
     )
     .await
@@ -236,6 +248,12 @@ async fn write_bridge_response_to_writer(
 ) -> io::Result<()> {
     let payload =
         serde_json::to_string(&response).map_err(|error| io::Error::other(error.to_string()))?;
+    if payload.len() > MCP_MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "FileTerm MCP bridge response exceeds the size limit",
+        ));
+    }
     timeout(MCP_BRIDGE_TIMEOUT, async {
         writer.write_all(payload.as_bytes()).await?;
         writer.write_all(b"\n").await?;
@@ -273,12 +291,329 @@ impl BridgeResponse {
 }
 
 async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Result<Value, String> {
+    if request.requires_approval && action_requires_approval(&request.action) {
+        request_mcp_approval(app, &request.action, &request.params).await?;
+    }
+
     match request.action.as_str() {
         "list_connections" => list_connections(app, &request.params).await,
         "get_session_context" => get_session_context(app, &request.params).await,
+        "get_command_templates" => get_command_templates(app, &request.params).await,
         "list_remote_directory" => list_remote_directory(app, &request.params).await,
+        "read_remote_file" => read_remote_file(app, &request.params).await,
+        "list_transfers" => list_transfers(app, &request.params).await,
+        "list_ssh_tunnels" => list_ssh_tunnels(app, &request.params).await,
+        "open_connection" => open_connection(app, &request.params).await,
+        "activate_session" => activate_session(app, &request.params).await,
+        "reconnect_session" => reconnect_session(app, &request.params).await,
+        "disconnect_session" => disconnect_session(app, &request.params).await,
+        "close_session" => close_session(app, &request.params).await,
+        "execute_remote_command" => execute_remote_command(app, &request.params).await,
+        "execute_command_template" => execute_command_template(app, &request.params).await,
+        "write_remote_file" => write_remote_file(app, &request.params).await,
+        "create_remote_directory" => create_remote_directory(app, &request.params).await,
+        "create_remote_file" => create_remote_file(app, &request.params).await,
+        "copy_remote_path" => copy_remote_path(app, &request.params).await,
+        "move_remote_path" => move_remote_path(app, &request.params).await,
+        "rename_remote_path" => rename_remote_path(app, &request.params).await,
+        "delete_remote_path" => delete_remote_path(app, &request.params).await,
+        "change_remote_permissions" => change_remote_permissions(app, &request.params).await,
+        "set_remote_file_access_mode" => set_remote_file_access_mode(app, &request.params).await,
+        "upload_file" => upload_file(app, &request.params).await,
+        "download_file" => download_file(app, &request.params).await,
+        "download_remote_directory" => download_remote_directory(app, &request.params).await,
+        "pause_transfer" => transfer_action(app, &request.params, "pause").await,
+        "resume_transfer" => transfer_action(app, &request.params, "resume").await,
+        "discard_transfer" => transfer_action(app, &request.params, "discard").await,
+        "clear_transfers" => clear_transfers(app, &request.params).await,
+        "create_ssh_tunnel" => create_ssh_tunnel(app, &request.params).await,
+        "start_ssh_tunnel" => tunnel_action(app, &request.params, "start").await,
+        "stop_ssh_tunnel" => tunnel_action(app, &request.params, "stop").await,
+        "delete_ssh_tunnel" => tunnel_action(app, &request.params, "delete").await,
         _ => Err("Unsupported FileTerm MCP action".to_string()),
     }
+}
+
+fn action_requires_approval(action: &str) -> bool {
+    matches!(
+        action,
+        "open_connection"
+            | "reconnect_session"
+            | "disconnect_session"
+            | "close_session"
+            | "execute_remote_command"
+            | "execute_command_template"
+            | "write_remote_file"
+            | "create_remote_directory"
+            | "create_remote_file"
+            | "copy_remote_path"
+            | "move_remote_path"
+            | "rename_remote_path"
+            | "delete_remote_path"
+            | "change_remote_permissions"
+            | "set_remote_file_access_mode"
+            | "upload_file"
+            | "download_file"
+            | "download_remote_directory"
+            | "pause_transfer"
+            | "resume_transfer"
+            | "discard_transfer"
+            | "clear_transfers"
+            | "create_ssh_tunnel"
+            | "start_ssh_tunnel"
+            | "stop_ssh_tunnel"
+            | "delete_ssh_tunnel"
+    )
+}
+
+struct ApprovalDetails {
+    summary: String,
+    target: Option<String>,
+    details: Option<String>,
+    destructive: bool,
+}
+
+async fn request_mcp_approval(app: &AppHandle, action: &str, params: &Value) -> Result<(), String> {
+    let details = approval_details(app, action, params).await?;
+    let request_id = format!("mcp-approval-{}", uuid::Uuid::new_v4());
+    let (sender, receiver) = oneshot::channel();
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    state
+        .pending_mcp_approvals
+        .write()
+        .await
+        .insert(request_id.clone(), sender);
+
+    let payload = json!({
+        "requestId": request_id,
+        "operation": action,
+        "title": "MCP 外部操作需要确认",
+        "summary": details.summary,
+        "target": details.target,
+        "details": details.details,
+        "destructive": details.destructive,
+    });
+    if let Err(error) = app.emit("mcp:approval-request", payload) {
+        state
+            .pending_mcp_approvals
+            .write()
+            .await
+            .remove(&request_id);
+        return Err(format!("Unable to show MCP approval dialog: {error}"));
+    }
+
+    let decision = timeout(MCP_APPROVAL_TIMEOUT, receiver).await;
+    state
+        .pending_mcp_approvals
+        .write()
+        .await
+        .remove(&request_id);
+    match decision {
+        Ok(Ok(true)) => {
+            crate::services::logging::info(
+                app,
+                "mcp",
+                format!("approval granted operation={action}"),
+            );
+            Ok(())
+        }
+        Ok(Ok(false)) => {
+            crate::services::logging::info(
+                app,
+                "mcp",
+                format!("approval denied operation={action}"),
+            );
+            Err("MCP operation was rejected by the user".to_string())
+        }
+        Ok(Err(_)) => Err("MCP approval dialog was closed".to_string()),
+        Err(_) => {
+            crate::services::logging::warn(
+                app,
+                "mcp",
+                format!("approval timed out operation={action}"),
+            );
+            Err("MCP approval timed out; the operation was not started".to_string())
+        }
+    }
+}
+
+async fn approval_details(
+    app: &AppHandle,
+    action: &str,
+    params: &Value,
+) -> Result<ApprovalDetails, String> {
+    let tab_id = optional_string(params, "tab_id", 256)?;
+    let target = match action {
+        "open_connection" => optional_string(params, "profile_id", 256)?,
+        "write_remote_file"
+        | "delete_remote_path"
+        | "change_remote_permissions"
+        | "set_remote_file_access_mode" => optional_string(params, "path", 4_096)?,
+        "copy_remote_path" | "move_remote_path" => {
+            optional_string(params, "destination_path", 4_096)?
+        }
+        "rename_remote_path" => optional_string(params, "target_path", 4_096)?,
+        "upload_file" => optional_string(params, "local_path", 4_096)?,
+        "download_file" | "download_remote_directory" => {
+            optional_string(params, "remote_path", 4_096)?
+        }
+        "pause_transfer" | "resume_transfer" | "discard_transfer" => {
+            optional_string(params, "transfer_id", 256)?
+        }
+        "clear_transfers" => params.get("transfer_ids").map(|value| {
+            truncate_text(
+                &serde_json::to_string(value).unwrap_or_else(|_| "null".to_string()),
+                4_096,
+            )
+        }),
+        "start_ssh_tunnel" | "stop_ssh_tunnel" | "delete_ssh_tunnel" => {
+            optional_string(params, "rule_id", 256)?
+        }
+        "create_remote_directory" | "create_remote_file" => Some(format!(
+            "父目录：{}\n名称：{}",
+            required_string(params, "parent_path", 4_096)?,
+            required_string(params, "name", 512)?
+        )),
+        "create_ssh_tunnel" => params
+            .get("rule")
+            .and_then(Value::as_object)
+            .and_then(|rule| rule.get("name"))
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        _ => tab_id.clone(),
+    };
+    let details = match action {
+        "execute_remote_command" => Some(truncate_text(
+            &required_text(params, "command", 64 * 1024)?,
+            4 * 1024,
+        )),
+        "execute_command_template" => {
+            let command_id = required_string(params, "command_id", 256)?;
+            let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+                .await
+                .map_err(public_app_error)?;
+            let template = snapshot
+                .get("commandTemplates")
+                .and_then(Value::as_array)
+                .and_then(|templates| {
+                    templates.iter().find(|template| {
+                        template.get("id").and_then(Value::as_str) == Some(command_id.as_str())
+                    })
+                });
+            let template_text = template
+                .and_then(|template| template.get("command"))
+                .and_then(Value::as_str)
+                .map(|command| truncate_text(command, 4 * 1024))
+                .unwrap_or_else(|| "未找到命令模板内容".to_string());
+            Some(format!(
+                "命令模板：{}\n命令：{}\n参数：{}",
+                command_id,
+                template_text,
+                serde_json::to_string(params.get("args").unwrap_or(&Value::Null))
+                    .unwrap_or_else(|_| "null".to_string())
+            ))
+        }
+        "write_remote_file" => {
+            let content = required_text(params, "content", MCP_MAX_FILE_CONTENT_BYTES)?;
+            Some(format!(
+                "写入 {} 字节{}",
+                content.len(),
+                if content.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n内容预览：{}", truncate_text(&content, 1_000))
+                }
+            ))
+        }
+        "upload_file" => Some(format!(
+            "本地源：{}\n远端目录：{}",
+            required_string(params, "local_path", 4_096)?,
+            required_string(params, "remote_directory", 4_096)?
+        )),
+        "download_file" | "download_remote_directory" => Some(format!(
+            "远端源：{}\n本地目录：{}",
+            required_string(params, "remote_path", 4_096)?,
+            required_string(params, "local_directory", 4_096)?
+        )),
+        "copy_remote_path" | "move_remote_path" => Some(format!(
+            "源路径：{}\n目标路径：{}",
+            required_string(params, "target_path", 4_096)?,
+            required_string(params, "destination_path", 4_096)?
+        )),
+        "rename_remote_path" => Some(format!(
+            "原路径：{}\n新名称：{}",
+            required_string(params, "target_path", 4_096)?,
+            required_string(params, "new_name", 512)?
+        )),
+        "change_remote_permissions" => Some(format!(
+            "模式：{}\n递归：{}\n应用范围：{}",
+            required_string(params, "mode", 4)?,
+            optional_bool(params, "recursive")?.unwrap_or(false),
+            optional_string(params, "apply_to", 32)?.unwrap_or_else(|| "all".to_string())
+        )),
+        "set_remote_file_access_mode" => Some(format!(
+            "访问模式：{}",
+            required_string(params, "mode", 16)?
+        )),
+        "clear_transfers" => Some(format!(
+            "传输任务：{}",
+            serde_json::to_string(params.get("transfer_ids").unwrap_or(&Value::Null))
+                .unwrap_or_else(|_| "null".to_string())
+        )),
+        "create_ssh_tunnel" => Some(format!(
+            "规则：{}",
+            truncate_text(
+                &serde_json::to_string(params.get("rule").unwrap_or(&Value::Null))
+                    .unwrap_or_else(|_| "null".to_string()),
+                4 * 1024
+            )
+        )),
+        _ => None,
+    };
+    let summary = match action {
+        "open_connection" => "打开 FileTerm 连接".to_string(),
+        "reconnect_session" => "重新连接 FileTerm 会话".to_string(),
+        "disconnect_session" => "断开 FileTerm 会话".to_string(),
+        "close_session" => "关闭 FileTerm 标签页".to_string(),
+        "execute_remote_command" => "在远程 SSH 主机执行命令".to_string(),
+        "execute_command_template" => "执行 FileTerm 命令模板".to_string(),
+        "write_remote_file" => "写入远程文件".to_string(),
+        "create_remote_directory" => "创建远程目录".to_string(),
+        "create_remote_file" => "创建远程文件".to_string(),
+        "copy_remote_path" => "复制远程文件或目录".to_string(),
+        "move_remote_path" => "移动远程文件或目录".to_string(),
+        "rename_remote_path" => "重命名远程文件或目录".to_string(),
+        "delete_remote_path" => "删除远程文件或目录".to_string(),
+        "change_remote_permissions" => "修改远程文件权限".to_string(),
+        "set_remote_file_access_mode" => "切换远程文件访问身份".to_string(),
+        "upload_file" => "上传本地文件或目录".to_string(),
+        "download_file" => "下载远程文件".to_string(),
+        "download_remote_directory" => "下载远程目录".to_string(),
+        "pause_transfer" => "暂停传输任务".to_string(),
+        "resume_transfer" => "继续传输任务".to_string(),
+        "discard_transfer" => "丢弃传输任务断点".to_string(),
+        "clear_transfers" => "清理传输历史".to_string(),
+        "create_ssh_tunnel" => "创建 SSH 隧道".to_string(),
+        "start_ssh_tunnel" => "启动 SSH 隧道".to_string(),
+        "stop_ssh_tunnel" => "停止 SSH 隧道".to_string(),
+        "delete_ssh_tunnel" => "删除 SSH 隧道".to_string(),
+        _ => return Err("Unsupported FileTerm MCP approval action".to_string()),
+    };
+    Ok(ApprovalDetails {
+        summary,
+        target: target.or(tab_id),
+        details,
+        destructive: matches!(
+            action,
+            "write_remote_file"
+                | "delete_remote_path"
+                | "change_remote_permissions"
+                | "set_remote_file_access_mode"
+                | "discard_transfer"
+                | "clear_transfers"
+                | "delete_ssh_tunnel"
+        ),
+    })
 }
 
 async fn list_connections(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -333,27 +668,579 @@ async fn get_session_context(app: &AppHandle, params: &Value) -> Result<Value, S
         .filter_map(|tab| {
             let tab_id = tab.get("id").and_then(Value::as_str)?;
             let session = sessions.get(tab_id)?;
-            Some(json!({
-                "tabId": tab_id,
-                "profileId": tab.get("profileId"),
-                "title": tab.get("title"),
-                "sessionType": tab.get("sessionType"),
-                "status": tab.get("status"),
-                "connected": session.get("connected"),
-                "remotePath": session.get("remotePath"),
-                "capabilities": session.get("capabilities"),
-            }))
+            Some(compact_session(tab, session, tab_id))
         })
         .collect::<Vec<_>>();
     Ok(json!({ "items": items }))
 }
 
+async fn get_command_templates(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let (limit, offset) = pagination(params)?;
+    let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+        .await
+        .map_err(public_app_error)?;
+    let templates = snapshot
+        .get("commandTemplates")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let total = templates.len();
+    let items = templates
+        .iter()
+        .skip(offset)
+        .take(limit)
+        .cloned()
+        .collect::<Vec<_>>();
+    let next_offset = offset + items.len();
+    Ok(json!({
+        "total": total,
+        "count": items.len(),
+        "offset": offset,
+        "items": items,
+        "hasMore": next_offset < total,
+        "nextOffset": (next_offset < total).then_some(next_offset),
+    }))
+}
+
 async fn list_remote_directory(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let tab_id = required_string(params, "tab_id", 256)?;
     let path = optional_string(params, "path", 4_096)?;
-    crate::commands::mcp_list_remote_directory(app.clone(), tab_id, path)
+    let (limit, offset) = pagination(params)?;
+    let snapshot = crate::commands::mcp_list_remote_directory(app.clone(), tab_id, path)
         .await
-        .map_err(public_app_error)
+        .map_err(public_app_error)?;
+    let items = snapshot
+        .get("items")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let total = items.len();
+    let items = items
+        .iter()
+        .skip(offset)
+        .take(limit)
+        .cloned()
+        .collect::<Vec<_>>();
+    let next_offset = offset + items.len();
+    Ok(json!({
+        "tabId": snapshot.get("tabId"),
+        "path": snapshot.get("path"),
+        "total": total,
+        "count": items.len(),
+        "offset": offset,
+        "items": items,
+        "hasMore": next_offset < total,
+        "nextOffset": (next_offset < total).then_some(next_offset),
+    }))
+}
+
+async fn read_remote_file(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let path = required_string(params, "path", 4_096)?;
+    let encoding = optional_string(params, "encoding", 64)?;
+    let content = crate::commands::app_read_remote_file(
+        app.clone(),
+        tab_id.clone(),
+        path.clone(),
+        encoding.clone(),
+    )
+    .await
+    .map_err(public_app_error)?;
+    let (content, truncated) = truncate_text_with_flag(&content, MCP_MAX_FILE_CONTENT_BYTES);
+    Ok(json!({
+        "tabId": tab_id,
+        "path": path,
+        "encoding": encoding.unwrap_or_else(|| "utf-8".to_string()),
+        "content": content,
+        "truncated": truncated,
+    }))
+}
+
+async fn list_transfers(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let (limit, offset) = pagination(params)?;
+    let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+        .await
+        .map_err(public_app_error)?;
+    let transfers = snapshot
+        .get("transfers")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "FileTerm returned invalid transfer state".to_string())?;
+    let total = transfers.len();
+    let items = transfers
+        .iter()
+        .skip(offset)
+        .take(limit)
+        .cloned()
+        .collect::<Vec<_>>();
+    let next_offset = offset + items.len();
+    Ok(json!({
+        "total": total,
+        "count": items.len(),
+        "offset": offset,
+        "items": items,
+        "hasMore": next_offset < total,
+        "nextOffset": (next_offset < total).then_some(next_offset),
+    }))
+}
+
+async fn list_ssh_tunnels(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let items = crate::commands::app_list_ssh_tunnels(app.clone(), tab_id.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(json!({ "tabId": tab_id, "items": items }))
+}
+
+async fn open_connection(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let profile_id = required_string(params, "profile_id", 256)?;
+    let snapshot = crate::commands::app_open_profile(app.clone(), profile_id.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(compact_snapshot(&snapshot, None, "open_connection"))
+}
+
+async fn activate_session(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let snapshot = crate::commands::app_activate_tab(app.clone(), tab_id.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "activate_session",
+    ))
+}
+
+async fn reconnect_session(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let snapshot = crate::commands::app_reconnect_tab(app.clone(), tab_id.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "reconnect_session",
+    ))
+}
+
+async fn disconnect_session(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let snapshot = crate::commands::app_disconnect_tab(app.clone(), tab_id.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "disconnect_session",
+    ))
+}
+
+async fn close_session(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let snapshot = crate::commands::app_close_tab(app.clone(), tab_id.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(compact_snapshot(&snapshot, Some(&tab_id), "close_session"))
+}
+
+async fn execute_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command = required_text(params, "command", 64 * 1024)?;
+    let cwd = optional_string(params, "cwd", 4_096)?;
+    let timeout_ms = optional_u64(params, "timeout_ms")?;
+    crate::commands::app_execute_remote_command(
+        app.clone(),
+        tab_id.clone(),
+        command,
+        cwd,
+        timeout_ms,
+    )
+    .await
+    .map(|result| json!({ "tabId": tab_id, "result": result }))
+    .map_err(public_app_error)
+}
+
+async fn execute_command_template(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    let args = optional_string_array(params, "args", 64, 4_096)?;
+    let options = params.get("options").cloned();
+    crate::commands::app_execute_command_template(
+        app.clone(),
+        tab_id.clone(),
+        command_id,
+        args,
+        options,
+    )
+    .await
+    .map(|result| json!({ "tabId": tab_id, "result": result }))
+    .map_err(public_app_error)
+}
+
+async fn write_remote_file(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let path = required_string(params, "path", 4_096)?;
+    let content = required_text(params, "content", MCP_MAX_FILE_CONTENT_BYTES)?;
+    let encoding = optional_string(params, "encoding", 64)?;
+    let snapshot = crate::commands::app_write_remote_file(
+        app.clone(),
+        tab_id.clone(),
+        path,
+        content,
+        encoding,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "write_remote_file",
+    ))
+}
+
+async fn create_remote_directory(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let parent_path = required_string(params, "parent_path", 4_096)?;
+    let name = required_string(params, "name", 512)?;
+    let snapshot = crate::commands::app_create_remote_directory(
+        app.clone(),
+        tab_id.clone(),
+        parent_path,
+        name,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "create_remote_directory",
+    ))
+}
+
+async fn create_remote_file(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let parent_path = required_string(params, "parent_path", 4_096)?;
+    let name = required_string(params, "name", 512)?;
+    let snapshot =
+        crate::commands::app_create_remote_file(app.clone(), tab_id.clone(), parent_path, name)
+            .await
+            .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "create_remote_file",
+    ))
+}
+
+async fn copy_remote_path(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let target_path = required_string(params, "target_path", 4_096)?;
+    let destination_path = required_string(params, "destination_path", 4_096)?;
+    let target_type = required_target_type(params)?;
+    let snapshot = crate::commands::app_copy_remote_path(
+        app.clone(),
+        tab_id.clone(),
+        target_path,
+        destination_path,
+        target_type,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "copy_remote_path",
+    ))
+}
+
+async fn move_remote_path(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let target_path = required_string(params, "target_path", 4_096)?;
+    let destination_path = required_string(params, "destination_path", 4_096)?;
+    let snapshot = crate::commands::app_move_remote_path(
+        app.clone(),
+        tab_id.clone(),
+        target_path,
+        destination_path,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "move_remote_path",
+    ))
+}
+
+async fn rename_remote_path(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let target_path = required_string(params, "target_path", 4_096)?;
+    let new_name = required_string(params, "new_name", 512)?;
+    let snapshot =
+        crate::commands::app_rename_remote_path(app.clone(), tab_id.clone(), target_path, new_name)
+            .await
+            .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "rename_remote_path",
+    ))
+}
+
+async fn delete_remote_path(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let target_path = required_string(params, "target_path", 4_096)?;
+    let target_type = required_target_type(params)?;
+    let snapshot = crate::commands::app_delete_remote_path(
+        app.clone(),
+        tab_id.clone(),
+        target_path,
+        target_type,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "delete_remote_path",
+    ))
+}
+
+async fn change_remote_permissions(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let target_path = required_string(params, "path", 4_096)?;
+    let mode = required_string(params, "mode", 4)?;
+    let options = serde_json::from_value(json!({
+        "mode": mode,
+        "recursive": optional_bool(params, "recursive")?.unwrap_or(false),
+        "applyTo": optional_string(params, "apply_to", 32)?,
+    }))
+    .map_err(|error| format!("Invalid remote permission options: {error}"))?;
+    let snapshot = crate::commands::app_change_remote_permissions(
+        app.clone(),
+        tab_id.clone(),
+        target_path,
+        options,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "change_remote_permissions",
+    ))
+}
+
+async fn set_remote_file_access_mode(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let mode = required_string(params, "mode", 16)?;
+    if !matches!(mode.as_str(), "user" | "root") {
+        return Err("mode must be user or root".to_string());
+    }
+    let snapshot =
+        crate::commands::app_set_remote_file_access_mode(app.clone(), tab_id.clone(), mode, None)
+            .await
+            .map_err(public_app_error)?;
+    Ok(compact_snapshot(
+        &snapshot,
+        Some(&tab_id),
+        "set_remote_file_access_mode",
+    ))
+}
+
+fn transfer_options(params: &Value) -> Result<Option<Value>, String> {
+    Ok(optional_string(params, "target_name", 512)?
+        .map(|target_name| json!({ "targetName": target_name })))
+}
+
+async fn upload_file(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let local_path = required_string(params, "local_path", 4_096)?;
+    let remote_directory = required_string(params, "remote_directory", 4_096)?;
+    let snapshot = crate::commands::app_upload_file(
+        app.clone(),
+        tab_id.clone(),
+        local_path,
+        remote_directory,
+        transfer_options(params)?,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(transfer_snapshot(
+        &snapshot,
+        &tab_id,
+        "upload_file",
+        "upload",
+    ))
+}
+
+async fn download_file(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let remote_path = required_string(params, "remote_path", 4_096)?;
+    let local_directory = required_string(params, "local_directory", 4_096)?;
+    let snapshot = crate::commands::app_download_file(
+        app.clone(),
+        tab_id.clone(),
+        remote_path,
+        local_directory,
+        transfer_options(params)?,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(transfer_snapshot(
+        &snapshot,
+        &tab_id,
+        "download_file",
+        "download",
+    ))
+}
+
+async fn download_remote_directory(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let remote_path = required_string(params, "remote_path", 4_096)?;
+    let local_directory = required_string(params, "local_directory", 4_096)?;
+    let snapshot = crate::commands::app_download_remote_path(
+        app.clone(),
+        tab_id.clone(),
+        remote_path,
+        "folder".to_string(),
+        local_directory,
+        transfer_options(params)?,
+    )
+    .await
+    .map_err(public_app_error)?;
+    Ok(transfer_snapshot(
+        &snapshot,
+        &tab_id,
+        "download_remote_directory",
+        "download",
+    ))
+}
+
+async fn transfer_action(app: &AppHandle, params: &Value, action: &str) -> Result<Value, String> {
+    let transfer_id = required_string(params, "transfer_id", 256)?;
+    let snapshot = match action {
+        "pause" => crate::commands::app_pause_transfer(app.clone(), transfer_id.clone()).await,
+        "resume" => crate::commands::app_resume_transfer(app.clone(), transfer_id.clone()).await,
+        "discard" => crate::commands::app_discard_transfer(app.clone(), transfer_id.clone()).await,
+        _ => return Err("Unsupported transfer action".to_string()),
+    }
+    .map_err(public_app_error)?;
+    Ok(json!({
+        "operation": format!("{action}_transfer"),
+        "transferId": transfer_id,
+        "transfer": find_transfer(&snapshot, &transfer_id),
+    }))
+}
+
+async fn clear_transfers(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let transfer_ids = required_string_array(params, "transfer_ids", 256, 256)?;
+    let snapshot = crate::commands::app_clear_transfers(app.clone(), transfer_ids.clone())
+        .await
+        .map_err(public_app_error)?;
+    Ok(json!({
+        "operation": "clear_transfers",
+        "transferIds": transfer_ids,
+        "remaining": snapshot.get("transfers").cloned().unwrap_or_else(|| json!([])),
+    }))
+}
+
+async fn create_ssh_tunnel(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let rule = params
+        .get("rule")
+        .cloned()
+        .ok_or_else(|| "rule is required".to_string())?;
+    if !rule.is_object() {
+        return Err("rule must be an object".to_string());
+    }
+    let items = crate::commands::app_create_ssh_tunnel(app.clone(), tab_id.clone(), rule)
+        .await
+        .map_err(public_app_error)?;
+    Ok(json!({ "tabId": tab_id, "items": items }))
+}
+
+async fn tunnel_action(app: &AppHandle, params: &Value, action: &str) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let rule_id = required_string(params, "rule_id", 256)?;
+    let items = match action {
+        "start" => {
+            crate::commands::app_start_ssh_tunnel(app.clone(), tab_id.clone(), rule_id).await
+        }
+        "stop" => crate::commands::app_stop_ssh_tunnel(app.clone(), tab_id.clone(), rule_id).await,
+        "delete" => {
+            crate::commands::app_delete_ssh_tunnel(app.clone(), tab_id.clone(), rule_id).await
+        }
+        _ => return Err("Unsupported SSH tunnel action".to_string()),
+    }
+    .map_err(public_app_error)?;
+    Ok(json!({ "tabId": tab_id, "items": items }))
+}
+
+fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
+    json!({
+        "tabId": tab_id,
+        "profileId": tab.get("profileId"),
+        "title": tab.get("title"),
+        "sessionType": tab.get("sessionType"),
+        "status": tab.get("status"),
+        "connected": session.get("connected"),
+        "remotePath": session.get("remotePath"),
+        "shellCwd": session.get("shellCwd"),
+        "shellUser": session.get("shellUser"),
+        "fileAccessMode": session.get("fileAccessMode"),
+        "capabilities": session.get("capabilities"),
+    })
+}
+
+fn compact_snapshot(snapshot: &Value, tab_id: Option<&str>, operation: &str) -> Value {
+    let tab_id = tab_id.or_else(|| snapshot.get("activeTabId").and_then(Value::as_str));
+    let session = tab_id.and_then(|id| {
+        let tab = snapshot
+            .get("tabs")
+            .and_then(Value::as_array)
+            .and_then(|tabs| {
+                tabs.iter()
+                    .find(|tab| tab.get("id").and_then(Value::as_str) == Some(id))
+            })?;
+        let session = snapshot.get("sessions")?.get(id)?;
+        Some(compact_session(tab, session, id))
+    });
+    json!({
+        "operation": operation,
+        "activeTabId": snapshot.get("activeTabId"),
+        "session": session,
+    })
+}
+
+fn transfer_snapshot(snapshot: &Value, tab_id: &str, operation: &str, direction: &str) -> Value {
+    let transfer = snapshot
+        .get("transfers")
+        .and_then(Value::as_array)
+        .and_then(|transfers| {
+            transfers.iter().rev().find(|transfer| {
+                transfer.get("tabId").and_then(Value::as_str) == Some(tab_id)
+                    && transfer.get("direction").and_then(Value::as_str) == Some(direction)
+            })
+        });
+    json!({
+        "operation": operation,
+        "tabId": tab_id,
+        "transfer": transfer,
+    })
+}
+
+fn find_transfer(snapshot: &Value, transfer_id: &str) -> Value {
+    snapshot
+        .get("transfers")
+        .and_then(Value::as_array)
+        .and_then(|transfers| {
+            transfers
+                .iter()
+                .find(|transfer| transfer.get("id").and_then(Value::as_str) == Some(transfer_id))
+        })
+        .cloned()
+        .unwrap_or(Value::Null)
 }
 
 fn pagination(params: &Value) -> Result<(usize, usize), String> {
@@ -377,6 +1264,26 @@ fn optional_usize(params: &Value, key: &str) -> Result<Option<usize>, String> {
         .map_err(|_| format!("{key} is too large"))
 }
 
+fn optional_u64(params: &Value, key: &str) -> Result<Option<u64>, String> {
+    let Some(value) = params.get(key) else {
+        return Ok(None);
+    };
+    value
+        .as_u64()
+        .ok_or_else(|| format!("{key} must be a non-negative integer"))
+        .map(Some)
+}
+
+fn optional_bool(params: &Value, key: &str) -> Result<Option<bool>, String> {
+    let Some(value) = params.get(key) else {
+        return Ok(None);
+    };
+    value
+        .as_bool()
+        .ok_or_else(|| format!("{key} must be a boolean"))
+        .map(Some)
+}
+
 fn required_string(params: &Value, key: &str, maximum: usize) -> Result<String, String> {
     optional_string(params, key, maximum)?.ok_or_else(|| format!("{key} is required"))
 }
@@ -396,6 +1303,86 @@ fn optional_string(params: &Value, key: &str, maximum: usize) -> Result<Option<S
         return Err(format!("{key} exceeds the FileTerm MCP limit"));
     }
     Ok(Some(value.to_string()))
+}
+
+fn required_text(params: &Value, key: &str, maximum: usize) -> Result<String, String> {
+    let value = params
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{key} is required and must be a string"))?;
+    if value.is_empty() {
+        return Err(format!("{key} must not be empty"));
+    }
+    if value.len() > maximum {
+        return Err(format!("{key} exceeds the FileTerm MCP limit"));
+    }
+    Ok(value.to_string())
+}
+
+fn optional_string_array(
+    params: &Value,
+    key: &str,
+    maximum_items: usize,
+    maximum_item_bytes: usize,
+) -> Result<Option<Vec<String>>, String> {
+    let Some(value) = params.get(key) else {
+        return Ok(None);
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("{key} must be an array of strings"))?;
+    if items.len() > maximum_items {
+        return Err(format!("{key} has too many items"));
+    }
+    items
+        .iter()
+        .map(|item| {
+            let value = item
+                .as_str()
+                .ok_or_else(|| format!("{key} must contain only strings"))?;
+            if value.len() > maximum_item_bytes {
+                return Err(format!("{key} item exceeds the FileTerm MCP limit"));
+            }
+            Ok(value.to_string())
+        })
+        .collect::<Result<Vec<_>, String>>()
+        .map(Some)
+}
+
+fn required_string_array(
+    params: &Value,
+    key: &str,
+    maximum_items: usize,
+    maximum_item_bytes: usize,
+) -> Result<Vec<String>, String> {
+    optional_string_array(params, key, maximum_items, maximum_item_bytes)?
+        .ok_or_else(|| format!("{key} is required"))
+}
+
+fn required_target_type(params: &Value) -> Result<String, String> {
+    let target_type = required_string(params, "target_type", 16)?;
+    if !matches!(target_type.as_str(), "file" | "folder") {
+        return Err("target_type must be file or folder".to_string());
+    }
+    Ok(target_type)
+}
+
+fn truncate_text(value: &str, maximum: usize) -> String {
+    truncate_text_with_flag(value, maximum).0
+}
+
+fn truncate_text_with_flag(value: &str, maximum: usize) -> (String, bool) {
+    if value.len() <= maximum {
+        return (value.to_string(), false);
+    }
+    let mut end = maximum;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    (
+        format!("{}\n[… output truncated by FileTerm …]", &value[..end]),
+        true,
+    )
 }
 
 fn public_app_error(error: AppError) -> String {
@@ -422,7 +1409,7 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         .iter()
         .any(|argument| argument == "--help" || argument == "-h")
     {
-        println!("Usage: fileterm mcp\n\nRun the FileTerm read-only MCP server over stdio. FileTerm must be running.");
+        println!("Usage: fileterm mcp\n\nRun the FileTerm MCP server over stdio. FileTerm must be running.");
         return Ok(());
     }
 
@@ -432,6 +1419,18 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
     for line in stdin.lock().lines() {
         let line = line.map_err(|error| format!("Unable to read MCP input: {error}"))?;
         if line.trim().is_empty() {
+            continue;
+        }
+        if line.len() > MCP_MAX_MESSAGE_BYTES {
+            let response = jsonrpc_error(Value::Null, -32600, "Request exceeds the size limit");
+            serde_json::to_writer(&mut stdout, &response)
+                .map_err(|error| format!("Unable to encode MCP response: {error}"))?;
+            stdout
+                .write_all(b"\n")
+                .map_err(|error| format!("Unable to write MCP response: {error}"))?;
+            stdout
+                .flush()
+                .map_err(|error| format!("Unable to flush MCP response: {error}"))?;
             continue;
         }
         let response = match serde_json::from_str::<Value>(&line) {
@@ -450,6 +1449,409 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Entry point for the small FileTerm CLI. The CLI intentionally
+/// shares the MCP bridge and returns JSON so shell scripts and agents can use
+/// the same capability boundary without duplicating authorization logic.
+pub fn run_cli(arguments: &[String]) -> Result<(), String> {
+    let command_index = usize::from(arguments.first().is_some_and(|argument| argument == "cli"));
+    let Some(command) = arguments.get(command_index).map(String::as_str) else {
+        print_cli_help();
+        return Ok(());
+    };
+    let options = &arguments[command_index + 1..];
+
+    match command {
+        "help" | "-h" | "--help" => {
+            print_cli_help();
+            Ok(())
+        }
+        "-V" | "--version" => {
+            println!("{}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        "connections" => {
+            if has_cli_help(options) {
+                print_cli_command_help("connections");
+                return Ok(());
+            }
+            let values = parse_cli_options(options, &["limit", "offset"])?;
+            let mut params = serde_json::Map::new();
+            if let Some(limit) = values.get("limit") {
+                params.insert("limit".to_string(), json!(parse_cli_usize("limit", limit)?));
+            }
+            if let Some(offset) = values.get("offset") {
+                params.insert(
+                    "offset".to_string(),
+                    json!(parse_cli_usize("offset", offset)?),
+                );
+            }
+            print_cli_result(call_desktop_bridge(cli_bridge_request(
+                "list_connections",
+                Value::Object(params),
+            ))?)
+        }
+        "sessions" => {
+            if has_cli_help(options) {
+                print_cli_command_help("sessions");
+                return Ok(());
+            }
+            let values = parse_cli_options(options, &["profile-id"])?;
+            let mut params = serde_json::Map::new();
+            if let Some(profile_id) = values.get("profile-id") {
+                params.insert("profile_id".to_string(), json!(profile_id));
+            }
+            print_cli_result(call_desktop_bridge(cli_bridge_request(
+                "get_session_context",
+                Value::Object(params),
+            ))?)
+        }
+        "directory" | "ls" => {
+            if has_cli_help(options) {
+                print_cli_command_help("directory");
+                return Ok(());
+            }
+            let values = parse_cli_options(options, &["tab-id", "path", "limit", "offset"])?;
+            let tab_id = values
+                .get("tab-id")
+                .ok_or_else(|| "directory requires --tab-id <TAB_ID>".to_string())?;
+            let mut params = serde_json::Map::new();
+            params.insert("tab_id".to_string(), json!(tab_id));
+            if let Some(path) = values.get("path") {
+                params.insert("path".to_string(), json!(path));
+            }
+            if let Some(limit) = values.get("limit") {
+                params.insert("limit".to_string(), json!(parse_cli_usize("limit", limit)?));
+            }
+            if let Some(offset) = values.get("offset") {
+                params.insert(
+                    "offset".to_string(),
+                    json!(parse_cli_usize("offset", offset)?),
+                );
+            }
+            print_cli_result(call_desktop_bridge(cli_bridge_request(
+                "list_remote_directory",
+                Value::Object(params),
+            ))?)
+        }
+        "commands" | "command-templates" => {
+            cli_action("get_command_templates", options, &["limit", "offset"], &[])
+        }
+        "read" | "cat" => cli_action(
+            "read_remote_file",
+            options,
+            &["tab-id", "path", "encoding"],
+            &["tab-id", "path"],
+        ),
+        "transfers" => cli_action("list_transfers", options, &["limit", "offset"], &[]),
+        "tunnels" => cli_action("list_ssh_tunnels", options, &["tab-id"], &["tab-id"]),
+        "open" => cli_action("open_connection", options, &["profile-id"], &["profile-id"]),
+        "activate" => cli_action("activate_session", options, &["tab-id"], &["tab-id"]),
+        "reconnect" => cli_action("reconnect_session", options, &["tab-id"], &["tab-id"]),
+        "disconnect" => cli_action("disconnect_session", options, &["tab-id"], &["tab-id"]),
+        "close" => cli_action("close_session", options, &["tab-id"], &["tab-id"]),
+        "exec" | "execute" => cli_action(
+            "execute_remote_command",
+            options,
+            &["tab-id", "command", "cwd", "timeout-ms"],
+            &["tab-id", "command"],
+        ),
+        "command-template" => cli_action(
+            "execute_command_template",
+            options,
+            &["tab-id", "command-id", "args-json", "options-json"],
+            &["tab-id", "command-id"],
+        ),
+        "write" => cli_action(
+            "write_remote_file",
+            options,
+            &["tab-id", "path", "content", "encoding"],
+            &["tab-id", "path", "content"],
+        ),
+        "mkdir" => cli_action(
+            "create_remote_directory",
+            options,
+            &["tab-id", "parent-path", "name"],
+            &["tab-id", "parent-path", "name"],
+        ),
+        "touch" => cli_action(
+            "create_remote_file",
+            options,
+            &["tab-id", "parent-path", "name"],
+            &["tab-id", "parent-path", "name"],
+        ),
+        "copy" => cli_action(
+            "copy_remote_path",
+            options,
+            &["tab-id", "target-path", "destination-path", "target-type"],
+            &["tab-id", "target-path", "destination-path", "target-type"],
+        ),
+        "move" => cli_action(
+            "move_remote_path",
+            options,
+            &["tab-id", "target-path", "destination-path"],
+            &["tab-id", "target-path", "destination-path"],
+        ),
+        "rename" => cli_action(
+            "rename_remote_path",
+            options,
+            &["tab-id", "target-path", "new-name"],
+            &["tab-id", "target-path", "new-name"],
+        ),
+        "delete" => cli_action(
+            "delete_remote_path",
+            options,
+            &["tab-id", "target-path", "target-type"],
+            &["tab-id", "target-path", "target-type"],
+        ),
+        "chmod" => cli_action(
+            "change_remote_permissions",
+            options,
+            &["tab-id", "path", "mode", "recursive", "apply-to"],
+            &["tab-id", "path", "mode"],
+        ),
+        "access" => cli_action(
+            "set_remote_file_access_mode",
+            options,
+            &["tab-id", "mode"],
+            &["tab-id", "mode"],
+        ),
+        "upload" => cli_action(
+            "upload_file",
+            options,
+            &["tab-id", "local-path", "remote-directory", "target-name"],
+            &["tab-id", "local-path", "remote-directory"],
+        ),
+        "download" => cli_action(
+            "download_file",
+            options,
+            &["tab-id", "remote-path", "local-directory", "target-name"],
+            &["tab-id", "remote-path", "local-directory"],
+        ),
+        "download-directory" => cli_action(
+            "download_remote_directory",
+            options,
+            &["tab-id", "remote-path", "local-directory", "target-name"],
+            &["tab-id", "remote-path", "local-directory"],
+        ),
+        "pause-transfer" => cli_action(
+            "pause_transfer",
+            options,
+            &["transfer-id"],
+            &["transfer-id"],
+        ),
+        "resume-transfer" => cli_action(
+            "resume_transfer",
+            options,
+            &["transfer-id"],
+            &["transfer-id"],
+        ),
+        "discard-transfer" | "cancel-transfer" => cli_action(
+            "discard_transfer",
+            options,
+            &["transfer-id"],
+            &["transfer-id"],
+        ),
+        "clear-transfers" => cli_action(
+            "clear_transfers",
+            options,
+            &["transfer-ids"],
+            &["transfer-ids"],
+        ),
+        "create-tunnel" => cli_action(
+            "create_ssh_tunnel",
+            options,
+            &["tab-id", "rule-json"],
+            &["tab-id", "rule-json"],
+        ),
+        "start-tunnel" => cli_action(
+            "start_ssh_tunnel",
+            options,
+            &["tab-id", "rule-id"],
+            &["tab-id", "rule-id"],
+        ),
+        "stop-tunnel" => cli_action(
+            "stop_ssh_tunnel",
+            options,
+            &["tab-id", "rule-id"],
+            &["tab-id", "rule-id"],
+        ),
+        "delete-tunnel" => cli_action(
+            "delete_ssh_tunnel",
+            options,
+            &["tab-id", "rule-id"],
+            &["tab-id", "rule-id"],
+        ),
+        "call" => cli_call_action(options),
+        _ => Err(format!(
+            "Unknown FileTerm CLI command: {command}. Run `fileterm --help` for usage."
+        )),
+    }
+}
+
+fn has_cli_help(arguments: &[String]) -> bool {
+    arguments
+        .iter()
+        .any(|argument| argument == "-h" || argument == "--help")
+}
+
+fn cli_bridge_request(action: &str, params: Value) -> BridgeRequest {
+    BridgeRequest {
+        action: action.to_string(),
+        params,
+        requires_approval: false,
+    }
+}
+
+fn cli_action(
+    action: &str,
+    arguments: &[String],
+    allowed: &[&str],
+    required: &[&str],
+) -> Result<(), String> {
+    if has_cli_help(arguments) {
+        print_cli_command_help(action);
+        return Ok(());
+    }
+    let values = parse_cli_options(arguments, allowed)?;
+    for key in required {
+        if !values.contains_key(*key) {
+            return Err(format!("{action} requires --{key} <value>"));
+        }
+    }
+    let params = cli_values_to_params(&values)?;
+    print_cli_result(call_desktop_bridge(cli_bridge_request(action, params))?)
+}
+
+fn cli_call_action(arguments: &[String]) -> Result<(), String> {
+    let action = arguments
+        .first()
+        .filter(|value| !value.starts_with('-'))
+        .ok_or_else(|| "call requires an action name".to_string())?;
+    let values = parse_cli_options(&arguments[1..], &["params-json"])?;
+    let params_json = values
+        .get("params-json")
+        .ok_or_else(|| "call requires --params-json JSON".to_string())?;
+    let params = serde_json::from_str::<Value>(params_json)
+        .map_err(|error| format!("--params-json must be valid JSON: {error}"))?;
+    if !params.is_object() {
+        return Err("--params-json must contain a JSON object".to_string());
+    }
+    print_cli_result(call_desktop_bridge(cli_bridge_request(action, params))?)
+}
+
+fn cli_values_to_params(values: &HashMap<String, String>) -> Result<Value, String> {
+    let mut params = serde_json::Map::new();
+    for (key, value) in values {
+        let parameter = match key.as_str() {
+            "rule-json" => "rule".to_string(),
+            "args-json" => "args".to_string(),
+            "options-json" => "options".to_string(),
+            "transfer-ids" => "transfer_ids".to_string(),
+            _ => key.replace('-', "_"),
+        };
+        let converted = match key.as_str() {
+            "rule-json" => serde_json::from_str::<Value>(value)
+                .map_err(|error| format!("--rule-json must be valid JSON: {error}"))?,
+            "args-json" => serde_json::from_str::<Value>(value)
+                .map_err(|error| format!("--args-json must be valid JSON: {error}"))?,
+            "options-json" => serde_json::from_str::<Value>(value)
+                .map_err(|error| format!("--options-json must be valid JSON: {error}"))?,
+            "transfer-ids" => Value::Array(
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|item| !item.is_empty())
+                    .map(|item| Value::String(item.to_string()))
+                    .collect(),
+            ),
+            "recursive" => Value::Bool(parse_cli_bool("recursive", value)?),
+            "limit" | "offset" | "timeout-ms" => json!(parse_cli_usize(key, value)?),
+            _ => Value::String(value.clone()),
+        };
+        params.insert(parameter, converted);
+    }
+    Ok(Value::Object(params))
+}
+
+fn parse_cli_bool(key: &str, value: &str) -> Result<bool, String> {
+    match value {
+        "true" | "1" | "yes" => Ok(true),
+        "false" | "0" | "no" => Ok(false),
+        _ => Err(format!("Option --{key} must be true or false")),
+    }
+}
+
+fn parse_cli_options(
+    arguments: &[String],
+    allowed: &[&str],
+) -> Result<HashMap<String, String>, String> {
+    let mut values = HashMap::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
+        let key = argument
+            .strip_prefix("--")
+            .filter(|key| !key.is_empty())
+            .ok_or_else(|| format!("Expected a long option, got {argument}"))?;
+        if !allowed.contains(&key) {
+            return Err(format!("Unknown option --{key}"));
+        }
+        if values.contains_key(key) {
+            return Err(format!("Option --{key} may only be provided once"));
+        }
+        let value = arguments
+            .get(index + 1)
+            .filter(|value| !value.starts_with("--"))
+            .ok_or_else(|| format!("Option --{key} requires a value"))?;
+        if value.is_empty() {
+            return Err(format!("Option --{key} must not be empty"));
+        }
+        values.insert(key.to_string(), value.clone());
+        index += 2;
+    }
+    Ok(values)
+}
+
+fn parse_cli_usize(key: &str, value: &str) -> Result<usize, String> {
+    value
+        .parse::<usize>()
+        .map_err(|_| format!("Option --{key} must be a non-negative integer"))
+}
+
+fn print_cli_result(result: Value) -> Result<(), String> {
+    let output = serde_json::to_string_pretty(&result)
+        .map_err(|error| format!("Unable to encode FileTerm CLI response: {error}"))?;
+    println!("{output}");
+    Ok(())
+}
+
+fn print_cli_help() {
+    println!(
+        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path PATH --local-directory PATH\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm transfers|pause-transfer|resume-transfer|discard-transfer ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\nCLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
+fn print_cli_command_help(command: &str) {
+    match command {
+        "connections" => println!("Usage: fileterm connections [--limit N] [--offset N]"),
+        "sessions" => println!("Usage: fileterm sessions [--profile-id PROFILE_ID]"),
+        "directory" => println!(
+            "Usage: fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n       fileterm ls --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]"
+        ),
+        "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
+        "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]"),
+        "write_remote_file" => println!("Usage: fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT [--encoding utf-8]"),
+        "upload_file" => println!("Usage: fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH [--target-name NAME]"),
+        "download_file" => println!("Usage: fileterm download --tab-id TAB_ID --remote-path PATH --local-directory PATH [--target-name NAME]"),
+        "download_remote_directory" => println!("Usage: fileterm download-directory --tab-id TAB_ID --remote-path PATH --local-directory PATH [--target-name NAME]"),
+        "clear_transfers" => println!("Usage: fileterm clear-transfers --transfer-ids ID1,ID2"),
+        "create_ssh_tunnel" => println!("Usage: fileterm create-tunnel --tab-id TAB_ID --rule-json JSON"),
+        "call" => println!("Usage: fileterm call ACTION --params-json JSON"),
+        _ => print_cli_help(),
+    }
 }
 
 fn handle_jsonrpc_request(request: Value) -> Option<Value> {
@@ -480,7 +1882,7 @@ fn initialize_result(_params: &Value) -> Result<Value, String> {
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools only to inspect connections and already-open remote sessions. They never expose credentials. Remote writes and command execution are intentionally unavailable until FileTerm adds explicit in-app approval."
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed."
     }))
 }
 
@@ -494,20 +1896,13 @@ fn call_tool(params: &Value) -> Result<Value, String> {
         .cloned()
         .unwrap_or_else(|| json!({}));
     validate_tool_arguments(name, &arguments)?;
-    let request = match name {
-        "fileterm_list_connections" => BridgeRequest {
-            action: "list_connections".to_string(),
-            params: arguments,
-        },
-        "fileterm_get_session_context" => BridgeRequest {
-            action: "get_session_context".to_string(),
-            params: arguments,
-        },
-        "fileterm_list_remote_directory" => BridgeRequest {
-            action: "list_remote_directory".to_string(),
-            params: arguments,
-        },
-        _ => return Err("Unknown FileTerm tool".to_string()),
+    let action = name
+        .strip_prefix("fileterm_")
+        .ok_or_else(|| "Unknown FileTerm tool".to_string())?;
+    let request = BridgeRequest {
+        action: action.to_string(),
+        params: arguments,
+        requires_approval: true,
     };
     match call_desktop_bridge(request) {
         Ok(result) => Ok(tool_result(result, false)),
@@ -517,9 +1912,46 @@ fn call_tool(params: &Value) -> Result<Value, String> {
 
 fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> {
     let allowed: &[&str] = match name {
-        "fileterm_list_connections" => &["limit", "offset"],
+        "fileterm_list_connections"
+        | "fileterm_list_transfers"
+        | "fileterm_get_command_templates" => &["limit", "offset"],
         "fileterm_get_session_context" => &["profile_id"],
-        "fileterm_list_remote_directory" => &["tab_id", "path"],
+        "fileterm_list_remote_directory" => &["tab_id", "path", "limit", "offset"],
+        "fileterm_read_remote_file" => &["tab_id", "path", "encoding"],
+        "fileterm_list_ssh_tunnels"
+        | "fileterm_activate_session"
+        | "fileterm_reconnect_session"
+        | "fileterm_disconnect_session"
+        | "fileterm_close_session" => &["tab_id"],
+        "fileterm_open_connection" => &["profile_id"],
+        "fileterm_execute_remote_command" => &["tab_id", "command", "cwd", "timeout_ms"],
+        "fileterm_execute_command_template" => &["tab_id", "command_id", "args", "options"],
+        "fileterm_write_remote_file" => &["tab_id", "path", "content", "encoding"],
+        "fileterm_create_remote_directory" | "fileterm_create_remote_file" => {
+            &["tab_id", "parent_path", "name"]
+        }
+        "fileterm_copy_remote_path" => {
+            &["tab_id", "target_path", "destination_path", "target_type"]
+        }
+        "fileterm_move_remote_path" => &["tab_id", "target_path", "destination_path"],
+        "fileterm_rename_remote_path" => &["tab_id", "target_path", "new_name"],
+        "fileterm_delete_remote_path" => &["tab_id", "target_path", "target_type"],
+        "fileterm_change_remote_permissions" => {
+            &["tab_id", "path", "mode", "recursive", "apply_to"]
+        }
+        "fileterm_set_remote_file_access_mode" => &["tab_id", "mode"],
+        "fileterm_upload_file" => &["tab_id", "local_path", "remote_directory", "target_name"],
+        "fileterm_download_file" | "fileterm_download_remote_directory" => {
+            &["tab_id", "remote_path", "local_directory", "target_name"]
+        }
+        "fileterm_pause_transfer" | "fileterm_resume_transfer" | "fileterm_discard_transfer" => {
+            &["transfer_id"]
+        }
+        "fileterm_clear_transfers" => &["transfer_ids"],
+        "fileterm_create_ssh_tunnel" => &["tab_id", "rule"],
+        "fileterm_start_ssh_tunnel" | "fileterm_stop_ssh_tunnel" | "fileterm_delete_ssh_tunnel" => {
+            &["tab_id", "rule_id"]
+        }
         _ => return Err("Unknown FileTerm tool".to_string()),
     };
     let object = arguments
@@ -542,49 +1974,104 @@ fn tool_result(value: Value, is_error: bool) -> Value {
 
 fn tool_definitions() -> Vec<Value> {
     vec![
-        json!({
-            "name": "fileterm_list_connections",
-            "title": "List FileTerm connections",
-            "description": "List saved FileTerm connection profiles without credentials. Use this to identify a profile before asking the user to open it in FileTerm.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE, "description": "Maximum profiles to return (default 20)." },
-                    "offset": { "type": "integer", "minimum": 0, "description": "Profiles to skip for pagination (default 0)." }
-                },
-                "additionalProperties": false
-            },
-            "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
-        }),
-        json!({
-            "name": "fileterm_get_session_context",
-            "title": "Get FileTerm session context",
-            "description": "List currently open FileTerm workspace sessions with connection status, current remote path, and capabilities. Terminal transcripts and credentials are never returned.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "profile_id": { "type": "string", "description": "Optional saved FileTerm profile ID to filter sessions." }
-                },
-                "additionalProperties": false
-            },
-            "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false }
-        }),
-        json!({
-            "name": "fileterm_list_remote_directory",
-            "title": "List an open FileTerm remote directory",
-            "description": "List directory entries through an already-open FileTerm file-capable session. The tool cannot open connections or modify the remote host.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "tab_id": { "type": "string", "description": "Open FileTerm workspace tab ID from fileterm_get_session_context." },
-                    "path": { "type": "string", "description": "Optional remote directory path; defaults to that session's current remote path." }
-                },
-                "required": ["tab_id"],
-                "additionalProperties": false
-            },
-            "annotations": { "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true }
-        }),
+        tool_definition("fileterm_list_connections", "List FileTerm connections", "List saved profiles without credentials.", json!({
+            "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &[], true, false, true, false),
+        tool_definition("fileterm_get_session_context", "Get FileTerm session context", "List open sessions with status, paths and capabilities. Credentials and terminal transcripts are never returned.", json!({
+            "profile_id": { "type": "string" }
+        }), &[], true, false, true, false),
+        tool_definition("fileterm_get_command_templates", "List command templates", "List saved FileTerm command templates that can be executed with explicit approval.", json!({
+            "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &[], true, false, true, false),
+        tool_definition("fileterm_list_remote_directory", "List a remote directory", "List entries through an already-open file-capable session. Results are paginated.", json!({
+            "tab_id": { "type": "string" },
+            "path": { "type": "string" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &["tab_id"], true, false, true, true),
+        tool_definition("fileterm_read_remote_file", "Read a remote file", "Read text from an already-open remote session. Large output is bounded and marked truncated.", json!({
+            "tab_id": { "type": "string" },
+            "path": { "type": "string" },
+            "encoding": { "type": "string", "default": "utf-8" }
+        }), &["tab_id", "path"], true, false, true, true),
+        tool_definition("fileterm_list_transfers", "List transfer tasks", "List FileTerm upload/download tasks and their current status.", json!({
+            "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
+            "offset": { "type": "integer", "minimum": 0 }
+        }), &[], true, false, true, false),
+        tool_definition("fileterm_list_ssh_tunnels", "List SSH tunnels", "List tunnels attached to an open SSH session.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], true, false, true, false),
+        tool_definition("fileterm_open_connection", "Open a FileTerm connection", "Open a saved profile in a new FileTerm session. The user must approve the connection attempt.", json!({ "profile_id": { "type": "string" } }), &["profile_id"], false, false, false, true),
+        tool_definition("fileterm_activate_session", "Activate a FileTerm session", "Make an existing session the active workspace session.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
+        tool_definition("fileterm_reconnect_session", "Reconnect a FileTerm session", "Reconnect an existing session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, false, true),
+        tool_definition("fileterm_disconnect_session", "Disconnect a FileTerm session", "Disconnect an open session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
+        tool_definition("fileterm_close_session", "Close a FileTerm session", "Close a workspace tab after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, true, true, false),
+        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel. The interactive terminal is not hijacked.", json!({
+            "tab_id": { "type": "string" },
+            "command": { "type": "string" },
+            "cwd": { "type": "string" },
+            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 120000 }
+        }), &["tab_id", "command"], false, false, false, true),
+        tool_definition("fileterm_execute_command_template", "Execute a command template", "Execute a saved FileTerm command template with optional positional arguments after approval.", json!({
+            "tab_id": { "type": "string" },
+            "command_id": { "type": "string" },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "options": { "type": "object", "properties": { "appendCarriageReturn": { "type": "boolean" } }, "additionalProperties": false }
+        }), &["tab_id", "command_id"], false, false, false, true),
+        tool_definition("fileterm_write_remote_file", "Write a remote file", "Write text to a remote file after showing the target and content preview for approval.", json!({
+            "tab_id": { "type": "string" }, "path": { "type": "string" }, "content": { "type": "string" }, "encoding": { "type": "string" }
+        }), &["tab_id", "path", "content"], false, true, false, true),
+        tool_definition("fileterm_create_remote_directory", "Create a remote directory", "Create a remote directory after approval.", json!({ "tab_id": { "type": "string" }, "parent_path": { "type": "string" }, "name": { "type": "string" } }), &["tab_id", "parent_path", "name"], false, true, false, true),
+        tool_definition("fileterm_create_remote_file", "Create a remote file", "Create an empty remote file after approval.", json!({ "tab_id": { "type": "string" }, "parent_path": { "type": "string" }, "name": { "type": "string" } }), &["tab_id", "parent_path", "name"], false, true, false, true),
+        tool_definition("fileterm_copy_remote_path", "Copy a remote path", "Copy a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "destination_path": { "type": "string" }, "target_type": { "type": "string", "enum": ["file", "folder"] } }), &["tab_id", "target_path", "destination_path", "target_type"], false, true, false, true),
+        tool_definition("fileterm_move_remote_path", "Move a remote path", "Move a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "destination_path": { "type": "string" } }), &["tab_id", "target_path", "destination_path"], false, true, false, true),
+        tool_definition("fileterm_rename_remote_path", "Rename a remote path", "Rename a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "new_name": { "type": "string" } }), &["tab_id", "target_path", "new_name"], false, true, false, true),
+        tool_definition("fileterm_delete_remote_path", "Delete a remote path", "Delete a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "target_type": { "type": "string", "enum": ["file", "folder"] } }), &["tab_id", "target_path", "target_type"], false, true, false, true),
+        tool_definition("fileterm_change_remote_permissions", "Change remote permissions", "Change remote mode bits after approval.", json!({ "tab_id": { "type": "string" }, "path": { "type": "string" }, "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" }, "recursive": { "type": "boolean" }, "apply_to": { "type": "string", "enum": ["all", "files", "directories"] } }), &["tab_id", "path", "mode"], false, true, true, true),
+        tool_definition("fileterm_set_remote_file_access_mode", "Set remote file access mode", "Switch the existing session's file view between user and root mode. Root credentials are never accepted from MCP; FileTerm must already have reusable authorization or the operation fails.", json!({ "tab_id": { "type": "string" }, "mode": { "type": "string", "enum": ["user", "root"] } }), &["tab_id", "mode"], false, true, true, true),
+        tool_definition("fileterm_upload_file", "Upload a local file", "Queue a resumable upload through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "local_path": { "type": "string" }, "remote_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "local_path", "remote_directory"], false, false, false, true),
+        tool_definition("fileterm_download_file", "Download a remote file", "Queue a resumable download through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "remote_path": { "type": "string" }, "local_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "remote_path", "local_directory"], false, false, false, true),
+        tool_definition("fileterm_download_remote_directory", "Download a remote directory", "Queue a resumable directory download through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "remote_path": { "type": "string" }, "local_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "remote_path", "local_directory"], false, false, false, true),
+        tool_definition("fileterm_pause_transfer", "Pause a transfer", "Pause a FileTerm transfer and preserve its resumable checkpoint after approval.", json!({ "transfer_id": { "type": "string" } }), &["transfer_id"], false, false, true, false),
+        tool_definition("fileterm_resume_transfer", "Resume a transfer", "Resume a paused FileTerm transfer after approval.", json!({ "transfer_id": { "type": "string" } }), &["transfer_id"], false, false, true, true),
+        tool_definition("fileterm_discard_transfer", "Discard a transfer", "Discard a transfer and its checkpoint after approval.", json!({ "transfer_id": { "type": "string" } }), &["transfer_id"], false, true, true, false),
+        tool_definition("fileterm_clear_transfers", "Clear transfer history", "Clear selected transfer history after approval.", json!({ "transfer_ids": { "type": "array", "items": { "type": "string" } } }), &["transfer_ids"], false, true, true, false),
+        tool_definition("fileterm_create_ssh_tunnel", "Create an SSH tunnel", "Create a tunnel rule on an open SSH session after approval.", json!({ "tab_id": { "type": "string" }, "rule": { "type": "object" } }), &["tab_id", "rule"], false, false, true, true),
+        tool_definition("fileterm_start_ssh_tunnel", "Start an SSH tunnel", "Start a configured SSH tunnel after approval.", json!({ "tab_id": { "type": "string" }, "rule_id": { "type": "string" } }), &["tab_id", "rule_id"], false, false, true, true),
+        tool_definition("fileterm_stop_ssh_tunnel", "Stop an SSH tunnel", "Stop a running SSH tunnel after approval.", json!({ "tab_id": { "type": "string" }, "rule_id": { "type": "string" } }), &["tab_id", "rule_id"], false, false, true, false),
+        tool_definition("fileterm_delete_ssh_tunnel", "Delete an SSH tunnel", "Delete an SSH tunnel rule after approval.", json!({ "tab_id": { "type": "string" }, "rule_id": { "type": "string" } }), &["tab_id", "rule_id"], false, true, true, false),
     ]
+}
+
+#[allow(clippy::too_many_arguments)] // Tool metadata stays explicit at each call site.
+fn tool_definition(
+    name: &str,
+    title: &str,
+    description: &str,
+    properties: Value,
+    required: &[&str],
+    read_only: bool,
+    destructive: bool,
+    idempotent: bool,
+    open_world: bool,
+) -> Value {
+    json!({
+        "name": name,
+        "title": title,
+        "description": description,
+        "inputSchema": {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": false
+        },
+        "annotations": {
+            "readOnlyHint": read_only,
+            "destructiveHint": destructive,
+            "idempotentHint": idempotent,
+            "openWorldHint": open_world
+        }
+    })
 }
 
 fn jsonrpc_error(id: Value, code: i32, message: &str) -> Value {
@@ -620,10 +2107,10 @@ fn call_desktop_bridge(request: BridgeRequest) -> Result<Value, String> {
         "FileTerm desktop app is unavailable. Open or restart FileTerm, then retry this MCP tool.".to_string()
     })?;
     stream
-        .set_read_timeout(Some(MCP_BRIDGE_TIMEOUT))
+        .set_read_timeout(Some(MCP_CLIENT_TIMEOUT))
         .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
     stream
-        .set_write_timeout(Some(MCP_BRIDGE_TIMEOUT))
+        .set_write_timeout(Some(MCP_CLIENT_TIMEOUT))
         .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
     let envelope = BridgeEnvelope {
         token: descriptor.token,
@@ -709,13 +2196,22 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn tools_are_prefixed_read_only_and_have_strict_schemas() {
+    fn tools_are_prefixed_and_have_strict_schemas() {
         for tool in tool_definitions() {
             assert!(tool["name"].as_str().unwrap().starts_with("fileterm_"));
-            assert_eq!(tool["annotations"]["readOnlyHint"], true);
-            assert_eq!(tool["annotations"]["destructiveHint"], false);
             assert_eq!(tool["inputSchema"]["additionalProperties"], false);
         }
+        let read_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_read_remote_file")
+            .unwrap();
+        assert_eq!(read_tool["annotations"]["readOnlyHint"], true);
+        let write_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_write_remote_file")
+            .unwrap();
+        assert_eq!(write_tool["annotations"]["readOnlyHint"], false);
+        assert_eq!(write_tool["annotations"]["destructiveHint"], true);
     }
 
     #[test]
@@ -739,7 +2235,7 @@ mod tests {
             "method": "tools/list"
         }))
         .unwrap();
-        assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 3);
+        assert!(response["result"]["tools"].as_array().unwrap().len() >= 20);
     }
 
     #[test]

@@ -835,6 +835,16 @@ export type SshInteractionRequest =
   | SshCredentialsPromptRequest
   | SshKeyPassphrasePromptRequest
   | SshKeyboardInteractiveRequest
+
+export interface McpApprovalRequest {
+  requestId: string
+  operation: string
+  title: string
+  summary: string
+  target?: string
+  details?: string
+  destructive: boolean
+}
 export type SshInteractionDraft =
   | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
@@ -1040,6 +1050,12 @@ export interface FileTermDesktopApi {
     args?: string[],
     options?: CommandExecutionOptions
   ): Promise<CommandExecutionResult>
+  executeRemoteCommand(
+    tabId: string,
+    command: string,
+    cwd?: string,
+    timeoutMs?: number
+  ): Promise<{ output: string; exitCode: number | null; timedOut: boolean }>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
   getCommandSendPreferences(): Promise<CommandSendPreferences>
@@ -1125,6 +1141,7 @@ export interface FileTermDesktopApi {
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
+  resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
     tabId: string,
     targetPath: string,
@@ -1136,6 +1153,7 @@ export interface FileTermDesktopApi {
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  onMcpApprovalRequest(listener: (request: McpApprovalRequest) => void): () => void
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void
   onNewTabRequest(listener: () => void): () => void

@@ -377,6 +377,9 @@ pub struct WorkspaceState {
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions: Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
+    /// Pending MCP mutation approvals. The renderer resolves these through
+    /// `app_resolve_mcp_approval`; dropping or timing out a request denies it.
+    pub pending_mcp_approvals: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A
@@ -432,6 +435,7 @@ impl Default for WorkspaceState {
             worker_controls: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_runtime_ids: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
+            pending_mcp_approvals: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
             transfers: Arc::new(RwLock::new(Vec::new())),
             transfer_runs: Arc::new(RwLock::new(HashMap::new())),

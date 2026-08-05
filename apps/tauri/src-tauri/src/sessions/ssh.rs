@@ -5114,6 +5114,45 @@ async fn run_worker_loop(
     }
 }
 
+/// Execute one explicit remote command on an independent SSH exec channel.
+/// The interactive PTY remains owned by the terminal, so an external CLI/MCP
+/// call cannot steal terminal input or mix its output into the user's shell.
+fn spawn_remote_command(
+    handle: &Arc<Handle<ClientHandler>>,
+    command: String,
+    cwd: Option<String>,
+    timeout_ms: u64,
+    respond_to: oneshot::Sender<Result<Value, String>>,
+) {
+    let handle = Arc::clone(handle);
+    let command = cwd
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| format!("cd -- {} && {command}", shell_quote(path.trim())))
+        .unwrap_or(command);
+    let timeout_duration = Duration::from_millis(timeout_ms);
+    tokio::spawn(async move {
+        let result = match timeout(
+            timeout_duration,
+            super::system_metrics::exec_command_with_status(&handle, &command),
+        )
+        .await
+        {
+            Ok(Ok((output, exit_code))) => Ok(serde_json::json!({
+                "output": output,
+                "exitCode": exit_code,
+                "timedOut": false,
+            })),
+            Ok(Err(error)) => Err(error),
+            Err(_) => Ok(serde_json::json!({
+                "output": "",
+                "exitCode": Value::Null,
+                "timedOut": true,
+            })),
+        };
+        let _ = respond_to.send(result);
+    });
+}
+
 /// Returns `Ok(true)` when the worker should exit (Disconnect requested),
 /// `Ok(false)` otherwise.
 ///
@@ -5124,7 +5163,7 @@ async fn run_worker_loop(
 #[allow(clippy::too_many_arguments)] // Worker state is borrowed separately to avoid a second mutable aggregate.
 async fn handle_worker_cmd_without_sftp(
     cmd: WorkerCmd,
-    handle: &Handle<ClientHandler>,
+    handle: &Arc<Handle<ClientHandler>>,
     shell_writer: &SshShellWriteHalf,
     file_access_mode: &mut String,
     root_file_access_method: &mut RootFileAccessMethod,
@@ -5156,6 +5195,15 @@ async fn handle_worker_cmd_without_sftp(
                     // has a degraded session; do not escalate resize errors.
                 }
             }
+            Ok(false)
+        }
+        WorkerCmd::ExecuteRemoteCommand {
+            command,
+            cwd,
+            timeout_ms,
+            respond_to,
+        } => {
+            spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
             Ok(false)
         }
         WorkerCmd::ListSshTunnels { respond_to } => {
@@ -5385,6 +5433,15 @@ async fn handle_worker_cmd(
                     );
                 }
             }
+            Ok(false)
+        }
+        WorkerCmd::ExecuteRemoteCommand {
+            command,
+            cwd,
+            timeout_ms,
+            respond_to,
+        } => {
+            spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
             Ok(false)
         }
         WorkerCmd::ListSshTunnels { respond_to } => {

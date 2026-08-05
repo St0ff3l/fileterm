@@ -1025,6 +1025,15 @@ async fn send_worker_cmd<T>(
     tab_id: &str,
     make_cmd: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,
 ) -> Result<T, AppError> {
+    send_worker_cmd_with_response_timeout(app, tab_id, WORKER_FILE_RESPONSE_TIMEOUT, make_cmd).await
+}
+
+async fn send_worker_cmd_with_response_timeout<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    response_timeout: Duration,
+    make_cmd: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,
+) -> Result<T, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let workers = state.workers.read().await;
     let sender = workers
@@ -1042,9 +1051,9 @@ async fn send_worker_cmd<T>(
         .map_err(|_| AppError::Storage("Worker busy: command send timeout".to_string()))?
         .map_err(|e| AppError::Storage(e.to_string()))?;
 
-    let res = timeout(WORKER_FILE_RESPONSE_TIMEOUT, rx)
+    let res = timeout(response_timeout, rx)
         .await
-        .map_err(|_| AppError::Storage("远程文件操作超时，请检查连接后重试".to_string()))?
+        .map_err(|_| AppError::Storage("远程操作超时，请检查连接后重试".to_string()))?
         .map_err(|e| AppError::Storage(e.to_string()))?
         .map_err(AppError::Storage)?;
     Ok(res)
@@ -1110,6 +1119,90 @@ pub(crate) async fn mcp_list_remote_directory(
         "path": path,
         "items": session.remote_files,
     }))
+}
+
+/// Execute a bounded command through a dedicated SSH exec channel. This is
+/// separate from the interactive terminal so an external CLI/MCP caller
+/// receives deterministic output without stealing the user's PTY input.
+#[tauri::command]
+pub async fn app_execute_remote_command(
+    app: AppHandle,
+    tab_id: String,
+    command: String,
+    cwd: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<serde_json::Value, AppError> {
+    const MAX_COMMAND_BYTES: usize = 64 * 1024;
+    const MAX_CWD_BYTES: usize = 4 * 1024;
+    const DEFAULT_TIMEOUT_MS: u64 = 60_000;
+    const MIN_TIMEOUT_MS: u64 = 1_000;
+    const MAX_TIMEOUT_MS: u64 = 120_000;
+
+    let command = command.trim().to_string();
+    if command.is_empty() {
+        return Err(AppError::Command(
+            "Remote command must not be empty".to_string(),
+        ));
+    }
+    if command.len() > MAX_COMMAND_BYTES {
+        return Err(AppError::Command(format!(
+            "Remote command exceeds the {} KiB limit",
+            MAX_COMMAND_BYTES / 1024
+        )));
+    }
+    let cwd = cwd
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if cwd
+        .as_ref()
+        .is_some_and(|value| value.len() > MAX_CWD_BYTES)
+    {
+        return Err(AppError::Command(
+            "Remote command working directory is too long".to_string(),
+        ));
+    }
+
+    let timeout_ms = timeout_ms
+        .unwrap_or(DEFAULT_TIMEOUT_MS)
+        .clamp(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS);
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let session_type = {
+        let tabs = state.tabs.read().await;
+        tabs.iter()
+            .find(|tab| tab.id == tab_id)
+            .map(|tab| tab.session_type.clone())
+            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?
+    };
+    if session_type != "ssh" {
+        return Err(AppError::Command(
+            "Remote command execution is only supported for SSH sessions".to_string(),
+        ));
+    }
+    let default_cwd = {
+        let sessions = state.sessions.read().await;
+        let session = sessions
+            .get(&tab_id)
+            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
+        if !session.connected {
+            return Err(AppError::Command(
+                "FileTerm SSH session is not connected".to_string(),
+            ));
+        }
+        cwd.or_else(|| session.shell_cwd.clone())
+    };
+
+    send_worker_cmd_with_response_timeout(
+        &app,
+        &tab_id,
+        Duration::from_millis(timeout_ms.saturating_add(5_000)),
+        |tx| WorkerCmd::ExecuteRemoteCommand {
+            command,
+            cwd: default_cwd,
+            timeout_ms,
+            respond_to: tx,
+        },
+    )
+    .await
 }
 
 fn create_tab_layout(profile_type: &str) -> String {
@@ -2871,6 +2964,23 @@ pub async fn app_resolve_ssh_interaction(
         // Sender error means the receiver was dropped (handshake timed out
         // or the worker exited) — not actionable, ignore.
         let _ = tx.send(response);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_resolve_mcp_approval(
+    app: AppHandle,
+    request_id: String,
+    approved: bool,
+) -> Result<(), AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let sender = {
+        let mut pending = state.pending_mcp_approvals.write().await;
+        pending.remove(&request_id)
+    };
+    if let Some(tx) = sender {
+        let _ = tx.send(approved);
     }
     Ok(())
 }
