@@ -1158,7 +1158,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   if (isFileEditorWindow && fileEditor) {
     return (
       <StandaloneWindowFrame isWindows={isWindowsDesktop} showPlatformTitlebar={false} title={fileEditor.name}>
-        <Suspense fallback={<div className="standalone-shell file-editor-window">{t.updating}</div>}>
+        <Suspense fallback={<div aria-busy="true" className="standalone-shell file-editor-window" />}>
           <FileEditorModal
             errorMessage={fileEditorError}
             file={fileEditor}
@@ -1195,7 +1195,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         showPlatformTitlebar={false}
         title={fileEditorWindowName ?? t.appTitle}
       >
-        <div className="standalone-shell file-editor-window">
+        <div aria-busy={!fileEditorError} className="standalone-shell file-editor-window">
           <div
             className={`modal-card file-editor-modal ${themeMode === 'default-dark' ? 'file-editor-modal--dark' : ''} standalone`}
           >
@@ -1208,11 +1208,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 <CloseButton onClick={closeCurrentWindow} />
               </div>
             </div>
-            {fileEditorError ? (
-              <div className="modal-error">{fileEditorError}</div>
-            ) : (
-              <div className="file-editor-path">{t.updating}</div>
-            )}
+            {fileEditorError ? <div className="modal-error">{fileEditorError}</div> : null}
           </div>
         </div>
       </StandaloneWindowFrame>

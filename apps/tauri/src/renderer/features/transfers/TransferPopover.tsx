@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TransferTask } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
-import { formatTransferBytes, isActiveTransfer, isCompletedTransfer, transferStatusText } from '../../app/app-utils'
+import {
+  formatTransferBytes,
+  formatTransferDateTime,
+  getTransferTimestamp,
+  isActiveTransfer,
+  isCompletedTransfer,
+  transferStatusText
+} from '../../app/app-utils'
 import { t } from '../../i18n'
 
 export function TransferPopover({
@@ -25,8 +32,16 @@ export function TransferPopover({
   const [isClearing, setIsClearing] = useState(false)
   const pendingTransferIdsRef = useRef(new Set<string>())
   const isClearingRef = useRef(false)
+  const orderedTransfers = transfers
+    .map((transfer, index) => ({ index, transfer }))
+    .sort((left, right) => {
+      const leftTimestamp = getTransferTimestamp(left.transfer) ?? 0
+      const rightTimestamp = getTransferTimestamp(right.transfer) ?? 0
+      return rightTimestamp - leftTimestamp || left.index - right.index
+    })
+    .map(({ transfer }) => transfer)
   const visibleTransfers: TransferTask[] = []
-  for (const transfer of transfers) {
+  for (const transfer of orderedTransfers) {
     if (statusFilter === 'running' && isCompletedTransfer(transfer)) {
       continue
     }
@@ -179,6 +194,8 @@ export function TransferPopover({
           visibleTransfers.map((transfer) => {
             const transferSizeText = getTransferSizeText(transfer)
             const progress = Math.round(Math.max(0, Math.min(100, Number(transfer.progress) || 0)))
+            const transferTimestamp = getTransferTimestamp(transfer)
+            const transferDateTime = formatTransferDateTime(transferTimestamp)
             return (
               <div
                 aria-busy={Boolean(pendingActions[transfer.id])}
@@ -243,6 +260,9 @@ export function TransferPopover({
                 </div>
                 <div className="transfer-row-main">
                   <span>{transferStatusText(transfer)}</span>
+                  {transferDateTime && transferTimestamp !== undefined ? (
+                    <time dateTime={new Date(transferTimestamp).toISOString()}>{transferDateTime}</time>
+                  ) : null}
                 </div>
                 <div className="transfer-row-meta">
                   <span>
