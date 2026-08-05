@@ -16,6 +16,13 @@ FileTerm 2.1.7 聚焦 SSH 隧道转发、`su -` 文件传输稳定性、文件�
 - [PR #174](https://github.com/St0ff3l/fileterm/pull/174)：合入文件管理器权限、`su -` 下载和 Tauri 窗口定位等 2.1.7 发布前修复。
 - [Issue #167](https://github.com/St0ff3l/fileterm/issues/167)：跟进普通用户 `su -` 场景下的文件管理器权限与传输问题。
 
+### Contributors
+
+感谢本版本的贡献者：
+
+- [@gochar0011](https://github.com/gochar0011)：提交并维护 PR #173，修复 SSH 远程端口转发。
+- [@St0ff3l](https://github.com/St0ff3l)：完成 PR #174 及本版本的集成与发布工作。
+
 > 遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
 
 > 也可以加入微信群交流：请打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81) 扫描二维码进微信群，也可加入 QQ 群 534418986。
