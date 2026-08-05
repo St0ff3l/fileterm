@@ -7177,7 +7177,12 @@ async fn download_root_remote_file_via_su_pty(
             }) => {
                 exit_status = Some(status);
             }
-            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) if exit_status.is_some() => break,
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                exit_status = wait_for_root_download_exit_status(&mut channel, &cancel).await?;
+                break;
+            }
+            None => break,
             _ => {}
         }
     }
@@ -7196,15 +7201,64 @@ async fn download_root_remote_file_via_su_pty(
     }
     local.flush().await.map_err(|error| error.to_string())?;
 
-    let status = exit_status.ok_or_else(|| "root 下载命令未返回退出状态".to_string())?;
-    if status != 0 {
-        return Err(format!("root 下载命令失败（exit={status}）"));
+    if exit_status.is_none() {
+        crate::services::logging::warn(
+            app,
+            &format!("transfer:{transfer_id}"),
+            "root 下载完成但 SSH 通道未返回退出状态，按完整字节数确认成功",
+        );
     }
-    if transferred != source.size {
-        return Err(format!(
-            "root 下载未完成（{transferred}/{} bytes）",
-            source.size
-        ));
+    validate_root_download_completion(exit_status, transferred, source.size)
+}
+
+async fn wait_for_root_download_exit_status(
+    channel: &mut Channel<russh::client::Msg>,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<Option<u32>, String> {
+    let mut exit_status = None;
+    loop {
+        let message = tokio::select! {
+            _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+            result = timeout(SUDO_VERIFY_TIMEOUT, channel.wait()) => {
+                match result {
+                    Ok(message) => message,
+                    Err(_) => return Ok(exit_status),
+                }
+            }
+        };
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => {
+                exit_status = Some(status);
+            }
+            ChannelMsg::Eof | ChannelMsg::Close if exit_status.is_some() => break,
+            ChannelMsg::Eof | ChannelMsg::Close => {}
+            _ => {}
+        }
+    }
+    Ok(exit_status)
+}
+
+/// PTY-backed `su` channels on some SSH servers close without forwarding an
+/// exit status. Once the exact source byte count has been received, the binary
+/// stream itself is sufficient to establish transfer completeness. An explicit
+/// non-zero status and a short stream must still fail.
+fn validate_root_download_completion(
+    exit_status: Option<u32>,
+    transferred: u64,
+    expected: u64,
+) -> Result<(), String> {
+    if transferred != expected {
+        return Err(format!("root 下载未完成（{transferred}/{expected} bytes）"));
+    }
+    if let Some(status) = exit_status {
+        if status != 0 {
+            return Err(format!("root 下载命令失败（exit={status}）"));
+        }
     }
     Ok(())
 }
@@ -7900,10 +7954,10 @@ mod tests {
         root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
         strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front,
-        try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
-        wait_for_ssh_stage, KeyboardInteractiveRequest, RootFileAccessMethod,
-        ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
-        SU_EXEC_OUTPUT_MARKER,
+        try_keyboard_interactive_with_responder, tunnel_bind_address,
+        validate_root_download_completion, validate_tunnel_rule, wait_for_ssh_stage,
+        KeyboardInteractiveRequest, RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule,
+        TunnelCommand, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -8864,6 +8918,24 @@ mod tests {
         assert_eq!(
             root_upload_base64_shell_command("/etc/fileterm/config.toml", 12),
             "set -e\nmkdir -p '/etc/fileterm'\nbase64 -d >> '/etc/fileterm/config.toml'"
+        );
+    }
+
+    #[test]
+    fn accepts_complete_root_download_without_ssh_exit_status() {
+        assert_eq!(validate_root_download_completion(None, 14, 14), Ok(()));
+        assert_eq!(validate_root_download_completion(Some(0), 14, 14), Ok(()));
+    }
+
+    #[test]
+    fn rejects_incomplete_or_failed_root_download() {
+        assert_eq!(
+            validate_root_download_completion(None, 13, 14),
+            Err("root 下载未完成（13/14 bytes）".to_string())
+        );
+        assert_eq!(
+            validate_root_download_completion(Some(1), 14, 14),
+            Err("root 下载命令失败（exit=1）".to_string())
         );
     }
 
