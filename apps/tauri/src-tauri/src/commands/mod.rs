@@ -68,11 +68,64 @@ async fn send_terminal_input(
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct SshConnectionDefaults {
+    #[serde(default = "default_use_empty_password")]
+    pub use_empty_password: bool,
+    #[serde(default = "default_enable_exec_channel")]
+    pub enable_exec_channel: bool,
+    #[serde(default = "default_enable_resource_monitoring")]
+    pub enable_resource_monitoring: bool,
+    #[serde(default = "default_resource_monitoring_interval_seconds")]
+    pub resource_monitoring_interval_seconds: u64,
+    #[serde(default = "default_reconnect_mode")]
+    pub reconnect_mode: String,
+    #[serde(default = "default_legacy_algorithms")]
+    pub legacy_algorithms: bool,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SshConnectionDefaultsInput {
+    pub use_empty_password: Option<bool>,
+    pub enable_exec_channel: Option<bool>,
+    pub enable_resource_monitoring: Option<bool>,
+    pub resource_monitoring_interval_seconds: Option<u64>,
+    pub reconnect_mode: Option<String>,
+    pub legacy_algorithms: Option<bool>,
+}
+
+impl Default for SshConnectionDefaults {
+    fn default() -> Self {
+        Self {
+            use_empty_password: default_use_empty_password(),
+            enable_exec_channel: default_enable_exec_channel(),
+            enable_resource_monitoring: default_enable_resource_monitoring(),
+            resource_monitoring_interval_seconds: default_resource_monitoring_interval_seconds(),
+            reconnect_mode: default_reconnect_mode(),
+            legacy_algorithms: default_legacy_algorithms(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub theme: String,
     pub locale: String,
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
+    #[serde(default)]
+    pub connection_defaults: SshConnectionDefaults,
+    #[serde(default = "default_overview_show_stats")]
+    pub overview_show_stats: bool,
+    #[serde(default = "default_overview_show_recent")]
+    pub overview_show_recent: bool,
+    #[serde(default = "default_overview_show_all_connections")]
+    pub overview_show_all_connections: bool,
+    #[serde(default = "default_overview_show_quick_actions")]
+    pub overview_show_quick_actions: bool,
+    #[serde(default = "default_overview_section_order")]
+    pub overview_section_order: Vec<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -81,13 +134,85 @@ pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
     pub auto_check_updates: Option<bool>,
+    pub connection_defaults: Option<SshConnectionDefaultsInput>,
+    pub overview_show_stats: Option<bool>,
+    pub overview_show_recent: Option<bool>,
+    pub overview_show_all_connections: Option<bool>,
+    pub overview_show_quick_actions: Option<bool>,
+    pub overview_section_order: Option<Vec<String>>,
 }
 
 const DEFAULT_UI_THEME: &str = "default-dark";
 const DEFAULT_UI_LOCALE: &str = "zhCN";
+const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
+    ["stats", "recent", "allConnections", "quickActions"];
 
 fn default_auto_check_updates() -> bool {
     true
+}
+
+fn default_use_empty_password() -> bool {
+    false
+}
+
+fn default_enable_exec_channel() -> bool {
+    true
+}
+
+fn default_enable_resource_monitoring() -> bool {
+    true
+}
+
+fn default_resource_monitoring_interval_seconds() -> u64 {
+    1
+}
+
+fn default_reconnect_mode() -> String {
+    "none".to_string()
+}
+
+fn default_legacy_algorithms() -> bool {
+    false
+}
+
+fn default_overview_show_stats() -> bool {
+    true
+}
+
+fn default_overview_show_recent() -> bool {
+    true
+}
+
+fn default_overview_show_all_connections() -> bool {
+    true
+}
+
+fn default_overview_show_quick_actions() -> bool {
+    true
+}
+
+fn default_overview_section_order() -> Vec<String> {
+    DEFAULT_OVERVIEW_SECTION_ORDER
+        .iter()
+        .map(|section| (*section).to_string())
+        .collect()
+}
+
+fn normalize_overview_section_order(order: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::with_capacity(DEFAULT_OVERVIEW_SECTION_ORDER.len());
+    for section in order {
+        if DEFAULT_OVERVIEW_SECTION_ORDER.contains(&section.as_str())
+            && !normalized.iter().any(|existing| existing == &section)
+        {
+            normalized.push(section);
+        }
+    }
+    for section in DEFAULT_OVERVIEW_SECTION_ORDER {
+        if !normalized.iter().any(|existing| existing == section) {
+            normalized.push(section.to_string());
+        }
+    }
+    normalized
 }
 
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
@@ -97,7 +222,101 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     if !matches!(preferences.locale.as_str(), "zhCN" | "enUS") {
         preferences.locale = DEFAULT_UI_LOCALE.to_string();
     }
+    if !matches!(
+        preferences
+            .connection_defaults
+            .resource_monitoring_interval_seconds,
+        1 | 5 | 15 | 30 | 60
+    ) {
+        preferences
+            .connection_defaults
+            .resource_monitoring_interval_seconds = default_resource_monitoring_interval_seconds();
+    }
+    if !matches!(
+        preferences.connection_defaults.reconnect_mode.as_str(),
+        "none" | "enter" | "auto"
+    ) {
+        preferences.connection_defaults.reconnect_mode = default_reconnect_mode();
+    }
+    preferences.overview_section_order =
+        normalize_overview_section_order(preferences.overview_section_order);
     preferences
+}
+
+/// Resolve the effective SSH behavior for a live session without mutating the
+/// persisted profile. Global values are creation-time defaults; saved profile
+/// fields remain authoritative and legacy explicit overrides take precedence.
+/// Defaults are only a fallback for profiles that do not have a saved value.
+fn resolve_profile_with_connection_defaults(
+    profile: &Value,
+    defaults: &SshConnectionDefaults,
+) -> Value {
+    if profile.get("type").and_then(Value::as_str) != Some("ssh") {
+        return profile.clone();
+    }
+
+    let Some(mut resolved) = profile.as_object().cloned() else {
+        return profile.clone();
+    };
+    let overrides = resolved
+        .get("connectionOverrides")
+        .and_then(Value::as_object)
+        .cloned();
+    let saved_values = resolved.clone();
+    let value_for = |key: &str, fallback: Value| {
+        overrides
+            .as_ref()
+            .and_then(|values| values.get(key).cloned())
+            .or_else(|| saved_values.get(key).cloned())
+            .unwrap_or(fallback)
+    };
+
+    resolved.insert(
+        "useEmptyPassword".to_string(),
+        value_for("useEmptyPassword", Value::Bool(defaults.use_empty_password)),
+    );
+    resolved.insert(
+        "enableExecChannel".to_string(),
+        value_for(
+            "enableExecChannel",
+            Value::Bool(defaults.enable_exec_channel),
+        ),
+    );
+    resolved.insert(
+        "enableResourceMonitoring".to_string(),
+        value_for(
+            "enableResourceMonitoring",
+            Value::Bool(defaults.enable_resource_monitoring),
+        ),
+    );
+    resolved.insert(
+        "resourceMonitoringIntervalSeconds".to_string(),
+        value_for(
+            "resourceMonitoringIntervalSeconds",
+            Value::Number(defaults.resource_monitoring_interval_seconds.into()),
+        ),
+    );
+    resolved.insert(
+        "reconnectMode".to_string(),
+        value_for(
+            "reconnectMode",
+            Value::String(defaults.reconnect_mode.clone()),
+        ),
+    );
+    resolved.insert(
+        "legacyAlgorithms".to_string(),
+        value_for("legacyAlgorithms", Value::Bool(defaults.legacy_algorithms)),
+    );
+
+    Value::Object(resolved)
+}
+
+fn resolve_profile_for_session(app: &AppHandle, profile: &Value) -> Result<Value, AppError> {
+    let preferences = app_get_ui_preferences(app.clone())?;
+    Ok(resolve_profile_with_connection_defaults(
+        profile,
+        &preferences.connection_defaults,
+    ))
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -270,6 +489,12 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             auto_check_updates: default_auto_check_updates(),
+            connection_defaults: SshConnectionDefaults::default(),
+            overview_show_stats: default_overview_show_stats(),
+            overview_show_recent: default_overview_show_recent(),
+            overview_show_all_connections: default_overview_show_all_connections(),
+            overview_show_quick_actions: default_overview_show_quick_actions(),
+            overview_section_order: default_overview_section_order(),
         })
     }
 }
@@ -281,6 +506,7 @@ pub fn app_set_ui_preferences(
 ) -> Result<UiPreferences, AppError> {
     let path = crate::storage::state_path(&app)?;
     let mut preferences = app_get_ui_preferences(app.clone())?;
+    let previous_locale = preferences.locale.clone();
     if let Some(theme) = input.theme {
         preferences.theme = theme;
     }
@@ -290,28 +516,67 @@ pub fn app_set_ui_preferences(
     if let Some(auto_check_updates) = input.auto_check_updates {
         preferences.auto_check_updates = auto_check_updates;
     }
+    if let Some(connection_defaults) = input.connection_defaults {
+        if let Some(value) = connection_defaults.use_empty_password {
+            preferences.connection_defaults.use_empty_password = value;
+        }
+        if let Some(value) = connection_defaults.enable_exec_channel {
+            preferences.connection_defaults.enable_exec_channel = value;
+        }
+        if let Some(value) = connection_defaults.enable_resource_monitoring {
+            preferences.connection_defaults.enable_resource_monitoring = value;
+        }
+        if let Some(value) = connection_defaults.resource_monitoring_interval_seconds {
+            preferences
+                .connection_defaults
+                .resource_monitoring_interval_seconds = value;
+        }
+        if let Some(value) = connection_defaults.reconnect_mode {
+            preferences.connection_defaults.reconnect_mode = value;
+        }
+        if let Some(value) = connection_defaults.legacy_algorithms {
+            preferences.connection_defaults.legacy_algorithms = value;
+        }
+    }
+    if let Some(overview_show_stats) = input.overview_show_stats {
+        preferences.overview_show_stats = overview_show_stats;
+    }
+    if let Some(overview_show_recent) = input.overview_show_recent {
+        preferences.overview_show_recent = overview_show_recent;
+    }
+    if let Some(overview_show_all_connections) = input.overview_show_all_connections {
+        preferences.overview_show_all_connections = overview_show_all_connections;
+    }
+    if let Some(overview_show_quick_actions) = input.overview_show_quick_actions {
+        preferences.overview_show_quick_actions = overview_show_quick_actions;
+    }
+    if let Some(overview_section_order) = input.overview_section_order {
+        preferences.overview_section_order = overview_section_order;
+    }
     let preferences = normalize_ui_preferences(preferences);
     let content = serde_json::to_string_pretty(&preferences)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
-    if let Err(error) =
-        crate::install_localized_application_menu(&app, preferences.locale == "enUS")
-    {
-        // Preferences are already durable at this point. Do not report the
-        // whole save as failed (and invite a duplicate retry) merely because
-        // native menu refresh failed on the current platform.
-        crate::services::logging::warn(
-            &app,
-            "ui-preferences",
-            format!("failed to refresh native menu: {error}"),
-        );
-    }
-    if let Err(error) = crate::install_localized_tray_menu(&app, preferences.locale == "enUS") {
-        crate::services::logging::warn(
-            &app,
-            "ui-preferences",
-            format!("failed to refresh tray menu: {error}"),
-        );
+    if previous_locale != preferences.locale {
+        if let Err(error) =
+            crate::install_localized_application_menu(&app, preferences.locale == "enUS")
+        {
+            // Preferences are already durable at this point. Do not report the
+            // whole save as failed (and invite a duplicate retry) merely because
+            // native menu refresh failed on the current platform.
+            crate::services::logging::warn(
+                &app,
+                "ui-preferences",
+                format!("failed to refresh native menu: {error}"),
+            );
+        }
+        if let Err(error) = crate::install_localized_tray_menu(&app, preferences.locale == "enUS") {
+            crate::services::logging::warn(
+                &app,
+                "ui-preferences",
+                format!("failed to refresh tray menu: {error}"),
+            );
+        }
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
     Ok(preferences)
@@ -1305,6 +1570,8 @@ async fn spawn_session_for_profile(
     profile_id: &str,
     pane_root_tab_id: Option<String>,
 ) -> Result<String, AppError> {
+    let resolved_profile = resolve_profile_for_session(app, profile)?;
+    let profile = &resolved_profile;
     let profile_type = profile
         .get("type")
         .and_then(|t| t.as_str())
@@ -2051,6 +2318,8 @@ pub async fn app_reconnect_tab(
             .iter()
             .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&pid))
         {
+            let resolved_profile = resolve_profile_for_session(&app, profile)?;
+            let profile = &resolved_profile;
             // Claim the reconnect before awaiting worker shutdown. Tauri can
             // dispatch Enter/button/auto-reconnect commands concurrently; a
             // status check performed after an await lets each caller replace
@@ -3011,7 +3280,8 @@ pub async fn app_update_profile(
 ) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
     let profile = crate::services::profile_ops::update_profile(&app, &profile_id, input)?;
-    let reconnect_mode = crate::services::workspace::reconnect_mode_for_profile(&profile);
+    let resolved_profile = resolve_profile_for_session(&app, &profile)?;
+    let reconnect_mode = crate::services::workspace::reconnect_mode_for_profile(&resolved_profile);
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let mut sessions = state.sessions.write().await;
     for session in sessions.values_mut() {
@@ -3417,7 +3687,11 @@ mod ui_state_tests {
 
 #[cfg(test)]
 mod ui_preferences_tests {
-    use super::{normalize_ui_preferences, UiPreferences, UiPreferencesInput};
+    use super::{
+        default_overview_section_order, normalize_ui_preferences,
+        resolve_profile_with_connection_defaults, SshConnectionDefaults, UiPreferences,
+        UiPreferencesInput,
+    };
 
     #[test]
     fn falls_back_to_safe_values_for_unknown_preferences() {
@@ -3425,10 +3699,26 @@ mod ui_preferences_tests {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
             auto_check_updates: false,
+            connection_defaults: SshConnectionDefaults::default(),
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: vec![
+                "unknown".to_string(),
+                "stats".to_string(),
+                "stats".to_string(),
+            ],
         });
 
         assert_eq!(preferences.theme, "default-dark");
         assert_eq!(preferences.locale, "zhCN");
+        assert!(preferences.overview_show_recent);
+        assert!(preferences.overview_show_all_connections);
+        assert_eq!(
+            preferences.overview_section_order,
+            default_overview_section_order()
+        );
     }
 
     #[test]
@@ -3437,11 +3727,86 @@ mod ui_preferences_tests {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
             auto_check_updates: false,
+            connection_defaults: SshConnectionDefaults::default(),
+            overview_show_stats: false,
+            overview_show_recent: false,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: false,
+            overview_section_order: vec![
+                "allConnections".to_string(),
+                "stats".to_string(),
+                "recent".to_string(),
+                "quickActions".to_string(),
+            ],
         });
 
         assert_eq!(preferences.theme, "default-light");
         assert_eq!(preferences.locale, "enUS");
         assert!(!preferences.auto_check_updates);
+        assert!(!preferences.overview_show_stats);
+        assert!(!preferences.overview_show_recent);
+        assert!(preferences.overview_show_all_connections);
+        assert!(!preferences.overview_show_quick_actions);
+        assert_eq!(
+            preferences.overview_section_order,
+            vec![
+                "allConnections".to_string(),
+                "stats".to_string(),
+                "recent".to_string(),
+                "quickActions".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn preserves_saved_connection_values_and_explicit_overrides() {
+        let defaults = SshConnectionDefaults {
+            use_empty_password: true,
+            enable_exec_channel: false,
+            enable_resource_monitoring: false,
+            resource_monitoring_interval_seconds: 15,
+            reconnect_mode: "enter".to_string(),
+            legacy_algorithms: false,
+        };
+        let profile = serde_json::json!({
+            "type": "ssh",
+            "enableExecChannel": true,
+            "enableResourceMonitoring": true,
+            "resourceMonitoringIntervalSeconds": 5,
+            "reconnectMode": "none",
+            "legacyAlgorithms": false,
+            "connectionOverrides": {
+                "reconnectMode": "auto",
+                "legacyAlgorithms": true
+            }
+        });
+
+        let resolved = resolve_profile_with_connection_defaults(&profile, &defaults);
+
+        assert_eq!(resolved["useEmptyPassword"], true);
+        assert_eq!(resolved["enableExecChannel"], true);
+        assert_eq!(resolved["enableResourceMonitoring"], true);
+        assert_eq!(resolved["resourceMonitoringIntervalSeconds"], 5);
+        assert_eq!(resolved["reconnectMode"], "auto");
+        assert_eq!(resolved["legacyAlgorithms"], true);
+        assert_eq!(profile["enableExecChannel"], true);
+    }
+
+    #[test]
+    fn preserves_legacy_profile_values_without_override_metadata() {
+        let defaults = SshConnectionDefaults::default();
+        let profile = serde_json::json!({
+            "type": "ssh",
+            "enableExecChannel": false,
+            "reconnectMode": "auto"
+        });
+
+        let resolved = resolve_profile_with_connection_defaults(&profile, &defaults);
+
+        assert_eq!(resolved["enableExecChannel"], false);
+        assert_eq!(resolved["reconnectMode"], "auto");
+        assert_eq!(resolved["enableResourceMonitoring"], true);
+        assert_eq!(resolved["resourceMonitoringIntervalSeconds"], 1);
     }
 
     #[test]
@@ -3453,23 +3818,68 @@ mod ui_preferences_tests {
         .expect("legacy UI preferences should still deserialize");
 
         assert!(preferences.auto_check_updates);
+        assert!(preferences.overview_show_stats);
+        assert!(preferences.overview_show_recent);
+        assert!(preferences.overview_show_all_connections);
+        assert!(preferences.overview_show_quick_actions);
+        assert_eq!(
+            preferences.overview_section_order,
+            default_overview_section_order()
+        );
     }
 
     #[test]
     fn uses_camel_case_for_the_update_check_preference_contract() {
         let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({
-            "autoCheckUpdates": false
+            "autoCheckUpdates": false,
+            "overviewShowStats": false,
+            "overviewShowRecent": false,
+            "overviewShowAllConnections": true,
+            "overviewShowQuickActions": false,
+            "overviewSectionOrder": ["recent", "allConnections", "stats", "quickActions"]
         }))
         .expect("renderer preference input should deserialize");
         assert_eq!(input.auto_check_updates, Some(false));
+        assert_eq!(input.overview_show_stats, Some(false));
+        assert_eq!(input.overview_show_recent, Some(false));
+        assert_eq!(input.overview_show_all_connections, Some(true));
+        assert_eq!(input.overview_show_quick_actions, Some(false));
+        assert_eq!(
+            input.overview_section_order,
+            Some(vec![
+                "recent".to_string(),
+                "allConnections".to_string(),
+                "stats".to_string(),
+                "quickActions".to_string()
+            ])
+        );
 
         let preferences = serde_json::to_value(UiPreferences {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             auto_check_updates: false,
+            connection_defaults: SshConnectionDefaults::default(),
+            overview_show_stats: false,
+            overview_show_recent: false,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: false,
+            overview_section_order: vec![
+                "recent".to_string(),
+                "allConnections".to_string(),
+                "stats".to_string(),
+                "quickActions".to_string(),
+            ],
         })
         .expect("preferences should serialize");
         assert_eq!(preferences["autoCheckUpdates"], false);
+        assert_eq!(preferences["overviewShowStats"], false);
+        assert_eq!(preferences["overviewShowRecent"], false);
+        assert_eq!(preferences["overviewShowAllConnections"], true);
+        assert_eq!(preferences["overviewShowQuickActions"], false);
+        assert_eq!(
+            preferences["overviewSectionOrder"],
+            serde_json::json!(["recent", "allConnections", "stats", "quickActions"])
+        );
     }
 }
 

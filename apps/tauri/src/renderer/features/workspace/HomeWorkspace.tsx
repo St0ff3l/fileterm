@@ -4,6 +4,7 @@ import type {
   CommandTemplateInput,
   ConnectionFolder,
   ConnectionProfile,
+  OverviewSectionId,
   AppUpdateStatus
 } from '@fileterm/core'
 import { useEffect, useState } from 'react'
@@ -24,6 +25,11 @@ export function HomeWorkspace({
   commandTemplates = [],
   theme,
   locale,
+  overviewShowStats,
+  overviewShowRecent,
+  overviewShowAllConnections,
+  overviewShowQuickActions,
+  overviewSectionOrder,
   onOpen,
   onOpenLocalTerminal,
   onCreateConnection,
@@ -56,6 +62,11 @@ export function HomeWorkspace({
   commandTemplates?: CommandTemplate[]
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
+  overviewShowStats: boolean
+  overviewShowRecent: boolean
+  overviewShowAllConnections: boolean
+  overviewShowQuickActions: boolean
+  overviewSectionOrder: OverviewSectionId[]
   onOpen(profileId: string): void
   onOpenLocalTerminal(): void
   onCreateConnection(): void
@@ -310,6 +321,11 @@ export function HomeWorkspace({
                 profiles={profiles}
                 folders={folders}
                 onOpenProfile={onOpen}
+                showStats={overviewShowStats}
+                showRecent={overviewShowRecent}
+                showAllConnections={overviewShowAllConnections}
+                showQuickActions={overviewShowQuickActions}
+                sectionOrder={overviewSectionOrder}
                 onOpenLocalTerminal={onOpenLocalTerminal}
                 onOpenNewConnection={handleOpenNewConnection}
                 onOpenConnectionManager={() => selectTab('connection-manager')}

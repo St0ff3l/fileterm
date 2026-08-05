@@ -3070,9 +3070,9 @@
   box-shadow: none !important;
 }
 
-:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']),
-:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']),
-:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']),
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']),
 :root:not([data-theme]) .modal-card.ssh-modal select,
 :root[data-theme='default-dark'] .modal-card.ssh-modal select,
 :root[data-theme='default'] .modal-card.ssh-modal select,
@@ -3088,9 +3088,9 @@
     box-shadow 0.18s !important;
 }
 
-:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):hover,
-:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):hover,
-:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):hover,
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):hover,
 :root:not([data-theme]) .modal-card.ssh-modal select:hover,
 :root[data-theme='default-dark'] .modal-card.ssh-modal select:hover,
 :root[data-theme='default'] .modal-card.ssh-modal select:hover,
@@ -3100,9 +3100,9 @@
   border-color: var(--border-dark) !important;
 }
 
-:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):focus,
-:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):focus,
-:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):focus,
+:root:not([data-theme]) .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
+:root[data-theme='default-dark'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
+:root[data-theme='default'] .modal-card.ssh-modal input:not([type='checkbox']):not([type='radio']):focus,
 :root:not([data-theme]) .modal-card.ssh-modal select:focus,
 :root[data-theme='default-dark'] .modal-card.ssh-modal select:focus,
 :root[data-theme='default'] .modal-card.ssh-modal select:focus,

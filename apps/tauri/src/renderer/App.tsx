@@ -16,9 +16,14 @@ import {
   type ConnectionImportPlan,
   type ConnectionProfile,
   type CreateProfileInput,
+  DEFAULT_SSH_CONNECTION_DEFAULTS,
   type FileContentSnapshot,
   type McpApprovalRequest,
-  type RemoteFileItem
+  DEFAULT_OVERVIEW_SECTION_ORDER,
+  type OverviewSectionId,
+  type RemoteFileItem,
+  type SshConnectionDefaults,
+  type UiPreferences
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import { profileToForm } from './app/app-data'
@@ -76,10 +81,17 @@ type ErrorDetails = {
   targetPath?: string
 }
 
-type InitialUiPreferences = {
-  theme: ThemeMode
-  locale: AppLocale
-}
+type InitialUiPreferences = Pick<
+  UiPreferences,
+  | 'theme'
+  | 'locale'
+  | 'connectionDefaults'
+  | 'overviewShowStats'
+  | 'overviewShowRecent'
+  | 'overviewShowAllConnections'
+  | 'overviewShowQuickActions'
+  | 'overviewSectionOrder'
+>
 
 function readInitialTheme(searchParams: URLSearchParams, persistedPreferences?: InitialUiPreferences): ThemeMode {
   const queryTheme = searchParams.get('theme')
@@ -101,6 +113,10 @@ function readInitialLocale(searchParams: URLSearchParams, persistedPreferences?:
     return persistedPreferences.locale
   }
   return defaultLocale
+}
+
+function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
+  return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
 }
 
 export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUiPreferences } = {}) {
@@ -138,6 +154,21 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const hasRenderedWorkspaceRef = useRef(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams, initialUiPreferences))
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
+  const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
+    ...DEFAULT_SSH_CONNECTION_DEFAULTS,
+    ...(initialUiPreferences?.connectionDefaults ?? {})
+  }))
+  const [overviewShowStats, setOverviewShowStats] = useState(() => initialUiPreferences?.overviewShowStats ?? true)
+  const [overviewShowRecent, setOverviewShowRecent] = useState(() => initialUiPreferences?.overviewShowRecent ?? true)
+  const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(
+    () => initialUiPreferences?.overviewShowAllConnections ?? true
+  )
+  const [overviewShowQuickActions, setOverviewShowQuickActions] = useState(
+    () => initialUiPreferences?.overviewShowQuickActions ?? true
+  )
+  const [overviewSectionOrder, setOverviewSectionOrder] = useState<OverviewSectionId[]>(() => [
+    ...(initialUiPreferences?.overviewSectionOrder ?? DEFAULT_OVERVIEW_SECTION_ORDER)
+  ])
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
   const [mcpApprovalRequests, setMcpApprovalRequests] = useState<McpApprovalRequest[]>([])
@@ -251,11 +282,32 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     isConnectionManagerWindow,
     themeMode,
     locale,
+    connectionDefaults,
+    overviewShowStats,
+    overviewShowRecent,
+    overviewShowAllConnections,
+    overviewShowQuickActions,
+    overviewSectionOrder,
     initialUiPreferencesLoaded: initialUiPreferences !== undefined,
     onThemeModeChange: setThemeMode,
     onLocaleChange: (nextLocale) => {
       setLocale(nextLocale)
       setLocaleState(nextLocale)
+    },
+    onConnectionDefaultsChange: (nextDefaults) => {
+      setConnectionDefaults((currentDefaults) => ({ ...currentDefaults, ...nextDefaults }))
+    },
+    onOverviewShowStatsChange: setOverviewShowStats,
+    onOverviewShowRecentChange: setOverviewShowRecent,
+    onOverviewShowAllConnectionsChange: setOverviewShowAllConnections,
+    onOverviewShowQuickActionsChange: setOverviewShowQuickActions,
+    onOverviewSectionOrderChange: (nextOrder) => {
+      // Tauri returns a fresh array for every preference event. Keep the same
+      // reference for an equal order so the persistence effect does not echo
+      // the event back into an IPC update loop.
+      setOverviewSectionOrder((currentOrder) =>
+        sameOverviewSectionOrder(currentOrder, nextOrder) ? currentOrder : nextOrder
+      )
     },
     onError: (scope, err) => reportError(setError, scope, err),
     onStatusMessage: (msg) => setError(msg)
@@ -361,8 +413,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const activeCommandPaneWidth = activeTab
     ? (commandPaneWidths[activeTab.id] ?? DEFAULT_COMMAND_LIST_WIDTH)
     : DEFAULT_COMMAND_LIST_WIDTH
-  const isResourceMonitoringAvailable =
-    activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring !== false
+  const activeSshResourceMonitoring =
+    activeProfile?.type === 'ssh'
+      ? (activeProfile.connectionOverrides?.enableResourceMonitoring ??
+        activeProfile.enableResourceMonitoring ??
+        connectionDefaults.enableResourceMonitoring)
+      : false
+  const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
   const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
   const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
   const isSystemSidebarCollapsed =
@@ -458,6 +515,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     formWindowProfileId,
     hasLoadedInitialSnapshot,
     isConnectionFormWindow,
+    connectionDefaults,
     profiles: workspace.profiles || []
   })
 
@@ -917,7 +975,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     try {
       setIsBusy(true)
       const nextInput: CreateProfileInput = {
-        ...profileToForm(profile),
+        ...profileToForm(profile, connectionDefaults),
         trustedHostFingerprint: ''
       }
       const snapshot = await desktopApi.updateProfile(profile.id, nextInput)
@@ -1084,6 +1142,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           />
           {showConnectionForm ? (
             <ConnectionModal
+              connectionDefaults={connectionDefaults}
               errorMessage={formError}
               groupOptions={connectionGroupOptions}
               mode={editingProfileId ? 'edit' : 'create'}
@@ -1181,6 +1240,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         title={editingProfileId ? t.editConnection : t.newConnection}
       >
         <ConnectionFormHost
+          connectionDefaults={connectionDefaults}
           editingProfileId={editingProfileId}
           errorMessage={formError}
           groupOptions={connectionGroupOptions}
@@ -1438,6 +1498,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onUploadFiles={handleUploadFiles}
                 theme={themeMode}
                 locale={locale}
+                overviewShowStats={overviewShowStats}
+                overviewShowRecent={overviewShowRecent}
+                overviewShowAllConnections={overviewShowAllConnections}
+                overviewShowQuickActions={overviewShowQuickActions}
+                overviewSectionOrder={overviewSectionOrder}
                 onCreateConnection={() => {
                   if (desktopApi) void desktopApi.openConnectionFormWindow('create')
                 }}
@@ -1526,6 +1591,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             ? {
                 editingProfileId,
                 errorMessage: formError,
+                connectionDefaults,
                 groupOptions: connectionGroupOptions,
                 mode: editingProfileId ? 'edit' : 'create',
                 form,

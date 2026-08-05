@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ConnectionFolder,
   ConnectionFormMode,
   ConnectionProfile,
   CreateProfileInput,
-  FileTermDesktopApi
+  FileTermDesktopApi,
+  SshConnectionDefaults
 } from '@fileterm/core'
 import { defaultForm, profileToForm } from '../app/app-data'
 import { t } from '../i18n'
@@ -21,6 +22,7 @@ type UseWorkspaceModalsOptions = {
   formWindowProfileId: string | null
   hasLoadedInitialSnapshot: boolean
   isConnectionFormWindow: boolean
+  connectionDefaults: SshConnectionDefaults
   profiles: ConnectionProfile[]
 }
 
@@ -48,8 +50,8 @@ function collectConnectionGroups(folderNames: string[], profileGroups: string[],
   return [...groups]
 }
 
-function createDefaultForm(): CreateProfileInput {
-  return { ...defaultForm, group: t.defaultGroup }
+function createDefaultForm(connectionDefaults: SshConnectionDefaults): CreateProfileInput {
+  return { ...defaultForm, ...connectionDefaults, group: t.defaultGroup }
 }
 
 export function useWorkspaceModals({
@@ -59,16 +61,19 @@ export function useWorkspaceModals({
   formWindowProfileId,
   hasLoadedInitialSnapshot,
   isConnectionFormWindow,
+  connectionDefaults,
   profiles
 }: UseWorkspaceModalsOptions) {
   const [showConnectionForm, setShowConnectionForm] = useState(false)
   const [showConnectionManager, setShowConnectionManager] = useState(false)
   const [showCommandManager, setShowCommandManager] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [form, setForm] = useState<CreateProfileInput>(createDefaultForm)
+  const [form, setForm] = useState<CreateProfileInput>(() => createDefaultForm(connectionDefaults))
   const [formError, setFormError] = useState<string | null>(null)
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [windowCloseConfirm, setWindowCloseConfirm] = useState<WindowCloseConfirmState | null>(null)
+  const connectionDefaultsRef = useRef(connectionDefaults)
+  connectionDefaultsRef.current = connectionDefaults
 
   const connectionGroupOptions = useMemo(
     () =>
@@ -97,13 +102,13 @@ export function useWorkspaceModals({
       }
 
       setEditingProfileId(profile.id)
-      setForm(profileToForm(profile))
+      setForm(profileToForm(profile, connectionDefaultsRef.current))
       setFormError(null)
       return
     }
 
     setEditingProfileId(null)
-    setForm(createDefaultForm())
+    setForm(createDefaultForm(connectionDefaultsRef.current))
     setFormError(null)
   }, [formWindowMode, formWindowProfileId, hasLoadedInitialSnapshot, isConnectionFormWindow, profiles])
 
@@ -114,14 +119,14 @@ export function useWorkspaceModals({
 
   const openCreateModal = () => {
     setEditingProfileId(null)
-    setForm(createDefaultForm())
+    setForm(createDefaultForm(connectionDefaultsRef.current))
     setFormError(null)
     setShowConnectionForm(true)
   }
 
   const openEditModal = (profile: ConnectionProfile) => {
     setEditingProfileId(profile.id)
-    setForm(profileToForm(profile))
+    setForm(profileToForm(profile, connectionDefaultsRef.current))
     setFormError(null)
     setShowConnectionForm(true)
   }

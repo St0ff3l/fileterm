@@ -1,8 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AppUpdateStatus, S3BackupConfig, WebDavSyncConfig } from '@fileterm/core'
+import {
+  DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_OVERVIEW_SECTION_ORDER,
+  type AppUpdateStatus,
+  type OverviewSectionId,
+  type S3BackupConfig,
+  type SshConnectionDefaults,
+  type UiPreferences,
+  type WebDavSyncConfig
+} from '@fileterm/core'
+import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
+import { targetsNestedManagerControl } from '../common/manager-interactions'
+
+function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
+  return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
+}
 
 export function SettingsModal({
   theme,
@@ -27,12 +43,31 @@ export function SettingsModal({
   standalone?: boolean
   inline?: boolean
 }) {
-  const [activeTab, setActiveTab] = useState<'general' | 'sync' | 'tools' | 'updates' | 'system'>('general')
+  const [activeTab, setActiveTab] = useState<
+    'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+  >('interface')
   const [syncSubTab, setSyncSubTab] = useState<'webdav' | 's3'>('webdav')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
   const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
+  const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
+    ...DEFAULT_SSH_CONNECTION_DEFAULTS
+  }))
+  const [isSavingConnectionDefaults, setIsSavingConnectionDefaults] = useState(false)
+  const [connectionDefaultsError, setConnectionDefaultsError] = useState<string | null>(null)
+  const [overviewShowStats, setOverviewShowStats] = useState(true)
+  const [overviewShowRecent, setOverviewShowRecent] = useState(true)
+  const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(true)
+  const [overviewShowQuickActions, setOverviewShowQuickActions] = useState(true)
+  const [overviewSectionOrder, setOverviewSectionOrder] = useState<OverviewSectionId[]>(() => [
+    ...DEFAULT_OVERVIEW_SECTION_ORDER
+  ])
+  const [draggingOverviewSection, setDraggingOverviewSection] = useState<OverviewSectionId | null>(null)
+  const [dragOverOverviewSection, setDragOverOverviewSection] = useState<OverviewSectionId | null>(null)
+  const [overviewDragPosition, setOverviewDragPosition] = useState<ManagerDropPosition | null>(null)
+  const [isSavingOverviewPreference, setIsSavingOverviewPreference] = useState(false)
+  const [overviewPreferenceError, setOverviewPreferenceError] = useState<string | null>(null)
   const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
   const [syncPassword, setSyncPassword] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -43,6 +78,12 @@ export function SettingsModal({
     'load' | 'save' | 'test' | 'upload' | 'download' | 's3-save' | 's3-test' | 's3-upload' | 's3-download' | null
   >(null)
   const syncOperationRef = useRef<typeof syncOperation>(null)
+  const overviewDragStateRef = useRef<{
+    source: OverviewSectionId | null
+    target: OverviewSectionId | null
+    position: ManagerDropPosition | null
+  }>({ source: null, target: null, position: null })
+  const suppressOverviewCardClickRef = useRef(false)
   const desktopApi = window.fileterm
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
 
@@ -78,6 +119,16 @@ export function SettingsModal({
       .then((preferences) => {
         if (!canceled) {
           setAutoCheckUpdates(preferences.autoCheckUpdates)
+          setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
+          setOverviewShowStats(preferences.overviewShowStats)
+          setOverviewShowRecent(preferences.overviewShowRecent)
+          setOverviewShowAllConnections(preferences.overviewShowAllConnections)
+          setOverviewShowQuickActions(preferences.overviewShowQuickActions)
+          setOverviewSectionOrder((currentOrder) =>
+            sameOverviewSectionOrder(currentOrder, preferences.overviewSectionOrder)
+              ? currentOrder
+              : preferences.overviewSectionOrder
+          )
         }
       })
       .catch(() => {
@@ -89,6 +140,16 @@ export function SettingsModal({
     const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
       if (!canceled) {
         setAutoCheckUpdates(preferences.autoCheckUpdates)
+        setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
+        setOverviewShowStats(preferences.overviewShowStats)
+        setOverviewShowRecent(preferences.overviewShowRecent)
+        setOverviewShowAllConnections(preferences.overviewShowAllConnections)
+        setOverviewShowQuickActions(preferences.overviewShowQuickActions)
+        setOverviewSectionOrder((currentOrder) =>
+          sameOverviewSectionOrder(currentOrder, preferences.overviewSectionOrder)
+            ? currentOrder
+            : preferences.overviewSectionOrder
+        )
       }
     })
 
@@ -186,6 +247,212 @@ export function SettingsModal({
       .finally(() => setIsSavingUpdatePreference(false))
   }
 
+  const setConnectionDefault = <K extends keyof SshConnectionDefaults>(key: K, value: SshConnectionDefaults[K]) => {
+    if (!desktopApi || isSavingConnectionDefaults || connectionDefaults[key] === value) {
+      return
+    }
+
+    const previousDefaults = connectionDefaults
+    const nextDefaults = { ...connectionDefaults, [key]: value }
+    setConnectionDefaults(nextDefaults)
+    setConnectionDefaultsError(null)
+    setIsSavingConnectionDefaults(true)
+    void desktopApi
+      .setUiPreferences({ connectionDefaults: { [key]: value } })
+      .then((preferences) =>
+        setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
+      )
+      .catch(() => {
+        setConnectionDefaults(previousDefaults)
+        setConnectionDefaultsError(t.connectionDefaultsSaveFailed)
+      })
+      .finally(() => setIsSavingConnectionDefaults(false))
+  }
+
+  const applyOverviewPreferences = (preferences: UiPreferences) => {
+    setOverviewShowStats(preferences.overviewShowStats)
+    setOverviewShowRecent(preferences.overviewShowRecent)
+    setOverviewShowAllConnections(preferences.overviewShowAllConnections)
+    setOverviewShowQuickActions(preferences.overviewShowQuickActions)
+    setOverviewSectionOrder((currentOrder) =>
+      sameOverviewSectionOrder(currentOrder, preferences.overviewSectionOrder)
+        ? currentOrder
+        : preferences.overviewSectionOrder
+    )
+  }
+
+  const setOverviewShowStatsPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingOverviewPreference || nextValue === overviewShowStats) {
+      return
+    }
+
+    const previousValue = overviewShowStats
+    setOverviewShowStats(nextValue)
+    setOverviewPreferenceError(null)
+    setIsSavingOverviewPreference(true)
+    void desktopApi
+      .setUiPreferences({ overviewShowStats: nextValue })
+      .then(applyOverviewPreferences)
+      .catch(() => {
+        setOverviewShowStats(previousValue)
+        setOverviewPreferenceError(t.overviewPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingOverviewPreference(false))
+  }
+
+  const setOverviewShowRecentPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingOverviewPreference || nextValue === overviewShowRecent) {
+      return
+    }
+
+    const previousValue = overviewShowRecent
+    setOverviewShowRecent(nextValue)
+    setOverviewPreferenceError(null)
+    setIsSavingOverviewPreference(true)
+    void desktopApi
+      .setUiPreferences({ overviewShowRecent: nextValue })
+      .then(applyOverviewPreferences)
+      .catch(() => {
+        setOverviewShowRecent(previousValue)
+        setOverviewPreferenceError(t.overviewPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingOverviewPreference(false))
+  }
+
+  const setOverviewShowAllConnectionsPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingOverviewPreference || nextValue === overviewShowAllConnections) {
+      return
+    }
+
+    const previousValue = overviewShowAllConnections
+    setOverviewShowAllConnections(nextValue)
+    setOverviewPreferenceError(null)
+    setIsSavingOverviewPreference(true)
+    void desktopApi
+      .setUiPreferences({ overviewShowAllConnections: nextValue })
+      .then(applyOverviewPreferences)
+      .catch(() => {
+        setOverviewShowAllConnections(previousValue)
+        setOverviewPreferenceError(t.overviewPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingOverviewPreference(false))
+  }
+
+  const setOverviewShowQuickActionsPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingOverviewPreference || nextValue === overviewShowQuickActions) {
+      return
+    }
+
+    const previousValue = overviewShowQuickActions
+    setOverviewShowQuickActions(nextValue)
+    setOverviewPreferenceError(null)
+    setIsSavingOverviewPreference(true)
+    void desktopApi
+      .setUiPreferences({ overviewShowQuickActions: nextValue })
+      .then(applyOverviewPreferences)
+      .catch(() => {
+        setOverviewShowQuickActions(previousValue)
+        setOverviewPreferenceError(t.overviewPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingOverviewPreference(false))
+  }
+
+  const clearOverviewDragState = () => {
+    overviewDragStateRef.current = { source: null, target: null, position: null }
+    setDraggingOverviewSection(null)
+    setDragOverOverviewSection(null)
+    setOverviewDragPosition(null)
+    window.setTimeout(() => {
+      suppressOverviewCardClickRef.current = false
+    }, 0)
+  }
+
+  const setOverviewDropTarget = (target: OverviewSectionId, position: ManagerDropPosition) => {
+    if (overviewDragStateRef.current.target === target && overviewDragStateRef.current.position === position) {
+      return
+    }
+
+    overviewDragStateRef.current.target = target
+    overviewDragStateRef.current.position = position
+    setDragOverOverviewSection(target)
+    setOverviewDragPosition(position)
+  }
+
+  const positionForOverviewTarget = (target: PointerSortTarget | HTMLElement, clientY: number) => {
+    if ('kind' in target && target.kind === 'overview-section-top') {
+      return 'top' as const
+    }
+
+    const element = 'element' in target ? target.element : target
+    return resolveManagerDropPosition(element, clientY, false)
+  }
+
+  const persistOverviewSectionOrder = (nextOrder: OverviewSectionId[], previousOrder: OverviewSectionId[]) => {
+    if (!desktopApi || isSavingOverviewPreference) return
+
+    setOverviewSectionOrder(nextOrder)
+    setOverviewPreferenceError(null)
+    setIsSavingOverviewPreference(true)
+    void desktopApi
+      .setUiPreferences({ overviewSectionOrder: nextOrder })
+      .then(applyOverviewPreferences)
+      .catch(() => {
+        setOverviewSectionOrder(previousOrder)
+        setOverviewPreferenceError(t.overviewPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingOverviewPreference(false))
+  }
+
+  const applyOverviewSectionDrop = (
+    source: OverviewSectionId,
+    target: OverviewSectionId,
+    position: ManagerDropPosition
+  ) => {
+    if (source === target || position === 'inside' || isSavingOverviewPreference) return
+
+    const previousOrder = overviewSectionOrder
+    const nextOrder = overviewSectionOrder.filter((sectionId) => sectionId !== source)
+    const targetIndex = nextOrder.indexOf(target)
+    if (targetIndex === -1) return
+
+    nextOrder.splice(position === 'bottom' ? targetIndex + 1 : targetIndex, 0, source)
+    if (nextOrder.every((sectionId, index) => sectionId === previousOrder[index])) return
+    persistOverviewSectionOrder(nextOrder, previousOrder)
+  }
+
+  const handleOverviewPointerDown = usePointerSortFallback<OverviewSectionId>({
+    onStart: (sectionId) => {
+      if (isSavingOverviewPreference) return
+      suppressOverviewCardClickRef.current = true
+      overviewDragStateRef.current = { source: sectionId, target: null, position: null }
+      setDraggingOverviewSection(sectionId)
+    },
+    onTarget: (source, target, clientY) => {
+      if (source === target.id || (target.kind !== 'overview-section' && target.kind !== 'overview-section-top')) {
+        return
+      }
+      setOverviewDropTarget(target.id as OverviewSectionId, positionForOverviewTarget(target, clientY))
+    },
+    onDrop: (source, target, clientY) => {
+      if (
+        target &&
+        (target.kind === 'overview-section' || target.kind === 'overview-section-top') &&
+        source !== target.id
+      ) {
+        applyOverviewSectionDrop(source, target.id as OverviewSectionId, positionForOverviewTarget(target, clientY))
+      }
+      clearOverviewDragState()
+    },
+    onCancel: clearOverviewDragState
+  })
+
+  const overviewSectionMeta: Record<OverviewSectionId, { title: string; hint: string }> = {
+    stats: { title: t.overviewShowStats, hint: t.overviewShowStatsHint },
+    recent: { title: t.overviewShowRecent, hint: t.overviewShowRecentHint },
+    allConnections: { title: t.overviewShowAllConnections, hint: t.overviewShowAllConnectionsHint },
+    quickActions: { title: t.overviewShowQuickActions, hint: t.overviewShowQuickActionsHint }
+  }
+
   const content = (
     <div
       className={`modal-card manager-modal connection-manager-modal settings-modal ${standalone ? 'standalone' : ''} ${inline ? 'manager-inline' : ''}`}
@@ -205,14 +472,24 @@ export function SettingsModal({
       <div className="connection-manager-layout">
         <aside className="connection-manager-sidebar" aria-label={t.settings}>
           <button
-            className={`connection-manager-sidebar-item ${activeTab === 'general' ? 'active' : ''}`}
+            className={`connection-manager-sidebar-item ${activeTab === 'interface' ? 'active' : ''}`}
             type="button"
-            onClick={() => setActiveTab('general')}
+            onClick={() => setActiveTab('interface')}
           >
             <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">tune</span>
+              <span className="material-symbols-outlined">palette</span>
             </span>
-            <span className="connection-manager-sidebar-label">{t.generalSettings}</span>
+            <span className="connection-manager-sidebar-label">{t.interfaceSettings}</span>
+          </button>
+          <button
+            className={`connection-manager-sidebar-item ${activeTab === 'connections' ? 'active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab('connections')}
+          >
+            <span className="connection-manager-sidebar-icon">
+              <span className="material-symbols-outlined">settings_ethernet</span>
+            </span>
+            <span className="connection-manager-sidebar-label">{t.connectionDefaults}</span>
           </button>
           <button
             className={`connection-manager-sidebar-item ${activeTab === 'sync' ? 'active' : ''}`}
@@ -254,10 +531,144 @@ export function SettingsModal({
             </span>
             <span className="connection-manager-sidebar-label">{t.systemLogsInfo}</span>
           </button>
+          <button
+            className={`connection-manager-sidebar-item ${activeTab === 'language' ? 'active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab('language')}
+          >
+            <span className="connection-manager-sidebar-icon">
+              <span className="material-symbols-outlined">translate</span>
+            </span>
+            <span className="connection-manager-sidebar-label">{t.languageSidebarLabel}</span>
+          </button>
         </aside>
 
         <main className="connection-manager-main">
-          {activeTab === 'general' ? (
+          {activeTab === 'connections' ? (
+            <div className="settings-panel">
+              <section className="settings-section">
+                <h3>{t.connectionDefaults}</h3>
+                <p className="settings-tools-hint">{t.connectionDefaultsHint}</p>
+                <fieldset
+                  className="settings-connection-defaults"
+                  disabled={!desktopApi || isSavingConnectionDefaults}
+                  style={{ border: 0, margin: 0, padding: 0 }}
+                >
+                  <div className="advanced-toggle-list">
+                    <div className="advanced-toggle-row">
+                      <label className="ssh-checkbox advanced-toggle-label">
+                        <input
+                          checked={connectionDefaults.useEmptyPassword}
+                          onChange={(event) => setConnectionDefault('useEmptyPassword', event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span className="advanced-toggle-name">{t.useEmptyPassword}</span>
+                      </label>
+                      <p className="advanced-toggle-hint">{t.useEmptyPasswordHint}</p>
+                    </div>
+                    <div className="advanced-toggle-row">
+                      <label className="ssh-checkbox advanced-toggle-label">
+                        <input
+                          checked={connectionDefaults.enableExecChannel}
+                          onChange={(event) => setConnectionDefault('enableExecChannel', event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span className="advanced-toggle-name">{t.enableExecChannel}</span>
+                      </label>
+                      <p className="advanced-toggle-hint">{t.enableExecChannelHint}</p>
+                    </div>
+                    <div className="advanced-toggle-row">
+                      <label className="ssh-checkbox advanced-toggle-label">
+                        <input
+                          checked={connectionDefaults.enableResourceMonitoring}
+                          onChange={(event) => setConnectionDefault('enableResourceMonitoring', event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span className="advanced-toggle-name">{t.resourceMonitoring}</span>
+                      </label>
+                      <p className="advanced-toggle-hint">{t.resourceMonitoringDescription}</p>
+                      <label className="resource-monitoring-interval">
+                        <span>{t.resourceMonitoringInterval}</span>
+                        <DropdownSelect
+                          className="resource-monitoring-interval__select"
+                          disabled={!connectionDefaults.enableResourceMonitoring}
+                          options={[
+                            { value: '1', label: t.resourceMonitoringEverySecond },
+                            { value: '5', label: t.resourceMonitoringEvery5Seconds },
+                            { value: '15', label: t.resourceMonitoringEvery15Seconds },
+                            { value: '30', label: t.resourceMonitoringEvery30Seconds },
+                            { value: '60', label: t.resourceMonitoringEvery60Seconds }
+                          ]}
+                          value={String(connectionDefaults.resourceMonitoringIntervalSeconds)}
+                          onChange={(value) =>
+                            setConnectionDefault(
+                              'resourceMonitoringIntervalSeconds',
+                              Number(value) as SshConnectionDefaults['resourceMonitoringIntervalSeconds']
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="advanced-toggle-row">
+                      <label className="ssh-checkbox advanced-toggle-label">
+                        <input
+                          checked={connectionDefaults.legacyAlgorithms}
+                          onChange={(event) => setConnectionDefault('legacyAlgorithms', event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span className="advanced-toggle-name">{t.legacyAlgorithms}</span>
+                      </label>
+                      <p className="advanced-toggle-hint">{t.legacyAlgorithmsHint}</p>
+                    </div>
+                  </div>
+                  <div className="reconnect-mode-group">
+                    <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
+                    <div className="advanced-toggle-list">
+                      <div className="advanced-toggle-row">
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={connectionDefaults.reconnectMode === 'none'}
+                            name="global-reconnect-mode"
+                            onChange={() => setConnectionDefault('reconnectMode', 'none')}
+                            type="radio"
+                          />
+                          <span className="advanced-toggle-name">{t.reconnectNone}</span>
+                        </label>
+                        <p className="advanced-toggle-hint">{t.reconnectNoneHint}</p>
+                      </div>
+                      <div className="advanced-toggle-row">
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={connectionDefaults.reconnectMode === 'enter'}
+                            name="global-reconnect-mode"
+                            onChange={() => setConnectionDefault('reconnectMode', 'enter')}
+                            type="radio"
+                          />
+                          <span className="advanced-toggle-name">{t.reconnectEnter}</span>
+                        </label>
+                        <p className="advanced-toggle-hint">{t.reconnectEnterHint}</p>
+                      </div>
+                      <div className="advanced-toggle-row">
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={connectionDefaults.reconnectMode === 'auto'}
+                            name="global-reconnect-mode"
+                            onChange={() => setConnectionDefault('reconnectMode', 'auto')}
+                            type="radio"
+                          />
+                          <span className="advanced-toggle-name">{t.autoReconnect}</span>
+                        </label>
+                        <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
+                      </div>
+                    </div>
+                  </div>
+                </fieldset>
+                {connectionDefaultsError ? <p className="modal-error">{connectionDefaultsError}</p> : null}
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === 'interface' ? (
             <div className="settings-panel">
               <section className="settings-section">
                 <h3>{t.appearanceTheme}</h3>
@@ -298,23 +709,81 @@ export function SettingsModal({
               </section>
 
               <section className="settings-section">
-                <h3>{t.languageSelection}</h3>
-                <div className="language-selector-row">
-                  <button
-                    className={`lang-card ${locale === 'zhCN' ? 'active' : ''}`}
-                    onClick={() => onSetLocale('zhCN')}
-                    type="button"
-                  >
-                    {t.languageZhCN}
-                  </button>
-                  <button
-                    className={`lang-card ${locale === 'enUS' ? 'active' : ''}`}
-                    onClick={() => onSetLocale('enUS')}
-                    type="button"
-                  >
-                    {t.languageEnglish}
-                  </button>
+                <h3>{t.overviewContentSettings}</h3>
+                <p className="settings-tools-hint">{t.overviewContentSettingsHint}</p>
+                <div className="overview-preference-list">
+                  {draggingOverviewSection && overviewSectionOrder[0] ? (
+                    <div
+                      aria-hidden="true"
+                      className="overview-preference-top-drop-zone"
+                      data-fileterm-sort-id={overviewSectionOrder[0]}
+                      data-fileterm-sort-kind="overview-section-top"
+                    />
+                  ) : null}
+                  {overviewSectionOrder.map((sectionId) => {
+                    const isDragging = draggingOverviewSection === sectionId
+                    const isDragOver = dragOverOverviewSection === sectionId
+                    const sectionMeta = overviewSectionMeta[sectionId]
+                    const checked =
+                      sectionId === 'stats'
+                        ? overviewShowStats
+                        : sectionId === 'recent'
+                          ? overviewShowRecent
+                          : sectionId === 'allConnections'
+                            ? overviewShowAllConnections
+                            : overviewShowQuickActions
+
+                    return (
+                      <label
+                        className={`overview-preference-row ${isDragging ? 'dragging' : ''} ${managerDropClass(isDragOver, overviewDragPosition)}`}
+                        data-fileterm-sort-id={sectionId}
+                        data-fileterm-sort-kind="overview-section"
+                        draggable={false}
+                        key={sectionId}
+                        onClick={(event) => {
+                          if (suppressOverviewCardClickRef.current) {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }
+                        }}
+                        onPointerDown={(event) => {
+                          if (!isSavingOverviewPreference && !targetsNestedManagerControl(event)) {
+                            handleOverviewPointerDown(event, sectionId)
+                          }
+                        }}
+                      >
+                        <span
+                          aria-label={t.overviewDragToReorder}
+                          className="material-symbols-outlined overview-preference-drag-handle"
+                          title={t.overviewDragToReorder}
+                        >
+                          drag_indicator
+                        </span>
+                        <span className="overview-preference-copy">
+                          <strong>{sectionMeta.title}</strong>
+                          <p>{sectionMeta.hint}</p>
+                        </span>
+                        <span className="command-toggle overview-preference-toggle">
+                          <input
+                            checked={checked}
+                            disabled={!desktopApi || isSavingOverviewPreference}
+                            onChange={(event) => {
+                              if (sectionId === 'stats') setOverviewShowStatsPreference(event.target.checked)
+                              else if (sectionId === 'recent') setOverviewShowRecentPreference(event.target.checked)
+                              else if (sectionId === 'allConnections') {
+                                setOverviewShowAllConnectionsPreference(event.target.checked)
+                              } else {
+                                setOverviewShowQuickActionsPreference(event.target.checked)
+                              }
+                            }}
+                            type="checkbox"
+                          />
+                        </span>
+                      </label>
+                    )
+                  })}
                 </div>
+                {overviewPreferenceError ? <p className="modal-error">{overviewPreferenceError}</p> : null}
               </section>
             </div>
           ) : null}
@@ -818,6 +1287,30 @@ export function SettingsModal({
                       folder_open
                     </span>
                     {t.openLogsDirectory}
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === 'language' ? (
+            <div className="settings-panel">
+              <section className="settings-section">
+                <h3>{t.languageSelection}</h3>
+                <div className="language-selector-row">
+                  <button
+                    className={`lang-card ${locale === 'zhCN' ? 'active' : ''}`}
+                    onClick={() => onSetLocale('zhCN')}
+                    type="button"
+                  >
+                    {t.languageZhCN}
+                  </button>
+                  <button
+                    className={`lang-card ${locale === 'enUS' ? 'active' : ''}`}
+                    onClick={() => onSetLocale('enUS')}
+                    type="button"
+                  >
+                    {t.languageEnglish}
                   </button>
                 </div>
               </section>

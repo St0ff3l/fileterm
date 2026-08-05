@@ -4,6 +4,7 @@ import type {
   CreateProfileInput,
   FtpSecurityMode,
   SessionType,
+  SshConnectionDefaults,
   SshForwardRule
 } from '@fileterm/core'
 import { normalizeConnectionHost } from '@fileterm/shared'
@@ -12,9 +13,21 @@ import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
+type SshConnectionSettingKey = keyof SshConnectionDefaults
+
+function effectiveConnectionSetting<K extends SshConnectionSettingKey>(
+  form: CreateProfileInput,
+  defaults: SshConnectionDefaults,
+  key: K
+): SshConnectionDefaults[K] {
+  const value = (form as unknown as Record<string, unknown>)[key]
+  return (value ?? defaults[key]) as SshConnectionDefaults[K]
+}
+
 export function ConnectionModal({
   errorMessage,
   groupOptions,
+  connectionDefaults,
   isSubmitting = false,
   mode,
   form,
@@ -28,6 +41,7 @@ export function ConnectionModal({
 }: {
   errorMessage: string | null
   groupOptions: string[]
+  connectionDefaults: SshConnectionDefaults
   isSubmitting?: boolean
   mode: ConnectionFormMode
   form: CreateProfileInput
@@ -43,6 +57,18 @@ export function ConnectionModal({
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet'
   const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
+
+  const setSshConnectionSetting = <K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]) => {
+    setForm((previous) => ({ ...previous, [key]: value }))
+  }
+
+  const intervalSettingOptions = [
+    { value: '1', label: t.resourceMonitoringEverySecond },
+    { value: '5', label: t.resourceMonitoringEvery5Seconds },
+    { value: '15', label: t.resourceMonitoringEvery15Seconds },
+    { value: '30', label: t.resourceMonitoringEvery30Seconds },
+    { value: '60', label: t.resourceMonitoringEvery60Seconds }
+  ]
 
   const content = (
     <div className={`modal-card ssh-modal ${standalone ? 'standalone' : ''}`}>
@@ -296,7 +322,9 @@ export function ConnectionModal({
                         {t.password}:
                         <input
                           disabled={
-                            form.type === 'ssh' && form.authType === 'password' && Boolean(form.useEmptyPassword)
+                            form.type === 'ssh' &&
+                            form.authType === 'password' &&
+                            effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
                           }
                           type="password"
                           value={form.password ?? ''}
@@ -315,7 +343,7 @@ export function ConnectionModal({
                     ) : null}
                     {form.type === 'ssh' && form.authType === 'password' ? (
                       <div className="span-2 ssh-auth-hint">
-                        {form.useEmptyPassword
+                        {effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
                           ? t.emptyPasswordAuthEnabledHint
                           : mode === 'edit' && hasSavedPassword
                             ? t.passwordSavedHint
@@ -384,15 +412,15 @@ export function ConnectionModal({
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
                             <input
-                              checked={Boolean(form.useEmptyPassword)}
+                              checked={effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')}
                               type="checkbox"
-                              onChange={(event) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  password: event.target.checked ? '' : prev.password,
-                                  useEmptyPassword: event.target.checked
-                                }))
-                              }
+                              onChange={(event) => {
+                                const nextValue = event.target.checked
+                                setSshConnectionSetting('useEmptyPassword', nextValue)
+                                if (nextValue) {
+                                  setForm((previous) => ({ ...previous, password: '' }))
+                                }
+                              }}
                             />
                             <span className="advanced-toggle-name">{t.useEmptyPassword}</span>
                           </label>
@@ -402,11 +430,9 @@ export function ConnectionModal({
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
                           <input
-                            checked={Boolean(form.enableExecChannel)}
+                            checked={effectiveConnectionSetting(form, connectionDefaults, 'enableExecChannel')}
                             type="checkbox"
-                            onChange={(event) =>
-                              setForm((prev) => ({ ...prev, enableExecChannel: event.target.checked }))
-                            }
+                            onChange={(event) => setSshConnectionSetting('enableExecChannel', event.target.checked)}
                           />
                           <span className="advanced-toggle-name">{t.enableExecChannel}</span>
                         </label>
@@ -415,10 +441,10 @@ export function ConnectionModal({
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
                           <input
-                            checked={form.enableResourceMonitoring !== false}
+                            checked={effectiveConnectionSetting(form, connectionDefaults, 'enableResourceMonitoring')}
                             type="checkbox"
                             onChange={(event) =>
-                              setForm((prev) => ({ ...prev, enableResourceMonitoring: event.target.checked }))
+                              setSshConnectionSetting('enableResourceMonitoring', event.target.checked)
                             }
                           />
                           <span className="advanced-toggle-name">{t.resourceMonitoring}</span>
@@ -428,20 +454,16 @@ export function ConnectionModal({
                           <span>{t.resourceMonitoringInterval}</span>
                           <DropdownSelect
                             className="resource-monitoring-interval__select"
-                            disabled={form.enableResourceMonitoring === false}
-                            options={[
-                              { value: '1', label: t.resourceMonitoringEverySecond },
-                              { value: '5', label: t.resourceMonitoringEvery5Seconds },
-                              { value: '15', label: t.resourceMonitoringEvery15Seconds },
-                              { value: '30', label: t.resourceMonitoringEvery30Seconds },
-                              { value: '60', label: t.resourceMonitoringEvery60Seconds }
-                            ]}
-                            value={String(form.resourceMonitoringIntervalSeconds ?? 1)}
+                            disabled={!effectiveConnectionSetting(form, connectionDefaults, 'enableResourceMonitoring')}
+                            options={intervalSettingOptions}
+                            value={String(
+                              effectiveConnectionSetting(form, connectionDefaults, 'resourceMonitoringIntervalSeconds')
+                            )}
                             onChange={(value) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                resourceMonitoringIntervalSeconds: Number(value) as 1 | 5 | 15 | 30 | 60
-                              }))
+                              setSshConnectionSetting(
+                                'resourceMonitoringIntervalSeconds',
+                                Number(value) as SshConnectionDefaults['resourceMonitoringIntervalSeconds']
+                              )
                             }
                           />
                         </label>
@@ -449,11 +471,9 @@ export function ConnectionModal({
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
                           <input
-                            checked={Boolean(form.legacyAlgorithms)}
+                            checked={effectiveConnectionSetting(form, connectionDefaults, 'legacyAlgorithms')}
                             type="checkbox"
-                            onChange={(event) =>
-                              setForm((prev) => ({ ...prev, legacyAlgorithms: event.target.checked }))
-                            }
+                            onChange={(event) => setSshConnectionSetting('legacyAlgorithms', event.target.checked)}
                           />
                           <span className="advanced-toggle-name">{t.legacyAlgorithms}</span>
                         </label>
@@ -466,9 +486,10 @@ export function ConnectionModal({
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
                             <input
-                              checked={!form.reconnectMode || form.reconnectMode === 'none'}
-                              type="checkbox"
-                              onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'none' }))}
+                              checked={effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'none'}
+                              name="connection-reconnect-mode"
+                              type="radio"
+                              onChange={() => setSshConnectionSetting('reconnectMode', 'none')}
                             />
                             <span className="advanced-toggle-name">{t.reconnectNone}</span>
                           </label>
@@ -477,9 +498,12 @@ export function ConnectionModal({
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
                             <input
-                              checked={form.reconnectMode === 'enter'}
-                              type="checkbox"
-                              onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'enter' }))}
+                              checked={
+                                effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'enter'
+                              }
+                              name="connection-reconnect-mode"
+                              type="radio"
+                              onChange={() => setSshConnectionSetting('reconnectMode', 'enter')}
                             />
                             <span className="advanced-toggle-name">{t.reconnectEnter}</span>
                           </label>
@@ -488,9 +512,10 @@ export function ConnectionModal({
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
                             <input
-                              checked={form.reconnectMode === 'auto'}
-                              type="checkbox"
-                              onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'auto' }))}
+                              checked={effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'auto'}
+                              name="connection-reconnect-mode"
+                              type="radio"
+                              onChange={() => setSshConnectionSetting('reconnectMode', 'auto')}
                             />
                             <span className="advanced-toggle-name">{t.autoReconnect}</span>
                           </label>

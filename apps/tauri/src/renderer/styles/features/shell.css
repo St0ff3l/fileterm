@@ -836,6 +836,15 @@
   grid-row: 2;
 }
 
+/* Overview sorting owns the pointer stream. Keep the renderer/native window
+ * chrome out of the drag-region path while a card is being sorted. */
+:root.fileterm-pointer-sorting .fs-tabbar,
+:root.fileterm-pointer-sorting .fs-tabbar *,
+:root.fileterm-pointer-sorting .window-menubar,
+:root.fileterm-pointer-sorting .window-menubar * {
+  -webkit-app-region: no-drag;
+}
+
 .fs-tabbar::after {
   content: '';
   position: absolute;

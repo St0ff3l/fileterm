@@ -3,9 +3,12 @@ import {
   mergeSystemMetricsHistory,
   type FileTermDesktopApi,
   type LocalFileItem,
+  type OverviewSectionId,
   type PaneFocusDirection,
   type SessionMetricsUpdate,
+  type SshConnectionDefaults,
   type TransferTask,
+  type UiPreferences,
   type WorkspaceSnapshot
 } from '@fileterm/core'
 import { emptyState, localPreviewFiles, previewLocalPath, previewState } from '../app/app-data'
@@ -36,9 +39,21 @@ export type UseWorkspaceIpcSyncOptions = {
   isConnectionManagerWindow: boolean
   themeMode: ThemeMode
   locale: AppLocale
+  connectionDefaults: SshConnectionDefaults
+  overviewShowStats: boolean
+  overviewShowRecent: boolean
+  overviewShowAllConnections: boolean
+  overviewShowQuickActions: boolean
+  overviewSectionOrder: OverviewSectionId[]
   initialUiPreferencesLoaded: boolean
   onThemeModeChange(themeMode: ThemeMode): void
   onLocaleChange(locale: AppLocale): void
+  onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
+  onOverviewShowStatsChange(value: boolean): void
+  onOverviewShowRecentChange(value: boolean): void
+  onOverviewShowAllConnectionsChange(value: boolean): void
+  onOverviewShowQuickActionsChange(value: boolean): void
+  onOverviewSectionOrderChange(value: OverviewSectionId[]): void
   onError(scope: string, error: unknown): void
   onStatusMessage(message: string): void
 }
@@ -69,6 +84,51 @@ function useLatestRef<T>(value: T) {
   const ref = useRef(value)
   ref.current = value
   return ref
+}
+
+type SyncedUiPreferences = Pick<
+  UiPreferences,
+  | 'theme'
+  | 'locale'
+  | 'connectionDefaults'
+  | 'overviewShowStats'
+  | 'overviewShowRecent'
+  | 'overviewShowAllConnections'
+  | 'overviewShowQuickActions'
+  | 'overviewSectionOrder'
+>
+
+function sameSyncedUiPreferences(left: SyncedUiPreferences, right: SyncedUiPreferences) {
+  return (
+    left.theme === right.theme &&
+    left.locale === right.locale &&
+    left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
+    left.connectionDefaults.enableExecChannel === right.connectionDefaults.enableExecChannel &&
+    left.connectionDefaults.enableResourceMonitoring === right.connectionDefaults.enableResourceMonitoring &&
+    left.connectionDefaults.resourceMonitoringIntervalSeconds ===
+      right.connectionDefaults.resourceMonitoringIntervalSeconds &&
+    left.connectionDefaults.reconnectMode === right.connectionDefaults.reconnectMode &&
+    left.connectionDefaults.legacyAlgorithms === right.connectionDefaults.legacyAlgorithms &&
+    left.overviewShowStats === right.overviewShowStats &&
+    left.overviewShowRecent === right.overviewShowRecent &&
+    left.overviewShowAllConnections === right.overviewShowAllConnections &&
+    left.overviewShowQuickActions === right.overviewShowQuickActions &&
+    left.overviewSectionOrder.length === right.overviewSectionOrder.length &&
+    left.overviewSectionOrder.every((sectionId, index) => sectionId === right.overviewSectionOrder[index])
+  )
+}
+
+function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPreferences {
+  return {
+    theme: preferences.theme,
+    locale: preferences.locale,
+    connectionDefaults: { ...preferences.connectionDefaults },
+    overviewShowStats: preferences.overviewShowStats,
+    overviewShowRecent: preferences.overviewShowRecent,
+    overviewShowAllConnections: preferences.overviewShowAllConnections,
+    overviewShowQuickActions: preferences.overviewShowQuickActions,
+    overviewSectionOrder: preferences.overviewSectionOrder
+  }
 }
 
 function isUploadPermissionFailure(transfer: TransferTask) {
@@ -107,9 +167,21 @@ export function useWorkspaceIpcSync({
   isConnectionManagerWindow,
   themeMode,
   locale,
+  connectionDefaults,
+  overviewShowStats,
+  overviewShowRecent,
+  overviewShowAllConnections,
+  overviewShowQuickActions,
+  overviewSectionOrder,
   initialUiPreferencesLoaded,
   onThemeModeChange,
   onLocaleChange,
+  onConnectionDefaultsChange,
+  onOverviewShowStatsChange,
+  onOverviewShowRecentChange,
+  onOverviewShowAllConnectionsChange,
+  onOverviewShowQuickActionsChange,
+  onOverviewSectionOrderChange,
   onError,
   onStatusMessage
 }: UseWorkspaceIpcSyncOptions): UseWorkspaceIpcSyncResult {
@@ -134,8 +206,15 @@ export function useWorkspaceIpcSync({
   const desktopApiRef = useLatestRef(desktopApi)
   const onThemeModeChangeRef = useLatestRef(onThemeModeChange)
   const onLocaleChangeRef = useLatestRef(onLocaleChange)
+  const onConnectionDefaultsChangeRef = useLatestRef(onConnectionDefaultsChange)
+  const onOverviewShowStatsChangeRef = useLatestRef(onOverviewShowStatsChange)
+  const onOverviewShowRecentChangeRef = useLatestRef(onOverviewShowRecentChange)
+  const onOverviewShowAllConnectionsChangeRef = useLatestRef(onOverviewShowAllConnectionsChange)
+  const onOverviewShowQuickActionsChangeRef = useLatestRef(onOverviewShowQuickActionsChange)
+  const onOverviewSectionOrderChangeRef = useLatestRef(onOverviewSectionOrderChange)
   const onErrorRef = useLatestRef(onError)
   const onStatusMessageRef = useLatestRef(onStatusMessage)
+  const lastPersistedUiPreferencesRef = useRef<SyncedUiPreferences | null>(null)
   const nextWindowCloseRequestIdRef = useRef(0)
   const nextSplitPaneRequestIdRef = useRef(0)
   const nextPaneFocusRequestIdRef = useRef(0)
@@ -218,12 +297,19 @@ export function useWorkspaceIpcSync({
     }
 
     return desktopApi.onUiPreferencesChanged((preferences) => {
+      lastPersistedUiPreferencesRef.current = syncedUiPreferencesFrom(preferences)
       if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
         onThemeModeChangeRef.current(preferences.theme)
       }
       if (preferences.locale === 'enUS' || preferences.locale === 'zhCN') {
         onLocaleChangeRef.current(preferences.locale)
       }
+      onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
+      onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
+      onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
+      onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
+      onOverviewShowQuickActionsChangeRef.current(preferences.overviewShowQuickActions)
+      onOverviewSectionOrderChangeRef.current(preferences.overviewSectionOrder)
     })
   }, [desktopApi])
 
@@ -242,6 +328,7 @@ export function useWorkspaceIpcSync({
         if (canceled) {
           return
         }
+        lastPersistedUiPreferencesRef.current = syncedUiPreferencesFrom(preferences)
         setCanPersistUiPreferences(true)
         if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
           onThemeModeChangeRef.current(preferences.theme)
@@ -249,6 +336,12 @@ export function useWorkspaceIpcSync({
         if (preferences.locale === 'enUS' || preferences.locale === 'zhCN') {
           onLocaleChangeRef.current(preferences.locale)
         }
+        onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
+        onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
+        onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
+        onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
+        onOverviewShowQuickActionsChangeRef.current(preferences.overviewShowQuickActions)
+        onOverviewSectionOrderChangeRef.current(preferences.overviewSectionOrder)
       })
       .catch((error: unknown) => {
         if (!canceled) {
@@ -272,9 +365,33 @@ export function useWorkspaceIpcSync({
       return
     }
 
+    const nextPreferences: SyncedUiPreferences = {
+      theme: themeMode,
+      locale,
+      connectionDefaults,
+      overviewShowStats,
+      overviewShowRecent,
+      overviewShowAllConnections,
+      overviewShowQuickActions,
+      overviewSectionOrder
+    }
+    if (
+      lastPersistedUiPreferencesRef.current &&
+      sameSyncedUiPreferences(lastPersistedUiPreferencesRef.current, nextPreferences)
+    ) {
+      return
+    }
+
+    lastPersistedUiPreferencesRef.current = nextPreferences
     let canceled = false
-    void desktopApi.setUiPreferences({ theme: themeMode, locale }).catch((error: unknown) => {
+    void desktopApi.setUiPreferences(nextPreferences).catch((error: unknown) => {
       if (!canceled) {
+        if (
+          lastPersistedUiPreferencesRef.current &&
+          sameSyncedUiPreferences(lastPersistedUiPreferencesRef.current, nextPreferences)
+        ) {
+          lastPersistedUiPreferencesRef.current = null
+        }
         onErrorRef.current('同步界面偏好', error)
       }
     })
@@ -282,7 +399,19 @@ export function useWorkspaceIpcSync({
     return () => {
       canceled = true
     }
-  }, [canPersistUiPreferences, desktopApi, hasHydratedUiPreferences, locale, themeMode])
+  }, [
+    canPersistUiPreferences,
+    connectionDefaults,
+    desktopApi,
+    hasHydratedUiPreferences,
+    locale,
+    overviewShowAllConnections,
+    overviewShowRecent,
+    overviewShowStats,
+    overviewShowQuickActions,
+    overviewSectionOrder,
+    themeMode
+  ])
 
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow) {

@@ -6,6 +6,7 @@ import type {
   ConnectionFolder,
   ConnectionProfile,
   LocalFileItem,
+  OverviewSectionId,
   RemoteFileItem,
   SessionSnapshot,
   WorkspaceTab
@@ -61,6 +62,11 @@ export function WorkspaceStage({
   profiles,
   theme,
   locale,
+  overviewShowStats,
+  overviewShowRecent,
+  overviewShowAllConnections,
+  overviewShowQuickActions,
+  overviewSectionOrder,
   onCopyItems,
   onCutItems,
   onClearCutState,
@@ -164,6 +170,11 @@ export function WorkspaceStage({
   profiles: ConnectionProfile[]
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
+  overviewShowStats: boolean
+  overviewShowRecent: boolean
+  overviewShowAllConnections: boolean
+  overviewShowQuickActions: boolean
+  overviewSectionOrder: OverviewSectionId[]
   onCopyItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onCutItems(pane: 'local' | 'remote', items: Array<LocalFileItem | RemoteFileItem>): void
   onClearCutState(): void
@@ -346,6 +357,11 @@ export function WorkspaceStage({
       commandTemplates={commandTemplates}
       theme={theme}
       locale={locale}
+      overviewShowStats={overviewShowStats}
+      overviewShowRecent={overviewShowRecent}
+      overviewShowAllConnections={overviewShowAllConnections}
+      overviewShowQuickActions={overviewShowQuickActions}
+      overviewSectionOrder={overviewSectionOrder}
       onOpen={onOpenProfile}
       onOpenLocalTerminal={onOpenLocalTerminal}
       onCreateConnection={onCreateConnection}

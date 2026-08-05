@@ -1,9 +1,7 @@
 import type { ConnectionProfile, ConnectionFolder } from '@fileterm/core'
 import { useState, useMemo } from 'react'
 import { t } from '../../i18n'
-
-type ConnectionTreeNode =
-  (ConnectionFolder & { children: ConnectionTreeNode[] }) | (ConnectionProfile & { children?: never })
+import { buildConnectionTree, type ConnectionTreeNode } from '../connections/connection-tree'
 
 export function QuickLinksPage({
   profiles,
@@ -28,44 +26,7 @@ export function QuickLinksPage({
     })
   }
 
-  const tree = useMemo(() => {
-    const items: ConnectionTreeNode[] = [
-      ...profiles.map((profile, index) => ({
-        ...profile,
-        order: typeof profile.order === 'number' ? profile.order : index * 1000
-      })),
-      ...folders.map((folder, index) => ({
-        ...folder,
-        order: typeof folder.order === 'number' ? folder.order : (profiles.length + index) * 1000,
-        children: []
-      }))
-    ]
-
-    const roots: ConnectionTreeNode[] = []
-    const map = new Map<string, ConnectionTreeNode>()
-
-    items.forEach((item) => {
-      map.set(item.id, item)
-    })
-
-    items.forEach((item) => {
-      const parent = item.parentId ? map.get(item.parentId) : undefined
-      if (parent?.type === 'folder') {
-        parent.children.push(item)
-      } else {
-        roots.push(item)
-      }
-    })
-
-    const sortNodes = (nodes: ConnectionTreeNode[]) => {
-      nodes.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      nodes.forEach((n) => {
-        if (n.type === 'folder') sortNodes(n.children)
-      })
-    }
-    sortNodes(roots)
-    return roots
-  }, [profiles, folders])
+  const tree = useMemo(() => buildConnectionTree(profiles, folders).roots, [profiles, folders])
 
   const renderNode = (node: ConnectionTreeNode, depth: number) => {
     const isFolder = node.type === 'folder'

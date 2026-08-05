@@ -1,4 +1,4 @@
-import type { ConnectionFormMode, ConnectionProfile, CreateProfileInput } from '@fileterm/core'
+import type { ConnectionFormMode, ConnectionProfile, CreateProfileInput, SshConnectionDefaults } from '@fileterm/core'
 import type { FormEvent } from 'react'
 import { ConnectionModal } from './ConnectionModal'
 
@@ -6,6 +6,7 @@ export function ConnectionFormHost({
   editingProfileId,
   errorMessage,
   form,
+  connectionDefaults,
   groupOptions,
   isSubmitting,
   mode,
@@ -19,6 +20,7 @@ export function ConnectionFormHost({
   editingProfileId: string | null
   errorMessage: string | null
   form: CreateProfileInput
+  connectionDefaults: SshConnectionDefaults
   groupOptions: string[]
   isSubmitting?: boolean
   mode: ConnectionFormMode
@@ -42,6 +44,7 @@ export function ConnectionFormHost({
   return (
     <ConnectionModal
       errorMessage={errorMessage}
+      connectionDefaults={connectionDefaults}
       groupOptions={groupOptions}
       isSubmitting={isSubmitting}
       mode={mode}

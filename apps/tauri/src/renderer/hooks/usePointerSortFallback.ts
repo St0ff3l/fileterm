@@ -92,7 +92,11 @@ export function usePointerSortFallback<T>({
         overflow: 'hidden',
         boxShadow: '0 3px 10px rgb(0 0 0 / 18%)',
         transition: 'none',
-        willChange: 'transform'
+        willChange: 'transform',
+        // Set the first transform before inserting the clone. Appending it
+        // at the fixed-position origin and moving it afterwards produces a
+        // visible one-frame flash in WebKit/Tauri windows.
+        transform: `translate3d(${Math.round(rect.left)}px, ${Math.round(rect.top)}px, 0)`
       })
       document.body.appendChild(ghost)
       ghostRef.current = ghost
@@ -114,11 +118,13 @@ export function usePointerSortFallback<T>({
         // the image by the cursor's delta from this exact start frame.
         state.dragStartX = event.clientX
         state.dragStartY = event.clientY
+        event.preventDefault()
         createGhost(state.sourceElement, event.clientX, event.clientY)
         document.documentElement.classList.add('fileterm-pointer-sorting')
         callbacksRef.current.onStart(state.source)
       }
 
+      event.preventDefault()
       moveGhost(state, event.clientX, event.clientY)
       const target = resolveTarget(event.clientX, event.clientY)
       if (target) callbacksRef.current.onTarget(state.source, target, event.clientY)
