@@ -15,6 +15,7 @@ import type { SendScope, SessionSendTarget } from '../common/session-send-target
 import type { TabBarProps } from '../layout/TabBar'
 import { SystemInfoWorkspace } from '../system/SystemInfoWorkspace'
 import { HomeWorkspace } from './HomeWorkspace'
+import { LocalTerminalWorkspace } from './LocalTerminalWorkspace'
 import { SessionWorkspace } from './SessionWorkspace'
 
 type ActiveLocalTab = {
@@ -77,6 +78,8 @@ export function WorkspaceStage({
   onOpenLocalPath,
   onBackToLocalComputer,
   onOpenProfile,
+  onOpenLocalTerminal,
+  onReconnectLocalTerminal,
   onOpenRemoteItem,
   onOpenRemotePath,
   onPasteIntoPane,
@@ -185,6 +188,8 @@ export function WorkspaceStage({
   onOpenLocalPath(path: string): void
   onBackToLocalComputer(): void
   onOpenProfile(profileId: string): void
+  onOpenLocalTerminal(): void
+  onReconnectLocalTerminal(tabId: string): Promise<void>
   onOpenRemoteItem(item: RemoteFileItem): void
   onOpenRemotePath(path: string): void
   onPasteIntoPane(pane: 'local' | 'remote'): void
@@ -242,6 +247,16 @@ export function WorkspaceStage({
         activeProfile={activeProfile}
         activeSession={activeSession}
         connectionStatus={activeTab?.status ?? null}
+      />
+    )
+  }
+
+  if (activeTab?.sessionType === 'local' && activeSession && !activeLocalTab) {
+    return (
+      <LocalTerminalWorkspace
+        activeSession={activeSession}
+        activeTab={activeTab}
+        onRestart={() => onReconnectLocalTerminal(activeTab.id)}
       />
     )
   }
@@ -332,6 +347,7 @@ export function WorkspaceStage({
       theme={theme}
       locale={locale}
       onOpen={onOpenProfile}
+      onOpenLocalTerminal={onOpenLocalTerminal}
       onCreateConnection={onCreateConnection}
       onEditConnection={onEditConnection}
       onDeleteConnection={onDeleteConnection}

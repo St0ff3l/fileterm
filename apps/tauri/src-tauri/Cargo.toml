@@ -32,12 +32,14 @@ encoding_rs = "0.8"
 rfd = "0.17"
 sha2 = "0.10"
 hmac = "0.12"
+subtle = "2.6"
 base64 = "0.22"
 flate2 = "1"
 tokio-socks = "0.5"
 tokio-serial = "5.5"
 suppaftp = { version = "10", default-features = false, features = ["tokio-async-native-tls", "deprecated"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+portable-pty = "0.9"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 raw-window-handle = "0.6"

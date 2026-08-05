@@ -1065,6 +1065,53 @@ async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Resu
     Ok(())
 }
 
+/// Read-only MCP surface for browsing an already-open file-capable session.
+/// The MCP adapter intentionally cannot open profiles or access profile
+/// secrets; the desktop UI owns both actions and this helper only delegates to
+/// an existing protocol worker.
+pub(crate) async fn mcp_list_remote_directory(
+    app: AppHandle,
+    tab_id: String,
+    requested_path: Option<String>,
+) -> Result<serde_json::Value, AppError> {
+    let path = {
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        let sessions = state.sessions.read().await;
+        let session = sessions
+            .get(&tab_id)
+            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
+        if !session.capabilities.files {
+            return Err(AppError::Command(
+                "This FileTerm session does not provide remote file access".to_string(),
+            ));
+        }
+        requested_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| session.remote_path.clone())
+    };
+
+    if path.len() > 4_096 {
+        return Err(AppError::Command(
+            "Remote path exceeds the FileTerm MCP limit".to_string(),
+        ));
+    }
+
+    refresh_remote_files(&app, &tab_id, &path).await?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let sessions = state.sessions.read().await;
+    let session = sessions.get(&tab_id).ok_or_else(|| {
+        AppError::Command("FileTerm session closed while listing directory".to_string())
+    })?;
+    Ok(serde_json::json!({
+        "tabId": tab_id,
+        "path": path,
+        "items": session.remote_files,
+    }))
+}
+
 fn create_tab_layout(profile_type: &str) -> String {
     match profile_type {
         "ssh" => "terminal-file".to_string(),
@@ -1103,6 +1150,11 @@ async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState,
         // emitting state over a replacement connection after reconnect.
         control.cancel();
     }
+    state
+        .local_terminal_runtime_ids
+        .write()
+        .await
+        .remove(tab_id);
     state.terminal_inputs.write().await.remove(tab_id);
     let sender = state.workers.write().await.remove(tab_id);
     if let Some(sender) = sender {
@@ -1261,6 +1313,135 @@ async fn spawn_session_for_profile(
     );
 
     Ok(tab_id)
+}
+
+/// Creates one isolated local PTY and exposes it through the same runtime
+/// workspace model as a remote session. A local terminal is deliberately not
+/// persisted as a connection profile.
+async fn spawn_local_terminal_tab(
+    app: &AppHandle,
+    state: &crate::services::workspace::WorkspaceState,
+) -> String {
+    let tab_id = format!("local-{}", uuid::Uuid::new_v4());
+    let launch = crate::sessions::local_terminal::default_launch();
+    let capabilities =
+        crate::services::workspace::ConnectionCapabilities::for_session_type("local");
+
+    {
+        let mut tabs = state.tabs.write().await;
+        tabs.push(crate::services::WorkspaceTab {
+            id: tab_id.clone(),
+            profile_id: "__local_terminal__".to_string(),
+            session_type: "local".to_string(),
+            title: "Local Terminal".to_string(),
+            layout: "terminal-only".to_string(),
+            status: crate::services::WorkspaceTabStatus::Connecting,
+            pane_root: None,
+            pane_root_tab_id: None,
+        });
+        let mut sessions = state.sessions.write().await;
+        sessions.insert(
+            tab_id.clone(),
+            crate::services::SessionSnapshot {
+                profile_id: "__local_terminal__".to_string(),
+                access_host: launch.cwd.clone(),
+                summary: launch.shell.clone(),
+                terminal_transcript: "Starting local shell...\r\n".to_string(),
+                remote_path: launch.cwd.clone(),
+                shell_cwd: Some(launch.cwd.clone()),
+                follow_shell_cwd: false,
+                remote_files_loading: false,
+                remote_files: Vec::new(),
+                sftp_unavailable_reason: None,
+                file_access_mode: "user".to_string(),
+                sudo_user: None,
+                has_reusable_sudo_auth: false,
+                login_user: None,
+                shell_user: None,
+                connected: false,
+                system_metrics: None,
+                capabilities,
+                reconnect_mode: None,
+            },
+        );
+    }
+
+    match start_local_terminal_for_tab(app, state, &tab_id, launch).await {
+        Ok(()) => {
+            crate::sessions::terminal::set_terminal_state(
+                app,
+                &tab_id,
+                "Local shell started".to_string(),
+                crate::services::WorkspaceTabStatus::Connected,
+            )
+            .await;
+        }
+        Err(error) => {
+            crate::sessions::terminal::set_terminal_state(
+                app,
+                &tab_id,
+                error,
+                crate::services::WorkspaceTabStatus::Error,
+            )
+            .await;
+        }
+    }
+
+    tab_id
+}
+
+async fn start_local_terminal_for_tab(
+    app: &AppHandle,
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    launch: crate::sessions::local_terminal::LocalTerminalLaunch,
+) -> Result<(), String> {
+    let (worker_tx, worker_rx) = mpsc::channel(16);
+    let (terminal_input_tx, terminal_input_rx) = mpsc::unbounded_channel();
+    let worker_control = CancellationToken::new();
+    let runtime_id = uuid::Uuid::new_v4().to_string();
+    state
+        .workers
+        .write()
+        .await
+        .insert(tab_id.to_string(), worker_tx);
+    state
+        .terminal_inputs
+        .write()
+        .await
+        .insert(tab_id.to_string(), terminal_input_tx);
+    state
+        .worker_controls
+        .write()
+        .await
+        .insert(tab_id.to_string(), worker_control.clone());
+    state
+        .local_terminal_runtime_ids
+        .write()
+        .await
+        .insert(tab_id.to_string(), runtime_id.clone());
+
+    if let Err(error) = crate::sessions::local_terminal::start_local_terminal_worker(
+        tab_id.to_string(),
+        runtime_id,
+        worker_rx,
+        terminal_input_rx,
+        app.clone(),
+        worker_control,
+        launch,
+    ) {
+        state.workers.write().await.remove(tab_id);
+        state.terminal_inputs.write().await.remove(tab_id);
+        state.worker_controls.write().await.remove(tab_id);
+        state
+            .local_terminal_runtime_ids
+            .write()
+            .await
+            .remove(tab_id);
+        return Err(error);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1714,14 +1895,64 @@ pub async fn app_reconnect_tab(
     tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let profile_id = {
+    let tab_metadata = {
         let tabs = state.tabs.read().await;
         tabs.iter()
             .find(|t| t.id == tab_id)
-            .map(|t| t.profile_id.clone())
+            .map(|t| (t.profile_id.clone(), t.session_type.clone()))
     };
 
-    if let Some(pid) = profile_id {
+    if let Some((profile_id, session_type)) = tab_metadata {
+        if session_type == "local" {
+            let should_start = {
+                let mut tabs = state.tabs.write().await;
+                claim_reconnect_tab(&mut tabs, &tab_id)
+            };
+            if !should_start {
+                return get_workspace_snapshot(app).await;
+            }
+
+            stop_session_worker(&state, &tab_id).await;
+            {
+                let mut sessions = state.sessions.write().await;
+                if let Some(session) = sessions.get_mut(&tab_id) {
+                    session.connected = false;
+                    if !session.terminal_transcript.is_empty() {
+                        session
+                            .terminal_transcript
+                            .push_str("\r\n--- Local shell restarted ---\r\n");
+                    }
+                    session
+                        .terminal_transcript
+                        .push_str("Starting local shell...\r\n");
+                }
+            }
+
+            let launch = crate::sessions::local_terminal::default_launch();
+            match start_local_terminal_for_tab(&app, &state, &tab_id, launch).await {
+                Ok(()) => {
+                    crate::sessions::terminal::set_terminal_state(
+                        &app,
+                        &tab_id,
+                        "Local shell started".to_string(),
+                        crate::services::WorkspaceTabStatus::Connected,
+                    )
+                    .await;
+                }
+                Err(error) => {
+                    crate::sessions::terminal::set_terminal_state(
+                        &app,
+                        &tab_id,
+                        error,
+                        crate::services::WorkspaceTabStatus::Error,
+                    )
+                    .await;
+                }
+            }
+            return get_workspace_snapshot(app).await;
+        }
+
+        let pid = profile_id;
         let profiles = read_json_array(&app, "profiles.json")?;
         if let Some(profile) = profiles
             .iter()
@@ -1844,6 +2075,26 @@ pub async fn app_disconnect_tab(
     app: AppHandle,
     tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
+    let is_local_terminal = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .tabs
+        .read()
+        .await
+        .iter()
+        .any(|tab| tab.id == tab_id && tab.session_type == "local");
+    if is_local_terminal {
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        stop_session_worker(&state, &tab_id).await;
+        crate::sessions::terminal::set_terminal_state(
+            &app,
+            &tab_id,
+            "Local shell stopped".to_string(),
+            crate::services::WorkspaceTabStatus::Closed,
+        )
+        .await;
+        return get_workspace_snapshot(app).await;
+    }
+
     crate::services::transfers::pause_for_tab(&app, &tab_id, "连接断开，可在重连后继续传输")
         .await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
@@ -2000,6 +2251,17 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
     }
 
     get_workspace_snapshot(app).await
+}
+
+#[tauri::command]
+pub async fn app_open_local_terminal(app: AppHandle) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let tab_id = spawn_local_terminal_tab(&app, &state).await;
+    {
+        let mut active = state.active_tab_id.write().await;
+        *active = Some(tab_id);
+    }
+    get_workspace_snapshot_and_emit(&app).await
 }
 
 #[tauri::command]

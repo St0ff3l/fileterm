@@ -1,5 +1,6 @@
 pub mod connections;
 pub mod logging;
+pub mod mcp;
 pub mod profile_ops;
 pub mod s3_backup;
 pub mod ssh_keys;

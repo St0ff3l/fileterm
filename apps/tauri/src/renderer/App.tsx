@@ -270,7 +270,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     updateTerminalDockSelectedTabIds,
     sendTerminalCommand,
     openProfile,
+    openLocalTerminal,
     activateSessionTab,
+    reconnectSessionTab,
     confirmShortcutClose,
     handleTabContextAction,
     openTabContextMenu,
@@ -320,6 +322,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     : DEFAULT_COMMAND_LIST_WIDTH
   const isResourceMonitoringAvailable =
     activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring !== false
+  const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
+  const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
   const isSystemSidebarCollapsed =
     isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
   const activeTabId = activeTab?.id ?? null
@@ -1262,7 +1266,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -1273,7 +1277,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         {usesCustomWindowChrome ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
         {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
 
-        {showSidebar ? (
+        {shouldShowSystemSidebar ? (
           <SystemSidebarShell
             activeProfile={activeProfile}
             activeSession={activeSession}
@@ -1287,7 +1291,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           />
         ) : null}
 
-        <main className={`fs-main ${error ? 'has-status' : 'no-status'} ${showSidebar ? '' : 'full-width'}`}>
+        <main
+          className={`fs-main ${error ? 'has-status' : 'no-status'} ${shouldShowSystemSidebar ? '' : 'full-width'}`}
+        >
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>
@@ -1370,6 +1376,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLocalPath={handleOpenLocalPath}
                 onBackToLocalComputer={handleBackToLocalComputer}
                 onOpenProfile={openProfile}
+                onOpenLocalTerminal={() => {
+                  void openLocalTerminal()
+                }}
+                onReconnectLocalTerminal={reconnectSessionTab}
                 onOpenRemoteItem={handleOpenRemoteItem}
                 onOpenRemotePath={handleOpenRemotePath}
                 onPasteIntoPane={handlePasteIntoPane}
@@ -1435,13 +1445,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}
           desktopApi={desktopApi}
-          fullWidth={!showSidebar}
+          fullWidth={!shouldShowSystemSidebar}
           isPending={isBusy}
           onApplySnapshot={applySnapshot}
           onError={(scope, err) => reportError(setError, scope, err)}
-          sessionTabs={visibleWorkspaceTabs}
+          sessionTabs={visibleWorkspaceTabs.filter((tab) => tab.sessionType !== 'local')}
           transfers={workspace.transfers}
-          visible={!isHomeWorkspaceVisible}
+          visible={!isHomeWorkspaceVisible && !isLocalTerminalWorkspace}
         />
       </div>
 

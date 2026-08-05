@@ -1,5 +1,8 @@
 export type SessionType = 'ssh' | 'ftp' | 'telnet' | 'serial'
 
+/** Runtime workspace sessions may also be a local shell; connection profiles never are. */
+export type WorkspaceSessionType = SessionType | 'local'
+
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
@@ -210,7 +213,7 @@ export const getConnectionCapabilities = (profile: Pick<ConnectionProfile, 'type
 
 export interface WorkspaceTab {
   id: string
-  sessionType: SessionType
+  sessionType: WorkspaceSessionType
   profileId: string
   title: string
   layout: TabLayout
@@ -1103,6 +1106,7 @@ export interface FileTermDesktopApi {
     mode: 'user' | 'root',
     options?: RemoteFileAccessOptions
   ): Promise<WorkspaceSnapshot>
+  openLocalTerminal(): Promise<WorkspaceSnapshot>
   writeTerminal(tabId: string, data: string): Promise<void>
   resizeTerminal(tabId: string, cols: number, rows: number, width: number, height: number): Promise<void>
   openRemotePath(tabId: string, targetPath: string): Promise<WorkspaceSnapshot>

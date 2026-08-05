@@ -531,7 +531,9 @@ export const TerminalView = memo(function TerminalView({
   onSplitPane,
   onClosePane,
   onCloseTab,
-  canClosePane = false
+  canClosePane = false,
+  closedMessage = t.terminalConnectionClosed,
+  reconnectHint = t.pressEnterToReconnect
 }: {
   tabId: string
   bootText: string
@@ -545,6 +547,8 @@ export const TerminalView = memo(function TerminalView({
   onClosePane?(): void
   onCloseTab?(): void
   canClosePane?: boolean
+  closedMessage?: string
+  reconnectHint?: string
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
@@ -581,6 +585,8 @@ export const TerminalView = memo(function TerminalView({
   const tabIdRef = useRef(tabId)
   const onStatusRef = useRef(onStatus)
   const onReconnectRef = useRef(onReconnect)
+  const closedMessageRef = useRef(closedMessage)
+  const reconnectHintRef = useRef(reconnectHint)
   const onSplitPaneRef = useRef(onSplitPane)
   const onClosePaneRef = useRef(onClosePane)
   const onCloseTabRef = useRef(onCloseTab)
@@ -593,6 +599,8 @@ export const TerminalView = memo(function TerminalView({
   connectingRef.current = Boolean(connecting)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
+  closedMessageRef.current = closedMessage
+  reconnectHintRef.current = reconnectHint
   onSplitPaneRef.current = onSplitPane
   onClosePaneRef.current = onClosePane
   onCloseTabRef.current = onCloseTab
@@ -1110,7 +1118,7 @@ export const TerminalView = memo(function TerminalView({
       }
 
       reconnectHintShownRef.current = true
-      terminal.write(`\r\n${t.pressEnterToReconnect}\r\n`)
+      terminal.write(`\r\n${reconnectHintRef.current}\r\n`)
     }
     const requestReconnect = () => {
       if (wasConnectedRef.current || connectingRef.current || isReconnectingRef.current) {
@@ -1451,7 +1459,7 @@ export const TerminalView = memo(function TerminalView({
         // would make the first retry look swallowed.
         connectedRef.current = false
         wasConnectedRef.current = false
-        terminal.write(`\r\n${t.terminalConnectionClosed}\r\n`)
+        terminal.write(`\r\n${closedMessageRef.current}\r\n`)
         writeReconnectHint()
       })
     })
@@ -1508,13 +1516,13 @@ export const TerminalView = memo(function TerminalView({
           if (isDisconnecting) {
             terminal.write(buildExitAlternateScreenSequence(), () => {
               const visibleTranscript = snapshotTerminalBuffer(terminal)
-              const reconnectHint = onReconnectRef.current ? `\r\n${t.pressEnterToReconnect}` : ''
+              const reconnectHint = onReconnectRef.current ? `\r\n${reconnectHintRef.current}` : ''
               if (reconnectHint) {
                 reconnectHintShownRef.current = true
               }
               const disconnectedTranscript = visibleTranscript
-                ? `${visibleTranscript}\r\n${t.terminalConnectionClosed}${reconnectHint}\r\n`
-                : `${t.terminalConnectionClosed}${reconnectHint}\r\n`
+                ? `${visibleTranscript}\r\n${closedMessageRef.current}${reconnectHint}\r\n`
+                : `${closedMessageRef.current}${reconnectHint}\r\n`
               replaceTerminalWithTranscript(terminal, disconnectedTranscript)
             })
           } else if (!connected && status === 'error') {

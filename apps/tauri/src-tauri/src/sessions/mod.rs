@@ -1,5 +1,6 @@
 pub mod ftp;
 pub mod local_files;
+pub mod local_terminal;
 pub mod serial;
 pub mod ssh;
 pub mod system_metrics;

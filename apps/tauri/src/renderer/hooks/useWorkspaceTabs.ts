@@ -912,6 +912,35 @@ export function useWorkspaceTabs({
     await openProfileInCurrentWorkspace(profileId)
   }
 
+  const openLocalTerminal = async () => {
+    if (!desktopApi) {
+      return
+    }
+
+    const activeHomeId = isHomeWorkspaceVisible ? effectiveActiveLocalTabId : null
+    const replacementKey = activeHomeId ? homeTabKey(activeHomeId) : null
+    pendingHomeReplacementKeyRef.current = replacementKey
+
+    try {
+      onBusyChange(true)
+      const snapshot = await desktopApi.openLocalTerminal()
+      applySnapshot(snapshot)
+      onStatusMessage(null)
+      if (activeHomeId && snapshot.activeTabId && replacementKey) {
+        const nextSessionKey = sessionTabKey(snapshot.activeTabId)
+        setTabOrder((current) => uniqueStrings(current.map((key) => (key === replacementKey ? nextSessionKey : key))))
+        setLocalTabs((current) => current.filter((tab) => tab.id !== activeHomeId))
+      }
+      pendingHomeReplacementKeyRef.current = null
+      setActiveLocalTabId(null)
+    } catch (error) {
+      pendingHomeReplacementKeyRef.current = null
+      onError('打开本地终端', error)
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
   useEffect(() => {
     if (!isMainWorkspaceWindow || !hasLoadedInitialSnapshot || !hasHydratedMainTabUiState) {
       return
@@ -1447,7 +1476,10 @@ export function useWorkspaceTabs({
 
       try {
         onBusyChange(true)
-        const snapshot = await desktopApi.openProfile(sourceTab.profileId)
+        const snapshot =
+          sourceTab.sessionType === 'local'
+            ? await desktopApi.openLocalTerminal()
+            : await desktopApi.openProfile(sourceTab.profileId)
         applySnapshot(snapshot)
         setActiveLocalTabId(null)
       } catch (error) {
@@ -1471,7 +1503,7 @@ export function useWorkspaceTabs({
         return
       }
       const reconnectableTabs = visibleWorkspaceTabs.filter(
-        (tab) => tab.status !== 'connected' && tab.status !== 'connecting'
+        (tab) => tab.sessionType === 'ssh' && tab.status !== 'connected' && tab.status !== 'connecting'
       )
       if (!reconnectableTabs.length) {
         return
@@ -1601,6 +1633,7 @@ export function useWorkspaceTabs({
     orderedTabs,
     sessionSendTargets,
     openProfile,
+    openLocalTerminal,
     activateSessionTab,
     reconnectSessionTab,
     disconnectSessionTab,
