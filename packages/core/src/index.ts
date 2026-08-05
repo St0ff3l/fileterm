@@ -1,5 +1,8 @@
 export type SessionType = 'ssh' | 'ftp' | 'telnet' | 'serial'
 
+/** Runtime workspace sessions may also be a local shell; connection profiles never are. */
+export type WorkspaceSessionType = SessionType | 'local'
+
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
@@ -210,7 +213,7 @@ export const getConnectionCapabilities = (profile: Pick<ConnectionProfile, 'type
 
 export interface WorkspaceTab {
   id: string
-  sessionType: SessionType
+  sessionType: WorkspaceSessionType
   profileId: string
   title: string
   layout: TabLayout
@@ -832,6 +835,16 @@ export type SshInteractionRequest =
   | SshCredentialsPromptRequest
   | SshKeyPassphrasePromptRequest
   | SshKeyboardInteractiveRequest
+
+export interface McpApprovalRequest {
+  requestId: string
+  operation: string
+  title: string
+  summary: string
+  target?: string
+  details?: string
+  destructive: boolean
+}
 export type SshInteractionDraft =
   | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
@@ -1037,6 +1050,12 @@ export interface FileTermDesktopApi {
     args?: string[],
     options?: CommandExecutionOptions
   ): Promise<CommandExecutionResult>
+  executeRemoteCommand(
+    tabId: string,
+    command: string,
+    cwd?: string,
+    timeoutMs?: number
+  ): Promise<{ output: string; exitCode: number | null; timedOut: boolean }>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
   getCommandSendPreferences(): Promise<CommandSendPreferences>
@@ -1103,6 +1122,7 @@ export interface FileTermDesktopApi {
     mode: 'user' | 'root',
     options?: RemoteFileAccessOptions
   ): Promise<WorkspaceSnapshot>
+  openLocalTerminal(): Promise<WorkspaceSnapshot>
   writeTerminal(tabId: string, data: string): Promise<void>
   resizeTerminal(tabId: string, cols: number, rows: number, width: number, height: number): Promise<void>
   openRemotePath(tabId: string, targetPath: string): Promise<WorkspaceSnapshot>
@@ -1121,6 +1141,7 @@ export interface FileTermDesktopApi {
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
+  resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
     tabId: string,
     targetPath: string,
@@ -1132,6 +1153,7 @@ export interface FileTermDesktopApi {
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  onMcpApprovalRequest(listener: (request: McpApprovalRequest) => void): () => void
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void
   onNewTabRequest(listener: () => void): () => void

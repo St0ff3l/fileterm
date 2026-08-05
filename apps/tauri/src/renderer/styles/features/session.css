@@ -14,6 +14,60 @@
   grid-template-rows: 1fr;
 }
 
+.local-terminal-workspace {
+  box-sizing: border-box;
+  display: grid;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--terminal-bg);
+}
+
+.local-terminal-frame {
+  --local-terminal-frame-size: 15px;
+
+  box-sizing: border-box;
+  display: grid;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  padding: 0 var(--local-terminal-frame-size) var(--local-terminal-frame-size);
+  overflow: hidden;
+  background: rgb(36, 36, 36);
+}
+
+.local-terminal-surface {
+  display: grid;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--terminal-bg);
+}
+
+.local-terminal-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--terminal-frame-gradient, none);
+  box-shadow: var(--terminal-frame-shadow);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.local-terminal-surface > .terminal-view {
+  box-sizing: border-box;
+  height: auto;
+  min-height: 0;
+  border: 0;
+  background: var(--terminal-bg);
+}
+
+.local-terminal-workspace .terminal-host {
+  padding: 10px 14px;
+}
+
 .session-workspace.is-file-panel-dragging {
   transition: none;
 }

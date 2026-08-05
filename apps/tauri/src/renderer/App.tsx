@@ -17,6 +17,7 @@ import {
   type ConnectionProfile,
   type CreateProfileInput,
   type FileContentSnapshot,
+  type McpApprovalRequest,
   type RemoteFileItem
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
@@ -139,6 +140,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
+  const [mcpApprovalRequests, setMcpApprovalRequests] = useState<McpApprovalRequest[]>([])
+  const [resolvingMcpApprovalId, setResolvingMcpApprovalId] = useState<string | null>(null)
+  const resolvingMcpApprovalIdsRef = useRef(new Set<string>())
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
@@ -182,6 +186,43 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   }
 
   useThemeMode(themeMode)
+
+  useEffect(() => {
+    if (!desktopApi || !isMainWorkspaceWindow) {
+      return
+    }
+
+    return desktopApi.onMcpApprovalRequest((request) => {
+      setMcpApprovalRequests((current) => {
+        if (current.some((item) => item.requestId === request.requestId)) {
+          return current
+        }
+        return [...current, request]
+      })
+    })
+  }, [desktopApi, isMainWorkspaceWindow])
+
+  const resolveMcpApproval = useCallback(
+    async (approved: boolean) => {
+      const request = mcpApprovalRequests[0]
+      if (!desktopApi || !request || resolvingMcpApprovalIdsRef.current.has(request.requestId)) {
+        return
+      }
+
+      resolvingMcpApprovalIdsRef.current.add(request.requestId)
+      setResolvingMcpApprovalId(request.requestId)
+      try {
+        await desktopApi.resolveMcpApproval(request.requestId, approved)
+        setMcpApprovalRequests((current) => current.filter((item) => item.requestId !== request.requestId))
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        resolvingMcpApprovalIdsRef.current.delete(request.requestId)
+        setResolvingMcpApprovalId((current) => (current === request.requestId ? null : current))
+      }
+    },
+    [desktopApi, mcpApprovalRequests]
+  )
 
   // 1. IPC Synchronization Hook
   const {
@@ -270,7 +311,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     updateTerminalDockSelectedTabIds,
     sendTerminalCommand,
     openProfile,
+    openLocalTerminal,
     activateSessionTab,
+    reconnectSessionTab,
     confirmShortcutClose,
     handleTabContextAction,
     openTabContextMenu,
@@ -320,6 +363,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     : DEFAULT_COMMAND_LIST_WIDTH
   const isResourceMonitoringAvailable =
     activeProfile?.type === 'ssh' && activeProfile.enableResourceMonitoring !== false
+  const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
+  const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
   const isSystemSidebarCollapsed =
     isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
   const activeTabId = activeTab?.id ?? null
@@ -1262,7 +1307,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -1273,7 +1318,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         {usesCustomWindowChrome ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
         {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
 
-        {showSidebar ? (
+        {shouldShowSystemSidebar ? (
           <SystemSidebarShell
             activeProfile={activeProfile}
             activeSession={activeSession}
@@ -1287,7 +1332,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           />
         ) : null}
 
-        <main className={`fs-main ${error ? 'has-status' : 'no-status'} ${showSidebar ? '' : 'full-width'}`}>
+        <main
+          className={`fs-main ${error ? 'has-status' : 'no-status'} ${shouldShowSystemSidebar ? '' : 'full-width'}`}
+        >
           {error ? (
             <div className="status-message" role="alert">
               <span className="status-message-text">{error}</span>
@@ -1370,6 +1417,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLocalPath={handleOpenLocalPath}
                 onBackToLocalComputer={handleBackToLocalComputer}
                 onOpenProfile={openProfile}
+                onOpenLocalTerminal={() => {
+                  void openLocalTerminal()
+                }}
+                onReconnectLocalTerminal={reconnectSessionTab}
                 onOpenRemoteItem={handleOpenRemoteItem}
                 onOpenRemotePath={handleOpenRemotePath}
                 onPasteIntoPane={handlePasteIntoPane}
@@ -1435,13 +1486,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}
           desktopApi={desktopApi}
-          fullWidth={!showSidebar}
+          fullWidth={!shouldShowSystemSidebar}
           isPending={isBusy}
           onApplySnapshot={applySnapshot}
           onError={(scope, err) => reportError(setError, scope, err)}
-          sessionTabs={visibleWorkspaceTabs}
+          sessionTabs={visibleWorkspaceTabs.filter((tab) => tab.sessionType !== 'local')}
           transfers={workspace.transfers}
-          visible={!isHomeWorkspaceVisible}
+          visible={!isHomeWorkspaceVisible && !isLocalTerminalWorkspace}
         />
       </div>
 
@@ -1706,6 +1757,27 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         }
         windowCloseConfirm={windowCloseConfirmProps}
       />
+      {isMainWorkspaceWindow && mcpApprovalRequests[0] ? (
+        <ConfirmActionDialog
+          confirmLabel={t.confirm}
+          confirmVariant={mcpApprovalRequests[0].destructive ? 'danger' : 'primary'}
+          description={
+            <div>
+              <p>{mcpApprovalRequests[0].summary}</p>
+              {mcpApprovalRequests[0].target ? <p>目标：{mcpApprovalRequests[0].target}</p> : null}
+              {mcpApprovalRequests[0].details ? <pre>{mcpApprovalRequests[0].details}</pre> : null}
+            </div>
+          }
+          isSubmitting={resolvingMcpApprovalId === mcpApprovalRequests[0].requestId}
+          onClose={() => {
+            void resolveMcpApproval(false)
+          }}
+          onConfirm={() => {
+            void resolveMcpApproval(true)
+          }}
+          title={mcpApprovalRequests[0].title}
+        />
+      ) : null}
     </>
   )
 }

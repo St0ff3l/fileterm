@@ -5,6 +5,7 @@ export function OverviewPage({
   profiles,
   folders = [],
   onOpenProfile,
+  onOpenLocalTerminal,
   onOpenNewConnection,
   onOpenConnectionManager,
   onOpenCommandManager,
@@ -13,6 +14,7 @@ export function OverviewPage({
   profiles: ConnectionProfile[]
   folders?: ConnectionFolder[]
   onOpenProfile(profileId: string): void
+  onOpenLocalTerminal(): void
   onOpenNewConnection(): void
   onOpenConnectionManager(): void
   onOpenCommandManager(): void
@@ -46,6 +48,10 @@ export function OverviewPage({
             <button className="hero-btn hero-btn-secondary" onClick={onOpenConnectionManager} type="button">
               <span className="material-symbols-outlined">settings_ethernet</span>
               <span>{t.connectionManager}</span>
+            </button>
+            <button className="hero-btn hero-btn-secondary" onClick={onOpenLocalTerminal} type="button">
+              <span className="material-symbols-outlined">terminal</span>
+              <span>{t.localTerminal}</span>
             </button>
           </div>
         </div>
@@ -151,6 +157,15 @@ export function OverviewPage({
           <h2 className="section-title">{t.overviewQuickActions}</h2>
         </div>
         <div className="action-grid">
+          <button className="action-card" onClick={onOpenLocalTerminal} type="button">
+            <div className="action-icon">
+              <span className="material-symbols-outlined">terminal</span>
+            </div>
+            <div className="action-content">
+              <h3 className="action-title">{t.localTerminal}</h3>
+              <p className="action-desc">{t.localTerminalDescription}</p>
+            </div>
+          </button>
           <button className="action-card" onClick={onOpenCommandManager} type="button">
             <div className="action-icon">
               <span className="material-symbols-outlined">terminal</span>

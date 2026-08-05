@@ -1,5 +1,6 @@
 pub mod ftp;
 pub mod local_files;
+pub mod local_terminal;
 pub mod serial;
 pub mod ssh;
 pub mod system_metrics;
@@ -14,6 +15,12 @@ pub enum WorkerCmd {
         rows: u32,
         width: u32,
         height: u32,
+    },
+    ExecuteRemoteCommand {
+        command: String,
+        cwd: Option<String>,
+        timeout_ms: u64,
+        respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
     },
     ListRemoteFiles {
         path: String,

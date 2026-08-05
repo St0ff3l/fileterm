@@ -3,6 +3,14 @@ pub mod services;
 pub mod sessions;
 pub mod storage;
 
+pub fn run_mcp_stdio(arguments: &[String]) -> Result<(), String> {
+    crate::services::mcp::run_stdio(arguments)
+}
+
+pub fn run_cli(arguments: &[String]) -> Result<(), String> {
+    crate::services::mcp::run_cli(arguments)
+}
+
 use crate::commands::OpenWindowInput;
 #[cfg(target_os = "linux")]
 use gtk::prelude::GtkWindowExt;
@@ -1529,6 +1537,7 @@ pub fn run() {
                 ),
             );
             app.manage(crate::services::WorkspaceState::default());
+            crate::services::mcp::start_runtime(app.handle())?;
             app.manage(FileEditorCloseRegistry::default());
             app.manage(QuitPreparationRegistry::default());
             app.manage(HiddenWithMainRegistry::default());
@@ -1900,11 +1909,13 @@ pub fn run() {
             crate::commands::app_close_pane,
             crate::commands::app_set_active_pane,
             crate::commands::app_set_pane_weights,
+            crate::commands::app_open_local_terminal,
             crate::commands::app_write_terminal,
             crate::commands::app_subscribe_terminal_data,
             crate::commands::app_resize_terminal,
             crate::commands::app_open_remote_path,
             crate::commands::app_set_follow_shell_cwd,
+            crate::commands::app_execute_remote_command,
             crate::commands::app_read_remote_file,
             crate::commands::app_write_remote_file,
             crate::commands::app_create_remote_directory,
@@ -1943,6 +1954,7 @@ pub fn run() {
             crate::commands::app_update_command_template,
             crate::commands::app_delete_command_template,
             crate::commands::app_execute_command_template,
+            crate::commands::app_resolve_mcp_approval,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
             crate::sessions::local_files::app_connect_local_network_share,
@@ -1968,6 +1980,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = _event {
                 show_main_window(_app_handle);
+            }
+
+            if matches!(_event, tauri::RunEvent::Exit) {
+                crate::services::mcp::remove_runtime_descriptor(_app_handle);
             }
 
             #[cfg(target_os = "macos")]

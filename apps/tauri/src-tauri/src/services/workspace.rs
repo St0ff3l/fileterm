@@ -250,6 +250,14 @@ impl ConnectionCapabilities {
                 file_access: false,
                 tunnels: false,
             },
+            "local" => Self {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: false,
+            },
             _ => Self {
                 terminal: true,
                 files: false,
@@ -363,9 +371,15 @@ pub struct WorkspaceState {
     /// alone cannot interrupt a worker that is currently parsing a large
     /// remote metrics payload or waiting on an SSH operation.
     pub worker_controls: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    /// Identifies the live local PTY for each local tab. Native-thread cleanup
+    /// must never remove a newer shell restarted in the same tab.
+    pub local_terminal_runtime_ids: Arc<RwLock<HashMap<String, String>>>,
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions: Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
+    /// Pending MCP mutation approvals. The renderer resolves these through
+    /// `app_resolve_mcp_approval`; dropping or timing out a request denies it.
+    pub pending_mcp_approvals: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A
@@ -419,7 +433,9 @@ impl Default for WorkspaceState {
             terminal_inputs: Arc::new(RwLock::new(HashMap::new())),
             terminal_output_channels: Arc::new(StdMutex::new(HashMap::new())),
             worker_controls: Arc::new(RwLock::new(HashMap::new())),
+            local_terminal_runtime_ids: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
+            pending_mcp_approvals: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
             transfers: Arc::new(RwLock::new(Vec::new())),
             transfer_runs: Arc::new(RwLock::new(HashMap::new())),
@@ -520,6 +536,21 @@ mod tests {
         for (status, expected) in statuses {
             assert_eq!(serde_json::to_value(status).unwrap(), expected);
         }
+    }
+
+    #[test]
+    fn local_terminal_capabilities_expose_only_the_terminal_surface() {
+        assert_eq!(
+            ConnectionCapabilities::for_session_type("local"),
+            ConnectionCapabilities {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: false,
+            }
+        );
     }
 
     #[test]

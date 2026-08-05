@@ -5,6 +5,7 @@
   --bg-sidebar: #ffffff;
   --bg-card: #ffffff;
   --bg-elevated: #ffffff;
+  --titlebar-background: var(--bg-main);
   --bg-hover: #e8e8ec;
   --bg-active: #dddde3;
   --manager-head-bg: #f4f4f6;

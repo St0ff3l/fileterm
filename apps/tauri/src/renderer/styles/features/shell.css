@@ -19,6 +19,14 @@
   grid-template-rows: 32px 48px minmax(0, 1fr) 24px;
 }
 
+.fs-shell.is-local-terminal {
+  grid-template-rows: 48px minmax(0, 1fr);
+}
+
+.fs-shell.has-window-menubar.is-local-terminal {
+  grid-template-rows: 32px 48px minmax(0, 1fr);
+}
+
 .window-menubar {
   grid-column: 1 / -1;
   grid-row: 1;

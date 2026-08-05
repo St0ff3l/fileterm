@@ -25,6 +25,7 @@ export function HomeWorkspace({
   theme,
   locale,
   onOpen,
+  onOpenLocalTerminal,
   onCreateConnection,
   onEditConnection,
   onDeleteConnection,
@@ -56,6 +57,7 @@ export function HomeWorkspace({
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
   onOpen(profileId: string): void
+  onOpenLocalTerminal(): void
   onCreateConnection(): void
   onEditConnection(profile: ConnectionProfile): void
   onDeleteConnection(profileId: string): Promise<boolean> | boolean | void
@@ -308,6 +310,7 @@ export function HomeWorkspace({
                 profiles={profiles}
                 folders={folders}
                 onOpenProfile={onOpen}
+                onOpenLocalTerminal={onOpenLocalTerminal}
                 onOpenNewConnection={handleOpenNewConnection}
                 onOpenConnectionManager={() => selectTab('connection-manager')}
                 onOpenCommandManager={() => selectTab('command-manager')}
