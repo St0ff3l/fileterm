@@ -923,6 +923,7 @@ export interface TerminalStatePayload {
 }
 
 export interface RemoteFileAccessOptions {
+  rootAccessMethod?: 'sudo' | 'su'
   sudoUser?: string
   sudoPassword?: string
 }

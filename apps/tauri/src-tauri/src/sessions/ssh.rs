@@ -1497,6 +1497,21 @@ enum RootFileAccessMethod {
     Su,
 }
 
+fn parse_root_file_access_method(value: Option<&str>) -> Result<RootFileAccessMethod, String> {
+    match value.unwrap_or("sudo") {
+        "sudo" => Ok(RootFileAccessMethod::Sudo),
+        "su" => Ok(RootFileAccessMethod::Su),
+        other => Err(format!("不支持的 root 文件访问方式: {other}")),
+    }
+}
+
+fn root_file_access_method_label(method: RootFileAccessMethod) -> &'static str {
+    match method {
+        RootFileAccessMethod::Sudo => "sudo",
+        RootFileAccessMethod::Su => "su",
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PendingRootAccessAuth {
     method: RootFileAccessMethod,
@@ -5211,10 +5226,19 @@ async fn handle_worker_cmd_without_sftp(
         }
         WorkerCmd::SetRemoteFileAccessMode {
             mode,
+            root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
             respond_to,
         } => {
+            let requested_access_method =
+                match parse_root_file_access_method(new_root_access_method.as_deref()) {
+                    Ok(method) => method,
+                    Err(error) => {
+                        let _ = respond_to.send(Err(error));
+                        return Ok(false);
+                    }
+                };
             // root 模式走 exec channel（handle.channel_open_session().exec()），
             // 不依赖 SFTP subsystem。即使用户的服务器拒绝 SFTP（Timeout /
             // disabled），root 视角的文件操作仍可通过 sudo/su + exec 完成。
@@ -5222,9 +5246,13 @@ async fn handle_worker_cmd_without_sftp(
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
             let prev_mode = file_access_mode.clone();
+            let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
+            }
+            if mode == "root" && requested_access_method != prev_access_method {
+                *sudo_password = None;
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
@@ -5233,7 +5261,7 @@ async fn handle_worker_cmd_without_sftp(
             }
 
             if mode == "root" {
-                // 与原有手动 root 视图流程一致：弹窗输入始终验证 sudo 凭据。
+                // 与原有手动 root 视图流程一致：验证弹窗选择的 sudo/su 凭据。
                 // 用外层短超时避免 `exec_shell_file_command` 内部 10s 超时把
                 // worker 主循环卡死，导致终端 select! 无法响应 Ctrl+C。
                 let verify = match timeout(
@@ -5241,7 +5269,7 @@ async fn handle_worker_cmd_without_sftp(
                     exec_shell_file_command(
                         handle,
                         "true",
-                        RootFileAccessMethod::Sudo,
+                        requested_access_method,
                         sudo_user,
                         sudo_password,
                     ),
@@ -5249,16 +5277,20 @@ async fn handle_worker_cmd_without_sftp(
                 .await
                 {
                     Ok(inner) => inner,
-                    Err(_) => Err("sudo 验证超时：服务器未在 1.5 秒内响应".to_string()),
+                    Err(_) => Err(format!(
+                        "{} 验证超时：服务器未在 1.5 秒内响应",
+                        root_file_access_method_label(requested_access_method)
+                    )),
                 };
                 if let Err(err) = verify {
                     *file_access_mode = prev_mode;
+                    *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
-                *root_file_access_method = RootFileAccessMethod::Sudo;
+                *root_file_access_method = requested_access_method;
             }
 
             *file_access_mode = mode.clone();
@@ -6115,19 +6147,32 @@ async fn handle_worker_cmd(
         }
         WorkerCmd::SetRemoteFileAccessMode {
             mode,
+            root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
             respond_to,
         } => {
+            let requested_access_method =
+                match parse_root_file_access_method(new_root_access_method.as_deref()) {
+                    Ok(method) => method,
+                    Err(error) => {
+                        let _ = respond_to.send(Err(error));
+                        return Ok(false);
+                    }
+                };
             // 对照 Electron verifyRootFileAccess：切到 root 前先验证 sudo 凭据
             // 可用，失败则回滚状态并返回错误，让用户在弹窗里立即看到反馈，
             // 而不是等到第一次文件操作才失败（用户会以为"root 切换没接入"）。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
             let prev_mode = file_access_mode.clone();
+            let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
+            }
+            if mode == "root" && requested_access_method != prev_access_method {
+                *sudo_password = None;
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
@@ -6137,7 +6182,7 @@ async fn handle_worker_cmd(
             }
 
             if mode == "root" {
-                // 手动弹窗流程始终验证 sudo 凭据，失败则回滚。`exec_shell_file_command`
+                // 手动弹窗流程验证选择的 sudo/su 凭据，失败则回滚。`exec_shell_file_command`
                 // 内部最长会等 SUDO_VERIFY_TIMEOUT（10s）才放弃，对 worker
                 // 主循环来说太长——一旦 sudo 提示卡住或网络抖动，整个
                 // 终端 select! 都停在这里，连 Ctrl+C 都进不去。这里用
@@ -6149,7 +6194,7 @@ async fn handle_worker_cmd(
                     exec_shell_file_command(
                         handle,
                         "true",
-                        RootFileAccessMethod::Sudo,
+                        requested_access_method,
                         sudo_user,
                         sudo_password,
                     ),
@@ -6157,17 +6202,21 @@ async fn handle_worker_cmd(
                 .await
                 {
                     Ok(inner) => inner,
-                    Err(_) => Err("sudo 验证超时：服务器未在 1.5 秒内响应".to_string()),
+                    Err(_) => Err(format!(
+                        "{} 验证超时：服务器未在 1.5 秒内响应",
+                        root_file_access_method_label(requested_access_method)
+                    )),
                 };
                 if let Err(err) = verify {
                     // 回滚到切换前的状态
                     *file_access_mode = prev_mode;
+                    *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
-                *root_file_access_method = RootFileAccessMethod::Sudo;
+                *root_file_access_method = requested_access_method;
             }
 
             *file_access_mode = mode.clone();
@@ -7177,7 +7226,12 @@ async fn download_root_remote_file_via_su_pty(
             }) => {
                 exit_status = Some(status);
             }
-            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) if exit_status.is_some() => break,
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => {
+                exit_status = wait_for_root_download_exit_status(&mut channel, &cancel).await?;
+                break;
+            }
+            None => break,
             _ => {}
         }
     }
@@ -7196,15 +7250,64 @@ async fn download_root_remote_file_via_su_pty(
     }
     local.flush().await.map_err(|error| error.to_string())?;
 
-    let status = exit_status.ok_or_else(|| "root 下载命令未返回退出状态".to_string())?;
-    if status != 0 {
-        return Err(format!("root 下载命令失败（exit={status}）"));
+    if exit_status.is_none() {
+        crate::services::logging::warn(
+            app,
+            &format!("transfer:{transfer_id}"),
+            "root 下载完成但 SSH 通道未返回退出状态，按完整字节数确认成功",
+        );
     }
-    if transferred != source.size {
-        return Err(format!(
-            "root 下载未完成（{transferred}/{} bytes）",
-            source.size
-        ));
+    validate_root_download_completion(exit_status, transferred, source.size)
+}
+
+async fn wait_for_root_download_exit_status(
+    channel: &mut Channel<russh::client::Msg>,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<Option<u32>, String> {
+    let mut exit_status = None;
+    loop {
+        let message = tokio::select! {
+            _ = cancel.cancelled() => return Err(TRANSFER_CANCELED.to_string()),
+            result = timeout(SUDO_VERIFY_TIMEOUT, channel.wait()) => {
+                match result {
+                    Ok(message) => message,
+                    Err(_) => return Ok(exit_status),
+                }
+            }
+        };
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => {
+                exit_status = Some(status);
+            }
+            ChannelMsg::Eof | ChannelMsg::Close if exit_status.is_some() => break,
+            ChannelMsg::Eof | ChannelMsg::Close => {}
+            _ => {}
+        }
+    }
+    Ok(exit_status)
+}
+
+/// PTY-backed `su` channels on some SSH servers close without forwarding an
+/// exit status. Once the exact source byte count has been received, the binary
+/// stream itself is sufficient to establish transfer completeness. An explicit
+/// non-zero status and a short stream must still fail.
+fn validate_root_download_completion(
+    exit_status: Option<u32>,
+    transferred: u64,
+    expected: u64,
+) -> Result<(), String> {
+    if transferred != expected {
+        return Err(format!("root 下载未完成（{transferred}/{expected} bytes）"));
+    }
+    if let Some(status) = exit_status {
+        if status != 0 {
+            return Err(format!("root 下载命令失败（exit={status}）"));
+        }
     }
     Ok(())
 }
@@ -7893,17 +7996,18 @@ mod tests {
         enqueue_tunnel_command, finish_shell_setup_suppression, format_sftp_unavailable_reason,
         is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
         looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
-        parent_remote_item, parent_remote_path, password_for_authentication,
-        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
-        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
-        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
-        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        parent_remote_item, parent_remote_path, parse_root_file_access_method,
+        password_for_authentication, privilege_command_from_terminal_input,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        resource_monitoring_interval_seconds, root_access_auth_failed, root_file_command,
+        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
+        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, strip_su_exec_output,
+        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front,
-        try_keyboard_interactive_with_responder, tunnel_bind_address, validate_tunnel_rule,
-        wait_for_ssh_stage, KeyboardInteractiveRequest, RootFileAccessMethod,
-        ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand, SHELL_SETUP_SETTLE_DELAY,
-        SU_EXEC_OUTPUT_MARKER,
+        try_keyboard_interactive_with_responder, tunnel_bind_address,
+        validate_root_download_completion, validate_tunnel_rule, wait_for_ssh_stage,
+        KeyboardInteractiveRequest, RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule,
+        TunnelCommand, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -8570,6 +8674,23 @@ mod tests {
     }
 
     #[test]
+    fn parses_file_manager_root_access_methods_with_sudo_compatibility() {
+        assert_eq!(
+            parse_root_file_access_method(None),
+            Ok(RootFileAccessMethod::Sudo)
+        );
+        assert_eq!(
+            parse_root_file_access_method(Some("sudo")),
+            Ok(RootFileAccessMethod::Sudo)
+        );
+        assert_eq!(
+            parse_root_file_access_method(Some("su")),
+            Ok(RootFileAccessMethod::Su)
+        );
+        assert!(parse_root_file_access_method(Some("doas")).is_err());
+    }
+
+    #[test]
     fn su_method_is_synced_when_file_pane_is_already_in_root_mode() {
         let authenticated = super::PendingRootAccessAuth {
             method: RootFileAccessMethod::Su,
@@ -8864,6 +8985,24 @@ mod tests {
         assert_eq!(
             root_upload_base64_shell_command("/etc/fileterm/config.toml", 12),
             "set -e\nmkdir -p '/etc/fileterm'\nbase64 -d >> '/etc/fileterm/config.toml'"
+        );
+    }
+
+    #[test]
+    fn accepts_complete_root_download_without_ssh_exit_status() {
+        assert_eq!(validate_root_download_completion(None, 14, 14), Ok(()));
+        assert_eq!(validate_root_download_completion(Some(0), 14, 14), Ok(()));
+    }
+
+    #[test]
+    fn rejects_incomplete_or_failed_root_download() {
+        assert_eq!(
+            validate_root_download_completion(None, 13, 14),
+            Err("root 下载未完成（13/14 bytes）".to_string())
+        );
+        assert_eq!(
+            validate_root_download_completion(Some(1), 14, 14),
+            Err("root 下载命令失败（exit=1）".to_string())
         );
     }
 

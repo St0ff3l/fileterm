@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { t } from '../../i18n'
 
 export function RootAccessModal({
@@ -15,15 +16,19 @@ export function RootAccessModal({
   errorMessage?: string | null
   isSubmitting?: boolean
   onClose(): void
-  onSubmit(input: { sudoUser: string; sudoPassword: string }): void
+  onSubmit(input: { rootAccessMethod: 'sudo' | 'su'; sudoUser: string; sudoPassword: string }): void
 }) {
+  const [rootAccessMethod, setRootAccessMethod] = useState<'sudo' | 'su'>('sudo')
   const [sudoUser, setSudoUser] = useState(defaultSudoUser || 'root')
   const [sudoPassword, setSudoPassword] = useState('')
 
   useEffect(() => {
+    setRootAccessMethod('sudo')
     setSudoUser(defaultSudoUser || 'root')
     setSudoPassword('')
   }, [defaultSudoUser])
+
+  const submit = () => onSubmit({ rootAccessMethod, sudoUser, sudoPassword })
 
   return (
     <div className="modal-backdrop">
@@ -52,13 +57,28 @@ export function RootAccessModal({
           <fieldset className="ssh-fieldset root-access-fieldset" disabled={isSubmitting}>
             <legend>{t.auth}</legend>
             <label className="file-action-field">
+              <span>{t.fileRootAccessMethod}</span>
+              <DropdownSelect
+                className="root-access-method-select"
+                disabled={isSubmitting}
+                value={rootAccessMethod}
+                options={[
+                  { value: 'sudo', label: t.fileRootAccessMethodSudo },
+                  { value: 'su', label: t.fileRootAccessMethodSu }
+                ]}
+                onChange={(value) => setRootAccessMethod(value as 'sudo' | 'su')}
+              />
+              <div className="file-action-hint root-access-method-hint">{t.fileRootAccessMethodHint}</div>
+            </label>
+
+            <label className="file-action-field">
               <span>{t.fileRootAccessTargetUser}</span>
               <input
                 value={sudoUser}
                 onChange={(event) => setSudoUser(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !isSubmitting) {
-                    onSubmit({ sudoUser, sudoPassword })
+                    submit()
                   }
                 }}
               />
@@ -73,7 +93,7 @@ export function RootAccessModal({
                 onChange={(event) => setSudoPassword(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !isSubmitting) {
-                    onSubmit({ sudoUser, sudoPassword })
+                    submit()
                   }
                 }}
               />
@@ -89,21 +109,21 @@ export function RootAccessModal({
               {errorMessage}
             </div>
           ) : null}
+        </div>
 
-          <div className="form-actions">
-            <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">
-              {t.cancel}
-            </button>
-            <button
-              className="primary-button file-action-submit-button"
-              disabled={isSubmitting}
-              onClick={() => onSubmit({ sudoUser, sudoPassword })}
-              type="button"
-            >
-              {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-              <span>{t.fileRootAccessConfirm}</span>
-            </button>
-          </div>
+        <div className="form-actions root-access-modal__actions">
+          <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">
+            {t.cancel}
+          </button>
+          <button
+            className="primary-button file-action-submit-button"
+            disabled={isSubmitting}
+            onClick={submit}
+            type="button"
+          >
+            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
+            <span>{t.fileRootAccessConfirm}</span>
+          </button>
         </div>
       </div>
     </div>

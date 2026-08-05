@@ -70,6 +70,7 @@ pub enum WorkerCmd {
     },
     SetRemoteFileAccessMode {
         mode: String,
+        root_access_method: Option<String>,
         sudo_user: Option<String>,
         sudo_password: Option<String>,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,

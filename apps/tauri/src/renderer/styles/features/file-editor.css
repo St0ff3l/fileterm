@@ -174,7 +174,10 @@
   height: 32px;
   padding: 0 20px;
   justify-content: center;
-  pointer-events: none;
+  /* Keep the empty title area eventful so Tauri's global drag handler can
+   * start a native drag. Interactive descendants opt back into pointer
+   * events and are excluded from dragging by the renderer selector. */
+  pointer-events: auto;
   -webkit-app-region: drag;
   box-sizing: border-box;
 }

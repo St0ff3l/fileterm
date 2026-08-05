@@ -1060,6 +1060,9 @@
 :root:not([data-theme]) .transfer-row small,
 :root[data-theme='default-dark'] .transfer-row small,
 :root[data-theme='default'] .transfer-row small,
+:root:not([data-theme]) .transfer-row time,
+:root[data-theme='default-dark'] .transfer-row time,
+:root[data-theme='default'] .transfer-row time,
 :root:not([data-theme]) .transfer-row-meta span,
 :root[data-theme='default-dark'] .transfer-row-meta span,
 :root[data-theme='default'] .transfer-row-meta span {
@@ -1971,66 +1974,66 @@
 :root:not([data-theme]) .terminal-find,
 :root[data-theme='default-dark'] .terminal-find,
 :root[data-theme='default'] .terminal-find {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(28, 29, 33, 0.96);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  border: 1px solid transparent;
+  background: var(--bg-card);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 :root:not([data-theme]) .terminal-find input,
 :root[data-theme='default-dark'] .terminal-find input,
 :root[data-theme='default'] .terminal-find input {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: #17181b;
-  color: #edf2f8;
+  border: 1px solid var(--border-dark);
+  background: var(--bg-main);
+  color: var(--text-main);
 }
 
 :root:not([data-theme]) .terminal-find button,
 :root[data-theme='default-dark'] .terminal-find button,
 :root[data-theme='default'] .terminal-find button {
-  background: #2b2d33;
-  color: #edf2f8;
+  background: var(--bg-elevated);
+  color: var(--text-main);
 }
 
 :root:not([data-theme]) .terminal-find .terminal-find-actions,
 :root[data-theme='default-dark'] .terminal-find .terminal-find-actions,
 :root[data-theme='default'] .terminal-find .terminal-find-actions {
-  --terminal-find-action-divider: rgba(255, 255, 255, 0.09);
-  background: rgba(20, 21, 24, 0.72);
+  --terminal-find-action-divider: transparent;
+  background: transparent;
 }
 
 :root:not([data-theme]) .terminal-find .terminal-find-actions > button,
 :root[data-theme='default-dark'] .terminal-find .terminal-find-actions > button,
 :root[data-theme='default'] .terminal-find .terminal-find-actions > button {
   background: transparent;
-  color: #cdd2dc;
+  color: var(--text-muted);
 }
 
 :root:not([data-theme]) .terminal-find button:hover,
 :root[data-theme='default-dark'] .terminal-find button:hover,
 :root[data-theme='default'] .terminal-find button:hover {
-  background: #363942;
+  background: var(--bg-hover);
 }
 
 :root:not([data-theme]) .terminal-find .terminal-find-actions > button:hover,
 :root[data-theme='default-dark'] .terminal-find .terminal-find-actions > button:hover,
 :root[data-theme='default'] .terminal-find .terminal-find-actions > button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: var(--bg-hover);
+  color: var(--text-main);
 }
 
 :root:not([data-theme]) .terminal-find button.is-active,
 :root[data-theme='default-dark'] .terminal-find button.is-active,
 :root[data-theme='default'] .terminal-find button.is-active {
-  background: color-mix(in srgb, var(--primary) 24%, #343840);
-  color: color-mix(in srgb, var(--primary) 34%, #ffffff);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent) inset;
+  background: color-mix(in srgb, var(--text-main) 16%, var(--bg-elevated));
+  color: var(--text-main);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-main) 22%, transparent) inset;
 }
 
 :root:not([data-theme]) .terminal-find .terminal-find-submit,
 :root[data-theme='default-dark'] .terminal-find .terminal-find-submit,
 :root[data-theme='default'] .terminal-find .terminal-find-submit {
-  background: rgba(255, 255, 255, 0.07);
-  color: #f4f6fa;
+  background: var(--bg-hover);
+  color: var(--text-main);
 }
 
 :root:not([data-theme]) .terminal-find-status,

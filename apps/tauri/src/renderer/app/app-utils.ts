@@ -256,6 +256,26 @@ export function transferStatusText(transfer: TransferTask) {
   return transfer.direction === 'upload' ? t.uploading : t.downloading
 }
 
+export function getTransferTimestamp(transfer: TransferTask) {
+  return transfer.updatedAt ?? transfer.createdAt
+}
+
+export function formatTransferDateTime(timestamp?: number) {
+  if (timestamp === undefined || !Number.isFinite(timestamp)) {
+    return undefined
+  }
+
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) {
+    return undefined
+  }
+
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}:${pad(date.getSeconds())}`
+}
+
 export function formatTransferBytes(bytes?: number) {
   if (bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
     return undefined
