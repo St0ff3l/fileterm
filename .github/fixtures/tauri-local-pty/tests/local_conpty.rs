@@ -7,7 +7,9 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 #[cfg(windows)]
 #[test]
 fn conpty_preserves_output_and_exit_status() {
+    eprintln!("conpty stage: create pty system");
     let pty_system = native_pty_system();
+    eprintln!("conpty stage: open pty");
     let pair = pty_system
         .openpty(PtySize {
             rows: 24,
@@ -16,18 +18,22 @@ fn conpty_preserves_output_and_exit_status() {
             pixel_height: 0,
         })
         .expect("local ConPTY should open in the test environment");
+    eprintln!("conpty stage: build command");
     let portable_pty::PtyPair { master, slave } = pair;
     let mut command = CommandBuilder::new("cmd.exe");
     command.args(["/C", "echo FileTerm local && exit /B 7"]);
     let mut child = slave
         .spawn_command(command)
         .expect("cmd.exe should start in ConPTY");
+    eprintln!("conpty stage: child spawned");
     drop(slave);
 
+    eprintln!("conpty stage: clone reader");
     let mut reader = master
         .try_clone_reader()
         .expect("ConPTY reader should clone");
     let (output_tx, output_rx) = std::sync::mpsc::channel();
+    eprintln!("conpty stage: start reader");
     let reader_thread = std::thread::spawn(move || {
         let mut output = Vec::new();
         let mut buffer = [0_u8; 1024];
@@ -44,10 +50,12 @@ fn conpty_preserves_output_and_exit_status() {
     let writer = master
         .take_writer()
         .expect("ConPTY writer should be available");
+    eprintln!("conpty stage: drop writer");
     drop(writer);
     // Poll instead of calling wait() directly so a runner-level ConPTY
     // problem fails with a useful assertion rather than hanging the job.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    eprintln!("conpty stage: wait for child");
     let status = loop {
         if let Some(status) = child.try_wait().expect("cmd.exe status should be readable") {
             break status;
