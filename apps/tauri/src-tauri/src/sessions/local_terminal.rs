@@ -92,12 +92,134 @@ enum LocalPtyCommand {
 struct LocalOutputChunk {
     data: String,
     dropped_bytes_before: usize,
+    /// 丢帧期间被丢的数据里是否可能包含 alternate screen 切换序列。
+    /// renderer 可据此提示用户终端状态可能不一致（参考 Netcatty 的
+    /// droppedOutputMayAffectTerminalState 语义）。
+    dropped_alt_screen_change: bool,
 }
 
 #[derive(Default)]
 struct LocalOutputDropState {
     bytes: usize,
     logged: bool,
+    saw_alt_screen_change: bool,
+    alt_screen_scanner: AltScreenTransitionScanner,
+}
+
+#[derive(Default)]
+struct AltScreenTransitionScanner {
+    state: AltScreenScanState,
+}
+
+#[derive(Default)]
+enum AltScreenScanState {
+    #[default]
+    Ground,
+    Escape,
+    Csi {
+        params: Vec<u8>,
+        has_intermediate: bool,
+        overflowed: bool,
+    },
+}
+
+impl AltScreenTransitionScanner {
+    /// Scan a PTY chunk while retaining an incomplete CSI sequence for the next chunk.
+    fn observe(&mut self, data: &str) -> bool {
+        let mut found_transition = false;
+        for byte in data.bytes() {
+            let (state, transition) = match std::mem::take(&mut self.state) {
+                AltScreenScanState::Ground => {
+                    if byte == 0x1b {
+                        (AltScreenScanState::Escape, false)
+                    } else {
+                        (AltScreenScanState::Ground, false)
+                    }
+                }
+                AltScreenScanState::Escape => match byte {
+                    b'[' => (
+                        AltScreenScanState::Csi {
+                            params: Vec::new(),
+                            has_intermediate: false,
+                            overflowed: false,
+                        },
+                        false,
+                    ),
+                    0x1b => (AltScreenScanState::Escape, false),
+                    _ => (AltScreenScanState::Ground, false),
+                },
+                AltScreenScanState::Csi {
+                    mut params,
+                    mut has_intermediate,
+                    mut overflowed,
+                } => {
+                    if (0x30..=0x3f).contains(&byte) {
+                        if params.len() < 128 {
+                            params.push(byte);
+                        } else {
+                            overflowed = true;
+                        }
+                        (
+                            AltScreenScanState::Csi {
+                                params,
+                                has_intermediate,
+                                overflowed,
+                            },
+                            false,
+                        )
+                    } else if (0x20..=0x2f).contains(&byte) {
+                        has_intermediate = true;
+                        (
+                            AltScreenScanState::Csi {
+                                params,
+                                has_intermediate,
+                                overflowed,
+                            },
+                            false,
+                        )
+                    } else if (0x40..=0x7e).contains(&byte) {
+                        let transition = !overflowed
+                            && !has_intermediate
+                            && (byte == b'h' || byte == b'l')
+                            && alt_screen_params_match(&params);
+                        (AltScreenScanState::Ground, transition)
+                    } else if byte == 0x1b {
+                        (AltScreenScanState::Escape, false)
+                    } else {
+                        (AltScreenScanState::Ground, false)
+                    }
+                }
+            };
+            self.state = state;
+            found_transition |= transition;
+        }
+        found_transition
+    }
+
+    fn has_pending_sequence(&self) -> bool {
+        !matches!(&self.state, AltScreenScanState::Ground)
+    }
+}
+
+fn alt_screen_params_match(params: &[u8]) -> bool {
+    let params = if params.first() == Some(&b'?') {
+        &params[1..]
+    } else {
+        params
+    };
+    params.split(|byte| *byte == b';').any(|token| {
+        let token = std::str::from_utf8(token).unwrap_or("");
+        matches!(token, "47" | "1047" | "1049")
+    })
+}
+
+/// 检测数据里是否包含 DECSET/DECRST 风格的 alternate screen 切换序列。
+/// 这个无状态入口保留给单 chunk 场景和单元测试；真实 PTY reader 使用
+/// `AltScreenTransitionScanner`，以便处理 ANSI 序列跨 read 边界的情况。
+#[cfg(test)]
+fn scan_alt_screen_transition(data: &str) -> bool {
+    let mut scanner = AltScreenTransitionScanner::default();
+    scanner.observe(data)
 }
 
 const LOCAL_OSC7_BUFFER_LIMIT: usize = 16 * 1024;
@@ -460,18 +582,30 @@ fn queue_local_terminal_output(
         return false;
     }
 
+    // Feed every reader chunk into the scanner, not only chunks that are already
+    // being dropped. A CSI sequence can start in a successfully delivered chunk
+    // and finish after the output queue becomes full.
+    let alt_screen_transition = output_drop_state.alt_screen_scanner.observe(&chunk);
     let dropped_bytes_before = output_drop_state.bytes;
+    let dropped_alt_screen_change = output_drop_state.saw_alt_screen_change
+        || (dropped_bytes_before > 0 && alt_screen_transition);
     match output_tx.try_send(LocalOutputChunk {
         data: chunk.clone(),
         dropped_bytes_before,
+        dropped_alt_screen_change,
     }) {
         Ok(()) => {
             output_drop_state.bytes = 0;
             output_drop_state.logged = false;
+            output_drop_state.saw_alt_screen_change = false;
             true
         }
         Err(mpsc::error::TrySendError::Full(_)) => {
             output_drop_state.bytes = output_drop_state.bytes.saturating_add(chunk.len());
+            if alt_screen_transition || output_drop_state.alt_screen_scanner.has_pending_sequence()
+            {
+                output_drop_state.saw_alt_screen_change = true;
+            }
             if !output_drop_state.logged {
                 output_drop_state.logged = true;
                 crate::services::logging::session(
@@ -497,15 +631,18 @@ fn flush_local_output_drop_notice(
     }
 
     let dropped_bytes_before = output_drop_state.bytes;
+    let dropped_alt_screen_change = output_drop_state.saw_alt_screen_change;
     if output_tx
         .try_send(LocalOutputChunk {
             data: String::new(),
             dropped_bytes_before,
+            dropped_alt_screen_change,
         })
         .is_ok()
     {
         output_drop_state.bytes = 0;
         output_drop_state.logged = false;
+        output_drop_state.saw_alt_screen_change = false;
     }
 }
 
@@ -515,6 +652,9 @@ fn append_local_output_chunk(batch: &mut String, chunk: &LocalOutputChunk) {
             "\r\n[FileTerm: local terminal output dropped {} bytes while the renderer was busy]\r\n",
             chunk.dropped_bytes_before
         ));
+        if chunk.dropped_alt_screen_change {
+            batch.push_str("\r\n[FileTerm: dropped output may include alternate screen transitions; terminal state may be inconsistent — run `reset` or Ctrl+L to resync]\r\n");
+        }
     }
     batch.push_str(&chunk.data);
 }
@@ -797,7 +937,54 @@ fn clamp_u16(value: u32, fallback: u16) -> u16 {
 
 #[cfg(target_os = "windows")]
 fn default_shell() -> String {
-    "powershell.exe".to_string()
+    // 优先 PowerShell（Windows 默认），缺失时回退 cmd.exe。
+    // Server Core / 精简镜像可能没有 powershell.exe。
+    if shell_available_in_path("powershell.exe") {
+        "powershell.exe".to_string()
+    } else if shell_available_in_path("pwsh.exe") {
+        "pwsh.exe".to_string()
+    } else {
+        "cmd.exe".to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn shell_available_in_path(name: &str) -> bool {
+    use std::path::Path;
+
+    // 正常情况：PATH 里能找到。
+    if let Some(path_var) = env::var_os("PATH") {
+        if env::split_paths(&path_var).any(|dir| dir.join(name).is_file()) {
+            return true;
+        }
+    }
+
+    // Fallback：PATH 异常（如被清理过的服务进程）时，直接查 System32。
+    // Windows PowerShell 和 cmd.exe 在 System32；PowerShell 7 另查其标准安装目录。
+    let system32 = env::var_os("SystemRoot")
+        .map(Path::new)
+        .unwrap_or_else(|| Path::new(r"C:\Windows"))
+        .join("System32");
+    if system32.join(name).is_file() {
+        return true;
+    }
+
+    if name.eq_ignore_ascii_case("pwsh.exe") {
+        for variable in ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"] {
+            let Some(root) = env::var_os(variable) else {
+                continue;
+            };
+            let base = Path::new(&root).join("PowerShell");
+            if ["7", "7-preview"]
+                .into_iter()
+                .any(|version| base.join(version).join(name).is_file())
+            {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -922,6 +1109,17 @@ fn configure_shell_command(
     custom_env: &BTreeMap<String, String>,
 ) {
     let name = shell_name(shell);
+    let inject_default_zsh_prompt = name == "zsh"
+        && !custom_env.contains_key("PROMPT")
+        && !custom_env.contains_key("PS1")
+        && !has_non_empty_env("PROMPT")
+        && !has_non_empty_env("PS1");
+    if inject_default_zsh_prompt {
+        // The prompt uses command substitution to percent-encode the current
+        // directory for OSC 7. Enable it before user args so `-c`/`--` keep
+        // their normal meaning.
+        command.args(["-o", "promptsubst"]);
+    }
     if matches!(
         name.as_str(),
         "bash" | "dash" | "fish" | "ksh" | "mksh" | "sh" | "zsh"
@@ -933,6 +1131,15 @@ fn configure_shell_command(
     set_default_env(command, "TERM", "xterm-256color", custom_env);
     set_default_env(command, "COLORTERM", "truecolor", custom_env);
     set_default_env(command, "TERM_PROGRAM", "FileTerm", custom_env);
+
+    // bash 原生读取 PROMPT_COMMAND，每次显示 prompt 前执行。zsh 默认使用
+    // PROMPT；给它注入一个保持默认视觉样式的不可见 OSC 7 前缀。fish/sh 等
+    // 没有安全的环境变量 prompt hook，用户需要在 rc 文件里手动加 hook。
+    if name == "bash" {
+        inject_bash_osc7_prompt_command(command, custom_env);
+    } else if inject_default_zsh_prompt {
+        inject_zsh_osc7_prompt(command, custom_env);
+    }
 
     if !custom_env.contains_key("LANG")
         && !custom_env.contains_key("LC_ALL")
@@ -956,6 +1163,48 @@ fn configure_shell_command(
     }
 }
 
+#[cfg(not(target_os = "windows"))]
+fn inject_bash_osc7_prompt_command(
+    command: &mut CommandBuilder,
+    custom_env: &BTreeMap<String, String>,
+) {
+    // 用户显式传入 PROMPT_COMMAND 时不覆盖。
+    if custom_env.contains_key("PROMPT_COMMAND") {
+        return;
+    }
+
+    // PROMPT_COMMAND 在每次显示 prompt 前 emit 一次 OSC 7。将 `%` 先编码，
+    // 避免目录名中的字面量 `%20` 被后端误解为一个空格。
+    // 不使用 DEBUG trap：它会在每条简单命令（包括循环和子 shell）前产生
+    // 额外 PTY 输出，反而会放大高输出场景的丢帧压力。
+    const OSC7_HOOK: &str = "printf '\\033]7;file://%s\\007' \"${PWD//%/%25}\"";
+
+    let combined = match env::var("PROMPT_COMMAND")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        Some(existing) => format!("{OSC7_HOOK}; {existing}"),
+        None => OSC7_HOOK.to_string(),
+    };
+    command.env("PROMPT_COMMAND", combined);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn inject_zsh_osc7_prompt(command: &mut CommandBuilder, custom_env: &BTreeMap<String, String>) {
+    // 尊重用户显式提供的 prompt。没有自定义 prompt 时，使用 zsh 默认的
+    // `%m%# ` 样式，仅在其前面加入不占列宽的 OSC 7 CWD 标记。
+    if custom_env.contains_key("PROMPT")
+        || custom_env.contains_key("PS1")
+        || has_non_empty_env("PROMPT")
+        || has_non_empty_env("PS1")
+    {
+        return;
+    }
+
+    const ZSH_PROMPT: &str = "%{$(printf '\\033]7;file://%s\\007' \"${PWD//%/%25}\")%}%m%# ";
+    command.env("PROMPT", ZSH_PROMPT);
+}
+
 #[cfg(target_os = "windows")]
 fn configure_shell_command(
     command: &mut CommandBuilder,
@@ -972,14 +1221,23 @@ fn configure_shell_command(
         "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" => {
             command.args(["-NoLogo", "-NoExit"]);
             command.args(extra_args);
-            command.args([
-                "-Command",
-                "$utf8 = [System.Text.UTF8Encoding]::new($false); [Console]::InputEncoding = $utf8; [Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8",
-            ]);
+            // -Command / -CommandWithArgs / -File / -EncodedCommand 互斥：用户传了这些参数时
+            // 不再自动追加 UTF-8 setup，避免 PowerShell 因参数冲突直接报错。
+            // 用户需在自己的脚本/命令里设置 UTF-8 编码。
+            if !powershell_args_have_explicit_command(extra_args) {
+                command.args([
+                    "-Command",
+                    "$utf8 = [System.Text.UTF8Encoding]::new($false); [Console]::InputEncoding = $utf8; [Console]::OutputEncoding = $utf8; $OutputEncoding = $utf8",
+                ]);
+            }
         }
         "cmd" | "cmd.exe" => {
             command.args(extra_args);
-            command.args(["/K", "chcp 65001>nul"]);
+            // `/C` and `/K` consume the remaining command line. Appending our
+            // own `/K` after an explicit command changes the user's command.
+            if !cmd_args_have_explicit_command(extra_args) {
+                command.args(["/K", "chcp 65001>nul"]);
+            }
         }
         "bash" | "bash.exe" | "fish" | "fish.exe" | "zsh" | "zsh.exe" => {
             command.arg("--login");
@@ -989,6 +1247,34 @@ fn configure_shell_command(
             command.args(extra_args);
         }
     }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn powershell_args_have_explicit_command(extra_args: &[String]) -> bool {
+    // PowerShell 允许参数唯一前缀缩写，并把 `-c`、`-cwa`、`-f`、`-e`、`-ec`
+    // 作为 Command/CommandWithArgs/File/EncodedCommand 的短写。命中任何显式命令模式后，
+    // configure_shell_command 不再追加自己的 `-Command`。
+    // ConfigurationFile/ConfigurationName 只是会话配置参数，仍可与
+    // -Command 组合，不能把它们误判为命令模式。
+    const EXPLICIT_FLAGS: &[&str] = &["command", "commandwithargs", "file", "encodedcommand"];
+    const EXPLICIT_ALIASES: &[&str] = &["c", "cwa", "f", "e", "ec"];
+    extra_args.iter().any(|arg| {
+        let lower = arg.to_ascii_lowercase();
+        let Some(flag) = lower.strip_prefix('-') else {
+            return false;
+        };
+        !flag.is_empty()
+            && (EXPLICIT_ALIASES.contains(&flag)
+                || EXPLICIT_FLAGS.iter().any(|known| known.starts_with(flag)))
+    })
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn cmd_args_have_explicit_command(extra_args: &[String]) -> bool {
+    extra_args.iter().any(|arg| {
+        let lower = arg.to_ascii_lowercase();
+        matches!(lower.as_str(), "/c" | "/k")
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -1012,8 +1298,10 @@ mod tests {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
     use super::{
-        append_local_output_chunk, clamp_u16, configure_shell_command, default_launch,
-        local_shell_exit_summary, resolve_launch, run_pty_loop, shell_name, validate_launch,
+        append_local_output_chunk, clamp_u16, cmd_args_have_explicit_command,
+        configure_shell_command, default_launch, local_shell_exit_summary,
+        powershell_args_have_explicit_command, resolve_launch, run_pty_loop,
+        scan_alt_screen_transition, shell_name, validate_launch, AltScreenTransitionScanner,
         LocalOsc7CwdTracker, LocalOutputChunk, LocalProcessTree, LocalPtyCommand,
         LocalTerminalLaunch, LocalTerminalLaunchOptions, Utf8StreamDecoder,
     };
@@ -1175,11 +1463,148 @@ mod tests {
             &LocalOutputChunk {
                 data: "after".to_string(),
                 dropped_bytes_before: 42,
+                dropped_alt_screen_change: false,
             },
         );
 
         assert!(batch.starts_with("before\r\n[FileTerm: local terminal output dropped 42 bytes"));
         assert!(batch.ends_with("]\r\nafter"));
+    }
+
+    #[test]
+    fn local_output_drop_notice_flags_alt_screen_transitions() {
+        let mut batch = String::new();
+        append_local_output_chunk(
+            &mut batch,
+            &LocalOutputChunk {
+                data: "resumed".to_string(),
+                dropped_bytes_before: 100,
+                dropped_alt_screen_change: true,
+            },
+        );
+
+        assert!(batch.contains("dropped 100 bytes"));
+        assert!(batch.contains("alternate screen transitions"));
+        assert!(batch.contains("reset"));
+    }
+
+    #[test]
+    fn scan_alt_screen_transition_detects_common_modes() {
+        // 1049 是 vim/less/nano 最常用的 alt screen 切换
+        assert!(scan_alt_screen_transition("\x1b[?1049h"));
+        assert!(scan_alt_screen_transition("\x1b[?1049l"));
+        // 47 / 1047 是较早的 alt screen 实现
+        assert!(scan_alt_screen_transition("\x1b[?47h"));
+        assert!(scan_alt_screen_transition("\x1b[?1047l"));
+        // 组合模式（同时设置多个私有模式）
+        assert!(scan_alt_screen_transition("\x1b[?1;1049h"));
+        assert!(scan_alt_screen_transition("\x1b[?47;1049h"));
+    }
+
+    #[test]
+    fn scan_alt_screen_transition_ignores_unrelated_sequences() {
+        // 普通光标移动、颜色等不应触发
+        assert!(!scan_alt_screen_transition("\x1b[2J"));
+        assert!(!scan_alt_screen_transition("\x1b[H"));
+        assert!(!scan_alt_screen_transition("\x1b[31m"));
+        assert!(!scan_alt_screen_transition("\x1b[?25h")); // 光标可见，不是 alt screen
+        assert!(!scan_alt_screen_transition("\x1b[?2004h")); // bracketed paste
+        assert!(!scan_alt_screen_transition("plain text"));
+        assert!(!scan_alt_screen_transition(""));
+    }
+
+    #[test]
+    fn scan_alt_screen_transition_handles_split_sequences() {
+        let mut scanner = AltScreenTransitionScanner::default();
+        assert!(!scanner.observe("output\x1b"));
+        assert!(!scanner.observe("[?1049"));
+        assert!(scanner.observe("h"));
+    }
+
+    #[test]
+    fn scan_alt_screen_transition_handles_a_split_sequence_after_a_successful_chunk() {
+        let mut scanner = AltScreenTransitionScanner::default();
+        assert!(!scanner.observe("\x1b[?1049"));
+        assert!(scanner.has_pending_sequence());
+        assert!(scanner.observe("hrest"));
+        assert!(!scanner.has_pending_sequence());
+    }
+
+    #[test]
+    fn powershell_explicit_command_detection_accepts_abbreviations() {
+        // 完整形式
+        assert!(powershell_args_have_explicit_command(&[
+            "-Command".to_string(),
+            "Get-Date".to_string()
+        ]));
+        assert!(powershell_args_have_explicit_command(&[
+            "-File".to_string(),
+            "script.ps1".to_string()
+        ]));
+        assert!(powershell_args_have_explicit_command(&[
+            "-EncodedCommand".to_string()
+        ]));
+        // PowerShell 唯一前缀缩写
+        assert!(powershell_args_have_explicit_command(
+            &["-Comm".to_string()]
+        ));
+        assert!(powershell_args_have_explicit_command(&[
+            "-comma".to_string()
+        ]));
+        assert!(powershell_args_have_explicit_command(&["-fil".to_string()]));
+        assert!(powershell_args_have_explicit_command(&["-enc".to_string()]));
+        assert!(powershell_args_have_explicit_command(&[
+            "-CommandWithArgs".to_string()
+        ]));
+        assert!(powershell_args_have_explicit_command(&["-cwa".to_string()]));
+
+        // 官方短写
+        assert!(powershell_args_have_explicit_command(&["-c".to_string()]));
+        assert!(powershell_args_have_explicit_command(&["-f".to_string()]));
+        assert!(powershell_args_have_explicit_command(&["-e".to_string()]));
+        assert!(powershell_args_have_explicit_command(&["-ec".to_string()]));
+
+        // 大小写不敏感
+        assert!(powershell_args_have_explicit_command(&[
+            "-COMMAND".to_string()
+        ]));
+        assert!(powershell_args_have_explicit_command(
+            &["-File".to_string()]
+        ));
+    }
+
+    #[test]
+    fn powershell_explicit_command_detection_rejects_unrelated_args() {
+        // 无关参数
+        assert!(!powershell_args_have_explicit_command(&[
+            "-NoLogo".to_string()
+        ]));
+        assert!(!powershell_args_have_explicit_command(&[
+            "-NoExit".to_string()
+        ]));
+        assert!(!powershell_args_have_explicit_command(&[]));
+        // 非 flag 参数
+        assert!(!powershell_args_have_explicit_command(&[
+            "script.ps1".to_string()
+        ]));
+        // 形似但不匹配
+        assert!(!powershell_args_have_explicit_command(&[
+            "-NoCommand".to_string()
+        ]));
+        assert!(!powershell_args_have_explicit_command(&[
+            "-ConfigurationFile".to_string()
+        ]));
+        assert!(!powershell_args_have_explicit_command(&[
+            "-ConfigurationName".to_string()
+        ]));
+    }
+
+    #[test]
+    fn cmd_explicit_command_detection_preserves_user_command_modes() {
+        assert!(cmd_args_have_explicit_command(&["/c".to_string()]));
+        assert!(cmd_args_have_explicit_command(&["/K".to_string()]));
+        assert!(!cmd_args_have_explicit_command(&["/q".to_string()]));
+        assert!(!cmd_args_have_explicit_command(&[]));
     }
 
     #[test]
@@ -1216,10 +1641,11 @@ mod tests {
         let mut command = CommandBuilder::new("/bin/zsh");
         configure_shell_command(&mut command, "/bin/zsh", &[], &BTreeMap::new());
 
-        assert_eq!(
-            command.get_argv().get(1).and_then(|value| value.to_str()),
-            Some("-l")
-        );
+        let argv = command.get_argv();
+        assert!(argv.iter().any(|value| value.to_str() == Some("-l")));
+        assert!(argv.windows(2).any(|values| {
+            values[0].to_str() == Some("-o") && values[1].to_str() == Some("promptsubst")
+        }));
         assert_eq!(
             command.get_env("TERM").and_then(|value| value.to_str()),
             Some("xterm-256color")
@@ -1263,6 +1689,126 @@ mod tests {
                 .get_env("FILETERM_TEST")
                 .and_then(|value| value.to_str()),
             Some("present")
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn bash_gets_osc7_prompt_command_injection() {
+        let mut command = CommandBuilder::new("/bin/bash");
+        configure_shell_command(&mut command, "/bin/bash", &[], &BTreeMap::new());
+
+        let prompt_command = command
+            .get_env("PROMPT_COMMAND")
+            .and_then(|value| value.to_str())
+            .expect("bash should receive a PROMPT_COMMAND");
+        assert!(
+            prompt_command.contains("\\033]7;"),
+            "PROMPT_COMMAND should emit OSC 7: {prompt_command}"
+        );
+        assert!(
+            prompt_command.contains("${PWD//"),
+            "PROMPT_COMMAND should reference $PWD: {prompt_command}"
+        );
+        assert!(
+            prompt_command.contains("${PWD//%/%25}"),
+            "PROMPT_COMMAND should encode literal percent signs: {prompt_command}"
+        );
+        assert!(
+            !prompt_command.contains("trap") && !prompt_command.contains("DEBUG"),
+            "PROMPT_COMMAND should not install a high-frequency DEBUG trap: {prompt_command}"
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn explicit_prompt_command_is_not_overwritten_for_bash() {
+        let mut command = CommandBuilder::new("/bin/bash");
+        let mut environment = BTreeMap::new();
+        environment.insert("PROMPT_COMMAND".to_string(), "custom-hook".to_string());
+        for (name, value) in &environment {
+            command.env(name, value);
+        }
+        configure_shell_command(&mut command, "/bin/bash", &[], &environment);
+
+        assert_eq!(
+            command
+                .get_env("PROMPT_COMMAND")
+                .and_then(|value| value.to_str()),
+            Some("custom-hook")
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn zsh_gets_an_osc7_prompt_without_changing_default_prompt_style() {
+        let mut command = CommandBuilder::new("/bin/zsh");
+        configure_shell_command(&mut command, "/bin/zsh", &[], &BTreeMap::new());
+
+        let prompt = command
+            .get_env("PROMPT")
+            .and_then(|value| value.to_str())
+            .expect("zsh should receive a default-compatible PROMPT");
+        assert!(
+            prompt.contains("$(printf") && prompt.contains("${PWD//%/%25}"),
+            "zsh prompt should emit encoded OSC 7 with the current path: {prompt:?}"
+        );
+        assert!(
+            prompt.ends_with("%m%# "),
+            "zsh prompt should retain the default visual suffix: {prompt:?}"
+        );
+        assert!(command.get_argv().windows(2).any(|values| {
+            values[0].to_str() == Some("-o") && values[1].to_str() == Some("promptsubst")
+        }));
+        assert!(command.get_env("PROMPT_COMMAND").is_none());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn explicit_zsh_prompt_is_not_overwritten() {
+        let mut command = CommandBuilder::new("/bin/zsh");
+        let mut environment = BTreeMap::new();
+        environment.insert("PROMPT".to_string(), "custom-prompt".to_string());
+        for (name, value) in &environment {
+            command.env(name, value);
+        }
+        configure_shell_command(&mut command, "/bin/zsh", &[], &environment);
+
+        assert_eq!(
+            command.get_env("PROMPT").and_then(|value| value.to_str()),
+            Some("custom-prompt")
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn explicit_zsh_ps1_is_not_overwritten() {
+        let mut command = CommandBuilder::new("/bin/zsh");
+        let mut environment = BTreeMap::new();
+        environment.insert("PS1".to_string(), "custom-prompt".to_string());
+        for (name, value) in &environment {
+            command.env(name, value);
+        }
+        configure_shell_command(&mut command, "/bin/zsh", &[], &environment);
+
+        assert!(command.get_env("PROMPT").is_none());
+        assert_eq!(
+            command.get_env("PS1").and_then(|value| value.to_str()),
+            Some("custom-prompt")
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn zsh_prompt_uses_the_terminal_program_marker_for_rc_overrides() {
+        let mut command = CommandBuilder::new("/bin/zsh");
+        configure_shell_command(&mut command, "/bin/zsh", &[], &BTreeMap::new());
+
+        assert_eq!(
+            command
+                .get_env("TERM_PROGRAM")
+                .and_then(|value| value.to_str()),
+            Some("FileTerm")
         );
     }
 
@@ -1523,6 +2069,88 @@ mod tests {
         process_tree.terminate(child.as_mut());
         let status = child.wait().expect("terminated shell should be reapable");
         assert!(!status.success());
+    }
+
+    /// 验证进程组终止能收掉孙进程，而不只是直接子 shell。
+    /// 修复前实现依赖 portable_pty 的 forkpty 调了 setsid()，但测试没显式
+    /// 覆盖 grandchild，回归会漏掉。
+    #[cfg(unix)]
+    #[test]
+    fn local_process_tree_terminates_grandchild_process() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let pid_file = std::env::temp_dir().join(format!(
+            "fileterm-grandchild-{}-{}.pid",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_file(&pid_file);
+
+        // 启动一个后台 sleep（grandchild），把 pid 写到文件，shell wait 它。
+        let script = format!(
+            "sleep 30 &\necho $! > {pid_file}\nwait\n",
+            pid_file = pid_file.display()
+        );
+
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("local PTY should open in the test environment");
+        let portable_pty::PtyPair { master: _, slave } = pair;
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.args(["-c", &script]);
+        let mut child = slave
+            .spawn_command(command)
+            .expect("local shell should start in a PTY");
+        let process_tree = LocalProcessTree::attach(child.as_ref());
+
+        // 等 grandchild pid 落盘
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let grandchild_pid = loop {
+            if let Ok(content) = fs::read_to_string(&pid_file) {
+                if let Ok(pid) = content.trim().parse::<libc::pid_t>() {
+                    if pid > 0 {
+                        break pid;
+                    }
+                }
+            }
+            if std::time::Instant::now() > deadline {
+                let _ = fs::remove_file(&pid_file);
+                panic!("grandchild pid was not recorded in time");
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        };
+
+        process_tree.terminate(child.as_mut());
+        child.wait().expect("terminated shell should be reapable");
+
+        // 给 SIGHUP/SIGKILL 时间生效，并容忍 init 回收孤儿的延迟。
+        // kill -0 对僵尸进程也返回 0，所以需要轮询直到进程真正消失，
+        // 避免 CI 高负载下 init 回收慢导致误报。
+        let mut still_alive = true;
+        for attempt in 0..15 {
+            if unsafe { libc::kill(grandchild_pid, 0) != 0 } {
+                still_alive = false;
+                break;
+            }
+            if attempt < 14 {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        let _ = fs::remove_file(&pid_file);
+        assert!(
+            !still_alive,
+            "grandchild (pid={grandchild_pid}) survived process tree termination after 1.5s"
+        );
     }
 
     #[cfg(windows)]
