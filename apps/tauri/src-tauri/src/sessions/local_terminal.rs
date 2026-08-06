@@ -951,7 +951,7 @@ fn default_shell() -> String {
 
 #[cfg(target_os = "windows")]
 fn shell_available_in_path(name: &str) -> bool {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     // 正常情况：PATH 里能找到。
     if let Some(path_var) = env::var_os("PATH") {
@@ -963,8 +963,8 @@ fn shell_available_in_path(name: &str) -> bool {
     // Fallback：PATH 异常（如被清理过的服务进程）时，直接查 System32。
     // Windows PowerShell 和 cmd.exe 在 System32；PowerShell 7 另查其标准安装目录。
     let system32 = env::var_os("SystemRoot")
-        .map(|root| Path::new(root.as_os_str()))
-        .unwrap_or_else(|| Path::new(r"C:\Windows"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
         .join("System32");
     if system32.join(name).is_file() {
         return true;
