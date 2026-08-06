@@ -1,0 +1,8 @@
+[package]
+name = "fileterm-tauri-local-pty"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+portable-pty = "0.9"
