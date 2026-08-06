@@ -28,7 +28,7 @@ fn conpty_preserves_output_and_exit_status() {
         .try_clone_reader()
         .expect("ConPTY reader should clone");
     let (output_tx, output_rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
+    let reader_thread = std::thread::spawn(move || {
         let mut output = Vec::new();
         let mut buffer = [0_u8; 1024];
         loop {
@@ -46,9 +46,16 @@ fn conpty_preserves_output_and_exit_status() {
         .expect("ConPTY writer should be available");
     drop(writer);
     let status = child.wait().expect("cmd.exe should exit");
+    // Closing the master is required for ConPTY's cloned reader to observe
+    // EOF after the child exits. Keep this explicit so the fixture cannot
+    // leave the workflow waiting on a live pseudo-console handle.
+    drop(master);
     let output = output_rx
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("ConPTY reader should finish after shell exit");
+    reader_thread
+        .join()
+        .expect("ConPTY reader thread should finish after shell exit");
 
     assert!(String::from_utf8_lossy(&output).contains("FileTerm local"));
     assert_eq!(status.exit_code(), 7);
