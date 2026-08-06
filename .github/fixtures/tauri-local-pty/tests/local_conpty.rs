@@ -35,6 +35,13 @@ fn conpty_preserves_output_and_exit_status() {
     let mut reader = master
         .try_clone_reader()
         .expect("ConPTY reader should clone");
+    let (output_tx, output_rx) = std::sync::mpsc::channel();
+    eprintln!("conpty stage: start reader");
+    let reader_thread = std::thread::spawn(move || {
+        let mut output = [0_u8; 4096];
+        let result = reader.read(&mut output).map(|size| output[..size].to_vec());
+        let _ = output_tx.send(result);
+    });
 
     let writer = master
         .take_writer()
@@ -52,20 +59,25 @@ fn conpty_preserves_output_and_exit_status() {
         if std::time::Instant::now() >= deadline {
             let _ = child.kill();
             drop(master);
-            panic!("cmd.exe did not exit within the ConPTY test timeout");
+            eprintln!("cmd.exe did not exit within the ConPTY test timeout");
+            std::process::exit(1);
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
-    // The child has already exited, so its short output is available without
-    // waiting for ConPTY EOF. Some Windows runners do not produce EOF on the
-    // cloned pipe until the pseudo-console is closed, and waiting for EOF here
-    // would turn a successful command into a test hang.
-    let mut output = [0_u8; 1024];
-    let output_size = reader
-        .read(&mut output)
-        .expect("ConPTY reader should return shell output");
+    let output = match output_rx.recv_timeout(std::time::Duration::from_secs(2)) {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => panic!("ConPTY reader failed: {error}"),
+        Err(_) => {
+            let _ = child.kill();
+            eprintln!("ConPTY reader did not produce output within the test timeout");
+            std::process::exit(1);
+        }
+    };
+    reader_thread
+        .join()
+        .expect("ConPTY reader thread should finish after one output frame");
     drop(master);
 
-    assert!(String::from_utf8_lossy(&output[..output_size]).contains("FileTerm local"));
+    assert!(String::from_utf8_lossy(&output).contains("FileTerm local"));
     assert_eq!(status.exit_code(), 0);
 }
