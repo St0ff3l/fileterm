@@ -95,6 +95,10 @@ jobs:
         working-directory: apps/tauri/src-tauri
         run: cargo check --locked --all-targets
 
+      - name: Exercise local PTY lifecycle
+        working-directory: apps/tauri/src-tauri
+        run: cargo test sessions::local_terminal::tests --locked -- --test-threads=1
+
       - name: Verify direct Telnet socket release
         if: runner.os != 'Windows'
         working-directory: apps/tauri/src-tauri

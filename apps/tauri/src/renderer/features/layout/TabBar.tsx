@@ -15,6 +15,10 @@ export type TabContextTarget =
   | { kind: 'local'; id: string; title: string }
   | { kind: 'session'; id: string; title: string; status: WorkspaceTab['status'] }
 
+function getSessionTabTitle(tab: WorkspaceTab) {
+  return tab.sessionType === 'local' ? t.localTerminal : tab.title
+}
+
 export interface TabBarProps {
   activeHomeTabId: string | null
   activeSessionTabId: string | null
@@ -171,7 +175,7 @@ export function TabBar({
                   onOpenTabContext(event, {
                     kind: 'session',
                     id: entry.tab.id,
-                    title: entry.tab.title,
+                    title: getSessionTabTitle(entry.tab),
                     status: entry.tab.status
                   })
                 }}
@@ -186,10 +190,10 @@ export function TabBar({
                 tabIndex={0}
               >
                 <span>{index + 1}</span>
-                <strong>{entry.tab.title}</strong>
+                <strong>{getSessionTabTitle(entry.tab)}</strong>
                 <span className={`tab-dot ${tabStatusClass(entry.tab.status)}`} />
                 <CloseButton
-                  aria-label={`${t.closeTab} ${entry.tab.title}`}
+                  aria-label={`${t.closeTab} ${getSessionTabTitle(entry.tab)}`}
                   onClick={(event) => onCloseSessionTab(event, entry.tab.id)}
                   size="tab"
                 />

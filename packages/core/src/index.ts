@@ -3,6 +3,18 @@ export type SessionType = 'ssh' | 'ftp' | 'telnet' | 'serial'
 /** Runtime workspace sessions may also be a local shell; connection profiles never are. */
 export type WorkspaceSessionType = SessionType | 'local'
 
+/** Optional launch overrides for an isolated local PTY tab. */
+export interface LocalTerminalLaunchOptions {
+  /** Shell executable name or absolute path. Defaults to the platform shell. */
+  shell?: string
+  /** Initial working directory. Defaults to the current user's home directory. */
+  cwd?: string
+  /** Additional shell options. These are not persisted in a connection profile. */
+  args?: string[]
+  /** Environment overrides applied only to the new local PTY process. */
+  env?: Record<string, string>
+}
+
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
@@ -1161,7 +1173,7 @@ export interface FileTermDesktopApi {
     mode: 'user' | 'root',
     options?: RemoteFileAccessOptions
   ): Promise<WorkspaceSnapshot>
-  openLocalTerminal(): Promise<WorkspaceSnapshot>
+  openLocalTerminal(options?: LocalTerminalLaunchOptions): Promise<WorkspaceSnapshot>
   writeTerminal(tabId: string, data: string): Promise<void>
   resizeTerminal(tabId: string, cols: number, rows: number, width: number, height: number): Promise<void>
   openRemotePath(tabId: string, targetPath: string): Promise<WorkspaceSnapshot>
