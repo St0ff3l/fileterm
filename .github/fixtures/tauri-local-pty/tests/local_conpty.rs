@@ -45,11 +45,23 @@ fn conpty_preserves_output_and_exit_status() {
         .take_writer()
         .expect("ConPTY writer should be available");
     drop(writer);
-    // Closing the master is required for ConPTY's cloned reader to observe
-    // EOF and for cmd.exe to observe that its pseudo-console is gone. Close
-    // it before waiting so the fixture cannot wait on a live console handle.
+    // Poll instead of calling wait() directly so a runner-level ConPTY
+    // problem fails with a useful assertion rather than hanging the job.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("cmd.exe status should be readable") {
+            break status;
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            panic!("cmd.exe did not exit within the ConPTY test timeout");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    };
+    // portable-pty's ConPTY implementation expects the master to stay alive
+    // until the child has exited; dropping it now lets the cloned reader see
+    // EOF and releases the pseudo-console handles.
     drop(master);
-    let status = child.wait().expect("cmd.exe should exit");
     let output = output_rx
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("ConPTY reader should finish after shell exit");

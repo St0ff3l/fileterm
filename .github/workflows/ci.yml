@@ -100,10 +100,10 @@ jobs:
         working-directory: apps/tauri/src-tauri
         run: cargo test sessions::local_terminal::tests --locked -- --test-threads=1
 
-      - name: Compile local ConPTY fixture without desktop runtime DLLs
+      - name: Exercise local ConPTY lifecycle without desktop runtime DLLs
         if: runner.os == 'Windows'
         timeout-minutes: 5
-        run: cargo test --manifest-path .github/fixtures/tauri-local-pty/Cargo.toml --locked --no-run
+        run: cargo test --manifest-path .github/fixtures/tauri-local-pty/Cargo.toml --locked
 
       - name: Verify direct Telnet socket release
         if: runner.os != 'Windows'
