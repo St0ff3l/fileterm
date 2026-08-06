@@ -267,6 +267,7 @@ export function WorkspaceStage({
       <LocalTerminalWorkspace
         activeSession={activeSession}
         activeTab={activeTab}
+        onCloseTab={onCloseTab}
         onRestart={() => onReconnectLocalTerminal(activeTab.id)}
       />
     )

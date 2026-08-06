@@ -7,11 +7,13 @@ import { LocalTerminalFrame } from './LocalTerminalFrame'
 export function LocalTerminalWorkspace({
   activeTab,
   activeSession,
-  onRestart
+  onRestart,
+  onCloseTab
 }: {
   activeTab: WorkspaceTab
   activeSession: SessionSnapshot
   onRestart(): Promise<void>
+  onCloseTab(): void
 }) {
   return (
     <section className="local-terminal-workspace" aria-label={t.localTerminal}>
@@ -22,6 +24,7 @@ export function LocalTerminalWorkspace({
           connected={activeSession.connected}
           connecting={activeTab.status === 'connecting'}
           onReconnect={onRestart}
+          onCloseTab={onCloseTab}
           reconnectHint={t.pressEnterToRestartLocalTerminal}
           tabId={activeTab.id}
         />
