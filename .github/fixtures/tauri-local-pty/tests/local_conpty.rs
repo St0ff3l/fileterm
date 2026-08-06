@@ -45,11 +45,11 @@ fn conpty_preserves_output_and_exit_status() {
         .take_writer()
         .expect("ConPTY writer should be available");
     drop(writer);
-    let status = child.wait().expect("cmd.exe should exit");
     // Closing the master is required for ConPTY's cloned reader to observe
-    // EOF after the child exits. Keep this explicit so the fixture cannot
-    // leave the workflow waiting on a live pseudo-console handle.
+    // EOF and for cmd.exe to observe that its pseudo-console is gone. Close
+    // it before waiting so the fixture cannot wait on a live console handle.
     drop(master);
+    let status = child.wait().expect("cmd.exe should exit");
     let output = output_rx
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("ConPTY reader should finish after shell exit");

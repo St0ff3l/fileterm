@@ -102,6 +102,7 @@ jobs:
 
       - name: Exercise local ConPTY lifecycle without desktop runtime DLLs
         if: runner.os == 'Windows'
+        timeout-minutes: 5
         run: cargo test --manifest-path .github/fixtures/tauri-local-pty/Cargo.toml --locked
 
       - name: Verify direct Telnet socket release
