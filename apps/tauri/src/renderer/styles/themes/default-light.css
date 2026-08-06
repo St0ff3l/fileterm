@@ -207,6 +207,10 @@
   border-radius: 0 !important;
 }
 
+:root[data-theme='default-light'] .local-terminal-frame {
+  background: rgb(255, 255, 255);
+}
+
 :root[data-theme='default-light'] .terminal-find {
   border: 1px solid transparent;
   background: var(--bg-card);
@@ -495,7 +499,7 @@
   background: transparent !important;
   border: none !important;
   color: var(--text-soft) !important;
-  height: 47px !important;
+  height: 28px !important;
   transition:
     background-color 0.2s,
     color 0.2s;
@@ -854,6 +858,14 @@
 :root[data-theme='default-light'] .system-table tbody tr:nth-child(even),
 :root[data-theme='default-light'] .fs-file-table tbody tr:nth-child(even) {
   background: #f6f7f9;
+}
+
+/* Keep file selection and hover states above the alternating row backgrounds. */
+:root[data-theme='default-light'] .fs-file-table tbody tr:hover,
+:root[data-theme='default-light'] .fs-file-table tbody tr.is-selected,
+:root[data-theme='default-light'] .fs-file-table tbody tr.is-selected:nth-child(even) {
+  background: var(--selection-bg) !important;
+  color: var(--text-main);
 }
 
 :root[data-theme='default-light'] .file-icon,

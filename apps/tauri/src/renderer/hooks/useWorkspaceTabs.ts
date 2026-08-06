@@ -91,6 +91,10 @@ function formatSystemInfoTabTitle(sourceTabTitle: string) {
   return `${t.systemInfoTabTitle} · ${sourceTabTitle || t.untitledTab}`
 }
 
+function formatSessionTabTitle(tab: WorkspaceTab) {
+  return tab.sessionType === 'local' ? t.localTerminal : tab.title
+}
+
 function areStringArraysEqual(left: string[], right: string[]) {
   if (left === right) {
     return true
@@ -1239,7 +1243,7 @@ export function useWorkspaceTabs({
     if (isTabActivelyConnected(targetTab)) {
       setShortcutCloseConfirm({
         tabId,
-        title: targetTab?.title ?? '',
+        title: targetTab ? formatSessionTabTitle(targetTab) : '',
         variant: targetTab?.status === 'connecting' ? 'connecting' : 'active-session'
       })
       return
@@ -1377,7 +1381,7 @@ export function useWorkspaceTabs({
       if (needsDisconnectConfirm) {
         setShortcutCloseConfirm({
           tabId: activeSessionTab.id,
-          title: activeSessionTab.title,
+          title: formatSessionTabTitle(activeSessionTab),
           variant:
             activeSessionTab.status === 'connecting'
               ? 'connecting'

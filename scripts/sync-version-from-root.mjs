@@ -78,12 +78,27 @@ function updateTauriConfigVersion(raw) {
 }
 
 function updateLinuxMetainfoVersion(raw) {
-  const today = new Date().toISOString().slice(0, 10)
-  const releasePattern = /<release\s+version="[^"]*"\s+date="[^"]*">/
-  if (!releasePattern.test(raw)) {
-    return raw.replace(/<release\s+version="[^"]*"/, `<release version="${nextVersion}"`)
+  // 只在版本号真正变化时才更新 date，避免每次 sync:version 都把 date 改成当天。
+  // AppStream 规范要求 date 反映该版本的发布日期，不是同步日期。
+  const releaseWithDatePattern = /<release\s+version="([^"]*)"\s+date="([^"]*)">/
+  const match = releaseWithDatePattern.exec(raw)
+  if (match) {
+    const [, currentVersion] = match
+    if (currentVersion === nextVersion) {
+      // 版本号未变，保留原 date
+      return raw
+    }
+    // 版本号变化，更新 version 和 date
+    const today = new Date().toISOString().slice(0, 10)
+    return raw.replace(releaseWithDatePattern, `<release version="${nextVersion}" date="${today}">`)
   }
-  return raw.replace(releasePattern, `<release version="${nextVersion}" date="${today}">`)
+  // 没有 date 属性的旧格式，补上 version 和 date
+  const today = new Date().toISOString().slice(0, 10)
+  if (/<release\s+version="[^"]*"/.test(raw)) {
+    return raw.replace(/<release\s+version="[^"]*"/, `<release version="${nextVersion}" date="${today}"`)
+  }
+  // 完全没有 release 标签，原样返回（不应发生）
+  return raw
 }
 
 await Promise.all(

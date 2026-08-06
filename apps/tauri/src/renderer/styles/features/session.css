@@ -37,6 +37,16 @@
   background: rgb(36, 36, 36);
 }
 
+.local-terminal-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0 var(--local-terminal-frame-size) var(--local-terminal-frame-size);
+  border-inline: 1px solid var(--terminal-right-frame-accent);
+  border-bottom: 1px solid var(--terminal-right-frame-accent);
+  pointer-events: none;
+  z-index: 6;
+}
+
 .local-terminal-surface {
   display: grid;
   position: relative;

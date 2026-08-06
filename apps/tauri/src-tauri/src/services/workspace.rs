@@ -2,7 +2,7 @@ use crate::services::transfers::TransferTask;
 use crate::sessions::WorkerCmd;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tauri::ipc::Channel;
@@ -14,6 +14,42 @@ pub struct TransferRunHandle {
     pub generation: u64,
     pub cancel: CancellationToken,
     pub settled: watch::Receiver<bool>,
+}
+
+/// Coordinates output from one local PTY runtime with shutdown/reconnect.
+///
+/// The reader runs on a native thread while reconnect and close are async
+/// commands. Keeping an async lock around the final output publication lets a
+/// shutdown wait briefly for an in-flight chunk, then deactivate the old
+/// runtime before a replacement shell is installed for the same tab.
+pub struct LocalTerminalRuntimeGate {
+    pub(crate) active: AtomicBool,
+    pub(crate) emit_lock: Mutex<()>,
+}
+
+impl LocalTerminalRuntimeGate {
+    pub fn new() -> Self {
+        Self {
+            active: AtomicBool::new(true),
+            emit_lock: Mutex::new(()),
+        }
+    }
+
+    pub async fn deactivate(&self) {
+        // Flip the fast-path first so a reader that wakes while shutdown is
+        // waiting cannot enqueue another chunk. The short lock wait lets an
+        // already-publishing chunk finish in the normal case, but a stalled
+        // renderer channel must never make close/reconnect hang forever.
+        self.active.store(false, Ordering::Release);
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(250), self.emit_lock.lock())
+            .await;
+    }
+}
+
+impl Default for LocalTerminalRuntimeGate {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TransferRunHandle {
@@ -374,6 +410,15 @@ pub struct WorkspaceState {
     /// Identifies the live local PTY for each local tab. Native-thread cleanup
     /// must never remove a newer shell restarted in the same tab.
     pub local_terminal_runtime_ids: Arc<RwLock<HashMap<String, String>>>,
+    /// Gates terminal output from each local PTY runtime. The gate is separate
+    /// from the id map so a stale reader can be stopped before a replacement
+    /// runtime is allowed to publish output for the same tab.
+    pub local_terminal_runtime_gates: Arc<RwLock<HashMap<String, Arc<LocalTerminalRuntimeGate>>>>,
+    /// One-shot launch configuration retained only for the lifetime of a local
+    /// tab. It is needed when that tab is reconnected, but must never be part
+    /// of the renderer snapshot or persisted connection profiles.
+    pub local_terminal_launches:
+        Arc<RwLock<HashMap<String, crate::sessions::local_terminal::LocalTerminalLaunch>>>,
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions: Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
@@ -434,6 +479,8 @@ impl Default for WorkspaceState {
             terminal_output_channels: Arc::new(StdMutex::new(HashMap::new())),
             worker_controls: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_runtime_ids: Arc::new(RwLock::new(HashMap::new())),
+            local_terminal_runtime_gates: Arc::new(RwLock::new(HashMap::new())),
+            local_terminal_launches: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
             pending_mcp_approvals: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),

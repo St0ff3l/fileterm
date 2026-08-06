@@ -4,6 +4,7 @@ use crate::AppError;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 use std::time::Duration;
 use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
 use tokio::sync::{mpsc, oneshot};
@@ -1502,6 +1503,7 @@ fn start_session_worker(
 }
 
 async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState, tab_id: &str) {
+    crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
     if let Some(control) = state.worker_controls.write().await.remove(tab_id) {
         // Cancel first: a command sender cannot wake a worker which is inside
         // an SSH read/metrics parse. This also prevents a stale worker from
@@ -1539,6 +1541,18 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     for control in controls {
         control.cancel();
     }
+    state.local_terminal_runtime_ids.write().await.clear();
+    let local_gates = state
+        .local_terminal_runtime_gates
+        .write()
+        .await
+        .drain()
+        .map(|(_, gate)| gate)
+        .collect::<Vec<_>>();
+    for gate in local_gates {
+        gate.deactivate().await;
+    }
+    state.local_terminal_launches.write().await.clear();
     state.terminal_inputs.write().await.clear();
     let senders = state
         .workers
@@ -1681,9 +1695,9 @@ async fn spawn_session_for_profile(
 async fn spawn_local_terminal_tab(
     app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
+    launch: crate::sessions::local_terminal::LocalTerminalLaunch,
 ) -> String {
     let tab_id = format!("local-{}", uuid::Uuid::new_v4());
-    let launch = crate::sessions::local_terminal::default_launch();
     let capabilities =
         crate::services::workspace::ConnectionCapabilities::for_session_type("local");
 
@@ -1760,6 +1774,7 @@ async fn start_local_terminal_for_tab(
     let (terminal_input_tx, terminal_input_rx) = mpsc::unbounded_channel();
     let worker_control = CancellationToken::new();
     let runtime_id = uuid::Uuid::new_v4().to_string();
+    let runtime_gate = Arc::new(crate::services::workspace::LocalTerminalRuntimeGate::new());
     state
         .workers
         .write()
@@ -1780,6 +1795,16 @@ async fn start_local_terminal_for_tab(
         .write()
         .await
         .insert(tab_id.to_string(), runtime_id.clone());
+    state
+        .local_terminal_runtime_gates
+        .write()
+        .await
+        .insert(tab_id.to_string(), runtime_gate.clone());
+    state
+        .local_terminal_launches
+        .write()
+        .await
+        .insert(tab_id.to_string(), launch.clone());
 
     if let Err(error) = crate::sessions::local_terminal::start_local_terminal_worker(
         tab_id.to_string(),
@@ -1789,6 +1814,7 @@ async fn start_local_terminal_for_tab(
         app.clone(),
         worker_control,
         launch,
+        runtime_gate,
     ) {
         state.workers.write().await.remove(tab_id);
         state.terminal_inputs.write().await.remove(tab_id);
@@ -1798,6 +1824,7 @@ async fn start_local_terminal_for_tab(
             .write()
             .await
             .remove(tab_id);
+        crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
         return Err(error);
     }
 
@@ -2288,7 +2315,22 @@ pub async fn app_reconnect_tab(
                 }
             }
 
-            let launch = crate::sessions::local_terminal::default_launch();
+            let mut launch = state
+                .local_terminal_launches
+                .read()
+                .await
+                .get(&tab_id)
+                .cloned()
+                .unwrap_or_else(crate::sessions::local_terminal::default_launch);
+            if let Some(cwd) = state
+                .sessions
+                .read()
+                .await
+                .get(&tab_id)
+                .and_then(|session| session.shell_cwd.clone())
+            {
+                launch.cwd = cwd;
+            }
             match start_local_terminal_for_tab(&app, &state, &tab_id, launch).await {
                 Ok(()) => {
                     crate::sessions::terminal::set_terminal_state(
@@ -2559,6 +2601,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
             tabs.retain(|t| t.id != tab_id);
             let mut sessions = state.sessions.write().await;
             sessions.remove(&tab_id);
+            state.local_terminal_launches.write().await.remove(&tab_id);
             let mut active_panes = state.active_pane_tab_id_by_root.write().await;
             if let Some(root_tab) = tabs.get(root_idx) {
                 if root_tab.pane_root.is_none() {
@@ -2606,6 +2649,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
             let mut sessions = state.sessions.write().await;
             for id in &all_ids_to_close {
                 sessions.remove(id);
+                state.local_terminal_launches.write().await.remove(id);
             }
             let mut active_panes = state.active_pane_tab_id_by_root.write().await;
             active_panes.remove(&tab_id);
@@ -2616,14 +2660,22 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
 }
 
 #[tauri::command]
-pub async fn app_open_local_terminal(app: AppHandle) -> Result<serde_json::Value, AppError> {
+pub async fn app_open_local_terminal(
+    app: AppHandle,
+    options: Option<crate::sessions::local_terminal::LocalTerminalLaunchOptions>,
+) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let tab_id = spawn_local_terminal_tab(&app, &state).await;
+    let launch =
+        crate::sessions::local_terminal::resolve_launch(options).map_err(AppError::Command)?;
+    let tab_id = spawn_local_terminal_tab(&app, &state, launch).await;
     {
         let mut active = state.active_tab_id.write().await;
         *active = Some(tab_id);
     }
-    get_workspace_snapshot_and_emit(&app).await
+    // The renderer replaces the active home tab with the returned session in
+    // the same turn. Emitting here races that replacement and briefly exposes
+    // the new session as an additional tab before the old placeholder closes.
+    get_workspace_snapshot(app).await
 }
 
 #[tauri::command]
@@ -2692,6 +2744,27 @@ pub async fn app_set_follow_shell_cwd(
     enabled: bool,
 ) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let is_local_terminal = state
+        .tabs
+        .read()
+        .await
+        .iter()
+        .any(|tab| tab.id == tab_id && tab.session_type == "local");
+    if is_local_terminal {
+        {
+            let mut sessions = state.sessions.write().await;
+            if let Some(session) = sessions.get_mut(&tab_id) {
+                session.follow_shell_cwd = enabled;
+                if enabled {
+                    if let Some(cwd) = session.shell_cwd.clone() {
+                        session.remote_path = cwd;
+                    }
+                }
+            }
+        }
+        return get_workspace_snapshot(app).await;
+    }
+
     let cwd_to_follow = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&tab_id) {

@@ -1,3 +1,5 @@
+use std::sync::{atomic::Ordering, Arc};
+
 use tauri::{AppHandle, Emitter, Manager};
 
 pub fn decode_terminal(bytes: &[u8], encoding: &str) -> String {
@@ -49,6 +51,95 @@ pub async fn emit_terminal_data(app: &AppHandle, tab_id: &str, chunk: &str) {
         session.terminal_transcript.push_str(chunk);
         truncate_transcript(&mut session.terminal_transcript);
     }
+}
+
+/// Publish local PTY output only while its runtime is still the owner of the
+/// tab. The gate also serializes the final output chunk with shutdown so an old
+/// reader cannot publish after a reconnect has installed a new shell.
+pub async fn emit_local_terminal_data(
+    app: &AppHandle,
+    tab_id: &str,
+    runtime_id: &str,
+    gate: &Arc<crate::services::workspace::LocalTerminalRuntimeGate>,
+    chunk: &str,
+) -> bool {
+    if chunk.is_empty() {
+        return true;
+    }
+
+    let _emit_guard = gate.emit_lock.lock().await;
+    if !gate.active.load(Ordering::Acquire) {
+        return false;
+    }
+
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let owns_runtime = state
+        .local_terminal_runtime_ids
+        .read()
+        .await
+        .get(tab_id)
+        .is_some_and(|current_id| current_id == runtime_id);
+    if !owns_runtime {
+        return false;
+    }
+
+    state.publish_terminal_output(tab_id, chunk);
+    let mut sessions = state.sessions.write().await;
+    if let Some(session) = sessions.get_mut(tab_id) {
+        session.terminal_transcript.push_str(chunk);
+        truncate_transcript(&mut session.terminal_transcript);
+    }
+    true
+}
+
+/// Store an OSC 7 working-directory update from a local PTY without exposing
+/// the launch environment. The local tab currently has no remote file pane,
+/// so this is metadata-only; a future local file pane can opt into the same
+/// `follow_shell_cwd` behavior used by SSH sessions.
+pub async fn update_local_terminal_cwd(
+    app: &AppHandle,
+    tab_id: &str,
+    runtime_id: &str,
+    gate: &Arc<crate::services::workspace::LocalTerminalRuntimeGate>,
+    cwd: String,
+) -> bool {
+    let _emit_guard = gate.emit_lock.lock().await;
+    if !gate.active.load(Ordering::Acquire) {
+        return false;
+    }
+
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let owns_runtime = state
+        .local_terminal_runtime_ids
+        .read()
+        .await
+        .get(tab_id)
+        .is_some_and(|current_id| current_id == runtime_id);
+    if !owns_runtime {
+        return false;
+    }
+
+    let changed = {
+        let mut sessions = state.sessions.write().await;
+        let Some(session) = sessions.get_mut(tab_id) else {
+            return false;
+        };
+        if session.shell_cwd.as_deref() == Some(cwd.as_str()) {
+            false
+        } else {
+            session.shell_cwd = Some(cwd.clone());
+            if session.follow_shell_cwd {
+                session.remote_path = cwd;
+            }
+            true
+        }
+    };
+    if changed {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
+    }
+    true
 }
 
 pub async fn set_terminal_state(

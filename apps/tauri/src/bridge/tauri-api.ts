@@ -35,6 +35,7 @@ import type {
   CommandExecutionResult,
   TerminalZoomOperation,
   McpApprovalRequest,
+  LocalTerminalLaunchOptions,
   UiPreferences,
   UiPreferencesInput
 } from '@fileterm/core'
@@ -468,7 +469,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     setPaneWeights: (rootTabId: string, panePath: number[], weights: number[]) =>
       invoke<WorkspaceSnapshot>('app_set_pane_weights', { rootTabId, panePath, weights }),
 
-    openLocalTerminal: () => invoke<WorkspaceSnapshot>('app_open_local_terminal'),
+    openLocalTerminal: (options?: LocalTerminalLaunchOptions) =>
+      invoke<WorkspaceSnapshot>('app_open_local_terminal', { options: options ?? null }),
     writeTerminal: (tabId: string, data: string) => invoke<void>('app_write_terminal', { tabId, data }),
     resizeTerminal: (tabId: string, cols: number, rows: number, width: number, height: number) =>
       invoke<void>('app_resize_terminal', { tabId, cols, rows, width, height }),
