@@ -56,15 +56,16 @@ fn conpty_preserves_output_and_exit_status() {
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
-    // portable-pty's ConPTY implementation expects the master to stay alive
-    // until the child has exited; dropping it now lets the cloned reader see
-    // EOF and releases the pseudo-console handles.
+    // The child has already exited, so its short output is available without
+    // waiting for ConPTY EOF. Some Windows runners do not produce EOF on the
+    // cloned pipe until the pseudo-console is closed, and waiting for EOF here
+    // would turn a successful command into a test hang.
+    let mut output = [0_u8; 1024];
+    let output_size = reader
+        .read(&mut output)
+        .expect("ConPTY reader should return shell output");
     drop(master);
-    let mut output = Vec::new();
-    reader
-        .read_to_end(&mut output)
-        .expect("ConPTY reader should finish after shell exit");
 
-    assert!(String::from_utf8_lossy(&output).contains("FileTerm local"));
+    assert!(String::from_utf8_lossy(&output[..output_size]).contains("FileTerm local"));
     assert_eq!(status.exit_code(), 0);
 }
