@@ -21,7 +21,12 @@ fn conpty_preserves_output_and_exit_status() {
     eprintln!("conpty stage: build command");
     let portable_pty::PtyPair { master, slave } = pair;
     let mut command = CommandBuilder::new("cmd.exe");
-    command.args(["/C", "echo FileTerm local && exit /B 7"]);
+    // Keep the command tokens separate so CommandBuilder does not wrap the
+    // complete `/C` payload in another pair of quotes. `/D` also prevents a
+    // runner-level cmd autorun hook from changing the test's lifecycle.
+    command.args([
+        "/D", "/C", "echo", "FileTerm", "local", "&&", "exit", "/B", "7",
+    ]);
     let mut child = slave
         .spawn_command(command)
         .expect("cmd.exe should start in ConPTY");
@@ -62,6 +67,10 @@ fn conpty_preserves_output_and_exit_status() {
         }
         if std::time::Instant::now() >= deadline {
             let _ = child.kill();
+            drop(master);
+            reader_thread
+                .join()
+                .expect("ConPTY reader thread should finish after shell termination");
             panic!("cmd.exe did not exit within the ConPTY test timeout");
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
