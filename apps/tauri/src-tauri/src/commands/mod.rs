@@ -349,6 +349,7 @@ impl Default for CommandSendPreferences {
 #[serde(rename_all = "camelCase")]
 pub struct ImportSshKeyInput {
     pub source_path: Option<String>,
+    pub content: Option<String>,
     pub note: Option<String>,
 }
 
@@ -776,9 +777,11 @@ pub fn app_import_ssh_key(
 ) -> Result<Option<serde_json::Value>, AppError> {
     let input = input.unwrap_or(ImportSshKeyInput {
         source_path: None,
+        content: None,
         note: None,
     });
-    let result = crate::services::ssh_keys::import(&app, input.source_path, input.note)?;
+    let result =
+        crate::services::ssh_keys::import(&app, input.source_path, input.content, input.note)?;
     if result.is_some() {
         emit_ssh_keys_changed(&app)?;
     }

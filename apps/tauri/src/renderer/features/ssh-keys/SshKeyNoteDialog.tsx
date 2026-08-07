@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { SshKeyFileSelection } from '@fileterm/core'
+import type { SshKeyFileSelection, SshKeyImportSource } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { formatMessage, t } from '../../i18n'
+
+const MAX_PRIVATE_KEY_TEXT_LENGTH = 1024 * 1024
 
 export function SshKeyNoteDialog({
   errorMessage,
@@ -26,22 +28,33 @@ export function SshKeyNoteDialog({
   mode: 'import' | 'edit'
   onClose(): void
   onSelectFile?(): Promise<SshKeyFileSelection | null>
-  onSubmit(note: string, sourcePath?: string, folderId?: string): void
+  onSubmit(note: string, source: SshKeyImportSource, folderId?: string): void
 }) {
   const [note, setNote] = useState(initialNote)
   const [folderId, setFolderId] = useState(initialFolderId ?? '')
+  const [inputMode, setInputMode] = useState<'file' | 'text'>('file')
   const [selectedFile, setSelectedFile] = useState<SshKeyFileSelection | null>(() =>
     initialSourcePath ? selectionFromPath(initialSourcePath) : null
   )
+  const [privateKeyText, setPrivateKeyText] = useState('')
   const [isSelectingFile, setIsSelectingFile] = useState(false)
   const normalizedNote = note.trim()
-  const canSubmit = Boolean(normalizedNote && (mode === 'edit' || selectedFile))
+  const hasImportSource = inputMode === 'file' ? Boolean(selectedFile) : Boolean(privateKeyText.trim())
+  const canSubmit = Boolean(normalizedNote && (mode === 'edit' || hasImportSource))
 
   useEffect(() => {
     setNote(initialNote)
     setFolderId(initialFolderId ?? '')
+    setInputMode('file')
     setSelectedFile(initialSourcePath ? selectionFromPath(initialSourcePath) : null)
+    setPrivateKeyText('')
   }, [initialFolderId, initialNote, initialSourcePath, mode])
+
+  const selectInputMode = (nextMode: 'file' | 'text') => {
+    setInputMode(nextMode)
+    if (nextMode === 'file') setPrivateKeyText('')
+    else setSelectedFile(null)
+  }
 
   const selectFile = async () => {
     if (!onSelectFile) return
@@ -57,7 +70,10 @@ export function SshKeyNoteDialog({
   }
 
   const submit = () => {
-    if (canSubmit) onSubmit(normalizedNote, selectedFile?.sourcePath, folderId || undefined)
+    if (!canSubmit) return
+    const source: SshKeyImportSource =
+      inputMode === 'file' ? { sourcePath: selectedFile?.sourcePath } : { content: privateKeyText }
+    onSubmit(normalizedNote, source, folderId || undefined)
   }
 
   return (
@@ -98,53 +114,95 @@ export function SshKeyNoteDialog({
             </label>
           ) : null}
           {mode === 'import' ? (
-            <div className="ssh-key-note-dialog__field">
-              <span>{t.sshKeyNoteChooseFile}</span>
-              <div className="ssh-key-import-dialog__file-row">
-                <div
-                  className={`ssh-key-import-dialog__file-name${selectedFile ? ' has-file' : ''}`}
-                  title={selectedFile?.sourcePath}
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    description
-                  </span>
-                  <span>{selectedFile?.fileName ?? t.sshKeyNoteNoFile}</span>
-                </div>
+            <>
+              <div aria-label={t.sshKeyNoteInputMode} className="ssh-key-import-dialog__source-switch" role="tablist">
                 <button
-                  className="flat-button compact ssh-key-import-dialog__file-button"
-                  disabled={isSubmitting || isSelectingFile}
-                  onClick={() => void selectFile()}
+                  aria-selected={inputMode === 'file'}
+                  className={inputMode === 'file' ? 'is-active' : ''}
+                  onClick={() => selectInputMode('file')}
+                  role="tab"
                   type="button"
                 >
-                  {isSelectingFile ? (
-                    <span aria-hidden="true" className="button-spinner" />
-                  ) : (
-                    <AppIcon name="folder" size={14} />
-                  )}
-                  <span>
-                    {isSelectingFile
-                      ? t.sshKeyNoteSelecting
-                      : selectedFile
-                        ? t.sshKeyNoteReselect
-                        : t.sshKeyNoteSelectFile}
-                  </span>
+                  <AppIcon name="folder" size={14} />
+                  <span>{t.sshKeyNoteInputFile}</span>
+                </button>
+                <button
+                  aria-selected={inputMode === 'text'}
+                  className={inputMode === 'text' ? 'is-active' : ''}
+                  onClick={() => selectInputMode('text')}
+                  role="tab"
+                  type="button"
+                >
+                  <AppIcon name="edit" size={14} />
+                  <span>{t.sshKeyNoteInputText}</span>
                 </button>
               </div>
-              {selectedFile?.existingKey ? (
-                <div className="ssh-key-import-dialog__duplicate-notice">
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    info
-                  </span>
-                  <div>
-                    <strong>{t.sshKeyNoteDuplicateTitle}</strong>
-                    <span>
-                      {formatMessage(t.sshKeyNoteDuplicateBody, { note: selectedFile.existingKey.note || '—' })}
-                    </span>
+              {inputMode === 'file' ? (
+                <div className="ssh-key-note-dialog__field">
+                  <span>{t.sshKeyNoteChooseFile}</span>
+                  <div className="ssh-key-import-dialog__file-row">
+                    <div
+                      className={`ssh-key-import-dialog__file-name${selectedFile ? ' has-file' : ''}`}
+                      title={selectedFile?.sourcePath}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">
+                        description
+                      </span>
+                      <span>{selectedFile?.fileName ?? t.sshKeyNoteNoFile}</span>
+                    </div>
+                    <button
+                      className="flat-button compact ssh-key-import-dialog__file-button"
+                      disabled={isSubmitting || isSelectingFile}
+                      onClick={() => void selectFile()}
+                      type="button"
+                    >
+                      {isSelectingFile ? (
+                        <span aria-hidden="true" className="button-spinner" />
+                      ) : (
+                        <AppIcon name="folder" size={14} />
+                      )}
+                      <span>
+                        {isSelectingFile
+                          ? t.sshKeyNoteSelecting
+                          : selectedFile
+                            ? t.sshKeyNoteReselect
+                            : t.sshKeyNoteSelectFile}
+                      </span>
+                    </button>
                   </div>
+                  {selectedFile?.existingKey ? (
+                    <div className="ssh-key-import-dialog__duplicate-notice">
+                      <span aria-hidden="true" className="material-symbols-outlined">
+                        info
+                      </span>
+                      <div>
+                        <strong>{t.sshKeyNoteDuplicateTitle}</strong>
+                        <span>
+                          {formatMessage(t.sshKeyNoteDuplicateBody, { note: selectedFile.existingKey.note || '—' })}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+                  <small>{t.sshKeyNoteFileHint}</small>
                 </div>
-              ) : null}
-              <small>{t.sshKeyNoteFileHint}</small>
-            </div>
+              ) : (
+                <label className="ssh-key-note-dialog__field">
+                  <span>{t.sshKeyNotePasteText}</span>
+                  <textarea
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoFocus
+                    maxLength={MAX_PRIVATE_KEY_TEXT_LENGTH}
+                    placeholder={t.sshKeyNoteTextPlaceholder}
+                    spellCheck={false}
+                    value={privateKeyText}
+                    wrap="off"
+                    onChange={(event) => setPrivateKeyText(event.target.value)}
+                  />
+                  <small>{t.sshKeyNoteTextHint}</small>
+                </label>
+              )}
+            </>
           ) : null}
         </div>
       }

@@ -8,7 +8,7 @@ import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent
 } from 'react'
-import type { SshKeyMetadata } from '@fileterm/core'
+import type { SshKeyImportSource, SshKeyMetadata } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { ManagerInlineFolderRow } from '../common/ManagerInlineFolderRow'
@@ -516,12 +516,12 @@ export function SshKeyManagerPage({
     clearDragState()
   }
 
-  const handleImport = async (note: string, sourcePath?: string, folderId?: string) => {
-    if (!sourcePath || busyRef.current) return
+  const handleImport = async (note: string, source: SshKeyImportSource, folderId?: string) => {
+    if ((!source.sourcePath && !source.content) || busyRef.current) return
     busyRef.current = true
     setBusy(true)
     try {
-      const result = await importKey(note, sourcePath)
+      const result = await importKey(note, source)
       if (result) {
         const nextAssignments = { ...assignments }
         if (folderId) nextAssignments[result.key.id] = folderId
@@ -859,9 +859,9 @@ export function SshKeyManagerPage({
             if (!busy) setNoteDialog(null)
           }}
           onSelectFile={selectKeyFile}
-          onSubmit={(note, sourcePath, folderId) => {
+          onSubmit={(note, source, folderId) => {
             if (noteDialog.mode === 'import') {
-              void handleImport(note, sourcePath, folderId)
+              void handleImport(note, source, folderId)
               return
             }
             void handleEditNote(noteDialog.keyId, note, folderId)

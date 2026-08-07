@@ -32,6 +32,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - SSH shell 输出接入
 - SSH keyboard-interactive/MFA、SOCKS5/HTTP outbound proxy、单级 Jump Host 与运行时 `-L/-R/-D` tunnel service；隧道运行状态归属具体 workspace tab，断线自动回收。
 - SSH 私钥库：私钥、元数据和可选口令分离存储；连接 profile 仅保存 `privateKeyId`，口令交互通过 `ssh:interaction` 返回 renderer。
+- SSH 私钥导入同时支持文件和临时文本输入；文本只在导入弹窗与一次 IPC 调用期间存在，不进入 profile、workspace snapshot 或日志。
 - 终端写入与 resize IPC
 - SFTP 远程目录浏览
 - 远程文件读取与写回
