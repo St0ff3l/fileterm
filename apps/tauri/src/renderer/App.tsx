@@ -1557,31 +1557,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               />
             </div>
             {isAiCopilotOpen ? (
-              <>
-                <div className="ai-copilot-joiner">
-                  <button
-                    aria-label={t.closeAiCopilot}
-                    title={t.closeAiCopilot}
-                    type="button"
-                    onClick={() => setIsAiCopilotOpen(false)}
-                  >
-                    <span aria-hidden="true" className="material-symbols-outlined">
-                      chevron_right
-                    </span>
-                  </button>
-                </div>
-                <AiCopilotPanel
-                  activeProfile={activeProfile}
-                  activeSession={aiCopilotTargetSession}
-                  activeTab={aiCopilotTargetTab ?? null}
-                  onClose={() => setIsAiCopilotOpen(false)}
-                  onOpenSettings={() => {
-                    setIsAiCopilotOpen(false)
-                    setSettingsInitialTab('ai')
-                    setShowSettings(true)
-                  }}
-                />
-              </>
+              <AiCopilotPanel
+                activeProfile={activeProfile}
+                activeSession={aiCopilotTargetSession}
+                activeTab={aiCopilotTargetTab ?? null}
+                onClose={() => setIsAiCopilotOpen(false)}
+                onOpenSettings={() => {
+                  setIsAiCopilotOpen(false)
+                  setSettingsInitialTab('ai')
+                  setShowSettings(true)
+                }}
+              />
             ) : null}
           </div>
         </main>

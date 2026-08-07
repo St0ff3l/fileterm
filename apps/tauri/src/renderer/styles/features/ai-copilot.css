@@ -1,94 +1,33 @@
-/* The Copilot is renderer-only: it shares FileTerm's native window and uses a
- * compact same-window card. The shell reserves its footprint, while the card
- * itself is positioned from the window top so it can sit beside the titlebar. */
+/* Integrated AI Copilot Sidebar: functions like the left system sidebar,
+ * sitting flush as a right sidebar column with a clean 1px border divider. */
 .fs-shell.has-ai-copilot {
-  --ai-copilot-joiner-width: 14px;
-  --ai-copilot-joiner-offset: 7px;
   --ai-copilot-panel-width: 368px;
   position: relative;
 }
 
 .fs-shell.has-ai-copilot .fs-tabbar,
 .fs-shell.has-ai-copilot .window-menubar {
-  margin-right: calc(var(--ai-copilot-joiner-width) + var(--ai-copilot-panel-width));
-  overflow: hidden;
-  border-top-right-radius: var(--window-corner-radius);
-  border-right: 1px solid var(--terminal-right-frame-accent, var(--border-light));
+  margin-right: var(--ai-copilot-panel-width);
 }
 
 .fs-shell.has-ai-copilot .fs-main {
-  margin-right: calc(var(--ai-copilot-joiner-width) + var(--ai-copilot-panel-width));
-  border-right: 1px solid var(--terminal-right-frame-accent, var(--border-light));
+  margin-right: var(--ai-copilot-panel-width);
 }
 
 .fs-shell.has-ai-copilot .transfer-strip {
-  margin-right: calc(var(--ai-copilot-joiner-width) + var(--ai-copilot-panel-width));
-  overflow: hidden;
-  border-right: 1px solid var(--terminal-right-frame-accent, var(--border-light));
-  border-bottom: 1px solid var(--terminal-right-frame-accent, var(--border-light));
-  border-bottom-right-radius: var(--window-corner-radius);
+  margin-right: var(--ai-copilot-panel-width);
+}
+
+.fs-shell.has-ai-copilot .terminal-right-frame {
+  display: none;
 }
 
 .fs-shell.has-ai-copilot::after {
-  position: absolute;
-  top: 0;
-  right: calc(var(--ai-copilot-panel-width) + var(--ai-copilot-joiner-offset));
-  bottom: 0;
-  z-index: 11;
-  width: 1px;
-  background: color-mix(in srgb, var(--border-light) 72%, transparent);
-  content: '';
-  pointer-events: none;
+  display: none;
 }
 
 .workspace-stage.has-ai-copilot {
   overflow: visible;
-}
-
-.ai-copilot-joiner {
-  z-index: 12;
-  display: flex;
-  position: absolute;
-  top: 0;
-  right: var(--ai-copilot-panel-width);
-  bottom: 0;
-  width: var(--ai-copilot-joiner-width);
-  min-width: var(--ai-copilot-joiner-width);
-  align-items: center;
-  justify-content: center;
-}
-
-.ai-copilot-joiner::before {
-  display: none;
-}
-
-.ai-copilot-joiner > button {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  width: 22px;
-  height: 54px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid var(--floating-drawer-expanded-border, var(--border-light));
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: var(--floating-drawer-expanded-bg, var(--bg-card));
-  box-shadow: var(--shadow-sm);
-  transition:
-    color 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.ai-copilot-joiner > button:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  transform: translateX(-1px);
-}
-
-.ai-copilot-joiner > button .material-symbols-outlined {
-  font-size: 17px;
 }
 
 .ai-copilot-panel {
@@ -98,16 +37,20 @@
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 3;
-  width: min(var(--ai-copilot-panel-width), calc(100vw - var(--sidebar-width, 256px) - var(--ai-copilot-joiner-width)));
+  z-index: 10;
+  width: min(var(--ai-copilot-panel-width), calc(100vw - var(--sidebar-width, 256px)));
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--floating-drawer-expanded-border, var(--border-light));
-  border-radius: var(--window-corner-radius);
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 1px solid var(--border-light);
+  border-top-right-radius: var(--window-corner-radius);
+  border-bottom-right-radius: var(--window-corner-radius);
   color: var(--text-main);
-  background: var(--floating-drawer-expanded-bg, var(--bg-card));
-  box-shadow: var(--floating-drawer-shadow, var(--shadow-lg));
+  background: var(--bg-card);
+  box-shadow: none;
   animation: ai-copilot-panel-enter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -116,12 +59,8 @@
   border-top-right-radius: inherit;
 }
 
-.fs-shell.has-window-menubar.has-ai-copilot .ai-copilot-joiner,
 .fs-shell.has-window-menubar.has-ai-copilot .ai-copilot-panel {
   top: 32px;
-}
-
-.fs-shell.has-window-menubar.has-ai-copilot .ai-copilot-panel {
   bottom: 0;
 }
 
@@ -160,10 +99,12 @@
 .ai-copilot-header {
   justify-content: space-between;
   gap: 12px;
-  min-height: 54px;
+  height: 48px;
+  min-height: 48px;
+  box-sizing: border-box;
   padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-elevated));
+  background: var(--bg-sidebar);
 }
 
 .ai-copilot-title {
