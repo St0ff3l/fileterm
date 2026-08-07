@@ -2,7 +2,7 @@
   display: grid;
   position: relative;
   grid-template-rows: minmax(160px, 1fr) minmax(0, var(--file-panel-height, 300px));
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
   overflow: hidden;
@@ -106,9 +106,10 @@
 .terminal-right-frame {
   position: relative;
   grid-column: 2;
-  grid-row: 1;
+  grid-row: 1 / -1;
   width: 12px;
   min-height: 0;
+  height: 100%;
   background: linear-gradient(
     to left,
     var(--terminal-right-frame-outer) 0px,

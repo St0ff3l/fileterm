@@ -16,6 +16,8 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 
+type SettingsTab = 'ai' | 'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
 }
@@ -29,6 +31,7 @@ export function SettingsModal({
   onOpenConnectionManager,
   onOpenLogsDirectory,
   onClose,
+  initialTab = 'interface',
   standalone = false,
   inline = false
 }: {
@@ -40,12 +43,11 @@ export function SettingsModal({
   onOpenConnectionManager(): void
   onOpenLogsDirectory(): void
   onClose(): void
+  initialTab?: SettingsTab
   standalone?: boolean
   inline?: boolean
 }) {
-  const [activeTab, setActiveTab] = useState<
-    'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
-  >('interface')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
   const [syncSubTab, setSyncSubTab] = useState<'webdav' | 's3'>('webdav')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
@@ -74,6 +76,10 @@ export function SettingsModal({
   const [s3Config, setS3Config] = useState<S3BackupConfig | null>(null)
   const [s3SecretAccessKey, setS3SecretAccessKey] = useState('')
   const [s3Message, setS3Message] = useState<string | null>(null)
+  const [aiProvider, setAiProvider] = useState('openai-compatible')
+  const [aiEndpoint, setAiEndpoint] = useState('')
+  const [aiApiKey, setAiApiKey] = useState('')
+  const [aiModel, setAiModel] = useState('')
   const [syncOperation, setSyncOperation] = useState<
     'load' | 'save' | 'test' | 'upload' | 'download' | 's3-save' | 's3-test' | 's3-upload' | 's3-download' | null
   >(null)
@@ -86,6 +92,10 @@ export function SettingsModal({
   const suppressOverviewCardClickRef = useRef(false)
   const desktopApi = window.fileterm
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
+
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
 
   useEffect(() => {
     if (updatePreviewState) {
@@ -482,6 +492,16 @@ export function SettingsModal({
             <span className="connection-manager-sidebar-label">{t.interfaceSettings}</span>
           </button>
           <button
+            className={`connection-manager-sidebar-item ${activeTab === 'ai' ? 'active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab('ai')}
+          >
+            <span className="connection-manager-sidebar-icon">
+              <span className="material-symbols-outlined">auto_awesome</span>
+            </span>
+            <span className="connection-manager-sidebar-label">{t.aiSettings}</span>
+          </button>
+          <button
             className={`connection-manager-sidebar-item ${activeTab === 'connections' ? 'active' : ''}`}
             type="button"
             onClick={() => setActiveTab('connections')}
@@ -544,6 +564,83 @@ export function SettingsModal({
         </aside>
 
         <main className="connection-manager-main">
+          {activeTab === 'ai' ? (
+            <div className="settings-panel settings-ai-panel">
+              <section className="settings-section">
+                <h3>{t.aiSettingsProvider}</h3>
+                <p className="settings-tools-hint">{t.aiSettingsProviderDescription}</p>
+
+                <div className="ai-settings-provider-card">
+                  <span aria-hidden="true" className="material-symbols-outlined">
+                    auto_awesome
+                  </span>
+                  <div>
+                    <strong>{t.aiSettingsNotConfigured}</strong>
+                    <p>{t.aiSettingsPreviewHint}</p>
+                  </div>
+                  <span className="ai-settings-preview-tag">{t.aiCopilotPreview}</span>
+                </div>
+
+                <div className="ai-settings-form">
+                  <label>
+                    <span>{t.aiSettingsProviderType}</span>
+                    <select value={aiProvider} onChange={(event) => setAiProvider(event.target.value)}>
+                      <option value="openai-compatible">OpenAI-compatible</option>
+                      <option value="anthropic-compatible">Anthropic-compatible</option>
+                      <option value="custom">{t.aiSettingsCustomProvider}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t.aiSettingsModel}</span>
+                    <input
+                      placeholder={t.aiSettingsModelPlaceholder}
+                      value={aiModel}
+                      onChange={(event) => setAiModel(event.target.value)}
+                    />
+                  </label>
+                  <label className="ai-settings-form-span-two">
+                    <span>{t.aiSettingsEndpoint}</span>
+                    <input
+                      placeholder={t.aiSettingsEndpointPlaceholder}
+                      value={aiEndpoint}
+                      onChange={(event) => setAiEndpoint(event.target.value)}
+                    />
+                  </label>
+                  <label className="ai-settings-form-span-two">
+                    <span>{t.aiSettingsApiKey}</span>
+                    <input
+                      autoComplete="off"
+                      placeholder={t.aiSettingsApiKeyPlaceholder}
+                      type="password"
+                      value={aiApiKey}
+                      onChange={(event) => setAiApiKey(event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="ai-settings-privacy-card">
+                  <span aria-hidden="true" className="material-symbols-outlined">
+                    shield_lock
+                  </span>
+                  <div>
+                    <strong>{t.aiSettingsPrivacyTitle}</strong>
+                    <p>{t.aiSettingsPrivacyDescription}</p>
+                  </div>
+                </div>
+
+                <div className="ai-settings-footer">
+                  <small>{t.aiSettingsPreviewHint}</small>
+                  <button className="primary-button compact" disabled type="button">
+                    <span aria-hidden="true" className="material-symbols-outlined">
+                      lock
+                    </span>
+                    {t.aiSettingsSavePreview}
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
           {activeTab === 'connections' ? (
             <div className="settings-panel">
               <section className="settings-section">

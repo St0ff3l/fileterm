@@ -52,6 +52,7 @@ import { ConfirmActionDialog } from './features/common/ConfirmActionDialog'
 import type { SendScope } from './features/common/session-send-targets'
 import { resolveSelectedTabIds } from './features/common/session-send-targets'
 import { TabBar, type TabBarProps, type TabContextTarget } from './features/layout/TabBar'
+import { AiCopilotPanel } from './features/ai/AiCopilotPanel'
 import { WindowMenubar } from './features/layout/WindowMenubar'
 import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
@@ -181,6 +182,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [workspaceFocusModes, setWorkspaceFocusModes] = useState<Record<string, boolean>>({})
   const [workspaceViews, setWorkspaceViews] = useState<Record<string, 'file' | 'command' | 'tunnel'>>({})
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [isAiCopilotOpen, setIsAiCopilotOpen] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'interface' | 'ai'>('interface')
 
   const desktopApi = window.fileterm
   const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
@@ -425,6 +428,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const isSystemSidebarCollapsed =
     isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
   const activeTabId = activeTab?.id ?? null
+  const aiCopilotTargetTab = activePaneTab ?? activeTab
+  const aiCopilotTargetSession = activePaneSession ?? activeSession
+  const isAiCopilotAvailable = Boolean(activeTab)
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {
       if (!activeTabId) {
@@ -1328,6 +1334,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
+    isAiCopilotAvailable,
+    isAiCopilotOpen,
     isWorkspaceFocusMode,
     onAddHomeTab: addHomeTab,
     onActivateHome: activateHomeTab,
@@ -1341,7 +1349,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onDragEnd: endTabDrag,
     onDragEnter: enterDraggedTab,
     onDragStart: startTabDrag,
-    onOpenSettings: () => setShowSettings(true),
+    onOpenSettings: () => {
+      setSettingsInitialTab('interface')
+      setShowSettings(true)
+    },
+    onToggleAiCopilot: () => setIsAiCopilotOpen((current) => !current),
     onToggleWindowMaximize: () => {
       void desktopApi?.toggleMaximizeCurrentWindow()
     },
@@ -1367,7 +1379,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isAiCopilotOpen ? 'has-ai-copilot' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -1401,7 +1413,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               <CloseButton aria-label={t.closeTab} onClick={() => setError(null)} size="compact" />
             </div>
           ) : null}
-          <div className="workspace-stage">
+          <div className={`workspace-stage ${isAiCopilotOpen ? 'has-ai-copilot' : ''}`}>
             <div
               key={activeLocalTab ? activeWorkspaceOrderKey : 'session-workspace'}
               className={`workspace-stage-transition ${isWorkspaceTransitionActive ? 'is-transitioning' : ''}`}
@@ -1544,6 +1556,33 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onSetPaneWeights={setPaneWeights}
               />
             </div>
+            {isAiCopilotOpen ? (
+              <>
+                <div className="ai-copilot-joiner">
+                  <button
+                    aria-label={t.closeAiCopilot}
+                    title={t.closeAiCopilot}
+                    type="button"
+                    onClick={() => setIsAiCopilotOpen(false)}
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined">
+                      chevron_right
+                    </span>
+                  </button>
+                </div>
+                <AiCopilotPanel
+                  activeProfile={activeProfile}
+                  activeSession={aiCopilotTargetSession}
+                  activeTab={aiCopilotTargetTab ?? null}
+                  onClose={() => setIsAiCopilotOpen(false)}
+                  onOpenSettings={() => {
+                    setIsAiCopilotOpen(false)
+                    setSettingsInitialTab('ai')
+                    setShowSettings(true)
+                  }}
+                />
+              </>
+            ) : null}
           </div>
         </main>
 
@@ -1725,6 +1764,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLogsDirectory: () => {
                   openLogsDirectory()
                 },
+                initialTab: settingsInitialTab,
                 onClose: () => setShowSettings(false)
               }
             : null

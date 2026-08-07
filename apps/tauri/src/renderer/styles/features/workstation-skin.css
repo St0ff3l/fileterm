@@ -187,7 +187,7 @@ textarea:focus-visible,
 .fs-tabbar {
   grid-column: 1 / -1;
   grid-row: 1;
-  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr);
+  grid-template-columns: var(--brand-width, 214px) minmax(0, 1fr) auto;
   height: 48px;
   z-index: 10;
   position: relative;
