@@ -17,6 +17,25 @@ FileTerm 采用标准 GitHub 流程：所有功能、修复和版本号更新先
 4. 在该 release 分支对应提交创建 `v<version>` tag 并推送；GitHub Actions 验证 tag 位于 `release/*` 后执行 macOS 与 Windows 打包。
 5. 稳定版本 tag（如 `v1.0.0`）创建正式 GitHub Release；带预发布后缀的 tag（如 `v1.0.1-beta.1`）创建 prerelease。
 
+## Release notes 与贡献者展示
+
+### 正文格式
+
+正式版本可以新增 `docs/quality/release-notes-x.y.z.md`，正文结构参考 2.1.7：
+
+- 版本简介
+- 更新重点
+- 主要 PR 与问题修复
+- 使用提示、反馈渠道或其他发布说明
+
+正文中不要添加手写的 `### Contributors`、贡献者名单或头像链接。贡献者区域由 GitHub 根据本次 Release 的提交和 Pull Request 自动生成，避免手工名单与实际变更不一致。
+
+### 自动生成规则
+
+发布 workflow 始终调用 `gh release create --generate-notes`。如果存在版本说明文件，文件内容通过 `--notes` 作为自定义正文传入；不要改回只使用 `--notes-file`。这样 GitHub 会在自定义正文之后继续生成 `What's Changed`、`Full Changelog` 和带头像的 `Contributors` 区域。
+
+发布完成后打开 Release 页面确认：自定义正文存在，且 GitHub 自动生成的贡献者头像区域也存在。
+
 ## Guardrails
 
 - 不直接向 `main` 或 `release/*` 推送常规功能改动。

@@ -177,6 +177,8 @@ npm run sync:version
 
 **关键约束**：tag 必须指向 `release/*` 分支上的 commit，否则 `validate-release-tag` 步骤会拒绝构建。
 
+发布说明正文可参考 2.1.7 的结构（版本简介、更新重点、主要 PR/问题和使用提示），但不要手写 `Contributors` 名单。发布 workflow 会在保留自定义正文的同时调用 GitHub 自动生成 Release Notes，由 GitHub 负责生成贡献者头像区域；详细规则见 `docs/quality/git-branch-release-convention.md`。
+
 ## 11. 文档维护规则
 
 - `AGENTS.md` 只放入口地图和硬约束，保持短小。
