@@ -637,8 +637,15 @@ export interface SshKeyMetadata {
 
 export interface ImportSshKeyInput {
   sourcePath?: string
+  /**
+   * Transient private-key text entered in the import dialog. It must never be
+   * persisted in a connection profile or workspace snapshot.
+   */
+  content?: string
   note?: string
 }
+
+export type SshKeyImportSource = Pick<ImportSshKeyInput, 'sourcePath' | 'content'>
 
 export interface SshKeyFileSelection {
   sourcePath: string
@@ -750,6 +757,11 @@ export interface SshKeyMetadata {
 
 export interface ImportSshKeyInput {
   sourcePath?: string
+  /**
+   * Transient private-key text entered in the import dialog. It must never be
+   * persisted in a connection profile or workspace snapshot.
+   */
+  content?: string
   note?: string
 }
 

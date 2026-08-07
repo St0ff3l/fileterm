@@ -1,4 +1,4 @@
-import type { CreateProfileInput } from '@fileterm/core'
+import type { CreateProfileInput, SshKeyImportSource } from '@fileterm/core'
 import { useState } from 'react'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { DropdownSelect } from '../common/DropdownSelect'
@@ -32,11 +32,11 @@ export function SshPrivateKeyField({
     setPendingImport({ sourcePath })
   }
 
-  const importNewKey = async (note: string, sourcePath?: string) => {
+  const importNewKey = async (note: string, source: SshKeyImportSource) => {
     setBusy(true)
     setNotice(null)
     try {
-      const result = await importKey(note, sourcePath)
+      const result = await importKey(note, source)
       if (result) {
         setForm((previous) => ({ ...previous, privateKeyId: result.key.id, privateKeyPath: undefined }))
         setNotice(
@@ -105,7 +105,7 @@ export function SshPrivateKeyField({
             if (!busy) setPendingImport(null)
           }}
           onSelectFile={selectKeyFile}
-          onSubmit={(note, sourcePath) => void importNewKey(note, sourcePath)}
+          onSubmit={(note, source) => void importNewKey(note, source)}
         />
       ) : null}
     </div>

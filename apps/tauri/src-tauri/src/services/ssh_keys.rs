@@ -107,17 +107,23 @@ pub async fn select_file(app: &AppHandle) -> Result<Option<serde_json::Value>, A
 pub fn import(
     app: &AppHandle,
     source_path: Option<String>,
+    content: Option<String>,
     note: Option<String>,
 ) -> Result<Option<serde_json::Value>, AppError> {
     let note = note.unwrap_or_default().trim().to_string();
     if note.is_empty() {
         return Err(AppError::Command("请输入密钥备注。".to_string()));
     }
-    let Some(source_path) = source_path else {
-        return Ok(None);
+    let inspected = match (source_path, content) {
+        (Some(_), Some(_)) => {
+            return Err(AppError::Command(
+                "只能选择文件或填写私钥文本，不能同时提供两种来源。".to_string(),
+            ));
+        }
+        (Some(source_path), None) => inspect_private_key(&PathBuf::from(source_path))?,
+        (None, Some(content)) => inspect_private_key_text(&content)?,
+        (None, None) => return Ok(None),
     };
-    let source_path = PathBuf::from(source_path);
-    let inspected = inspect_private_key(&source_path)?;
     let paths = ensure_store(app)?;
     let mut index = read_index(&paths)?;
     let usage = key_usage_counts(app)?;
@@ -384,11 +390,41 @@ fn inspect_private_key(path: &Path) -> Result<InspectedPrivateKey, AppError> {
     }
     let bytes =
         fs::read(path).map_err(|error| AppError::Storage(format!("无法读取私钥文件: {error}")))?;
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("ssh-key")
+        .to_string();
+    inspect_private_key_bytes(bytes, name, "私钥文件")
+}
+
+fn inspect_private_key_text(content: &str) -> Result<InspectedPrivateKey, AppError> {
+    inspect_private_key_bytes(
+        content.as_bytes().to_vec(),
+        "pasted-key".to_string(),
+        "私钥文本",
+    )
+}
+
+fn inspect_private_key_bytes(
+    bytes: Vec<u8>,
+    name: String,
+    source_label: &str,
+) -> Result<InspectedPrivateKey, AppError> {
+    if bytes.is_empty() || bytes.len() as u64 > MAX_PRIVATE_KEY_BYTES {
+        return Err(AppError::Command(format!(
+            "{source_label}为空、无效或超过 1 MB 限制。"
+        )));
+    }
     let content = String::from_utf8(bytes.clone()).map_err(|_| {
-        AppError::Command("无法识别该文件，请选择文本格式的 SSH 私钥。".to_string())
+        AppError::Command(format!(
+            "无法识别该{source_label}，请输入文本格式的 SSH 私钥。"
+        ))
     })?;
     if !content.contains("PRIVATE KEY") {
-        return Err(AppError::Command("选择的文件不是 SSH 私钥。".to_string()));
+        return Err(AppError::Command(format!(
+            "输入的{source_label}不是 SSH 私钥。"
+        )));
     }
     let decoded = russh::keys::decode_secret_key(&content, None);
     let (algorithm, fingerprint, encrypted) = match decoded {
@@ -408,16 +444,11 @@ fn inspect_private_key(path: &Path) -> Result<InspectedPrivateKey, AppError> {
             true,
         ),
         Err(_) => {
-            return Err(AppError::Command(
-                "无法识别该文件，请选择 OpenSSH、PEM 或兼容格式的私钥。".to_string(),
-            ))
+            return Err(AppError::Command(format!(
+                "无法识别该{source_label}，请输入 OpenSSH、PEM 或兼容格式的私钥。"
+            )))
         }
     };
-    let name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("ssh-key")
-        .to_string();
     Ok(InspectedPrivateKey {
         bytes,
         name,
@@ -464,9 +495,40 @@ fn lock_down_dir(_path: &Path) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::probably_encrypted;
     #[cfg(unix)]
     use super::write_bytes_atomic;
+    use super::{inspect_private_key_text, probably_encrypted, MAX_PRIVATE_KEY_BYTES};
+
+    #[test]
+    fn inspects_pasted_openssh_private_key_text() {
+        let key = russh::keys::PrivateKey::random(
+            &mut rand::rng(),
+            russh::keys::ssh_key::Algorithm::Ed25519,
+        )
+        .unwrap();
+        let text = key
+            .to_openssh(russh::keys::ssh_key::LineEnding::LF)
+            .unwrap();
+
+        let inspected = inspect_private_key_text(&text).unwrap();
+
+        assert_eq!(inspected.name, "pasted-key");
+        assert_eq!(inspected.algorithm, "ssh-ed25519");
+        assert!(!inspected.encrypted);
+        assert_eq!(inspected.bytes, text.as_bytes());
+    }
+
+    #[test]
+    fn rejects_invalid_or_oversized_private_key_text() {
+        assert!(inspect_private_key_text("not a private key").is_err());
+
+        let oversized = "x".repeat(MAX_PRIVATE_KEY_BYTES as usize + 1);
+        let error = match inspect_private_key_text(&oversized) {
+            Err(error) => error,
+            Ok(_) => panic!("oversized private key text should be rejected"),
+        };
+        assert!(error.to_string().contains("超过 1 MB"));
+    }
 
     #[test]
     fn recognizes_private_key_headers_without_treating_public_keys_as_private() {

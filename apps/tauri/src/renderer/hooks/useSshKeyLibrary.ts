@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { SshKeyMetadata } from '@fileterm/core'
+import type { SshKeyImportSource, SshKeyMetadata } from '@fileterm/core'
 
 export function useSshKeyLibrary() {
   const desktopApi = window.fileterm
@@ -41,10 +41,10 @@ export function useSshKeyLibrary() {
   }, [desktopApi])
 
   const importKey = useCallback(
-    async (note = '', sourcePath?: string) => {
+    async (note = '', source?: SshKeyImportSource) => {
       if (!desktopApi) return null
       try {
-        const result = await desktopApi.importSshKey({ note, sourcePath })
+        const result = await desktopApi.importSshKey({ note, ...(source ?? {}) })
         if (result) {
           setKeys((current) => [result.key, ...current.filter((key) => key.id !== result.key.id)])
         }

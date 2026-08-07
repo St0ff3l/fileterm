@@ -289,7 +289,8 @@
 }
 
 .ssh-key-note-dialog__field input,
-.ssh-key-note-dialog__field select {
+.ssh-key-note-dialog__field select,
+.ssh-key-note-dialog__field textarea {
   width: 100%;
   min-height: 40px;
   padding: 8px 10px;
@@ -302,15 +303,71 @@
 }
 
 .ssh-key-note-dialog__field input:focus-visible,
-.ssh-key-note-dialog__field select:focus-visible {
+.ssh-key-note-dialog__field select:focus-visible,
+.ssh-key-note-dialog__field textarea:focus-visible {
   outline: none;
   border-color: var(--copy-link);
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
+.ssh-key-note-dialog__field textarea {
+  min-height: 176px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
 .ssh-key-note-dialog__field small {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.ssh-key-import-dialog__source-switch {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-light);
+  border-radius: 9px;
+  background: var(--bg-main);
+}
+
+.ssh-key-import-dialog__source-switch button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ssh-key-import-dialog__source-switch button:hover {
+  color: var(--text-main);
+}
+
+.ssh-key-import-dialog__source-switch button.is-active {
+  background: var(--bg-active);
+  color: var(--text-main);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 16%);
+}
+
+.ssh-key-import-dialog__source-switch button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+.ssh-key-import-dialog__source-switch .app-icon {
+  color: currentColor;
 }
 
 .ssh-key-import-dialog__file-row {
