@@ -1,6 +1,6 @@
 # AI Copilot 功能集成计划
 
-状态：进行中（Phase 0–3 已实现；下一步收口本地历史与跨平台体验验证）
+状态：进行中（Phase 0–4 的代码实现已完成；Review Mode 与跨平台发行验收待收口）
 前置工作：[AI Copilot 同窗 UI 草案](../completed/ai-copilot-companion-window.md)
 
 ## 1. 结论
@@ -414,9 +414,9 @@ interface AiCommandError {
 
 ### Phase 4：本地历史与体验收口
 
-- [ ] 本地历史搜索、重命名、删除和容量上限。
-- [ ] 展示 Provider、model、usage、目标变化和 context attached 状态。
-- [ ] macOS、Windows、Linux 真机验证流式取消、代理、睡眠恢复、窗口关闭和断网重试。
+- [x] 本地历史搜索、重命名、删除和容量上限。
+- [x] 展示 Provider、model、usage、目标变化和 context attached 状态。
+- [ ] macOS、Windows、Linux 真机验证流式取消、代理、睡眠恢复、窗口关闭和断网重试（见 `docs/quality/ai-copilot-platform-regression.md`；不能由当前单一开发机伪造）。
 
 ### Phase 5：Review Mode（单独评审后再做）
 

@@ -670,6 +670,14 @@ pub fn app_create_ai_conversation(
 }
 
 #[tauri::command]
+pub fn app_rename_ai_conversation(
+    app: AppHandle,
+    input: crate::services::ai::RenameAiConversationInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::rename_conversation(&app, input)
+}
+
+#[tauri::command]
 pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Result<(), AppError> {
     crate::services::ai::delete_conversation(&app, &conversation_id)
 }

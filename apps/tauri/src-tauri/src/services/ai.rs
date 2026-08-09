@@ -38,6 +38,7 @@ const MAX_BASE_URL_LENGTH: usize = 2_048;
 const MAX_CONVERSATIONS: usize = 50;
 const MAX_CONVERSATION_MESSAGES: usize = 200;
 const MAX_CONVERSATION_BYTES: usize = 1_048_576;
+const MAX_CONVERSATION_TITLE_LENGTH: usize = 120;
 const MAX_USER_MESSAGE_LENGTH: usize = 16_384;
 const MAX_ASSISTANT_MESSAGE_LENGTH: usize = 262_144;
 const MAX_HISTORY_CHARACTERS: usize = 48_000;
@@ -332,6 +333,13 @@ pub struct AiConversation {
 #[serde(rename_all = "camelCase")]
 pub struct CreateAiConversationInput {
     pub provider_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameAiConversationInput {
+    pub conversation_id: String,
+    pub title: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -753,6 +761,24 @@ fn title_from_user_message(message: &str) -> String {
     } else {
         title
     }
+}
+
+fn normalize_conversation_title(value: &str) -> Result<String, AppError> {
+    let value = value.trim();
+    if value.is_empty() || value.chars().any(char::is_control) {
+        return Err(ai_error(
+            "AI_CONVERSATION_INVALID_INPUT",
+            "对话标题不能为空或包含控制字符",
+        ));
+    }
+    let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.chars().count() > MAX_CONVERSATION_TITLE_LENGTH {
+        return Err(ai_error(
+            "AI_CONVERSATION_INVALID_INPUT",
+            "对话标题超过长度限制",
+        ));
+    }
+    Ok(compact)
 }
 
 fn normalize_user_message(value: &str) -> Result<String, AppError> {
@@ -1788,6 +1814,22 @@ pub fn create_conversation(
         updated_at: timestamp,
         messages: Vec::new(),
     };
+    persist_conversation(app, &mut index, &conversation)?;
+    Ok(public_conversation(conversation))
+}
+
+pub fn rename_conversation(
+    app: &AppHandle,
+    input: RenameAiConversationInput,
+) -> Result<AiConversation, AppError> {
+    let conversation_id = validate_conversation_id(&input.conversation_id)?;
+    let title = normalize_conversation_title(&input.title)?;
+    let _guard = conversation_store_lock()?;
+    let mut index = read_conversation_index(app)?;
+    require_indexed_conversation(&index, &conversation_id)?;
+    let mut conversation = read_stored_conversation(app, &conversation_id)?;
+    conversation.title = title;
+    conversation.updated_at = now_timestamp();
     persist_conversation(app, &mut index, &conversation)?;
     Ok(public_conversation(conversation))
 }
@@ -3305,17 +3347,17 @@ async fn test_anthropic_messages(
 mod tests {
     use super::{
         command_has_unsafe_input, context_mode_reads_terminal_transcript, ensure_conversation_fits,
-        normalize_base_url, now_millis, parse_command_proposal, provider_history_messages,
-        provider_is_usable, provider_summary, prune_expired_context_snapshots,
-        repair_default_provider, sanitize_recent_terminal_output, stream_anthropic_messages,
-        stream_openai_responses, system_prompt, test_openai_compatible_chat,
-        title_from_user_message, write_json_file, AiChatResponseMode, AiCommandRisk, AiContextMode,
-        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiMessage, AiMessageRole,
-        AiPromptContext, AiProviderKind, AiProviderSummary, AiStreamEvent, SseDecoder,
-        StoredAiContextSnapshot, StoredAiProvider, StoredConversation, StoredProviderConfig,
-        StoredProviderSecret, StoredProviderSecrets, ANTHROPIC_API_VERSION,
+        normalize_base_url, normalize_conversation_title, now_millis, parse_command_proposal,
+        provider_history_messages, provider_is_usable, provider_summary,
+        prune_expired_context_snapshots, repair_default_provider, sanitize_recent_terminal_output,
+        stream_anthropic_messages, stream_openai_responses, system_prompt,
+        test_openai_compatible_chat, title_from_user_message, write_json_file, AiChatResponseMode,
+        AiCommandRisk, AiContextMode, AiContextRedactionKind, AiContextRegistry, AiContextTarget,
+        AiMessage, AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSummary,
+        AiStreamEvent, SseDecoder, StoredAiContextSnapshot, StoredAiProvider, StoredConversation,
+        StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets, ANTHROPIC_API_VERSION,
         ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
-        MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
+        MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES, MAX_CONVERSATION_TITLE_LENGTH,
     };
     use reqwest::Client;
     use serde_json::{json, Value};
@@ -3763,6 +3805,19 @@ mod tests {
             commands: Vec::new(),
         }]);
         assert!(ensure_conversation_fits(&conversation).is_ok());
+    }
+
+    #[test]
+    fn conversation_title_normalization_rejects_controls_and_bounds_local_history_labels() {
+        assert_eq!(
+            normalize_conversation_title("  Inspect   nginx logs ")
+                .expect("title should normalize"),
+            "Inspect nginx logs"
+        );
+        assert!(normalize_conversation_title("line one\nline two").is_err());
+        assert!(
+            normalize_conversation_title(&"a".repeat(MAX_CONVERSATION_TITLE_LENGTH + 1)).is_err()
+        );
     }
 
     #[tokio::test]

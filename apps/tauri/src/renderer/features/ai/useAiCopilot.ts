@@ -461,6 +461,58 @@ export function useAiCopilot() {
     }
   }, [activeRequestId])
 
+  const renameConversation = useCallback(
+    async (conversationId: string, title: string) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return false
+      setErrorMessage(null)
+      try {
+        const renamed = await desktopApi.renameAiConversation({ conversationId, title })
+        if (mountedRef.current) {
+          if (conversationRef.current?.id === renamed.id) {
+            applyConversation(renamed)
+          }
+          setConversations((current) => replaceConversationSummary(current, renamed))
+        }
+        return true
+      } catch (error) {
+        if (mountedRef.current) {
+          setErrorMessage(toMessage(error))
+        }
+        return false
+      }
+    },
+    [applyConversation, isStreaming]
+  )
+
+  const deleteConversation = useCallback(
+    async (conversationId: string) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return false
+      setErrorMessage(null)
+      try {
+        await desktopApi.deleteAiConversation(conversationId)
+        if (mountedRef.current) {
+          const wasActive = conversationRef.current?.id === conversationId
+          setConversations((current) => current.filter((item) => item.id !== conversationId))
+          if (wasActive) {
+            activeAssistantMessageIdRef.current = null
+            setUsage(null)
+            setContextPreview(null)
+            applyConversation(null)
+          }
+        }
+        return true
+      } catch (error) {
+        if (mountedRef.current) {
+          setErrorMessage(toMessage(error))
+        }
+        return false
+      }
+    },
+    [applyConversation, isStreaming]
+  )
+
   const newChat = useCallback(() => {
     if (isStreaming) return
     activeAssistantMessageIdRef.current = null
@@ -487,6 +539,8 @@ export function useAiCopilot() {
     loadConversation,
     refresh,
     newChat,
+    renameConversation,
+    deleteConversation,
     createContextPreview,
     clearContextPreview,
     sendMessage,

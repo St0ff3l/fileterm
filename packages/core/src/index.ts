@@ -1157,6 +1157,11 @@ export interface CreateAiConversationInput {
   providerId: string
 }
 
+export interface RenameAiConversationInput {
+  conversationId: string
+  title: string
+}
+
 export interface CreateAiContextPreviewInput {
   tabId: string
   /** Optional renderer hint. Rust resolves and validates the actual root relation. */
@@ -1264,6 +1269,7 @@ export interface FileTermDesktopApi {
   listAiConversations(): Promise<AiConversationSummary[]>
   getAiConversation(conversationId: string): Promise<AiConversation>
   createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
+  renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
   createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
   startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type {
   AiCommandRisk,
   AiCommandSuggestion,
+  AiContextTarget,
   ConnectionProfile,
   SessionSnapshot,
   WorkspaceTab
@@ -30,6 +31,41 @@ function contextModeLabel(mode: 'metadata' | 'recent-terminal') {
   return mode === 'metadata' ? t.aiCopilotContextMetadata : t.aiCopilotContextRecentTerminal
 }
 
+function targetHasChanged({
+  target,
+  activeProfile,
+  activeSession,
+  activeTab,
+  rootTab
+}: {
+  target: AiContextTarget
+  activeProfile: ConnectionProfile | null
+  activeSession: SessionSnapshot | null
+  activeTab: WorkspaceTab | null
+  rootTab: WorkspaceTab | null
+}) {
+  if (
+    !activeTab ||
+    !rootTab ||
+    !activeSession ||
+    activeTab.id !== target.tabId ||
+    rootTab.id !== target.rootTabId ||
+    activeTab.sessionType !== target.sessionType ||
+    activeSession.connected !== true
+  ) {
+    return true
+  }
+
+  const host = activeSession.accessHost || activeProfile?.host || activeTab.title
+  const user = activeSession.shellUser || activeSession.loginUser || activeProfile?.username
+  const cwd = activeSession.shellCwd || activeSession.remotePath || undefined
+  return (
+    (Boolean(target.displayHost) && Boolean(host) && target.displayHost !== host) ||
+    (Boolean(target.user) && Boolean(user) && target.user !== user) ||
+    (Boolean(target.cwd) && Boolean(cwd) && target.cwd !== cwd)
+  )
+}
+
 export function AiCopilotPanel({
   activeProfile,
   activeSession,
@@ -56,6 +92,10 @@ export function AiCopilotPanel({
   const [commandProposal, setCommandProposal] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
   const [writingCommandId, setWritingCommandId] = useState<string | null>(null)
+  const [conversationSearch, setConversationSearch] = useState('')
+  const [isRenamingConversation, setIsRenamingConversation] = useState(false)
+  const [conversationTitleDraft, setConversationTitleDraft] = useState('')
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
   const messageViewportRef = useRef<HTMLDivElement>(null)
   const {
     providers,
@@ -72,12 +112,33 @@ export function AiCopilotPanel({
     selectProvider,
     loadConversation,
     newChat,
+    renameConversation,
+    deleteConversation,
     createContextPreview,
     clearContextPreview,
     sendMessage,
     retry,
     stop
   } = useAiCopilot()
+
+  const previewTargetChanged = useMemo(
+    () =>
+      contextPreview
+        ? targetHasChanged({
+            target: contextPreview.target,
+            activeProfile,
+            activeSession,
+            activeTab,
+            rootTab
+          })
+        : false,
+    [activeProfile, activeSession, activeTab, contextPreview, rootTab]
+  )
+  const filteredConversations = useMemo(() => {
+    const query = conversationSearch.trim().toLocaleLowerCase()
+    if (!query) return conversations
+    return conversations.filter((item) => item.title.toLocaleLowerCase().includes(query))
+  }, [conversationSearch, conversations])
 
   useEffect(() => {
     const viewport = messageViewportRef.current
@@ -92,10 +153,20 @@ export function AiCopilotPanel({
     }
   }, [contextPreview])
 
+  useEffect(() => {
+    setIsRenamingConversation(false)
+    setIsDeleteConfirmationOpen(false)
+    setConversationTitleDraft(conversation?.title ?? '')
+  }, [conversation?.id, conversation?.title])
+
   const canChat = Boolean(currentProvider)
   const canRetry = Boolean(errorMessage && conversation?.messages.at(-1)?.role === 'user')
 
   const send = async () => {
+    if (contextPreview && previewTargetChanged) {
+      setCommandActionMessage(t.aiCopilotContextTargetChanged)
+      return
+    }
     const sent = await sendMessage(
       draft,
       contextPreview
@@ -124,6 +195,25 @@ export function AiCopilotPanel({
   const clearPreview = () => {
     clearContextPreview()
     setCommandProposal(false)
+    setCommandActionMessage(null)
+  }
+
+  const saveConversationTitle = async () => {
+    if (!conversation) return
+    const saved = await renameConversation(conversation.id, conversationTitleDraft)
+    if (saved) {
+      setIsRenamingConversation(false)
+      setConversationTitleDraft('')
+    }
+  }
+
+  const deleteCurrentConversation = async () => {
+    if (!conversation) return
+    const deleted = await deleteConversation(conversation.id)
+    if (deleted) {
+      setIsDeleteConfirmationOpen(false)
+      setConversationSearch('')
+    }
   }
 
   const copyCommand = async (suggestion: AiCommandSuggestion) => {
@@ -222,8 +312,16 @@ export function AiCopilotPanel({
           <strong>{targetLabel}</strong>
           <small>{isTerminalTarget ? workingDirectory : t.aiCopilotNoTerminalDescription}</small>
         </span>
-        <span className={`ai-copilot-context-status ${contextPreview ? 'is-approved' : ''}`}>
-          {contextPreview ? t.aiCopilotContextOn : t.aiCopilotContextOff}
+        <span
+          className={`ai-copilot-context-status ${
+            previewTargetChanged ? 'is-stale' : contextPreview ? 'is-approved' : ''
+          }`}
+        >
+          {previewTargetChanged
+            ? t.aiCopilotContextTargetChanged
+            : contextPreview
+              ? t.aiCopilotContextOn
+              : t.aiCopilotContextOff}
         </span>
       </section>
 
@@ -293,6 +391,14 @@ export function AiCopilotPanel({
                 </label>
                 <label>
                   <span>{t.aiCopilotConversationLabel}</span>
+                  <input
+                    aria-label={t.aiCopilotHistorySearch}
+                    disabled={isStreaming}
+                    placeholder={t.aiCopilotHistorySearchPlaceholder}
+                    type="search"
+                    value={conversationSearch}
+                    onChange={(event) => setConversationSearch(event.target.value)}
+                  />
                   <select
                     disabled={isStreaming}
                     value={conversation?.id ?? ''}
@@ -305,13 +411,107 @@ export function AiCopilotPanel({
                     }}
                   >
                     <option value="">{t.aiCopilotNewChat}</option>
-                    {conversations.map((item) => (
+                    {conversation && !filteredConversations.some((item) => item.id === conversation.id) ? (
+                      <option value={conversation.id}>{conversation.title}</option>
+                    ) : null}
+                    {filteredConversations.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.title}
                       </option>
                     ))}
                   </select>
                 </label>
+              </section>
+
+              <section className="ai-copilot-conversation-actions" aria-label={t.aiCopilotConversationControls}>
+                {conversation ? (
+                  isRenamingConversation ? (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void saveConversationTitle()
+                      }}
+                    >
+                      <input
+                        aria-label={t.aiCopilotConversationTitle}
+                        autoFocus
+                        disabled={isStreaming}
+                        maxLength={120}
+                        value={conversationTitleDraft}
+                        onChange={(event) => setConversationTitleDraft(event.target.value)}
+                      />
+                      <button disabled={isStreaming || !conversationTitleDraft.trim()} title={t.save} type="submit">
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          check
+                        </span>
+                        {t.save}
+                      </button>
+                      <button
+                        disabled={isStreaming}
+                        title={t.cancel}
+                        type="button"
+                        onClick={() => {
+                          setIsRenamingConversation(false)
+                          setConversationTitleDraft(conversation.title)
+                        }}
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          close
+                        </span>
+                        {t.cancel}
+                      </button>
+                    </form>
+                  ) : isDeleteConfirmationOpen ? (
+                    <div className="ai-copilot-conversation-delete-confirm">
+                      <span>{t.aiCopilotDeleteConversationConfirm}</span>
+                      <button
+                        className="is-danger"
+                        disabled={isStreaming}
+                        type="button"
+                        onClick={() => void deleteCurrentConversation()}
+                      >
+                        {t.delete}
+                      </button>
+                      <button disabled={isStreaming} type="button" onClick={() => setIsDeleteConfirmationOpen(false)}>
+                        {t.cancel}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span>{conversation.title}</span>
+                      <div>
+                        <button
+                          aria-label={t.rename}
+                          disabled={isStreaming}
+                          title={t.rename}
+                          type="button"
+                          onClick={() => {
+                            setConversationTitleDraft(conversation.title)
+                            setIsRenamingConversation(true)
+                          }}
+                        >
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            edit
+                          </span>
+                        </button>
+                        <button
+                          aria-label={t.aiCopilotDeleteConversation}
+                          className="is-danger"
+                          disabled={isStreaming}
+                          title={t.aiCopilotDeleteConversation}
+                          type="button"
+                          onClick={() => setIsDeleteConfirmationOpen(true)}
+                        >
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            delete
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <span>{t.aiCopilotNewChat}</span>
+                )}
               </section>
 
               <section className="ai-copilot-context-control" aria-label={t.aiCopilotContextPreview}>
@@ -357,6 +557,9 @@ export function AiCopilotPanel({
                     <strong>{t.aiCopilotContextPreviewTitle}</strong>
                     <pre>{contextPreview.preview}</pre>
                     <footer>
+                      {previewTargetChanged ? (
+                        <span className="is-target-changed">{t.aiCopilotContextTargetChanged}</span>
+                      ) : null}
                       {contextPreview.redactions.length
                         ? t.aiCopilotContextRedactions.replace(
                             '{count}',
@@ -365,7 +568,9 @@ export function AiCopilotPanel({
                         : null}
                       {contextPreview.truncated ? t.aiCopilotContextTruncated : null}
                     </footer>
-                    <small>{t.aiCopilotContextPreviewHint}</small>
+                    <small>
+                      {previewTargetChanged ? t.aiCopilotContextTargetChangedHint : t.aiCopilotContextPreviewHint}
+                    </small>
                   </article>
                 ) : (
                   <small className="ai-copilot-context-preview-hint">{t.aiCopilotContextPrototypeHint}</small>
@@ -406,41 +611,56 @@ export function AiCopilotPanel({
                         {contextModeLabel(message.context.mode)}
                       </span>
                     ) : null}
-                    {message.commands?.map((suggestion) => (
-                      <section key={suggestion.id} className="ai-copilot-command-card">
-                        <header>
-                          <span className={`ai-copilot-command-risk is-${suggestion.risk}`}>
-                            {commandRiskLabel(suggestion.risk)}
-                          </span>
-                          {suggestion.multiline ? <span>{t.aiCopilotMultilinePasteUnavailable}</span> : null}
-                        </header>
-                        <code>{suggestion.command}</code>
-                        {suggestion.explanation ? <p>{suggestion.explanation}</p> : null}
-                        <footer>
-                          <button type="button" onClick={() => void copyCommand(suggestion)}>
-                            <span aria-hidden="true" className="material-symbols-outlined">
-                              content_copy
+                    {message.commands?.map((suggestion) => {
+                      const commandTargetChanged = targetHasChanged({
+                        target: suggestion.target,
+                        activeProfile,
+                        activeSession,
+                        activeTab,
+                        rootTab
+                      })
+                      return (
+                        <section key={suggestion.id} className="ai-copilot-command-card">
+                          <header>
+                            <span className={`ai-copilot-command-risk is-${suggestion.risk}`}>
+                              {commandRiskLabel(suggestion.risk)}
                             </span>
-                            {t.aiCopilotCopyCommand}
-                          </button>
-                          <button
-                            disabled={
-                              suggestion.multiline ||
-                              suggestion.target.sessionType !== 'ssh' ||
-                              writingCommandId === suggestion.id
-                            }
-                            type="button"
-                            onClick={() => void writeCommand(suggestion)}
-                          >
-                            <span aria-hidden="true" className="material-symbols-outlined">
-                              input
-                            </span>
-                            {t.aiCopilotPasteCommand}
-                          </button>
-                        </footer>
-                        <small>{t.aiCopilotPasteCommandHint}</small>
-                      </section>
-                    ))}
+                            {commandTargetChanged ? (
+                              <span className="is-target-changed">{t.aiCopilotContextTargetChanged}</span>
+                            ) : null}
+                            {suggestion.multiline ? <span>{t.aiCopilotMultilinePasteUnavailable}</span> : null}
+                          </header>
+                          <code>{suggestion.command}</code>
+                          {suggestion.explanation ? <p>{suggestion.explanation}</p> : null}
+                          <footer>
+                            <button type="button" onClick={() => void copyCommand(suggestion)}>
+                              <span aria-hidden="true" className="material-symbols-outlined">
+                                content_copy
+                              </span>
+                              {t.aiCopilotCopyCommand}
+                            </button>
+                            <button
+                              disabled={
+                                suggestion.multiline ||
+                                suggestion.target.sessionType !== 'ssh' ||
+                                commandTargetChanged ||
+                                writingCommandId === suggestion.id
+                              }
+                              type="button"
+                              onClick={() => void writeCommand(suggestion)}
+                            >
+                              <span aria-hidden="true" className="material-symbols-outlined">
+                                input
+                              </span>
+                              {t.aiCopilotPasteCommand}
+                            </button>
+                          </footer>
+                          <small>
+                            {commandTargetChanged ? t.aiCopilotContextTargetChangedHint : t.aiCopilotPasteCommandHint}
+                          </small>
+                        </section>
+                      )
+                    })}
                   </article>
                 ))
               )}
@@ -493,11 +713,13 @@ export function AiCopilotPanel({
               </span>
               {isStreaming
                 ? t.aiCopilotThinking
-                : commandProposal
-                  ? t.aiCopilotCommandProposalHint
-                  : contextPreview
-                    ? t.aiCopilotContextPreviewReady
-                    : t.aiCopilotL0ComposerHint}
+                : previewTargetChanged
+                  ? t.aiCopilotContextTargetChangedHint
+                  : commandProposal
+                    ? t.aiCopilotCommandProposalHint
+                    : contextPreview
+                      ? t.aiCopilotContextPreviewReady
+                      : t.aiCopilotL0ComposerHint}
             </span>
             {isStreaming ? (
               <button aria-label={t.aiCopilotStop} className="is-stop" type="button" onClick={() => void stop()}>
@@ -511,8 +733,14 @@ export function AiCopilotPanel({
                   aria-label={t.aiCopilotCommandProposal}
                   aria-pressed={commandProposal}
                   className={`ai-copilot-command-proposal-toggle ${commandProposal ? 'is-active' : ''}`}
-                  disabled={!contextPreview}
-                  title={contextPreview ? t.aiCopilotCommandProposalHint : t.aiCopilotCommandProposalRequiresContext}
+                  disabled={!contextPreview || previewTargetChanged}
+                  title={
+                    previewTargetChanged
+                      ? t.aiCopilotContextTargetChangedHint
+                      : contextPreview
+                        ? t.aiCopilotCommandProposalHint
+                        : t.aiCopilotCommandProposalRequiresContext
+                  }
                   type="button"
                   onClick={() => setCommandProposal((current) => !current)}
                 >
@@ -522,7 +750,7 @@ export function AiCopilotPanel({
                 </button>
                 <button
                   aria-label={t.aiCopilotSend}
-                  disabled={!canChat || !draft.trim()}
+                  disabled={!canChat || !draft.trim() || (Boolean(contextPreview) && previewTargetChanged)}
                   type="button"
                   onClick={() => void send()}
                 >
