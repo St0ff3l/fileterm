@@ -288,7 +288,11 @@ export function useAiCopilot() {
       activeResponseModeRef.current = 'chat'
       setActiveRequestId(null)
       setIsStreaming(false)
-      setErrorMessage(event.message)
+      // A user stop (or a surface teardown) is a successful cancellation
+      // path, not a retryable Provider error. Restore the persisted local
+      // conversation so any partial assistant delta disappears, while
+      // keeping the submitted user message available in history.
+      setErrorMessage(event.code === 'AI_REQUEST_CANCELLED' ? null : event.message)
       void restoreConversation(conversationId)
     },
     [applyConversation, restoreConversation]

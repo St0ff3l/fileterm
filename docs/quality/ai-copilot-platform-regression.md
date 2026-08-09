@@ -9,6 +9,35 @@
 - 为代理与断网用例准备可开关的 HTTP CONNECT 或 SOCKS5 代理，并确保不会在测试日志中保存真实 API Key 或终端输出。
 - 准备一个非敏感 SSH 测试目标和可重复的短命令；不要在生产主机上测试 Review Mode 或上下文上传。
 
+### 可控本地 Provider（推荐）
+
+仓库内提供仅监听 loopback 的 OpenAI-compatible fixture，用于把 L0 流式、停止、断连重试、usage 和命令卡的验收变成可重复操作：
+
+```bash
+npm run qa:ai-copilot-fixture
+```
+
+在打包应用的 AI Provider 设置中填写以下 **测试专用** 值：
+
+| 字段            | 值                         |
+| --------------- | -------------------------- |
+| Provider 类型   | `OpenAI-compatible Chat`   |
+| Base URL        | `http://127.0.0.1:9419/v1` |
+| 模型            | `fileterm-fixture`         |
+| API Key         | `fileterm-fixture-key`     |
+| 允许不安全 HTTP | 开启                       |
+| 无 API Key      | 关闭                       |
+
+fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization` 内容。可用下列消息触发确定性行为：
+
+- `fixture:hello`：普通 SSE 回答和 usage。
+- `fixture:slow`：持续流式输出，便于验证“停止”与关闭面板/窗口后的取消。
+- `fixture:fail-once`：首个请求返回 HTTP 503；对同一消息点击“重试”后成功。
+- `fixture:disconnect-once`：首个请求在首个 SSE chunk 后断开；对同一消息重试后成功。
+- 在已授权 L1/L2 上下文并打开“命令建议”时发送 `fixture:command` 或 `fixture:multiline`：分别返回只读 `pwd` 卡和多行卡。
+
+该 fixture 故意绑定 `127.0.0.1`，而应用会对 loopback Provider 禁用系统代理，避免本机 API Key 被意外转发。因此它**不能**替代 HTTP CONNECT / SOCKS5 验收；代理项仍须使用一个受控的非 loopback Provider 或相应测试网络。
+
 ## 每个平台：macOS、Windows、Linux
 
 - [ ] Provider 配置保存后重新打开设置：只显示 `hasApiKey`，不得回填 Key；默认 Provider、禁用和删除状态正确。

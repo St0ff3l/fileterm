@@ -2614,6 +2614,11 @@ fn emit_stream_event(
 
 fn stream_error_event(error: AppError) -> AiStreamEvent {
     let raw = error.to_string();
+    // AI failures are created as `AppError::Command`, whose display wrapper
+    // prefixes the payload with `command error: `. Strip only that stable
+    // wrapper before decoding the typed AI error. Otherwise every streamed
+    // AI failure silently degrades to the generic connection error.
+    let raw = raw.strip_prefix("command error: ").unwrap_or(&raw);
     let known_code = raw
         .split_once(": ")
         .map(|(code, message)| (code, message.to_string()))
@@ -3491,14 +3496,35 @@ fn chat_request_error(error: reqwest::Error, stage: &str) -> AppError {
     }
 }
 
+/// A cancellation can race with reqwest returning an aborted socket/body read.
+/// Once the user has cancelled, that transport error is an expected side
+/// effect rather than a Provider failure and must retain the cancellation
+/// code all the way to the renderer.
+fn cancellation_or_request_error(cancellation: &CancellationToken, fallback: AppError) -> AppError {
+    if cancellation.is_cancelled() {
+        request_cancelled_error()
+    } else {
+        fallback
+    }
+}
+
 async fn send_streaming_request(
     request: reqwest::RequestBuilder,
     cancellation: &CancellationToken,
 ) -> Result<reqwest::Response, AppError> {
     let response = tokio::select! {
         _ = cancellation.cancelled() => return Err(request_cancelled_error()),
-        response = request.send() => response.map_err(|error| chat_request_error(error, "对话请求"))?,
+        response = request.send() => match response {
+            Ok(response) => response,
+            Err(error) => return Err(cancellation_or_request_error(
+                cancellation,
+                chat_request_error(error, "对话请求"),
+            )),
+        },
     };
+    if cancellation.is_cancelled() {
+        return Err(request_cancelled_error());
+    }
     if !response.status().is_success() {
         return Err(ai_error(
             "AI_PROVIDER_HTTP_ERROR",
@@ -3532,10 +3558,17 @@ async fn consume_streaming_response(
     if is_json_response {
         let payload = tokio::select! {
             _ = cancellation.cancelled() => return Err(request_cancelled_error()),
-            payload = response.json::<Value>() => payload.map_err(|_| {
-                ai_error("AI_PROVIDER_RESPONSE_INVALID", "AI Provider 未返回有效 JSON 对象")
-            })?,
+            payload = response.json::<Value>() => match payload {
+                Ok(payload) => payload,
+                Err(_) => return Err(cancellation_or_request_error(
+                    cancellation,
+                    ai_error("AI_PROVIDER_RESPONSE_INVALID", "AI Provider 未返回有效 JSON 对象"),
+                )),
+            },
         };
+        if cancellation.is_cancelled() {
+            return Err(request_cancelled_error());
+        }
         process_payload(payload, &mut stream, channel)?;
         return Ok(stream);
     }
@@ -3544,8 +3577,17 @@ async fn consume_streaming_response(
     loop {
         let chunk = tokio::select! {
             _ = cancellation.cancelled() => return Err(request_cancelled_error()),
-            chunk = response.chunk() => chunk.map_err(|error| chat_request_error(error, "流式响应"))?,
+            chunk = response.chunk() => match chunk {
+                Ok(chunk) => chunk,
+                Err(error) => return Err(cancellation_or_request_error(
+                    cancellation,
+                    chat_request_error(error, "流式响应"),
+                )),
+            },
         };
+        if cancellation.is_cancelled() {
+            return Err(request_cancelled_error());
+        }
         let Some(chunk) = chunk else {
             break;
         };
@@ -3555,6 +3597,9 @@ async fn consume_streaming_response(
             }
             process_payload(parse_stream_payload(&event)?, &mut stream, channel)?;
         }
+    }
+    if cancellation.is_cancelled() {
+        return Err(request_cancelled_error());
     }
     for event in decoder.finish()? {
         if event.trim() == "[DONE]" {
@@ -3885,18 +3930,19 @@ async fn test_anthropic_messages(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_secret_patch, command_has_unsafe_input, context_mode_reads_terminal_transcript,
-        ensure_conversation_fits, escape_review_prompt_value, normalize_base_url,
-        normalize_conversation_title, now_millis, parse_command_proposal, provider_history_items,
-        provider_history_messages, provider_is_usable, provider_summary,
-        prune_expired_context_snapshots, repair_default_provider, sanitize_recent_terminal_output,
-        stream_anthropic_messages, stream_openai_compatible_chat, stream_openai_responses,
-        system_prompt, test_openai_compatible_chat, title_from_user_message, write_json_file,
-        AiChatResponseMode, AiCommandRisk, AiContextMode, AiContextRedactionKind,
-        AiContextRegistry, AiContextTarget, AiMessage, AiMessageRole, AiPromptContext,
-        AiProviderKind, AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome, AiReviewRecord,
-        AiStreamEvent, SseDecoder, StoredAiContextSnapshot, StoredAiProvider, StoredConversation,
-        StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets, ANTHROPIC_API_VERSION,
+        ai_error, apply_secret_patch, cancellation_or_request_error, command_has_unsafe_input,
+        context_mode_reads_terminal_transcript, ensure_conversation_fits,
+        escape_review_prompt_value, normalize_base_url, normalize_conversation_title, now_millis,
+        parse_command_proposal, provider_history_items, provider_history_messages,
+        provider_is_usable, provider_summary, prune_expired_context_snapshots,
+        repair_default_provider, sanitize_recent_terminal_output, stream_anthropic_messages,
+        stream_error_event, stream_openai_compatible_chat, stream_openai_responses, system_prompt,
+        test_openai_compatible_chat, title_from_user_message, write_json_file, AiChatResponseMode,
+        AiCommandRisk, AiContextMode, AiContextRedactionKind, AiContextRegistry, AiContextTarget,
+        AiMessage, AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch,
+        AiProviderSummary, AiReviewOutcome, AiReviewRecord, AiStreamEvent, SseDecoder,
+        StoredAiContextSnapshot, StoredAiProvider, StoredConversation, StoredProviderConfig,
+        StoredProviderSecret, StoredProviderSecrets, ANTHROPIC_API_VERSION,
         ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
         MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES, MAX_CONVERSATION_TITLE_LENGTH,
     };
@@ -4444,6 +4490,31 @@ mod tests {
             payload,
             json!({ "type": "started", "requestId": "request-1", "messageId": "message-1" })
         );
+    }
+
+    #[test]
+    fn cancelled_transport_failures_keep_the_cancelled_error_code() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+
+        let error = cancellation_or_request_error(
+            &cancellation,
+            ai_error(
+                "AI_PROVIDER_CONNECTION_FAILED",
+                "AI Provider 流式响应失败，请检查网络和 API 地址",
+            ),
+        );
+
+        assert!(error.to_string().contains("AI_REQUEST_CANCELLED"));
+        let event = stream_error_event(error);
+        assert!(matches!(
+            event,
+            AiStreamEvent::Error {
+                code,
+                retryable: false,
+                ..
+            } if code == "AI_REQUEST_CANCELLED"
+        ));
     }
 
     #[test]
