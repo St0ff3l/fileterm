@@ -52,6 +52,27 @@ function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft {
   }
 }
 
+function aiProviderRequestUrlPreview(draft: AiProviderDraft) {
+  const endpoint =
+    draft.kind === 'openai-compatible-chat'
+      ? '/chat/completions'
+      : draft.kind === 'openai-responses'
+        ? '/responses'
+        : '/messages'
+  try {
+    const url = new URL(draft.baseUrl.trim())
+    // Keep this preview safe even while a user is correcting an invalid draft.
+    // The Rust validator rejects credentials, queries and fragments on save.
+    url.username = ''
+    url.password = ''
+    url.search = ''
+    url.hash = ''
+    return `${url.toString().replace(/\/+$/, '')}${endpoint}`
+  } catch {
+    return null
+  }
+}
+
 export function SettingsModal({
   theme,
   onSetTheme,
@@ -109,6 +130,7 @@ export function SettingsModal({
   const [aiProviders, setAiProviders] = useState<AiProviderSummary[]>([])
   const [aiDraft, setAiDraft] = useState<AiProviderDraft>(() => createAiProviderDraft())
   const [aiApiKey, setAiApiKey] = useState('')
+  const [clearAiApiKey, setClearAiApiKey] = useState(false)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
   const [syncOperation, setSyncOperation] = useState<
@@ -295,13 +317,17 @@ export function SettingsModal({
   const selectAiProvider = (provider: AiProviderSummary | undefined) => {
     setAiDraft(provider ? aiProviderToDraft(provider) : createAiProviderDraft(aiProviders.length === 0))
     setAiApiKey('')
+    setClearAiApiKey(false)
     setAiMessage(null)
   }
 
-  const aiProviderInput = () => ({
-    provider: aiDraft,
-    ...(aiApiKey.trim() ? { secrets: { apiKey: aiApiKey } } : {})
-  })
+  const aiProviderInput = () => {
+    const secrets = clearAiApiKey ? { apiKey: null } : aiApiKey.trim() ? { apiKey: aiApiKey } : undefined
+    return {
+      provider: aiDraft,
+      ...(secrets ? { secrets } : {})
+    }
+  }
 
   const saveAiProvider = async () => {
     if (!desktopApi || aiOperation) return
@@ -319,6 +345,7 @@ export function SettingsModal({
       setAiMessage(error instanceof Error ? error.message : String(error))
     } finally {
       setAiApiKey('')
+      setClearAiApiKey(false)
       setAiOperation(null)
     }
   }
@@ -349,6 +376,7 @@ export function SettingsModal({
       const fallback = providers.find((provider) => provider.isDefault) ?? providers[0]
       setAiDraft(fallback ? aiProviderToDraft(fallback) : createAiProviderDraft(true))
       setAiApiKey('')
+      setClearAiApiKey(false)
       window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
       setAiMessage(t.aiSettingsDeleteSucceeded)
     } catch (error) {
@@ -359,6 +387,7 @@ export function SettingsModal({
   }
 
   const selectedAiProvider = aiDraft.id ? aiProviders.find((provider) => provider.id === aiDraft.id) : undefined
+  const aiRequestUrlPreview = aiProviderRequestUrlPreview(aiDraft)
 
   const platformLabel = (() => {
     const platform = desktopApi?.platform ?? 'unknown'
@@ -724,7 +753,13 @@ export function SettingsModal({
                           ? t.aiSettingsProviderNeedsAttention
                           : t.aiSettingsNotConfigured}
                     </strong>
-                    <p>{selectedAiProvider ? selectedAiProvider.baseUrl : t.aiSettingsPreviewHint}</p>
+                    <p>
+                      {aiRequestUrlPreview
+                        ? `${t.aiSettingsRequestUrlPreview} · ${aiRequestUrlPreview}`
+                        : selectedAiProvider
+                          ? selectedAiProvider.baseUrl
+                          : t.aiSettingsPreviewHint}
+                    </p>
                   </div>
                   <span className="ai-settings-preview-tag">
                     {selectedAiProvider?.hasApiKey ? t.aiSettingsApiKeySaved : t.aiCopilotPreview}
@@ -815,7 +850,10 @@ export function SettingsModal({
                         }
                         type="password"
                         value={aiApiKey}
-                        onChange={(event) => setAiApiKey(event.target.value)}
+                        onChange={(event) => {
+                          setAiApiKey(event.target.value)
+                          setClearAiApiKey(false)
+                        }}
                       />
                     </label>
                   </div>
@@ -865,6 +903,24 @@ export function SettingsModal({
                         <small>{t.aiSettingsAllowInsecureHttpHint}</small>
                       </span>
                     </label>
+                    {selectedAiProvider?.hasApiKey ? (
+                      <label className="ai-settings-toggle-row">
+                        <input
+                          checked={clearAiApiKey}
+                          type="checkbox"
+                          onChange={(event) => {
+                            setClearAiApiKey(event.target.checked)
+                            if (event.target.checked) {
+                              setAiApiKey('')
+                            }
+                          }}
+                        />
+                        <span>
+                          <strong>{t.aiSettingsClearApiKey}</strong>
+                          <small>{t.aiSettingsClearApiKeyHint}</small>
+                        </span>
+                      </label>
+                    ) : null}
                   </div>
                 </fieldset>
 

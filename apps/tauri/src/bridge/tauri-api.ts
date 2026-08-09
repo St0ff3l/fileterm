@@ -70,6 +70,21 @@ let terminalDataRetryBackoffMs = 1000
 const TERMINAL_DATA_RETRY_MAX_BACKOFF_MS = 30_000
 const pendingAiChatChannels = new Set<Channel<AiStreamEvent>>()
 const activeAiChatChannels = new Map<string, Channel<AiStreamEvent>>()
+let aiChatBridgeIsUnloading = false
+
+function cancelAiChatsForPageHide() {
+  aiChatBridgeIsUnloading = true
+  const requestIds = [...activeAiChatChannels.keys()]
+  activeAiChatChannels.clear()
+  pendingAiChatChannels.clear()
+  for (const requestId of requestIds) {
+    // Best effort is intentional: a closing WebView cannot wait for IPC, but
+    // the backend still receives a cancellation whenever it remains alive.
+    void invoke<void>('app_cancel_ai_chat', { requestId }).catch(() => undefined)
+  }
+}
+
+window.addEventListener('pagehide', cancelAiChatsForPageHide, { once: true })
 
 function invokeAiChat(
   command: 'app_start_ai_chat' | 'app_retry_ai_chat',
@@ -93,7 +108,9 @@ function invokeAiChat(
     .then((request) => {
       requestId = request.requestId
       pendingAiChatChannels.delete(channel)
-      if (!terminalEventReceived) {
+      if (aiChatBridgeIsUnloading) {
+        void invoke<void>('app_cancel_ai_chat', { requestId: request.requestId }).catch(() => undefined)
+      } else if (!terminalEventReceived) {
         activeAiChatChannels.set(request.requestId, channel)
       }
       return request

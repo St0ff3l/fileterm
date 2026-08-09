@@ -74,6 +74,9 @@ export function useAiCopilot() {
   const selectedProviderIdRef = useRef<string | null>(null)
   const activeConversationIdRef = useRef<string | null>(null)
   const activeAssistantMessageIdRef = useRef<string | null>(null)
+  const activeRequestIdRef = useRef<string | null>(null)
+  const requestCompletedRef = useRef(false)
+  const unmountedRef = useRef(false)
   const activeResponseModeRef = useRef<AiChatResponseMode>('chat')
   const mountedRef = useRef(true)
 
@@ -177,6 +180,21 @@ export function useAiCopilot() {
     }
   }, [refresh])
 
+  useEffect(() => {
+    unmountedRef.current = false
+    return () => {
+      unmountedRef.current = true
+      const requestId = activeRequestIdRef.current
+      activeRequestIdRef.current = null
+      // Closing the Copilot surface must also stop its provider request. The
+      // Rust service is the cancellation authority; this never mutates the
+      // conversation or sends anything to an interactive terminal.
+      if (requestId) {
+        void window.fileterm?.cancelAiChat(requestId).catch(() => undefined)
+      }
+    }
+  }, [])
+
   const createConversation = useCallback(
     async (providerId: string) => {
       const desktopApi = window.fileterm
@@ -254,6 +272,8 @@ export function useAiCopilot() {
       }
       if (event.type === 'completed') {
         activeAssistantMessageIdRef.current = null
+        activeRequestIdRef.current = null
+        requestCompletedRef.current = true
         applyConversation(event.conversation)
         setConversations((current) => replaceConversationSummary(current, event.conversation))
         setActiveRequestId(null)
@@ -263,6 +283,8 @@ export function useAiCopilot() {
         return
       }
       activeAssistantMessageIdRef.current = null
+      activeRequestIdRef.current = null
+      requestCompletedRef.current = true
       activeResponseModeRef.current = 'chat'
       setActiveRequestId(null)
       setIsStreaming(false)
@@ -282,8 +304,12 @@ export function useAiCopilot() {
       conversationId: string,
       providerId: string
     ) => {
+      requestCompletedRef.current = false
       const result = await request(conversationId, providerId, (event) => onStreamEvent(conversationId, event))
-      if (mountedRef.current) {
+      if (!mountedRef.current || unmountedRef.current) {
+        void window.fileterm?.cancelAiChat(result.requestId).catch(() => undefined)
+      } else if (!requestCompletedRef.current) {
+        activeRequestIdRef.current = result.requestId
         setActiveRequestId(result.requestId)
       }
       return result
@@ -377,6 +403,8 @@ export function useAiCopilot() {
           })
           setErrorMessage(toMessage(error))
           setIsStreaming(false)
+          activeRequestIdRef.current = null
+          requestCompletedRef.current = true
           setActiveRequestId(null)
           activeResponseModeRef.current = 'chat'
           if (options.contextSnapshotId) {
@@ -442,6 +470,8 @@ export function useAiCopilot() {
       if (mountedRef.current) {
         setErrorMessage(toMessage(error))
         setIsStreaming(false)
+        activeRequestIdRef.current = null
+        requestCompletedRef.current = true
         setActiveRequestId(null)
         activeResponseModeRef.current = 'chat'
       }

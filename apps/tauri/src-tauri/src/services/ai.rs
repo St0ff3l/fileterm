@@ -3885,15 +3885,16 @@ async fn test_anthropic_messages(
 #[cfg(test)]
 mod tests {
     use super::{
-        command_has_unsafe_input, context_mode_reads_terminal_transcript, ensure_conversation_fits,
-        escape_review_prompt_value, normalize_base_url, normalize_conversation_title, now_millis,
-        parse_command_proposal, provider_history_items, provider_history_messages,
-        provider_is_usable, provider_summary, prune_expired_context_snapshots,
-        repair_default_provider, sanitize_recent_terminal_output, stream_anthropic_messages,
-        stream_openai_responses, system_prompt, test_openai_compatible_chat,
-        title_from_user_message, write_json_file, AiChatResponseMode, AiCommandRisk, AiContextMode,
-        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiMessage, AiMessageRole,
-        AiPromptContext, AiProviderKind, AiProviderSummary, AiReviewOutcome, AiReviewRecord,
+        apply_secret_patch, command_has_unsafe_input, context_mode_reads_terminal_transcript,
+        ensure_conversation_fits, escape_review_prompt_value, normalize_base_url,
+        normalize_conversation_title, now_millis, parse_command_proposal, provider_history_items,
+        provider_history_messages, provider_is_usable, provider_summary,
+        prune_expired_context_snapshots, repair_default_provider, sanitize_recent_terminal_output,
+        stream_anthropic_messages, stream_openai_compatible_chat, stream_openai_responses,
+        system_prompt, test_openai_compatible_chat, title_from_user_message, write_json_file,
+        AiChatResponseMode, AiCommandRisk, AiContextMode, AiContextRedactionKind,
+        AiContextRegistry, AiContextTarget, AiMessage, AiMessageRole, AiPromptContext,
+        AiProviderKind, AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome, AiReviewRecord,
         AiStreamEvent, SseDecoder, StoredAiContextSnapshot, StoredAiProvider, StoredConversation,
         StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets, ANTHROPIC_API_VERSION,
         ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
@@ -3907,6 +3908,7 @@ mod tests {
     use tauri::ipc::Channel;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+    use tokio::sync::oneshot;
     use tokio_util::sync::CancellationToken;
 
     fn provider(base_url: &str) -> StoredAiProvider {
@@ -4100,6 +4102,35 @@ mod tests {
             })
         );
         assert!(!payload.to_string().contains("secret-key"));
+    }
+
+    #[test]
+    fn secret_patch_distinguishes_empty_preserve_and_explicit_clear() {
+        let mut secrets = StoredProviderSecrets {
+            schema_version: 1,
+            providers: BTreeMap::from([(
+                "provider-1".to_string(),
+                StoredProviderSecret {
+                    api_key: "saved-key".to_string(),
+                },
+            )]),
+        };
+        let preserve: AiProviderSecretPatch = serde_json::from_value(json!({ "apiKey": "   " }))
+            .expect("empty API key patch should deserialize");
+        assert!(!apply_secret_patch(
+            &mut secrets,
+            "provider-1",
+            Some(&preserve)
+        ));
+        assert_eq!(
+            secrets.providers["provider-1"].api_key, "saved-key",
+            "an empty field preserves a saved key"
+        );
+
+        let clear: AiProviderSecretPatch = serde_json::from_value(json!({ "apiKey": null }))
+            .expect("null API key patch should deserialize");
+        assert!(apply_secret_patch(&mut secrets, "provider-1", Some(&clear)));
+        assert!(!secrets.providers.contains_key("provider-1"));
     }
 
     #[test]
@@ -4444,6 +4475,155 @@ mod tests {
         assert!(
             normalize_conversation_title(&"a".repeat(MAX_CONVERSATION_TITLE_LENGTH + 1)).is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn openai_compatible_adapter_streams_text_usage_and_finish_reason() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("fixture should bind");
+        let address = listener.local_addr().expect("fixture should have address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("fixture should accept");
+            let request = read_request(&mut socket).await;
+            assert!(request.starts_with("POST /v1/chat/completions HTTP/1.1"));
+            assert!(request
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case("authorization: Bearer test-key")));
+            let body = request
+                .split("\r\n\r\n")
+                .nth(1)
+                .expect("request should include body");
+            let body: Value = serde_json::from_str(body).expect("body should be json");
+            assert_eq!(body["model"], "test-model");
+            assert_eq!(body["stream"], true);
+            assert!(body["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|instructions| instructions.contains("no terminal")));
+            assert_eq!(body["messages"][1]["role"], "user");
+            assert_eq!(body["messages"][1]["content"], "Inspect the service");
+            assert!(!body.to_string().contains("transcript"));
+
+            let response_body = concat!(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Service\"},\"finish_reason\":null}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{\"content\":\" is healthy\"},\"finish_reason\":null}]}\n\n",
+                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":6,\"completion_tokens\":3}}\n\n",
+                "data: [DONE]\n\n"
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            socket
+                .write_all(response.as_bytes())
+                .await
+                .expect("fixture should respond");
+        });
+
+        let mut provider = provider(&format!("http://{address}/v1"));
+        provider.allow_insecure_http = true;
+        let conversation = conversation(vec![AiMessage {
+            id: "message-user".to_string(),
+            role: AiMessageRole::User,
+            content: "Inspect the service".to_string(),
+            created_at: "1".to_string(),
+            context: None,
+            commands: Vec::new(),
+            review: None,
+        }]);
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let result = stream_openai_compatible_chat(
+            &provider,
+            Some("test-key"),
+            &conversation,
+            None,
+            AiChatResponseMode::Chat,
+            &stream_channel(Arc::clone(&events)),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("compatible stream should succeed");
+
+        assert_eq!(result.content, "Service is healthy");
+        assert_eq!(result.finish_reason.as_deref(), Some("stop"));
+        assert_eq!(result.input_tokens, Some(6));
+        assert_eq!(result.output_tokens, Some(3));
+        assert_eq!(
+            *events.lock().expect("events lock should be available"),
+            vec![
+                json!({ "type": "text-delta", "text": "Service" }),
+                json!({ "type": "text-delta", "text": " is healthy" }),
+            ]
+        );
+        server.await.expect("fixture should finish");
+    }
+
+    #[tokio::test]
+    async fn compatible_stream_stops_promptly_when_cancelled_mid_response() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("fixture should bind");
+        let address = listener.local_addr().expect("fixture should have address");
+        let (headers_sent, headers_received) = oneshot::channel();
+        let (release_server, wait_for_release) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("fixture should accept");
+            let request = read_request(&mut socket).await;
+            assert!(request.starts_with("POST /v1/chat/completions HTTP/1.1"));
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n",
+                )
+                .await
+                .expect("fixture should send headers");
+            let _ = headers_sent.send(());
+            let _ = wait_for_release.await;
+        });
+
+        let mut provider = provider(&format!("http://{address}/v1"));
+        provider.allow_insecure_http = true;
+        let conversation = conversation(vec![AiMessage {
+            id: "message-user".to_string(),
+            role: AiMessageRole::User,
+            content: "Inspect the service".to_string(),
+            created_at: "1".to_string(),
+            context: None,
+            commands: Vec::new(),
+            review: None,
+        }]);
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let cancellation = CancellationToken::new();
+        let request_cancellation = cancellation.clone();
+        let request = tokio::spawn(async move {
+            stream_openai_compatible_chat(
+                &provider,
+                Some("test-key"),
+                &conversation,
+                None,
+                AiChatResponseMode::Chat,
+                &stream_channel(events),
+                &request_cancellation,
+            )
+            .await
+        });
+
+        headers_received
+            .await
+            .expect("fixture should confirm the stream is waiting");
+        cancellation.cancel();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), request)
+            .await
+            .expect("cancelled stream should not wait for the provider")
+            .expect("stream task should not panic");
+        let error = match result {
+            Ok(_) => panic!("cancelled stream should return an error"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("AI_REQUEST_CANCELLED"));
+
+        let _ = release_server.send(());
+        server.await.expect("fixture should finish");
     }
 
     #[tokio::test]
