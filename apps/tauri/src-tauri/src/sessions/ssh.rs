@@ -5172,20 +5172,22 @@ fn spawn_remote_command(
     tokio::spawn(async move {
         let result = match timeout(
             timeout_duration,
-            super::system_metrics::exec_command_with_status(&handle, &command),
+            super::system_metrics::exec_command_with_status_detailed(&handle, &command),
         )
         .await
         {
-            Ok(Ok((output, exit_code))) => Ok(serde_json::json!({
-                "output": output,
-                "exitCode": exit_code,
+            Ok(Ok(result)) => Ok(serde_json::json!({
+                "output": result.output,
+                "exitCode": result.exit_code,
                 "timedOut": false,
+                "outputTruncated": result.output_truncated,
             })),
             Ok(Err(error)) => Err(error),
             Err(_) => Ok(serde_json::json!({
                 "output": "",
                 "exitCode": Value::Null,
                 "timedOut": true,
+                "outputTruncated": false,
             })),
         };
         let _ = respond_to.send(result);

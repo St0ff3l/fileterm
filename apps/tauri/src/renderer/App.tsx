@@ -18,7 +18,7 @@ import {
   type CreateProfileInput,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
   type FileContentSnapshot,
-  type McpApprovalRequest,
+  type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type OverviewSectionId,
   type RemoteFileItem,
@@ -172,9 +172,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   ])
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
-  const [mcpApprovalRequests, setMcpApprovalRequests] = useState<McpApprovalRequest[]>([])
-  const [resolvingMcpApprovalId, setResolvingMcpApprovalId] = useState<string | null>(null)
-  const resolvingMcpApprovalIdsRef = useRef(new Set<string>())
+  const [actionApprovalRequests, setActionApprovalRequests] = useState<ActionApprovalRequest[]>([])
+  const [resolvingActionApprovalId, setResolvingActionApprovalId] = useState<string | null>(null)
+  const resolvingActionApprovalIdsRef = useRef(new Set<string>())
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
@@ -226,8 +226,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       return
     }
 
-    return desktopApi.onMcpApprovalRequest((request) => {
-      setMcpApprovalRequests((current) => {
+    return desktopApi.onActionApprovalRequest((request) => {
+      setActionApprovalRequests((current) => {
         if (current.some((item) => item.requestId === request.requestId)) {
           return current
         }
@@ -236,26 +236,26 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     })
   }, [desktopApi, isMainWorkspaceWindow])
 
-  const resolveMcpApproval = useCallback(
+  const resolveActionApproval = useCallback(
     async (approved: boolean) => {
-      const request = mcpApprovalRequests[0]
-      if (!desktopApi || !request || resolvingMcpApprovalIdsRef.current.has(request.requestId)) {
+      const request = actionApprovalRequests[0]
+      if (!desktopApi || !request || resolvingActionApprovalIdsRef.current.has(request.requestId)) {
         return
       }
 
-      resolvingMcpApprovalIdsRef.current.add(request.requestId)
-      setResolvingMcpApprovalId(request.requestId)
+      resolvingActionApprovalIdsRef.current.add(request.requestId)
+      setResolvingActionApprovalId(request.requestId)
       try {
-        await desktopApi.resolveMcpApproval(request.requestId, approved)
-        setMcpApprovalRequests((current) => current.filter((item) => item.requestId !== request.requestId))
+        await desktopApi.resolveActionApproval(request.requestId, approved)
+        setActionApprovalRequests((current) => current.filter((item) => item.requestId !== request.requestId))
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause))
       } finally {
-        resolvingMcpApprovalIdsRef.current.delete(request.requestId)
-        setResolvingMcpApprovalId((current) => (current === request.requestId ? null : current))
+        resolvingActionApprovalIdsRef.current.delete(request.requestId)
+        setResolvingActionApprovalId((current) => (current === request.requestId ? null : current))
       }
     },
-    [desktopApi, mcpApprovalRequests]
+    [actionApprovalRequests, desktopApi]
   )
 
   // 1. IPC Synchronization Hook
@@ -1850,25 +1850,25 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         }
         windowCloseConfirm={windowCloseConfirmProps}
       />
-      {isMainWorkspaceWindow && mcpApprovalRequests[0] ? (
+      {isMainWorkspaceWindow && actionApprovalRequests[0] ? (
         <ConfirmActionDialog
           confirmLabel={t.confirm}
-          confirmVariant={mcpApprovalRequests[0].destructive ? 'danger' : 'primary'}
+          confirmVariant={actionApprovalRequests[0].destructive ? 'danger' : 'primary'}
           description={
             <div>
-              <p>{mcpApprovalRequests[0].summary}</p>
-              {mcpApprovalRequests[0].target ? <p>目标：{mcpApprovalRequests[0].target}</p> : null}
-              {mcpApprovalRequests[0].details ? <pre>{mcpApprovalRequests[0].details}</pre> : null}
+              <p>{actionApprovalRequests[0].summary}</p>
+              {actionApprovalRequests[0].target ? <p>目标：{actionApprovalRequests[0].target}</p> : null}
+              {actionApprovalRequests[0].details ? <pre>{actionApprovalRequests[0].details}</pre> : null}
             </div>
           }
-          isSubmitting={resolvingMcpApprovalId === mcpApprovalRequests[0].requestId}
+          isSubmitting={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
           onClose={() => {
-            void resolveMcpApproval(false)
+            void resolveActionApproval(false)
           }}
           onConfirm={() => {
-            void resolveMcpApproval(true)
+            void resolveActionApproval(true)
           }}
-          title={mcpApprovalRequests[0].title}
+          title={actionApprovalRequests[0].title}
         />
       ) : null}
     </>

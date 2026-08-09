@@ -5,6 +5,10 @@
 //! running desktop application over an authenticated loopback socket. SSH,
 //! SFTP workers and connection secrets remain inside the desktop process.
 
+use crate::services::action_review::{
+    request_action_approval, ActionApprovalDecision, ActionApprovalDetails, ActionApprovalSource,
+    ACTION_APPROVAL_TIMEOUT,
+};
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -18,11 +22,11 @@ use std::{
     time::Duration,
 };
 use subtle::ConstantTimeEq;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     net::{TcpListener, TcpStream},
-    sync::{oneshot, Semaphore},
+    sync::Semaphore,
     time::timeout,
 };
 
@@ -31,7 +35,6 @@ const MCP_PROTOCOL_VERSION: u32 = 1;
 const MCP_JSONRPC_PROTOCOL_VERSION: &str = "2025-06-18";
 const MCP_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(130);
-const MCP_APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
 const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
 const MCP_DEFAULT_PAGE_SIZE: usize = 20;
@@ -199,7 +202,7 @@ async fn handle_runtime_connection(
     let request_timeout = if envelope.request.requires_approval
         && action_requires_approval(&envelope.request.action)
     {
-        MCP_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
+        ACTION_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
     } else {
         MCP_BRIDGE_TIMEOUT
     };
@@ -366,74 +369,16 @@ fn action_requires_approval(action: &str) -> bool {
     )
 }
 
-struct ApprovalDetails {
-    summary: String,
-    target: Option<String>,
-    details: Option<String>,
-    destructive: bool,
-}
-
 async fn request_mcp_approval(app: &AppHandle, action: &str, params: &Value) -> Result<(), String> {
     let details = approval_details(app, action, params).await?;
-    let request_id = format!("mcp-approval-{}", uuid::Uuid::new_v4());
-    let (sender, receiver) = oneshot::channel();
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    state
-        .pending_mcp_approvals
-        .write()
+    let decision = request_action_approval(app, ActionApprovalSource::Mcp, action, details)
         .await
-        .insert(request_id.clone(), sender);
-
-    let payload = json!({
-        "requestId": request_id,
-        "operation": action,
-        "title": "MCP 外部操作需要确认",
-        "summary": details.summary,
-        "target": details.target,
-        "details": details.details,
-        "destructive": details.destructive,
-    });
-    if let Err(error) = app.emit("mcp:approval-request", payload) {
-        state
-            .pending_mcp_approvals
-            .write()
-            .await
-            .remove(&request_id);
-        return Err(format!("Unable to show MCP approval dialog: {error}"));
-    }
-
-    let decision = timeout(MCP_APPROVAL_TIMEOUT, receiver).await;
-    state
-        .pending_mcp_approvals
-        .write()
-        .await
-        .remove(&request_id);
+        .map_err(public_app_error)?;
     match decision {
-        Ok(Ok(true)) => {
-            crate::services::logging::info(
-                app,
-                "mcp",
-                format!("approval granted operation={action}"),
-            );
-            Ok(())
-        }
-        Ok(Ok(false)) => {
-            crate::services::logging::info(
-                app,
-                "mcp",
-                format!("approval denied operation={action}"),
-            );
-            Err("MCP operation was rejected by the user".to_string())
-        }
-        Ok(Err(_)) => Err("MCP approval dialog was closed".to_string()),
-        Err(_) => {
-            crate::services::logging::warn(
-                app,
-                "mcp",
-                format!("approval timed out operation={action}"),
-            );
-            Err("MCP approval timed out; the operation was not started".to_string())
-        }
+        ActionApprovalDecision::Approved => Ok(()),
+        decision => Err(decision
+            .rejection_message(ActionApprovalSource::Mcp)
+            .to_string()),
     }
 }
 
@@ -441,7 +386,7 @@ async fn approval_details(
     app: &AppHandle,
     action: &str,
     params: &Value,
-) -> Result<ApprovalDetails, String> {
+) -> Result<ActionApprovalDetails, String> {
     let tab_id = optional_string(params, "tab_id", 256)?;
     let target = match action {
         "open_connection" => optional_string(params, "profile_id", 256)?,
@@ -599,7 +544,8 @@ async fn approval_details(
         "delete_ssh_tunnel" => "删除 SSH 隧道".to_string(),
         _ => return Err("Unsupported FileTerm MCP approval action".to_string()),
     };
-    Ok(ApprovalDetails {
+    Ok(ActionApprovalDetails {
+        title: "MCP 外部操作需要确认".to_string(),
         summary,
         target: target.or(tab_id),
         details,

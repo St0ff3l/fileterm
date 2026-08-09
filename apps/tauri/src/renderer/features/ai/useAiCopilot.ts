@@ -513,6 +513,30 @@ export function useAiCopilot() {
     [applyConversation, isStreaming]
   )
 
+  const runReview = useCallback(
+    async (commandId: string) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return null
+      setErrorMessage(null)
+      try {
+        const result = await desktopApi.runAiReview({ commandId })
+        if (mountedRef.current) {
+          if (conversationRef.current?.id === result.conversation.id) {
+            applyConversation(result.conversation)
+          }
+          setConversations((current) => replaceConversationSummary(current, result.conversation))
+        }
+        return result
+      } catch (error) {
+        if (mountedRef.current) {
+          setErrorMessage(toMessage(error))
+        }
+        return null
+      }
+    },
+    [applyConversation, isStreaming]
+  )
+
   const newChat = useCallback(() => {
     if (isStreaming) return
     activeAssistantMessageIdRef.current = null
@@ -544,6 +568,7 @@ export function useAiCopilot() {
     createContextPreview,
     clearContextPreview,
     sendMessage,
+    runReview,
     retry,
     stop
   }

@@ -26,6 +26,17 @@ const EXEC_CHANNEL_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
 /// 参考 meatshell 的 MON_BUF_CAP 设计，防止恶意服务器内存 DoS。
 const EXEC_COMMAND_OUTPUT_CAP: usize = 256 * 1024;
 
+/// Bounded output collected from a dedicated SSH exec channel. The legacy
+/// tuple helpers below intentionally keep their stable shape, while callers
+/// that surface output to users (AI Review Mode) can expose the truncation
+/// bit instead of pretending the remote command produced a complete result.
+#[derive(Clone, Debug)]
+pub struct ExecCommandResult {
+    pub output: String,
+    pub exit_code: Option<u32>,
+    pub output_truncated: bool,
+}
+
 pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
     // 1. Try POSIX probe
     let posix_cmd = "sh -lc 'printf \"__FILETERM_PROBE_START__\\n\"; uname -s 2>/dev/null; shell_exe=$(readlink /proc/$$/exe 2>/dev/null || readlink /bin/sh 2>/dev/null || true); case \"$shell_exe\" in *busybox*) printf \"busybox\\n\" ;; esac; if [ -f /etc/openwrt_release ]; then printf \"openwrt\\n\"; fi; printf \"__FILETERM_PROBE_END__\\n\"'";
@@ -132,6 +143,17 @@ pub async fn exec_command_with_status<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<(String, Option<u32>), String> {
+    exec_command_with_status_detailed(handle, cmd)
+        .await
+        .map(|result| (result.output, result.exit_code))
+}
+
+/// Like [`exec_command_with_status`], but preserves whether the bounded
+/// collector discarded remote output after its safety cap.
+pub async fn exec_command_with_status_detailed<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+) -> Result<ExecCommandResult, String> {
     exec_command_internal(handle, cmd, None, false).await
 }
 
@@ -142,7 +164,9 @@ pub async fn exec_command_with_stdin_status<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false).await
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false)
+        .await
+        .map(|result| (result.output, result.exit_code))
 }
 
 /// Run an exec command with a requested PTY and retain its SSH-level exit
@@ -152,7 +176,9 @@ pub async fn exec_command_with_status_pty<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, None, true).await
+    exec_command_internal(handle, cmd, None, true)
+        .await
+        .map(|result| (result.output, result.exit_code))
 }
 
 /// Run an exec command with a requested PTY, write `stdin`, and retain the
@@ -164,7 +190,9 @@ pub async fn exec_command_with_stdin_status_pty<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true).await
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true)
+        .await
+        .map(|result| (result.output, result.exit_code))
 }
 
 async fn exec_command_internal<H: Handler>(
@@ -172,7 +200,7 @@ async fn exec_command_internal<H: Handler>(
     cmd: &str,
     stdin: Option<&[u8]>,
     request_pty: bool,
-) -> Result<(String, Option<u32>), String> {
+) -> Result<ExecCommandResult, String> {
     let mut channel = handle
         .channel_open_session()
         .await
@@ -255,7 +283,11 @@ async fn exec_command_internal<H: Handler>(
             _ => {}
         }
     }
-    Ok((String::from_utf8_lossy(&output).into_owned(), exit_status))
+    Ok(ExecCommandResult {
+        output: String::from_utf8_lossy(&output).into_owned(),
+        exit_code: exit_status,
+        output_truncated: capped,
+    })
 }
 
 /// Run a command via the exec channel, write `stdin` to the channel, then
@@ -1679,8 +1711,22 @@ mod tests {
     use super::{
         build_posix_metrics_command, build_windows_metrics_command,
         build_windows_streaming_metrics_command, build_windows_streaming_metrics_exec_command,
-        classify_posix_probe_body, classify_windows_probe_output, parse_system_metrics,
+        classify_posix_probe_body, classify_windows_probe_output, extend_with_cap,
+        parse_system_metrics, EXEC_COMMAND_OUTPUT_CAP,
     };
+
+    #[test]
+    fn bounded_exec_output_marks_when_remote_data_is_discarded() {
+        let mut output = vec![b'x'; EXEC_COMMAND_OUTPUT_CAP - 2];
+        let mut capped = false;
+
+        extend_with_cap(&mut output, b"abcd", &mut capped);
+        extend_with_cap(&mut output, b"ignored", &mut capped);
+
+        assert_eq!(output.len(), EXEC_COMMAND_OUTPUT_CAP);
+        assert!(capped);
+        assert_eq!(&output[EXEC_COMMAND_OUTPUT_CAP - 2..], b"ab");
+    }
 
     #[test]
     fn posix_metrics_command_emits_real_awk_line_breaks() {

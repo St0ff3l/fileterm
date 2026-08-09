@@ -884,8 +884,12 @@ export type SshInteractionRequest =
   | SshKeyPassphrasePromptRequest
   | SshKeyboardInteractiveRequest
 
-export interface McpApprovalRequest {
+export type ActionApprovalSource = 'mcp' | 'ai-review'
+
+/** One-time in-app approval shared by MCP and AI Review Mode. */
+export interface ActionApprovalRequest {
   requestId: string
+  source: ActionApprovalSource
   operation: string
   title: string
   summary: string
@@ -893,6 +897,9 @@ export interface McpApprovalRequest {
   details?: string
   destructive: boolean
 }
+
+/** @deprecated Use ActionApprovalRequest. */
+export type McpApprovalRequest = ActionApprovalRequest
 export type SshInteractionDraft =
   | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
@@ -1116,6 +1123,34 @@ export interface AiContextAttachment {
 
 export type AiCommandRisk = 'read-only' | 'mutating' | 'destructive' | 'privileged' | 'unknown'
 
+export type AiReviewOutcome =
+  | 'completed'
+  | 'rejected'
+  | 'approval-dismissed'
+  | 'approval-timed-out'
+  | 'target-changed'
+  | 'command-timed-out'
+  | 'failed'
+
+/** Local audit metadata for a single user-approved SSH exec invocation. */
+export interface AiReviewRecord {
+  id: string
+  commandId: string
+  command: string
+  risk: AiCommandRisk
+  target: AiContextTarget
+  timeoutMs: number
+  requestedAt: string
+  approvedAt?: string
+  completedAt: string
+  outcome: AiReviewOutcome
+  exitCode?: number
+  timedOut: boolean
+  outputTruncated: boolean
+  output?: string
+  error?: string
+}
+
 /** A structured, locally validated command proposal; it is never an execution request. */
 export interface AiCommandSuggestion {
   id: string
@@ -1129,13 +1164,15 @@ export interface AiCommandSuggestion {
 /** A message stored locally for an AI Copilot conversation. */
 export interface AiMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'review'
   content: string
   createdAt: string
   /** Present only for an explicitly approved L1/L2 user turn; never contains raw transcript text. */
   context?: AiContextAttachment
   /** Present only after a strict JSON command-proposal response validates locally. */
   commands?: AiCommandSuggestion[]
+  /** Present only for one-time AI Review Mode audit messages. */
+  review?: AiReviewRecord
 }
 
 /** Lightweight metadata used by the Copilot conversation switcher. */
@@ -1207,6 +1244,15 @@ export interface AiCommandInsertResult {
   command: string
 }
 
+export interface RunAiReviewInput {
+  commandId: string
+}
+
+export interface AiReviewExecution {
+  conversation: AiConversation
+  review: AiReviewRecord
+}
+
 /** Per-request stream events; never emitted through a global application event. */
 export type AiStreamEvent =
   | { type: 'started'; requestId: string; messageId: string }
@@ -1234,6 +1280,8 @@ export type AiErrorCode =
   | 'AI_CONTEXT_FORBIDDEN'
   | 'AI_COMMAND_NOT_FOUND'
   | 'AI_COMMAND_UNSAFE_INPUT'
+  | 'AI_REVIEW_IN_PROGRESS'
+  | 'AI_REVIEW_UNAVAILABLE'
   | 'AI_CONVERSATION_LIMIT'
   | 'AI_CONVERSATION_NOT_FOUND'
   | 'AI_CONVERSATION_INVALID_INPUT'
@@ -1276,6 +1324,7 @@ export interface FileTermDesktopApi {
   retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   cancelAiChat(requestId: string): Promise<void>
   insertAiCommand(input: AiCommandInsertInput): Promise<AiCommandInsertResult>
+  runAiReview(input: RunAiReviewInput): Promise<AiReviewExecution>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -1355,7 +1404,7 @@ export interface FileTermDesktopApi {
     command: string,
     cwd?: string,
     timeoutMs?: number
-  ): Promise<{ output: string; exitCode: number | null; timedOut: boolean }>
+  ): Promise<{ output: string; exitCode: number | null; timedOut: boolean; outputTruncated: boolean }>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
   getCommandSendPreferences(): Promise<CommandSendPreferences>
@@ -1441,6 +1490,8 @@ export interface FileTermDesktopApi {
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
+  resolveActionApproval(requestId: string, approved: boolean): Promise<void>
+  /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
     tabId: string,
@@ -1453,6 +1504,8 @@ export interface FileTermDesktopApi {
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void
+  /** @deprecated Use onActionApprovalRequest. */
   onMcpApprovalRequest(listener: (request: McpApprovalRequest) => void): () => void
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void

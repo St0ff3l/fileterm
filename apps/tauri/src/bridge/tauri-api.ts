@@ -34,6 +34,7 @@ import type {
   SshTunnelSnapshot,
   CommandExecutionResult,
   TerminalZoomOperation,
+  ActionApprovalRequest,
   McpApprovalRequest,
   LocalTerminalLaunchOptions,
   AiProviderSummary,
@@ -41,6 +42,7 @@ import type {
   AiChatRequest,
   AiCommandInsertInput,
   AiCommandInsertResult,
+  AiReviewExecution,
   AiConversation,
   AiConversationSummary,
   AiContextPreview,
@@ -49,6 +51,7 @@ import type {
   CreateAiContextPreviewInput,
   RenameAiConversationInput,
   RetryAiChatInput,
+  RunAiReviewInput,
   SaveAiProviderInput,
   StartAiChatInput,
   TestAiProviderInput,
@@ -327,6 +330,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invokeAiChat('app_retry_ai_chat', input, onEvent),
     cancelAiChat: (requestId: string) => invoke<void>('app_cancel_ai_chat', { requestId }),
     insertAiCommand: (input: AiCommandInsertInput) => invoke<AiCommandInsertResult>('app_insert_ai_command', { input }),
+    runAiReview: (input: RunAiReviewInput) => invoke<AiReviewExecution>('app_run_ai_review', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),
@@ -519,12 +523,15 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         options: options ?? null
       }),
     executeRemoteCommand: (tabId: string, command: string, cwd?: string, timeoutMs?: number) =>
-      invoke<{ output: string; exitCode: number | null; timedOut: boolean }>('app_execute_remote_command', {
-        tabId,
-        command,
-        cwd: cwd ?? null,
-        timeoutMs: timeoutMs ?? null
-      }),
+      invoke<{ output: string; exitCode: number | null; timedOut: boolean; outputTruncated: boolean }>(
+        'app_execute_remote_command',
+        {
+          tabId,
+          command,
+          cwd: cwd ?? null,
+          timeoutMs: timeoutMs ?? null
+        }
+      ),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
@@ -571,6 +578,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<void>('app_resolve_ssh_interaction', { requestId, response }),
     resolveMcpApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
+    resolveActionApproval: (requestId: string, approved: boolean) =>
+      invoke<void>('app_resolve_action_approval', { requestId, approved }),
     setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
       invoke<WorkspaceSnapshot>('app_set_remote_file_access_mode', { tabId, mode, options }),
     listSshTunnels: (tabId: string) => invoke<SshTunnelSnapshot[]>('app_list_ssh_tunnels', { tabId }),
@@ -596,8 +605,10 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
+    onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>
+      subscribe('action:approval-request', listener),
     onMcpApprovalRequest: (listener: (request: McpApprovalRequest) => void) =>
-      subscribe('mcp:approval-request', listener),
+      subscribe('action:approval-request', listener),
     onSshKeysChanged: (listener: (keys: SshKeyMetadata[]) => void) => subscribe('sshKeys:changed', listener),
     onWindowCloseRequest: (listener: (event: { isQuit: boolean }) => void) =>
       subscribe('app:window-close-request', listener),

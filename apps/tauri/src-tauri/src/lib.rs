@@ -1879,6 +1879,7 @@ pub fn run() {
             crate::commands::app_retry_ai_chat,
             crate::commands::app_cancel_ai_chat,
             crate::commands::app_insert_ai_command,
+            crate::commands::app_run_ai_review,
             crate::commands::app_get_ui_state_item,
             crate::commands::app_set_ui_state_item,
             crate::commands::app_remove_ui_state_item,
@@ -1969,6 +1970,7 @@ pub fn run() {
             crate::commands::app_delete_command_template,
             crate::commands::app_execute_command_template,
             crate::commands::app_resolve_mcp_approval,
+            crate::commands::app_resolve_action_approval,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
             crate::sessions::local_files::app_connect_local_network_share,

@@ -1,6 +1,6 @@
 # AI Copilot 功能集成计划
 
-状态：进行中（Phase 0–4 的代码实现已完成；Review Mode 与跨平台发行验收待收口）
+状态：进行中（Phase 0–5 的代码实现已完成；跨平台打包应用发行验收待收口）
 前置工作：[AI Copilot 同窗 UI 草案](../completed/ai-copilot-companion-window.md)
 
 ## 1. 结论
@@ -15,10 +15,10 @@ FileTerm 内置 AI 首先定位为**保守的终端助手**，不是无人值守
 
 这使两套入口保持清晰：
 
-| 入口             | 面向用户              | 首要能力                   | 执行边界                                 |
-| ---------------- | --------------------- | -------------------------- | ---------------------------------------- |
-| 内置 Copilot     | 普通终端用户          | 解释、排障、生成可检查命令 | MVP 不执行，只复制或写入输入区           |
-| FileTerm MCP/CLI | 熟悉 Agent 的高级用户 | 远程执行、文件、传输、隧道 | MCP 修改操作逐次审批，CLI 为用户显式调用 |
+| 入口             | 面向用户              | 首要能力                   | 执行边界                                                    |
+| ---------------- | --------------------- | -------------------------- | ----------------------------------------------------------- |
+| 内置 Copilot     | 普通终端用户          | 解释、排障、生成可检查命令 | 默认只复制或写入输入区；Review Mode 每次单独审批后独立 exec |
+| FileTerm MCP/CLI | 熟悉 Agent 的高级用户 | 远程执行、文件、传输、隧道 | MCP 修改操作逐次审批，CLI 为用户显式调用                    |
 
 ## 2. 产品权限级别
 
@@ -40,14 +40,14 @@ FileTerm 内置 AI 首先定位为**保守的终端助手**，不是无人值守
 - UI 展示将发送的准确文本，用户确认后才随本次消息发送。
 - 不持续同步，不在后台上传，不默认写入对话历史。
 
-### L3：Review Mode（后续独立阶段）
+### L3：Review Mode（已完成独立阶段）
 
 - 模型只能提出结构化 action proposal。
 - 用户点击“审核并运行”后，FileTerm 展示目标主机、CWD、完整命令、风险提示和超时，再进入一次性审批。
 - 执行使用独立 SSH exec channel，不劫持交互式 PTY；结果作为工具结果回到对话。
 - 不提供“本会话始终允许”、自动批准或无人值守循环。
 
-MVP 只交付 L0–L2。
+基础交付为 L0–L2；Phase 5 在独立安全评审后增加 opt-in L3，且不改变 L0–L2 的默认行为。
 
 ## 3. 总体架构
 
@@ -64,6 +64,9 @@ AiCopilotPanel / AI Settings
         -> ANSI/control cleanup + limits + redaction
       -> AiConversationStore
         -> local conversation metadata/messages
+      -> ActionReviewService
+        -> one-time visible approval queue
+        -> independent SSH exec channel
 ```
 
 约束：
@@ -349,9 +352,10 @@ interface AiCommandError {
 - `conversation.rs`：本地历史和裁剪。
 - `command.rs`：结构化解析、风险升级、写入约束。
 
-当前 Phase 0–2 暂时集中实现为 `apps/tauri/src-tauri/src/services/ai.rs`，以便在 context
-与 command card 尚未落地时保持边界紧凑；进入 Phase 3 前再按上下文、命令和 Provider
-职责拆分到上述目录。
+当前 AI provider、context、command card 与 Review Mode 状态仍集中在
+`apps/tauri/src-tauri/src/services/ai.rs`，以便保持当前数据生命周期的原子性；跨入口的
+一次性审批和独立 SSH exec 已抽到 `apps/tauri/src-tauri/src/services/action_review.rs`，由 MCP
+和 AI Review Mode 共用。
 
 ### `apps/tauri/src-tauri/src/commands/ai.rs`
 
@@ -366,6 +370,7 @@ interface AiCommandError {
 - `app_start_ai_chat`
 - `app_cancel_ai_chat`
 - `app_insert_ai_command`
+- `app_run_ai_review`
 
 ### `apps/tauri/src/bridge/tauri-api.ts`
 
@@ -382,7 +387,7 @@ interface AiCommandError {
 
 - 内置 Copilot 不启动 `claude`/`codex` 子进程，也不通过 `fileterm mcp` loopback 调用自身服务。
 - MCP 保持“外部 Agent 协议适配器”；内置 Copilot 保持“应用内 Provider 客户端”。
-- 后续 Review Mode 不复制 MCP 的业务逻辑，应先把 `services/mcp.rs` 中 action dispatch 与 approval detail 抽成内部可复用 service，再由 MCP 和 AI 两个入口调用。
+- Review Mode 复用 `ActionReviewService` 的一次性审批队列和独立 SSH exec，而不是通过 MCP loopback 或复制其连接执行逻辑；MCP 的 action 路由仍保持 MCP 专属。
 - AI 请求不能借 CLI 的“用户显式调用”语义绕过审批；任何 AI 发起的执行都按 MCP mutation 的审批强度处理。
 
 ## 10. 分阶段交付
@@ -418,12 +423,12 @@ interface AiCommandError {
 - [x] 展示 Provider、model、usage、目标变化和 context attached 状态。
 - [ ] macOS、Windows、Linux 真机验证流式取消、代理、睡眠恢复、窗口关闭和断网重试（见 `docs/quality/ai-copilot-platform-regression.md`；不能由当前单一开发机伪造）。
 
-### Phase 5：Review Mode（单独评审后再做）
+### Phase 5：Review Mode（已完成）
 
-- [ ] 抽取 MCP action/approval service。
-- [ ] 只开放独立 SSH exec 的单步命令 proposal。
-- [ ] 完整审批、结果回传、超时/截断和审计元数据。
-- [ ] 不做自动多步循环、交互式 PTY 注入或永久授权。
+- [x] 抽取 MCP/AI 共用的一次性 action approval 与独立 SSH exec service。
+- [x] 只开放已绑定目标的 SSH 单步、单行命令 proposal。
+- [x] 完整审批、结果回传、超时/截断和本地审计元数据；远端输出在入库前清理控制序列、截断并 best-effort 脱敏。
+- [x] 不做自动多步循环、交互式 PTY 注入或永久授权；Review Mode 不能向终端输入框写入或自动回车。
 
 ## 11. 测试与验收
 
@@ -445,6 +450,8 @@ interface AiCommandError {
 - 模型给出危险或多行命令时不能一键写入，更不能自动执行。
 - 写入单行命令后终端不自动回车，用户仍有最终执行权。
 - 切换 tab、分屏 pane、CWD 或身份后，旧命令卡不会静默写入错误目标。
+- Review Mode 只对已连接 SSH 的单行命令显示；点击后确认框必须展示 host、CWD、完整命令、风险和超时。拒绝、关闭或超时均不得启动远端 exec。
+- Review Mode 的执行不写入交互式 PTY；结果、退出码、超时和截断状态显示为本地审核记录，删除正在审核的对话必须被拒绝以保留审计落点。
 
 ## 12. 已完成的前两阶段
 

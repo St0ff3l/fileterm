@@ -672,6 +672,11 @@
   justify-self: end;
 }
 
+.ai-copilot-message.is-review {
+  width: 100%;
+  max-width: 100%;
+}
+
 .ai-copilot-message-role {
   color: var(--text-soft);
   font-size: 9px;
@@ -826,6 +831,110 @@
 
 .ai-copilot-command-card > small {
   color: var(--text-soft);
+  font-size: 9px;
+}
+
+.ai-copilot-review-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 34%, var(--border-light));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent-tint-weak));
+}
+
+.ai-copilot-review-card.is-rejected,
+.ai-copilot-review-card.is-approval-dismissed,
+.ai-copilot-review-card.is-approval-timed-out,
+.ai-copilot-review-card.is-target-changed {
+  border-color: color-mix(in srgb, var(--warning, #c78a1b) 42%, var(--border-light));
+}
+
+.ai-copilot-review-card.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border-light));
+}
+
+.ai-copilot-review-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-copilot-review-card header strong {
+  color: var(--text-main);
+  font-size: 11px;
+}
+
+.ai-copilot-review-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+  margin: 0;
+}
+
+.ai-copilot-review-card dl > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ai-copilot-review-card dt {
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.ai-copilot-review-card dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.ai-copilot-review-card code,
+.ai-copilot-review-output pre {
+  display: block;
+  max-height: 144px;
+  margin: 0;
+  overflow: auto;
+  padding: 7px;
+  border-radius: 6px;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-elevated) 78%, #000);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-copilot-review-card > p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 10px;
+}
+
+.ai-copilot-review-card > p.is-warning {
+  color: var(--warning, #c78a1b);
+}
+
+.ai-copilot-review-card > p.is-error {
+  color: var(--danger);
+}
+
+.ai-copilot-review-output {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-copilot-review-output > strong {
+  color: var(--text-muted);
   font-size: 9px;
 }
 
