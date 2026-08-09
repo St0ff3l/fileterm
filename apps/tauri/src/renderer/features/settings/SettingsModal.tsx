@@ -313,6 +313,7 @@ export function SettingsModal({
       setAiProviders(providers)
       const selected = providers.find((provider) => provider.id === saved.id) ?? saved
       setAiDraft(aiProviderToDraft(selected))
+      window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
       setAiMessage(t.aiSettingsSaveSucceeded)
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : String(error))
@@ -348,6 +349,7 @@ export function SettingsModal({
       const fallback = providers.find((provider) => provider.isDefault) ?? providers[0]
       setAiDraft(fallback ? aiProviderToDraft(fallback) : createAiProviderDraft(true))
       setAiApiKey('')
+      window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
       setAiMessage(t.aiSettingsDeleteSucceeded)
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : String(error))
@@ -782,6 +784,8 @@ export function SettingsModal({
                         onChange={(event) => patchAiDraft({ kind: event.target.value as AiProviderKind })}
                       >
                         <option value="openai-compatible-chat">OpenAI-compatible Chat</option>
+                        <option value="openai-responses">OpenAI Responses</option>
+                        <option value="anthropic-messages">Anthropic Messages</option>
                       </select>
                     </label>
                     <label>

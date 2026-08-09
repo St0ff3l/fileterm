@@ -1,6 +1,6 @@
 # AI Copilot 功能集成计划
 
-状态：进行中（Phase 0/1 的 Provider 配置切片已实现；对话、终端上下文和执行能力尚未开始）  
+状态：进行中（Phase 0–2 的 Provider、纯对话和三种流式协议已实现；终端上下文与受控执行尚未开始）
 前置工作：[AI Copilot 同窗 UI 草案](../completed/ai-copilot-companion-window.md)
 
 ## 1. 结论
@@ -349,9 +349,9 @@ interface AiCommandError {
 - `conversation.rs`：本地历史和裁剪。
 - `command.rs`：结构化解析、风险升级、写入约束。
 
-当前 Phase 0/1 先集中实现为 `apps/tauri/src-tauri/src/services/ai.rs`，以便在还没有
-流式对话、context 或 command card 时保持边界紧凑；Provider adapter 扩展到第二、三种协议
-时再按上述目录拆分。
+当前 Phase 0–2 暂时集中实现为 `apps/tauri/src-tauri/src/services/ai.rs`，以便在 context
+与 command card 尚未落地时保持边界紧凑；进入 Phase 3 前再按上下文、命令和 Provider
+职责拆分到上述目录。
 
 ### `apps/tauri/src-tauri/src/commands/ai.rs`
 
@@ -392,7 +392,7 @@ interface AiCommandError {
 - [x] 增加 core Provider 类型、稳定错误码和 Rust serde contract fixture。
 - [x] 建立公开配置/secret 分离存储与 Unix owner-only `0600` 测试。
 - [x] 实现 endpoint 校验、HTTP/无鉴权显式门控、禁用重定向与不含请求内容的稳定错误码。
-- [ ] 流式请求的取消和并发限制（Phase 2；本切片没有流式对话请求）。
+- [x] 流式请求的取消和并发限制（Phase 2）。
 
 ### Phase 1：Provider 配置
 
@@ -402,9 +402,9 @@ interface AiCommandError {
 
 ### Phase 2：无终端上下文的流式对话
 
-- [ ] 实现 conversation CRUD、请求 channel、取消和重试。
-- [ ] AI 面板支持新建会话、切换 Provider、发送、停止和错误恢复。
-- [ ] 增加 `openai-responses` 与 `anthropic-messages` adapter fixture。
+- [x] 实现 conversation CRUD、请求 channel、取消和重试。
+- [x] AI 面板支持新建会话、切换 Provider、发送、停止和错误恢复。
+- [x] 增加 `openai-responses` 与 `anthropic-messages` adapter fixture。
 
 ### Phase 3：按次上下文与命令卡
 
@@ -446,18 +446,18 @@ interface AiCommandError {
 - 写入单行命令后终端不自动回车，用户仍有最终执行权。
 - 切换 tab、分屏 pane、CWD 或身份后，旧命令卡不会静默写入错误目标。
 
-## 12. 第一实现切片（已完成）
+## 12. 已完成的前两阶段
 
-下一步建议只做 Phase 0 + Phase 1，不同时接聊天与终端上下文：
+Phase 0–2 已在不读取终端的前提下完成：
 
 1. 在 core 定义 provider 类型和稳定错误码。
 2. Rust 增加公开配置/secret 存储和 endpoint 校验。
-3. 实现 `openai-compatible-chat` 的最小非流式测试请求。
-4. 经 commands 与 `tauri-api.ts` 接通现有 AI 设置页。
-5. 补齐 secret、URL、错误和 contract 测试。
+3. 实现三个 Provider 协议族的最小非流式连接测试。
+4. 经 commands 与 `tauri-api.ts` 接通设置页、会话持久化与 per-request 流式 channel。
+5. 补齐 secret、URL、SSE、错误、取消和核心 stream-event contract 测试。
 
-该切片已经让 UI 中“尚未配置 AI 服务”变成真实状态：右侧 Copilot 会识别可用默认
-Provider，但仍只展示安全占位态。它不会读取终端、不会发送对话，也不会生成或执行命令。
+右侧 Copilot 现在会识别可用 Provider、保存本地会话并显示流式纯对话回答。当前仍为 L0：
+它不会读取终端、不会上传上下文，也不会生成可执行动作或执行命令。
 
 ## 13. 参考
 

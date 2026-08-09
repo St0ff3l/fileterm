@@ -647,6 +647,57 @@ pub async fn app_test_ai_provider(
 }
 
 #[tauri::command]
+pub fn app_list_ai_conversations(
+    app: AppHandle,
+) -> Result<Vec<crate::services::ai::AiConversationSummary>, AppError> {
+    crate::services::ai::list_conversations(&app)
+}
+
+#[tauri::command]
+pub fn app_get_ai_conversation(
+    app: AppHandle,
+    conversation_id: String,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::get_conversation(&app, &conversation_id)
+}
+
+#[tauri::command]
+pub fn app_create_ai_conversation(
+    app: AppHandle,
+    input: crate::services::ai::CreateAiConversationInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::create_conversation(&app, input)
+}
+
+#[tauri::command]
+pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Result<(), AppError> {
+    crate::services::ai::delete_conversation(&app, &conversation_id)
+}
+
+#[tauri::command]
+pub fn app_start_ai_chat(
+    app: AppHandle,
+    input: crate::services::ai::StartAiChatInput,
+    channel: Channel<crate::services::ai::AiStreamEvent>,
+) -> Result<crate::services::ai::AiChatRequest, AppError> {
+    crate::services::ai::start_chat(&app, input, channel)
+}
+
+#[tauri::command]
+pub fn app_retry_ai_chat(
+    app: AppHandle,
+    input: crate::services::ai::RetryAiChatInput,
+    channel: Channel<crate::services::ai::AiStreamEvent>,
+) -> Result<crate::services::ai::AiChatRequest, AppError> {
+    crate::services::ai::retry_chat(&app, input, channel)
+}
+
+#[tauri::command]
+pub fn app_cancel_ai_chat(request_id: String) -> Result<(), AppError> {
+    crate::services::ai::cancel_chat(&request_id)
+}
+
+#[tauri::command]
 pub fn app_get_ui_state_item(app: AppHandle, key: String) -> Result<Option<String>, AppError> {
     Ok(read_ui_state(&app)?
         .get(&key)

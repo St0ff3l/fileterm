@@ -38,7 +38,14 @@ import type {
   LocalTerminalLaunchOptions,
   AiProviderSummary,
   AiProviderTestResult,
+  AiChatRequest,
+  AiConversation,
+  AiConversationSummary,
+  AiStreamEvent,
+  CreateAiConversationInput,
+  RetryAiChatInput,
   SaveAiProviderInput,
+  StartAiChatInput,
   TestAiProviderInput,
   UiPreferences,
   UiPreferencesInput
@@ -53,6 +60,41 @@ let terminalDataRegistration: Promise<void> | null = null
 let terminalDataRetryTimer: ReturnType<typeof setTimeout> | null = null
 let terminalDataRetryBackoffMs = 1000
 const TERMINAL_DATA_RETRY_MAX_BACKOFF_MS = 30_000
+const pendingAiChatChannels = new Set<Channel<AiStreamEvent>>()
+const activeAiChatChannels = new Map<string, Channel<AiStreamEvent>>()
+
+function invokeAiChat(
+  command: 'app_start_ai_chat' | 'app_retry_ai_chat',
+  input: StartAiChatInput | RetryAiChatInput,
+  onEvent: (event: AiStreamEvent) => void
+) {
+  const channel = new Channel<AiStreamEvent>()
+  let requestId: string | null = null
+  let terminalEventReceived = false
+  channel.onmessage = (event) => {
+    onEvent(event)
+    if (event.type === 'completed' || event.type === 'error') {
+      terminalEventReceived = true
+      if (requestId) {
+        activeAiChatChannels.delete(requestId)
+      }
+    }
+  }
+  pendingAiChatChannels.add(channel)
+  return invoke<AiChatRequest>(command, { input, channel })
+    .then((request) => {
+      requestId = request.requestId
+      pendingAiChatChannels.delete(channel)
+      if (!terminalEventReceived) {
+        activeAiChatChannels.set(request.requestId, channel)
+      }
+      return request
+    })
+    .catch((error) => {
+      pendingAiChatChannels.delete(channel)
+      throw error
+    })
+}
 
 function clearNativeDropFallback() {
   latestNativeDropPaths = []
@@ -264,6 +306,17 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     saveAiProvider: (input: SaveAiProviderInput) => invoke<AiProviderSummary>('app_save_ai_provider', { input }),
     deleteAiProvider: (providerId: string) => invoke<AiProviderSummary[]>('app_delete_ai_provider', { providerId }),
     testAiProvider: (input: TestAiProviderInput) => invoke<AiProviderTestResult>('app_test_ai_provider', { input }),
+    listAiConversations: () => invoke<AiConversationSummary[]>('app_list_ai_conversations'),
+    getAiConversation: (conversationId: string) =>
+      invoke<AiConversation>('app_get_ai_conversation', { conversationId }),
+    createAiConversation: (input: CreateAiConversationInput) =>
+      invoke<AiConversation>('app_create_ai_conversation', { input }),
+    deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
+    startAiChat: (input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
+      invokeAiChat('app_start_ai_chat', input, onEvent),
+    retryAiChat: (input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
+      invokeAiChat('app_retry_ai_chat', input, onEvent),
+    cancelAiChat: (requestId: string) => invoke<void>('app_cancel_ai_chat', { requestId }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),

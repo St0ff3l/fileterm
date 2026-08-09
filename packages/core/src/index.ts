@@ -1073,6 +1073,64 @@ export interface AiProviderTestResult {
   message: string
 }
 
+/** A message stored locally for an AI Copilot conversation. */
+export interface AiMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+}
+
+/** Lightweight metadata used by the Copilot conversation switcher. */
+export interface AiConversationSummary {
+  id: string
+  title: string
+  providerId: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
+}
+
+/** A complete local AI Copilot conversation. */
+export interface AiConversation extends AiConversationSummary {
+  messages: AiMessage[]
+}
+
+export interface CreateAiConversationInput {
+  providerId: string
+}
+
+/**
+ * L0 chat payload. It intentionally cannot carry terminal, host, path or
+ * transcript data; later context phases use a separate, Rust-owned snapshot.
+ */
+export interface StartAiChatInput {
+  conversationId: string
+  providerId: string
+  userMessage: string
+}
+
+/** Retries the latest user turn without duplicating it in local history. */
+export interface RetryAiChatInput {
+  conversationId: string
+  providerId: string
+}
+
+export interface AiChatRequest {
+  requestId: string
+  conversationId: string
+  userMessageId: string
+  assistantMessageId: string
+}
+
+/** Per-request stream events; never emitted through a global application event. */
+export type AiStreamEvent =
+  | { type: 'started'; requestId: string; messageId: string }
+  | { type: 'text-delta'; text: string }
+  | { type: 'usage'; inputTokens?: number; outputTokens?: number }
+  | { type: 'completed'; conversation: AiConversation; finishReason?: string }
+  | { type: 'error'; code: AiErrorCode; message: string; retryable: boolean }
+
 export type AiErrorCode =
   | 'AI_PROVIDER_NOT_FOUND'
   | 'AI_PROVIDER_INVALID_CONFIG'
@@ -1090,6 +1148,8 @@ export type AiErrorCode =
   | 'AI_CONTEXT_TARGET_CHANGED'
   | 'AI_COMMAND_UNSAFE_INPUT'
   | 'AI_CONVERSATION_LIMIT'
+  | 'AI_CONVERSATION_NOT_FOUND'
+  | 'AI_CONVERSATION_INVALID_INPUT'
 
 export interface AiCommandError {
   code: AiErrorCode
@@ -1119,6 +1179,13 @@ export interface FileTermDesktopApi {
   saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
   deleteAiProvider(providerId: string): Promise<AiProviderSummary[]>
   testAiProvider(input: TestAiProviderInput): Promise<AiProviderTestResult>
+  listAiConversations(): Promise<AiConversationSummary[]>
+  getAiConversation(conversationId: string): Promise<AiConversation>
+  createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
+  deleteAiConversation(conversationId: string): Promise<void>
+  startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
+  retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
+  cancelAiChat(requestId: string): Promise<void>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
