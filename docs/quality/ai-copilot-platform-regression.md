@@ -34,6 +34,7 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 - `fixture:slow`：持续流式输出，便于验证“停止”与关闭面板/窗口后的取消。
 - `fixture:fail-once`：首个请求返回 HTTP 503；对同一消息点击“重试”后成功。
 - `fixture:disconnect-once`：首个请求在首个 SSE chunk 后断开；对同一消息重试后成功。
+- `fixture:markdown`：流式返回标题、列表、表格、代码块和链接，并带有应被忽略的原始 HTML、图片和 `javascript:` 链接。
 - 在已授权 L1/L2 上下文并打开“命令建议”时发送 `fixture:command` 或 `fixture:multiline`：分别返回只读 `pwd` 卡和多行卡。
 
 该 fixture 故意绑定 `127.0.0.1`，而应用会对 loopback Provider 禁用系统代理，避免本机 API Key 被意外转发。因此它**不能**替代 HTTP CONNECT / SOCKS5 验收；代理项仍须使用一个受控的非 loopback Provider 或相应测试网络。
@@ -42,6 +43,7 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 
 - [ ] Provider 配置保存后重新打开设置：只显示 `hasApiKey`，不得回填 Key；默认 Provider、禁用和删除状态正确。
 - [ ] L0 聊天连续发送两条消息，确认 Provider/model、usage、错误重试和本地历史搜索、重命名、删除均可用。
+- [ ] 使用 `fixture:markdown`：标题、列表、表格、代码块和 HTTP(S) 链接应正常显示；原始 HTML、远程图片和非 HTTP(S) 链接不得渲染或触发请求，外链只能经系统浏览器打开。
 - [ ] 流式输出中点击“停止”，确认请求停止、对话可继续且没有残留忙碌状态；随后关闭 AI 面板或整个窗口，确认不会崩溃或继续向已关闭窗口写事件。
 - [ ] 经 HTTP CONNECT 或 SOCKS5 代理完成一轮流式聊天；停止代理后确认出现可重试连接错误，恢复网络后重试成功。
 - [ ] 设备睡眠后唤醒，再发送一条消息；确认明确失败并可重试，或直接恢复，不得静默卡在生成中。

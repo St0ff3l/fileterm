@@ -11,6 +11,7 @@ import type {
 import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
+import { AiCopilotMarkdown } from './AiCopilotMarkdown'
 import { useAiCopilot } from './useAiCopilot'
 
 function commandRiskLabel(risk: AiCommandRisk) {
@@ -715,8 +716,10 @@ export function AiCopilotPanel({
                           <p>{t.aiCopilotReviewNoOutput}</p>
                         ) : null}
                       </section>
+                    ) : message.role === 'assistant' ? (
+                      <AiCopilotMarkdown content={message.content} />
                     ) : (
-                      <p>{message.content}</p>
+                      <p className="ai-copilot-message-plain">{message.content}</p>
                     )}
                     {message.context ? (
                       <span className="ai-copilot-message-context">

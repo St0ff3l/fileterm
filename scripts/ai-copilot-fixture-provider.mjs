@@ -112,6 +112,7 @@ function requestedMode(prompt, commandProposal) {
   }
   if (/fixture:fail-once\b/i.test(prompt)) return 'fail-once'
   if (/fixture:disconnect-once\b/i.test(prompt)) return 'disconnect-once'
+  if (/fixture:markdown\b/i.test(prompt)) return 'markdown'
   if (/fixture:slow\b/i.test(prompt)) return 'slow'
   return 'normal'
 }
@@ -143,6 +144,30 @@ function responseText(mode) {
   }
   if (mode === 'slow') {
     return Array.from({ length: 40 }, (_, index) => `fixture-stream-${index + 1} `).join('')
+  }
+  if (mode === 'markdown') {
+    return [
+      '# Fixture Markdown',
+      '',
+      'This reply has **bold text**, `inline code`, and a [safe external link](https://example.com).',
+      '',
+      '- stream as ordinary Markdown',
+      '- keep code separate from command cards',
+      '',
+      '> Provider HTML and non-HTTP(S) links must not become active content.',
+      '',
+      '```sh',
+      "printf '%s\\n' fixture-markdown",
+      '```',
+      '',
+      '| Surface | Expected behavior |',
+      '| --- | --- |',
+      '| Raw HTML | omitted |',
+      '| `javascript:` link | inactive |',
+      '',
+      '<img src="https://example.com/fixture.png" onerror="window.filetermMarkdownExecuted = true">',
+      '[unsafe link](javascript:window.filetermMarkdownExecuted=true)'
+    ].join('\n')
   }
   return 'Fixture response received. Streaming, usage reporting, and local history can be verified with this deterministic reply.'
 }

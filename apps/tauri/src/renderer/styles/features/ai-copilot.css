@@ -687,7 +687,8 @@
   text-align: right;
 }
 
-.ai-copilot-message p {
+.ai-copilot-message-plain,
+.ai-copilot-message-markdown {
   margin: 0;
   padding: 9px 10px;
   border: 1px solid var(--border-light);
@@ -697,14 +698,171 @@
   font-size: 12px;
   line-height: 1.55;
   overflow-wrap: anywhere;
+}
+
+.ai-copilot-message-plain {
   white-space: pre-wrap;
 }
 
-.ai-copilot-message.is-user p {
+.ai-copilot-message.is-user .ai-copilot-message-plain {
   border-color: color-mix(in srgb, var(--accent-primary) 36%, var(--border-light));
   border-radius: 10px 10px 3px;
   color: var(--text-main);
   background: var(--accent-tint-weak);
+}
+
+.ai-copilot-message-markdown {
+  min-width: 0;
+}
+
+.ai-copilot-message-markdown > :first-child {
+  margin-top: 0;
+}
+
+.ai-copilot-message-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.ai-copilot-message-markdown p,
+.ai-copilot-message-markdown ul,
+.ai-copilot-message-markdown ol,
+.ai-copilot-message-markdown blockquote,
+.ai-copilot-message-markdown pre,
+.ai-copilot-message-markdown table {
+  margin: 0 0 8px;
+}
+
+.ai-copilot-message-markdown h1,
+.ai-copilot-message-markdown h2,
+.ai-copilot-message-markdown h3,
+.ai-copilot-message-markdown h4,
+.ai-copilot-message-markdown h5,
+.ai-copilot-message-markdown h6 {
+  margin: 12px 0 5px;
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ai-copilot-message-markdown h1 {
+  font-size: 14px;
+}
+
+.ai-copilot-message-markdown h2 {
+  font-size: 13px;
+}
+
+.ai-copilot-message-markdown ul,
+.ai-copilot-message-markdown ol {
+  padding-left: 20px;
+}
+
+.ai-copilot-message-markdown li + li {
+  margin-top: 3px;
+}
+
+.ai-copilot-message-markdown blockquote {
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent-primary) 50%, var(--border-light));
+  color: var(--text-muted);
+}
+
+.ai-copilot-message-markdown hr {
+  height: 1px;
+  margin: 10px 0;
+  border: 0;
+  background: var(--border-light);
+}
+
+.ai-copilot-message-markdown :not(pre) > code {
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--border-light) 86%, var(--accent-primary));
+  border-radius: 4px;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-elevated) 74%, var(--surface-inset));
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.ai-copilot-message-markdown pre {
+  max-height: 168px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-light) 86%, var(--accent-primary));
+  border-radius: 6px;
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-elevated) 80%, #000);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-copilot-message-markdown pre code {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.ai-copilot-message-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  border-spacing: 0;
+  font-size: 10px;
+}
+
+.ai-copilot-message-markdown th,
+.ai-copilot-message-markdown td {
+  min-width: 72px;
+  padding: 5px 6px;
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+  vertical-align: top;
+}
+
+.ai-copilot-message-markdown th {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-elevated) 74%, var(--surface-inset));
+  font-weight: 650;
+}
+
+.ai-copilot-message-markdown tr > :last-child {
+  border-right: 0;
+}
+
+.ai-copilot-message-markdown tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.ai-copilot-message-markdown a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+.ai-copilot-message-markdown a:hover {
+  color: var(--text-main);
+  text-decoration-color: currentColor;
+}
+
+.ai-copilot-message-markdown a .material-symbols-outlined {
+  font-size: 12px;
+}
+
+.ai-copilot-markdown-invalid-link {
+  color: var(--text-muted);
 }
 
 .ai-copilot-message-context {

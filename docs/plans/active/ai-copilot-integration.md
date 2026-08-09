@@ -321,7 +321,7 @@ interface AiCommandError {
 
 ## 7. 回答与命令卡
 
-- 普通解释使用 Markdown 文本流式显示。
+- 普通解释使用 Markdown 文本流式显示；不启用 raw HTML 或远程图片，链接只接受 HTTP(S) 并经桌面外链 command 打开。
 - 命令不能依靠扫描 Markdown code fence 推断；Provider 支持结构化输出时使用 schema，否则要求严格 JSON envelope，并在 Rust 中校验。
 - “不开放工具调用”指不向模型提供任何可产生副作用的 FileTerm action；Provider 原生 structured output 或仅用于返回 `AiCommandSuggestion` 的 output-only schema 不属于执行工具。
 - 普通解释回合可以直接流式显示；需要返回命令卡的结构化回合先在 Rust 缓冲并完成 schema 校验，再一次性提交回答和命令卡，不能把未闭合的 JSON 增量直接渲染为可信命令。
@@ -421,6 +421,7 @@ interface AiCommandError {
 
 - [x] 本地历史搜索、重命名、删除和容量上限。
 - [x] 展示 Provider、model、usage、目标变化和 context attached 状态。
+- [x] 普通助手回答以安全 Markdown/GFM 流式显示；原始 HTML、远程图片和非 HTTP(S) 链接保持不可激活。
 - [ ] macOS、Windows、Linux 真机验证流式取消、代理、睡眠恢复、窗口关闭和断网重试（见 `docs/quality/ai-copilot-platform-regression.md`；不能由当前单一开发机伪造）。
 
 ### Phase 5：Review Mode（已完成）
