@@ -63,3 +63,41 @@ notes: <stream cancel, sleep recovery, close behavior, retry result>
 ```
 
 任何失败都应保留脱敏日志，并在修复后重新跑该平台对应条目；不要用另一个平台的成功结果替代。
+
+## 已执行记录（未完成发行签收）
+
+### 2026-08-10 — macOS 本地包，部分通过
+
+```text
+platform: macOS 27.0 / arm64
+fileterm commit: 86821841
+provider: OpenAI-compatible Chat / loopback QA fixture
+network: direct loopback（不经过系统代理）
+result: pass（L0 + local L1 子集）
+notes:
+  - 用 npm run build -w @fileterm/tauri 生成 FileTerm.app，并使用隔离 HOME 启动，未触及日常应用数据。
+  - Provider 保存后可被重启后的包体读取；Key 只显示“已保存”状态，不回填到设置表单。
+  - L0 连续消息、usage、本地历史、503 错误重试均正常。
+  - fixture:slow 的“停止生成”与关闭 AI 面板都会中断 SSE；服务端没有记录 stream-completed，面板可立刻继续发送且不显示连接失败。
+  - 本地终端的 L1 元数据预览可生成；fixture:command 只产生可审查的 pwd 命令卡，本地目标的写入和审核动作保持禁用。
+```
+
+这不是完整发行签收：该产物由本机普通 build 生成，不是 release 配置下的签名/公证包；Windows、Linux、代理、睡眠恢复、SSH 目标变化和 SSH Review Mode 仍必须按上方清单在对应环境完成。
+
+### 2026-08-10 — macOS 本地包，SSH host key 与 Review Mode
+
+```text
+platform: macOS 27.0 / arm64
+source: 86821841 之后的 SSH host-key 修补工作树
+target: disposable local Docker sshd (127.0.0.1:2222)
+provider: OpenAI-compatible Chat / loopback QA fixture
+result: pass（SSH host key + L1 + Review Mode）
+notes:
+  - 空 trustedHostFingerprint 会按“尚未信任”处理，不会被误判为已保存指纹不匹配。
+  - 首次 host key 弹窗出现后，人工等待超过 35 秒再选择“只接受本次”，SSH 仍能成功认证；网络握手 30 秒与人工确认 300 秒分别计时。
+  - 会话元数据预览、结构化 pwd 命令卡和风险标识均正常生成。
+  - “写入当前终端”只留下 pwd 输入，不自动回车、没有产生交互终端输出。
+  - “审核并运行”先显示目标、工作目录、风险、30 秒超时与完整命令；确认后经独立 SSH exec 通道执行一次，审计记录输出 /home/filetermqa。
+```
+
+本条仅覆盖本机普通 build + 一次性 localhost 容器，不等同于签名/公证发行包验证；Windows、Linux、代理、睡眠恢复、SSH 目标变更与真实远端环境仍需按清单验收。

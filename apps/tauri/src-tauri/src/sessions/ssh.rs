@@ -13,7 +13,10 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, LazyLock,
+};
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -31,7 +34,7 @@ use tokio::io::{
 };
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 use tokio_socks::tcp::Socks5Stream;
 use tokio_util::sync::CancellationToken;
 
@@ -110,14 +113,76 @@ async fn wait_for_ssh_stage<T>(
     deadline: Duration,
     operation: impl Future<Output = Result<T, String>>,
 ) -> Result<T, String> {
-    let timeout_label = if deadline.as_secs() > 0 {
-        format!("{} seconds", deadline.as_secs())
-    } else {
-        format!("{} ms", deadline.as_millis())
-    };
+    let timeout_label = timeout_label(deadline);
     timeout(deadline, operation)
         .await
         .map_err(|_| format!("{stage} timed out after {timeout_label}"))?
+}
+
+fn timeout_label(deadline: Duration) -> String {
+    if deadline.as_secs() > 0 {
+        format!("{} seconds", deadline.as_secs())
+    } else {
+        format!("{} ms", deadline.as_millis())
+    }
+}
+
+/// A host-key confirmation is part of the SSH handshake, but it is an
+/// intentional user decision rather than stalled network I/O. Pause the
+/// normal handshake budget while that explicit prompt is visible, while still
+/// bounding transport work and user interaction independently.
+async fn wait_for_ssh_handshake<T>(
+    stage: &str,
+    host_verification_waiting: Arc<AtomicBool>,
+    operation: impl Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    wait_for_ssh_handshake_with_timeouts(
+        stage,
+        host_verification_waiting,
+        SSH_HANDSHAKE_TIMEOUT,
+        SSH_INTERACTION_TIMEOUT,
+        operation,
+    )
+    .await
+}
+
+async fn wait_for_ssh_handshake_with_timeouts<T>(
+    stage: &str,
+    host_verification_waiting: Arc<AtomicBool>,
+    network_timeout: Duration,
+    interaction_timeout: Duration,
+    operation: impl Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    let mut network_elapsed = Duration::ZERO;
+    let mut verification_elapsed = Duration::ZERO;
+    let mut last_tick = Instant::now();
+    tokio::pin!(operation);
+
+    loop {
+        tokio::select! {
+            result = &mut operation => return result,
+            _ = sleep(Duration::from_millis(100)) => {
+                let now = Instant::now();
+                let elapsed = now.saturating_duration_since(last_tick);
+                last_tick = now;
+
+                if host_verification_waiting.load(Ordering::Acquire) {
+                    verification_elapsed += elapsed;
+                    if verification_elapsed >= interaction_timeout {
+                        return Err(format!(
+                            "SSH host-key verification timed out after {}",
+                            timeout_label(interaction_timeout)
+                        ));
+                    }
+                } else {
+                    network_elapsed += elapsed;
+                    if network_elapsed >= network_timeout {
+                        return Err(format!("{stage} timed out after {}", timeout_label(network_timeout)));
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn resource_monitoring_enabled(profile: &Value) -> bool {
@@ -371,6 +436,7 @@ pub struct ClientHandler {
     host: String,
     port: u16,
     trusted_fingerprint: Option<String>,
+    host_verification_waiting: Arc<AtomicBool>,
 }
 
 pub type ClientHandle = Handle<ClientHandler>;
@@ -425,32 +491,51 @@ impl Handler for ClientHandler {
             let mut pending = state.pending_interactions.write().await;
             pending.insert(request_id.clone(), tx);
         }
+        self.host_verification_waiting
+            .store(true, Ordering::Release);
         // Emit a `host-verification` interaction request. The payload shape
         // matches `SshHostVerificationRequest` in packages/core so the
         // renderer's `useSshInteractions` hook recognises it and shows the
         // accept/reject dialog. The renderer resolves via
         // `app_resolve_ssh_interaction`, which forwards the response back
         // through the oneshot channel.
-        let _ = self.app.emit(
-            "ssh:interaction",
-            serde_json::json!({
-                "requestId": request_id,
-                "kind": "host-verification",
-                "tabId": self.tab_id,
-                "profileId": self.profile_id,
-                "host": self.host,
-                "port": self.port,
-                "fingerprint": fp,
-                "knownFingerprint": known,
-            }),
-        );
-        let decision = match rx.await {
-            Ok(response) => response
+        if self
+            .app
+            .emit(
+                "ssh:interaction",
+                serde_json::json!({
+                    "requestId": request_id,
+                    "kind": "host-verification",
+                    "tabId": self.tab_id,
+                    "profileId": self.profile_id,
+                    "host": self.host,
+                    "port": self.port,
+                    "fingerprint": fp,
+                    "knownFingerprint": known,
+                }),
+            )
+            .is_err()
+        {
+            self.host_verification_waiting
+                .store(false, Ordering::Release);
+            self.app
+                .state::<crate::services::workspace::WorkspaceState>()
+                .pending_interactions
+                .write()
+                .await
+                .remove(&request_id);
+            return Ok(false);
+        }
+        let response = timeout(SSH_INTERACTION_TIMEOUT, rx).await;
+        self.host_verification_waiting
+            .store(false, Ordering::Release);
+        let decision = match response {
+            Ok(Ok(response)) => response
                 .get("decision")
                 .and_then(|v| v.as_str())
                 .unwrap_or("cancel")
                 .to_string(),
-            Err(_) => "cancel".to_string(),
+            Ok(Err(_)) | Err(_) => "cancel".to_string(),
         };
         match decision.as_str() {
             "accept-and-save" => {
@@ -2116,6 +2201,7 @@ fn new_client_handler(
     host: &str,
     port: u16,
     trusted_fingerprint: Option<String>,
+    host_verification_waiting: Arc<AtomicBool>,
 ) -> ClientHandler {
     ClientHandler {
         app: app.clone(),
@@ -2124,6 +2210,7 @@ fn new_client_handler(
         host: host.to_string(),
         port,
         trusted_fingerprint,
+        host_verification_waiting,
     }
 }
 
@@ -2134,6 +2221,7 @@ async fn connect_target_through_jump(
     host: &str,
     port: u16,
 ) -> Result<Handle<ClientHandler>, String> {
+    let host_verification_waiting = handler.host_verification_waiting.clone();
     let channel = wait_for_ssh_stage(
         "SSH jump-host channel setup",
         SSH_HANDSHAKE_TIMEOUT,
@@ -2145,9 +2233,9 @@ async fn connect_target_through_jump(
         },
     )
     .await?;
-    wait_for_ssh_stage(
+    wait_for_ssh_handshake(
         "SSH handshake via jump host",
-        SSH_HANDSHAKE_TIMEOUT,
+        host_verification_waiting,
         async {
             russh::client::connect_stream(config, channel.into_stream(), handler)
                 .await
@@ -2432,6 +2520,19 @@ fn password_for_authentication(profile: &Value) -> Option<&str> {
         .filter(|password| !password.is_empty())
 }
 
+/// Renderer-side connection forms keep an empty string as the stable default
+/// for `trustedHostFingerprint`. Treat that exactly like an absent field: an
+/// empty value is not a previously trusted key and must not be surfaced as a
+/// misleading "mismatch" in the host-verification prompt.
+fn trusted_host_fingerprint(profile: &Value) -> Option<String> {
+    profile
+        .get("trustedHostFingerprint")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|fingerprint| !fingerprint.is_empty())
+        .map(str::to_string)
+}
+
 async fn ensure_password_credentials(
     profile: &mut Value,
     app: &AppHandle,
@@ -2567,10 +2668,7 @@ async fn open_session(
         .and_then(|a| a.as_str())
         .unwrap_or("password")
         .to_string();
-    let trusted = profile
-        .get("trustedHostFingerprint")
-        .and_then(|f| f.as_str())
-        .map(|s| s.to_string());
+    let trusted = trusted_host_fingerprint(profile);
     crate::services::logging::session(
         app,
         "INFO",
@@ -2688,10 +2786,19 @@ async fn open_session(
         // target / retry handle 也需要显式 disconnect，否则目标机的
         // MaxStartups 统计可能虚高，极端情况下导致后续连接被拒绝。
         let target_result: Result<Handle<ClientHandler>, String> = async {
+            let target_host_verification_waiting = Arc::new(AtomicBool::new(false));
             let mut target_handle = connect_target_through_jump(
                 &jump_handle,
                 config.clone(),
-                new_client_handler(app, tab_id, &profile_id, &host, port, trusted.clone()),
+                new_client_handler(
+                    app,
+                    tab_id,
+                    &profile_id,
+                    &host,
+                    port,
+                    trusted.clone(),
+                    target_host_verification_waiting,
+                ),
                 &host,
                 port,
             )
@@ -2721,10 +2828,19 @@ async fn open_session(
                         ),
                     )
                     .await;
+                    let retry_host_verification_waiting = Arc::new(AtomicBool::new(false));
                     let mut retry_handle = connect_target_through_jump(
                         &jump_handle,
                         config,
-                        new_client_handler(app, tab_id, &profile_id, &host, port, trusted),
+                        new_client_handler(
+                            app,
+                            tab_id,
+                            &profile_id,
+                            &host,
+                            port,
+                            trusted,
+                            retry_host_verification_waiting,
+                        ),
                         &host,
                         port,
                     )
@@ -2796,15 +2912,28 @@ async fn open_session(
         connect_ssh_transport(profile, &host, port),
     )
     .await?;
-    let mut handle = wait_for_ssh_stage("SSH protocol handshake", SSH_HANDSHAKE_TIMEOUT, async {
-        russh::client::connect_stream(
-            config.clone(),
-            stream,
-            new_client_handler(app, tab_id, &profile_id, &host, port, trusted.clone()),
-        )
-        .await
-        .map_err(|error| format!("SSH connect failed: {error}"))
-    })
+    let host_verification_waiting = Arc::new(AtomicBool::new(false));
+    let mut handle = wait_for_ssh_handshake(
+        "SSH protocol handshake",
+        host_verification_waiting.clone(),
+        async {
+            russh::client::connect_stream(
+                config.clone(),
+                stream,
+                new_client_handler(
+                    app,
+                    tab_id,
+                    &profile_id,
+                    &host,
+                    port,
+                    trusted.clone(),
+                    host_verification_waiting,
+                ),
+            )
+            .await
+            .map_err(|error| format!("SSH connect failed: {error}"))
+        },
+    )
     .await?;
     match try_authenticate(&mut handle, &username, &auth_type, profile, app, tab_id).await? {
         AuthenticationResult::Authenticated => Ok(handle),
@@ -2827,19 +2956,31 @@ async fn open_session(
                 connect_ssh_transport(profile, &host, port),
             )
             .await?;
-            let mut retry_handle =
-                wait_for_ssh_stage("SSH protocol re-handshake", SSH_HANDSHAKE_TIMEOUT, async {
+            let retry_host_verification_waiting = Arc::new(AtomicBool::new(false));
+            let mut retry_handle = wait_for_ssh_handshake(
+                "SSH protocol re-handshake",
+                retry_host_verification_waiting.clone(),
+                async {
                     russh::client::connect_stream(
                         config,
                         stream,
-                        new_client_handler(app, tab_id, &profile_id, &host, port, trusted),
+                        new_client_handler(
+                            app,
+                            tab_id,
+                            &profile_id,
+                            &host,
+                            port,
+                            trusted,
+                            retry_host_verification_waiting,
+                        ),
                     )
                     .await
                     .map_err(|error| {
                         format!("SSH reconnect for keyboard-interactive failed: {error}")
                     })
-                })
-                .await?;
+                },
+            )
+            .await?;
             if try_keyboard_interactive(
                 &mut retry_handle,
                 &username,
@@ -8140,17 +8281,21 @@ mod tests {
         root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
         root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
         strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
-        track_root_access_prompt_from_terminal, trim_string_front,
+        track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
-        validate_root_download_completion, validate_tunnel_rule, wait_for_ssh_stage,
-        KeyboardInteractiveRequest, RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule,
-        TunnelCommand, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
+        validate_root_download_completion, validate_tunnel_rule,
+        wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, KeyboardInteractiveRequest,
+        RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand,
+        SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
     use std::borrow::Cow;
     use std::path::Path;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    };
     use std::time::Instant;
 
     use russh::keys::PrivateKey;
@@ -8327,6 +8472,45 @@ mod tests {
         assert_eq!(error, "SSH password authentication timed out after 1 ms");
     }
 
+    #[tokio::test]
+    async fn host_key_confirmation_pauses_the_network_handshake_budget() {
+        let host_verification_waiting = Arc::new(AtomicBool::new(true));
+        let result = wait_for_ssh_handshake_with_timeouts(
+            "SSH protocol handshake",
+            host_verification_waiting,
+            Duration::from_millis(50),
+            Duration::from_millis(250),
+            async {
+                tokio::time::sleep(Duration::from_millis(120)).await;
+                Ok::<_, String>(())
+            },
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn host_key_confirmation_keeps_its_own_bounded_timeout() {
+        let host_verification_waiting = Arc::new(AtomicBool::new(true));
+        let wait_flag = host_verification_waiting.clone();
+        let error = wait_for_ssh_handshake_with_timeouts(
+            "SSH protocol handshake",
+            host_verification_waiting,
+            Duration::from_millis(50),
+            Duration::from_millis(50),
+            async move {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                wait_flag.store(false, Ordering::Release);
+                Ok::<_, String>(())
+            },
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(error, "SSH host-key verification timed out after 50 ms");
+    }
+
     #[test]
     fn password_auth_requests_missing_credentials_without_falling_back_to_keys() {
         assert_eq!(
@@ -8357,6 +8541,28 @@ mod tests {
                 "username": "ops"
             })),
             None
+        );
+    }
+
+    #[test]
+    fn empty_trusted_host_fingerprint_is_not_treated_as_known() {
+        assert_eq!(
+            trusted_host_fingerprint(&serde_json::json!({
+                "trustedHostFingerprint": ""
+            })),
+            None
+        );
+        assert_eq!(
+            trusted_host_fingerprint(&serde_json::json!({
+                "trustedHostFingerprint": "  \t"
+            })),
+            None
+        );
+        assert_eq!(
+            trusted_host_fingerprint(&serde_json::json!({
+                "trustedHostFingerprint": "SHA256:known-host-key"
+            })),
+            Some("SHA256:known-host-key".to_string())
         );
     }
 
