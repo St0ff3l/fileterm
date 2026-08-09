@@ -1,4 +1,5 @@
-import type { ConnectionProfile, SessionSnapshot, WorkspaceTab } from '@fileterm/core'
+import { useEffect, useState } from 'react'
+import type { AiProviderSummary, ConnectionProfile, SessionSnapshot, WorkspaceTab } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 
@@ -20,6 +21,29 @@ export function AiCopilotPanel({
   const user = activeSession?.shellUser || activeSession?.loginUser || activeProfile?.username
   const targetLabel = isSshTarget && user ? `${user}@${host}` : host
   const workingDirectory = activeSession?.shellCwd || activeSession?.remotePath || '~'
+  const [activeProvider, setActiveProvider] = useState<AiProviderSummary | null>(null)
+
+  useEffect(() => {
+    let canceled = false
+    const desktopApi = window.fileterm
+    if (!desktopApi) return
+
+    void desktopApi
+      .listAiProviders()
+      .then((providers) => {
+        if (canceled) return
+        setActiveProvider(providers.find((provider) => provider.isDefault && provider.usable) ?? null)
+      })
+      .catch(() => {
+        if (!canceled) {
+          setActiveProvider(null)
+        }
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [])
 
   return (
     <aside aria-label={t.aiCopilot} className="ai-copilot-panel">
@@ -66,8 +90,14 @@ export function AiCopilotPanel({
             auto_awesome
           </span>
           <span className="ai-copilot-eyebrow">{t.aiCopilotPreview}</span>
-          <h2 id="ai-copilot-setup-title">{t.aiCopilotNotConfigured}</h2>
-          <p>{t.aiCopilotNotConfiguredDescription}</p>
+          <h2 id="ai-copilot-setup-title">
+            {activeProvider ? t.aiCopilotProviderConfigured : t.aiCopilotNotConfigured}
+          </h2>
+          <p>
+            {activeProvider
+              ? activeProvider.name + ' · ' + activeProvider.model + ' · ' + t.aiCopilotProviderConfiguredDescription
+              : t.aiCopilotNotConfiguredDescription}
+          </p>
           <button className="ai-copilot-setup-action" type="button" onClick={onOpenSettings}>
             <span aria-hidden="true" className="material-symbols-outlined">
               tune
@@ -103,7 +133,12 @@ export function AiCopilotPanel({
 
       <footer className="ai-copilot-composer-zone">
         <div className="ai-copilot-composer is-disabled">
-          <textarea aria-label={t.aiCopilotInputAria} disabled placeholder={t.aiCopilotComposerLocked} rows={3} />
+          <textarea
+            aria-label={t.aiCopilotInputAria}
+            disabled
+            placeholder={activeProvider ? t.aiCopilotChatComingSoon : t.aiCopilotComposerLocked}
+            rows={3}
+          />
           <div className="ai-copilot-composer-toolbar">
             <span>
               <span aria-hidden="true" className="material-symbols-outlined">

@@ -616,6 +616,37 @@ fn write_ui_state(app: &AppHandle, states: serde_json::Map<String, Value>) -> Re
 }
 
 #[tauri::command]
+pub fn app_list_ai_providers(
+    app: AppHandle,
+) -> Result<Vec<crate::services::ai::AiProviderSummary>, AppError> {
+    crate::services::ai::list_providers(&app)
+}
+
+#[tauri::command]
+pub fn app_save_ai_provider(
+    app: AppHandle,
+    input: crate::services::ai::SaveAiProviderInput,
+) -> Result<crate::services::ai::AiProviderSummary, AppError> {
+    crate::services::ai::save_provider(&app, input)
+}
+
+#[tauri::command]
+pub fn app_delete_ai_provider(
+    app: AppHandle,
+    provider_id: String,
+) -> Result<Vec<crate::services::ai::AiProviderSummary>, AppError> {
+    crate::services::ai::delete_provider(&app, &provider_id)
+}
+
+#[tauri::command]
+pub async fn app_test_ai_provider(
+    app: AppHandle,
+    input: crate::services::ai::TestAiProviderInput,
+) -> Result<crate::services::ai::AiProviderTestResult, AppError> {
+    crate::services::ai::test_provider(&app, input).await
+}
+
+#[tauri::command]
 pub fn app_get_ui_state_item(app: AppHandle, key: String) -> Result<Option<String>, AppError> {
     Ok(read_ui_state(&app)?
         .get(&key)

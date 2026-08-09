@@ -36,6 +36,10 @@ import type {
   TerminalZoomOperation,
   McpApprovalRequest,
   LocalTerminalLaunchOptions,
+  AiProviderSummary,
+  AiProviderTestResult,
+  SaveAiProviderInput,
+  TestAiProviderInput,
   UiPreferences,
   UiPreferencesInput
 } from '@fileterm/core'
@@ -256,6 +260,10 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
+    listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
+    saveAiProvider: (input: SaveAiProviderInput) => invoke<AiProviderSummary>('app_save_ai_provider', { input }),
+    deleteAiProvider: (providerId: string) => invoke<AiProviderSummary[]>('app_delete_ai_provider', { providerId }),
+    testAiProvider: (input: TestAiProviderInput) => invoke<AiProviderTestResult>('app_test_ai_provider', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),

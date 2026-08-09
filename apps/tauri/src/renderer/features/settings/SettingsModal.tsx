@@ -3,6 +3,9 @@ import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type AppUpdateStatus,
+  type AiProviderDraft,
+  type AiProviderKind,
+  type AiProviderSummary,
   type OverviewSectionId,
   type S3BackupConfig,
   type SshConnectionDefaults,
@@ -20,6 +23,33 @@ type SettingsTab = 'ai' | 'connections' | 'interface' | 'sync' | 'tools' | 'upda
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
+}
+
+function createAiProviderDraft(isDefault = true): AiProviderDraft {
+  return {
+    name: '',
+    kind: 'openai-compatible-chat',
+    baseUrl: '',
+    model: '',
+    enabled: true,
+    isDefault,
+    allowNoAuth: false,
+    allowInsecureHttp: false
+  }
+}
+
+function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft {
+  return {
+    id: provider.id,
+    name: provider.name,
+    kind: provider.kind,
+    baseUrl: provider.baseUrl,
+    model: provider.model,
+    enabled: provider.enabled,
+    isDefault: provider.isDefault,
+    allowNoAuth: provider.allowNoAuth,
+    allowInsecureHttp: provider.allowInsecureHttp
+  }
 }
 
 export function SettingsModal({
@@ -76,10 +106,11 @@ export function SettingsModal({
   const [s3Config, setS3Config] = useState<S3BackupConfig | null>(null)
   const [s3SecretAccessKey, setS3SecretAccessKey] = useState('')
   const [s3Message, setS3Message] = useState<string | null>(null)
-  const [aiProvider, setAiProvider] = useState('openai-compatible')
-  const [aiEndpoint, setAiEndpoint] = useState('')
+  const [aiProviders, setAiProviders] = useState<AiProviderSummary[]>([])
+  const [aiDraft, setAiDraft] = useState<AiProviderDraft>(() => createAiProviderDraft())
   const [aiApiKey, setAiApiKey] = useState('')
-  const [aiModel, setAiModel] = useState('')
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
   const [syncOperation, setSyncOperation] = useState<
     'load' | 'save' | 'test' | 'upload' | 'download' | 's3-save' | 's3-test' | 's3-upload' | 's3-download' | null
   >(null)
@@ -189,6 +220,45 @@ export function SettingsModal({
       })
   }, [activeTab, desktopApi])
 
+  useEffect(() => {
+    if (activeTab !== 'ai') return
+    if (!desktopApi) {
+      setAiMessage(t.aiSettingsDesktopOnly)
+      return
+    }
+
+    let canceled = false
+    setAiOperation('load')
+    setAiMessage(null)
+    void desktopApi
+      .listAiProviders()
+      .then((providers) => {
+        if (canceled) return
+        setAiProviders(providers)
+        setAiDraft((current) => {
+          const selected = current.id ? providers.find((provider) => provider.id === current.id) : undefined
+          const fallback = providers.find((provider) => provider.isDefault) ?? providers[0]
+          const nextProvider = selected ?? fallback
+          return nextProvider ? aiProviderToDraft(nextProvider) : createAiProviderDraft(true)
+        })
+        setAiApiKey('')
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setAiMessage(error instanceof Error ? error.message : String(error))
+        }
+      })
+      .finally(() => {
+        if (!canceled) {
+          setAiOperation(null)
+        }
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [activeTab, desktopApi])
+
   const runSyncOperation = async (
     operation: Exclude<typeof syncOperation, 'load' | null>,
     action: () => Promise<void>
@@ -217,6 +287,76 @@ export function SettingsModal({
       }
     }
   }
+
+  const patchAiDraft = (patch: Partial<AiProviderDraft>) => {
+    setAiDraft((current) => ({ ...current, ...patch }))
+  }
+
+  const selectAiProvider = (provider: AiProviderSummary | undefined) => {
+    setAiDraft(provider ? aiProviderToDraft(provider) : createAiProviderDraft(aiProviders.length === 0))
+    setAiApiKey('')
+    setAiMessage(null)
+  }
+
+  const aiProviderInput = () => ({
+    provider: aiDraft,
+    ...(aiApiKey.trim() ? { secrets: { apiKey: aiApiKey } } : {})
+  })
+
+  const saveAiProvider = async () => {
+    if (!desktopApi || aiOperation) return
+    setAiOperation('save')
+    setAiMessage(null)
+    try {
+      const saved = await desktopApi.saveAiProvider(aiProviderInput())
+      const providers = await desktopApi.listAiProviders()
+      setAiProviders(providers)
+      const selected = providers.find((provider) => provider.id === saved.id) ?? saved
+      setAiDraft(aiProviderToDraft(selected))
+      setAiMessage(t.aiSettingsSaveSucceeded)
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAiApiKey('')
+      setAiOperation(null)
+    }
+  }
+
+  const testAiProvider = async () => {
+    if (!desktopApi || aiOperation) return
+    setAiOperation('test')
+    setAiMessage(null)
+    try {
+      const result = await desktopApi.testAiProvider(aiProviderInput())
+      setAiMessage(result.message)
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAiOperation(null)
+    }
+  }
+
+  const deleteAiProvider = async () => {
+    if (!desktopApi || !aiDraft.id || aiOperation) return
+    if (!window.confirm(t.aiSettingsDeleteConfirm)) return
+
+    setAiOperation('delete')
+    setAiMessage(null)
+    try {
+      const providers = await desktopApi.deleteAiProvider(aiDraft.id)
+      setAiProviders(providers)
+      const fallback = providers.find((provider) => provider.isDefault) ?? providers[0]
+      setAiDraft(fallback ? aiProviderToDraft(fallback) : createAiProviderDraft(true))
+      setAiApiKey('')
+      setAiMessage(t.aiSettingsDeleteSucceeded)
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAiOperation(null)
+    }
+  }
+
+  const selectedAiProvider = aiDraft.id ? aiProviders.find((provider) => provider.id === aiDraft.id) : undefined
 
   const platformLabel = (() => {
     const platform = desktopApi?.platform ?? 'unknown'
@@ -575,48 +715,160 @@ export function SettingsModal({
                     auto_awesome
                   </span>
                   <div>
-                    <strong>{t.aiSettingsNotConfigured}</strong>
-                    <p>{t.aiSettingsPreviewHint}</p>
+                    <strong>
+                      {selectedAiProvider?.usable
+                        ? t.aiSettingsProviderReady
+                        : selectedAiProvider
+                          ? t.aiSettingsProviderNeedsAttention
+                          : t.aiSettingsNotConfigured}
+                    </strong>
+                    <p>{selectedAiProvider ? selectedAiProvider.baseUrl : t.aiSettingsPreviewHint}</p>
                   </div>
-                  <span className="ai-settings-preview-tag">{t.aiCopilotPreview}</span>
+                  <span className="ai-settings-preview-tag">
+                    {selectedAiProvider?.hasApiKey ? t.aiSettingsApiKeySaved : t.aiCopilotPreview}
+                  </span>
                 </div>
 
-                <div className="ai-settings-form">
+                <div className="ai-settings-provider-picker">
                   <label>
-                    <span>{t.aiSettingsProviderType}</span>
-                    <select value={aiProvider} onChange={(event) => setAiProvider(event.target.value)}>
-                      <option value="openai-compatible">OpenAI-compatible</option>
-                      <option value="anthropic-compatible">Anthropic-compatible</option>
-                      <option value="custom">{t.aiSettingsCustomProvider}</option>
+                    <span>{t.aiSettingsConfiguredProviders}</span>
+                    <select
+                      disabled={!desktopApi || aiOperation !== null}
+                      value={aiDraft.id ?? '__new__'}
+                      onChange={(event) => {
+                        const providerId = event.target.value
+                        selectAiProvider(
+                          providerId === '__new__'
+                            ? undefined
+                            : aiProviders.find((provider) => provider.id === providerId)
+                        )
+                      }}
+                    >
+                      {aiProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.name}
+                        </option>
+                      ))}
+                      <option value="__new__">{t.aiSettingsAddProvider}</option>
                     </select>
                   </label>
-                  <label>
-                    <span>{t.aiSettingsModel}</span>
-                    <input
-                      placeholder={t.aiSettingsModelPlaceholder}
-                      value={aiModel}
-                      onChange={(event) => setAiModel(event.target.value)}
-                    />
-                  </label>
-                  <label className="ai-settings-form-span-two">
-                    <span>{t.aiSettingsEndpoint}</span>
-                    <input
-                      placeholder={t.aiSettingsEndpointPlaceholder}
-                      value={aiEndpoint}
-                      onChange={(event) => setAiEndpoint(event.target.value)}
-                    />
-                  </label>
-                  <label className="ai-settings-form-span-two">
-                    <span>{t.aiSettingsApiKey}</span>
-                    <input
-                      autoComplete="off"
-                      placeholder={t.aiSettingsApiKeyPlaceholder}
-                      type="password"
-                      value={aiApiKey}
-                      onChange={(event) => setAiApiKey(event.target.value)}
-                    />
-                  </label>
+                  <button
+                    className="ai-settings-secondary-button"
+                    disabled={!desktopApi || aiOperation !== null}
+                    type="button"
+                    onClick={() => selectAiProvider(undefined)}
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined">
+                      add
+                    </span>
+                    {t.aiSettingsAddProvider}
+                  </button>
                 </div>
+
+                <fieldset className="ai-settings-provider-fields" disabled={!desktopApi || aiOperation !== null}>
+                  <div className="ai-settings-form">
+                    <label>
+                      <span>{t.aiSettingsProviderName}</span>
+                      <input
+                        placeholder={t.aiSettingsProviderNamePlaceholder}
+                        value={aiDraft.name}
+                        onChange={(event) => patchAiDraft({ name: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>{t.aiSettingsProviderType}</span>
+                      <select
+                        value={aiDraft.kind}
+                        onChange={(event) => patchAiDraft({ kind: event.target.value as AiProviderKind })}
+                      >
+                        <option value="openai-compatible-chat">OpenAI-compatible Chat</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t.aiSettingsModel}</span>
+                      <input
+                        placeholder={t.aiSettingsModelPlaceholder}
+                        value={aiDraft.model}
+                        onChange={(event) => patchAiDraft({ model: event.target.value })}
+                      />
+                    </label>
+                    <label className="ai-settings-form-span-two">
+                      <span>{t.aiSettingsEndpoint}</span>
+                      <input
+                        placeholder={t.aiSettingsEndpointPlaceholder}
+                        value={aiDraft.baseUrl}
+                        onChange={(event) => patchAiDraft({ baseUrl: event.target.value })}
+                      />
+                    </label>
+                    <label className="ai-settings-form-span-two">
+                      <span>{t.aiSettingsApiKey}</span>
+                      <input
+                        autoComplete="off"
+                        placeholder={
+                          selectedAiProvider?.hasApiKey
+                            ? t.aiSettingsApiKeyReplacePlaceholder
+                            : t.aiSettingsApiKeyPlaceholder
+                        }
+                        type="password"
+                        value={aiApiKey}
+                        onChange={(event) => setAiApiKey(event.target.value)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="ai-settings-toggle-list">
+                    <label className="ai-settings-toggle-row">
+                      <input
+                        checked={aiDraft.enabled}
+                        type="checkbox"
+                        onChange={(event) => patchAiDraft({ enabled: event.target.checked })}
+                      />
+                      <span>
+                        <strong>{t.aiSettingsEnabled}</strong>
+                        <small>{t.aiSettingsEnabledHint}</small>
+                      </span>
+                    </label>
+                    <label className="ai-settings-toggle-row">
+                      <input
+                        checked={aiDraft.isDefault}
+                        type="checkbox"
+                        onChange={(event) => patchAiDraft({ isDefault: event.target.checked })}
+                      />
+                      <span>
+                        <strong>{t.aiSettingsDefaultProvider}</strong>
+                        <small>{t.aiSettingsDefaultProviderHint}</small>
+                      </span>
+                    </label>
+                    <label className="ai-settings-toggle-row">
+                      <input
+                        checked={aiDraft.allowNoAuth}
+                        type="checkbox"
+                        onChange={(event) => patchAiDraft({ allowNoAuth: event.target.checked })}
+                      />
+                      <span>
+                        <strong>{t.aiSettingsAllowNoAuth}</strong>
+                        <small>{t.aiSettingsAllowNoAuthHint}</small>
+                      </span>
+                    </label>
+                    <label className="ai-settings-toggle-row">
+                      <input
+                        checked={aiDraft.allowInsecureHttp}
+                        type="checkbox"
+                        onChange={(event) => patchAiDraft({ allowInsecureHttp: event.target.checked })}
+                      />
+                      <span>
+                        <strong>{t.aiSettingsAllowInsecureHttp}</strong>
+                        <small>{t.aiSettingsAllowInsecureHttpHint}</small>
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                {aiDraft.allowInsecureHttp ? (
+                  <p className="ai-settings-warning" role="alert">
+                    {t.aiSettingsInsecureHttpWarning}
+                  </p>
+                ) : null}
 
                 <div className="ai-settings-privacy-card">
                   <span aria-hidden="true" className="material-symbols-outlined">
@@ -629,13 +881,46 @@ export function SettingsModal({
                 </div>
 
                 <div className="ai-settings-footer">
-                  <small>{t.aiSettingsPreviewHint}</small>
-                  <button className="primary-button compact" disabled type="button">
-                    <span aria-hidden="true" className="material-symbols-outlined">
-                      lock
-                    </span>
-                    {t.aiSettingsSavePreview}
-                  </button>
+                  <small className={aiMessage ? 'ai-settings-operation-message' : undefined} role="status">
+                    {aiMessage ?? t.aiSettingsConnectionTestHint}
+                  </small>
+                  <div className="ai-settings-footer-actions">
+                    {aiDraft.id ? (
+                      <button
+                        className="ai-settings-danger-button"
+                        disabled={!desktopApi || aiOperation !== null}
+                        type="button"
+                        onClick={() => void deleteAiProvider()}
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          delete
+                        </span>
+                        {aiOperation === 'delete' ? t.aiSettingsDeleting : t.aiSettingsDelete}
+                      </button>
+                    ) : null}
+                    <button
+                      className="ai-settings-secondary-button"
+                      disabled={!desktopApi || aiOperation !== null}
+                      type="button"
+                      onClick={() => void testAiProvider()}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">
+                        network_check
+                      </span>
+                      {aiOperation === 'test' ? t.aiSettingsTesting : t.aiSettingsTestConnection}
+                    </button>
+                    <button
+                      className="primary-button compact"
+                      disabled={!desktopApi || aiOperation !== null}
+                      type="button"
+                      onClick={() => void saveAiProvider()}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">
+                        save
+                      </span>
+                      {aiOperation === 'save' ? t.aiSettingsSaving : t.aiSettingsSave}
+                    </button>
+                  </div>
                 </div>
               </section>
             </div>

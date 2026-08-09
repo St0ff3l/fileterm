@@ -451,8 +451,8 @@
   opacity: 0.45;
 }
 
-/* UI-only AI provider setup. Inputs intentionally remain renderer-local until
- * credential storage and provider requests are designed and implemented. */
+/* Provider setup is backed by Rust-side storage. The renderer can submit a
+ * one-time key patch, but it never receives a saved key. */
 .settings-ai-panel {
   gap: 18px;
 }
@@ -512,6 +512,50 @@
   white-space: nowrap;
 }
 
+.ai-settings-provider-picker {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.ai-settings-provider-picker label {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-settings-provider-picker select {
+  width: 100%;
+  height: 36px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  outline: 0;
+  color: var(--text-main);
+  background: var(--input-bg, var(--bg-primary));
+  font: inherit;
+  font-size: 12px;
+}
+
+.ai-settings-provider-picker select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.ai-settings-provider-fields {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .ai-settings-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -556,22 +600,147 @@
   color: var(--text-soft);
 }
 
+.ai-settings-toggle-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ai-settings-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 9px;
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.ai-settings-toggle-row input {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin: 1px 0 0;
+  accent-color: var(--accent-primary);
+}
+
+.ai-settings-toggle-row span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ai-settings-toggle-row strong {
+  color: var(--text-main);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ai-settings-toggle-row small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ai-settings-warning {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--warning, #e8a02b) 55%, var(--border-light));
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--warning, #e8a02b) 10%, var(--bg-card));
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .ai-settings-footer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
   padding-top: 2px;
 }
 
 .ai-settings-footer small {
+  min-width: 0;
+  max-width: 58ch;
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
 }
 
-.ai-settings-footer .primary-button {
+.ai-settings-operation-message {
+  color: var(--text-secondary) !important;
+}
+
+.ai-settings-footer-actions {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-settings-secondary-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-settings-secondary-button:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+  background: var(--accent-tint-weak);
+}
+
+.ai-settings-secondary-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ai-settings-secondary-button .material-symbols-outlined {
+  font-size: 15px;
+}
+
+.ai-settings-danger-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  color: var(--danger);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-settings-danger-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.ai-settings-danger-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ai-settings-danger-button .material-symbols-outlined {
+  font-size: 15px;
 }
 
 @media (max-width: 1180px) {
@@ -630,6 +799,20 @@
 
   .ai-settings-form label.ai-settings-form-span-two {
     grid-column: auto;
+  }
+
+  .ai-settings-provider-picker,
+  .ai-settings-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-settings-footer-actions {
+    justify-content: flex-end;
+  }
+
+  .ai-settings-toggle-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

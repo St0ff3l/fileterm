@@ -1022,6 +1022,82 @@ export interface RemoteFileAccessOptions {
   sudoPassword?: string
 }
 
+export type AiProviderKind = 'openai-compatible-chat' | 'openai-responses' | 'anthropic-messages'
+
+export interface AiProviderSummary {
+  id: string
+  name: string
+  kind: AiProviderKind
+  baseUrl: string
+  model: string
+  enabled: boolean
+  hasApiKey: boolean
+  usable: boolean
+  isDefault: boolean
+  allowNoAuth: boolean
+  allowInsecureHttp: boolean
+}
+
+export interface AiProviderDraft {
+  id?: string
+  name: string
+  kind: AiProviderKind
+  baseUrl: string
+  model: string
+  enabled: boolean
+  isDefault: boolean
+  allowNoAuth: boolean
+  allowInsecureHttp: boolean
+}
+
+export interface AiProviderSecretPatch {
+  /**
+   * An omitted value preserves the saved key; a non-empty string replaces it;
+   * null removes it. The API never returns the plaintext key.
+   */
+  apiKey?: string | null
+}
+
+export interface SaveAiProviderInput {
+  provider: AiProviderDraft
+  secrets?: AiProviderSecretPatch
+}
+
+export interface TestAiProviderInput {
+  provider: AiProviderDraft
+  secrets?: AiProviderSecretPatch
+}
+
+export interface AiProviderTestResult {
+  ok: true
+  message: string
+}
+
+export type AiErrorCode =
+  | 'AI_PROVIDER_NOT_FOUND'
+  | 'AI_PROVIDER_INVALID_CONFIG'
+  | 'AI_PROVIDER_INVALID_URL'
+  | 'AI_PROVIDER_INSECURE_HTTP'
+  | 'AI_PROVIDER_AUTH_REQUIRED'
+  | 'AI_PROVIDER_CONNECTION_FAILED'
+  | 'AI_PROVIDER_HTTP_ERROR'
+  | 'AI_PROVIDER_RESPONSE_INVALID'
+  | 'AI_PROVIDER_TIMEOUT'
+  | 'AI_REQUEST_CANCELLED'
+  | 'AI_CONTEXT_NOT_FOUND'
+  | 'AI_CONTEXT_EXPIRED'
+  | 'AI_CONTEXT_ALREADY_USED'
+  | 'AI_CONTEXT_TARGET_CHANGED'
+  | 'AI_COMMAND_UNSAFE_INPUT'
+  | 'AI_CONVERSATION_LIMIT'
+
+export interface AiCommandError {
+  code: AiErrorCode
+  message: string
+  retryable: boolean
+  httpStatus?: number
+}
+
 export interface FileTermDesktopApi {
   platform: string
   arch: string
@@ -1039,6 +1115,10 @@ export interface FileTermDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
+  listAiProviders(): Promise<AiProviderSummary[]>
+  saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
+  deleteAiProvider(providerId: string): Promise<AiProviderSummary[]>
+  testAiProvider(input: TestAiProviderInput): Promise<AiProviderTestResult>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
