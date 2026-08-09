@@ -88,7 +88,7 @@ notes:
 
 ```text
 platform: macOS 27.0 / arm64
-source: 86821841 之后的 SSH host-key 修补工作树
+fileterm commit: ad5d00c1
 target: disposable local Docker sshd (127.0.0.1:2222)
 provider: OpenAI-compatible Chat / loopback QA fixture
 result: pass（SSH host key + L1 + Review Mode）
