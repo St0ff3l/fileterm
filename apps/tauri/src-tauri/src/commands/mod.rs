@@ -675,12 +675,22 @@ pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Re
 }
 
 #[tauri::command]
-pub fn app_start_ai_chat(
+pub async fn app_create_ai_context_preview(
     app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::CreateAiContextPreviewInput,
+) -> Result<crate::services::ai::AiContextPreview, AppError> {
+    crate::services::ai::create_context_preview(&app, &window, input).await
+}
+
+#[tauri::command]
+pub async fn app_start_ai_chat(
+    app: AppHandle,
+    window: WebviewWindow,
     input: crate::services::ai::StartAiChatInput,
     channel: Channel<crate::services::ai::AiStreamEvent>,
 ) -> Result<crate::services::ai::AiChatRequest, AppError> {
-    crate::services::ai::start_chat(&app, input, channel)
+    crate::services::ai::start_chat(&app, &window, input, channel).await
 }
 
 #[tauri::command]
@@ -695,6 +705,15 @@ pub fn app_retry_ai_chat(
 #[tauri::command]
 pub fn app_cancel_ai_chat(request_id: String) -> Result<(), AppError> {
     crate::services::ai::cancel_chat(&request_id)
+}
+
+#[tauri::command]
+pub async fn app_insert_ai_command(
+    app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::AiCommandInsertInput,
+) -> Result<crate::services::ai::AiCommandInsertResult, AppError> {
+    crate::services::ai::insert_ai_command(&app, &window, input).await
 }
 
 #[tauri::command]
@@ -2102,8 +2121,10 @@ pub async fn app_split_tab(
         *active_tab = Some(root_tab_id.clone());
 
         let mut active_panes = state.active_pane_tab_id_by_root.write().await;
-        active_panes.insert(root_tab_id, new_tab_id.clone());
+        active_panes.insert(root_tab_id.clone(), new_tab_id.clone());
     }
+    state.touch_ai_session_revision(&source_tab_id).await;
+    state.touch_ai_session_revision(&new_tab_id).await;
 
     get_workspace_snapshot_and_emit(&app).await
 }
@@ -2270,6 +2291,7 @@ pub async fn app_close_pane(
     };
 
     state.sessions.write().await.remove(&pane_tab_id);
+    state.remove_ai_session_revision(&pane_tab_id).await;
 
     {
         let mut active_tab = state.active_tab_id.write().await;
@@ -2287,6 +2309,9 @@ pub async fn app_close_pane(
                 .unwrap_or_else(|| outcome.remaining_pane_tab_ids[0].clone());
             active_panes.insert(outcome.root_tab_id, next_active_pane);
         }
+    }
+    for remaining_tab_id in &outcome.remaining_pane_tab_ids {
+        state.touch_ai_session_revision(remaining_tab_id).await;
     }
 
     get_workspace_snapshot_and_emit(&app).await
@@ -2399,6 +2424,7 @@ pub async fn app_reconnect_tab(
                         .push_str("Starting local shell...\r\n");
                 }
             }
+            state.touch_ai_session_revision(&tab_id).await;
 
             let mut launch = state
                 .local_terminal_launches
@@ -2499,6 +2525,7 @@ pub async fn app_reconnect_tab(
                     session.system_metrics = None;
                 }
             }
+            state.touch_ai_session_revision(&tab_id).await;
 
             // Renderer-triggered reconnects apply the returned snapshot, but
             // auto-reconnect is initiated by the worker and has no renderer
@@ -2611,6 +2638,7 @@ pub async fn app_disconnect_tab(
             session.system_metrics = None;
         }
     }
+    state.touch_ai_session_revision(&tab_id).await;
 
     // Cancelling an SSH worker intentionally suppresses its normal worker
     // shutdown callback. Emit the same terminal notice/state that a network
@@ -2705,6 +2733,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
                 }
             }
         }
+        state.remove_ai_session_revision(&tab_id).await;
     } else {
         // 普通关闭（可能是独立 tab 或分屏 root）
         let all_ids_to_close = if pane_leaf_ids.is_empty() {
@@ -2738,6 +2767,9 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
             }
             let mut active_panes = state.active_pane_tab_id_by_root.write().await;
             active_panes.remove(&tab_id);
+        }
+        for id in &all_ids_to_close {
+            state.remove_ai_session_revision(id).await;
         }
     }
 

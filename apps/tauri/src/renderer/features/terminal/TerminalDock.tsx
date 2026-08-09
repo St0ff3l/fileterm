@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
-import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
+import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
@@ -69,6 +69,19 @@ export function TerminalDock({
   const focusTerminal = useCallback(() => {
     dispatchAppEvent(APP_EVENT.focusTerminal, activeTab.id)
   }, [activeTab.id])
+
+  useEffect(() => {
+    return onAppEvent(APP_EVENT.aiInsertTerminalCommand, ({ tabId, command }) => {
+      if (tabId !== activeTab.id || activeTab.sessionType !== 'ssh') {
+        return
+      }
+      // This is intentionally only a controlled-textarea handoff. It does
+      // not call onSendCommand, add a carriage return, or write to the PTY.
+      setCommand(command)
+      setPanel(null)
+      window.requestAnimationFrame(() => inputRef.current?.focus())
+    })
+  }, [activeTab.id, activeTab.sessionType])
 
   useEffect(() => {
     return () => {

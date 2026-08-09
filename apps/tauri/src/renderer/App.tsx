@@ -1561,6 +1561,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 activeProfile={activeProfile}
                 activeSession={aiCopilotTargetSession}
                 activeTab={aiCopilotTargetTab ?? null}
+                rootTab={activeTab ?? null}
                 onClose={() => setIsAiCopilotOpen(false)}
                 onOpenSettings={() => {
                   setIsAiCopilotOpen(false)

@@ -39,10 +39,14 @@ import type {
   AiProviderSummary,
   AiProviderTestResult,
   AiChatRequest,
+  AiCommandInsertInput,
+  AiCommandInsertResult,
   AiConversation,
   AiConversationSummary,
+  AiContextPreview,
   AiStreamEvent,
   CreateAiConversationInput,
+  CreateAiContextPreviewInput,
   RetryAiChatInput,
   SaveAiProviderInput,
   StartAiChatInput,
@@ -312,11 +316,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     createAiConversation: (input: CreateAiConversationInput) =>
       invoke<AiConversation>('app_create_ai_conversation', { input }),
     deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
+    createAiContextPreview: (input: CreateAiContextPreviewInput) =>
+      invoke<AiContextPreview>('app_create_ai_context_preview', { input }),
     startAiChat: (input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
       invokeAiChat('app_start_ai_chat', input, onEvent),
     retryAiChat: (input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
       invokeAiChat('app_retry_ai_chat', input, onEvent),
     cancelAiChat: (requestId: string) => invoke<void>('app_cancel_ai_chat', { requestId }),
+    insertAiCommand: (input: AiCommandInsertInput) => invoke<AiCommandInsertResult>('app_insert_ai_command', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),

@@ -135,6 +135,7 @@ pub async fn update_local_terminal_cwd(
         }
     };
     if changed {
+        state.touch_ai_session_revision(tab_id).await;
         if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
             let _ = app.emit("workspace:snapshot", snapshot);
         }
@@ -149,7 +150,7 @@ pub async fn set_terminal_state(
     status: crate::services::WorkspaceTabStatus,
 ) {
     let connected = status.is_connected();
-    let transcript = {
+    let (transcript, target_changed) = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
         // 显式分块获取 tabs 与 sessions 锁，避免依赖 NBL 隐式释放；
         // 与 ssh.rs::update_tab_status_and_emit 保持一致，防止未来在 if let
@@ -164,10 +165,16 @@ pub async fn set_terminal_state(
         let Some(session) = sessions.get_mut(tab_id) else {
             return;
         };
+        let target_changed = session.connected != connected;
         session.summary = summary.clone();
         session.connected = connected;
-        session.terminal_transcript.clone()
+        (session.terminal_transcript.clone(), target_changed)
     };
+    if target_changed {
+        app.state::<crate::services::workspace::WorkspaceState>()
+            .touch_ai_session_revision(tab_id)
+            .await;
+    }
     let _ = app.emit(
         "terminal:state",
         serde_json::json!({

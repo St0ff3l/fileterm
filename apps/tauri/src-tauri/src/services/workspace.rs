@@ -461,6 +461,12 @@ pub struct WorkspaceState {
     pub update_operation: Arc<Mutex<()>>,
     /// 分屏 root tabId -> 当前活跃 leaf tabId。用于终端输入/文件操作/命令发送定位。
     pub active_pane_tab_id_by_root: Arc<RwLock<HashMap<String, String>>>,
+    /// Monotonic identity revision for terminal targets exposed to the AI
+    /// context-preview contract. It deliberately does not change for every
+    /// terminal output chunk; it changes when the connected target, shell
+    /// identity, or shell CWD changes so a reviewed snapshot cannot silently
+    /// cross a reconnect or target transition.
+    pub ai_session_revisions: Arc<RwLock<HashMap<String, u64>>>,
     /// Windows keeps the verified updater payload in memory until the user
     /// confirms the restart. It is intentionally never persisted to user data.
     #[cfg(target_os = "windows")]
@@ -498,6 +504,7 @@ impl Default for WorkspaceState {
             update_check: Arc::new(Mutex::new(())),
             update_operation: Arc::new(Mutex::new(())),
             active_pane_tab_id_by_root: Arc::new(RwLock::new(HashMap::new())),
+            ai_session_revisions: Arc::new(RwLock::new(HashMap::new())),
             #[cfg(target_os = "windows")]
             windows_downloaded_update: Arc::new(Mutex::new(None)),
         }
@@ -505,6 +512,26 @@ impl Default for WorkspaceState {
 }
 
 impl WorkspaceState {
+    pub async fn ai_session_revision(&self, tab_id: &str) -> u64 {
+        self.ai_session_revisions
+            .read()
+            .await
+            .get(tab_id)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub async fn touch_ai_session_revision(&self, tab_id: &str) -> u64 {
+        let mut revisions = self.ai_session_revisions.write().await;
+        let revision = revisions.entry(tab_id.to_string()).or_default();
+        *revision = revision.saturating_add(1);
+        *revision
+    }
+
+    pub async fn remove_ai_session_revision(&self, tab_id: &str) {
+        self.ai_session_revisions.write().await.remove(tab_id);
+    }
+
     pub fn register_terminal_output_channel(&self, channel: Channel<serde_json::Value>) {
         if let Ok(mut channels) = self.terminal_output_channels.lock() {
             channels.insert(channel.id(), channel);

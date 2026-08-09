@@ -1,6 +1,6 @@
 # AI Copilot 功能集成计划
 
-状态：进行中（Phase 0–2 的 Provider、纯对话和三种流式协议已实现；终端上下文与受控执行尚未开始）
+状态：进行中（Phase 0–3 已实现；下一步收口本地历史与跨平台体验验证）
 前置工作：[AI Copilot 同窗 UI 草案](../completed/ai-copilot-companion-window.md)
 
 ## 1. 结论
@@ -408,9 +408,9 @@ interface AiCommandError {
 
 ### Phase 3：按次上下文与命令卡
 
-- [ ] 接入 context preview、TTL、清理、截断和 best-effort 遮盖。
-- [ ] 支持 L1/L2 按次授权，不提供全局“永久读取终端”默认值。
-- [ ] 接入结构化命令卡、复制和单行“写入但不回车”。
+- [x] 接入 context preview、5 分钟 TTL、一次性消费、清理、截断和 best-effort 遮盖。
+- [x] 支持 L1/L2 按次授权，不提供全局“永久读取终端”默认值；L1 不读取 runtime transcript，L2 才生成不可变预览。
+- [x] 接入严格 JSON 命令卡、复制和单行“写入但不回车”；写入动作只更新受控终端输入框，不经过 PTY。
 
 ### Phase 4：本地历史与体验收口
 

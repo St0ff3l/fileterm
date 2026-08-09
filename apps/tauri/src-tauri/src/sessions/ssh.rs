@@ -1160,6 +1160,7 @@ async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: Works
     let connected = status.is_connected();
     let mut summary = "连接已断开".to_string();
     let mut transcript = String::new();
+    let mut target_changed = false;
     {
         let mut tabs = state.tabs.write().await;
         if let Some(tab) = tabs.iter_mut().find(|t| t.id == tab_id) {
@@ -1169,10 +1170,14 @@ async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: Works
     {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(tab_id) {
+            target_changed = session.connected != connected;
             session.connected = connected;
             summary = session.summary.clone();
             transcript = session.terminal_transcript.clone();
         }
+    }
+    if target_changed {
+        state.touch_ai_session_revision(tab_id).await;
     }
     let payload = serde_json::json!({
         "tabId": tab_id.to_string(),
@@ -4811,6 +4816,7 @@ async fn run_worker_loop(
                             RootFileAccessMethod,
                         )> = None;
                         let mut session_state_changed = false;
+                        let mut ai_target_changed = false;
                         if new_cwd.is_some() || new_user.is_some() {
                             let mut sessions = state.sessions.write().await;
                             if let Some(s) = sessions.get_mut(tab_id) {
@@ -4823,6 +4829,7 @@ async fn run_worker_loop(
                                         );
                                         s.shell_cwd = Some(cwd.clone());
                                         session_state_changed = true;
+                                        ai_target_changed = true;
                                         // When the user marker is in a later
                                         // packet, wait for that packet before
                                         // opening the root exec channel.
@@ -4836,12 +4843,14 @@ async fn run_worker_loop(
                                     // （若 profile.username 不可用则用观察值）。
                                     if s.login_user.is_none() {
                                         s.login_user = Some(user.clone());
+                                        ai_target_changed = true;
                                     }
                                     let shell_user_changed =
                                         s.shell_user.as_deref() != Some(user.as_str());
                                     if shell_user_changed {
                                         s.shell_user = Some(user.clone());
                                         session_state_changed = true;
+                                        ai_target_changed = true;
                                     }
                                     // 对照 Electron resolveShellFileAccess：
                                     // shell user != login user ⇒ 自动切 root 视角
@@ -4942,6 +4951,9 @@ async fn run_worker_loop(
                                 }
                             }
                             drop(sessions);
+                            if ai_target_changed {
+                                state.touch_ai_session_revision(tab_id).await;
+                            }
                             // Keep worker-local auth/access state in lockstep
                             // before dispatching the follow task below.
                             if let Some((mode, su_user, access_method)) = file_mode_switch {

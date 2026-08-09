@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  AiChatResponseMode,
   AiChatRequest,
   AiConversation,
   AiConversationSummary,
+  AiContextAttachment,
+  AiContextPreview,
   AiMessage,
   AiProviderSummary,
-  AiStreamEvent
+  AiStreamEvent,
+  CreateAiContextPreviewInput
 } from '@fileterm/core'
+
+type SendMessageOptions = {
+  contextSnapshotId?: string
+  responseMode?: AiChatResponseMode
+}
 
 function toMessage(error: unknown) {
   const value = String(error)
@@ -59,10 +68,13 @@ export function useAiCopilot() {
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null)
+  const [contextPreview, setContextPreview] = useState<AiContextPreview | null>(null)
+  const [isContextPreviewing, setIsContextPreviewing] = useState(false)
   const conversationRef = useRef<AiConversation | null>(null)
   const selectedProviderIdRef = useRef<string | null>(null)
   const activeConversationIdRef = useRef<string | null>(null)
   const activeAssistantMessageIdRef = useRef<string | null>(null)
+  const activeResponseModeRef = useRef<AiChatResponseMode>('chat')
   const mountedRef = useRef(true)
 
   const applyConversation = useCallback((next: AiConversation | null) => {
@@ -74,6 +86,7 @@ export function useAiCopilot() {
   const selectProvider = useCallback((providerId: string | null) => {
     selectedProviderIdRef.current = providerId
     setSelectedProviderId(providerId)
+    setContextPreview(null)
   }, [])
 
   const loadConversation = useCallback(
@@ -206,6 +219,9 @@ export function useAiCopilot() {
         return
       }
       if (event.type === 'text-delta') {
+        if (activeResponseModeRef.current === 'command-proposal') {
+          return
+        }
         const assistantMessageId = activeAssistantMessageIdRef.current
         if (!assistantMessageId) return
         setConversation((current) => {
@@ -226,6 +242,12 @@ export function useAiCopilot() {
         })
         return
       }
+      if (event.type === 'command') {
+        // Command cards are only made visible from the completed, persisted
+        // conversation. This event is still useful as a typed transport
+        // boundary, but never turns partial model output into a trusted card.
+        return
+      }
       if (event.type === 'usage') {
         setUsage({ inputTokens: event.inputTokens, outputTokens: event.outputTokens })
         return
@@ -237,9 +259,11 @@ export function useAiCopilot() {
         setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
+        activeResponseModeRef.current = 'chat'
         return
       }
       activeAssistantMessageIdRef.current = null
+      activeResponseModeRef.current = 'chat'
       setActiveRequestId(null)
       setIsStreaming(false)
       setErrorMessage(event.message)
@@ -268,14 +292,26 @@ export function useAiCopilot() {
   )
 
   const sendMessage = useCallback(
-    async (value: string) => {
+    async (value: string, options: SendMessageOptions = {}) => {
       const desktopApi = window.fileterm
       const content = value.trim()
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !content || !providerId || isStreaming) return false
+      const responseMode = options.responseMode ?? 'chat'
+      const preview =
+        options.contextSnapshotId && contextPreview?.snapshotId === options.contextSnapshotId ? contextPreview : null
+      const context: AiContextAttachment | undefined = preview
+        ? {
+            mode: preview.mode,
+            target: preview.target,
+            redactions: preview.redactions,
+            truncated: preview.truncated
+          }
+        : undefined
       setErrorMessage(null)
       setUsage(null)
       setIsStreaming(true)
+      activeResponseModeRef.current = responseMode
 
       let target = conversationRef.current
       try {
@@ -288,7 +324,8 @@ export function useAiCopilot() {
           id: temporaryMessageId,
           role: 'user',
           content,
-          createdAt: timestamp
+          createdAt: timestamp,
+          context
         }
         const optimisticConversation: AiConversation = {
           ...target,
@@ -301,7 +338,16 @@ export function useAiCopilot() {
         applyConversation(optimisticConversation)
         const result = await startRequest(
           (conversationId, requestProviderId, onEvent) =>
-            desktopApi.startAiChat({ conversationId, providerId: requestProviderId, userMessage: content }, onEvent),
+            desktopApi.startAiChat(
+              {
+                conversationId,
+                providerId: requestProviderId,
+                userMessage: content,
+                contextSnapshotId: options.contextSnapshotId,
+                responseMode
+              },
+              onEvent
+            ),
           target.id,
           providerId
         )
@@ -316,6 +362,9 @@ export function useAiCopilot() {
             return next
           })
         }
+        if (options.contextSnapshotId && mountedRef.current) {
+          setContextPreview((current) => (current?.snapshotId === options.contextSnapshotId ? null : current))
+        }
         return true
       } catch (error) {
         if (mountedRef.current) {
@@ -329,12 +378,48 @@ export function useAiCopilot() {
           setErrorMessage(toMessage(error))
           setIsStreaming(false)
           setActiveRequestId(null)
+          activeResponseModeRef.current = 'chat'
+          if (options.contextSnapshotId) {
+            setContextPreview((current) => (current?.snapshotId === options.contextSnapshotId ? null : current))
+          }
         }
         return false
       }
     },
-    [applyConversation, createConversation, isStreaming, startRequest]
+    [applyConversation, contextPreview, createConversation, isStreaming, startRequest]
   )
+
+  const createContextPreview = useCallback(
+    async (input: CreateAiContextPreviewInput) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return null
+      setErrorMessage(null)
+      setIsContextPreviewing(true)
+      try {
+        const preview = await desktopApi.createAiContextPreview(input)
+        if (mountedRef.current) {
+          setContextPreview(preview)
+        }
+        return preview
+      } catch (error) {
+        if (mountedRef.current) {
+          setErrorMessage(toMessage(error))
+        }
+        return null
+      } finally {
+        if (mountedRef.current) {
+          setIsContextPreviewing(false)
+        }
+      }
+    },
+    [isStreaming]
+  )
+
+  const clearContextPreview = useCallback(() => {
+    if (!isStreaming) {
+      setContextPreview(null)
+    }
+  }, [isStreaming])
 
   const retry = useCallback(async () => {
     const desktopApi = window.fileterm
@@ -343,6 +428,7 @@ export function useAiCopilot() {
     if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
     setErrorMessage(null)
     setUsage(null)
+    setContextPreview(null)
     setIsStreaming(true)
     try {
       await startRequest(
@@ -357,6 +443,7 @@ export function useAiCopilot() {
         setErrorMessage(toMessage(error))
         setIsStreaming(false)
         setActiveRequestId(null)
+        activeResponseModeRef.current = 'chat'
       }
       return false
     }
@@ -394,10 +481,14 @@ export function useAiCopilot() {
     isStreaming,
     errorMessage,
     usage,
+    contextPreview,
+    isContextPreviewing,
     selectProvider,
     loadConversation,
     refresh,
     newChat,
+    createContextPreview,
+    clearContextPreview,
     sendMessage,
     retry,
     stop

@@ -1073,12 +1073,69 @@ export interface AiProviderTestResult {
   message: string
 }
 
+/** Per-request context modes. Neither mode becomes a provider-wide default. */
+export type AiContextMode = 'metadata' | 'recent-terminal'
+
+/** A target identity that a one-time context snapshot is bound to. */
+export interface AiContextTarget {
+  tabId: string
+  rootTabId: string
+  sessionType: 'ssh' | 'local'
+  /** Changes when the interactive target changes, reconnects, or its shell identity/CWD changes. */
+  sessionRevision: string
+  displayHost: string
+  user?: string
+  cwd?: string
+  connected: boolean
+}
+
+/** A best-effort sanitization applied before terminal text can leave the device. */
+export interface AiContextRedaction {
+  kind: 'authorization' | 'credential-assignment' | 'private-key' | 'control-sequence' | 'long-line'
+  count: number
+}
+
+/** Exact, immutable context that the user reviews before one request can consume it. */
+export interface AiContextPreview {
+  snapshotId: string
+  expiresAt: string
+  mode: AiContextMode
+  target: AiContextTarget
+  preview: string
+  redactions: AiContextRedaction[]
+  truncated: boolean
+}
+
+/** Non-sensitive audit metadata retained with a local user message; raw terminal text is never stored. */
+export interface AiContextAttachment {
+  mode: AiContextMode
+  target: AiContextTarget
+  redactions: AiContextRedaction[]
+  truncated: boolean
+}
+
+export type AiCommandRisk = 'read-only' | 'mutating' | 'destructive' | 'privileged' | 'unknown'
+
+/** A structured, locally validated command proposal; it is never an execution request. */
+export interface AiCommandSuggestion {
+  id: string
+  command: string
+  explanation?: string
+  risk: AiCommandRisk
+  multiline: boolean
+  target: AiContextTarget
+}
+
 /** A message stored locally for an AI Copilot conversation. */
 export interface AiMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  /** Present only for an explicitly approved L1/L2 user turn; never contains raw transcript text. */
+  context?: AiContextAttachment
+  /** Present only after a strict JSON command-proposal response validates locally. */
+  commands?: AiCommandSuggestion[]
 }
 
 /** Lightweight metadata used by the Copilot conversation switcher. */
@@ -1100,14 +1157,26 @@ export interface CreateAiConversationInput {
   providerId: string
 }
 
+export interface CreateAiContextPreviewInput {
+  tabId: string
+  /** Optional renderer hint. Rust resolves and validates the actual root relation. */
+  rootTabId?: string
+  providerId: string
+  mode: AiContextMode
+}
+
+export type AiChatResponseMode = 'chat' | 'command-proposal'
+
 /**
- * L0 chat payload. It intentionally cannot carry terminal, host, path or
- * transcript data; later context phases use a separate, Rust-owned snapshot.
+ * A context ID can only refer to a Rust-owned, reviewed one-time snapshot.
+ * The renderer cannot supply terminal text, host data, or command text here.
  */
 export interface StartAiChatInput {
   conversationId: string
   providerId: string
   userMessage: string
+  contextSnapshotId?: string
+  responseMode?: AiChatResponseMode
 }
 
 /** Retries the latest user turn without duplicating it in local history. */
@@ -1123,10 +1192,21 @@ export interface AiChatRequest {
   assistantMessageId: string
 }
 
+export interface AiCommandInsertInput {
+  commandId: string
+}
+
+/** Rust approved the target-bound command for a UI-only terminal input handoff. */
+export interface AiCommandInsertResult {
+  tabId: string
+  command: string
+}
+
 /** Per-request stream events; never emitted through a global application event. */
 export type AiStreamEvent =
   | { type: 'started'; requestId: string; messageId: string }
   | { type: 'text-delta'; text: string }
+  | { type: 'command'; command: AiCommandSuggestion }
   | { type: 'usage'; inputTokens?: number; outputTokens?: number }
   | { type: 'completed'; conversation: AiConversation; finishReason?: string }
   | { type: 'error'; code: AiErrorCode; message: string; retryable: boolean }
@@ -1146,6 +1226,8 @@ export type AiErrorCode =
   | 'AI_CONTEXT_EXPIRED'
   | 'AI_CONTEXT_ALREADY_USED'
   | 'AI_CONTEXT_TARGET_CHANGED'
+  | 'AI_CONTEXT_FORBIDDEN'
+  | 'AI_COMMAND_NOT_FOUND'
   | 'AI_COMMAND_UNSAFE_INPUT'
   | 'AI_CONVERSATION_LIMIT'
   | 'AI_CONVERSATION_NOT_FOUND'
@@ -1183,9 +1265,11 @@ export interface FileTermDesktopApi {
   getAiConversation(conversationId: string): Promise<AiConversation>
   createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
+  createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
   startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   cancelAiChat(requestId: string): Promise<void>
+  insertAiCommand(input: AiCommandInsertInput): Promise<AiCommandInsertResult>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
