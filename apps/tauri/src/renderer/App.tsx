@@ -860,6 +860,14 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     return () => window.removeEventListener('resize', handleWindowResize)
   }, [isAiCopilotOpen, isSystemSidebarCollapsed, sidebarWidth])
 
+  // Auto-close AI Copilot when the Home tab is active — the panel overlaps
+  // the welcome screen and has no session context to attach to.
+  useEffect(() => {
+    if (isHomeWorkspaceVisible && isAiCopilotOpen) {
+      setIsAiCopilotOpen(false)
+    }
+  }, [isHomeWorkspaceVisible, isAiCopilotOpen])
+
   // Timeout for error / status bar
   useEffect(() => {
     if (!error) {
