@@ -433,6 +433,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const aiCopilotTargetTab = activePaneTab ?? activeTab
   const aiCopilotTargetSession = activePaneSession ?? activeSession
   const isAiCopilotAvailable = Boolean(activeTab)
+  const shouldShowAiCopilot = isAiCopilotOpen && !isHomeWorkspaceVisible
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {
       if (!activeTabId) {
@@ -846,7 +847,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
   // Auto-clamp AI Copilot width on window resize to protect main workspace
   useEffect(() => {
-    if (!isAiCopilotOpen) return
+    if (!shouldShowAiCopilot) return
 
     const handleWindowResize = () => {
       const windowWidth = window.innerWidth
@@ -858,7 +859,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
     window.addEventListener('resize', handleWindowResize)
     return () => window.removeEventListener('resize', handleWindowResize)
-  }, [isAiCopilotOpen, isSystemSidebarCollapsed, sidebarWidth])
+  }, [shouldShowAiCopilot, isSystemSidebarCollapsed, sidebarWidth])
 
   // Timeout for error / status bar
   useEffect(() => {
@@ -1441,7 +1442,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${isAiCopilotOpen ? 'has-ai-copilot' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -1476,7 +1477,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               <CloseButton aria-label={t.closeTab} onClick={() => setError(null)} size="compact" />
             </div>
           ) : null}
-          <div className={`workspace-stage ${isAiCopilotOpen ? 'has-ai-copilot' : ''}`}>
+          <div className={`workspace-stage ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}>
             <div
               key={activeLocalTab ? activeWorkspaceOrderKey : 'session-workspace'}
               className={`workspace-stage-transition ${isWorkspaceTransitionActive ? 'is-transitioning' : ''}`}
@@ -1619,7 +1620,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onSetPaneWeights={setPaneWeights}
               />
             </div>
-            {isAiCopilotOpen ? (
+            {shouldShowAiCopilot ? (
               <AiCopilotPanel
                 activeProfile={activeProfile}
                 activeSession={aiCopilotTargetSession}
