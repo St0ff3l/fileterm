@@ -26,6 +26,13 @@
   display: none;
 }
 
+/* When Home tab is active with AI Copilot open, the home-workspace
+   must not extend under the panel — match the same margin-right. */
+.fs-shell.has-ai-copilot.is-home-active .home-workspace {
+  width: calc(100% - var(--ai-copilot-panel-width, 368px));
+  max-width: calc(100% - var(--ai-copilot-panel-width, 368px));
+}
+
 .workspace-stage.has-ai-copilot {
   overflow: visible;
 }
@@ -398,6 +405,12 @@
 
 .ai-copilot-chat-meta .ai-copilot-conversation-controls {
   border-bottom: 0;
+}
+
+/* Conversation label spans full width so provider+model sit on row 1
+   and the conversation search+select occupy the full row 2. */
+.ai-copilot-conversation-controls .ai-copilot-conversation-label {
+  grid-column: 1 / -1;
 }
 
 .ai-copilot-conversation-actions {

@@ -534,7 +534,7 @@ export function AiCopilotPanel({
                     </select>
                   </label>
                 )}
-                <label>
+                <label className="ai-copilot-conversation-label">
                   <span>{t.aiCopilotConversationLabel}</span>
                   <input
                     aria-label={t.aiCopilotHistorySearch}
