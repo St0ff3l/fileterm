@@ -1074,7 +1074,14 @@ export function SettingsModal({
                     placeholder={t.aiSettingsPresetPlaceholder}
                     options={[
                       { value: '__none__', label: t.aiSettingsPresetPlaceholder },
-                      ...AI_PROVIDER_PRESETS.map((preset) => ({
+                      ...AI_PROVIDER_PRESETS.filter((preset) => {
+                        const presetName = preset.draft.name.toLowerCase()
+                        const presetUrl = preset.draft.baseUrl.toLowerCase()
+                        return !aiProviders.some(
+                          (p) =>
+                            p.name.trim().toLowerCase() === presetName || p.baseUrl.trim().toLowerCase() === presetUrl
+                        )
+                      }).map((preset) => ({
                         value: preset.id,
                         label: String(t[preset.labelKey])
                       }))
