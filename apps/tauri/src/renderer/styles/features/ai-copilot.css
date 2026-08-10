@@ -26,11 +26,10 @@
   display: none;
 }
 
-/* When Home tab is active with AI Copilot open, the home-workspace
-   must not extend under the panel — match the same margin-right. */
-.fs-shell.has-ai-copilot.is-home-active .home-workspace {
-  width: calc(100% - var(--ai-copilot-panel-width, 368px));
-  max-width: calc(100% - var(--ai-copilot-panel-width, 368px));
+/* When Home tab is active with AI Copilot open, the tabbar inside .home-workspace
+   is already nested within .fs-main (which has margin-right), so reset its margin-right. */
+.fs-shell.has-ai-copilot.is-home-active .home-tabs-bar .fs-tabbar {
+  margin-right: 0;
 }
 
 .workspace-stage.has-ai-copilot {
