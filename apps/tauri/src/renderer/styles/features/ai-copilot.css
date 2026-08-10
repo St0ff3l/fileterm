@@ -373,36 +373,6 @@
   text-transform: uppercase;
 }
 
-.ai-copilot-msg-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.ai-copilot-copy-msg-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
-  border: 1px solid var(--border-light);
-  border-radius: 4px;
-  color: var(--text-soft);
-  background: transparent;
-  font: inherit;
-  font-size: 10px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-
-  user-select: none !important;
-}
-
-.ai-copilot-copy-msg-btn:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--bg-hover);
-}
-
 .ai-copilot-content {
   display: grid;
   align-content: center;

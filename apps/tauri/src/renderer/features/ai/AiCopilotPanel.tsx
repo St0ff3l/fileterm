@@ -125,17 +125,46 @@ export function AiCopilotPanel({
   const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
   const [isAdvancedControlsOpen, setIsAdvancedControlsOpen] = useState(false)
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
-
-  const handleCopyText = (id: string, text: string) => {
-    void navigator.clipboard.writeText(text)
-    setCopiedMessageId(id)
-    setTimeout(() => {
-      setCopiedMessageId((prev) => (prev === id ? null : prev))
-    }, 2000)
-  }
-
+  const panelRef = useRef<HTMLElement>(null)
   const messageViewportRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed || !selection.anchorNode) return
+
+      const panel = panelRef.current
+      if (!panel) return
+
+      const isAnchorInside = panel.contains(selection.anchorNode)
+      const isFocusInside = selection.focusNode ? panel.contains(selection.focusNode) : false
+
+      if (isAnchorInside && !isFocusInside) {
+        const range = selection.getRangeAt(0)
+        const treeWalker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT)
+        let lastTextNode: Node | null = null
+        while (treeWalker.nextNode()) {
+          lastTextNode = treeWalker.currentNode
+        }
+        if (lastTextNode) {
+          try {
+            range.setEnd(lastTextNode, lastTextNode.textContent?.length ?? 0)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          } catch {
+            selection.collapseToStart()
+          }
+        } else {
+          selection.collapseToStart()
+        }
+      }
+    }
+
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+    }
+  }, [])
   const {
     providers,
     conversations,
@@ -338,6 +367,7 @@ export function AiCopilotPanel({
 
   return (
     <aside
+      ref={panelRef}
       aria-label={t.aiCopilot}
       className="ai-copilot-panel"
       onMouseDown={(e) => e.stopPropagation()}
@@ -705,24 +735,13 @@ export function AiCopilotPanel({
                           : t.aiCopilotMessageAssistant
                     }
                   >
-                    <div className="ai-copilot-msg-header-row">
-                      <span className="ai-copilot-message-role">
-                        {message.role === 'user'
-                          ? t.aiCopilotMessageUser
-                          : message.role === 'review'
-                            ? t.aiCopilotMessageReview
-                            : t.aiCopilotMessageAssistant}
-                      </span>
-                      <button
-                        className="ai-copilot-copy-msg-btn"
-                        type="button"
-                        onClick={() => handleCopyText(message.id, message.content)}
-                        title="复制对话内容"
-                      >
-                        <AppIcon name="copy" size={12} />
-                        <span>{copiedMessageId === message.id ? '已复制' : '复制'}</span>
-                      </button>
-                    </div>
+                    <span className="ai-copilot-message-role">
+                      {message.role === 'user'
+                        ? t.aiCopilotMessageUser
+                        : message.role === 'review'
+                          ? t.aiCopilotMessageReview
+                          : t.aiCopilotMessageAssistant}
+                    </span>
                     {message.review ? (
                       <section className={`ai-copilot-review-card is-${message.review.outcome}`}>
                         <header>
