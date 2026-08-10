@@ -1065,38 +1065,31 @@ export function SettingsModal({
                   </button>
                 </div>
 
-                <div className="ai-settings-preset-picker">
-                  <span className="ai-settings-preset-label">{t.aiSettingsPresetLabel}</span>
-                  <DropdownSelect
-                    className="ai-settings-preset-select"
-                    disabled={!desktopApi || aiOperation !== null}
-                    value="__none__"
-                    placeholder={t.aiSettingsPresetPlaceholder}
-                    options={[
-                      { value: '__none__', label: t.aiSettingsPresetPlaceholder },
-                      ...AI_PROVIDER_PRESETS.filter((preset) => {
-                        const presetName = preset.draft.name.toLowerCase()
-                        const presetUrl = preset.draft.baseUrl.toLowerCase()
-                        return !aiProviders.some(
-                          (p) =>
-                            p.name.trim().toLowerCase() === presetName || p.baseUrl.trim().toLowerCase() === presetUrl
-                        )
-                      }).map((preset) => ({
-                        value: preset.id,
-                        label: String(t[preset.labelKey])
-                      }))
-                    ]}
-                    onChange={(value) => {
-                      const preset = AI_PROVIDER_PRESETS.find((item) => item.id === value)
-                      if (preset) {
-                        applyAiPreset(preset)
-                      }
-                      // Value is controlled by parent; DropdownSelect re-renders
-                      // with `__none__` so the same preset can be re-applied.
-                    }}
-                  />
-                  <p className="ai-settings-preset-hint">{t.aiSettingsPresetHint}</p>
-                </div>
+                {!aiDraft.id && (
+                  <div className="ai-settings-preset-picker">
+                    <span className="ai-settings-preset-label">{t.aiSettingsPresetLabel}</span>
+                    <DropdownSelect
+                      className="ai-settings-preset-select"
+                      disabled={!desktopApi || aiOperation !== null}
+                      value="__none__"
+                      placeholder={t.aiSettingsPresetPlaceholder}
+                      options={[
+                        { value: '__none__', label: t.aiSettingsPresetPlaceholder },
+                        ...AI_PROVIDER_PRESETS.map((preset) => ({
+                          value: preset.id,
+                          label: String(t[preset.labelKey])
+                        }))
+                      ]}
+                      onChange={(value) => {
+                        const preset = AI_PROVIDER_PRESETS.find((item) => item.id === value)
+                        if (preset) {
+                          applyAiPreset(preset)
+                        }
+                      }}
+                    />
+                    <p className="ai-settings-preset-hint">{t.aiSettingsPresetHint}</p>
+                  </div>
+                )}
 
                 <fieldset className="ai-settings-provider-fields" disabled={!desktopApi || aiOperation !== null}>
                   <div className="ai-settings-form">
