@@ -300,8 +300,9 @@ export function SettingsModal({
   // the user picks an already-configured provider (no preset bound). Stored
   // outside AiProviderDraft to keep the data-layer type free of UI-only state.
   const [aiModelChoices, setAiModelChoices] = useState<string[]>([])
-  const [isAddingModel, setIsAddingModel] = useState(false)
-  const [newModelName, setNewModelName] = useState('')
+  const [configuredModels, setConfiguredModels] = useState<string[]>([])
+  const [isCustomInput, setIsCustomInput] = useState(false)
+  const [customModelText, setCustomModelText] = useState('')
   const [aiApiKey, setAiApiKey] = useState('')
   const [clearAiApiKey, setClearAiApiKey] = useState(false)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
@@ -496,8 +497,9 @@ export function SettingsModal({
     )
     const defaultModels = presetMatch?.draft.models ?? DEFAULT_MODELS_BY_KIND[draft.kind] ?? []
     setAiModelChoices([...new Set([draft.model, ...defaultModels].filter(Boolean))])
-    setIsAddingModel(false)
-    setNewModelName('')
+    setConfiguredModels(draft.model ? [draft.model] : defaultModels.slice(0, 1))
+    setIsCustomInput(false)
+    setCustomModelText('')
     setAiApiKey('')
     setClearAiApiKey(false)
     setAiMessage(null)
@@ -515,40 +517,40 @@ export function SettingsModal({
       allowNoAuth: preset.draft.allowNoAuth,
       allowInsecureHttp: preset.draft.allowInsecureHttp
     }))
-    setAiModelChoices(preset.draft.models ?? [preset.draft.model])
-    setIsAddingModel(false)
-    setNewModelName('')
+    const presetModels = preset.draft.models ?? [preset.draft.model]
+    setAiModelChoices(presetModels)
+    setConfiguredModels([preset.draft.model])
+    setIsCustomInput(false)
+    setCustomModelText('')
     setAiMessage(null)
   }
 
-  const confirmAddModel = () => {
-    const trimmed = newModelName.trim()
-    if (trimmed) {
-      setAiModelChoices((prev) => [...new Set([trimmed, ...prev])])
-      patchAiDraft({ model: trimmed })
+  const addSelectedModelToProvider = () => {
+    let modelToAdd = aiDraft.model.trim()
+    if (isCustomInput) {
+      modelToAdd = customModelText.trim()
     }
-    setIsAddingModel(false)
-    setNewModelName('')
+    if (!modelToAdd) return
+
+    setConfiguredModels((prev) => [...new Set([...prev, modelToAdd])])
+    setAiModelChoices((prev) => [...new Set([modelToAdd, ...prev])])
+    patchAiDraft({ model: modelToAdd })
+    setIsCustomInput(false)
+    setCustomModelText('')
   }
 
-  const removeCustomModel = (modelName: string) => {
-    setAiModelChoices((prev) => prev.filter((m) => m !== modelName))
-    if (aiDraft.model === modelName) {
-      const remaining = aiModelChoices.filter((m) => m !== modelName)
-      patchAiDraft({ model: remaining[0] ?? '' })
-    }
+  const removeConfiguredModel = (modelName: string) => {
+    setConfiguredModels((prev) => {
+      const next = prev.filter((m) => m !== modelName)
+      if (aiDraft.model === modelName) {
+        patchAiDraft({ model: next[0] ?? '' })
+      }
+      return next
+    })
   }
 
-  const presetMatch = useMemo(
-    () =>
-      AI_PROVIDER_PRESETS.find(
-        (p) => p.draft.baseUrl === aiDraft.baseUrl || p.draft.name.toLowerCase() === aiDraft.name.toLowerCase()
-      ),
-    [aiDraft.baseUrl, aiDraft.name]
-  )
-
-  const availableModelOptions = useMemo(
-    () => [...new Set([aiDraft.model, ...aiModelChoices].filter(Boolean))],
+  const candidateModelOptions = useMemo(
+    () => [...new Set([...aiModelChoices, aiDraft.model].filter(Boolean))],
     [aiDraft.model, aiModelChoices]
   )
 
@@ -1080,37 +1082,36 @@ export function SettingsModal({
                       <span>{t.aiSettingsModel}</span>
                       <div className="ai-settings-model-container">
                         <div className="ai-settings-model-left">
-                          {isAddingModel ? (
+                          {isCustomInput ? (
                             <div className="ai-settings-model-add-row">
                               <input
                                 autoFocus
                                 className="ai-settings-model-add-input"
-                                placeholder="输入新模型名称 (例: deepseek-r1)"
-                                value={newModelName}
-                                onChange={(e) => setNewModelName(e.target.value)}
+                                placeholder="输入自定义模型名称 (例: deepseek-r1)"
+                                value={customModelText}
+                                onChange={(e) => setCustomModelText(e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault()
-                                    confirmAddModel()
+                                    addSelectedModelToProvider()
                                   } else if (e.key === 'Escape') {
-                                    setIsAddingModel(false)
+                                    setIsCustomInput(false)
                                   }
                                 }}
                               />
                               <button
-                                className="ai-settings-secondary-button"
-                                disabled={!newModelName.trim()}
+                                className="ai-settings-secondary-button ai-settings-add-model-btn"
+                                disabled={!customModelText.trim()}
                                 type="button"
-                                onClick={confirmAddModel}
-                                title="确认添加模型"
+                                onClick={addSelectedModelToProvider}
+                                title="添加此自定义模型到 Provider"
                               >
-                                <AppIcon name="check" size={14} />
-                                添加
+                                <AppIcon name="plus" size={14} />
                               </button>
                               <button
                                 className="ai-settings-secondary-button"
                                 type="button"
-                                onClick={() => setIsAddingModel(false)}
+                                onClick={() => setIsCustomInput(false)}
                                 title="取消"
                               >
                                 取消
@@ -1121,55 +1122,60 @@ export function SettingsModal({
                               <DropdownSelect
                                 className="ai-settings-model-select"
                                 disabled={!desktopApi || aiOperation !== null}
-                                value={aiDraft.model}
-                                options={availableModelOptions.map((model: string) => ({
-                                  value: model,
-                                  label: model
-                                }))}
-                                onChange={(value) => patchAiDraft({ model: value })}
+                                value={aiDraft.model || (candidateModelOptions[0] ?? '')}
+                                options={[
+                                  ...candidateModelOptions.map((model: string) => ({
+                                    value: model,
+                                    label: model
+                                  })),
+                                  { value: '__custom__', label: '+ 自定义模型...' }
+                                ]}
+                                onChange={(value) => {
+                                  if (value === '__custom__') {
+                                    setIsCustomInput(true)
+                                    setCustomModelText('')
+                                  } else {
+                                    patchAiDraft({ model: value })
+                                  }
+                                }}
                               />
                               <button
                                 className="ai-settings-secondary-button ai-settings-add-model-btn"
-                                disabled={!desktopApi || aiOperation !== null}
+                                disabled={!desktopApi || aiOperation !== null || !aiDraft.model}
                                 type="button"
-                                onClick={() => {
-                                  setIsAddingModel(true)
-                                  setNewModelName('')
-                                }}
-                                title="添加新模型到列表"
+                                onClick={addSelectedModelToProvider}
+                                title="添加当前下拉框选中的模型到 Provider"
                               >
                                 <AppIcon name="plus" size={14} />
                               </button>
                             </div>
                           )}
                         </div>
-                        {availableModelOptions.length > 0 && (
+                        {configuredModels.length > 0 && (
                           <div className="ai-settings-model-right">
+                            <span className="ai-settings-model-right-title">已加入 Provider 的模型:</span>
                             <div className="ai-settings-model-tags">
-                              {availableModelOptions.map((modelName) => {
+                              {configuredModels.map((modelName) => {
                                 const isActive = aiDraft.model === modelName
-                                const isPreset = presetMatch?.draft.models?.includes(modelName)
                                 return (
                                   <span
                                     key={modelName}
                                     className={`ai-settings-model-tag ${isActive ? 'is-active' : ''}`}
                                     onClick={() => patchAiDraft({ model: modelName })}
-                                    title={isActive ? '当前已选中模型' : `点击选中 ${modelName}`}
+                                    title={isActive ? '当前生效模型' : `点击作为当前生效模型 (${modelName})`}
                                   >
                                     <span className="ai-settings-model-tag-text">{modelName}</span>
-                                    {!isPreset && (
-                                      <button
-                                        type="button"
-                                        className="ai-settings-model-tag-remove"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          removeCustomModel(modelName)
-                                        }}
-                                        title="移除模型"
-                                      >
-                                        <AppIcon name="close" size={10} />
-                                      </button>
-                                    )}
+                                    <button
+                                      type="button"
+                                      className="ai-settings-model-tag-remove"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        removeConfiguredModel(modelName)
+                                      }}
+                                      title="从此 Provider 移除该模型"
+                                    >
+                                      <AppIcon name="close" size={10} />
+                                    </button>
                                   </span>
                                 )
                               })}

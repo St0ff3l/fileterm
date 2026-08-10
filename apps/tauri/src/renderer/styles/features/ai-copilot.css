@@ -1661,6 +1661,12 @@
   width: 100%;
 }
 
+.ai-settings-model-right-title {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .ai-settings-model-tags {
   display: flex;
   flex-wrap: wrap;
