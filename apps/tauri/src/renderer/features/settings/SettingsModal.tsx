@@ -1084,14 +1084,50 @@ export function SettingsModal({
                         onChange={(event) => patchAiDraft({ baseUrl: event.target.value })}
                       />
                     </label>
-                    <label className="ai-settings-form-span-two">
-                      <span>{t.aiSettingsApiKey}</span>
+                    <div className="ai-settings-form-span-two ai-settings-form-field">
+                      <div className="ai-settings-api-key-header">
+                        <span>{t.aiSettingsApiKey}</span>
+                        {selectedAiProvider?.hasApiKey && !clearAiApiKey ? (
+                          <button
+                            type="button"
+                            className="ai-settings-clear-key-btn"
+                            onClick={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              setClearAiApiKey(true)
+                              setAiApiKey('')
+                            }}
+                            title={t.aiSettingsClearApiKeyHint}
+                          >
+                            <AppIcon name="trash" size={13} />
+                            {t.aiSettingsClearApiKey}
+                          </button>
+                        ) : clearAiApiKey ? (
+                          <span className="ai-settings-key-cleared-tag">
+                            保存时将清除 Key
+                            <button
+                              type="button"
+                              className="ai-settings-undo-clear-btn"
+                              onClick={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+                                setClearAiApiKey(false)
+                              }}
+                            >
+                              撤销
+                            </button>
+                          </span>
+                        ) : null}
+                      </div>
                       <input
                         autoComplete="off"
+                        disabled={clearAiApiKey}
                         placeholder={
-                          selectedAiProvider?.hasApiKey
-                            ? t.aiSettingsApiKeyReplacePlaceholder
-                            : t.aiSettingsApiKeyPlaceholder
+                          clearAiApiKey
+                            ? '已标记保存时清除已保存的 API Key'
+                            : selectedAiProvider?.hasApiKey
+                              ? t.aiSettingsApiKeyReplacePlaceholder
+                              : t.aiSettingsApiKeyPlaceholder
                         }
                         type="password"
                         value={aiApiKey}
@@ -1100,7 +1136,7 @@ export function SettingsModal({
                           setClearAiApiKey(false)
                         }}
                       />
-                    </label>
+                    </div>
                   </div>
 
                   <div className="ai-settings-toggle-list">
@@ -1148,24 +1184,6 @@ export function SettingsModal({
                         <small>{t.aiSettingsAllowInsecureHttpHint}</small>
                       </span>
                     </label>
-                    {selectedAiProvider?.hasApiKey ? (
-                      <label className="ai-settings-toggle-row ssh-checkbox">
-                        <input
-                          checked={clearAiApiKey}
-                          type="checkbox"
-                          onChange={(event) => {
-                            setClearAiApiKey(event.target.checked)
-                            if (event.target.checked) {
-                              setAiApiKey('')
-                            }
-                          }}
-                        />
-                        <span>
-                          <strong>{t.aiSettingsClearApiKey}</strong>
-                          <small>{t.aiSettingsClearApiKeyHint}</small>
-                        </span>
-                      </label>
-                    ) : null}
                   </div>
                 </fieldset>
 

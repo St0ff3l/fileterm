@@ -1564,7 +1564,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 rootTab={activeTab ?? null}
                 onClose={() => setIsAiCopilotOpen(false)}
                 onOpenSettings={() => {
-                  setIsAiCopilotOpen(false)
                   setSettingsInitialTab('ai')
                   setShowSettings(true)
                 }}

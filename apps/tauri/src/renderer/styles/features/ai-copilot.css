@@ -1609,7 +1609,8 @@
   gap: 14px 16px;
 }
 
-.ai-settings-form label {
+.ai-settings-form label,
+.ai-settings-form .ai-settings-form-field {
   display: grid;
   gap: 7px;
   min-width: 0;
@@ -1618,8 +1619,61 @@
   font-weight: 600;
 }
 
-.ai-settings-form label.ai-settings-form-span-two {
+.ai-settings-form .ai-settings-form-span-two {
   grid-column: 1 / -1;
+}
+
+.ai-settings-api-key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-settings-clear-key-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  color: var(--danger, #ef4444);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ai-settings-clear-key-btn:hover {
+  border-color: var(--danger, #ef4444);
+  background: color-mix(in srgb, var(--danger, #ef4444) 10%, transparent);
+}
+
+.ai-settings-key-cleared-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger, #ef4444);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ai-settings-undo-clear-btn {
+  padding: 1px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  color: var(--text-main);
+  background: var(--bg-hover);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.ai-settings-undo-clear-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .ai-settings-form input,
