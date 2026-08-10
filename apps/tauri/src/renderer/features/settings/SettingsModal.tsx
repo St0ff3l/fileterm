@@ -13,8 +13,10 @@ import {
   type WebDavSyncConfig
 } from '@fileterm/core'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
-import { t } from '../../i18n'
+import { t, type LocaleMessages } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
@@ -37,6 +39,165 @@ function createAiProviderDraft(isDefault = true): AiProviderDraft {
     allowInsecureHttp: false
   }
 }
+
+type AiProviderPreset = {
+  id: string
+  // Stable translation key suffix, resolved via `t.aiSettingsPreset_<id>`.
+  labelKey: keyof LocaleMessages
+  draft: {
+    name: string
+    kind: AiProviderKind
+    baseUrl: string
+    model: string
+    // When non-empty, the form renders a DropdownSelect letting the user pick
+    // from this provider's latest model batch instead of typing an ID by hand.
+    models?: string[]
+    allowNoAuth: boolean
+    allowInsecureHttp: boolean
+  }
+}
+
+// Curated provider presets aligned with cc-switch's common defaults so users
+// can fill the form with one click instead of looking up Base URL / model IDs.
+const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
+  {
+    id: 'anthropic-official',
+    labelKey: 'aiSettingsPreset_anthropicOfficial',
+    draft: {
+      name: 'Anthropic',
+      kind: 'anthropic-messages',
+      baseUrl: 'https://api.anthropic.com/v1',
+      model: 'claude-opus-5',
+      models: ['claude-opus-5', 'claude-sonnet-5', 'claude-fable-5', 'claude-haiku-4.5'],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'openai-responses',
+    labelKey: 'aiSettingsPreset_openaiResponses',
+    draft: {
+      name: 'OpenAI Responses',
+      kind: 'openai-responses',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.6-sol',
+      models: [
+        'gpt-5.6-sol',
+        'gpt-5.6-terra',
+        'gpt-5.6-luna',
+        'gpt-5.5-pro',
+        'gpt-5.4-pro',
+        'gpt-5.4-mini',
+        'o3',
+        'o4-mini'
+      ],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'deepseek-chat',
+    labelKey: 'aiSettingsPreset_deepseekChat',
+    draft: {
+      name: 'DeepSeek',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'https://api.deepseek.com/v1',
+      model: 'deepseek-v4-flash',
+      models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'kimi-moonshot',
+    labelKey: 'aiSettingsPreset_kimiMoonshot',
+    draft: {
+      name: 'Kimi (Moonshot)',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'https://api.moonshot.cn/v1',
+      model: 'kimi-k3',
+      models: ['kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6'],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'glm-zhipu',
+    labelKey: 'aiSettingsPreset_glmZhipu',
+    draft: {
+      name: 'GLM (智谱)',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      model: 'glm-5.2',
+      models: ['glm-5.2', 'glm-5.1', 'glm-5', 'glm-4.7'],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'volcengine-ark',
+    labelKey: 'aiSettingsPreset_volcengineArk',
+    draft: {
+      name: '火山方舟 (Ark)',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+      model: 'doubao-seed-1-6-251015',
+      models: [
+        'doubao-seed-1-6-251015',
+        'doubao-seed-1-6-250615',
+        'doubao-seed-1-6-flash-250828',
+        'doubao-seed-1-6-thinking-250715',
+        'deepseek-v3-1-250821'
+      ],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'siliconflow',
+    labelKey: 'aiSettingsPreset_siliconflow',
+    draft: {
+      name: '硅基流动 (SiliconFlow)',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'https://api.siliconflow.cn/v1',
+      // SiliconFlow 文档示例的原始 model id；Pro 前缀为付费加速版。
+      model: 'deepseek-ai/DeepSeek-V3',
+      models: [
+        'deepseek-ai/DeepSeek-V3',
+        'Pro/deepseek-ai/DeepSeek-V3',
+        'deepseek-ai/DeepSeek-R1',
+        'Pro/deepseek-ai/DeepSeek-R1',
+        'Qwen/Qwen2.5-72B-Instruct'
+      ],
+      allowNoAuth: false,
+      allowInsecureHttp: false
+    }
+  },
+  {
+    id: 'ollama-local',
+    labelKey: 'aiSettingsPreset_ollamaLocal',
+    draft: {
+      name: 'Ollama (本地)',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'llama3.2',
+      allowNoAuth: true,
+      allowInsecureHttp: true
+    }
+  },
+  {
+    id: 'lm-studio-local',
+    labelKey: 'aiSettingsPreset_lmStudioLocal',
+    draft: {
+      name: 'LM Studio (本地)',
+      kind: 'openai-compatible-chat',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      model: 'loaded-model',
+      allowNoAuth: true,
+      allowInsecureHttp: true
+    }
+  }
+]
 
 function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft {
   return {
@@ -129,10 +290,16 @@ export function SettingsModal({
   const [s3Message, setS3Message] = useState<string | null>(null)
   const [aiProviders, setAiProviders] = useState<AiProviderSummary[]>([])
   const [aiDraft, setAiDraft] = useState<AiProviderDraft>(() => createAiProviderDraft())
+  // Candidate model IDs carried by the currently applied preset. Cleared when
+  // the user picks an already-configured provider (no preset bound). Stored
+  // outside AiProviderDraft to keep the data-layer type free of UI-only state.
+  const [aiModelChoices, setAiModelChoices] = useState<string[]>([])
+  const [isCustomModel, setIsCustomModel] = useState(false)
   const [aiApiKey, setAiApiKey] = useState('')
   const [clearAiApiKey, setClearAiApiKey] = useState(false)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
+  const [showDeleteAiProviderConfirm, setShowDeleteAiProviderConfirm] = useState(false)
   const [syncOperation, setSyncOperation] = useState<
     'load' | 'save' | 'test' | 'upload' | 'download' | 's3-save' | 's3-test' | 's3-upload' | 's3-download' | null
   >(null)
@@ -316,8 +483,27 @@ export function SettingsModal({
 
   const selectAiProvider = (provider: AiProviderSummary | undefined) => {
     setAiDraft(provider ? aiProviderToDraft(provider) : createAiProviderDraft(aiProviders.length === 0))
+    setAiModelChoices([])
+    setIsCustomModel(false)
     setAiApiKey('')
     setClearAiApiKey(false)
+    setAiMessage(null)
+  }
+
+  // Apply a curated preset without wiping the draft's identity (`id`) or the
+  // user's `enabled` / `isDefault` choices. The API key stays untouched.
+  const applyAiPreset = (preset: AiProviderPreset) => {
+    setAiDraft((current) => ({
+      ...current,
+      name: preset.draft.name,
+      kind: preset.draft.kind,
+      baseUrl: preset.draft.baseUrl,
+      model: preset.draft.model,
+      allowNoAuth: preset.draft.allowNoAuth,
+      allowInsecureHttp: preset.draft.allowInsecureHttp
+    }))
+    setAiModelChoices(preset.draft.models ?? [])
+    setIsCustomModel(false)
     setAiMessage(null)
   }
 
@@ -366,7 +552,6 @@ export function SettingsModal({
 
   const deleteAiProvider = async () => {
     if (!desktopApi || !aiDraft.id || aiOperation) return
-    if (!window.confirm(t.aiSettingsDeleteConfirm)) return
 
     setAiOperation('delete')
     setAiMessage(null)
@@ -379,6 +564,7 @@ export function SettingsModal({
       setClearAiApiKey(false)
       window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
       setAiMessage(t.aiSettingsDeleteSucceeded)
+      setShowDeleteAiProviderConfirm(false)
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : String(error))
     } finally {
@@ -802,6 +988,32 @@ export function SettingsModal({
                   </button>
                 </div>
 
+                <div className="ai-settings-preset-picker">
+                  <span className="ai-settings-preset-label">{t.aiSettingsPresetLabel}</span>
+                  <DropdownSelect
+                    className="ai-settings-preset-select"
+                    disabled={!desktopApi || aiOperation !== null}
+                    value="__none__"
+                    placeholder={t.aiSettingsPresetPlaceholder}
+                    options={[
+                      { value: '__none__', label: t.aiSettingsPresetPlaceholder },
+                      ...AI_PROVIDER_PRESETS.map((preset) => ({
+                        value: preset.id,
+                        label: String(t[preset.labelKey])
+                      }))
+                    ]}
+                    onChange={(value) => {
+                      const preset = AI_PROVIDER_PRESETS.find((item) => item.id === value)
+                      if (preset) {
+                        applyAiPreset(preset)
+                      }
+                      // Value is controlled by parent; DropdownSelect re-renders
+                      // with `__none__` so the same preset can be re-applied.
+                    }}
+                  />
+                  <p className="ai-settings-preset-hint">{t.aiSettingsPresetHint}</p>
+                </div>
+
                 <fieldset className="ai-settings-provider-fields" disabled={!desktopApi || aiOperation !== null}>
                   <div className="ai-settings-form">
                     <label>
@@ -818,18 +1030,55 @@ export function SettingsModal({
                         value={aiDraft.kind}
                         onChange={(event) => patchAiDraft({ kind: event.target.value as AiProviderKind })}
                       >
-                        <option value="openai-compatible-chat">OpenAI-compatible Chat</option>
-                        <option value="openai-responses">OpenAI Responses</option>
-                        <option value="anthropic-messages">Anthropic Messages</option>
+                        <option value="openai-compatible-chat">OpenAI-compatible Chat (OpenAI 兼容对话协议)</option>
+                        <option value="openai-responses">OpenAI Responses (OpenAI 官方结构化响应协议)</option>
+                        <option value="anthropic-messages">Anthropic Messages (Claude 官方消息协议)</option>
                       </select>
                     </label>
                     <label>
                       <span>{t.aiSettingsModel}</span>
-                      <input
-                        placeholder={t.aiSettingsModelPlaceholder}
-                        value={aiDraft.model}
-                        onChange={(event) => patchAiDraft({ model: event.target.value })}
-                      />
+                      {aiModelChoices.length > 0 && !isCustomModel && aiModelChoices.includes(aiDraft.model) ? (
+                        <DropdownSelect
+                          className="ai-settings-model-select"
+                          disabled={!desktopApi || aiOperation !== null}
+                          value={aiDraft.model}
+                          options={[
+                            ...aiModelChoices.map((model) => ({ value: model, label: model })),
+                            { value: '__custom__', label: '自定义模型...' }
+                          ]}
+                          onChange={(value) => {
+                            if (value === '__custom__') {
+                              setIsCustomModel(true)
+                            } else {
+                              patchAiDraft({ model: value })
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="ai-settings-model-row">
+                          <input
+                            className="ai-settings-model-input"
+                            placeholder={t.aiSettingsModelPlaceholder}
+                            value={aiDraft.model}
+                            onChange={(event) => patchAiDraft({ model: event.target.value })}
+                          />
+                          {aiModelChoices.length > 0 && (
+                            <button
+                              type="button"
+                              className="button button-secondary"
+                              onClick={() => {
+                                setIsCustomModel(false)
+                                if (!aiModelChoices.includes(aiDraft.model)) {
+                                  patchAiDraft({ model: aiModelChoices[0] })
+                                }
+                              }}
+                              title="从预设模型列表中选择"
+                            >
+                              从预设选择
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </label>
                     <label className="ai-settings-form-span-two">
                       <span>{t.aiSettingsEndpoint}</span>
@@ -859,7 +1108,7 @@ export function SettingsModal({
                   </div>
 
                   <div className="ai-settings-toggle-list">
-                    <label className="ai-settings-toggle-row">
+                    <label className="ai-settings-toggle-row ssh-checkbox">
                       <input
                         checked={aiDraft.enabled}
                         type="checkbox"
@@ -870,7 +1119,7 @@ export function SettingsModal({
                         <small>{t.aiSettingsEnabledHint}</small>
                       </span>
                     </label>
-                    <label className="ai-settings-toggle-row">
+                    <label className="ai-settings-toggle-row ssh-checkbox">
                       <input
                         checked={aiDraft.isDefault}
                         type="checkbox"
@@ -881,7 +1130,7 @@ export function SettingsModal({
                         <small>{t.aiSettingsDefaultProviderHint}</small>
                       </span>
                     </label>
-                    <label className="ai-settings-toggle-row">
+                    <label className="ai-settings-toggle-row ssh-checkbox">
                       <input
                         checked={aiDraft.allowNoAuth}
                         type="checkbox"
@@ -892,7 +1141,7 @@ export function SettingsModal({
                         <small>{t.aiSettingsAllowNoAuthHint}</small>
                       </span>
                     </label>
-                    <label className="ai-settings-toggle-row">
+                    <label className="ai-settings-toggle-row ssh-checkbox">
                       <input
                         checked={aiDraft.allowInsecureHttp}
                         type="checkbox"
@@ -904,7 +1153,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     {selectedAiProvider?.hasApiKey ? (
-                      <label className="ai-settings-toggle-row">
+                      <label className="ai-settings-toggle-row ssh-checkbox">
                         <input
                           checked={clearAiApiKey}
                           type="checkbox"
@@ -931,9 +1180,7 @@ export function SettingsModal({
                 ) : null}
 
                 <div className="ai-settings-privacy-card">
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    shield_lock
-                  </span>
+                  <AppIcon name="key" size={16} />
                   <div>
                     <strong>{t.aiSettingsPrivacyTitle}</strong>
                     <p>{t.aiSettingsPrivacyDescription}</p>
@@ -950,11 +1197,9 @@ export function SettingsModal({
                         className="ai-settings-danger-button"
                         disabled={!desktopApi || aiOperation !== null}
                         type="button"
-                        onClick={() => void deleteAiProvider()}
+                        onClick={() => setShowDeleteAiProviderConfirm(true)}
                       >
-                        <span aria-hidden="true" className="material-symbols-outlined">
-                          delete
-                        </span>
+                        <AppIcon name="trash" size={14} />
                         {aiOperation === 'delete' ? t.aiSettingsDeleting : t.aiSettingsDelete}
                       </button>
                     ) : null}
@@ -964,9 +1209,7 @@ export function SettingsModal({
                       type="button"
                       onClick={() => void testAiProvider()}
                     >
-                      <span aria-hidden="true" className="material-symbols-outlined">
-                        network_check
-                      </span>
+                      <AppIcon name="flash" size={14} />
                       {aiOperation === 'test' ? t.aiSettingsTesting : t.aiSettingsTestConnection}
                     </button>
                     <button
@@ -975,13 +1218,26 @@ export function SettingsModal({
                       type="button"
                       onClick={() => void saveAiProvider()}
                     >
-                      <span aria-hidden="true" className="material-symbols-outlined">
-                        save
-                      </span>
+                      <AppIcon name="disk" size={14} />
                       {aiOperation === 'save' ? t.aiSettingsSaving : t.aiSettingsSave}
                     </button>
                   </div>
                 </div>
+                {showDeleteAiProviderConfirm ? (
+                  <ConfirmActionDialog
+                    confirmLabel={t.delete}
+                    confirmVariant="danger"
+                    description={`确定要删除 Provider "${aiDraft.name || aiDraft.id}" 吗？删除后不可恢复。`}
+                    isSubmitting={aiOperation === 'delete'}
+                    onClose={() => {
+                      if (aiOperation !== 'delete') {
+                        setShowDeleteAiProviderConfirm(false)
+                      }
+                    }}
+                    onConfirm={() => void deleteAiProvider()}
+                    title="删除 Provider 确认"
+                  />
+                ) : null}
               </section>
             </div>
           ) : null}

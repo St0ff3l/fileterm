@@ -1480,6 +1480,120 @@
   box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
+.ai-settings-preset-picker {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.ai-settings-preset-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Preset + model selects reuse the shared DropdownSelect component (macOS native
+   select via ft-select-shell, other platforms self-drawn via dropdown-select-trigger)
+   so the dropdown arrow and menu styling stay consistent with the rest of the app. */
+.ai-settings-preset-select.dropdown-select-trigger,
+.ai-settings-preset-select.ft-select-shell select {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ai-settings-preset-select.ft-select-shell {
+  width: 100%;
+}
+
+.ai-settings-preset-select.ft-select-shell select {
+  cursor: pointer;
+}
+
+.ai-settings-preset-select.ft-select-shell__icon {
+  right: 10px;
+}
+
+.ai-settings-preset-select:hover:not(:disabled),
+.ai-settings-preset-select.ft-select-shell select:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+
+.ai-settings-preset-select:focus-visible,
+.ai-settings-preset-select.ft-select-shell select:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.ai-settings-preset-select:disabled,
+.ai-settings-preset-select.ft-select-shell:has(select:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ai-settings-preset-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* When a preset carries a model batch, the model field renders a DropdownSelect
+   for quick picking alongside a free-text input for custom IDs / overrides. */
+.ai-settings-model-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ai-settings-model-select.dropdown-select-trigger,
+.ai-settings-model-select.ft-select-shell select {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ai-settings-model-select.ft-select-shell {
+  width: 100%;
+}
+
+.ai-settings-model-select.ft-select-shell__icon {
+  right: 10px;
+}
+
+.ai-settings-model-select:hover:not(:disabled),
+.ai-settings-model-select.ft-select-shell select:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+
+.ai-settings-model-select:focus-visible,
+.ai-settings-model-select.ft-select-shell select:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.ai-settings-model-input {
+  min-width: 0;
+}
+
 .ai-settings-provider-fields {
   display: grid;
   gap: 14px;
@@ -1552,11 +1666,7 @@
 }
 
 .ai-settings-toggle-row input {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  margin: 1px 0 0;
-  accent-color: var(--accent-primary);
+  margin: 2px 0 0;
 }
 
 .ai-settings-toggle-row span {
@@ -1615,20 +1725,28 @@
   gap: 8px;
 }
 
-.ai-settings-secondary-button {
-  display: inline-flex;
+.ai-settings-footer-actions button {
+  height: 32px;
   min-height: 32px;
+  max-height: 32px;
+  box-sizing: border-box;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border-light);
+  padding: 0 12px;
   border-radius: 7px;
-  color: var(--text-secondary);
-  background: var(--bg-hover);
   font: inherit;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ai-settings-secondary-button {
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
 }
 
 .ai-settings-secondary-button:hover:not(:disabled) {
@@ -1637,29 +1755,10 @@
   background: var(--accent-tint-weak);
 }
 
-.ai-settings-secondary-button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.ai-settings-secondary-button .material-symbols-outlined {
-  font-size: 15px;
-}
-
 .ai-settings-danger-button {
-  display: inline-flex;
-  min-height: 32px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 8px;
   border: 1px solid var(--border-light);
-  border-radius: 7px;
   color: var(--danger);
   background: transparent;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .ai-settings-danger-button:hover:not(:disabled) {
@@ -1667,13 +1766,10 @@
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
+.ai-settings-secondary-button:disabled,
 .ai-settings-danger-button:disabled {
   cursor: default;
   opacity: 0.5;
-}
-
-.ai-settings-danger-button .material-symbols-outlined {
-  font-size: 15px;
 }
 
 @media (max-width: 1180px) {
