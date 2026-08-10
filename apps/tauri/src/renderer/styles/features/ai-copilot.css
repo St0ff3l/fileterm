@@ -1640,6 +1640,86 @@
 
 /* When a preset carries a model batch, the model field renders a DropdownSelect
    for quick picking alongside a free-text input for custom IDs / overrides. */
+.ai-settings-model-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.ai-settings-model-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.ai-settings-model-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.ai-settings-model-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.ai-settings-model-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.ai-settings-model-tag:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+}
+
+.ai-settings-model-tag.is-active {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-card));
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.ai-settings-model-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+}
+
+.ai-settings-model-tag-remove:hover {
+  opacity: 1;
+  color: var(--danger, #ff4d4f);
+}
+
 .ai-settings-model-picker-row,
 .ai-settings-model-add-row {
   display: flex;

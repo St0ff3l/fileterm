@@ -531,6 +531,22 @@ export function SettingsModal({
     setNewModelName('')
   }
 
+  const removeCustomModel = (modelName: string) => {
+    setAiModelChoices((prev) => prev.filter((m) => m !== modelName))
+    if (aiDraft.model === modelName) {
+      const remaining = aiModelChoices.filter((m) => m !== modelName)
+      patchAiDraft({ model: remaining[0] ?? '' })
+    }
+  }
+
+  const presetMatch = useMemo(
+    () =>
+      AI_PROVIDER_PRESETS.find(
+        (p) => p.draft.baseUrl === aiDraft.baseUrl || p.draft.name.toLowerCase() === aiDraft.name.toLowerCase()
+      ),
+    [aiDraft.baseUrl, aiDraft.name]
+  )
+
   const availableModelOptions = useMemo(
     () => [...new Set([aiDraft.model, ...aiModelChoices].filter(Boolean))],
     [aiDraft.model, aiModelChoices]
@@ -1060,67 +1076,107 @@ export function SettingsModal({
                         onChange={(value) => patchAiDraft({ kind: value as AiProviderKind })}
                       />
                     </label>
-                    <label>
+                    <label className="ai-settings-model-field">
                       <span>{t.aiSettingsModel}</span>
-                      {isAddingModel ? (
-                        <div className="ai-settings-model-add-row">
-                          <input
-                            autoFocus
-                            className="ai-settings-model-add-input"
-                            placeholder="输入新模型名称 (例: deepseek-r1)"
-                            value={newModelName}
-                            onChange={(e) => setNewModelName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                confirmAddModel()
-                              } else if (e.key === 'Escape') {
-                                setIsAddingModel(false)
-                              }
-                            }}
-                          />
-                          <button
-                            className="ai-settings-secondary-button"
-                            disabled={!newModelName.trim()}
-                            type="button"
-                            onClick={confirmAddModel}
-                            title="确认添加模型"
-                          >
-                            <AppIcon name="check" size={14} />
-                            添加
-                          </button>
-                          <button
-                            className="ai-settings-secondary-button"
-                            type="button"
-                            onClick={() => setIsAddingModel(false)}
-                            title="取消"
-                          >
-                            取消
-                          </button>
+                      <div className="ai-settings-model-container">
+                        <div className="ai-settings-model-left">
+                          {isAddingModel ? (
+                            <div className="ai-settings-model-add-row">
+                              <input
+                                autoFocus
+                                className="ai-settings-model-add-input"
+                                placeholder="输入新模型名称 (例: deepseek-r1)"
+                                value={newModelName}
+                                onChange={(e) => setNewModelName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    confirmAddModel()
+                                  } else if (e.key === 'Escape') {
+                                    setIsAddingModel(false)
+                                  }
+                                }}
+                              />
+                              <button
+                                className="ai-settings-secondary-button"
+                                disabled={!newModelName.trim()}
+                                type="button"
+                                onClick={confirmAddModel}
+                                title="确认添加模型"
+                              >
+                                <AppIcon name="check" size={14} />
+                                添加
+                              </button>
+                              <button
+                                className="ai-settings-secondary-button"
+                                type="button"
+                                onClick={() => setIsAddingModel(false)}
+                                title="取消"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="ai-settings-model-picker-row">
+                              <DropdownSelect
+                                className="ai-settings-model-select"
+                                disabled={!desktopApi || aiOperation !== null}
+                                value={aiDraft.model}
+                                options={availableModelOptions.map((model: string) => ({
+                                  value: model,
+                                  label: model
+                                }))}
+                                onChange={(value) => patchAiDraft({ model: value })}
+                              />
+                              <button
+                                className="ai-settings-secondary-button ai-settings-add-model-btn"
+                                disabled={!desktopApi || aiOperation !== null}
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingModel(true)
+                                  setNewModelName('')
+                                }}
+                                title="添加新模型到列表"
+                              >
+                                <AppIcon name="plus" size={14} />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="ai-settings-model-picker-row">
-                          <DropdownSelect
-                            className="ai-settings-model-select"
-                            disabled={!desktopApi || aiOperation !== null}
-                            value={aiDraft.model}
-                            options={availableModelOptions.map((model: string) => ({ value: model, label: model }))}
-                            onChange={(value) => patchAiDraft({ model: value })}
-                          />
-                          <button
-                            className="ai-settings-secondary-button ai-settings-add-model-btn"
-                            disabled={!desktopApi || aiOperation !== null}
-                            type="button"
-                            onClick={() => {
-                              setIsAddingModel(true)
-                              setNewModelName('')
-                            }}
-                            title="添加新模型到列表"
-                          >
-                            <AppIcon name="plus" size={14} />
-                          </button>
-                        </div>
-                      )}
+                        {availableModelOptions.length > 0 && (
+                          <div className="ai-settings-model-right">
+                            <div className="ai-settings-model-tags">
+                              {availableModelOptions.map((modelName) => {
+                                const isActive = aiDraft.model === modelName
+                                const isPreset = presetMatch?.draft.models?.includes(modelName)
+                                return (
+                                  <span
+                                    key={modelName}
+                                    className={`ai-settings-model-tag ${isActive ? 'is-active' : ''}`}
+                                    onClick={() => patchAiDraft({ model: modelName })}
+                                    title={isActive ? '当前已选中模型' : `点击选中 ${modelName}`}
+                                  >
+                                    <span className="ai-settings-model-tag-text">{modelName}</span>
+                                    {!isPreset && (
+                                      <button
+                                        type="button"
+                                        className="ai-settings-model-tag-remove"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          removeCustomModel(modelName)
+                                        }}
+                                        title="移除模型"
+                                      >
+                                        <AppIcon name="close" size={10} />
+                                      </button>
+                                    )}
+                                  </span>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </label>
                     <label className="ai-settings-form-span-two">
                       <span>{t.aiSettingsEndpoint}</span>
