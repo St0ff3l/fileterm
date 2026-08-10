@@ -218,7 +218,47 @@ platform probe
 - 远端 shell integration 在 prompt 上报真实 `cwd` 和 `id -un`，renderer 不解析命令文本、提示符或 `sudo` 输出。
 - 每个 SSH controller 的首次用户上报是登录身份；后续终端用户变化会单向驱动文件访问身份，并在切换成功后按最新 cwd 重新跟随。
 - 文件区手动切换 user/root 只改变独立的 SFTP/exec 文件通道，不向交互终端写命令；相同 shell 用户的重复 prompt 不会覆盖手动选择。
-- 终端与文件通道不是同一远端进程。文件区进入特权身份会通过独立 exec channel 重建与终端一致的 sudo 或 su 策略；优先复用终端输入期间已捕获的授权，也支持远端免密 sudo / su。特权上传的字节流仍走登录用户可写的随机 /tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY。
+- 终端与文件通道不是同一远端进程。文件区进入特权身份会通过独立 exec channel 重建与终端一致的 sudo 或 su 策略；优先复用终端输入期间已捕获的授权，也支持远端免密 sudo / su。
+- 特权上传的字节流仍走登录用户可写的随机 /tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY。
+
+## 4.5 MCP / CLI 外部 Agent 桥接边界
+
+FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。两者唯一共享的是 `services/action_review.rs` 的一次性审批队列和独立 SSH exec channel（`ActionApprovalSource` 枚举两个值 `Mcp` 与 `AiReview`）。
+
+```txt
+外部 Agent                        shell 脚本
+   │                                  │
+   │ stdio JSON-RPC 2025-06-18        │ argv
+   ▼                                  ▼
+fileterm mcp                    fileterm <cmd>
+   │                                  │
+   └─── call_desktop_bridge ──────────┘
+              │
+              │ read mcp-runtime.json (owner-only)
+              │ TCP 127.0.0.1:随机端口
+              │ ConstantTimeEq token 比较
+              ▼
+         桌面 runtime
+              │
+              │ dispatch_bridge_request
+              ▼
+   workspace / sessions / transfers
+   ── 写操作 ──> action_review.rs 审批队列
+                       │
+                       ▼
+              应用内审批对话框
+```
+
+- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（约 2220 行，手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
+- 同一份桌面可执行文件同时承担 GUI、MCP server、CLI 三种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；子命令白名单匹配 → `run_cli`；其他 → 启动桌面 GUI。
+- 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
+- `mcp-runtime.json` 路径在三平台：macOS `$HOME/Library/Application Support/com.fileterm.desktop/`、Windows `%APPDATA%\com.fileterm.desktop\`、Linux `$XDG_DATA_HOME/com.fileterm.desktop/` 或 `$HOME/.local/share/com.fileterm.desktop/`。CLI 端用 `#[cfg(target_os)]` 硬编码读取，依赖 `tauri.conf.json` 的 identifier 保持 `com.fileterm.desktop` 不变；可用 `FILETERM_MCP_RUNTIME_FILE` 环境变量覆盖。
+- 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，未实现 `resources/*` / `prompts/*` / `logging/*` / `notifications/progress`。
+- 暴露 34 个 `fileterm_*` 工具，覆盖连接管理、会话状态、远程命令执行（独立 SSH exec channel，不污染交互式 PTY；FTP / Telnet / Serial 不伪装支持）、远程文件操作、传输调度、SSH 隧道；tool annotations 标注 `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`。
+- 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 超时 5s、client 超时 130s（设计上大于审批 + bridge 之和，保证审批超时不触发 client 读超时）。
+- **MCP 与 CLI 的关键差异**：MCP `tools/call` 的写操作必须经桌面审批对话框（外部 Agent 调用，需要二次确认）；CLI 是用户显式启动，视为已授权，不重复弹审批。两者共用同一份 action 路由和 bridge 实现。
+- **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。详见 `docs/plans/active/ai-copilot-integration.md` 第 9 节。
+- 当前完成度：代码已构建、已注册、随 `npm run test:tauri` 跑 7 个单元测试（仅覆盖纯函数与协议层 happy path）；`docs/plans/active/local-terminal-mcp.md` 的 7 条真机验收标准全部未勾选，跨平台打包产物路径、Windows / Linux 的 `fileterm mcp` 可执行文件路径示例、真实 Claude Code / Codex CLI 端到端验收均待完成。
 
 ## 5. 当前仓库结构
 
