@@ -492,13 +492,16 @@ export function SettingsModal({
 
   const selectAiProvider = (provider: AiProviderSummary | undefined) => {
     const draft = provider ? aiProviderToDraft(provider) : createAiProviderDraft(aiProviders.length === 0)
+    if (!provider) {
+      draft.model = ''
+    }
     setAiDraft(draft)
     const presetMatch = AI_PROVIDER_PRESETS.find(
       (p) => p.draft.baseUrl === draft.baseUrl || p.draft.name.toLowerCase() === draft.name.toLowerCase()
     )
     const defaultModels = presetMatch?.draft.models ?? DEFAULT_MODELS_BY_KIND[draft.kind] ?? []
     setAiModelChoices([...new Set([draft.model, ...defaultModels].filter(Boolean))])
-    setConfiguredModels(draft.model ? [draft.model] : [])
+    setConfiguredModels(provider && provider.model ? [provider.model] : [])
     setSelectedCandidateModel('')
     setIsCustomInput(false)
     setCustomModelText('')
@@ -515,13 +518,13 @@ export function SettingsModal({
       name: preset.draft.name,
       kind: preset.draft.kind,
       baseUrl: preset.draft.baseUrl,
-      model: preset.draft.model,
+      model: '',
       allowNoAuth: preset.draft.allowNoAuth,
       allowInsecureHttp: preset.draft.allowInsecureHttp
     }))
-    const presetModels = preset.draft.models ?? [preset.draft.model]
+    const presetModels = preset.draft.models ?? (preset.draft.model ? [preset.draft.model] : [])
     setAiModelChoices(presetModels)
-    setConfiguredModels(preset.draft.model ? [preset.draft.model] : [])
+    setConfiguredModels([])
     setSelectedCandidateModel('')
     setIsCustomInput(false)
     setCustomModelText('')
@@ -1160,9 +1163,9 @@ export function SettingsModal({
                             </div>
                           )}
                         </div>
-                        {configuredModels.length > 0 && (
-                          <div className="ai-settings-model-right">
-                            <span className="ai-settings-model-right-title">已加入 Provider 的模型:</span>
+                        <div className="ai-settings-model-right">
+                          <span className="ai-settings-model-right-title">已加入 Provider 的模型:</span>
+                          {configuredModels.length > 0 ? (
                             <div className="ai-settings-model-tags">
                               {configuredModels.map((modelName) => {
                                 const isActive = aiDraft.model === modelName
@@ -1189,8 +1192,12 @@ export function SettingsModal({
                                 )
                               })}
                             </div>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="ai-settings-model-empty-hint">
+                              暂无已加入的模型，请在上方下拉框选择后点击 [+] 按钮添加
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </label>
                     <label className="ai-settings-form-span-two">

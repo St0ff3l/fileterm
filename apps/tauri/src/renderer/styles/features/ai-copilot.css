@@ -1667,6 +1667,12 @@
   font-weight: 600;
 }
 
+.ai-settings-model-empty-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 0;
+}
+
 .ai-settings-model-tags {
   display: flex;
   flex-wrap: wrap;
