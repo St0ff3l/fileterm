@@ -301,6 +301,7 @@ export function SettingsModal({
   // outside AiProviderDraft to keep the data-layer type free of UI-only state.
   const [aiModelChoices, setAiModelChoices] = useState<string[]>([])
   const [configuredModels, setConfiguredModels] = useState<string[]>([])
+  const [selectedCandidateModel, setSelectedCandidateModel] = useState<string>('')
   const [isCustomInput, setIsCustomInput] = useState(false)
   const [customModelText, setCustomModelText] = useState('')
   const [aiApiKey, setAiApiKey] = useState('')
@@ -497,7 +498,8 @@ export function SettingsModal({
     )
     const defaultModels = presetMatch?.draft.models ?? DEFAULT_MODELS_BY_KIND[draft.kind] ?? []
     setAiModelChoices([...new Set([draft.model, ...defaultModels].filter(Boolean))])
-    setConfiguredModels(draft.model ? [draft.model] : defaultModels.slice(0, 1))
+    setConfiguredModels(draft.model ? [draft.model] : [])
+    setSelectedCandidateModel('')
     setIsCustomInput(false)
     setCustomModelText('')
     setAiApiKey('')
@@ -519,14 +521,15 @@ export function SettingsModal({
     }))
     const presetModels = preset.draft.models ?? [preset.draft.model]
     setAiModelChoices(presetModels)
-    setConfiguredModels([preset.draft.model])
+    setConfiguredModels(preset.draft.model ? [preset.draft.model] : [])
+    setSelectedCandidateModel('')
     setIsCustomInput(false)
     setCustomModelText('')
     setAiMessage(null)
   }
 
   const addSelectedModelToProvider = () => {
-    let modelToAdd = aiDraft.model.trim()
+    let modelToAdd = selectedCandidateModel.trim()
     if (isCustomInput) {
       modelToAdd = customModelText.trim()
     }
@@ -535,6 +538,7 @@ export function SettingsModal({
     setConfiguredModels((prev) => [...new Set([...prev, modelToAdd])])
     setAiModelChoices((prev) => [...new Set([modelToAdd, ...prev])])
     patchAiDraft({ model: modelToAdd })
+    setSelectedCandidateModel('')
     setIsCustomInput(false)
     setCustomModelText('')
   }
@@ -550,8 +554,8 @@ export function SettingsModal({
   }
 
   const candidateModelOptions = useMemo(
-    () => [...new Set([...aiModelChoices, aiDraft.model].filter(Boolean))],
-    [aiDraft.model, aiModelChoices]
+    () => [...new Set([...aiModelChoices, ...configuredModels].filter(Boolean))],
+    [aiModelChoices, configuredModels]
   )
 
   const aiProviderInput = () => {
@@ -1122,8 +1126,9 @@ export function SettingsModal({
                               <DropdownSelect
                                 className="ai-settings-model-select"
                                 disabled={!desktopApi || aiOperation !== null}
-                                value={aiDraft.model || (candidateModelOptions[0] ?? '')}
+                                value={selectedCandidateModel || '__none__'}
                                 options={[
+                                  { value: '__none__', label: '选择模型以添加...' },
                                   ...candidateModelOptions.map((model: string) => ({
                                     value: model,
                                     label: model
@@ -1133,15 +1138,19 @@ export function SettingsModal({
                                 onChange={(value) => {
                                   if (value === '__custom__') {
                                     setIsCustomInput(true)
+                                    setSelectedCandidateModel('')
                                     setCustomModelText('')
+                                  } else if (value === '__none__') {
+                                    setSelectedCandidateModel('')
                                   } else {
-                                    patchAiDraft({ model: value })
+                                    setSelectedCandidateModel(value)
+                                    setIsCustomInput(false)
                                   }
                                 }}
                               />
                               <button
                                 className="ai-settings-secondary-button ai-settings-add-model-btn"
-                                disabled={!desktopApi || aiOperation !== null || !aiDraft.model}
+                                disabled={!desktopApi || aiOperation !== null || !selectedCandidateModel}
                                 type="button"
                                 onClick={addSelectedModelToProvider}
                                 title="添加当前下拉框选中的模型到 Provider"
