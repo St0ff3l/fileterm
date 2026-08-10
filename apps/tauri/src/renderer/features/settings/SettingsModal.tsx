@@ -212,6 +212,7 @@ function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft {
     kind: provider.kind,
     baseUrl: provider.baseUrl,
     model: provider.model,
+    models: provider.models,
     enabled: provider.enabled,
     isDefault: provider.isDefault,
     allowNoAuth: provider.allowNoAuth,
@@ -433,12 +434,10 @@ export function SettingsModal({
       .then((providers) => {
         if (canceled) return
         setAiProviders(providers)
-        setAiDraft((current) => {
-          const selected = current.id ? providers.find((provider) => provider.id === current.id) : undefined
-          const fallback = providers.find((provider) => provider.isDefault) ?? providers[0]
-          const nextProvider = selected ?? fallback
-          return nextProvider ? aiProviderToDraft(nextProvider) : createAiProviderDraft(true)
-        })
+        const current = aiDraft.id ? providers.find((provider) => provider.id === aiDraft.id) : undefined
+        const nextProvider = current ?? providers.find((provider) => provider.isDefault) ?? providers[0]
+        // Use selectAiProvider to restore configuredModels and aiModelChoices properly
+        selectAiProvider(nextProvider)
         setAiApiKey('')
       })
       .catch((error: unknown) => {
@@ -455,6 +454,8 @@ export function SettingsModal({
     return () => {
       canceled = true
     }
+    // selectAiProvider is a stable inline function and intentionally not listed
+    // in deps — this effect runs once per tab activation, matching original behaviour.
   }, [activeTab, desktopApi])
 
   const runSyncOperation = async (
@@ -641,7 +642,7 @@ export function SettingsModal({
       const providers = await desktopApi.deleteAiProvider(aiDraft.id)
       setAiProviders(providers)
       const fallback = providers.find((provider) => provider.isDefault) ?? providers[0]
-      setAiDraft(fallback ? aiProviderToDraft(fallback) : createAiProviderDraft(true))
+      selectAiProvider(fallback)
       setAiApiKey('')
       setClearAiApiKey(false)
       window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
