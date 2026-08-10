@@ -1640,11 +1640,46 @@
 
 /* When a preset carries a model batch, the model field renders a DropdownSelect
    for quick picking alongside a free-text input for custom IDs / overrides. */
-.ai-settings-model-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+.ai-settings-model-picker-row,
+.ai-settings-model-add-row {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ai-settings-model-picker-row .ai-settings-model-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ai-settings-add-model-btn {
+  height: 36px;
+  min-width: 36px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ai-settings-model-add-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ai-settings-model-add-input:focus {
+  border-color: var(--accent-primary);
+  outline: none;
 }
 
 .ai-settings-model-select.dropdown-select-trigger,
