@@ -44,6 +44,13 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - **CRLF 归一化**：系统指标解析入口必须对远端输出做 `replace(/\r\n?/g, '\n')` 归一化，避免 `'windows\r'` 等污染导致平台误判。
 - **Sudo 与 Root 状态同步**：终端执行 `sudo` 或切换用户态需被底层 runtime 解析，双向同步到文件管理器权限模型。
 
+### UI 与公用组件边界
+
+- **下拉框统一走 DropdownSelect**：所有表单与设置项的下拉菜单必须统一使用公用组件 `<DropdownSelect>`，严禁直写原始 HTML `<select>` 标签（确保 macOS 下包裹 `ft-select-shell` 外壳，Windows / Linux 下 100% 触发自绘 React Portal 弹出菜单）。
+- **图标矢量就地化**：所有按钮与视觉图标优先使用预置的离线 SVG 图标组件 `<AppIcon />`，严禁新增 `<span className="material-symbols-outlined">` 依赖外部字体/WebFont 图标。
+- **二次确认弹窗统一**：所有破坏性/危险操作（如删除、清空等）必须调用项目通用的 `<ConfirmActionDialog>` 确认弹窗组件，严禁在桌面 Webview 环境中使用原生 `window.confirm()`。
+- **按钮尺寸高度规范**：同一操作组/表单行内的按钮必须具有严格统一的高度（如 32px 紧凑型 / 36px 表单型）、边框半径与内边距，禁止主次按钮尺寸参差不齐。
+
 ### 资源与安全边界
 
 - **离线资源就地化**：所有图标、字体与基础样式资源预置在代码库中打包输出，严禁运行时动态拉取外部 CDN 资源。

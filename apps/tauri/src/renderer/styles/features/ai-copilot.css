@@ -1725,26 +1725,39 @@
   gap: 8px;
 }
 
-.ai-settings-footer-actions button {
-  height: 32px;
-  min-height: 32px;
-  max-height: 32px;
-  box-sizing: border-box;
+.ai-settings-secondary-button,
+.ai-settings-danger-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 12px;
-  border-radius: 7px;
+  box-sizing: border-box;
   font: inherit;
-  font-size: 11px;
   font-weight: 600;
-  line-height: 1;
   cursor: pointer;
+  border-radius: 7px;
+  border: 1px solid var(--border-light);
+  transition: all 0.15s ease;
+}
+
+.ai-settings-provider-picker .ai-settings-secondary-button {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
+.ai-settings-footer-actions .ai-settings-secondary-button,
+.ai-settings-footer-actions .ai-settings-danger-button,
+.ai-settings-footer-actions .primary-button {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  padding: 0 12px;
+  font-size: 11px;
 }
 
 .ai-settings-secondary-button {
-  border: 1px solid var(--border-light);
   color: var(--text-secondary);
   background: var(--bg-hover);
 }
@@ -1756,7 +1769,6 @@
 }
 
 .ai-settings-danger-button {
-  border: 1px solid var(--border-light);
   color: var(--danger);
   background: transparent;
 }

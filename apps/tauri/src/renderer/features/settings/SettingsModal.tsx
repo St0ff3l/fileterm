@@ -955,25 +955,21 @@ export function SettingsModal({
                 <div className="ai-settings-provider-picker">
                   <label>
                     <span>{t.aiSettingsConfiguredProviders}</span>
-                    <select
+                    <DropdownSelect
                       disabled={!desktopApi || aiOperation !== null}
                       value={aiDraft.id ?? '__new__'}
-                      onChange={(event) => {
-                        const providerId = event.target.value
+                      options={[
+                        ...aiProviders.map((provider) => ({ value: provider.id, label: provider.name })),
+                        { value: '__new__', label: t.aiSettingsAddProvider }
+                      ]}
+                      onChange={(providerId) => {
                         selectAiProvider(
                           providerId === '__new__'
                             ? undefined
                             : aiProviders.find((provider) => provider.id === providerId)
                         )
                       }}
-                    >
-                      {aiProviders.map((provider) => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name}
-                        </option>
-                      ))}
-                      <option value="__new__">{t.aiSettingsAddProvider}</option>
-                    </select>
+                    />
                   </label>
                   <button
                     className="ai-settings-secondary-button"
@@ -981,9 +977,7 @@ export function SettingsModal({
                     type="button"
                     onClick={() => selectAiProvider(undefined)}
                   >
-                    <span aria-hidden="true" className="material-symbols-outlined">
-                      add
-                    </span>
+                    <AppIcon name="plus" size={14} />
                     {t.aiSettingsAddProvider}
                   </button>
                 </div>
@@ -1026,14 +1020,16 @@ export function SettingsModal({
                     </label>
                     <label>
                       <span>{t.aiSettingsProviderType}</span>
-                      <select
+                      <DropdownSelect
+                        disabled={!desktopApi || aiOperation !== null}
                         value={aiDraft.kind}
-                        onChange={(event) => patchAiDraft({ kind: event.target.value as AiProviderKind })}
-                      >
-                        <option value="openai-compatible-chat">OpenAI-compatible Chat (OpenAI 兼容对话协议)</option>
-                        <option value="openai-responses">OpenAI Responses (OpenAI 官方结构化响应协议)</option>
-                        <option value="anthropic-messages">Anthropic Messages (Claude 官方消息协议)</option>
-                      </select>
+                        options={[
+                          { value: 'openai-compatible-chat', label: 'OpenAI-compatible Chat (OpenAI 兼容对话协议)' },
+                          { value: 'openai-responses', label: 'OpenAI Responses (OpenAI 官方结构化响应协议)' },
+                          { value: 'anthropic-messages', label: 'Anthropic Messages (Claude 官方消息协议)' }
+                        ]}
+                        onChange={(value) => patchAiDraft({ kind: value as AiProviderKind })}
+                      />
                     </label>
                     <label>
                       <span>{t.aiSettingsModel}</span>

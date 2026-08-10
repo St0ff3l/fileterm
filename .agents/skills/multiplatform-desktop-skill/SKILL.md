@@ -56,6 +56,7 @@ FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分�
 ### 主题、平台 CSS 与视觉密度
 
 - 颜色、阴影、圆角和间距先进入 `token → theme vars → component skin`，不要在业务组件散落十六进制颜色或平台专用 magic number。
+- 所有表单下拉框统一使用 `<DropdownSelect>`：macOS 下渲染 `.ft-select-shell` 原生样式外壳，Windows 和 Linux 下自动开启自绘 Popover 浮层菜单 (`dropdown-select-trigger` + `dropdown-select-menu`)，严禁直接写原生 `<select>` 标签。
 - 优先在已有 `data-platform` 选择器中写差异。需要新增 CSS 时，写清楚为何只影响一个平台；不要用 `!important` 覆盖不清楚来源的规则。
 - Windows/Linux 的 CJK 字体高度可能高于 macOS。检查按钮、表格行、地址栏、标签栏、状态栏和弹窗标题的 line-height，避免文字垂直截断。
 - 高 DPI 下检查图标是否发虚、1px 边框是否稳定、紧凑布局是否仍可点击。不要只依赖开发机浏览器的像素结果。
