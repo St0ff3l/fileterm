@@ -296,14 +296,26 @@
   outline: none !important;
 }
 
-:root[data-theme='default-light'] .sidebar-resizer::after {
+:root[data-theme='default-light'] .ai-copilot-resizer {
+  left: -3px !important;
+  width: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:root[data-theme='default-light'] .sidebar-resizer::after,
+:root[data-theme='default-light'] .ai-copilot-resizer::after {
   width: 2px !important;
   left: 2px !important;
   background: transparent !important;
 }
 
 :root[data-theme='default-light'] .sidebar-resizer:hover::after,
-:root[data-theme='default-light'] .sidebar-resizer.is-active::after {
+:root[data-theme='default-light'] .sidebar-resizer.is-active::after,
+:root[data-theme='default-light'] .ai-copilot-resizer:hover::after,
+:root[data-theme='default-light'] .ai-copilot-resizer.is-active::after {
   background: var(--primary) !important;
 }
 

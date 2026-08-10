@@ -667,10 +667,28 @@
 }
 
 .terminal-dock-input-shell {
+  position: relative;
   display: flex;
   align-items: center;
   min-width: 0;
   width: 100%;
+}
+
+.terminal-dock-placeholder {
+  position: absolute;
+  top: 5px;
+  left: 4px;
+  right: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-soft);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.65;
+  user-select: none;
 }
 
 .terminal-dock-input-shell textarea {
@@ -680,14 +698,14 @@
   padding: 4px;
   border: none;
   resize: none;
-  overflow-x: auto;
-  overflow-y: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background: transparent;
   color: var(--text-main);
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
   line-height: 14px;
-  white-space: pre;
+  white-space: nowrap;
   transition: color 0.15s ease;
 }
 
@@ -698,8 +716,10 @@
 .terminal-dock-actions {
   display: flex;
   align-items: center;
-  align-self: end;
+  align-self: center;
   gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .terminal-dock-actions button {

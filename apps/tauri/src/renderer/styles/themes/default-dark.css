@@ -201,13 +201,19 @@
 
 :root:not([data-theme]) .sidebar-resizer,
 :root[data-theme='default-dark'] .sidebar-resizer,
-:root[data-theme='default'] .sidebar-resizer {
+:root[data-theme='default'] .sidebar-resizer,
+:root:not([data-theme]) .ai-copilot-resizer,
+:root[data-theme='default-dark'] .ai-copilot-resizer,
+:root[data-theme='default'] .ai-copilot-resizer {
   background: transparent;
 }
 
 :root:not([data-theme]) .sidebar-resizer::after,
 :root[data-theme='default-dark'] .sidebar-resizer::after,
-:root[data-theme='default'] .sidebar-resizer::after {
+:root[data-theme='default'] .sidebar-resizer::after,
+:root:not([data-theme]) .ai-copilot-resizer::after,
+:root[data-theme='default-dark'] .ai-copilot-resizer::after,
+:root[data-theme='default'] .ai-copilot-resizer::after {
   width: 2px;
   left: 2px;
 }
@@ -217,7 +223,13 @@
 :root[data-theme='default'] .sidebar-resizer:hover::after,
 :root:not([data-theme]) .sidebar-resizer.is-active::after,
 :root[data-theme='default-dark'] .sidebar-resizer.is-active::after,
-:root[data-theme='default'] .sidebar-resizer.is-active::after {
+:root[data-theme='default'] .sidebar-resizer.is-active::after,
+:root:not([data-theme]) .ai-copilot-resizer:hover::after,
+:root[data-theme='default-dark'] .ai-copilot-resizer:hover::after,
+:root[data-theme='default'] .ai-copilot-resizer:hover::after,
+:root:not([data-theme]) .ai-copilot-resizer.is-active::after,
+:root[data-theme='default-dark'] .ai-copilot-resizer.is-active::after,
+:root[data-theme='default'] .ai-copilot-resizer.is-active::after {
   background: var(--accent-primary);
 }
 

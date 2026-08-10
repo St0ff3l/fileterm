@@ -41,7 +41,7 @@
   width: min(var(--ai-copilot-panel-width), calc(100vw - var(--sidebar-width, 256px)));
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   border-top: 0;
   border-right: 0;
   border-bottom: 0;
@@ -52,6 +52,36 @@
   background: var(--bg-card);
   box-shadow: none;
   animation: ai-copilot-panel-enter 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ai-copilot-resizer {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  bottom: 0;
+  z-index: 30;
+  width: 6px;
+  min-height: 0;
+  cursor: col-resize;
+  transition: background 0.15s ease;
+  user-select: none !important;
+}
+
+.ai-copilot-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: transparent;
+  pointer-events: none;
+  transition: background 0.15s ease;
+}
+
+.ai-copilot-resizer:hover::after,
+.ai-copilot-resizer.is-active::after {
+  background: linear-gradient(180deg, var(--border-dark), var(--border-light));
 }
 
 .ai-copilot-header {
@@ -274,105 +304,6 @@
   -webkit-user-select: text !important;
 }
 
-.ai-copilot-compact-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--surface-inset) 60%, var(--bg-card));
-  user-select: none !important;
-}
-
-.ai-copilot-conversation-dropdown-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.ai-copilot-conversation-dropdown-wrap .ft-select-shell,
-.ai-copilot-conversation-dropdown-wrap .dropdown-select-trigger {
-  width: 100%;
-  height: 28px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.ai-copilot-toolbar-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-}
-
-.ai-copilot-toolbar-btn {
-  display: inline-flex;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 8px;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  background: var(--bg-elevated);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-
-  user-select: none !important;
-}
-
-.ai-copilot-toolbar-btn:hover:not(:disabled) {
-  border-color: var(--accent-primary);
-  color: var(--text-main);
-  background: var(--accent-tint-weak);
-}
-
-.ai-copilot-toolbar-btn.is-active {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--accent-tint-weak);
-}
-
-.ai-copilot-toolbar-btn.is-danger {
-  color: var(--danger);
-}
-
-.ai-copilot-toolbar-btn.is-danger:hover:not(:disabled) {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-}
-
-.ai-copilot-advanced-panel {
-  display: grid;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--surface-inset) 85%, var(--bg-card));
-  animation: ai-copilot-panel-enter 0.15s ease-out;
-  user-select: none !important;
-}
-
-.ai-copilot-advanced-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
-}
-
-.ai-copilot-advanced-row label {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  color: var(--text-soft);
-  font-size: 9px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
 .ai-copilot-content {
   display: grid;
   align-content: center;
@@ -574,19 +505,13 @@
 }
 
 .ai-copilot-context-control-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  align-items: end;
 }
 
-.ai-copilot-context-control-row label {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.ai-copilot-context-control-row label > span {
+.ai-copilot-context-control-row > span {
   color: var(--text-soft);
   font-size: 9px;
   font-weight: 650;
@@ -616,10 +541,17 @@
   gap: 4px;
   padding: 0 8px;
   color: var(--accent-primary);
+  cursor: pointer;
 }
 
 .ai-copilot-context-control-row > button:hover:not(:disabled) {
   border-color: var(--accent-primary);
+  background: var(--accent-tint-weak);
+}
+
+.ai-copilot-context-control-row > button.is-active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
   background: var(--accent-tint-weak);
 }
 
@@ -660,8 +592,42 @@
   font-weight: 650;
 }
 
-.ai-copilot-context-preview header .material-symbols-outlined {
-  font-size: 13px;
+.ai-copilot-context-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-copilot-context-preview-actions .ai-copilot-command-proposal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  height: 22px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ai-copilot-context-preview-actions .ai-copilot-command-proposal-toggle .material-symbols-outlined {
+  font-size: 12px;
+}
+
+.ai-copilot-context-preview-actions .ai-copilot-command-proposal-toggle:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.ai-copilot-context-preview-actions .ai-copilot-command-proposal-toggle.is-active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-tint-weak);
 }
 
 .ai-copilot-context-preview header button {
@@ -671,6 +637,7 @@
   background: transparent;
   font: inherit;
   font-size: 10px;
+  cursor: pointer;
 }
 
 .ai-copilot-context-preview header button:hover {
@@ -1488,7 +1455,14 @@
   font-size: 15px;
 }
 
-.ai-copilot-composer-toolbar .ai-copilot-command-proposal-toggle.is-active {
+.ai-copilot-composer-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+}
+
+.ai-copilot-composer-toolbar .ai-copilot-command-proposal-toggle.is-active:not(:disabled) {
   color: var(--accent-primary);
   background: var(--accent-tint-weak);
 }

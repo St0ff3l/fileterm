@@ -177,11 +177,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const resolvingActionApprovalIdsRef = useRef(new Set<string>())
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
+  const [aiCopilotWidth, setAiCopilotWidth] = useState(368)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
   const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
   const [workspaceFocusModes, setWorkspaceFocusModes] = useState<Record<string, boolean>>({})
   const [workspaceViews, setWorkspaceViews] = useState<Record<string, 'file' | 'command' | 'tunnel'>>({})
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [isResizingAiCopilot, setIsResizingAiCopilot] = useState(false)
   const [isAiCopilotOpen, setIsAiCopilotOpen] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<'interface' | 'ai'>('interface')
 
@@ -798,6 +800,66 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     }
   }, [isResizingSidebar])
 
+  const startAiCopilotResize = useCallback(() => {
+    window.getSelection()?.removeAllRanges()
+    document.body.classList.add('is-resizing-copilot')
+    setIsResizingAiCopilot(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isResizingAiCopilot) {
+      return
+    }
+
+    const onMouseMove = (event: globalThis.MouseEvent) => {
+      const windowWidth = window.innerWidth
+      const rawWidth = windowWidth - event.clientX
+      const currentLeftWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
+      const MIN_MAIN_WORKSPACE_WIDTH = 460
+      const maxAllowedWidth = Math.max(340, Math.min(600, windowWidth - currentLeftWidth - MIN_MAIN_WORKSPACE_WIDTH))
+      const nextWidth = Math.min(maxAllowedWidth, Math.max(340, rawWidth))
+      const DEFAULT_COPILOT_WIDTH = 368
+      setAiCopilotWidth(Math.abs(nextWidth - DEFAULT_COPILOT_WIDTH) <= 12 ? DEFAULT_COPILOT_WIDTH : nextWidth)
+    }
+
+    const onMouseUp = () => {
+      window.getSelection()?.removeAllRanges()
+      setIsResizingAiCopilot(false)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', onMouseUp)
+    document.body.classList.add('is-resizing-copilot')
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('blur', onMouseUp)
+      document.body.classList.remove('is-resizing-copilot')
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingAiCopilot, isSystemSidebarCollapsed, sidebarWidth])
+
+  // Auto-clamp AI Copilot width on window resize to protect main workspace
+  useEffect(() => {
+    if (!isAiCopilotOpen) return
+
+    const handleWindowResize = () => {
+      const windowWidth = window.innerWidth
+      const currentLeftWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
+      const MIN_MAIN_WORKSPACE_WIDTH = 460
+      const maxAllowed = Math.max(340, Math.min(600, windowWidth - currentLeftWidth - MIN_MAIN_WORKSPACE_WIDTH))
+      setAiCopilotWidth((prev) => (prev > maxAllowed ? maxAllowed : prev))
+    }
+
+    window.addEventListener('resize', handleWindowResize)
+    return () => window.removeEventListener('resize', handleWindowResize)
+  }, [isAiCopilotOpen, isSystemSidebarCollapsed, sidebarWidth])
+
   // Timeout for error / status bar
   useEffect(() => {
     if (!error) {
@@ -1379,11 +1441,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isAiCopilotOpen ? 'has-ai-copilot' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${isAiCopilotOpen ? 'has-ai-copilot' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
-            '--brand-width': `${brandWidth}px`
+            '--brand-width': `${brandWidth}px`,
+            '--ai-copilot-panel-width': `${aiCopilotWidth}px`
           } as CSSProperties
         }
       >
@@ -1562,11 +1625,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 activeSession={aiCopilotTargetSession}
                 activeTab={aiCopilotTargetTab ?? null}
                 rootTab={activeTab ?? null}
+                isResizing={isResizingAiCopilot}
                 onClose={() => setIsAiCopilotOpen(false)}
                 onOpenSettings={() => {
                   setSettingsInitialTab('ai')
                   setShowSettings(true)
                 }}
+                onResizeStart={startAiCopilotResize}
               />
             ) : null}
           </div>

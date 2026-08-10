@@ -10,9 +10,7 @@ import type {
 } from '@fileterm/core'
 import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
-import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
-import { DropdownSelect } from '../common/DropdownSelect'
 import { AiCopilotMarkdown } from './AiCopilotMarkdown'
 import { useAiCopilot } from './useAiCopilot'
 
@@ -98,15 +96,19 @@ export function AiCopilotPanel({
   activeSession,
   activeTab,
   rootTab,
+  isResizing,
   onClose,
-  onOpenSettings
+  onOpenSettings,
+  onResizeStart
 }: {
   activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   activeTab: WorkspaceTab | null
   rootTab: WorkspaceTab | null
+  isResizing?: boolean
   onClose(): void
   onOpenSettings(): void
+  onResizeStart?: () => void
 }) {
   const isTerminalTarget =
     (activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'local') && Boolean(activeSession)
@@ -115,7 +117,6 @@ export function AiCopilotPanel({
   const targetLabel = isTerminalTarget && user ? `${user}@${host}` : host
   const workingDirectory = activeSession?.shellCwd || activeSession?.remotePath || '~'
   const [draft, setDraft] = useState('')
-  const [contextMode, setContextMode] = useState<'metadata' | 'recent-terminal'>('metadata')
   const [commandProposal, setCommandProposal] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
   const [writingCommandId, setWritingCommandId] = useState<string | null>(null)
@@ -124,7 +125,6 @@ export function AiCopilotPanel({
   const [isRenamingConversation, setIsRenamingConversation] = useState(false)
   const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
-  const [isAdvancedControlsOpen, setIsAdvancedControlsOpen] = useState(false)
   const panelRef = useRef<HTMLElement>(null)
   const messageViewportRef = useRef<HTMLDivElement>(null)
 
@@ -257,7 +257,7 @@ export function AiCopilotPanel({
       tabId: activeTab.id,
       rootTabId: rootTab.id,
       providerId: currentProvider.id,
-      mode: contextMode
+      mode: 'recent-terminal'
     })
   }
 
@@ -369,13 +369,25 @@ export function AiCopilotPanel({
     <aside
       ref={panelRef}
       aria-label={t.aiCopilot}
-      className="ai-copilot-panel"
+      className={`ai-copilot-panel ${isResizing ? 'is-resizing' : ''}`}
       onMouseDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
+      <div
+        aria-label="调整 AI 侧边栏宽度"
+        className={`ai-copilot-resizer ${isResizing ? 'is-active' : ''}`}
+        onMouseDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onResizeStart?.()
+        }}
+        role="separator"
+      />
       <header className="ai-copilot-header">
         <div className="ai-copilot-title">
-          <AppIcon name="brand" size={14} />
+          <span aria-hidden="true" className="material-symbols-outlined ai-copilot-title-icon">
+            auto_awesome
+          </span>
           <span>
             <strong>{t.aiCopilot}</strong>
             <small>{currentProvider ? currentProvider.name + ' · ' + currentProvider.model : t.aiCopilotPreview}</small>
@@ -390,7 +402,9 @@ export function AiCopilotPanel({
             type="button"
             onClick={newChat}
           >
-            <AppIcon name="plus" size={14} />
+            <span aria-hidden="true" className="material-symbols-outlined">
+              add_comment
+            </span>
           </button>
           <button
             aria-label={t.aiCopilotConfigureProvider}
@@ -399,7 +413,9 @@ export function AiCopilotPanel({
             type="button"
             onClick={onOpenSettings}
           >
-            <AppIcon name="config-file" size={14} />
+            <span aria-hidden="true" className="material-symbols-outlined">
+              settings_suggest
+            </span>
           </button>
           <CloseButton aria-label={t.closeAiCopilot} onClick={onClose} size="compact" />
         </div>
@@ -474,211 +490,200 @@ export function AiCopilotPanel({
           </section>
         ) : (
           <>
-            <div className="ai-copilot-compact-toolbar">
-              <div className="ai-copilot-conversation-dropdown-wrap">
-                <DropdownSelect
-                  disabled={isStreaming}
-                  value={conversation?.id ?? '__new__'}
-                  options={[
-                    { value: '__new__', label: `+ ${t.aiCopilotNewChat}` },
-                    ...filteredConversations.map((item) => ({
-                      value: item.id,
-                      label: item.title
-                    }))
-                  ]}
-                  onChange={(value) => {
-                    if (value === '__new__') {
-                      newChat()
-                    } else {
-                      void loadConversation(value)
-                    }
-                  }}
-                />
-              </div>
-
-              <div className="ai-copilot-toolbar-actions">
-                {conversation ? (
-                  <>
-                    <button
-                      aria-label={t.rename}
-                      className="ai-copilot-toolbar-btn"
-                      disabled={isStreaming}
-                      title={t.rename}
-                      type="button"
-                      onClick={() => {
-                        setConversationTitleDraft(conversation.title)
-                        setIsRenamingConversation(true)
-                      }}
-                    >
-                      <AppIcon name="edit" size={13} />
-                    </button>
-                    <button
-                      aria-label={t.aiCopilotDeleteConversation}
-                      className="ai-copilot-toolbar-btn is-danger"
-                      disabled={isStreaming}
-                      title={t.aiCopilotDeleteConversation}
-                      type="button"
-                      onClick={() => setIsDeleteConfirmationOpen(true)}
-                    >
-                      <AppIcon name="trash" size={13} />
-                    </button>
-                  </>
-                ) : null}
-
-                <button
-                  className={`ai-copilot-toolbar-btn ${isAdvancedControlsOpen ? 'is-active' : ''}`}
-                  type="button"
-                  title="高级选项 / 模型与上下文"
-                  onClick={() => setIsAdvancedControlsOpen((prev) => !prev)}
-                >
-                  <AppIcon name="brand" size={13} />
-                  <span>{isAdvancedControlsOpen ? '收起选项' : '选项'}</span>
-                </button>
-              </div>
-            </div>
-
-            {isRenamingConversation && conversation ? (
-              <form
-                className="ai-copilot-compact-toolbar"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void saveConversationTitle()
-                }}
-              >
-                <input
-                  aria-label={t.aiCopilotConversationTitle}
-                  autoFocus
-                  disabled={isStreaming}
-                  maxLength={120}
-                  style={{
-                    flex: '1 1 auto',
-                    height: '28px',
-                    padding: '0 8px',
-                    fontSize: '11px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-light)',
-                    background: 'var(--bg-elevated)',
-                    color: 'var(--text-main)'
-                  }}
-                  value={conversationTitleDraft}
-                  onChange={(event) => setConversationTitleDraft(event.target.value)}
-                />
-                <button
-                  className="ai-copilot-toolbar-btn"
-                  disabled={isStreaming || !conversationTitleDraft.trim()}
-                  type="submit"
-                >
-                  <AppIcon name="check" size={13} />
-                </button>
-                <button
-                  className="ai-copilot-toolbar-btn"
-                  disabled={isStreaming}
-                  type="button"
-                  onClick={() => {
-                    setIsRenamingConversation(false)
-                    setConversationTitleDraft(conversation.title)
-                  }}
-                >
-                  <AppIcon name="close" size={13} />
-                </button>
-              </form>
-            ) : null}
-
-            {isDeleteConfirmationOpen && conversation ? (
-              <div className="ai-copilot-compact-toolbar">
-                <span style={{ fontSize: '11px', color: 'var(--danger)' }}>确定删除当前对话？</span>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  <button
-                    className="ai-copilot-toolbar-btn is-danger"
+            <div className="ai-copilot-chat-meta">
+              <section aria-label={t.aiCopilotConversationControls} className="ai-copilot-conversation-controls">
+                <label>
+                  <span>{t.aiCopilotProviderLabel}</span>
+                  <select
                     disabled={isStreaming}
-                    type="button"
-                    onClick={() => void deleteCurrentConversation()}
+                    value={selectedProviderId ?? ''}
+                    onChange={(event) => selectProvider(event.target.value || null)}
                   >
-                    {t.delete}
-                  </button>
-                  <button
-                    className="ai-copilot-toolbar-btn"
-                    disabled={isStreaming}
-                    type="button"
-                    onClick={() => setIsDeleteConfirmationOpen(false)}
-                  >
-                    {t.cancel}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {isAdvancedControlsOpen ? (
-              <div className="ai-copilot-advanced-panel">
-                <div className="ai-copilot-advanced-row">
-                  <label>
-                    <span>{t.aiCopilotProviderLabel}</span>
-                    <DropdownSelect
-                      disabled={isStreaming}
-                      value={selectedProviderId ?? ''}
-                      options={providers.map((provider) => ({
-                        value: provider.id,
-                        label: `${provider.name} · ${provider.model}`
-                      }))}
-                      onChange={(value) => selectProvider(value || null)}
-                    />
-                  </label>
-                  <label>
-                    <span>{t.aiCopilotContextPreview}</span>
-                    <DropdownSelect
-                      disabled={!isTerminalTarget || isStreaming || isContextPreviewing}
-                      value={contextMode}
-                      options={[
-                        { value: 'metadata', label: t.aiCopilotContextMetadata },
-                        { value: 'recent-terminal', label: t.aiCopilotContextRecentTerminal }
-                      ]}
-                      onChange={(value) => {
-                        setContextMode(value as 'metadata' | 'recent-terminal')
-                        clearPreview()
-                      }}
-                    />
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button
-                    className="ai-copilot-toolbar-btn"
-                    disabled={!currentProvider || !isTerminalTarget || isStreaming || isContextPreviewing}
-                    type="button"
-                    onClick={previewContext}
-                  >
-                    {isContextPreviewing ? t.aiCopilotContextPreviewing : t.aiCopilotContextPreview}
-                  </button>
+                    {providers.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name} · {provider.model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>{t.aiCopilotConversationLabel}</span>
                   <input
                     aria-label={t.aiCopilotHistorySearch}
                     disabled={isStreaming}
                     placeholder={t.aiCopilotHistorySearchPlaceholder}
-                    style={{
-                      height: '28px',
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-light)',
-                      background: 'var(--bg-elevated)',
-                      color: 'var(--text-main)',
-                      width: '160px'
-                    }}
                     type="search"
                     value={conversationSearch}
                     onChange={(event) => setConversationSearch(event.target.value)}
                   />
-                </div>
+                  <select
+                    disabled={isStreaming}
+                    value={conversation?.id ?? ''}
+                    onChange={(event) => {
+                      if (event.target.value) {
+                        void loadConversation(event.target.value)
+                      } else {
+                        newChat()
+                      }
+                    }}
+                  >
+                    <option value="">{t.aiCopilotNewChat}</option>
+                    {conversation && !filteredConversations.some((item) => item.id === conversation.id) ? (
+                      <option value={conversation.id}>{conversation.title}</option>
+                    ) : null}
+                    {filteredConversations.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </section>
 
+              <section className="ai-copilot-conversation-actions" aria-label={t.aiCopilotConversationControls}>
+                {conversation ? (
+                  isRenamingConversation ? (
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void saveConversationTitle()
+                      }}
+                    >
+                      <input
+                        aria-label={t.aiCopilotConversationTitle}
+                        autoFocus
+                        disabled={isStreaming}
+                        maxLength={120}
+                        value={conversationTitleDraft}
+                        onChange={(event) => setConversationTitleDraft(event.target.value)}
+                      />
+                      <button disabled={isStreaming || !conversationTitleDraft.trim()} title={t.save} type="submit">
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          check
+                        </span>
+                        {t.save}
+                      </button>
+                      <button
+                        disabled={isStreaming}
+                        title={t.cancel}
+                        type="button"
+                        onClick={() => {
+                          setIsRenamingConversation(false)
+                          setConversationTitleDraft(conversation.title)
+                        }}
+                      >
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          close
+                        </span>
+                        {t.cancel}
+                      </button>
+                    </form>
+                  ) : isDeleteConfirmationOpen ? (
+                    <div className="ai-copilot-conversation-delete-confirm">
+                      <span>{t.aiCopilotDeleteConversationConfirm}</span>
+                      <button
+                        className="is-danger"
+                        disabled={isStreaming}
+                        type="button"
+                        onClick={() => void deleteCurrentConversation()}
+                      >
+                        {t.delete}
+                      </button>
+                      <button disabled={isStreaming} type="button" onClick={() => setIsDeleteConfirmationOpen(false)}>
+                        {t.cancel}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span>{conversation.title}</span>
+                      <div>
+                        <button
+                          aria-label={t.rename}
+                          disabled={isStreaming}
+                          title={t.rename}
+                          type="button"
+                          onClick={() => {
+                            setConversationTitleDraft(conversation.title)
+                            setIsRenamingConversation(true)
+                          }}
+                        >
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            edit
+                          </span>
+                        </button>
+                        <button
+                          aria-label={t.aiCopilotDeleteConversation}
+                          className="is-danger"
+                          disabled={isStreaming}
+                          title={t.aiCopilotDeleteConversation}
+                          type="button"
+                          onClick={() => setIsDeleteConfirmationOpen(true)}
+                        >
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            delete
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  )
+                ) : (
+                  <span>{t.aiCopilotNewChat}</span>
+                )}
+              </section>
+
+              <section className="ai-copilot-context-control" aria-label={t.aiCopilotContextPreview}>
+                <div className="ai-copilot-context-control-row">
+                  <span>{t.aiCopilotContextPreview}</span>
+                  <button
+                    className={`ai-copilot-context-toggle-btn ${contextPreview ? 'is-active' : ''}`}
+                    disabled={!currentProvider || !isTerminalTarget || isStreaming || isContextPreviewing}
+                    type="button"
+                    onClick={() => {
+                      if (contextPreview) {
+                        clearPreview()
+                      } else {
+                        previewContext()
+                      }
+                    }}
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined">
+                      {isContextPreviewing ? 'progress_activity' : contextPreview ? 'check_circle' : 'preview'}
+                    </span>
+                    {isContextPreviewing
+                      ? t.aiCopilotContextPreviewing
+                      : contextPreview
+                        ? '已附加上下文'
+                        : '附加上下文'}
+                  </button>
+                </div>
                 {contextPreview ? (
                   <article className="ai-copilot-context-preview">
                     <header>
                       <span>
-                        <AppIcon name="check" size={13} />
-                        {t.aiCopilotContextPreviewReady} · {contextModeLabel(contextPreview.mode)}
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          verified_user
+                        </span>
+                        {t.aiCopilotContextPreviewReady}
                       </span>
-                      <button type="button" onClick={clearPreview}>
-                        {t.aiCopilotContextClear}
-                      </button>
+                      <div className="ai-copilot-context-preview-actions">
+                        <button
+                          aria-pressed={commandProposal}
+                          className={`ai-copilot-command-proposal-toggle ${commandProposal ? 'is-active' : ''}`}
+                          title={
+                            commandProposal ? t.aiCopilotCommandProposalHint : '开启后 AI 将生成带操作按钮的命令卡片'
+                          }
+                          type="button"
+                          onClick={() => setCommandProposal((current) => !current)}
+                        >
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            terminal
+                          </span>
+                          <span>{commandProposal ? '已开启命令卡片' : '生成命令卡片'}</span>
+                        </button>
+                        <button type="button" onClick={clearPreview}>
+                          {t.aiCopilotContextClear}
+                        </button>
+                      </div>
                     </header>
                     <strong>{t.aiCopilotContextPreviewTitle}</strong>
                     <pre>{contextPreview.preview}</pre>
@@ -698,14 +703,18 @@ export function AiCopilotPanel({
                       {previewTargetChanged ? t.aiCopilotContextTargetChangedHint : t.aiCopilotContextPreviewHint}
                     </small>
                   </article>
-                ) : null}
-                {commandActionMessage ? (
-                  <div className="ai-copilot-command-feedback" role="status">
-                    {commandActionMessage}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
+                ) : (
+                  <small className="ai-copilot-context-preview-hint">
+                    点击“附加上下文”可自动读取并预览当前终端输出与路径环境信息。
+                  </small>
+                )}
+              </section>
+              {commandActionMessage ? (
+                <div className="ai-copilot-command-feedback" role="status">
+                  {commandActionMessage}
+                </div>
+              ) : null}
+            </div>
 
             <div
               ref={messageViewportRef}
@@ -942,37 +951,16 @@ export function AiCopilotPanel({
                 </span>
               </button>
             ) : (
-              <>
-                <button
-                  aria-label={t.aiCopilotCommandProposal}
-                  aria-pressed={commandProposal}
-                  className={`ai-copilot-command-proposal-toggle ${commandProposal ? 'is-active' : ''}`}
-                  disabled={!contextPreview || previewTargetChanged}
-                  title={
-                    previewTargetChanged
-                      ? t.aiCopilotContextTargetChangedHint
-                      : contextPreview
-                        ? t.aiCopilotCommandProposalHint
-                        : t.aiCopilotCommandProposalRequiresContext
-                  }
-                  type="button"
-                  onClick={() => setCommandProposal((current) => !current)}
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    terminal
-                  </span>
-                </button>
-                <button
-                  aria-label={t.aiCopilotSend}
-                  disabled={!canChat || !draft.trim() || (Boolean(contextPreview) && previewTargetChanged)}
-                  type="button"
-                  onClick={() => void send()}
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    arrow_upward
-                  </span>
-                </button>
-              </>
+              <button
+                aria-label={t.aiCopilotSend}
+                disabled={!canChat || !draft.trim() || (Boolean(contextPreview) && previewTargetChanged)}
+                type="button"
+                onClick={() => void send()}
+              >
+                <span aria-hidden="true" className="material-symbols-outlined">
+                  arrow_upward
+                </span>
+              </button>
             )}
           </div>
         </div>

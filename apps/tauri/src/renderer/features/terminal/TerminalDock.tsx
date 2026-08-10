@@ -593,13 +593,18 @@ export function TerminalDock({
           <textarea
             ref={inputRef}
             disabled={activeTab.sessionType !== 'ssh' || isConnecting}
-            placeholder={reconnectFeedbackVisible || isConnecting ? t.terminalReconnecting : placeholderText}
             rows={1}
+            title={placeholderText}
             wrap="off"
             value={command}
             onChange={(event) => setCommand(event.currentTarget.value)}
             onKeyDown={handleInputKeyDown}
           />
+          {!command && (
+            <span className="terminal-dock-placeholder" title={placeholderText}>
+              {reconnectFeedbackVisible || isConnecting ? t.terminalReconnecting : placeholderText}
+            </span>
+          )}
         </label>
         <div className="terminal-dock-actions">
           <button
