@@ -63,6 +63,7 @@ export function useAiCopilot() {
   const [conversations, setConversations] = useState<AiConversationSummary[]>([])
   const [conversation, setConversation] = useState<AiConversation | null>(null)
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
@@ -72,6 +73,7 @@ export function useAiCopilot() {
   const [isContextPreviewing, setIsContextPreviewing] = useState(false)
   const conversationRef = useRef<AiConversation | null>(null)
   const selectedProviderIdRef = useRef<string | null>(null)
+  const selectedModelRef = useRef<string | null>(null)
   const activeConversationIdRef = useRef<string | null>(null)
   const activeAssistantMessageIdRef = useRef<string | null>(null)
   const activeRequestIdRef = useRef<string | null>(null)
@@ -89,7 +91,15 @@ export function useAiCopilot() {
   const selectProvider = useCallback((providerId: string | null) => {
     selectedProviderIdRef.current = providerId
     setSelectedProviderId(providerId)
+    // Reset model override when provider changes so default model is used
+    selectedModelRef.current = null
+    setSelectedModel(null)
     setContextPreview(null)
+  }, [])
+
+  const selectModel = useCallback((model: string | null) => {
+    selectedModelRef.current = model
+    setSelectedModel(model)
   }, [])
 
   const loadConversation = useCallback(
@@ -366,12 +376,14 @@ export function useAiCopilot() {
           messages: [...target.messages, optimisticMessage]
         }
         applyConversation(optimisticConversation)
+        const modelOverride = selectedModelRef.current || undefined
         const result = await startRequest(
           (conversationId, requestProviderId, onEvent) =>
             desktopApi.startAiChat(
               {
                 conversationId,
                 providerId: requestProviderId,
+                modelOverride,
                 userMessage: content,
                 contextSnapshotId: options.contextSnapshotId,
                 responseMode
@@ -463,9 +475,10 @@ export function useAiCopilot() {
     setContextPreview(null)
     setIsStreaming(true)
     try {
+      const modelOverride = selectedModelRef.current || undefined
       await startRequest(
         (conversationId, requestProviderId, onEvent) =>
-          desktopApi.retryAiChat({ conversationId, providerId: requestProviderId }, onEvent),
+          desktopApi.retryAiChat({ conversationId, providerId: requestProviderId, modelOverride }, onEvent),
         currentConversation.id,
         providerId
       )
@@ -580,6 +593,8 @@ export function useAiCopilot() {
   }, [applyConversation, isStreaming])
 
   const currentProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
+  // Effective model: user-selected override > provider's default model
+  const effectiveModel = selectedModel || currentProvider?.model || null
 
   return {
     providers,
@@ -587,6 +602,8 @@ export function useAiCopilot() {
     conversation,
     currentProvider,
     selectedProviderId,
+    selectedModel,
+    effectiveModel,
     isLoading,
     isStreaming,
     errorMessage,
@@ -594,6 +611,7 @@ export function useAiCopilot() {
     contextPreview,
     isContextPreviewing,
     selectProvider,
+    selectModel,
     loadConversation,
     refresh,
     newChat,

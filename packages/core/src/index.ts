@@ -1218,6 +1218,7 @@ export type AiChatResponseMode = 'chat' | 'command-proposal'
 export interface StartAiChatInput {
   conversationId: string
   providerId: string
+  modelOverride?: string
   userMessage: string
   contextSnapshotId?: string
   responseMode?: AiChatResponseMode
@@ -1227,6 +1228,7 @@ export interface StartAiChatInput {
 export interface RetryAiChatInput {
   conversationId: string
   providerId: string
+  modelOverride?: string
 }
 
 export interface AiChatRequest {

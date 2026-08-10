@@ -414,6 +414,8 @@ pub enum AiChatResponseMode {
 pub struct StartAiChatInput {
     pub conversation_id: String,
     pub provider_id: String,
+    #[serde(default)]
+    pub model_override: Option<String>,
     pub user_message: String,
     #[serde(default)]
     pub context_snapshot_id: Option<String>,
@@ -426,6 +428,8 @@ pub struct StartAiChatInput {
 pub struct RetryAiChatInput {
     pub conversation_id: String,
     pub provider_id: String,
+    #[serde(default)]
+    pub model_override: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2435,7 +2439,13 @@ async fn prepare_start_chat(
     let conversation_id = validate_conversation_id(&input.conversation_id)?;
     let provider_id = normalize_provider_id(&input.provider_id)?;
     let user_message = normalize_user_message(&input.user_message)?;
-    let (provider, api_key) = resolve_chat_provider(app, &provider_id)?;
+    let (mut provider, api_key) = resolve_chat_provider(app, &provider_id)?;
+    if let Some(ref model_override) = input.model_override {
+        let m = model_override.trim();
+        if !m.is_empty() {
+            provider.model = m.to_string();
+        }
+    };
     let (context_attachment, prompt_context) = match input.context_snapshot_id.as_deref() {
         Some(snapshot_id) => consume_context_snapshot(app, window_label, &provider.id, snapshot_id)
             .await
@@ -2494,7 +2504,13 @@ fn prepare_retry_chat(
 ) -> Result<PreparedChatRequest, AppError> {
     let conversation_id = validate_conversation_id(&input.conversation_id)?;
     let provider_id = normalize_provider_id(&input.provider_id)?;
-    let (provider, api_key) = resolve_chat_provider(app, &provider_id)?;
+    let (mut provider, api_key) = resolve_chat_provider(app, &provider_id)?;
+    if let Some(ref model_override) = input.model_override {
+        let m = model_override.trim();
+        if !m.is_empty() {
+            provider.model = m.to_string();
+        }
+    }
 
     let _guard = conversation_store_lock()?;
     let mut index = read_conversation_index(app)?;

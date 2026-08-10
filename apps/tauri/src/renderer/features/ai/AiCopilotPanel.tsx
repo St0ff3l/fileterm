@@ -171,6 +171,8 @@ export function AiCopilotPanel({
     conversation,
     currentProvider,
     selectedProviderId,
+    selectedModel,
+    effectiveModel,
     isLoading,
     isStreaming,
     errorMessage,
@@ -178,6 +180,7 @@ export function AiCopilotPanel({
     contextPreview,
     isContextPreviewing,
     selectProvider,
+    selectModel,
     loadConversation,
     newChat,
     renameConversation,
@@ -390,7 +393,13 @@ export function AiCopilotPanel({
           </span>
           <span>
             <strong>{t.aiCopilot}</strong>
-            <small>{currentProvider ? currentProvider.name + ' · ' + currentProvider.model : t.aiCopilotPreview}</small>
+            <small>
+              {currentProvider
+                ? effectiveModel
+                  ? `${currentProvider.name}  ·  ${effectiveModel}`
+                  : currentProvider.name
+                : t.aiCopilotPreview}
+            </small>
           </span>
         </div>
         <div className="ai-copilot-header-actions">
@@ -501,11 +510,30 @@ export function AiCopilotPanel({
                   >
                     {providers.map((provider) => (
                       <option key={provider.id} value={provider.id}>
-                        {provider.name} · {provider.model}
+                        {provider.name}
                       </option>
                     ))}
                   </select>
                 </label>
+                {currentProvider && (
+                  <label>
+                    <span>模型</span>
+                    <select
+                      disabled={isStreaming}
+                      value={selectedModel ?? currentProvider.model}
+                      onChange={(event) => selectModel(event.target.value || null)}
+                    >
+                      {(currentProvider.models && currentProvider.models.length > 0
+                        ? currentProvider.models
+                        : [currentProvider.model]
+                      ).map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label>
                   <span>{t.aiCopilotConversationLabel}</span>
                   <input
