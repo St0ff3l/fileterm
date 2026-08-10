@@ -125,6 +125,8 @@ pub struct AiProviderDraft {
     pub kind: AiProviderKind,
     pub base_url: String,
     pub model: String,
+    #[serde(default)]
+    pub models: Vec<String>,
     pub enabled: bool,
     pub is_default: bool,
     pub allow_no_auth: bool,
@@ -192,6 +194,8 @@ pub struct AiProviderSummary {
     pub kind: AiProviderKind,
     pub base_url: String,
     pub model: String,
+    #[serde(default)]
+    pub models: Vec<String>,
     pub enabled: bool,
     pub has_api_key: bool,
     pub usable: bool,
@@ -509,6 +513,8 @@ struct StoredAiProvider {
     kind: AiProviderKind,
     base_url: String,
     model: String,
+    #[serde(default)]
+    models: Vec<String>,
     enabled: bool,
     is_default: bool,
     allow_no_auth: bool,
@@ -948,12 +954,25 @@ fn normalize_provider(draft: AiProviderDraft, id: String) -> Result<StoredAiProv
         ));
     }
 
+    let mut models = Vec::new();
+    for m in &draft.models {
+        if let Ok(normalized_m) = normalize_text(m, "模型名称", MAX_MODEL_LENGTH) {
+            if !normalized_m.is_empty() && !models.contains(&normalized_m) {
+                models.push(normalized_m);
+            }
+        }
+    }
+    if !model.is_empty() && !models.contains(&model) {
+        models.push(model.clone());
+    }
+
     Ok(StoredAiProvider {
         id,
         name,
         kind: draft.kind,
         base_url,
         model,
+        models,
         enabled: draft.enabled,
         is_default: draft.is_default,
         allow_no_auth: draft.allow_no_auth,
@@ -1019,6 +1038,7 @@ fn provider_summary(
         kind: provider.kind.clone(),
         base_url: provider.base_url.clone(),
         model: provider.model.clone(),
+        models: provider.models.clone(),
         enabled: provider.enabled,
         has_api_key: has_api_key(secrets, &provider.id),
         usable: provider_is_usable(provider, secrets),
@@ -1130,6 +1150,18 @@ pub fn save_provider(
         .clone()
         .unwrap_or_else(|| crate::storage::new_id("ai-provider"));
     let provider = normalize_provider(input.provider, provider_id.clone())?;
+
+    let name_conflict = config.providers.iter().any(|existing| {
+        existing.id != provider_id
+            && existing.name.trim().eq_ignore_ascii_case(provider.name.trim())
+    });
+    if name_conflict {
+        return Err(ai_error(
+            "AI_PROVIDER_DUPLICATE_NAME",
+            &format!("Provider 名称 \"{}\" 已存在，请使用其他唯一名称", provider.name.trim()),
+        ));
+    }
+
     validate_secret_patch(input.secrets.as_ref())?;
 
     let secret_changed = apply_secret_patch(&mut secrets, &provider_id, input.secrets.as_ref());
@@ -3964,6 +3996,7 @@ mod tests {
             kind: AiProviderKind::OpenaiCompatibleChat,
             base_url: base_url.to_string(),
             model: "test-model".to_string(),
+            models: vec!["test-model".to_string()],
             enabled: true,
             is_default: false,
             allow_no_auth: false,
@@ -4139,6 +4172,7 @@ mod tests {
                 "kind": "openai-compatible-chat",
                 "baseUrl": "https://provider.test/v1",
                 "model": "test-model",
+                "models": ["test-model"],
                 "enabled": true,
                 "hasApiKey": true,
                 "usable": true,

@@ -501,7 +501,9 @@ export function SettingsModal({
     )
     const defaultModels = presetMatch?.draft.models ?? DEFAULT_MODELS_BY_KIND[draft.kind] ?? []
     setAiModelChoices([...new Set([draft.model, ...defaultModels].filter(Boolean))])
-    setConfiguredModels(provider && provider.model ? [provider.model] : [])
+    const providerModels =
+      provider?.models && provider.models.length > 0 ? provider.models : provider?.model ? [provider.model] : []
+    setConfiguredModels(providerModels)
     setSelectedCandidateModel('')
     setIsCustomInput(false)
     setCustomModelText('')
@@ -563,14 +565,37 @@ export function SettingsModal({
 
   const aiProviderInput = () => {
     const secrets = clearAiApiKey ? { apiKey: null } : aiApiKey.trim() ? { apiKey: aiApiKey } : undefined
+    const activeModel = aiDraft.model || configuredModels[0] || ''
     return {
-      provider: aiDraft,
+      provider: {
+        ...aiDraft,
+        name: aiDraft.name.trim(),
+        model: activeModel,
+        models: configuredModels
+      },
       ...(secrets ? { secrets } : {})
     }
   }
 
   const saveAiProvider = async () => {
     if (!desktopApi || aiOperation) return
+    const trimmedName = aiDraft.name.trim()
+    if (!trimmedName) {
+      setAiMessage('Provider 名称不能为空')
+      return
+    }
+    const duplicate = aiProviders.find(
+      (p) => p.name.trim().toLowerCase() === trimmedName.toLowerCase() && p.id !== aiDraft.id
+    )
+    if (duplicate) {
+      setAiMessage(`Provider 名称 "${trimmedName}" 已存在，请使用其他唯一名称`)
+      return
+    }
+    if (configuredModels.length === 0) {
+      setAiMessage('请至少添加一个模型到 Provider')
+      return
+    }
+
     setAiOperation('save')
     setAiMessage(null)
     try {
@@ -579,6 +604,9 @@ export function SettingsModal({
       setAiProviders(providers)
       const selected = providers.find((provider) => provider.id === saved.id) ?? saved
       setAiDraft(aiProviderToDraft(selected))
+      const savedModels =
+        selected.models && selected.models.length > 0 ? selected.models : selected.model ? [selected.model] : []
+      setConfiguredModels(savedModels)
       window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
       setAiMessage(t.aiSettingsSaveSucceeded)
     } catch (error) {

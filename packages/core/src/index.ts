@@ -1037,6 +1037,7 @@ export interface AiProviderSummary {
   kind: AiProviderKind
   baseUrl: string
   model: string
+  models?: string[]
   enabled: boolean
   hasApiKey: boolean
   usable: boolean
@@ -1051,6 +1052,7 @@ export interface AiProviderDraft {
   kind: AiProviderKind
   baseUrl: string
   model: string
+  models?: string[]
   enabled: boolean
   isDefault: boolean
   allowNoAuth: boolean
