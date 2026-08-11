@@ -634,7 +634,7 @@ export const TerminalView = memo(function TerminalView({
   const buildTerminalTheme = () => ({
     background: readColor('--terminal-bg', '#1e1e1e'),
     foreground: readColor('--terminal-text', '#e0e0e0'),
-    cursor: readColor('--terminal-cursor', readColor('--accent-primary', '#3b82f6')),
+    cursor: readColor('--terminal-cursor', readColor('--accent-highlight', '#3b82f6')),
     cursorAccent: readColor('--terminal-cursor-accent', readColor('--terminal-bg', '#ffffff')),
     green: readColor('--success', '#39d98a'),
     brightGreen: readColor('--success', '#52f2a0'),

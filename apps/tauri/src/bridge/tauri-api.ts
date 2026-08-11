@@ -54,6 +54,7 @@ import type {
   RunAiReviewInput,
   SaveAiProviderInput,
   StartAiChatInput,
+  SummarizeAiConversationTitleInput,
   TestAiProviderInput,
   UiPreferences,
   UiPreferencesInput
@@ -338,6 +339,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<AiConversation>('app_create_ai_conversation', { input }),
     renameAiConversation: (input: RenameAiConversationInput) =>
       invoke<AiConversation>('app_rename_ai_conversation', { input }),
+    summarizeAiConversationTitle: (input: SummarizeAiConversationTitleInput) =>
+      invoke<AiConversation>('app_summarize_ai_conversation_title', { input }),
     deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
     createAiContextPreview: (input: CreateAiContextPreviewInput) =>
       invoke<AiContextPreview>('app_create_ai_context_preview', { input }),

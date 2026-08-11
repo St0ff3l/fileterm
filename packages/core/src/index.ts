@@ -1201,6 +1201,13 @@ export interface RenameAiConversationInput {
   title: string
 }
 
+/** Requests automatic title generation from the configured Provider. */
+export interface SummarizeAiConversationTitleInput {
+  conversationId: string
+  providerId: string
+  modelOverride?: string
+}
+
 export interface CreateAiContextPreviewInput {
   tabId: string
   /** Optional renderer hint. Rust resolves and validates the actual root relation. */
@@ -1322,6 +1329,7 @@ export interface FileTermDesktopApi {
   getAiConversation(conversationId: string): Promise<AiConversation>
   createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
   renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
+  summarizeAiConversationTitle(input: SummarizeAiConversationTitleInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
   createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
   startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>

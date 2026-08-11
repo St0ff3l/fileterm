@@ -1364,5 +1364,5 @@ textarea:focus-visible,
   bottom: 0;
   right: 2px;
   width: 2px;
-  background-color: var(--accent-primary, #7eaef7);
+  background-color: var(--focus-outline, #7eaef7);
 }

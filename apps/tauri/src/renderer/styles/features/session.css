@@ -150,7 +150,7 @@
 .session-split-resizer:hover::after,
 .session-workspace.is-file-panel-dragging .session-split-resizer::after {
   height: 2px;
-  background: var(--accent-primary);
+  background: var(--focus-outline);
 }
 
 .terminal-view {
@@ -1037,8 +1037,8 @@
 
 .follow-shell-cwd-toggle:hover:not(:disabled),
 .follow-shell-cwd-toggle.is-active {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  border-color: var(--focus-outline);
+  color: var(--accent-highlight);
 }
 
 .follow-shell-cwd-toggle:disabled {
@@ -1086,8 +1086,8 @@
 }
 
 .pane-path-bar-action:hover:not(:disabled) {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
+  border-color: var(--focus-outline);
+  color: var(--accent-highlight);
 }
 
 .pane-filter-bar {
@@ -1182,7 +1182,7 @@
 .pane-filter-badge {
   font-size: 10px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
   background: var(--accent-tint, rgba(59, 130, 246, 0.12));
   padding: 1px 5px;
   border-radius: 4px;
@@ -1350,8 +1350,8 @@
 .workspace-loading-state__spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid color-mix(in srgb, var(--accent-primary) 24%, transparent);
-  border-top-color: var(--accent-primary);
+  border: 2px solid color-mix(in srgb, var(--focus-outline) 24%, transparent);
+  border-top-color: var(--focus-outline);
   border-radius: 50%;
   animation: workspace-loading-state-rotate 0.75s linear infinite;
 }
@@ -2067,9 +2067,9 @@
   display: grid;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-light));
+  border: 1px solid color-mix(in srgb, var(--focus-outline) 24%, var(--border-light));
   border-radius: 0;
-  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-highlight) 8%, transparent);
 }
 
 .root-access-modal .root-access-note-title {
@@ -2407,7 +2407,7 @@
 }
 
 .dropdown-select-menu button.is-selected {
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
 }
 
 .modal-card.manager-modal {
@@ -2680,7 +2680,7 @@
 
 .connection-manager-sidebar-item.root-drop-target.drag-over {
   background: var(--selection-bg) !important;
-  box-shadow: inset 3px 0 0 var(--accent-primary);
+  box-shadow: inset 3px 0 0 var(--focus-outline);
 }
 
 .connection-manager-sidebar-item:focus-visible {
@@ -3323,7 +3323,7 @@
   font-size: 11px;
 }
 .ssh-tunnel-kicker {
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -3367,14 +3367,14 @@
   gap: 9px;
   margin-top: 10px;
   padding: 8px 10px;
-  border-left: 2px solid var(--accent-primary);
+  border-left: 2px solid var(--focus-outline);
   background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
   color: var(--text-muted);
 }
 .ssh-tunnel-purpose > .app-icon {
   flex: 0 0 auto;
   margin-top: 1px;
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
 }
 .ssh-tunnel-purpose p {
   display: grid;
@@ -3610,7 +3610,7 @@
   background: color-mix(in srgb, var(--bg-primary) 42%, transparent);
 }
 .ssh-tunnel-empty > .app-icon {
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
 }
 .ssh-tunnel-empty strong {
   color: var(--text-secondary);
@@ -3695,8 +3695,8 @@
 
 .split-pane-resizer:hover::after,
 .split-pane-resizer:active::after {
-  background: var(--accent-primary);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 28%, transparent);
+  background: var(--focus-outline);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--focus-outline) 28%, transparent);
 }
 
 .split-pane-resizer--row {
@@ -3744,7 +3744,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  border: 2px solid var(--accent-primary);
+  border: 2px solid var(--focus-outline);
   pointer-events: none;
   z-index: 10;
 }

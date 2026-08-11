@@ -1873,6 +1873,7 @@ pub fn run() {
             crate::commands::app_get_ai_conversation,
             crate::commands::app_create_ai_conversation,
             crate::commands::app_rename_ai_conversation,
+            crate::commands::app_summarize_ai_conversation_title,
             crate::commands::app_delete_ai_conversation,
             crate::commands::app_create_ai_context_preview,
             crate::commands::app_start_ai_chat,

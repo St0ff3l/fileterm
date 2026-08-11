@@ -678,6 +678,14 @@ pub fn app_rename_ai_conversation(
 }
 
 #[tauri::command]
+pub async fn app_summarize_ai_conversation_title(
+    app: AppHandle,
+    input: crate::services::ai::SummarizeAiConversationTitleInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::summarize_conversation_title(&app, input).await
+}
+
+#[tauri::command]
 pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Result<(), AppError> {
     crate::services::ai::delete_conversation(&app, &conversation_id)
 }

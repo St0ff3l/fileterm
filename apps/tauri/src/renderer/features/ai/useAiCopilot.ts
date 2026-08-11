@@ -53,6 +53,11 @@ function replaceConversationSummary(
   return sortConversations([...conversations.filter((item) => item.id !== conversation.id), toSummary(conversation)])
 }
 
+function preserveLocalConversationTitle(current: AiConversation | null, incoming: AiConversation): AiConversation {
+  if (!current || current.id !== incoming.id || current.title === incoming.title) return incoming
+  return { ...incoming, title: current.title }
+}
+
 function titleFromMessage(value: string) {
   const compact = value.trim().replace(/\s+/g, ' ')
   return compact.length > 52 ? compact.slice(0, 52) + '…' : compact
@@ -284,8 +289,16 @@ export function useAiCopilot() {
         activeAssistantMessageIdRef.current = null
         activeRequestIdRef.current = null
         requestCompletedRef.current = true
-        applyConversation(event.conversation)
-        setConversations((current) => replaceConversationSummary(current, event.conversation))
+        const completedConversation = preserveLocalConversationTitle(conversationRef.current, event.conversation)
+        applyConversation(completedConversation)
+        setConversations((current) => {
+          const existing = current.find((item) => item.id === event.conversation.id)
+          const conversation =
+            existing && existing.title !== event.conversation.title
+              ? { ...event.conversation, title: existing.title }
+              : completedConversation
+          return replaceConversationSummary(current, conversation)
+        })
         setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
@@ -331,6 +344,45 @@ export function useAiCopilot() {
     [onStreamEvent]
   )
 
+  const autoSummarizeConversationTitle = useCallback(
+    async (conversationId: string, providerId: string, modelOverride?: string) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi) return
+
+      try {
+        const renamed = await desktopApi.summarizeAiConversationTitle({
+          conversationId,
+          providerId,
+          modelOverride
+        })
+        if (!mountedRef.current) return
+
+        // The chat stream may still be producing assistant text. Merge only
+        // the generated title so a title request cannot replace the visible
+        // in-flight message with its shorter persisted snapshot.
+        setConversation((current) => {
+          if (!current || current.id !== renamed.id) return current
+          const next = { ...current, title: renamed.title, updatedAt: renamed.updatedAt }
+          conversationRef.current = next
+          return next
+        })
+        setConversations((current) => {
+          const existing = current.some((item) => item.id === renamed.id)
+          if (!existing) return replaceConversationSummary(current, renamed)
+          return sortConversations(
+            current.map((item) =>
+              item.id === renamed.id ? { ...item, title: renamed.title, updatedAt: renamed.updatedAt } : item
+            )
+          )
+        })
+      } catch {
+        // OpenCode treats automatic title generation as best effort. A title
+        // failure must never surface as a chat failure or interrupt streaming.
+      }
+    },
+    []
+  )
+
   const sendMessage = useCallback(
     async (value: string, options: SendMessageOptions = {}) => {
       const desktopApi = window.fileterm
@@ -367,6 +419,7 @@ export function useAiCopilot() {
           createdAt: timestamp,
           context
         }
+        const shouldSummarizeTitle = target.messages.length === 0
         const optimisticConversation: AiConversation = {
           ...target,
           title: target.messages.length === 0 ? titleFromMessage(content) : target.title,
@@ -407,6 +460,12 @@ export function useAiCopilot() {
         if (options.contextSnapshotId && mountedRef.current) {
           setContextPreview((current) => (current?.snapshotId === options.contextSnapshotId ? null : current))
         }
+        if (shouldSummarizeTitle) {
+          // The Rust start command persists the first user message before it
+          // returns, so the title request sees the same local history that
+          // OpenCode uses for its one-shot title generation.
+          void autoSummarizeConversationTitle(target.id, providerId, modelOverride)
+        }
         return true
       } catch (error) {
         if (mountedRef.current) {
@@ -430,7 +489,7 @@ export function useAiCopilot() {
         return false
       }
     },
-    [applyConversation, contextPreview, createConversation, isStreaming, startRequest]
+    [applyConversation, autoSummarizeConversationTitle, contextPreview, createConversation, isStreaming, startRequest]
   )
 
   const createContextPreview = useCallback(

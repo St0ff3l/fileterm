@@ -28,7 +28,10 @@
 
   --primary: #6b737d;
   --primary-hover: #7f8894;
-  --accent-primary: #8bbfff;
+  /* Focus and selected-state outlines. Do not use this for filled buttons. */
+  --focus-outline: #8bbfff;
+  /* Non-button accent for informational text, icons, and status highlights. */
+  --accent-highlight: #8bbfff;
   --accent-text: #c8d0da;
   --sidebar-active-accent: #ffffff;
   --selection-bg: #383f48;
@@ -49,8 +52,8 @@
   --danger-text: #ff8f88;
   --danger-surface: rgba(255, 95, 87, 0.12);
   --danger-border: rgba(255, 95, 87, 0.3);
-  --info: var(--accent-primary);
-  --info-text: var(--accent-primary);
+  --info: var(--accent-highlight);
+  --info-text: var(--accent-highlight);
   --info-surface: rgba(139, 191, 255, 0.12);
   --info-border: rgba(139, 191, 255, 0.32);
   --input-focus-ring: rgba(255, 255, 255, 0.08);
@@ -230,7 +233,7 @@
 :root:not([data-theme]) .ai-copilot-resizer.is-active::after,
 :root[data-theme='default-dark'] .ai-copilot-resizer.is-active::after,
 :root[data-theme='default'] .ai-copilot-resizer.is-active::after {
-  background: var(--accent-primary);
+  background: var(--focus-outline);
 }
 
 :root:not([data-theme]) .sync-dot,
@@ -1378,7 +1381,7 @@
 :root[data-theme='default-dark'] .manager-row.drop-inside,
 :root[data-theme='default'] .manager-row.drop-inside {
   background: var(--selection-bg);
-  box-shadow: inset 3px 0 0 var(--accent-primary);
+  box-shadow: inset 3px 0 0 var(--focus-outline);
 }
 
 :root:not([data-theme]) .folder-row,
@@ -1503,7 +1506,7 @@
 :root:not([data-theme]) .ssh-grid textarea:focus,
 :root[data-theme='default-dark'] .ssh-grid textarea:focus,
 :root[data-theme='default'] .ssh-grid textarea:focus {
-  border-color: var(--accent-primary) !important;
+  border-color: var(--focus-outline) !important;
   box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
   background: var(--input-bg) !important;
   outline: none !important;
@@ -2829,7 +2832,7 @@
 :root:not([data-theme]) .command-form-standalone-page select:focus,
 :root[data-theme='default-dark'] .command-form-standalone-page select:focus,
 :root[data-theme='default'] .command-form-standalone-page select:focus {
-  border-color: var(--accent-primary) !important;
+  border-color: var(--focus-outline) !important;
   box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
   background: var(--input-bg) !important;
   outline: none !important;
@@ -2860,7 +2863,7 @@
 :root:not([data-theme]) .command-editor-dialog-textarea .command-code-area:focus-within,
 :root[data-theme='default-dark'] .command-editor-dialog-textarea .command-code-area:focus-within,
 :root[data-theme='default'] .command-editor-dialog-textarea .command-code-area:focus-within {
-  border-color: var(--accent-primary) !important;
+  border-color: var(--focus-outline) !important;
   box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
 }
 
@@ -2893,7 +2896,7 @@
 :root[data-theme='default'] .command-editor-dialog-params .command-param-hints button {
   background: var(--accent-tint-weak) !important;
   border: 1px solid var(--accent-tint) !important;
-  color: var(--accent-primary) !important;
+  color: var(--accent-highlight) !important;
   border-radius: var(--radius-sm) !important;
   height: 28px !important;
   padding: 0 12px !important;
@@ -3028,7 +3031,7 @@
 :root:not([data-theme]) .command-preview code,
 :root[data-theme='default-dark'] .command-preview code,
 :root[data-theme='default'] .command-preview code {
-  color: var(--accent-primary) !important;
+  color: var(--accent-highlight) !important;
   font-family: var(--font-mono) !important;
   background: transparent !important;
   border: none !important;
@@ -3121,7 +3124,7 @@
 :root:not([data-theme]) .modal-card.ssh-modal textarea:focus,
 :root[data-theme='default-dark'] .modal-card.ssh-modal textarea:focus,
 :root[data-theme='default'] .modal-card.ssh-modal textarea:focus {
-  border-color: var(--accent-primary) !important;
+  border-color: var(--focus-outline) !important;
   box-shadow: 0 0 0 3px var(--accent-focus-ring) !important;
   background: var(--input-bg) !important;
   outline: none !important;

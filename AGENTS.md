@@ -51,6 +51,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - **图标矢量就地化**：所有按钮与视觉图标优先使用预置的离线 SVG 图标组件 `<AppIcon />`，严禁新增 `<span className="material-symbols-outlined">` 依赖外部字体/WebFont 图标。
 - **二次确认弹窗统一**：所有破坏性/危险操作（如删除、清空等）必须调用项目通用的 `<ConfirmActionDialog>` 确认弹窗组件，严禁在桌面 Webview 环境中使用原生 `window.confirm()`。
 - **按钮尺寸高度规范**：同一操作组/表单行内的按钮必须具有严格统一的高度（如 32px 紧凑型 / 36px 表单型）、边框半径与内边距，禁止主次按钮尺寸参差不齐。
+- **颜色语义边界**：`--focus-outline` 只用于焦点/选中/拖拽目标的描边或光环；文件相关操作使用 `--folder-accent`，实心主按钮使用 `--button-primary-*`，不要用描边色填充按钮。
 
 ### 资源与安全边界
 

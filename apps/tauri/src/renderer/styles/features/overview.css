@@ -384,7 +384,7 @@
 }
 
 .recent-action:hover {
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
   background-color: transparent;
   border-color: transparent;
 }
@@ -428,7 +428,7 @@
 .action-card:hover {
   transform: none;
   box-shadow: none;
-  border-color: var(--accent-primary);
+  border-color: var(--focus-outline);
 }
 
 .action-card:focus-visible {
