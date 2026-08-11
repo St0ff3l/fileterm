@@ -45,11 +45,13 @@ export type AppIconName =
 export function AppIcon({
   name,
   size = 14,
-  strokeWidth = 1.8
+  strokeWidth = 1.8,
+  className
 }: {
   name: AppIconName
   size?: number
   strokeWidth?: number
+  className?: string
 }) {
   const commonProps = {
     fill: 'none',
@@ -60,7 +62,13 @@ export function AppIcon({
   }
 
   return (
-    <svg aria-hidden="true" className={`app-icon app-icon-${name}`} height={size} viewBox="0 0 16 16" width={size}>
+    <svg
+      aria-hidden="true"
+      className={['app-icon', `app-icon-${name}`, className].filter(Boolean).join(' ')}
+      height={size}
+      viewBox="0 0 16 16"
+      width={size}
+    >
       {name === 'brand' ? (
         <>
           <rect {...commonProps} x="2.25" y="2.5" width="11.5" height="11" rx="2" />

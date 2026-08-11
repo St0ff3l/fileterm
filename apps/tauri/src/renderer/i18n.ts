@@ -146,6 +146,7 @@ const zhCN = {
   aiSettingsProviderNamePlaceholder: '例如：OpenAI 或本地 Ollama',
   aiSettingsModel: '模型',
   aiSettingsModelPlaceholder: '例如：你的模型名称',
+  aiSettingsModelDefaultHint: '蓝色高亮的模型会在保存后作为此 Provider 的默认模型，点击其他模型即可切换。',
   aiSettingsEndpoint: 'API Endpoint',
   aiSettingsEndpointPlaceholder: 'https://api.example.com/v1',
   aiSettingsRequestUrlPreview: '请求地址预览',
@@ -1133,6 +1134,8 @@ const enUS: typeof zhCN = {
   aiSettingsProviderNamePlaceholder: 'For example: OpenAI or local Ollama',
   aiSettingsModel: 'Model',
   aiSettingsModelPlaceholder: 'For example: your model name',
+  aiSettingsModelDefaultHint:
+    "The blue-highlighted model becomes this Provider's default after saving. Click another model to switch.",
   aiSettingsEndpoint: 'API Endpoint',
   aiSettingsEndpointPlaceholder: 'https://api.example.com/v1',
   aiSettingsRequestUrlPreview: 'Request URL preview',

@@ -360,7 +360,7 @@
   gap: 4px;
 }
 
-.ai-copilot-conversation-controls label > span {
+.ai-copilot-conversation-controls .ai-copilot-field-label {
   overflow: hidden;
   color: var(--text-soft);
   font-size: 9px;
@@ -372,7 +372,8 @@
 }
 
 .ai-copilot-conversation-controls input,
-.ai-copilot-conversation-controls select {
+.ai-copilot-conversation-controls .ai-copilot-conversation-select.dropdown-select-trigger,
+.ai-copilot-conversation-controls .ai-copilot-conversation-select.ft-select-shell select {
   width: 100%;
   min-width: 0;
   height: 29px;
@@ -387,9 +388,15 @@
 }
 
 .ai-copilot-conversation-controls input:focus,
-.ai-copilot-conversation-controls select:focus {
+.ai-copilot-conversation-controls .ai-copilot-conversation-select.dropdown-select-trigger:focus-visible,
+.ai-copilot-conversation-controls .ai-copilot-conversation-select.ft-select-shell select:focus {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+
+.ai-copilot-conversation-controls .ai-copilot-conversation-select.ft-select-shell {
+  width: 100%;
+  min-width: 0;
 }
 
 .ai-copilot-conversation-controls input::placeholder {
@@ -1746,10 +1753,45 @@
 
 .ai-settings-model-picker-row,
 .ai-settings-model-add-row {
+  --ai-settings-model-add-button-width: 42px;
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
+}
+
+.ai-settings-model-add-row {
+  position: relative;
+  display: block;
+  width: calc(100% - var(--ai-settings-model-add-button-width) - 8px);
+  overflow: visible;
+}
+
+.ai-settings-model-add-row > .ai-settings-secondary-button {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ai-settings-model-add-row > .ai-settings-add-model-btn {
+  left: calc(100% + 8px);
+  width: var(--ai-settings-model-add-button-width);
+  min-width: var(--ai-settings-model-add-button-width);
+  gap: 0;
+}
+
+.ai-settings-model-add-row > .ai-settings-model-cancel-btn {
+  left: calc(100% + var(--ai-settings-model-add-button-width) + 16px);
+  width: 52px;
+  min-width: 52px;
 }
 
 .ai-settings-model-picker-row .ai-settings-model-select {
@@ -1757,10 +1799,20 @@
   min-width: 0;
 }
 
+.ai-settings-model-default-hint {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .ai-settings-add-model-btn {
   height: 36px;
-  min-width: 36px;
-  padding: 0 10px;
+  width: var(--ai-settings-model-add-button-width);
+  min-width: var(--ai-settings-model-add-button-width);
+  padding: 0;
+  gap: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1768,7 +1820,8 @@
 }
 
 .ai-settings-model-add-input {
-  flex: 1 1 auto;
+  display: block;
+  width: 100%;
   min-width: 0;
   height: 36px;
   box-sizing: border-box;

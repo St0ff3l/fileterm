@@ -8,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent
 } from 'react'
 import { createPortal } from 'react-dom'
+import { AppIcon } from './AppIcon'
 
 export type DropdownOption = {
   value: string
@@ -42,14 +43,35 @@ export function DropdownSelect({
   align?: 'left' | 'right' | 'auto'
   onKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void
 }) {
+  const nativeSelect = useNativeSelect()
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const selectRef = useRef<HTMLSelectElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const [resolvedStyle, setResolvedStyle] = useState<CSSProperties>({})
+  const [arrowSize, setArrowSize] = useState(14)
 
   const selectedOption = options.find((option) => option.value === value)
   const selectedLabel = selectedOption?.label ?? placeholder ?? value
+
+  useEffect(() => {
+    const control = nativeSelect ? selectRef.current : triggerRef.current
+    if (!control) return
+
+    const updateArrowSize = () => {
+      const controlHeight = control.getBoundingClientRect().height
+      const nextSize = Math.max(12, Math.min(20, Math.round(controlHeight * 0.45)))
+      setArrowSize((current) => (current === nextSize ? current : nextSize))
+    }
+
+    updateArrowSize()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(updateArrowSize)
+    observer.observe(control)
+    return () => observer.disconnect()
+  }, [nativeSelect])
 
   const focusMenuItem = useCallback((direction: 'first' | 'last' | 'next' | 'previous') => {
     const menu = menuRef.current
@@ -146,10 +168,11 @@ export function DropdownSelect({
     closeMenu()
   }
 
-  if (useNativeSelect()) {
+  if (nativeSelect) {
     return (
       <span className={`ft-select-shell ${className ?? ''}`.trim()}>
         <select
+          ref={selectRef}
           autoFocus={autoFocus}
           disabled={disabled}
           value={value}
@@ -162,9 +185,7 @@ export function DropdownSelect({
             </option>
           ))}
         </select>
-        <span aria-hidden="true" className="ft-select-shell__icon material-symbols-outlined">
-          expand_more
-        </span>
+        <AppIcon className="ft-select-shell__icon" name="chevron-down" size={arrowSize} />
       </span>
     )
   }
@@ -207,9 +228,7 @@ export function DropdownSelect({
           type="button"
         >
           <span className="dropdown-select-check-slot">
-            {option.value === value ? (
-              <span className="material-symbols-outlined dropdown-select-check">check</span>
-            ) : null}
+            {option.value === value ? <AppIcon className="dropdown-select-check" name="check" size={14} /> : null}
           </span>
           <span className="dropdown-select-label">{option.label}</span>
         </button>
@@ -229,7 +248,7 @@ export function DropdownSelect({
         onKeyDown={onKeyDown}
       >
         <span className="dropdown-select-value">{selectedLabel}</span>
-        <span className="material-symbols-outlined dropdown-select-arrow">expand_more</span>
+        <AppIcon className="dropdown-select-arrow" name="chevron-down" size={arrowSize} />
       </button>
       {open && typeof document !== 'undefined' ? createPortal(menuElement, document.body) : null}
     </>

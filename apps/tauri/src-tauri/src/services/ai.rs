@@ -1157,12 +1157,18 @@ pub fn save_provider(
 
     let name_conflict = config.providers.iter().any(|existing| {
         existing.id != provider_id
-            && existing.name.trim().eq_ignore_ascii_case(provider.name.trim())
+            && existing
+                .name
+                .trim()
+                .eq_ignore_ascii_case(provider.name.trim())
     });
     if name_conflict {
         return Err(ai_error(
             "AI_PROVIDER_DUPLICATE_NAME",
-            &format!("Provider 名称 \"{}\" 已存在，请使用其他唯一名称", provider.name.trim()),
+            format!(
+                "Provider 名称 \"{}\" 已存在，请使用其他唯一名称",
+                provider.name.trim()
+            ),
         ));
     }
 

@@ -11,6 +11,7 @@ import type {
 import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
+import { DropdownSelect } from '../common/DropdownSelect'
 import { AiCopilotMarkdown } from './AiCopilotMarkdown'
 import { useAiCopilot } from './useAiCopilot'
 
@@ -502,40 +503,32 @@ export function AiCopilotPanel({
             <div className="ai-copilot-chat-meta">
               <section aria-label={t.aiCopilotConversationControls} className="ai-copilot-conversation-controls">
                 <label>
-                  <span>{t.aiCopilotProviderLabel}</span>
-                  <select
+                  <span className="ai-copilot-field-label">{t.aiCopilotProviderLabel}</span>
+                  <DropdownSelect
+                    className="ai-copilot-conversation-select"
                     disabled={isStreaming}
+                    options={providers.map((provider) => ({ value: provider.id, label: provider.name }))}
                     value={selectedProviderId ?? ''}
-                    onChange={(event) => selectProvider(event.target.value || null)}
-                  >
-                    {providers.map((provider) => (
-                      <option key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => selectProvider(value || null)}
+                  />
                 </label>
                 {currentProvider && (
                   <label>
-                    <span>模型</span>
-                    <select
+                    <span className="ai-copilot-field-label">模型</span>
+                    <DropdownSelect
+                      className="ai-copilot-conversation-select"
                       disabled={isStreaming}
-                      value={selectedModel ?? currentProvider.model}
-                      onChange={(event) => selectModel(event.target.value || null)}
-                    >
-                      {(currentProvider.models && currentProvider.models.length > 0
+                      options={(currentProvider.models && currentProvider.models.length > 0
                         ? currentProvider.models
                         : [currentProvider.model]
-                      ).map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
+                      ).map((model) => ({ value: model, label: model }))}
+                      value={selectedModel ?? currentProvider.model}
+                      onChange={(value) => selectModel(value || null)}
+                    />
                   </label>
                 )}
                 <label className="ai-copilot-conversation-label">
-                  <span>{t.aiCopilotConversationLabel}</span>
+                  <span className="ai-copilot-field-label">{t.aiCopilotConversationLabel}</span>
                   <input
                     aria-label={t.aiCopilotHistorySearch}
                     disabled={isStreaming}
@@ -544,27 +537,25 @@ export function AiCopilotPanel({
                     value={conversationSearch}
                     onChange={(event) => setConversationSearch(event.target.value)}
                   />
-                  <select
+                  <DropdownSelect
+                    className="ai-copilot-conversation-select"
                     disabled={isStreaming}
+                    options={[
+                      { value: '', label: t.aiCopilotNewChat },
+                      ...(conversation && !filteredConversations.some((item) => item.id === conversation.id)
+                        ? [{ value: conversation.id, label: conversation.title }]
+                        : []),
+                      ...filteredConversations.map((item) => ({ value: item.id, label: item.title }))
+                    ]}
                     value={conversation?.id ?? ''}
-                    onChange={(event) => {
-                      if (event.target.value) {
-                        void loadConversation(event.target.value)
+                    onChange={(value) => {
+                      if (value) {
+                        void loadConversation(value)
                       } else {
                         newChat()
                       }
                     }}
-                  >
-                    <option value="">{t.aiCopilotNewChat}</option>
-                    {conversation && !filteredConversations.some((item) => item.id === conversation.id) ? (
-                      <option value={conversation.id}>{conversation.title}</option>
-                    ) : null}
-                    {filteredConversations.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.title}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
               </section>
 

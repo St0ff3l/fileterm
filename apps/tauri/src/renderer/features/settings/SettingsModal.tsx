@@ -205,6 +205,11 @@ const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   }
 ]
 
+// Settings can be rendered inline or through the modal portal. Share the
+// action lock across both instances so a transition between those surfaces
+// cannot submit the same provider operation twice.
+let aiProviderActionInFlight = false
+
 function aiProviderToDraft(provider: AiProviderSummary): AiProviderDraft {
   return {
     id: provider.id,
@@ -309,6 +314,9 @@ export function SettingsModal({
   const [clearAiApiKey, setClearAiApiKey] = useState(false)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
+  // React's disabled state is applied on the next render. Keep a synchronous
+  // guard as well so rapid clicks cannot submit the same AI operation twice.
+  const aiActionInFlightRef = useRef(false)
   const [showDeleteAiProviderConfirm, setShowDeleteAiProviderConfirm] = useState(false)
   const [syncOperation, setSyncOperation] = useState<
     'load' | 'save' | 'test' | 'upload' | 'download' | 's3-save' | 's3-test' | 's3-upload' | 's3-download' | null
@@ -579,7 +587,7 @@ export function SettingsModal({
   }
 
   const saveAiProvider = async () => {
-    if (!desktopApi || aiOperation) return
+    if (!desktopApi || aiOperation || aiActionInFlightRef.current || aiProviderActionInFlight) return
     const trimmedName = aiDraft.name.trim()
     if (!trimmedName) {
       setAiMessage('Provider 名称不能为空')
@@ -597,8 +605,11 @@ export function SettingsModal({
       return
     }
 
+    aiActionInFlightRef.current = true
+    aiProviderActionInFlight = true
+    // Keep the current footer message while the request is in flight. Clearing
+    // it would briefly render the idle test hint for fast save requests.
     setAiOperation('save')
-    setAiMessage(null)
     try {
       const saved = await desktopApi.saveAiProvider(aiProviderInput())
       const providers = await desktopApi.listAiProviders()
@@ -613,6 +624,8 @@ export function SettingsModal({
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : String(error))
     } finally {
+      aiActionInFlightRef.current = false
+      aiProviderActionInFlight = false
       setAiApiKey('')
       setClearAiApiKey(false)
       setAiOperation(null)
@@ -620,24 +633,28 @@ export function SettingsModal({
   }
 
   const testAiProvider = async () => {
-    if (!desktopApi || aiOperation) return
+    if (!desktopApi || aiOperation || aiActionInFlightRef.current || aiProviderActionInFlight) return
+    aiActionInFlightRef.current = true
+    aiProviderActionInFlight = true
     setAiOperation('test')
-    setAiMessage(null)
     try {
       const result = await desktopApi.testAiProvider(aiProviderInput())
       setAiMessage(result.message)
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : String(error))
     } finally {
+      aiActionInFlightRef.current = false
+      aiProviderActionInFlight = false
       setAiOperation(null)
     }
   }
 
   const deleteAiProvider = async () => {
-    if (!desktopApi || !aiDraft.id || aiOperation) return
+    if (!desktopApi || !aiDraft.id || aiOperation || aiActionInFlightRef.current || aiProviderActionInFlight) return
 
+    aiActionInFlightRef.current = true
+    aiProviderActionInFlight = true
     setAiOperation('delete')
-    setAiMessage(null)
     try {
       const providers = await desktopApi.deleteAiProvider(aiDraft.id)
       setAiProviders(providers)
@@ -651,6 +668,8 @@ export function SettingsModal({
     } catch (error) {
       setAiMessage(error instanceof Error ? error.message : String(error))
     } finally {
+      aiActionInFlightRef.current = false
+      aiProviderActionInFlight = false
       setAiOperation(null)
     }
   }
@@ -1145,7 +1164,7 @@ export function SettingsModal({
                                 <AppIcon name="plus" size={14} />
                               </button>
                               <button
-                                className="ai-settings-secondary-button"
+                                className="ai-settings-secondary-button ai-settings-model-cancel-btn"
                                 type="button"
                                 onClick={() => setIsCustomInput(false)}
                                 title="取消"
@@ -1195,32 +1214,35 @@ export function SettingsModal({
                         <div className="ai-settings-model-right">
                           <span className="ai-settings-model-right-title">已加入 Provider 的模型:</span>
                           {configuredModels.length > 0 ? (
-                            <div className="ai-settings-model-tags">
-                              {configuredModels.map((modelName) => {
-                                const isActive = aiDraft.model === modelName
-                                return (
-                                  <span
-                                    key={modelName}
-                                    className={`ai-settings-model-tag ${isActive ? 'is-active' : ''}`}
-                                    onClick={() => patchAiDraft({ model: modelName })}
-                                    title={isActive ? '当前生效模型' : `点击作为当前生效模型 (${modelName})`}
-                                  >
-                                    <span className="ai-settings-model-tag-text">{modelName}</span>
-                                    <button
-                                      type="button"
-                                      className="ai-settings-model-tag-remove"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        removeConfiguredModel(modelName)
-                                      }}
-                                      title="从此 Provider 移除该模型"
+                            <>
+                              <div className="ai-settings-model-tags">
+                                {configuredModels.map((modelName) => {
+                                  const isActive = aiDraft.model === modelName
+                                  return (
+                                    <span
+                                      key={modelName}
+                                      className={`ai-settings-model-tag ${isActive ? 'is-active' : ''}`}
+                                      onClick={() => patchAiDraft({ model: modelName })}
+                                      title={isActive ? '当前生效模型' : `点击作为当前生效模型 (${modelName})`}
                                     >
-                                      <AppIcon name="close" size={10} />
-                                    </button>
-                                  </span>
-                                )
-                              })}
-                            </div>
+                                      <span className="ai-settings-model-tag-text">{modelName}</span>
+                                      <button
+                                        type="button"
+                                        className="ai-settings-model-tag-remove"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          removeConfiguredModel(modelName)
+                                        }}
+                                        title="从此 Provider 移除该模型"
+                                      >
+                                        <AppIcon name="close" size={10} />
+                                      </button>
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                              <small className="ai-settings-model-default-hint">{t.aiSettingsModelDefaultHint}</small>
+                            </>
                           ) : (
                             <div className="ai-settings-model-empty-hint">
                               暂无已加入的模型，请在上方下拉框选择后点击 [+] 按钮添加
@@ -1356,7 +1378,7 @@ export function SettingsModal({
 
                 <div className="ai-settings-footer">
                   <small className={aiMessage ? 'ai-settings-operation-message' : undefined} role="status">
-                    {aiMessage ?? t.aiSettingsConnectionTestHint}
+                    {aiMessage || t.aiSettingsConnectionTestHint}
                   </small>
                   <div className="ai-settings-footer-actions">
                     {aiDraft.id ? (
