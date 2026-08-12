@@ -285,7 +285,7 @@ interface AiCommandError {
 
 `app_test_ai_provider(input: TestAiProviderInput)` 始终测试当前表单草稿，不要求先保存。已存在 Provider 且 `secrets.apiKey === undefined` 时由 Rust 复用已保存 Key；新 Provider 必须随本次 IPC 提供 Key，或满足显式 loopback `allowNoAuth`。测试不会持久化草稿或 secret。
 
-`sessionRevision` 由 Rust AI context service 维护：leaf tab 重连/替换、root/pane 归属变化、shell user 或 CWD 变化时递增；普通 transcript 追加不递增，因为发送的仍是用户已经预览过的不可变快照。命令卡和 context snapshot 都保存生成时 revision，写入或发送前再与 runtime 比较。
+`sessionRevision` 由 Rust AI context service 维护：leaf tab 重连/替换、root/pane 归属变化、shell user 或 CWD 变化时递增；普通 transcript 追加不递增，因为每次发送都会在 Rust 侧重新生成并校验一份不可变快照。命令卡和 context snapshot 都保存生成时 revision，写入或发送前再与 runtime 比较。
 
 ## 6. 终端上下文授权链路
 
@@ -300,7 +300,7 @@ interface AiCommandError {
 5. 对 Bearer token、常见 API Key、密码赋值、私钥块等做 best-effort 遮盖。
 6. 返回准确预览、截断标记、遮盖数量和短时有效的 `snapshotId`。
 
-遮盖不是安全保证。UI 必须明确告诉用户“请检查即将发送的内容”。预览保持只读；用户可以取消整个 transcript 附件或切换为 L1 后重新生成快照，不能在 renderer 中编辑一份与 Rust 快照不一致的隐藏副本。用户若要修改文本，应把需要的内容手动粘贴进普通消息。
+遮盖不是安全保证。UI 默认关闭“参考终端”开关，并明确显示开启后每条消息都会附加最新终端上下文；界面不再展开原始终端 excerpt 大预览。用户可以在发送前关闭开关，不能在 renderer 中编辑一份与 Rust 快照不一致的隐藏副本。用户若要修改文本，应把需要的内容手动粘贴进普通消息。
 
 ### 6.2 发送
 
@@ -309,6 +309,8 @@ interface AiCommandError {
 - 发送时原子消费快照；过期、重放、跨窗口使用、tab 已关闭、Provider/目标/CWD/用户或连接 generation 变化时拒绝发送并要求重新预览。
 - Rust 使用快照对应的准确内容组装 prompt，保证预览内容与发送内容一致。
 - 终端文本使用明确的 data delimiter，并在 system prompt 中声明它是不可信数据，不能覆盖 FileTerm 的安全规则。
+
+Renderer 的“参考终端”只是用户主动开启的会话面板开关，不是永久授权：开关开启期间，每次发送前都生成并消费一份新的 Rust 快照；关闭后回到 L0 纯对话。上下文开关不负责选择命令卡片模式。
 
 ### 6.3 历史
 
@@ -327,6 +329,7 @@ interface AiCommandError {
 - 普通解释回合可以直接流式显示；需要返回命令卡的结构化回合先在 Rust 缓冲并完成 schema 校验，再一次性提交回答和命令卡，不能把未闭合的 JSON 增量直接渲染为可信命令。
 - 结构化解析失败时降级为普通文本，不自动提取或执行疑似命令。
 - FileTerm 本地风险分类器可以提高模型给出的风险等级，不能降低；出现 `rm`、重定向覆盖、磁盘/分区、账号权限、包管理、服务重启、sudo/su 等模式时至少标记为 mutating/privileged/unknown。
+- 普通对话默认使用 chat 模式；命令卡生成通过输入框底部的紧凑“对话 / 命令卡”模式切换显式开启，不与“参考终端”开关混在一起。命令模式必须同时开启参考终端并绑定已连接目标，继续经过结构化校验和用户审核。
 
 命令卡动作：
 
@@ -379,7 +382,7 @@ interface AiCommandError {
 
 ### Renderer
 
-- 将 `AiCopilotPanel.tsx` 拆成 provider empty state、conversation list、message list、context preview、composer 和 command card。
+- 将 `AiCopilotPanel.tsx` 拆成 provider empty state、conversation list、message list、reference-terminal switch、composer mode switch 和 command card。
 - 把 AI 状态收敛到 `features/ai/useAiCopilot.ts`；在没有明确跨 feature 高频共享之前不引入 Zustand。
 - 设置页保存后应用 Rust 返回的 provider summary，不依赖广播更新当前窗口。
 
@@ -415,6 +418,7 @@ interface AiCommandError {
 
 - [x] 接入 context preview、5 分钟 TTL、一次性消费、清理、截断和 best-effort 遮盖。
 - [x] 支持 L1/L2 按次授权，不提供全局“永久读取终端”默认值；L1 不读取 runtime transcript，L2 才生成不可变预览。
+- [x] UI 使用默认关闭的“参考终端”开关；开启后每条消息自动刷新并消费上下文快照，不展示大段终端预览，也不按对话重复确认。
 - [x] 接入严格 JSON 命令卡、复制和单行“写入但不回车”；写入动作只更新受控终端输入框，不经过 PTY。
 
 ### Phase 4：本地历史与体验收口

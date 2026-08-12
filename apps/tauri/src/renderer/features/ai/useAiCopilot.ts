@@ -14,6 +14,7 @@ import type {
 
 type SendMessageOptions = {
   contextSnapshotId?: string
+  contextPreview?: AiContextPreview
   responseMode?: AiChatResponseMode
 }
 
@@ -391,7 +392,11 @@ export function useAiCopilot() {
       if (!desktopApi || !content || !providerId || isStreaming) return false
       const responseMode = options.responseMode ?? 'chat'
       const preview =
-        options.contextSnapshotId && contextPreview?.snapshotId === options.contextSnapshotId ? contextPreview : null
+        options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
+          ? options.contextPreview
+          : options.contextSnapshotId && contextPreview?.snapshotId === options.contextSnapshotId
+            ? contextPreview
+            : null
       const context: AiContextAttachment | undefined = preview
         ? {
             mode: preview.mode,

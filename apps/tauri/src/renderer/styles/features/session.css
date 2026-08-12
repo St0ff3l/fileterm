@@ -509,7 +509,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
@@ -521,6 +521,17 @@
 .terminal-dock-action-btn:hover {
   color: var(--text-main);
   background: var(--bg-hover);
+}
+
+.terminal-dock-copy-btn {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.terminal-dock-action-btn.terminal-dock-copy-btn .app-icon {
+  width: 15px;
+  height: 15px;
 }
 
 .terminal-dock-history-footer {
@@ -757,7 +768,7 @@
   width: 24px;
   height: 24px;
   min-width: 24px !important;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
@@ -772,6 +783,16 @@
 
 .terminal-dock-icon-btn:active {
   background: var(--bg-active);
+}
+
+.terminal-dock-icon-btn.terminal-dock-copy-btn {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.terminal-dock-icon-btn.terminal-dock-copy-btn:hover {
+  background: color-mix(in srgb, var(--bg-hover) 72%, transparent);
 }
 
 .terminal-dock-connection.is-connected {

@@ -493,7 +493,7 @@ export function TerminalDock({
                       <AppIcon name="play" />
                     </button>
                     <button
-                      className="terminal-dock-action-btn btn-copy"
+                      className="terminal-dock-action-btn terminal-dock-copy-btn btn-copy"
                       type="button"
                       title={t.copy}
                       onClick={(e) => {
@@ -501,7 +501,7 @@ export function TerminalDock({
                         void handleHistoryAction(entry.command, 1)
                       }}
                     >
-                      <AppIcon name="copy" />
+                      <AppIcon name="copy" size={15} strokeWidth={2.1} />
                     </button>
                     <button
                       className="terminal-dock-action-btn btn-delete"
@@ -630,15 +630,15 @@ export function TerminalDock({
             title={connected ? t.terminalDockDisconnect : t.terminalDockReconnect}
             onClick={handleToggleConnection}
           >
-            <AppIcon name="flash" />
+            <AppIcon name="flash" size={16} strokeWidth={2} />
           </button>
           <button
-            className="terminal-dock-icon-btn"
+            className="terminal-dock-icon-btn terminal-dock-copy-btn"
             type="button"
             title={t.copy}
             onClick={() => dispatchAppEvent(APP_EVENT.terminalCopy)}
           >
-            <AppIcon name="copy" />
+            <AppIcon name="copy" size={15} strokeWidth={2} />
           </button>
           <button
             className="terminal-dock-icon-btn"
@@ -646,7 +646,7 @@ export function TerminalDock({
             title={t.paste}
             onClick={() => dispatchAppEvent(APP_EVENT.terminalPaste)}
           >
-            <AppIcon name="paste" />
+            <AppIcon name="paste" size={15} strokeWidth={2} />
           </button>
           <button
             className="terminal-dock-icon-btn"
@@ -654,7 +654,7 @@ export function TerminalDock({
             title={t.find}
             onClick={() => dispatchAppEvent(APP_EVENT.terminalFind)}
           >
-            <AppIcon name="search" />
+            <AppIcon name="search" size={16} strokeWidth={2} />
           </button>
         </div>
       </div>

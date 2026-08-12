@@ -1,6 +1,9 @@
-import type { MouseEvent } from 'react'
+import { isValidElement, useRef, type MouseEvent, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { t } from '../../i18n'
+import { VerticalScrollbar } from '../common/VerticalScrollbar'
+import { AiCopilotCopyButton } from './AiCopilotCopyButton'
 
 const allowedElements = [
   'a',
@@ -44,6 +47,31 @@ function openExternalLink(event: MouseEvent<HTMLAnchorElement>, href: string) {
   void window.fileterm?.openExternalUrl(href)
 }
 
+function getCodeBlockText(children: ReactNode) {
+  const child = Array.isArray(children) ? children.find(isValidElement) : isValidElement(children) ? children : null
+  if (!child) {
+    return String(children ?? '').replace(/\n$/, '')
+  }
+
+  const codeElement = child as typeof child & {
+    props: { children?: ReactNode }
+  }
+  return String(codeElement.props.children ?? '').replace(/\n$/, '')
+}
+
+function MarkdownCodeBlock({ children }: { children?: ReactNode }) {
+  const text = getCodeBlockText(children)
+  const scrollRef = useRef<HTMLPreElement>(null)
+
+  return (
+    <div className="ai-copilot-markdown-code-block">
+      <pre ref={scrollRef}>{children}</pre>
+      <AiCopilotCopyButton text={text} />
+      <VerticalScrollbar ariaLabel={t.scrollContent} scrollRef={scrollRef} />
+    </div>
+  )
+}
+
 const markdownComponents: Components = {
   a: ({ children, href }) => {
     const safeHref = href ? safeExternalHref(href) : undefined
@@ -63,7 +91,8 @@ const markdownComponents: Components = {
         </span>
       </a>
     )
-  }
+  },
+  pre: ({ children }) => <MarkdownCodeBlock>{children}</MarkdownCodeBlock>
 }
 
 export function AiCopilotMarkdown({ content }: { content: string }) {

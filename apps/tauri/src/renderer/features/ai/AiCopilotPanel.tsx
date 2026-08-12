@@ -12,6 +12,8 @@ import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { VerticalScrollbar } from '../common/VerticalScrollbar'
+import { AiCopilotCopyButton } from './AiCopilotCopyButton'
 import { AiCopilotMarkdown } from './AiCopilotMarkdown'
 import { useAiCopilot } from './useAiCopilot'
 
@@ -55,6 +57,21 @@ function reviewOutcomeLabel(outcome: AiReviewOutcome) {
 
 function reviewTargetLabel(target: AiContextTarget) {
   return target.user ? `${target.user}@${target.displayHost}` : target.displayHost
+}
+
+function AiCopilotReviewOutput({ output }: { output: string }) {
+  const outputScrollRef = useRef<HTMLPreElement>(null)
+
+  return (
+    <div className="ai-copilot-review-output">
+      <strong>{t.aiCopilotReviewOutput}</strong>
+      <div className="ai-copilot-code-block ai-copilot-review-code-block">
+        <pre ref={outputScrollRef}>{output}</pre>
+        <AiCopilotCopyButton text={output} />
+        <VerticalScrollbar ariaLabel={t.aiCopilotReviewOutput} scrollRef={outputScrollRef} />
+      </div>
+    </div>
+  )
 }
 
 function targetHasChanged({
@@ -112,9 +129,10 @@ export function AiCopilotPanel({
   onResizeStart?: () => void
 }) {
   const isTerminalTarget =
-    (activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'local') && Boolean(activeSession)
+    (activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'local') && activeSession?.connected === true
   const [draft, setDraft] = useState('')
-  const [commandProposal, setCommandProposal] = useState(false)
+  const [referenceTerminal, setReferenceTerminal] = useState(false)
+  const [responseMode, setResponseMode] = useState<'chat' | 'command-proposal'>('chat')
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
   const [writingCommandId, setWritingCommandId] = useState<string | null>(null)
   const [reviewingCommandId, setReviewingCommandId] = useState<string | null>(null)
@@ -174,7 +192,6 @@ export function AiCopilotPanel({
     isStreaming,
     errorMessage,
     usage,
-    contextPreview,
     isContextPreviewing,
     selectProvider,
     selectModel,
@@ -183,26 +200,12 @@ export function AiCopilotPanel({
     renameConversation,
     deleteConversation,
     createContextPreview,
-    clearContextPreview,
     sendMessage,
     runReview,
     retry,
     stop
   } = useAiCopilot()
 
-  const previewTargetChanged = useMemo(
-    () =>
-      contextPreview
-        ? targetHasChanged({
-            target: contextPreview.target,
-            activeProfile,
-            activeSession,
-            activeTab,
-            rootTab
-          })
-        : false,
-    [activeProfile, activeSession, activeTab, contextPreview, rootTab]
-  )
   const filteredConversations = useMemo(() => {
     const query = conversationSearch.trim().toLocaleLowerCase()
     if (!query) return conversations
@@ -217,16 +220,17 @@ export function AiCopilotPanel({
   }, [conversation?.messages, isStreaming])
 
   useEffect(() => {
-    if (!contextPreview) {
-      setCommandProposal(false)
-    }
-  }, [contextPreview])
-
-  useEffect(() => {
     setIsRenamingConversation(false)
     setIsDeleteConfirmationOpen(false)
     setConversationTitleDraft(conversation?.title ?? '')
   }, [conversation?.id, conversation?.title])
+
+  useEffect(() => {
+    if ((!referenceTerminal || !isTerminalTarget) && responseMode === 'command-proposal') {
+      setResponseMode('chat')
+      setCommandActionMessage(null)
+    }
+  }, [isTerminalTarget, referenceTerminal, responseMode])
 
   const canChat = Boolean(currentProvider)
   const canRetry = Boolean(errorMessage && conversation?.messages.at(-1)?.role === 'user')
@@ -238,39 +242,46 @@ export function AiCopilotPanel({
   }
 
   const send = async () => {
-    if (contextPreview && previewTargetChanged) {
-      setCommandActionMessage(t.aiCopilotContextTargetChanged)
+    if (!draft.trim() || isStreaming) return
+    if (responseMode === 'command-proposal' && !referenceTerminal) {
+      setCommandActionMessage(t.aiCopilotCommandModeRequiresContext)
       return
     }
-    const sent = await sendMessage(
-      draft,
-      contextPreview
+
+    let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
+    if (referenceTerminal) {
+      if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
+        setCommandActionMessage(t.aiCopilotContextUnavailable)
+        return
+      }
+      setCommandActionMessage(null)
+      contextSnapshot = await createContextPreview({
+        tabId: activeTab.id,
+        rootTabId: rootTab.id,
+        providerId: currentProvider.id,
+        mode: 'recent-terminal'
+      })
+      if (!contextSnapshot) return
+    }
+
+    const sent = await sendMessage(draft, {
+      responseMode,
+      ...(contextSnapshot
         ? {
-            contextSnapshotId: contextPreview.snapshotId,
-            responseMode: commandProposal ? 'command-proposal' : 'chat'
+            contextSnapshotId: contextSnapshot.snapshotId,
+            contextPreview: contextSnapshot
           }
-        : undefined
-    )
+        : {})
+    })
     if (sent) {
       setDraft('')
     }
   }
 
-  const previewContext = () => {
-    if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) return
+  const toggleTerminalReference = () => {
+    if (isStreaming || isContextPreviewing) return
     setCommandActionMessage(null)
-    void createContextPreview({
-      tabId: activeTab.id,
-      rootTabId: rootTab.id,
-      providerId: currentProvider.id,
-      mode: 'recent-terminal'
-    })
-  }
-
-  const clearPreview = () => {
-    clearContextPreview()
-    setCommandProposal(false)
-    setCommandActionMessage(null)
+    setReferenceTerminal((current) => !current)
   }
 
   const saveConversationTitle = async () => {
@@ -288,20 +299,6 @@ export function AiCopilotPanel({
     if (deleted) {
       setIsDeleteConfirmationOpen(false)
       setConversationSearch('')
-    }
-  }
-
-  const copyCommand = async (suggestion: AiCommandSuggestion) => {
-    const desktopApi = window.fileterm
-    if (!desktopApi) {
-      setCommandActionMessage(t.aiCopilotCommandPasteFailed)
-      return
-    }
-    try {
-      await desktopApi.writeClipboardText(suggestion.command)
-      setCommandActionMessage(t.aiCopilotCommandCopied)
-    } catch {
-      setCommandActionMessage(t.aiCopilotCommandPasteFailed)
     }
   }
 
@@ -568,7 +565,9 @@ export function AiCopilotPanel({
                   </button>
                   <div className="ai-copilot-conversation-page-title">
                     <span>{t.aiCopilotConversationLabel}</span>
-                    <strong>{conversation?.title ?? t.aiCopilotNewChat}</strong>
+                    <strong title={conversation?.title ?? t.aiCopilotNewChat}>
+                      {conversation?.title ?? t.aiCopilotNewChat}
+                    </strong>
                   </div>
                 </div>
                 <section className="ai-copilot-conversation-actions" aria-label={t.aiCopilotConversationControls}>
@@ -659,198 +658,198 @@ export function AiCopilotPanel({
               </div>
             </div>
 
-            <div
-              ref={messageViewportRef}
-              className="ai-copilot-message-viewport"
-              role="log"
-              onMouseDown={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              {!conversation?.messages.length ? (
-                <section className="ai-copilot-empty-chat">
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    forum
-                  </span>
-                  <h2>{t.aiCopilotWelcomeTitle}</h2>
-                  <p>{t.aiCopilotL0Boundary}</p>
-                </section>
-              ) : (
-                conversation.messages.map((message) => (
-                  <article
-                    key={message.id}
-                    className={`ai-copilot-message is-${message.role}`}
-                    aria-label={
-                      message.role === 'user'
-                        ? t.aiCopilotMessageUser
-                        : message.role === 'review'
-                          ? t.aiCopilotMessageReview
-                          : t.aiCopilotMessageAssistant
-                    }
-                  >
-                    <span className="ai-copilot-message-role">
-                      {message.role === 'user'
-                        ? t.aiCopilotMessageUser
-                        : message.role === 'review'
-                          ? t.aiCopilotMessageReview
-                          : t.aiCopilotMessageAssistant}
+            <div className="ai-copilot-message-scroll-region">
+              <div
+                ref={messageViewportRef}
+                className="ai-copilot-message-viewport"
+                role="log"
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {!conversation?.messages.length ? (
+                  <section className="ai-copilot-empty-chat">
+                    <span aria-hidden="true" className="material-symbols-outlined">
+                      forum
                     </span>
-                    {message.review ? (
-                      <section className={`ai-copilot-review-card is-${message.review.outcome}`}>
-                        <header>
-                          <span className={`ai-copilot-command-risk is-${message.review.risk}`}>
-                            {commandRiskLabel(message.review.risk)}
-                          </span>
-                          <strong>{reviewOutcomeLabel(message.review.outcome)}</strong>
-                        </header>
-                        <dl>
-                          <div>
-                            <dt>{t.aiCopilotReviewTarget}</dt>
-                            <dd>{reviewTargetLabel(message.review.target)}</dd>
-                          </div>
-                          <div>
-                            <dt>{t.aiCopilotReviewWorkingDirectory}</dt>
-                            <dd>{message.review.target.cwd ?? '~'}</dd>
-                          </div>
-                          <div>
-                            <dt>{t.aiCopilotReviewTimeout}</dt>
-                            <dd>{Math.ceil(message.review.timeoutMs / 1000)} s</dd>
-                          </div>
-                          {message.review.exitCode !== undefined ? (
-                            <div>
-                              <dt>{t.aiCopilotReviewExitCode}</dt>
-                              <dd>{message.review.exitCode}</dd>
-                            </div>
-                          ) : null}
-                        </dl>
-                        <code>{message.review.command}</code>
-                        {message.review.timedOut ? (
-                          <p className="is-warning">{t.aiCopilotReviewCommandTimedOut}</p>
-                        ) : null}
-                        {message.review.outputTruncated ? (
-                          <p className="is-warning">{t.aiCopilotReviewOutputTruncated}</p>
-                        ) : null}
-                        {message.review.error ? <p className="is-error">{message.review.error}</p> : null}
-                        {message.review.output ? (
-                          <div className="ai-copilot-review-output">
-                            <strong>{t.aiCopilotReviewOutput}</strong>
-                            <pre>{message.review.output}</pre>
-                          </div>
-                        ) : message.review.outcome === 'completed' ? (
-                          <p>{t.aiCopilotReviewNoOutput}</p>
-                        ) : null}
-                      </section>
-                    ) : message.role === 'assistant' ? (
-                      <AiCopilotMarkdown content={message.content} />
-                    ) : (
-                      <p className="ai-copilot-message-plain">{message.content}</p>
-                    )}
-                    {message.context ? (
-                      <span className="ai-copilot-message-context">
-                        <span aria-hidden="true" className="material-symbols-outlined">
-                          verified_user
-                        </span>
-                        {contextModeLabel(message.context.mode)}
+                    <h2>{t.aiCopilotWelcomeTitle}</h2>
+                    <p>{t.aiCopilotL0Boundary}</p>
+                  </section>
+                ) : (
+                  conversation.messages.map((message) => (
+                    <article
+                      key={message.id}
+                      className={`ai-copilot-message is-${message.role}`}
+                      aria-label={
+                        message.role === 'user'
+                          ? t.aiCopilotMessageUser
+                          : message.role === 'review'
+                            ? t.aiCopilotMessageReview
+                            : t.aiCopilotMessageAssistant
+                      }
+                    >
+                      <span className="ai-copilot-message-role">
+                        {message.role === 'user'
+                          ? t.aiCopilotMessageUser
+                          : message.role === 'review'
+                            ? t.aiCopilotMessageReview
+                            : t.aiCopilotMessageAssistant}
                       </span>
-                    ) : null}
-                    {message.commands?.map((suggestion) => {
-                      const commandTargetChanged = targetHasChanged({
-                        target: suggestion.target,
-                        activeProfile,
-                        activeSession,
-                        activeTab,
-                        rootTab
-                      })
-                      return (
-                        <section key={suggestion.id} className="ai-copilot-command-card">
+                      {message.review ? (
+                        <section className={`ai-copilot-review-card is-${message.review.outcome}`}>
                           <header>
-                            <span className={`ai-copilot-command-risk is-${suggestion.risk}`}>
-                              {commandRiskLabel(suggestion.risk)}
+                            <span className={`ai-copilot-command-risk is-${message.review.risk}`}>
+                              {commandRiskLabel(message.review.risk)}
                             </span>
-                            {commandTargetChanged ? (
-                              <span className="is-target-changed">{t.aiCopilotContextTargetChanged}</span>
-                            ) : null}
-                            {suggestion.multiline ? <span>{t.aiCopilotMultilinePasteUnavailable}</span> : null}
+                            <strong>{reviewOutcomeLabel(message.review.outcome)}</strong>
                           </header>
-                          <code>{suggestion.command}</code>
-                          {suggestion.explanation ? <p>{suggestion.explanation}</p> : null}
-                          <footer>
-                            <button
-                              disabled={
-                                suggestion.multiline ||
-                                suggestion.target.sessionType !== 'ssh' ||
-                                commandTargetChanged ||
-                                isStreaming ||
-                                reviewingCommandId !== null
-                              }
-                              title={
-                                commandTargetChanged
-                                  ? t.aiCopilotContextTargetChangedHint
-                                  : suggestion.multiline || suggestion.target.sessionType !== 'ssh'
-                                    ? t.aiCopilotReviewUnavailable
-                                    : t.aiCopilotReviewCommandHint
-                              }
-                              type="button"
-                              onClick={() => void reviewCommand(suggestion)}
-                            >
-                              <span aria-hidden="true" className="material-symbols-outlined">
-                                {reviewingCommandId === suggestion.id ? 'progress_activity' : 'fact_check'}
-                              </span>
-                              {t.aiCopilotReviewCommand}
-                            </button>
-                            <button type="button" onClick={() => void copyCommand(suggestion)}>
-                              <span aria-hidden="true" className="material-symbols-outlined">
-                                content_copy
-                              </span>
-                              {t.aiCopilotCopyCommand}
-                            </button>
-                            <button
-                              disabled={
-                                suggestion.multiline ||
-                                suggestion.target.sessionType !== 'ssh' ||
-                                commandTargetChanged ||
-                                writingCommandId === suggestion.id
-                              }
-                              type="button"
-                              onClick={() => void writeCommand(suggestion)}
-                            >
-                              <span aria-hidden="true" className="material-symbols-outlined">
-                                input
-                              </span>
-                              {t.aiCopilotPasteCommand}
-                            </button>
-                          </footer>
-                          <small>
-                            {commandTargetChanged
-                              ? t.aiCopilotContextTargetChangedHint
-                              : `${t.aiCopilotReviewCommandHint} ${t.aiCopilotPasteCommandHint}`}
-                          </small>
+                          <dl>
+                            <div>
+                              <dt>{t.aiCopilotReviewTarget}</dt>
+                              <dd>{reviewTargetLabel(message.review.target)}</dd>
+                            </div>
+                            <div>
+                              <dt>{t.aiCopilotReviewWorkingDirectory}</dt>
+                              <dd>{message.review.target.cwd ?? '~'}</dd>
+                            </div>
+                            <div>
+                              <dt>{t.aiCopilotReviewTimeout}</dt>
+                              <dd>{Math.ceil(message.review.timeoutMs / 1000)} s</dd>
+                            </div>
+                            {message.review.exitCode !== undefined ? (
+                              <div>
+                                <dt>{t.aiCopilotReviewExitCode}</dt>
+                                <dd>{message.review.exitCode}</dd>
+                              </div>
+                            ) : null}
+                          </dl>
+                          <div className="ai-copilot-code-block ai-copilot-review-code-block">
+                            <code>{message.review.command}</code>
+                            <AiCopilotCopyButton text={message.review.command} />
+                          </div>
+                          {message.review.timedOut ? (
+                            <p className="is-warning">{t.aiCopilotReviewCommandTimedOut}</p>
+                          ) : null}
+                          {message.review.outputTruncated ? (
+                            <p className="is-warning">{t.aiCopilotReviewOutputTruncated}</p>
+                          ) : null}
+                          {message.review.error ? <p className="is-error">{message.review.error}</p> : null}
+                          {message.review.output ? (
+                            <AiCopilotReviewOutput output={message.review.output} />
+                          ) : message.review.outcome === 'completed' ? (
+                            <p>{t.aiCopilotReviewNoOutput}</p>
+                          ) : null}
                         </section>
-                      )
-                    })}
-                  </article>
-                ))
-              )}
-              {isStreaming ? (
-                <div className="ai-copilot-streaming-indicator">
-                  <span aria-hidden="true" className="material-symbols-outlined">
-                    more_horiz
-                  </span>
-                  {t.aiCopilotThinking}
-                </div>
-              ) : null}
-              {errorMessage ? (
-                <div className="ai-copilot-stream-error" role="alert">
-                  <span>{errorMessage}</span>
-                  {canRetry ? (
-                    <button disabled={isStreaming} type="button" onClick={() => void retry()}>
-                      <span aria-hidden="true" className="material-symbols-outlined">
-                        refresh
-                      </span>
-                      {t.aiCopilotRetry}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
+                      ) : message.role === 'assistant' ? (
+                        <AiCopilotMarkdown content={message.content} />
+                      ) : (
+                        <p className="ai-copilot-message-plain">{message.content}</p>
+                      )}
+                      {message.context ? (
+                        <span className="ai-copilot-message-context">
+                          <span aria-hidden="true" className="material-symbols-outlined">
+                            verified_user
+                          </span>
+                          {contextModeLabel(message.context.mode)}
+                        </span>
+                      ) : null}
+                      {message.commands?.map((suggestion) => {
+                        const commandTargetChanged = targetHasChanged({
+                          target: suggestion.target,
+                          activeProfile,
+                          activeSession,
+                          activeTab,
+                          rootTab
+                        })
+                        return (
+                          <section key={suggestion.id} className="ai-copilot-command-card">
+                            <header>
+                              <span className={`ai-copilot-command-risk is-${suggestion.risk}`}>
+                                {commandRiskLabel(suggestion.risk)}
+                              </span>
+                              {commandTargetChanged ? (
+                                <span className="is-target-changed">{t.aiCopilotContextTargetChanged}</span>
+                              ) : null}
+                              {suggestion.multiline ? <span>{t.aiCopilotMultilinePasteUnavailable}</span> : null}
+                            </header>
+                            <div className="ai-copilot-code-block ai-copilot-command-code-block">
+                              <code>{suggestion.command}</code>
+                              <AiCopilotCopyButton text={suggestion.command} />
+                            </div>
+                            {suggestion.explanation ? <p>{suggestion.explanation}</p> : null}
+                            <footer>
+                              <button
+                                disabled={
+                                  suggestion.multiline ||
+                                  suggestion.target.sessionType !== 'ssh' ||
+                                  commandTargetChanged ||
+                                  isStreaming ||
+                                  reviewingCommandId !== null
+                                }
+                                title={
+                                  commandTargetChanged
+                                    ? t.aiCopilotContextTargetChangedHint
+                                    : suggestion.multiline || suggestion.target.sessionType !== 'ssh'
+                                      ? t.aiCopilotReviewUnavailable
+                                      : t.aiCopilotReviewCommandHint
+                                }
+                                type="button"
+                                onClick={() => void reviewCommand(suggestion)}
+                              >
+                                <span aria-hidden="true" className="material-symbols-outlined">
+                                  {reviewingCommandId === suggestion.id ? 'progress_activity' : 'fact_check'}
+                                </span>
+                                {t.aiCopilotReviewCommand}
+                              </button>
+                              <button
+                                disabled={
+                                  suggestion.multiline ||
+                                  suggestion.target.sessionType !== 'ssh' ||
+                                  commandTargetChanged ||
+                                  writingCommandId === suggestion.id
+                                }
+                                type="button"
+                                onClick={() => void writeCommand(suggestion)}
+                              >
+                                <span aria-hidden="true" className="material-symbols-outlined">
+                                  input
+                                </span>
+                                {t.aiCopilotPasteCommand}
+                              </button>
+                            </footer>
+                            <small>
+                              {commandTargetChanged
+                                ? t.aiCopilotContextTargetChangedHint
+                                : `${t.aiCopilotReviewCommandHint} ${t.aiCopilotPasteCommandHint}`}
+                            </small>
+                          </section>
+                        )
+                      })}
+                    </article>
+                  ))
+                )}
+                {isStreaming ? (
+                  <div className="ai-copilot-streaming-indicator">
+                    <span aria-hidden="true" className="material-symbols-outlined">
+                      more_horiz
+                    </span>
+                    {t.aiCopilotThinking}
+                  </div>
+                ) : null}
+                {errorMessage ? (
+                  <div className="ai-copilot-stream-error" role="alert">
+                    <span>{errorMessage}</span>
+                    {canRetry ? (
+                      <button disabled={isStreaming} type="button" onClick={() => void retry()}>
+                        <span aria-hidden="true" className="material-symbols-outlined">
+                          refresh
+                        </span>
+                        {t.aiCopilotRetry}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <VerticalScrollbar ariaLabel={t.scrollContent} scrollRef={messageViewportRef} />
             </div>
             {usage ? (
               <div className="ai-copilot-usage" aria-label={t.aiCopilotUsage}>
@@ -865,85 +864,36 @@ export function AiCopilotPanel({
         <footer className="ai-copilot-composer-area">
           <div className="ai-copilot-composer-zone">
             {canChat ? (
-              <section className="ai-copilot-context-dock" aria-label={t.aiCopilotContextPreview}>
+              <section className="ai-copilot-context-dock" aria-label={t.aiCopilotReferenceTerminal}>
                 <div className="ai-copilot-context-dock-row">
                   <button
-                    className={`ai-copilot-context-toggle-btn ${contextPreview ? 'is-active' : ''}`}
-                    disabled={!currentProvider || !isTerminalTarget || isStreaming || isContextPreviewing}
+                    aria-pressed={referenceTerminal}
+                    aria-label={t.aiCopilotReferenceTerminal}
+                    className={`ai-copilot-context-switch ${referenceTerminal ? 'is-active' : ''}`}
+                    disabled={isStreaming || isContextPreviewing || (!isTerminalTarget && !referenceTerminal)}
                     type="button"
-                    onClick={() => {
-                      if (contextPreview) {
-                        clearPreview()
-                      } else {
-                        previewContext()
-                      }
-                    }}
+                    onClick={toggleTerminalReference}
                   >
                     <span aria-hidden="true" className="material-symbols-outlined">
-                      {isContextPreviewing ? 'progress_activity' : contextPreview ? 'check_circle' : 'preview'}
+                      {referenceTerminal ? 'visibility' : 'visibility_off'}
                     </span>
-                    {isContextPreviewing
-                      ? t.aiCopilotContextPreviewing
-                      : contextPreview
-                        ? '已附加上下文'
-                        : '附加上下文'}
+                    <span>{t.aiCopilotReferenceTerminal}</span>
+                    <span className="ai-copilot-context-switch-state">
+                      {isContextPreviewing
+                        ? t.aiCopilotContextPreparing
+                        : referenceTerminal
+                          ? t.aiCopilotReferenceTerminalOn
+                          : t.aiCopilotReferenceTerminalOff}
+                    </span>
                   </button>
                   <span className="ai-copilot-context-dock-hint">
-                    {previewTargetChanged
-                      ? t.aiCopilotContextTargetChangedHint
-                      : contextPreview
-                        ? t.aiCopilotContextPreviewReady
-                        : t.aiCopilotL0ComposerHint}
+                    {referenceTerminal
+                      ? isTerminalTarget
+                        ? t.aiCopilotContextAutoHint
+                        : t.aiCopilotContextNeedsTerminal
+                      : t.aiCopilotL0ComposerHint}
                   </span>
                 </div>
-                {contextPreview ? (
-                  <article className="ai-copilot-context-preview">
-                    <header>
-                      <span>
-                        <span aria-hidden="true" className="material-symbols-outlined">
-                          verified_user
-                        </span>
-                        {t.aiCopilotContextPreviewReady}
-                      </span>
-                      <div className="ai-copilot-context-preview-actions">
-                        <button
-                          aria-pressed={commandProposal}
-                          className={`ai-copilot-command-proposal-toggle ${commandProposal ? 'is-active' : ''}`}
-                          title={
-                            commandProposal ? t.aiCopilotCommandProposalHint : '开启后 AI 将生成带操作按钮的命令卡片'
-                          }
-                          type="button"
-                          onClick={() => setCommandProposal((current) => !current)}
-                        >
-                          <span aria-hidden="true" className="material-symbols-outlined">
-                            terminal
-                          </span>
-                          <span>{commandProposal ? '已开启命令卡片' : '生成命令卡片'}</span>
-                        </button>
-                        <button type="button" onClick={clearPreview}>
-                          {t.aiCopilotContextClear}
-                        </button>
-                      </div>
-                    </header>
-                    <strong>{t.aiCopilotContextPreviewTitle}</strong>
-                    <pre>{contextPreview.preview}</pre>
-                    <footer>
-                      {previewTargetChanged ? (
-                        <span className="is-target-changed">{t.aiCopilotContextTargetChanged}</span>
-                      ) : null}
-                      {contextPreview.redactions.length
-                        ? t.aiCopilotContextRedactions.replace(
-                            '{count}',
-                            String(contextPreview.redactions.reduce((total, item) => total + item.count, 0))
-                          )
-                        : null}
-                      {contextPreview.truncated ? t.aiCopilotContextTruncated : null}
-                    </footer>
-                    <small>
-                      {previewTargetChanged ? t.aiCopilotContextTargetChangedHint : t.aiCopilotContextPreviewHint}
-                    </small>
-                  </article>
-                ) : null}
                 {commandActionMessage ? (
                   <div className="ai-copilot-command-feedback" role="status">
                     {commandActionMessage}
@@ -973,16 +923,19 @@ export function AiCopilotPanel({
                         onChange={(value) => selectProvider(value || null)}
                       />
                       {currentProvider ? (
-                        <DropdownSelect
-                          className="ai-copilot-composer-select ai-copilot-model-select"
-                          disabled={isStreaming}
-                          options={(currentProvider.models && currentProvider.models.length > 0
-                            ? currentProvider.models
-                            : [currentProvider.model]
-                          ).map((model) => ({ value: model, label: model }))}
-                          value={selectedModel ?? currentProvider.model}
-                          onChange={(value) => selectModel(value || null)}
-                        />
+                        <>
+                          <span aria-hidden="true" className="ai-copilot-composer-model-divider" />
+                          <DropdownSelect
+                            className="ai-copilot-composer-select ai-copilot-model-select"
+                            disabled={isStreaming}
+                            options={(currentProvider.models && currentProvider.models.length > 0
+                              ? currentProvider.models
+                              : [currentProvider.model]
+                            ).map((model) => ({ value: model, label: model }))}
+                            value={selectedModel ?? currentProvider.model}
+                            onChange={(value) => selectModel(value || null)}
+                          />
+                        </>
                       ) : null}
                     </div>
                   ) : null}
@@ -1001,7 +954,11 @@ export function AiCopilotPanel({
                     <button
                       aria-label={t.aiCopilotSend}
                       className="ai-copilot-composer-send"
-                      disabled={!canChat || !draft.trim() || (Boolean(contextPreview) && previewTargetChanged)}
+                      disabled={
+                        !canChat ||
+                        !draft.trim() ||
+                        (responseMode === 'command-proposal' && (!referenceTerminal || !isTerminalTarget))
+                      }
                       type="button"
                       onClick={() => void send()}
                     >
@@ -1015,20 +972,42 @@ export function AiCopilotPanel({
             </div>
           </div>
           <div className="ai-copilot-safety-footer">
-            <span>
-              <span aria-hidden="true" className="material-symbols-outlined">
-                lock
-              </span>
-              {isStreaming
-                ? t.aiCopilotThinking
-                : previewTargetChanged
-                  ? t.aiCopilotContextTargetChangedHint
-                  : commandProposal
-                    ? t.aiCopilotCommandProposalHint
-                    : contextPreview
-                      ? t.aiCopilotContextPreviewReady
-                      : t.aiCopilotL0ComposerHint}
-            </span>
+            {canChat ? (
+              <div className="ai-copilot-response-mode" role="group" aria-label={t.aiCopilotResponseMode}>
+                <button
+                  aria-pressed={responseMode === 'chat'}
+                  className={responseMode === 'chat' ? 'is-active' : ''}
+                  title={t.aiCopilotChatMode}
+                  type="button"
+                  onClick={() => {
+                    setResponseMode('chat')
+                    setCommandActionMessage(null)
+                  }}
+                >
+                  {t.aiCopilotChatMode}
+                </button>
+                <button
+                  aria-pressed={responseMode === 'command-proposal'}
+                  className={responseMode === 'command-proposal' ? 'is-active' : ''}
+                  disabled={!referenceTerminal || !isTerminalTarget || isStreaming}
+                  title={t.aiCopilotCommandMode}
+                  type="button"
+                  onClick={() => {
+                    setResponseMode('command-proposal')
+                    setCommandActionMessage(null)
+                  }}
+                >
+                  {t.aiCopilotCommandMode}
+                </button>
+              </div>
+            ) : null}
+            {canChat && responseMode === 'command-proposal' ? (
+              <span className="ai-copilot-response-mode-hint">{t.aiCopilotCommandModeHint}</span>
+            ) : canChat && responseMode === 'chat' && !referenceTerminal ? (
+              <span className="ai-copilot-response-mode-hint">{t.aiCopilotCommandModeUnavailable}</span>
+            ) : canChat && responseMode === 'chat' && !isTerminalTarget ? (
+              <span className="ai-copilot-response-mode-hint">{t.aiCopilotContextNeedsTerminal}</span>
+            ) : null}
           </div>
         </footer>
       ) : null}
