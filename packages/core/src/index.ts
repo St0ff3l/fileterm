@@ -573,6 +573,8 @@ export function mergeSystemMetricsHistory(
 
 export interface SessionSnapshot {
   profileId: string
+  /** Monotonic terminal-target identity; unchanged by ordinary output chunks. */
+  aiSessionRevision?: string
   accessHost?: string
   summary: string
   terminalTranscript?: string
@@ -1236,6 +1238,8 @@ export interface RetryAiChatInput {
   conversationId: string
   providerId: string
   modelOverride?: string
+  contextSnapshotId?: string
+  responseMode?: AiChatResponseMode
 }
 
 export interface AiChatRequest {

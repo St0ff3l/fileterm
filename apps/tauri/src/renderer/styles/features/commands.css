@@ -111,6 +111,14 @@
   gap: 0;
 }
 
+/* The preview pane is also rendered in the compact bottom workspace. Keep
+   its header independently responsive instead of letting the command list
+   width force title and action controls into the same grid row. */
+.command-pane-preview {
+  container-type: inline-size;
+  container-name: command-preview-pane;
+}
+
 .command-folder-bar {
   display: flex;
   flex-direction: row;
@@ -331,6 +339,7 @@
   font-family: var(--font-ui);
   font-size: var(--button-font-size-compact);
   font-weight: var(--button-font-weight);
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -964,6 +973,83 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@container command-preview-pane (max-width: 400px) {
+  .command-pane-head.command-template-pane-head,
+  .command-pane-head.command-temporary-pane-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-rows: auto;
+    height: auto;
+    min-height: 24px;
+    align-content: center;
+    column-gap: 6px;
+    row-gap: 4px;
+    overflow: visible;
+  }
+
+  .command-pane-head.command-template-pane-head > strong,
+  .command-pane-head.command-temporary-pane-head > strong {
+    grid-area: title;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .command-pane-head.command-template-pane-head {
+    grid-template-areas:
+      'title edit'
+      'description description'
+      'actions actions';
+  }
+
+  .command-pane-head.command-temporary-pane-head {
+    grid-template-areas:
+      'title edit'
+      'actions actions';
+  }
+
+  .command-pane-head.command-template-pane-head > .command-pane-edit-actions,
+  .command-pane-head.command-temporary-pane-head > .command-pane-edit-actions {
+    grid-area: edit;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .command-pane-head.command-template-pane-head > .command-pane-template-description {
+    grid-area: description;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .command-pane-head.command-template-pane-head > .command-pane-actions,
+  .command-pane-head.command-temporary-pane-head > .command-pane-actions {
+    grid-area: actions;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow: visible;
+  }
+
+  .command-pane-head.command-template-pane-head > .command-pane-template-description > p {
+    min-width: 0;
+  }
+
+  .command-pane-head.command-template-pane-head > .command-pane-edit-actions button,
+  .command-pane-head.command-temporary-pane-head > .command-pane-edit-actions button {
+    flex: 0 0 auto;
+  }
+
+  .command-pane-head.command-template-pane-head > .command-pane-actions .command-toggle,
+  .command-pane-head.command-temporary-pane-head > .command-pane-actions .command-toggle {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 
 .command-template-actions {

@@ -781,7 +781,7 @@ export function FileManager({
             </button>
           </div>
         ) : activeView === 'command' ? (
-          <div className="file-tab-actions">
+          <div className="file-tab-actions file-tab-actions-command">
             <button className="flat-button compact command-manager-launch" type="button" onClick={onOpenCommandManager}>
               {t.commandManager}
             </button>

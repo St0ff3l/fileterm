@@ -310,6 +310,9 @@ impl ConnectionCapabilities {
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshot {
     pub profile_id: String,
+    /// Monotonic terminal-target identity. This must not change for ordinary
+    /// terminal output; it changes only when the interactive target changes.
+    pub ai_session_revision: String,
     pub access_host: String,
     pub summary: String,
     pub terminal_transcript: String,
@@ -691,6 +694,20 @@ mod tests {
             assert_eq!(payload["tabId"], "tab-load");
             assert_eq!(payload["chunk"], format!("{index}\r\n"));
         }
+    }
+
+    #[tokio::test]
+    async fn ai_session_revision_ignores_output_and_changes_on_target_transition() {
+        let state = WorkspaceState::default();
+
+        state.publish_terminal_output("tab-target", "prompt\r\n");
+        assert_eq!(state.ai_session_revision("tab-target").await, 0);
+
+        assert_eq!(state.touch_ai_session_revision("tab-target").await, 1);
+        state.publish_terminal_output("tab-target", "command output\r\n");
+        assert_eq!(state.ai_session_revision("tab-target").await, 1);
+
+        assert_eq!(state.touch_ai_session_revision("tab-target").await, 2);
     }
 
     #[test]

@@ -103,9 +103,10 @@ function targetHasChanged({
   const user = activeSession.shellUser || activeSession.loginUser || activeProfile?.username
   const cwd = activeSession.shellCwd || activeSession.remotePath || undefined
   return (
-    (Boolean(target.displayHost) && Boolean(host) && target.displayHost !== host) ||
-    (Boolean(target.user) && Boolean(user) && target.user !== user) ||
-    (Boolean(target.cwd) && Boolean(cwd) && target.cwd !== cwd)
+    (Boolean(target.sessionRevision) && target.sessionRevision !== activeSession.aiSessionRevision) ||
+    target.displayHost !== host ||
+    (target.user ?? undefined) !== (user ?? undefined) ||
+    (target.cwd ?? undefined) !== (cwd ?? undefined)
   )
 }
 
@@ -134,8 +135,10 @@ export function AiCopilotPanel({
   const [referenceTerminal, setReferenceTerminal] = useState(false)
   const [responseMode, setResponseMode] = useState<'chat' | 'command-proposal'>('chat')
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
-  const [writingCommandId, setWritingCommandId] = useState<string | null>(null)
-  const [reviewingCommandId, setReviewingCommandId] = useState<string | null>(null)
+  const [writingCommandIds, setWritingCommandIds] = useState<Set<string>>(() => new Set())
+  const writingCommandIdsRef = useRef<Set<string>>(new Set())
+  const [reviewingCommandIds, setReviewingCommandIds] = useState<Set<string>>(() => new Set())
+  const reviewingCommandIdsRef = useRef<Set<string>>(new Set())
   const [conversationSearch, setConversationSearch] = useState('')
   const [isConversationListOpen, setIsConversationListOpen] = useState(false)
   const [isRenamingConversation, setIsRenamingConversation] = useState(false)
@@ -278,6 +281,29 @@ export function AiCopilotPanel({
     }
   }
 
+  const retryLastRequest = async () => {
+    if (isStreaming) return
+    let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
+    if (responseMode === 'command-proposal' || referenceTerminal) {
+      if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
+        setCommandActionMessage(t.aiCopilotContextUnavailable)
+        return
+      }
+      setCommandActionMessage(null)
+      contextSnapshot = await createContextPreview({
+        tabId: activeTab.id,
+        rootTabId: rootTab.id,
+        providerId: currentProvider.id,
+        mode: 'recent-terminal'
+      })
+      if (!contextSnapshot) return
+    }
+    await retry({
+      responseMode,
+      ...(contextSnapshot ? { contextSnapshotId: contextSnapshot.snapshotId } : {})
+    })
+  }
+
   const toggleTerminalReference = () => {
     if (isStreaming || isContextPreviewing) return
     setCommandActionMessage(null)
@@ -311,22 +337,25 @@ export function AiCopilotPanel({
     }
     const desktopApi = window.fileterm
     if (!desktopApi) {
-      setCommandActionMessage(t.aiCopilotCommandPasteFailed)
+      setCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
       return
     }
-    setWritingCommandId(suggestion.id)
+    if (writingCommandIdsRef.current.has(suggestion.id)) return
+    writingCommandIdsRef.current.add(suggestion.id)
+    setWritingCommandIds(new Set(writingCommandIdsRef.current))
     try {
       const result = await desktopApi.insertAiCommand({ commandId: suggestion.id })
       dispatchAppEvent(APP_EVENT.aiInsertTerminalCommand, { tabId: result.tabId, command: result.command })
-      setCommandActionMessage(t.aiCopilotCommandInserted)
+      setCommandActionMessage(t.aiCopilotTerminalInputWritten)
     } catch (error) {
       const message = String(error)
         .replace(/^command error:\s*/i, '')
         .replace(/^AI_[A-Z_]+:\s*/i, '')
         .trim()
-      setCommandActionMessage(message || t.aiCopilotCommandPasteFailed)
+      setCommandActionMessage(message || t.aiCopilotTerminalInputWriteFailed)
     } finally {
-      setWritingCommandId(null)
+      writingCommandIdsRef.current.delete(suggestion.id)
+      setWritingCommandIds(new Set(writingCommandIdsRef.current))
     }
   }
 
@@ -346,19 +375,25 @@ export function AiCopilotPanel({
       setCommandActionMessage(t.aiCopilotReviewUnavailable)
       return
     }
-    if (reviewingCommandId) return
+    if (reviewingCommandIdsRef.current.has(suggestion.id)) return
 
     setCommandActionMessage(t.aiCopilotReviewInProgress)
-    setReviewingCommandId(suggestion.id)
+    reviewingCommandIdsRef.current.add(suggestion.id)
+    setReviewingCommandIds(new Set(reviewingCommandIdsRef.current))
     try {
       const result = await runReview(suggestion.id)
       if (result) {
-        setCommandActionMessage(reviewOutcomeLabel(result.review.outcome))
+        // The completed state is already rendered in the persisted review
+        // record. Do not repeat “Ran once” above the composer.
+        setCommandActionMessage(
+          result.review.outcome === 'completed' ? null : reviewOutcomeLabel(result.review.outcome)
+        )
       } else {
         setCommandActionMessage(t.aiCopilotReviewFailed)
       }
     } finally {
-      setReviewingCommandId(null)
+      reviewingCommandIdsRef.current.delete(suggestion.id)
+      setReviewingCommandIds(new Set(reviewingCommandIdsRef.current))
     }
   }
 
@@ -760,6 +795,8 @@ export function AiCopilotPanel({
                           activeTab,
                           rootTab
                         })
+                        const commandIsBusy =
+                          reviewingCommandIds.has(suggestion.id) || writingCommandIds.has(suggestion.id)
                         return (
                           <section key={suggestion.id} className="ai-copilot-command-card">
                             <header>
@@ -783,7 +820,7 @@ export function AiCopilotPanel({
                                   suggestion.target.sessionType !== 'ssh' ||
                                   commandTargetChanged ||
                                   isStreaming ||
-                                  reviewingCommandId !== null
+                                  commandIsBusy
                                 }
                                 title={
                                   commandTargetChanged
@@ -796,7 +833,7 @@ export function AiCopilotPanel({
                                 onClick={() => void reviewCommand(suggestion)}
                               >
                                 <span aria-hidden="true" className="material-symbols-outlined">
-                                  {reviewingCommandId === suggestion.id ? 'progress_activity' : 'fact_check'}
+                                  {reviewingCommandIds.has(suggestion.id) ? 'progress_activity' : 'fact_check'}
                                 </span>
                                 {t.aiCopilotReviewCommand}
                               </button>
@@ -805,21 +842,22 @@ export function AiCopilotPanel({
                                   suggestion.multiline ||
                                   suggestion.target.sessionType !== 'ssh' ||
                                   commandTargetChanged ||
-                                  writingCommandId === suggestion.id
+                                  commandIsBusy
                                 }
+                                title={t.aiCopilotWriteTerminalInputHint}
                                 type="button"
                                 onClick={() => void writeCommand(suggestion)}
                               >
                                 <span aria-hidden="true" className="material-symbols-outlined">
                                   input
                                 </span>
-                                {t.aiCopilotPasteCommand}
+                                {t.aiCopilotWriteTerminalInput}
                               </button>
                             </footer>
                             <small>
                               {commandTargetChanged
                                 ? t.aiCopilotContextTargetChangedHint
-                                : `${t.aiCopilotReviewCommandHint} ${t.aiCopilotPasteCommandHint}`}
+                                : `${t.aiCopilotReviewCommandHint} ${t.aiCopilotWriteTerminalInputHint}`}
                             </small>
                           </section>
                         )
@@ -839,7 +877,7 @@ export function AiCopilotPanel({
                   <div className="ai-copilot-stream-error" role="alert">
                     <span>{errorMessage}</span>
                     {canRetry ? (
-                      <button disabled={isStreaming} type="button" onClick={() => void retry()}>
+                      <button disabled={isStreaming} type="button" onClick={() => void retryLastRequest()}>
                         <span aria-hidden="true" className="material-symbols-outlined">
                           refresh
                         </span>

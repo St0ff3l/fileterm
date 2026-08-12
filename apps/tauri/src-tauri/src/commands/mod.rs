@@ -710,12 +710,13 @@ pub async fn app_start_ai_chat(
 }
 
 #[tauri::command]
-pub fn app_retry_ai_chat(
+pub async fn app_retry_ai_chat(
     app: AppHandle,
+    window: WebviewWindow,
     input: crate::services::ai::RetryAiChatInput,
     channel: Channel<crate::services::ai::AiStreamEvent>,
 ) -> Result<crate::services::ai::AiChatRequest, AppError> {
-    crate::services::ai::retry_chat(&app, input, channel)
+    crate::services::ai::retry_chat(&app, &window, input, channel).await
 }
 
 #[tauri::command]
@@ -1368,7 +1369,15 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
 
     let tabs = state.tabs.read().await.clone();
     let active_tab_id = state.active_tab_id.read().await.clone();
-    let sessions = state.sessions.read().await.clone();
+    let mut sessions = state.sessions.read().await.clone();
+    let ai_session_revisions = state.ai_session_revisions.read().await.clone();
+    for (tab_id, session) in &mut sessions {
+        session.ai_session_revision = ai_session_revisions
+            .get(tab_id)
+            .copied()
+            .unwrap_or_default()
+            .to_string();
+    }
     let transfers = state.transfers.read().await.clone();
     let active_pane_tab_id_by_root = state.active_pane_tab_id_by_root.read().await.clone();
 
@@ -1699,6 +1708,7 @@ async fn spawn_session_for_profile(
             tab_id.clone(),
             crate::services::SessionSnapshot {
                 profile_id: profile_id.to_string(),
+                ai_session_revision: "0".to_string(),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: "连接主机...\r\n".to_string(),
@@ -1787,6 +1797,7 @@ async fn spawn_local_terminal_tab(
             tab_id.clone(),
             crate::services::SessionSnapshot {
                 profile_id: "__local_terminal__".to_string(),
+                ai_session_revision: "0".to_string(),
                 access_host: launch.cwd.clone(),
                 summary: launch.shell.clone(),
                 terminal_transcript: "Starting local shell...\r\n".to_string(),
@@ -2290,9 +2301,19 @@ pub async fn app_set_active_pane(
     pane_tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let previous_pane_tab_id = {
+        let active_panes = state.active_pane_tab_id_by_root.read().await;
+        active_panes.get(&root_tab_id).cloned()
+    };
     {
         let mut active_panes = state.active_pane_tab_id_by_root.write().await;
-        active_panes.insert(root_tab_id, pane_tab_id);
+        active_panes.insert(root_tab_id, pane_tab_id.clone());
+    }
+    if previous_pane_tab_id.as_deref() != Some(pane_tab_id.as_str()) {
+        if let Some(previous_pane_tab_id) = previous_pane_tab_id {
+            state.touch_ai_session_revision(&previous_pane_tab_id).await;
+        }
+        state.touch_ai_session_revision(&pane_tab_id).await;
     }
     get_workspace_snapshot(app).await
 }
@@ -2810,11 +2831,21 @@ pub async fn app_open_remote_path(
 ) -> Result<serde_json::Value, AppError> {
     refresh_remote_files(&app, &tab_id, &target_path).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let target_changed = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&tab_id)
+            .map(|session| session.shell_cwd.is_none() && session.remote_path != target_path)
+            .unwrap_or(false)
+    };
     {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&tab_id) {
             session.remote_path = target_path;
         }
+    }
+    if target_changed {
+        state.touch_ai_session_revision(&tab_id).await;
     }
     get_workspace_snapshot(app).await
 }

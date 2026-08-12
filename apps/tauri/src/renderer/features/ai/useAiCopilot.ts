@@ -18,6 +18,11 @@ type SendMessageOptions = {
   responseMode?: AiChatResponseMode
 }
 
+type RetryMessageOptions = {
+  contextSnapshotId?: string
+  responseMode?: AiChatResponseMode
+}
+
 function toMessage(error: unknown) {
   const value = String(error)
   return value
@@ -529,36 +534,50 @@ export function useAiCopilot() {
     }
   }, [isStreaming])
 
-  const retry = useCallback(async () => {
-    const desktopApi = window.fileterm
-    const currentConversation = conversationRef.current
-    const providerId = selectedProviderIdRef.current
-    if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
-    setErrorMessage(null)
-    setUsage(null)
-    setContextPreview(null)
-    setIsStreaming(true)
-    try {
-      const modelOverride = selectedModelRef.current || undefined
-      await startRequest(
-        (conversationId, requestProviderId, onEvent) =>
-          desktopApi.retryAiChat({ conversationId, providerId: requestProviderId, modelOverride }, onEvent),
-        currentConversation.id,
-        providerId
-      )
-      return true
-    } catch (error) {
-      if (mountedRef.current) {
-        setErrorMessage(toMessage(error))
-        setIsStreaming(false)
-        activeRequestIdRef.current = null
-        requestCompletedRef.current = true
-        setActiveRequestId(null)
-        activeResponseModeRef.current = 'chat'
+  const retry = useCallback(
+    async (options: RetryMessageOptions = {}) => {
+      const desktopApi = window.fileterm
+      const currentConversation = conversationRef.current
+      const providerId = selectedProviderIdRef.current
+      if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
+      const responseMode = options.responseMode ?? 'chat'
+      setErrorMessage(null)
+      setUsage(null)
+      setContextPreview(null)
+      setIsStreaming(true)
+      activeResponseModeRef.current = responseMode
+      try {
+        const modelOverride = selectedModelRef.current || undefined
+        await startRequest(
+          (conversationId, requestProviderId, onEvent) =>
+            desktopApi.retryAiChat(
+              {
+                conversationId,
+                providerId: requestProviderId,
+                modelOverride,
+                contextSnapshotId: options.contextSnapshotId,
+                responseMode
+              },
+              onEvent
+            ),
+          currentConversation.id,
+          providerId
+        )
+        return true
+      } catch (error) {
+        if (mountedRef.current) {
+          setErrorMessage(toMessage(error))
+          setIsStreaming(false)
+          activeRequestIdRef.current = null
+          requestCompletedRef.current = true
+          setActiveRequestId(null)
+          activeResponseModeRef.current = 'chat'
+        }
+        return false
       }
-      return false
-    }
-  }, [isStreaming, startRequest])
+    },
+    [isStreaming, startRequest]
+  )
 
   const stop = useCallback(async () => {
     const desktopApi = window.fileterm

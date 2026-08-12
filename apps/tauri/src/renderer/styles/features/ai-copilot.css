@@ -39,6 +39,8 @@
 .ai-copilot-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  container-type: inline-size;
+  container-name: ai-copilot;
   position: absolute;
   top: 0;
   right: 0;
@@ -690,23 +692,25 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
 }
 
 .ai-copilot-context-dock-hint {
+  flex: 1 1 180px;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--text-soft);
   font-size: 9px;
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: right;
 }
 
 .ai-copilot-context-switch {
   display: inline-flex;
   height: 28px;
+  max-width: 100%;
   flex: 0 0 auto;
   align-items: center;
   gap: 5px;
@@ -737,7 +741,15 @@
 }
 
 .ai-copilot-context-switch .material-symbols-outlined {
+  flex: 0 0 auto;
   font-size: 13px;
+}
+
+.ai-copilot-context-switch > span:not(.material-symbols-outlined) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ai-copilot-context-switch-state {
@@ -754,6 +766,7 @@
 }
 
 .ai-copilot-command-feedback {
+  min-width: 0;
   margin: 0 0 8px;
   padding: 6px 8px;
   border: 1px solid color-mix(in srgb, var(--focus-outline) 28%, var(--border-light));
@@ -762,6 +775,7 @@
   background: var(--accent-tint-weak);
   font-size: 10px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .ai-copilot-visually-hidden {
@@ -1124,6 +1138,7 @@
 
 .ai-copilot-command-card {
   display: grid;
+  min-width: 0;
   gap: 7px;
   padding: 9px;
   border: 1px solid var(--border-light);
@@ -1134,7 +1149,9 @@
 .ai-copilot-command-card header,
 .ai-copilot-command-card footer {
   display: flex;
+  min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1213,12 +1230,14 @@
 }
 
 .ai-copilot-command-card footer {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .ai-copilot-command-card footer button {
   display: inline-flex;
   min-height: 26px;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 4px;
   padding: 0 7px;
@@ -1251,6 +1270,7 @@
 
 .ai-copilot-review-card {
   display: grid;
+  min-width: 0;
   gap: 8px;
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--focus-outline) 34%, var(--border-light));
@@ -1271,14 +1291,18 @@
 
 .ai-copilot-review-card header {
   display: flex;
+  min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
 }
 
 .ai-copilot-review-card header strong {
+  min-width: 0;
   color: var(--text-main);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .ai-copilot-review-card dl {
@@ -1334,6 +1358,52 @@
 .ai-copilot-review-output > strong {
   color: var(--text-muted);
   font-size: 9px;
+}
+
+@container ai-copilot (max-width: 390px) {
+  .ai-copilot-context-dock-row {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ai-copilot-context-dock-hint {
+    flex: none;
+    font-size: 8px;
+    line-height: 1.35;
+    text-align: right;
+  }
+
+  .ai-copilot-command-card footer {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .ai-copilot-command-card footer button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ai-copilot-review-card dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container ai-copilot (max-width: 330px) {
+  .ai-copilot-context-dock-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .ai-copilot-context-dock-hint {
+    padding: 0 2px;
+  }
+
+  .ai-copilot-command-card footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .ai-copilot-streaming-indicator {

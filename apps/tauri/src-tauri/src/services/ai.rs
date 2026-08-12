@@ -443,6 +443,10 @@ pub struct RetryAiChatInput {
     pub provider_id: String,
     #[serde(default)]
     pub model_override: Option<String>,
+    #[serde(default)]
+    pub context_snapshot_id: Option<String>,
+    #[serde(default)]
+    pub response_mode: AiChatResponseMode,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2625,8 +2629,9 @@ async fn prepare_start_chat(
     })
 }
 
-fn prepare_retry_chat(
+async fn prepare_retry_chat(
     app: &AppHandle,
+    window_label: &str,
     input: RetryAiChatInput,
 ) -> Result<PreparedChatRequest, AppError> {
     let conversation_id = validate_conversation_id(&input.conversation_id)?;
@@ -2637,6 +2642,18 @@ fn prepare_retry_chat(
         if !m.is_empty() {
             provider.model = m.to_string();
         }
+    }
+    let (context_attachment, prompt_context) = match input.context_snapshot_id.as_deref() {
+        Some(snapshot_id) => consume_context_snapshot(app, window_label, &provider.id, snapshot_id)
+            .await
+            .map(|(attachment, prompt)| (Some(attachment), Some(prompt)))?,
+        None => (None, None),
+    };
+    if input.response_mode == AiChatResponseMode::CommandProposal && context_attachment.is_none() {
+        return Err(ai_error(
+            "AI_CONTEXT_NOT_FOUND",
+            "生成命令卡片前，请先预览并确认目标终端上下文",
+        ));
     }
 
     let _guard = conversation_store_lock()?;
@@ -2654,8 +2671,22 @@ fn prepare_retry_chat(
                 "只有未完成的最新提问可以重试",
             )
         })?;
+    let mut conversation_changed = false;
+    if let Some(context_attachment) = context_attachment.as_ref() {
+        if let Some(message) = conversation
+            .messages
+            .iter_mut()
+            .find(|message| message.id == user_message_id)
+        {
+            message.context = Some(context_attachment.clone());
+            conversation_changed = true;
+        }
+    }
     if conversation.provider_id != provider.id {
         conversation.provider_id = provider.id.clone();
+        conversation_changed = true;
+    }
+    if conversation_changed {
         conversation.updated_at = now_timestamp();
         persist_conversation(app, &mut index, &conversation)?;
     }
@@ -2670,10 +2701,10 @@ fn prepare_retry_chat(
         provider,
         api_key,
         conversation,
-        context_attachment: None,
-        prompt_context: None,
-        response_mode: AiChatResponseMode::Chat,
-        source_window_label: None,
+        context_attachment,
+        prompt_context,
+        response_mode: input.response_mode,
+        source_window_label: Some(window_label.to_string()),
     })
 }
 
@@ -2855,8 +2886,9 @@ pub async fn start_chat(
     Ok(request)
 }
 
-pub fn retry_chat(
+pub async fn retry_chat(
     app: &AppHandle,
+    window: &WebviewWindow,
     input: RetryAiChatInput,
     channel: Channel<AiStreamEvent>,
 ) -> Result<AiChatRequest, AppError> {
@@ -2864,7 +2896,7 @@ pub fn retry_chat(
     let request_id = crate::storage::new_id("ai-request");
     let cancellation = CancellationToken::new();
     register_chat_request(&request_id, &conversation_id, cancellation.clone())?;
-    let prepared = match prepare_retry_chat(app, input) {
+    let prepared = match prepare_retry_chat(app, window.label(), input).await {
         Ok(mut prepared) => {
             prepared.request.request_id = request_id.clone();
             prepared
@@ -3054,7 +3086,30 @@ fn parse_command_proposal(
     value: &str,
     target: &AiContextTarget,
 ) -> Result<(String, Vec<AiCommandSuggestion>), AppError> {
-    let envelope = serde_json::from_str::<CommandProposalEnvelope>(value.trim()).map_err(|_| {
+    let value = value.trim();
+    // A few providers wrap an otherwise complete JSON response in a single
+    // code fence despite the instruction not to. Accept only that exact
+    // shape; prose before/after the fence remains invalid and is never
+    // interpreted as a command proposal.
+    let value = if let Some(fenced) = value.strip_prefix("```") {
+        if let Some((language, body)) = fenced.split_once('\n') {
+            if let Some(body) = body.strip_suffix("```") {
+                let language = language.trim();
+                if language.is_empty() || language.eq_ignore_ascii_case("json") {
+                    body.trim()
+                } else {
+                    value
+                }
+            } else {
+                value
+            }
+        } else {
+            value
+        }
+    } else {
+        value
+    };
+    let envelope = serde_json::from_str::<CommandProposalEnvelope>(value).map_err(|_| {
         ai_error(
             "AI_PROVIDER_RESPONSE_INVALID",
             "命令建议未返回有效的结构化响应",
@@ -3185,10 +3240,9 @@ async fn run_chat_request(
                 "命令建议缺少已确认的终端目标",
             ));
         };
-        // Plain text, Markdown fences, and malformed JSON stay ordinary
-        // assistant text. They can never be inferred into executable cards.
-        parse_command_proposal(&stream.content, &context_attachment.target)
-            .unwrap_or((stream.content, Vec::new()))
+        // Command mode is fail-closed: a provider response that is not the
+        // requested JSON envelope must never be shown as a normal answer.
+        parse_command_proposal(&stream.content, &context_attachment.target)?
     } else {
         (stream.content, Vec::new())
     };
@@ -3254,7 +3308,7 @@ fn system_prompt(context: Option<&AiPromptContext>, response_mode: AiChatRespons
         prompt.push_str("\n</fileterm-user-approved-context>");
     }
     if response_mode == AiChatResponseMode::CommandProposal {
-        prompt.push_str("\n\nReturn exactly one JSON object and nothing else. Its schema is {\"answer\": string, \"commands\": [{\"command\": string, \"explanation\": string | null, \"risk\": \"read-only\" | \"mutating\" | \"destructive\" | \"privileged\" | \"unknown\"}]}. Do not use Markdown fences. Include only commands that the user should review manually; do not imply they were executed.");
+        prompt.push_str("\n\nThis request is in command-proposal mode. This mode applies to the current turn even if earlier assistant messages used ordinary Markdown. Interpret short follow-ups such as 'start over', 'try again', '重新来', '再来一次', '换一种', or their equivalent as a request to regenerate the command proposal for the current task, using the preceding user intent and conversation context. Return exactly one JSON object and nothing else. Its schema is {\"answer\": string, \"commands\": [{\"command\": string, \"explanation\": string | null, \"risk\": \"read-only\" | \"mutating\" | \"destructive\" | \"privileged\" | \"unknown\"}]}. Do not use Markdown, code fences, or prose outside the JSON object. For an operational request, include one or more actionable shell commands; only use an empty commands array when no command can be responsibly proposed because required information is missing. Include only commands that the user should review manually; do not imply they were executed.");
     }
     prompt
 }
@@ -4771,10 +4825,16 @@ mod tests {
         assert_eq!(commands[0].risk, AiCommandRisk::Privileged);
         assert_eq!(commands[0].target, target);
         assert!(parse_command_proposal(
-            "```json\n{\"answer\":\"no\",\"commands\":[]}\n```",
+            "The command is below:\n```json\n{\"answer\":\"no\",\"commands\":[]}\n```",
             &context_target()
         )
         .is_err());
+        assert!(parse_command_proposal(
+            "```json\n{\"answer\":\"no\",\"commands\":[]}\n```",
+            &context_target()
+        )
+        .is_ok());
+        assert!(parse_command_proposal("ordinary assistant text", &context_target()).is_err());
     }
 
     #[test]

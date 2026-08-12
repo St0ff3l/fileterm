@@ -831,6 +831,8 @@ textarea:focus-visible,
 }
 
 .file-manager {
+  container-type: inline-size;
+  container-name: file-manager;
   grid-template-rows: 25px minmax(0, 1fr);
 }
 
@@ -838,6 +840,8 @@ textarea:focus-visible,
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+  overflow: hidden;
   padding-left: 0;
 }
 
@@ -846,10 +850,18 @@ textarea:focus-visible,
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+  overflow: hidden;
   padding-left: 14px;
   margin-right: 6px;
   flex-shrink: 0;
   box-sizing: border-box;
+}
+
+.file-tabs-left button,
+.file-tab-actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .file-tabs button {
@@ -866,12 +878,20 @@ textarea:focus-visible,
 }
 
 .file-current-path {
-  display: flex;
-  align-items: center;
+  display: block;
+  min-width: 0;
+  width: 0;
+  flex: 1 1 0;
+  align-self: center;
+  height: 22px;
   margin-left: 0;
+  overflow: hidden;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
   font-size: 12px;
   font-weight: 400;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-current-path.is-status-hint {
@@ -883,9 +903,16 @@ textarea:focus-visible,
 
 .file-tab-actions {
   display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
   gap: 5px;
   margin-left: auto;
   padding-right: 12px;
+}
+
+.file-tab-actions-command {
+  max-width: min(132px, 32%);
+  overflow: hidden;
 }
 
 .file-tab-actions button {
@@ -894,6 +921,34 @@ textarea:focus-visible,
   padding: 0 7px;
   border-radius: 5px;
   font-size: 11px;
+}
+
+@container file-manager (max-width: 720px) {
+  .file-tabs {
+    gap: 8px;
+  }
+
+  .file-tabs-left {
+    width: min(var(--local-pane-width, 214px), 50%);
+    gap: 8px;
+    margin-right: 0;
+    padding-left: 8px;
+  }
+
+  .file-tab-actions {
+    padding-right: 8px;
+  }
+
+  .file-tab-actions-command {
+    max-width: min(132px, 38%);
+  }
+
+  .command-manager-launch {
+    width: 100%;
+    max-width: 116px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .file-toolbar {

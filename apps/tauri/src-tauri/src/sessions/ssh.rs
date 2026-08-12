@@ -4173,6 +4173,7 @@ async fn run_worker_loop(
                     .and_then(|id| id.as_str())
                     .unwrap_or("")
                     .to_string(),
+                ai_session_revision: state.ai_session_revision(tab_id).await.to_string(),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: existing_transcript,
