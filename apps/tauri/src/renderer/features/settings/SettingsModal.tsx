@@ -277,6 +277,9 @@ export function SettingsModal({
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
   const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
+  const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
+  const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS
   }))
@@ -367,6 +370,7 @@ export function SettingsModal({
       .then((preferences) => {
         if (!canceled) {
           setAutoCheckUpdates(preferences.autoCheckUpdates)
+          setTerminalZoomLocked(preferences.terminalZoomLocked)
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
           setOverviewShowStats(preferences.overviewShowStats)
           setOverviewShowRecent(preferences.overviewShowRecent)
@@ -388,6 +392,7 @@ export function SettingsModal({
     const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
       if (!canceled) {
         setAutoCheckUpdates(preferences.autoCheckUpdates)
+        setTerminalZoomLocked(preferences.terminalZoomLocked)
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
         setOverviewShowStats(preferences.overviewShowStats)
         setOverviewShowRecent(preferences.overviewShowRecent)
@@ -736,6 +741,25 @@ export function SettingsModal({
         setConnectionDefaultsError(t.connectionDefaultsSaveFailed)
       })
       .finally(() => setIsSavingConnectionDefaults(false))
+  }
+
+  const setTerminalZoomLockPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingTerminalZoomPreference || nextValue === terminalZoomLocked) {
+      return
+    }
+
+    const previousValue = terminalZoomLocked
+    setTerminalZoomLocked(nextValue)
+    setTerminalZoomPreferenceError(null)
+    setIsSavingTerminalZoomPreference(true)
+    void desktopApi
+      .setUiPreferences({ terminalZoomLocked: nextValue })
+      .then((preferences) => setTerminalZoomLocked(preferences.terminalZoomLocked))
+      .catch(() => {
+        setTerminalZoomLocked(previousValue)
+        setTerminalZoomPreferenceError(t.terminalZoomPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingTerminalZoomPreference(false))
   }
 
   const applyOverviewPreferences = (preferences: UiPreferences) => {
@@ -1593,6 +1617,26 @@ export function SettingsModal({
                     </span>
                   </button>
                 </div>
+              </section>
+
+              <section className="settings-section">
+                <h3>{t.terminalDisplaySettings}</h3>
+                <p className="settings-tools-hint">{t.terminalDisplaySettingsHint}</p>
+                <div className="advanced-toggle-list">
+                  <div className="advanced-toggle-row">
+                    <label className="ssh-checkbox advanced-toggle-label">
+                      <input
+                        checked={terminalZoomLocked}
+                        disabled={!desktopApi || isSavingTerminalZoomPreference}
+                        onChange={(event) => setTerminalZoomLockPreference(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span className="advanced-toggle-name">{t.lockTerminalZoom}</span>
+                    </label>
+                    <p className="advanced-toggle-hint">{t.lockTerminalZoomHint}</p>
+                  </div>
+                </div>
+                {terminalZoomPreferenceError ? <p className="modal-error">{terminalZoomPreferenceError}</p> : null}
               </section>
 
               <section className="settings-section">

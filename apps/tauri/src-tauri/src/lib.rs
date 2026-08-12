@@ -23,7 +23,7 @@ use std::{
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::image::Image;
 #[cfg(not(target_os = "linux"))]
-use tauri::menu::{PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{CheckMenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{
     menu::{Menu, MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -336,6 +336,9 @@ pub(crate) fn install_localized_tray_menu(
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
     let quit_accelerator = application_quit_accelerator(platform);
+    let terminal_zoom_locked = crate::commands::app_get_ui_preferences(app.clone())
+        .map(|preferences| preferences.terminal_zoom_locked)
+        .unwrap_or(false);
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
         localized(is_english, "New Connection", "新建连接"),
@@ -486,11 +489,19 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .accelerator("Cmd+0")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-terminal-zoom-lock",
+            localized(is_english, "Lock Terminal Zoom", "锁定终端缩放"),
+        )
+        .checked(terminal_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)
             .item(&terminal_zoom_reset)
+            .item(&terminal_zoom_lock)
     };
     // Windows/Linux use a renderer-owned menubar, but native accelerators are
     // still the only path that reaches us before WebView2/WebKitGTK consumes a
@@ -519,11 +530,19 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .accelerator("Ctrl+0")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-terminal-zoom-lock",
+            localized(is_english, "Lock Terminal Zoom", "锁定终端缩放"),
+        )
+        .checked(terminal_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)
             .item(&terminal_zoom_reset)
+            .item(&terminal_zoom_lock)
     };
     // macOS uses this native menu instead of the renderer-owned Windows/Linux
     // menu bar, so expose the requested debug-only F12 entry here.
@@ -1791,6 +1810,15 @@ pub fn run() {
             "view-terminal-zoom-reset" => {
                 if let Some(window) = focused_webview_window(app) {
                     let _ = window.emit("app:terminal-zoom-request", "reset");
+                }
+            }
+            "view-terminal-zoom-lock" => {
+                if let Err(error) = crate::commands::app_toggle_terminal_zoom_lock(app.clone()) {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to toggle terminal zoom lock: {error}"),
+                    );
                 }
             }
             "workspace-new-tab" => {

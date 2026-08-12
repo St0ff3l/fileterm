@@ -25,7 +25,17 @@ const SHORTCUT_TERMINAL_ZOOM_RESET = 'Ctrl+0'
 // 行为一致：生产构建不暴露 devtools 入口。
 const isDevBuild = Boolean(import.meta.env.DEV)
 
-export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTermDesktopApi; isMaximized: boolean }) {
+export function WindowMenubar({
+  desktopApi,
+  isMaximized,
+  terminalZoomLocked,
+  onToggleTerminalZoomLock
+}: {
+  desktopApi?: FileTermDesktopApi
+  isMaximized: boolean
+  terminalZoomLocked: boolean
+  onToggleTerminalZoomLock(): void
+}) {
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null)
 
   const openMenuAt = (kind: WindowMenuKind, target: HTMLButtonElement) => {
@@ -80,6 +90,11 @@ export function WindowMenubar({ desktopApi, isMaximized }: { desktopApi?: FileTe
           label: t.terminalZoomReset,
           shortcut: SHORTCUT_TERMINAL_ZOOM_RESET,
           action: () => dispatchAppEvent(APP_EVENT.terminalZoom, 'reset')
+        },
+        {
+          label: t.lockTerminalZoom,
+          checked: terminalZoomLocked,
+          action: onToggleTerminalZoomLock
         }
       )
       return items

@@ -87,6 +87,7 @@ type InitialUiPreferences = Pick<
   | 'theme'
   | 'locale'
   | 'connectionDefaults'
+  | 'terminalZoomLocked'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -159,6 +160,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
     ...(initialUiPreferences?.connectionDefaults ?? {})
   }))
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(() => initialUiPreferences?.terminalZoomLocked ?? false)
   const [overviewShowStats, setOverviewShowStats] = useState(() => initialUiPreferences?.overviewShowStats ?? true)
   const [overviewShowRecent, setOverviewShowRecent] = useState(() => initialUiPreferences?.overviewShowRecent ?? true)
   const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(
@@ -288,6 +290,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     themeMode,
     locale,
     connectionDefaults,
+    terminalZoomLocked,
     overviewShowStats,
     overviewShowRecent,
     overviewShowAllConnections,
@@ -302,6 +305,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onConnectionDefaultsChange: (nextDefaults) => {
       setConnectionDefaults((currentDefaults) => ({ ...currentDefaults, ...nextDefaults }))
     },
+    onTerminalZoomLockedChange: setTerminalZoomLocked,
     onOverviewShowStatsChange: setOverviewShowStats,
     onOverviewShowRecentChange: setOverviewShowRecent,
     onOverviewShowAllConnectionsChange: setOverviewShowAllConnections,
@@ -1451,7 +1455,14 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           } as CSSProperties
         }
       >
-        {usesCustomWindowChrome ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
+        {usesCustomWindowChrome ? (
+          <WindowMenubar
+            desktopApi={desktopApi}
+            isMaximized={isMaximized}
+            terminalZoomLocked={terminalZoomLocked}
+            onToggleTerminalZoomLock={() => setTerminalZoomLocked((current) => !current)}
+          />
+        ) : null}
         {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
 
         {shouldShowSystemSidebar ? (

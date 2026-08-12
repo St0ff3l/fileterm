@@ -116,6 +116,8 @@ pub struct UiPreferences {
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
     #[serde(default)]
+    pub terminal_zoom_locked: bool,
+    #[serde(default)]
     pub connection_defaults: SshConnectionDefaults,
     #[serde(default = "default_overview_show_stats")]
     pub overview_show_stats: bool,
@@ -135,6 +137,7 @@ pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
     pub auto_check_updates: Option<bool>,
+    pub terminal_zoom_locked: Option<bool>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
     pub overview_show_stats: Option<bool>,
     pub overview_show_recent: Option<bool>,
@@ -491,6 +494,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             auto_check_updates: default_auto_check_updates(),
+            terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
             overview_show_stats: default_overview_show_stats(),
             overview_show_recent: default_overview_show_recent(),
@@ -509,6 +513,7 @@ pub fn app_set_ui_preferences(
     let path = crate::storage::state_path(&app)?;
     let mut preferences = app_get_ui_preferences(app.clone())?;
     let previous_locale = preferences.locale.clone();
+    let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
     if let Some(theme) = input.theme {
         preferences.theme = theme;
     }
@@ -517,6 +522,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(auto_check_updates) = input.auto_check_updates {
         preferences.auto_check_updates = auto_check_updates;
+    }
+    if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
+        preferences.terminal_zoom_locked = terminal_zoom_locked;
     }
     if let Some(connection_defaults) = input.connection_defaults {
         if let Some(value) = connection_defaults.use_empty_password {
@@ -559,7 +567,9 @@ pub fn app_set_ui_preferences(
     let content = serde_json::to_string_pretty(&preferences)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
-    if previous_locale != preferences.locale {
+    if previous_locale != preferences.locale
+        || previous_terminal_zoom_locked != preferences.terminal_zoom_locked
+    {
         if let Err(error) =
             crate::install_localized_application_menu(&app, preferences.locale == "enUS")
         {
@@ -572,16 +582,41 @@ pub fn app_set_ui_preferences(
                 format!("failed to refresh native menu: {error}"),
             );
         }
-        if let Err(error) = crate::install_localized_tray_menu(&app, preferences.locale == "enUS") {
-            crate::services::logging::warn(
-                &app,
-                "ui-preferences",
-                format!("failed to refresh tray menu: {error}"),
-            );
+        if previous_locale != preferences.locale {
+            if let Err(error) =
+                crate::install_localized_tray_menu(&app, preferences.locale == "enUS")
+            {
+                crate::services::logging::warn(
+                    &app,
+                    "ui-preferences",
+                    format!("failed to refresh tray menu: {error}"),
+                );
+            }
         }
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
     Ok(preferences)
+}
+
+/// Toggle terminal font zoom from a native menu item while keeping the
+/// renderer and settings page on the same persisted preference/event path.
+pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError> {
+    let current = app_get_ui_preferences(app.clone())?;
+    app_set_ui_preferences(
+        app,
+        UiPreferencesInput {
+            theme: None,
+            locale: None,
+            auto_check_updates: None,
+            terminal_zoom_locked: Some(!current.terminal_zoom_locked),
+            connection_defaults: None,
+            overview_show_stats: None,
+            overview_show_recent: None,
+            overview_show_all_connections: None,
+            overview_show_quick_actions: None,
+            overview_section_order: None,
+        },
+    )
 }
 
 fn normalize_ui_state(value: Value) -> Result<serde_json::Map<String, Value>, AppError> {
@@ -3886,6 +3921,7 @@ mod ui_preferences_tests {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
             auto_check_updates: false,
+            terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
             overview_show_stats: true,
             overview_show_recent: true,
@@ -3914,6 +3950,7 @@ mod ui_preferences_tests {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
             auto_check_updates: false,
+            terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
             overview_show_stats: false,
             overview_show_recent: false,
@@ -3930,6 +3967,7 @@ mod ui_preferences_tests {
         assert_eq!(preferences.theme, "default-light");
         assert_eq!(preferences.locale, "enUS");
         assert!(!preferences.auto_check_updates);
+        assert!(preferences.terminal_zoom_locked);
         assert!(!preferences.overview_show_stats);
         assert!(!preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
@@ -4045,6 +4083,7 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             auto_check_updates: false,
+            terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
             overview_show_stats: false,
             overview_show_recent: false,

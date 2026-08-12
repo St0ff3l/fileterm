@@ -2327,6 +2327,15 @@
   letter-spacing: 0;
 }
 
+.context-menu-check {
+  flex: 0 0 16px;
+  width: 16px;
+  color: var(--text-main);
+  font-size: 13px;
+  line-height: 1;
+  text-align: center;
+}
+
 .context-menu-separator {
   display: block;
   height: 1px;

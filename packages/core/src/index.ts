@@ -986,6 +986,7 @@ export interface UiPreferences {
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
   autoCheckUpdates: boolean
+  terminalZoomLocked: boolean
   connectionDefaults: SshConnectionDefaults
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -998,6 +999,7 @@ export interface UiPreferencesInput {
   theme?: UiPreferences['theme']
   locale?: UiPreferences['locale']
   autoCheckUpdates?: boolean
+  terminalZoomLocked?: boolean
   connectionDefaults?: Partial<SshConnectionDefaults>
   overviewShowStats?: boolean
   overviewShowRecent?: boolean

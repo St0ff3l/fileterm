@@ -618,8 +618,44 @@ export const TerminalView = memo(function TerminalView({
   const [activeFindIndex, setActiveFindIndex] = useState(-1)
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
   const [findRegex, setFindRegex] = useState(false)
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
+  const terminalZoomLockedRef = useRef(false)
   const isMac = window.fileterm?.platform === 'darwin'
   const isWin = window.fileterm?.platform === 'win32'
+
+  terminalZoomLockedRef.current = terminalZoomLocked
+
+  useEffect(() => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) {
+      return
+    }
+
+    let canceled = false
+    void desktopApi
+      .getUiPreferences()
+      .then((preferences) => {
+        if (!canceled) {
+          terminalZoomLockedRef.current = preferences.terminalZoomLocked
+          setTerminalZoomLocked(preferences.terminalZoomLocked)
+        }
+      })
+      .catch(() => {
+        // Keep the safe default (unlocked) when the preference cannot be read.
+      })
+
+    const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
+      if (!canceled) {
+        terminalZoomLockedRef.current = preferences.terminalZoomLocked
+        setTerminalZoomLocked(preferences.terminalZoomLocked)
+      }
+    })
+
+    return () => {
+      canceled = true
+      unsubscribe()
+    }
+  }, [])
 
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
@@ -1061,6 +1097,11 @@ export const TerminalView = memo(function TerminalView({
     }
     const terminalTextarea = terminal.textarea
     const adjustTerminalFontSize = (change: number) => {
+      if (terminalZoomLockedRef.current) {
+        logTerminalZoom(terminal, 'font-size-ignored-locked', { change, tabId: tabIdRef.current })
+        return false
+      }
+
       const currentSize = terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE
       const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, currentSize + change))
       logTerminalZoom(terminal, 'font-size-requested', { change, currentSize, nextSize, tabId: tabIdRef.current })
