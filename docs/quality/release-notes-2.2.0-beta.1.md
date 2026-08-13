@@ -12,6 +12,7 @@
 - **本地对话隐私**：对话历史保存在本地；纯对话模式只发送用户输入和本地对话历史，不主动读取主机、路径、文件或终端输出。
 - **远程备份安全**：WebDAV/S3 远程备份使用加密备份包；上传时需要二次确认密码，下载时单次输入即可。密码至少 8 个字符并包含大小写字母，用户主动导出的 JSON 格式保持不变。
 - **跨平台与界面细节**：继续完善 macOS、Windows、Linux 的 AI 侧边栏、终端工作区、滚动条、按钮、图标和复制操作一致性。
+- **Windows 便携版**：Beta 发布同时提供 x64 免安装 portable zip；它不写入安装器注册信息，运行前需要系统已有 WebView2 Runtime。
 
 ### 本版本包含的主要 PR 和问题修复
 
@@ -43,6 +44,7 @@ FileTerm 2.2.0 Beta 1 is a test release centered on the AI Copilot sidebar and i
 - **Execution and context consistency**: Only the command card currently being executed is locked. Other cards remain available while the tab, host, user, and working directory are unchanged. Terminal output changes alone do not invalidate the whole batch.
 - **Local conversation privacy**: Conversation history is stored locally. Pure chat mode sends only the user input and local conversation history; it does not proactively read the host, path, files, or terminal output.
 - **Cross-platform UI polish**: Continue refining the AI sidebar and terminal workspace across macOS, Windows, and Linux, including scrollbars, buttons, icons, and copy interactions.
+- **Windows portable build**: The Beta release also provides an x64 portable zip that does not install registration entries; the system must already have the WebView2 Runtime available.
 
 ### Main PRs
 

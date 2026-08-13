@@ -28,7 +28,7 @@
 前往 [GitHub Releases](https://github.com/St0ff3l/fileterm/releases/latest) 下载最新正式版：
 
 - **macOS**：提供 Apple Silicon（arm64）和 Intel（x64）安装包。
-- **Windows**：提供 x64 NSIS 安装包；已安装的正式版会在应用内下载、验签并在重启后更新。
+- **Windows**：提供 x64 NSIS 安装包和免安装 portable zip；已安装的正式版会在应用内下载、验签并在重启后更新。
 - **Linux**：提供 x64 `.deb` 安装包和 `.AppImage` 便携包。
 
 macOS 与 Linux 的“检查更新”会打开对应的 GitHub Release 下载页，由用户自行下载和安装；Windows 正式安装版使用签名的应用内更新。
@@ -144,7 +144,7 @@ npm run release:linux
 ### 发布与更新
 
 - 推送位于 `release/*` 分支提交上的 `vX.Y.Z` tag，会运行 Tauri 专用 Release Action，发布 macOS arm64/x64 DMG、Windows x64 NSIS 安装包以及 Linux x64 `.deb` / `.AppImage` 包。
-- Windows Action 同时生成带签名的 NSIS 安装器、`.sig` 签名文件和 `latest.json`；已安装 Windows 客户端从该清单验签后更新。
+- Windows Action 同时生成带签名的 NSIS 安装器、免安装 `*-windows-x64-portable.zip`、`.sig` 签名文件和 `latest.json`；已安装 Windows 客户端从该清单验签后更新。portable 版本不写入安装器注册信息，运行前仍需系统已有 WebView2 Runtime。
 - 仓库需要配置 GitHub Actions Secret `TAURI_SIGNING_PRIVATE_KEY`。它是 Tauri updater 私钥内容，只能保存为 GitHub Secret，绝不能提交到仓库。
 - macOS 发行包使用 ad hoc 签名（不使用 Apple Developer 证书或公证），不使用应用内 updater：检查到新版本后跳转 GitHub Release，由用户选择下载包；首次下载运行仍可能需要在“隐私与安全性”中手动放行。
 
