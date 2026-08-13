@@ -26,7 +26,10 @@
 
   --primary: #3b82f6;
   --primary-hover: #2563eb;
-  --accent-primary: var(--primary);
+  /* Focus and selected-state outlines. Do not use this for filled buttons. */
+  --focus-outline: var(--primary);
+  /* Non-button accent for informational text, icons, and status highlights. */
+  --accent-highlight: var(--primary);
   --accent-text: #27272a;
   --sidebar-active-accent: var(--text-main);
   --selection-bg: #e4e4e7;
@@ -296,14 +299,26 @@
   outline: none !important;
 }
 
-:root[data-theme='default-light'] .sidebar-resizer::after {
+:root[data-theme='default-light'] .ai-copilot-resizer {
+  left: -3px !important;
+  width: 6px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:root[data-theme='default-light'] .sidebar-resizer::after,
+:root[data-theme='default-light'] .ai-copilot-resizer::after {
   width: 2px !important;
   left: 2px !important;
   background: transparent !important;
 }
 
 :root[data-theme='default-light'] .sidebar-resizer:hover::after,
-:root[data-theme='default-light'] .sidebar-resizer.is-active::after {
+:root[data-theme='default-light'] .sidebar-resizer.is-active::after,
+:root[data-theme='default-light'] .ai-copilot-resizer:hover::after,
+:root[data-theme='default-light'] .ai-copilot-resizer.is-active::after {
   background: var(--primary) !important;
 }
 
@@ -561,7 +576,7 @@
 }
 
 :root[data-theme='default-light'] .dropdown-select-menu button.is-selected {
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
 }
 
 :root[data-theme='default-light'] .context-menu.tools-menu {
@@ -1063,7 +1078,7 @@
 
 :root[data-theme='default-light'] .manager-row.drop-inside {
   background: var(--selection-bg);
-  box-shadow: inset 3px 0 0 var(--accent-primary);
+  box-shadow: inset 3px 0 0 var(--focus-outline);
 }
 
 :root[data-theme='default-light'] .folder-row {

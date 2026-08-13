@@ -135,6 +135,7 @@ pub async fn update_local_terminal_cwd(
         }
     };
     if changed {
+        state.touch_ai_session_revision(tab_id).await;
         if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
             let _ = app.emit("workspace:snapshot", snapshot);
         }
@@ -148,8 +149,32 @@ pub async fn set_terminal_state(
     summary: String,
     status: crate::services::WorkspaceTabStatus,
 ) {
+    set_terminal_state_with_snapshot(app, tab_id, summary, status, true).await;
+}
+
+/// Update a terminal state while allowing a compound workspace mutation to
+/// defer its snapshot until the full invariant has been written. This is used
+/// when a newly spawned local PTY is immediately inserted into a pane tree:
+/// broadcasting the transient standalone tab would make the renderer flash a
+/// second top-level tab before the split root is installed.
+pub async fn set_terminal_state_without_snapshot(
+    app: &AppHandle,
+    tab_id: &str,
+    summary: String,
+    status: crate::services::WorkspaceTabStatus,
+) {
+    set_terminal_state_with_snapshot(app, tab_id, summary, status, false).await;
+}
+
+async fn set_terminal_state_with_snapshot(
+    app: &AppHandle,
+    tab_id: &str,
+    summary: String,
+    status: crate::services::WorkspaceTabStatus,
+    emit_workspace_snapshot: bool,
+) {
     let connected = status.is_connected();
-    let transcript = {
+    let (transcript, target_changed) = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
         // 显式分块获取 tabs 与 sessions 锁，避免依赖 NBL 隐式释放；
         // 与 ssh.rs::update_tab_status_and_emit 保持一致，防止未来在 if let
@@ -164,10 +189,16 @@ pub async fn set_terminal_state(
         let Some(session) = sessions.get_mut(tab_id) else {
             return;
         };
+        let target_changed = session.connected != connected;
         session.summary = summary.clone();
         session.connected = connected;
-        session.terminal_transcript.clone()
+        (session.terminal_transcript.clone(), target_changed)
     };
+    if target_changed {
+        app.state::<crate::services::workspace::WorkspaceState>()
+            .touch_ai_session_revision(tab_id)
+            .await;
+    }
     let _ = app.emit(
         "terminal:state",
         serde_json::json!({
@@ -178,7 +209,9 @@ pub async fn set_terminal_state(
             "status": status,
         }),
     );
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    if emit_workspace_snapshot {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
     }
 }

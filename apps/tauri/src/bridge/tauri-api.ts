@@ -24,6 +24,8 @@ import type {
   TransferTask,
   SessionMetricsUpdate,
   SshInteractionRequest,
+  RemoteExecInteractionRequest,
+  BackupPasswordRequest,
   SshKeyFileSelection,
   SshKeyImportResult,
   SshKeyMetadata,
@@ -34,8 +36,29 @@ import type {
   SshTunnelSnapshot,
   CommandExecutionResult,
   TerminalZoomOperation,
+  ActionApprovalRequest,
   McpApprovalRequest,
   LocalTerminalLaunchOptions,
+  AiProviderSummary,
+  AiProviderTestResult,
+  AiChatRequest,
+  AiCommandInsertInput,
+  AiCommandInsertResult,
+  AiReviewExecution,
+  AiConversation,
+  AiConversationSummary,
+  AiContextPreview,
+  AiStreamEvent,
+  CreateAiConversationInput,
+  CreateAiContextPreviewInput,
+  RenameAiConversationInput,
+  RetryAiChatInput,
+  RunAiReviewInput,
+  SaveAiProviderInput,
+  StartAiChatInput,
+  SummarizeAiConversationTitleInput,
+  TestAiProviderInput,
+  McpAgentSetup,
   UiPreferences,
   UiPreferencesInput
 } from '@fileterm/core'
@@ -49,6 +72,58 @@ let terminalDataRegistration: Promise<void> | null = null
 let terminalDataRetryTimer: ReturnType<typeof setTimeout> | null = null
 let terminalDataRetryBackoffMs = 1000
 const TERMINAL_DATA_RETRY_MAX_BACKOFF_MS = 30_000
+const pendingAiChatChannels = new Set<Channel<AiStreamEvent>>()
+const activeAiChatChannels = new Map<string, Channel<AiStreamEvent>>()
+let aiChatBridgeIsUnloading = false
+
+function cancelAiChatsForPageHide() {
+  aiChatBridgeIsUnloading = true
+  const requestIds = [...activeAiChatChannels.keys()]
+  activeAiChatChannels.clear()
+  pendingAiChatChannels.clear()
+  for (const requestId of requestIds) {
+    // Best effort is intentional: a closing WebView cannot wait for IPC, but
+    // the backend still receives a cancellation whenever it remains alive.
+    void invoke<void>('app_cancel_ai_chat', { requestId }).catch(() => undefined)
+  }
+}
+
+window.addEventListener('pagehide', cancelAiChatsForPageHide, { once: true })
+
+function invokeAiChat(
+  command: 'app_start_ai_chat' | 'app_retry_ai_chat',
+  input: StartAiChatInput | RetryAiChatInput,
+  onEvent: (event: AiStreamEvent) => void
+) {
+  const channel = new Channel<AiStreamEvent>()
+  let requestId: string | null = null
+  let terminalEventReceived = false
+  channel.onmessage = (event) => {
+    onEvent(event)
+    if (event.type === 'completed' || event.type === 'error') {
+      terminalEventReceived = true
+      if (requestId) {
+        activeAiChatChannels.delete(requestId)
+      }
+    }
+  }
+  pendingAiChatChannels.add(channel)
+  return invoke<AiChatRequest>(command, { input, channel })
+    .then((request) => {
+      requestId = request.requestId
+      pendingAiChatChannels.delete(channel)
+      if (aiChatBridgeIsUnloading) {
+        void invoke<void>('app_cancel_ai_chat', { requestId: request.requestId }).catch(() => undefined)
+      } else if (!terminalEventReceived) {
+        activeAiChatChannels.set(request.requestId, channel)
+      }
+      return request
+    })
+    .catch((error) => {
+      pendingAiChatChannels.delete(channel)
+      throw error
+    })
+}
 
 function clearNativeDropFallback() {
   latestNativeDropPaths = []
@@ -231,6 +306,53 @@ function subscribe<T>(eventName: string, listener: (payload: T) => void) {
   }
 }
 
+/**
+ * A subscription whose promise resolves only once Tauri has registered the
+ * native event listener. Secure remote-exec prompts use this so the backend
+ * never starts a task that can only wait for an unobservable renderer event.
+ */
+function subscribeReady<T>(eventName: string, listener: (payload: T) => void): Promise<() => void> {
+  const internals = window as unknown as {
+    __TAURI_INTERNALS__?: { unregisterCallback?: (id: number) => void }
+    __TAURI_EVENT_PLUGIN_INTERNALS__?: { unregisterListener?: (event: string, eventId: number) => void }
+  }
+  let active = true
+  let eventId: number | null = null
+  let unlistenStarted = false
+  const callbackId = transformCallback((event: unknown) => {
+    if (!active) return
+    const payload = (event as { payload?: T })?.payload
+    if (payload !== undefined) listener(payload)
+  })
+  const stopListening = () => {
+    active = false
+    if (eventId === null || unlistenStarted) return
+    unlistenStarted = true
+    const registeredEventId = eventId
+    void invoke<void>('plugin:event|unlisten', { event: eventName, eventId: registeredEventId })
+      .then(() => {
+        internals.__TAURI_EVENT_PLUGIN_INTERNALS__?.unregisterListener?.(eventName, registeredEventId)
+        internals.__TAURI_INTERNALS__?.unregisterCallback?.(callbackId)
+      })
+      .catch(() => undefined)
+  }
+
+  return invoke<number>('plugin:event|listen', {
+    event: eventName,
+    target: { kind: 'Any' },
+    handler: callbackId
+  })
+    .then((id) => {
+      eventId = id
+      return stopListening
+    })
+    .catch((error) => {
+      active = false
+      internals.__TAURI_INTERNALS__?.unregisterCallback?.(callbackId)
+      throw error
+    })
+}
+
 export async function createTauriApi(): Promise<FileTermDesktopApi> {
   const [nativePlatform, arch, runtimeVersion, appVersion, appName] = await Promise.all([
     invoke<string>('app_get_platform'),
@@ -256,6 +378,30 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
+    getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
+    listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
+    saveAiProvider: (input: SaveAiProviderInput) => invoke<AiProviderSummary>('app_save_ai_provider', { input }),
+    deleteAiProvider: (providerId: string) => invoke<AiProviderSummary[]>('app_delete_ai_provider', { providerId }),
+    testAiProvider: (input: TestAiProviderInput) => invoke<AiProviderTestResult>('app_test_ai_provider', { input }),
+    listAiConversations: () => invoke<AiConversationSummary[]>('app_list_ai_conversations'),
+    getAiConversation: (conversationId: string) =>
+      invoke<AiConversation>('app_get_ai_conversation', { conversationId }),
+    createAiConversation: (input: CreateAiConversationInput) =>
+      invoke<AiConversation>('app_create_ai_conversation', { input }),
+    renameAiConversation: (input: RenameAiConversationInput) =>
+      invoke<AiConversation>('app_rename_ai_conversation', { input }),
+    summarizeAiConversationTitle: (input: SummarizeAiConversationTitleInput) =>
+      invoke<AiConversation>('app_summarize_ai_conversation_title', { input }),
+    deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
+    createAiContextPreview: (input: CreateAiContextPreviewInput) =>
+      invoke<AiContextPreview>('app_create_ai_context_preview', { input }),
+    startAiChat: (input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
+      invokeAiChat('app_start_ai_chat', input, onEvent),
+    retryAiChat: (input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
+      invokeAiChat('app_retry_ai_chat', input, onEvent),
+    cancelAiChat: (requestId: string) => invoke<void>('app_cancel_ai_chat', { requestId }),
+    insertAiCommand: (input: AiCommandInsertInput) => invoke<AiCommandInsertResult>('app_insert_ai_command', { input }),
+    runAiReview: (input: RunAiReviewInput) => invoke<AiReviewExecution>('app_run_ai_review', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),
@@ -448,8 +594,37 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         options: options ?? null
       }),
     executeRemoteCommand: (tabId: string, command: string, cwd?: string, timeoutMs?: number) =>
-      invoke<{ output: string; exitCode: number | null; timedOut: boolean }>('app_execute_remote_command', {
+      invoke<{
+        output: string
+        exitCode: number | null
+        timedOut: boolean
+        outputTruncated: boolean
+        inputRequired: boolean
+        inputKind?: 'secret' | 'text'
+      }>('app_execute_remote_command', {
         tabId,
+        command,
+        cwd: cwd ?? null,
+        timeoutMs: timeoutMs ?? null
+      }),
+    executeInteractiveRemoteCommand: (
+      tabId: string,
+      expectedSessionRevision: string,
+      command: string,
+      cwd?: string,
+      timeoutMs?: number
+    ) =>
+      invoke<{
+        output: string
+        exitCode: number | null
+        timedOut: boolean
+        outputTruncated: boolean
+        inputRequired: boolean
+        inputKind?: 'secret' | 'text'
+        interactionCount?: number
+      }>('app_execute_interactive_remote_command', {
+        tabId,
+        expectedSessionRevision,
         command,
         cwd: cwd ?? null,
         timeoutMs: timeoutMs ?? null
@@ -498,8 +673,26 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>
       invoke<void>('app_resolve_ssh_interaction', { requestId, response }),
+    resolveRemoteExecInteraction: (requestId: string, cancelled: boolean, value?: string) =>
+      invoke<void>('app_resolve_remote_exec_interaction', {
+        requestId,
+        cancelled,
+        value: cancelled ? null : (value ?? null)
+      }),
+    setRemoteExecInteractionRendererReady: (registrationId: string, ready: boolean) =>
+      invoke<void>('app_set_remote_exec_interaction_renderer_ready', { registrationId, ready }),
+    resolveBackupPassword: (requestId: string, cancelled: boolean, value?: string) =>
+      invoke<void>('app_resolve_backup_password', {
+        requestId,
+        cancelled,
+        value: cancelled ? null : (value ?? null)
+      }),
+    setBackupPasswordRendererReady: (registrationId: string, ready: boolean) =>
+      invoke<void>('app_set_backup_password_renderer_ready', { registrationId, ready }),
     resolveMcpApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
+    resolveActionApproval: (requestId: string, approved: boolean) =>
+      invoke<void>('app_resolve_action_approval', { requestId, approved }),
     setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
       invoke<WorkspaceSnapshot>('app_set_remote_file_access_mode', { tabId, mode, options }),
     listSshTunnels: (tabId: string) => invoke<SshTunnelSnapshot[]>('app_list_ssh_tunnels', { tabId }),
@@ -525,8 +718,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
+    onRemoteExecInteraction: (listener: (request: RemoteExecInteractionRequest) => void) =>
+      subscribeReady('remote-exec:interaction-request', listener),
+    onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>
+      subscribeReady('backup:password-request', listener),
+    onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>
+      subscribe('action:approval-request', listener),
     onMcpApprovalRequest: (listener: (request: McpApprovalRequest) => void) =>
-      subscribe('mcp:approval-request', listener),
+      subscribe('action:approval-request', listener),
     onSshKeysChanged: (listener: (keys: SshKeyMetadata[]) => void) => subscribe('sshKeys:changed', listener),
     onWindowCloseRequest: (listener: (event: { isQuit: boolean }) => void) =>
       subscribe('app:window-close-request', listener),

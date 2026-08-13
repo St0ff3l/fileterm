@@ -18,12 +18,13 @@ import {
   type CreateProfileInput,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
   type FileContentSnapshot,
-  type McpApprovalRequest,
+  type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type OverviewSectionId,
   type RemoteFileItem,
   type SshConnectionDefaults,
-  type UiPreferences
+  type UiPreferences,
+  type McpAgentClientStatus
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import { profileToForm } from './app/app-data'
@@ -52,6 +53,7 @@ import { ConfirmActionDialog } from './features/common/ConfirmActionDialog'
 import type { SendScope } from './features/common/session-send-targets'
 import { resolveSelectedTabIds } from './features/common/session-send-targets'
 import { TabBar, type TabBarProps, type TabContextTarget } from './features/layout/TabBar'
+import { AiCopilotPanel } from './features/ai/AiCopilotPanel'
 import { WindowMenubar } from './features/layout/WindowMenubar'
 import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
@@ -65,6 +67,8 @@ import { useWorkspaceTabs } from './hooks/useWorkspaceTabs'
 import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
+import { useRemoteExecInteractions } from './hooks/useRemoteExecInteractions'
+import { useBackupPasswordInteractions } from './hooks/useBackupPasswordInteractions'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
 import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
@@ -86,6 +90,7 @@ type InitialUiPreferences = Pick<
   | 'theme'
   | 'locale'
   | 'connectionDefaults'
+  | 'terminalZoomLocked'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -158,6 +163,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
     ...(initialUiPreferences?.connectionDefaults ?? {})
   }))
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(() => initialUiPreferences?.terminalZoomLocked ?? false)
   const [overviewShowStats, setOverviewShowStats] = useState(() => initialUiPreferences?.overviewShowStats ?? true)
   const [overviewShowRecent, setOverviewShowRecent] = useState(() => initialUiPreferences?.overviewShowRecent ?? true)
   const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(
@@ -171,16 +177,20 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   ])
   const [isFileEditorDiscardConfirmOpen, setIsFileEditorDiscardConfirmOpen] = useState(false)
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
-  const [mcpApprovalRequests, setMcpApprovalRequests] = useState<McpApprovalRequest[]>([])
-  const [resolvingMcpApprovalId, setResolvingMcpApprovalId] = useState<string | null>(null)
-  const resolvingMcpApprovalIdsRef = useRef(new Set<string>())
+  const [actionApprovalRequests, setActionApprovalRequests] = useState<ActionApprovalRequest[]>([])
+  const [resolvingActionApprovalId, setResolvingActionApprovalId] = useState<string | null>(null)
+  const resolvingActionApprovalIdsRef = useRef(new Set<string>())
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
+  const [aiCopilotWidth, setAiCopilotWidth] = useState(368)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
   const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
   const [workspaceFocusModes, setWorkspaceFocusModes] = useState<Record<string, boolean>>({})
   const [workspaceViews, setWorkspaceViews] = useState<Record<string, 'file' | 'command' | 'tunnel'>>({})
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [isResizingAiCopilot, setIsResizingAiCopilot] = useState(false)
+  const [isAiCopilotOpen, setIsAiCopilotOpen] = useState(false)
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'interface' | 'ai'>('interface')
 
   const desktopApi = window.fileterm
   const rendererPlatform = resolveRendererPlatform(desktopApi?.platform ?? 'browser')
@@ -223,8 +233,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       return
     }
 
-    return desktopApi.onMcpApprovalRequest((request) => {
-      setMcpApprovalRequests((current) => {
+    return desktopApi.onActionApprovalRequest((request) => {
+      setActionApprovalRequests((current) => {
         if (current.some((item) => item.requestId === request.requestId)) {
           return current
         }
@@ -233,26 +243,26 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     })
   }, [desktopApi, isMainWorkspaceWindow])
 
-  const resolveMcpApproval = useCallback(
+  const resolveActionApproval = useCallback(
     async (approved: boolean) => {
-      const request = mcpApprovalRequests[0]
-      if (!desktopApi || !request || resolvingMcpApprovalIdsRef.current.has(request.requestId)) {
+      const request = actionApprovalRequests[0]
+      if (!desktopApi || !request || resolvingActionApprovalIdsRef.current.has(request.requestId)) {
         return
       }
 
-      resolvingMcpApprovalIdsRef.current.add(request.requestId)
-      setResolvingMcpApprovalId(request.requestId)
+      resolvingActionApprovalIdsRef.current.add(request.requestId)
+      setResolvingActionApprovalId(request.requestId)
       try {
-        await desktopApi.resolveMcpApproval(request.requestId, approved)
-        setMcpApprovalRequests((current) => current.filter((item) => item.requestId !== request.requestId))
+        await desktopApi.resolveActionApproval(request.requestId, approved)
+        setActionApprovalRequests((current) => current.filter((item) => item.requestId !== request.requestId))
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause))
       } finally {
-        resolvingMcpApprovalIdsRef.current.delete(request.requestId)
-        setResolvingMcpApprovalId((current) => (current === request.requestId ? null : current))
+        resolvingActionApprovalIdsRef.current.delete(request.requestId)
+        setResolvingActionApprovalId((current) => (current === request.requestId ? null : current))
       }
     },
-    [desktopApi, mcpApprovalRequests]
+    [actionApprovalRequests, desktopApi]
   )
 
   // 1. IPC Synchronization Hook
@@ -283,6 +293,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     themeMode,
     locale,
     connectionDefaults,
+    terminalZoomLocked,
     overviewShowStats,
     overviewShowRecent,
     overviewShowAllConnections,
@@ -297,6 +308,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onConnectionDefaultsChange: (nextDefaults) => {
       setConnectionDefaults((currentDefaults) => ({ ...currentDefaults, ...nextDefaults }))
     },
+    onTerminalZoomLockedChange: setTerminalZoomLocked,
     onOverviewShowStatsChange: setOverviewShowStats,
     onOverviewShowRecentChange: setOverviewShowRecent,
     onOverviewShowAllConnectionsChange: setOverviewShowAllConnections,
@@ -422,9 +434,23 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
   const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
   const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
+  const launchLocalAgent = useCallback(
+    (client: McpAgentClientStatus) => {
+      const launch =
+        client.id === 'claude-code'
+          ? { title: 'Claude Code', command: 'claude' }
+          : { title: 'Codex CLI', command: 'codex' }
+      void openLocalTerminal({ title: launch.title }, launch.command)
+    },
+    [openLocalTerminal]
+  )
   const isSystemSidebarCollapsed =
     isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
   const activeTabId = activeTab?.id ?? null
+  const aiCopilotTargetTab = activePaneTab ?? activeTab
+  const aiCopilotTargetSession = activePaneSession ?? activeSession
+  const isAiCopilotAvailable = Boolean(activeTab)
+  const shouldShowAiCopilot = isAiCopilotOpen && !isHomeWorkspaceVisible
   const setActiveFilePanelHeight = useCallback(
     (next: SetStateAction<number>) => {
       if (!activeTabId) {
@@ -751,6 +777,28 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onError: (scope, err) => reportError(setError, scope, err)
   })
 
+  const {
+    request: remoteExecInteractionRequest,
+    errorMessage: remoteExecInteractionError,
+    isResolving: isRemoteExecInteractionResolving,
+    cancel: cancelRemoteExecInteraction,
+    submit: submitRemoteExecInteraction
+  } = useRemoteExecInteractions({
+    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
+    onError: (scope, err) => reportError(setError, scope, err)
+  })
+
+  const {
+    request: backupPasswordRequest,
+    errorMessage: backupPasswordError,
+    isResolving: isBackupPasswordResolving,
+    cancel: cancelBackupPassword,
+    submit: submitBackupPassword
+  } = useBackupPasswordInteractions({
+    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
+    onError: (scope, err) => reportError(setError, scope, err)
+  })
+
   // Sidebars resizing logic
   const startSidebarResize = useCallback(() => {
     window.getSelection()?.removeAllRanges()
@@ -791,6 +839,66 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       document.body.style.userSelect = ''
     }
   }, [isResizingSidebar])
+
+  const startAiCopilotResize = useCallback(() => {
+    window.getSelection()?.removeAllRanges()
+    document.body.classList.add('is-resizing-copilot')
+    setIsResizingAiCopilot(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isResizingAiCopilot) {
+      return
+    }
+
+    const onMouseMove = (event: globalThis.MouseEvent) => {
+      const windowWidth = window.innerWidth
+      const rawWidth = windowWidth - event.clientX
+      const currentLeftWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
+      const MIN_MAIN_WORKSPACE_WIDTH = 460
+      const maxAllowedWidth = Math.max(340, Math.min(600, windowWidth - currentLeftWidth - MIN_MAIN_WORKSPACE_WIDTH))
+      const nextWidth = Math.min(maxAllowedWidth, Math.max(340, rawWidth))
+      const DEFAULT_COPILOT_WIDTH = 368
+      setAiCopilotWidth(Math.abs(nextWidth - DEFAULT_COPILOT_WIDTH) <= 12 ? DEFAULT_COPILOT_WIDTH : nextWidth)
+    }
+
+    const onMouseUp = () => {
+      window.getSelection()?.removeAllRanges()
+      setIsResizingAiCopilot(false)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', onMouseUp)
+    document.body.classList.add('is-resizing-copilot')
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('blur', onMouseUp)
+      document.body.classList.remove('is-resizing-copilot')
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizingAiCopilot, isSystemSidebarCollapsed, sidebarWidth])
+
+  // Auto-clamp AI Copilot width on window resize to protect main workspace
+  useEffect(() => {
+    if (!shouldShowAiCopilot) return
+
+    const handleWindowResize = () => {
+      const windowWidth = window.innerWidth
+      const currentLeftWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
+      const MIN_MAIN_WORKSPACE_WIDTH = 460
+      const maxAllowed = Math.max(340, Math.min(600, windowWidth - currentLeftWidth - MIN_MAIN_WORKSPACE_WIDTH))
+      setAiCopilotWidth((prev) => (prev > maxAllowed ? maxAllowed : prev))
+    }
+
+    window.addEventListener('resize', handleWindowResize)
+    return () => window.removeEventListener('resize', handleWindowResize)
+  }, [shouldShowAiCopilot, isSystemSidebarCollapsed, sidebarWidth])
 
   // Timeout for error / status bar
   useEffect(() => {
@@ -1328,6 +1436,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
     activeSessionTabId: visibleActiveSessionTabId,
+    isAiCopilotAvailable,
+    isAiCopilotOpen,
     isWorkspaceFocusMode,
     onAddHomeTab: addHomeTab,
     onActivateHome: activateHomeTab,
@@ -1341,7 +1451,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onDragEnd: endTabDrag,
     onDragEnter: enterDraggedTab,
     onDragStart: startTabDrag,
-    onOpenSettings: () => setShowSettings(true),
+    onOpenSettings: () => {
+      setSettingsInitialTab('interface')
+      setShowSettings(true)
+    },
+    onToggleAiCopilot: () => setIsAiCopilotOpen((current) => !current),
     onToggleWindowMaximize: () => {
       void desktopApi?.toggleMaximizeCurrentWindow()
     },
@@ -1367,15 +1481,23 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
-            '--brand-width': `${brandWidth}px`
+            '--brand-width': `${brandWidth}px`,
+            '--ai-copilot-panel-width': `${aiCopilotWidth}px`
           } as CSSProperties
         }
       >
-        {usesCustomWindowChrome ? <WindowMenubar desktopApi={desktopApi} isMaximized={isMaximized} /> : null}
+        {usesCustomWindowChrome ? (
+          <WindowMenubar
+            desktopApi={desktopApi}
+            isMaximized={isMaximized}
+            terminalZoomLocked={terminalZoomLocked}
+            onToggleTerminalZoomLock={() => setTerminalZoomLocked((current) => !current)}
+          />
+        ) : null}
         {!isHomeWorkspaceVisible && <TabBar {...tabBarProps} />}
 
         {shouldShowSystemSidebar ? (
@@ -1401,7 +1523,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               <CloseButton aria-label={t.closeTab} onClick={() => setError(null)} size="compact" />
             </div>
           ) : null}
-          <div className="workspace-stage">
+          <div className={`workspace-stage ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}>
             <div
               key={activeLocalTab ? activeWorkspaceOrderKey : 'session-workspace'}
               className={`workspace-stage-transition ${isWorkspaceTransitionActive ? 'is-transitioning' : ''}`}
@@ -1480,6 +1602,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLocalTerminal={() => {
                   void openLocalTerminal()
                 }}
+                onLaunchLocalAgent={launchLocalAgent}
                 onReconnectLocalTerminal={reconnectSessionTab}
                 onOpenRemoteItem={handleOpenRemoteItem}
                 onOpenRemotePath={handleOpenRemotePath}
@@ -1544,6 +1667,21 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onSetPaneWeights={setPaneWeights}
               />
             </div>
+            {shouldShowAiCopilot ? (
+              <AiCopilotPanel
+                activeProfile={activeProfile}
+                activeSession={aiCopilotTargetSession}
+                activeTab={aiCopilotTargetTab ?? null}
+                rootTab={activeTab ?? null}
+                isResizing={isResizingAiCopilot}
+                onClose={() => setIsAiCopilotOpen(false)}
+                onOpenSettings={() => {
+                  setSettingsInitialTab('ai')
+                  setShowSettings(true)
+                }}
+                onResizeStart={startAiCopilotResize}
+              />
+            ) : null}
           </div>
         </main>
 
@@ -1725,6 +1863,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLogsDirectory: () => {
                   openLogsDirectory()
                 },
+                onLaunchLocalAgent: launchLocalAgent,
+                initialTab: settingsInitialTab,
                 onClose: () => setShowSettings(false)
               }
             : null
@@ -1801,6 +1941,36 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               }
             : null
         }
+        remoteExecInteraction={
+          remoteExecInteractionRequest
+            ? {
+                request: remoteExecInteractionRequest,
+                errorMessage: remoteExecInteractionError,
+                isSubmitting: isRemoteExecInteractionResolving,
+                onCancel: () => {
+                  void cancelRemoteExecInteraction()
+                },
+                onSubmit: (value) => {
+                  void submitRemoteExecInteraction(value)
+                }
+              }
+            : null
+        }
+        backupPassword={
+          backupPasswordRequest
+            ? {
+                request: backupPasswordRequest,
+                errorMessage: backupPasswordError,
+                isSubmitting: isBackupPasswordResolving,
+                onCancel: () => {
+                  void cancelBackupPassword()
+                },
+                onSubmit: (value) => {
+                  void submitBackupPassword(value)
+                }
+              }
+            : null
+        }
         tabContextMenu={
           tabContextMenu
             ? {
@@ -1823,25 +1993,25 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         }
         windowCloseConfirm={windowCloseConfirmProps}
       />
-      {isMainWorkspaceWindow && mcpApprovalRequests[0] ? (
+      {isMainWorkspaceWindow && actionApprovalRequests[0] ? (
         <ConfirmActionDialog
           confirmLabel={t.confirm}
-          confirmVariant={mcpApprovalRequests[0].destructive ? 'danger' : 'primary'}
+          confirmVariant={actionApprovalRequests[0].destructive ? 'danger' : 'primary'}
           description={
             <div>
-              <p>{mcpApprovalRequests[0].summary}</p>
-              {mcpApprovalRequests[0].target ? <p>目标：{mcpApprovalRequests[0].target}</p> : null}
-              {mcpApprovalRequests[0].details ? <pre>{mcpApprovalRequests[0].details}</pre> : null}
+              <p>{actionApprovalRequests[0].summary}</p>
+              {actionApprovalRequests[0].target ? <p>目标：{actionApprovalRequests[0].target}</p> : null}
+              {actionApprovalRequests[0].details ? <pre>{actionApprovalRequests[0].details}</pre> : null}
             </div>
           }
-          isSubmitting={resolvingMcpApprovalId === mcpApprovalRequests[0].requestId}
+          isSubmitting={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
           onClose={() => {
-            void resolveMcpApproval(false)
+            void resolveActionApproval(false)
           }}
           onConfirm={() => {
-            void resolveMcpApproval(true)
+            void resolveActionApproval(true)
           }}
-          title={mcpApprovalRequests[0].title}
+          title={actionApprovalRequests[0].title}
         />
       ) : null}
     </>

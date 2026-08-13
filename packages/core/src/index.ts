@@ -7,6 +7,8 @@ export type WorkspaceSessionType = SessionType | 'local'
 export interface LocalTerminalLaunchOptions {
   /** Shell executable name or absolute path. Defaults to the platform shell. */
   shell?: string
+  /** User-visible label for this one local terminal tab. Defaults to Local Terminal. */
+  title?: string
   /** Initial working directory. Defaults to the current user's home directory. */
   cwd?: string
   /** Additional shell options. These are not persisted in a connection profile. */
@@ -152,6 +154,43 @@ export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
   resourceMonitoringIntervalSeconds: 1,
   reconnectMode: 'none',
   legacyAlgorithms: false
+}
+
+/** Scope exposed to externally launched MCP Agents such as Codex and Claude. */
+export type McpConnectionScope = 'all-saved-connections' | 'active-session' | 'default-connection'
+
+/** Whether an external MCP Agent may request state-changing operations. */
+export type McpOperationPolicy = 'read-only' | 'approved-operations'
+
+/** Non-secret local policy for an external MCP Agent connection. */
+export interface McpAgentPreferences {
+  connectionScope: McpConnectionScope
+  operationPolicy: McpOperationPolicy
+  /** Saved connection profile used when `connectionScope` is `default-connection`. */
+  defaultProfileId?: string
+}
+
+export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
+  connectionScope: 'all-saved-connections',
+  operationPolicy: 'approved-operations'
+}
+
+export type McpAgentClientId = 'claude-code' | 'codex-cli'
+
+/** Local client discovery result. Detection only reads PATH and never runs the client. */
+export interface McpAgentClientStatus {
+  id: McpAgentClientId
+  label: string
+  command: string
+  available: boolean
+  path?: string
+  registrationCommand: string
+}
+
+/** Backend-generated configuration help for local stdio MCP clients. */
+export interface McpAgentSetup {
+  filetermCommand: string
+  clients: McpAgentClientStatus[]
 }
 
 export interface SshProfile extends NetworkProfile {
@@ -573,6 +612,8 @@ export function mergeSystemMetricsHistory(
 
 export interface SessionSnapshot {
   profileId: string
+  /** Monotonic terminal-target identity; unchanged by ordinary output chunks. */
+  aiSessionRevision?: string
   accessHost?: string
   summary: string
   terminalTranscript?: string
@@ -711,6 +752,7 @@ export interface WebDavSyncResult {
   imported?: number
   updated?: number
   skipped?: number
+  legacyPlaintext?: boolean
 }
 
 export type S3BackupProvider = 'custom' | 'cloudflare-r2' | 'bitiful-s4'
@@ -742,6 +784,7 @@ export interface S3BackupResult {
   imported?: number
   updated?: number
   skipped?: number
+  legacyPlaintext?: boolean
 }
 
 export interface SshKeyMetadata {
@@ -884,8 +927,39 @@ export type SshInteractionRequest =
   | SshKeyPassphrasePromptRequest
   | SshKeyboardInteractiveRequest
 
-export interface McpApprovalRequest {
+/**
+ * A task-local prompt from an isolated SSH exec PTY. This is not a terminal
+ * input request: the response goes only to the one MCP/CLI task that raised
+ * it and is never added to the terminal transcript or returned to the agent.
+ */
+export interface RemoteExecInteractionRequest {
   requestId: string
+  tabId: string
+  command: string
+  host: string
+  shellUser?: string
+  cwd?: string
+  prompt: string
+  attempt: number
+  maxAttempts: number
+  inputKind: 'secret' | 'text'
+}
+
+export type BackupPasswordOperation = 'upload' | 'download'
+
+/** One-time password request for a cross-device WebDAV/S3 backup. */
+export interface BackupPasswordRequest {
+  requestId: string
+  operation: BackupPasswordOperation
+  provider: 'WebDAV' | 'S3'
+}
+
+export type ActionApprovalSource = 'mcp' | 'ai-review'
+
+/** One-time in-app approval shared by MCP and AI Review Mode. */
+export interface ActionApprovalRequest {
+  requestId: string
+  source: ActionApprovalSource
   operation: string
   title: string
   summary: string
@@ -893,6 +967,9 @@ export interface McpApprovalRequest {
   details?: string
   destructive: boolean
 }
+
+/** @deprecated Use ActionApprovalRequest. */
+export type McpApprovalRequest = ActionApprovalRequest
 export type SshInteractionDraft =
   | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
@@ -977,7 +1054,9 @@ export interface UiPreferences {
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
   autoCheckUpdates: boolean
+  terminalZoomLocked: boolean
   connectionDefaults: SshConnectionDefaults
+  mcpAgent: McpAgentPreferences
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -989,7 +1068,9 @@ export interface UiPreferencesInput {
   theme?: UiPreferences['theme']
   locale?: UiPreferences['locale']
   autoCheckUpdates?: boolean
+  terminalZoomLocked?: boolean
   connectionDefaults?: Partial<SshConnectionDefaults>
+  mcpAgent?: Partial<McpAgentPreferences>
   overviewShowStats?: boolean
   overviewShowRecent?: boolean
   overviewShowAllConnections?: boolean
@@ -1022,6 +1103,283 @@ export interface RemoteFileAccessOptions {
   sudoPassword?: string
 }
 
+export type AiProviderKind = 'openai-compatible-chat' | 'openai-responses' | 'anthropic-messages'
+
+export interface AiProviderSummary {
+  id: string
+  name: string
+  kind: AiProviderKind
+  baseUrl: string
+  model: string
+  models?: string[]
+  enabled: boolean
+  hasApiKey: boolean
+  usable: boolean
+  isDefault: boolean
+  allowNoAuth: boolean
+  allowInsecureHttp: boolean
+}
+
+export interface AiProviderDraft {
+  id?: string
+  name: string
+  kind: AiProviderKind
+  baseUrl: string
+  model: string
+  models?: string[]
+  enabled: boolean
+  isDefault: boolean
+  allowNoAuth: boolean
+  allowInsecureHttp: boolean
+}
+
+export interface AiProviderSecretPatch {
+  /**
+   * An omitted value preserves the saved key; a non-empty string replaces it;
+   * null removes it. The API never returns the plaintext key.
+   */
+  apiKey?: string | null
+}
+
+export interface SaveAiProviderInput {
+  provider: AiProviderDraft
+  secrets?: AiProviderSecretPatch
+}
+
+export interface TestAiProviderInput {
+  provider: AiProviderDraft
+  secrets?: AiProviderSecretPatch
+}
+
+export interface AiProviderTestResult {
+  ok: true
+  message: string
+}
+
+/** Per-request context modes. Neither mode becomes a provider-wide default. */
+export type AiContextMode = 'metadata' | 'recent-terminal'
+
+/** A target identity that a one-time context snapshot is bound to. */
+export interface AiContextTarget {
+  tabId: string
+  rootTabId: string
+  sessionType: 'ssh' | 'local'
+  /** Changes when the interactive target changes, reconnects, or its shell identity/CWD changes. */
+  sessionRevision: string
+  displayHost: string
+  user?: string
+  cwd?: string
+  connected: boolean
+}
+
+/** A best-effort sanitization applied before terminal text can leave the device. */
+export interface AiContextRedaction {
+  kind: 'authorization' | 'credential-assignment' | 'private-key' | 'control-sequence' | 'long-line'
+  count: number
+}
+
+/** Exact, immutable context that the user reviews before one request can consume it. */
+export interface AiContextPreview {
+  snapshotId: string
+  expiresAt: string
+  mode: AiContextMode
+  target: AiContextTarget
+  preview: string
+  redactions: AiContextRedaction[]
+  truncated: boolean
+}
+
+/** Non-sensitive audit metadata retained with a local user message; raw terminal text is never stored. */
+export interface AiContextAttachment {
+  mode: AiContextMode
+  target: AiContextTarget
+  redactions: AiContextRedaction[]
+  truncated: boolean
+}
+
+export type AiCommandRisk = 'read-only' | 'mutating' | 'destructive' | 'privileged' | 'unknown'
+
+export type AiReviewOutcome =
+  | 'completed'
+  | 'rejected'
+  | 'approval-dismissed'
+  | 'approval-timed-out'
+  | 'target-changed'
+  | 'command-timed-out'
+  | 'failed'
+
+/** Local audit metadata for a single user-approved SSH exec invocation. */
+export interface AiReviewRecord {
+  id: string
+  commandId: string
+  command: string
+  risk: AiCommandRisk
+  target: AiContextTarget
+  timeoutMs: number
+  requestedAt: string
+  approvedAt?: string
+  completedAt: string
+  outcome: AiReviewOutcome
+  exitCode?: number
+  timedOut: boolean
+  outputTruncated: boolean
+  output?: string
+  error?: string
+}
+
+/** A structured, locally validated command proposal; it is never an execution request. */
+export interface AiCommandSuggestion {
+  id: string
+  command: string
+  explanation?: string
+  risk: AiCommandRisk
+  multiline: boolean
+  target: AiContextTarget
+}
+
+/** A message stored locally for an AI Copilot conversation. */
+export interface AiMessage {
+  id: string
+  role: 'user' | 'assistant' | 'review'
+  content: string
+  createdAt: string
+  /** Present only for an explicitly approved L1/L2 user turn; never contains raw transcript text. */
+  context?: AiContextAttachment
+  /** Present only after a strict JSON command-proposal response validates locally. */
+  commands?: AiCommandSuggestion[]
+  /** Present only for one-time AI Review Mode audit messages. */
+  review?: AiReviewRecord
+}
+
+/** Lightweight metadata used by the Copilot conversation switcher. */
+export interface AiConversationSummary {
+  id: string
+  title: string
+  providerId: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
+}
+
+/** A complete local AI Copilot conversation. */
+export interface AiConversation extends AiConversationSummary {
+  messages: AiMessage[]
+}
+
+export interface CreateAiConversationInput {
+  providerId: string
+}
+
+export interface RenameAiConversationInput {
+  conversationId: string
+  title: string
+}
+
+/** Requests automatic title generation from the configured Provider. */
+export interface SummarizeAiConversationTitleInput {
+  conversationId: string
+  providerId: string
+  modelOverride?: string
+}
+
+export interface CreateAiContextPreviewInput {
+  tabId: string
+  /** Optional renderer hint. Rust resolves and validates the actual root relation. */
+  rootTabId?: string
+  providerId: string
+  mode: AiContextMode
+}
+
+export type AiChatResponseMode = 'chat' | 'command-proposal'
+
+/**
+ * A context ID can only refer to a Rust-owned, reviewed one-time snapshot.
+ * The renderer cannot supply terminal text, host data, or command text here.
+ */
+export interface StartAiChatInput {
+  conversationId: string
+  providerId: string
+  modelOverride?: string
+  userMessage: string
+  contextSnapshotId?: string
+  responseMode?: AiChatResponseMode
+}
+
+/** Retries the latest user turn without duplicating it in local history. */
+export interface RetryAiChatInput {
+  conversationId: string
+  providerId: string
+  modelOverride?: string
+  contextSnapshotId?: string
+  responseMode?: AiChatResponseMode
+}
+
+export interface AiChatRequest {
+  requestId: string
+  conversationId: string
+  userMessageId: string
+  assistantMessageId: string
+}
+
+export interface AiCommandInsertInput {
+  commandId: string
+}
+
+/** Rust approved the target-bound command for a UI-only terminal input handoff. */
+export interface AiCommandInsertResult {
+  tabId: string
+  command: string
+}
+
+export interface RunAiReviewInput {
+  commandId: string
+}
+
+export interface AiReviewExecution {
+  conversation: AiConversation
+  review: AiReviewRecord
+}
+
+/** Per-request stream events; never emitted through a global application event. */
+export type AiStreamEvent =
+  | { type: 'started'; requestId: string; messageId: string }
+  | { type: 'text-delta'; text: string }
+  | { type: 'command'; command: AiCommandSuggestion }
+  | { type: 'usage'; inputTokens?: number; outputTokens?: number }
+  | { type: 'completed'; conversation: AiConversation; finishReason?: string }
+  | { type: 'error'; code: AiErrorCode; message: string; retryable: boolean }
+
+export type AiErrorCode =
+  | 'AI_PROVIDER_NOT_FOUND'
+  | 'AI_PROVIDER_INVALID_CONFIG'
+  | 'AI_PROVIDER_INVALID_URL'
+  | 'AI_PROVIDER_INSECURE_HTTP'
+  | 'AI_PROVIDER_AUTH_REQUIRED'
+  | 'AI_PROVIDER_CONNECTION_FAILED'
+  | 'AI_PROVIDER_HTTP_ERROR'
+  | 'AI_PROVIDER_RESPONSE_INVALID'
+  | 'AI_PROVIDER_TIMEOUT'
+  | 'AI_REQUEST_CANCELLED'
+  | 'AI_CONTEXT_NOT_FOUND'
+  | 'AI_CONTEXT_EXPIRED'
+  | 'AI_CONTEXT_ALREADY_USED'
+  | 'AI_CONTEXT_TARGET_CHANGED'
+  | 'AI_CONTEXT_FORBIDDEN'
+  | 'AI_COMMAND_NOT_FOUND'
+  | 'AI_COMMAND_UNSAFE_INPUT'
+  | 'AI_REVIEW_IN_PROGRESS'
+  | 'AI_REVIEW_UNAVAILABLE'
+  | 'AI_CONVERSATION_LIMIT'
+  | 'AI_CONVERSATION_NOT_FOUND'
+  | 'AI_CONVERSATION_INVALID_INPUT'
+
+export interface AiCommandError {
+  code: AiErrorCode
+  message: string
+  retryable: boolean
+  httpStatus?: number
+}
+
 export interface FileTermDesktopApi {
   platform: string
   arch: string
@@ -1039,6 +1397,23 @@ export interface FileTermDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
+  getMcpAgentSetup(): Promise<McpAgentSetup>
+  listAiProviders(): Promise<AiProviderSummary[]>
+  saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
+  deleteAiProvider(providerId: string): Promise<AiProviderSummary[]>
+  testAiProvider(input: TestAiProviderInput): Promise<AiProviderTestResult>
+  listAiConversations(): Promise<AiConversationSummary[]>
+  getAiConversation(conversationId: string): Promise<AiConversation>
+  createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
+  renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
+  summarizeAiConversationTitle(input: SummarizeAiConversationTitleInput): Promise<AiConversation>
+  deleteAiConversation(conversationId: string): Promise<void>
+  createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
+  startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
+  retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
+  cancelAiChat(requestId: string): Promise<void>
+  insertAiCommand(input: AiCommandInsertInput): Promise<AiCommandInsertResult>
+  runAiReview(input: RunAiReviewInput): Promise<AiReviewExecution>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -1118,7 +1493,32 @@ export interface FileTermDesktopApi {
     command: string,
     cwd?: string,
     timeoutMs?: number
-  ): Promise<{ output: string; exitCode: number | null; timedOut: boolean }>
+  ): Promise<{
+    output: string
+    exitCode: number | null
+    timedOut: boolean
+    outputTruncated: boolean
+    /** The non-interactive channel saw a supported input prompt. */
+    inputRequired: boolean
+    /** A bounded routing hint; the input itself is never returned. */
+    inputKind?: 'secret' | 'text'
+  }>
+  executeInteractiveRemoteCommand(
+    tabId: string,
+    expectedSessionRevision: string,
+    command: string,
+    cwd?: string,
+    timeoutMs?: number
+  ): Promise<{
+    output: string
+    exitCode: number | null
+    timedOut: boolean
+    outputTruncated: boolean
+    inputRequired: boolean
+    inputKind?: 'secret' | 'text'
+    /** Number of local secure-input rounds; answers themselves never leave FileTerm. */
+    interactionCount?: number
+  }>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
   getCommandSendPreferences(): Promise<CommandSendPreferences>
@@ -1204,6 +1604,12 @@ export interface FileTermDesktopApi {
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
+  resolveRemoteExecInteraction(requestId: string, cancelled: boolean, value?: string): Promise<void>
+  setRemoteExecInteractionRendererReady(registrationId: string, ready: boolean): Promise<void>
+  resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
+  setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
+  resolveActionApproval(requestId: string, approved: boolean): Promise<void>
+  /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
     tabId: string,
@@ -1216,6 +1622,12 @@ export interface FileTermDesktopApi {
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  /** Resolves only after the main renderer has registered its secure-input listener. */
+  onRemoteExecInteraction(listener: (request: RemoteExecInteractionRequest) => void): Promise<() => void>
+  /** Resolves only after the main renderer has registered the password prompt listener. */
+  onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>
+  onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void
+  /** @deprecated Use onActionApprovalRequest. */
   onMcpApprovalRequest(listener: (request: McpApprovalRequest) => void): () => void
   onWindowCloseRequest(listener: (event: { isQuit: boolean }) => void): () => void
   onRequestCloseActiveWorkspaceItem(listener: () => void): () => void

@@ -40,18 +40,20 @@ tokens -> theme vars -> component skins -> terminal colors
 
 浅色主题基准：
 
-| Role             | Token            | Value / Usage                       |
-| ---------------- | ---------------- | ----------------------------------- |
-| App background   | `--bg-main`      | `#f4f5f7`，窗口和工作区底色         |
-| Sidebar / chrome | `--bg-sidebar`   | `#ffffff`，左侧栏和顶部栏           |
-| Card / panel     | `--bg-card`      | `#ffffff`，终端外围、表格面板、弹层 |
-| Hover            | `--bg-hover`     | `#eceff3`，导航 hover、轻按钮 hover |
-| Active           | `--bg-active`    | `#dde2e8`，更强的选中背景           |
-| Main text        | `--text-main`    | `#1f2933`，正文和关键标签           |
-| Muted text       | `--text-muted`   | `#66717f`，辅助信息                 |
-| Soft text        | `--text-soft`    | `#7b8794`，弱辅助信息               |
-| Border           | `--border-light` | 低对比 1px 分割线                   |
-| Primary          | `--primary`      | 只用于主要动作、链接、焦点环        |
+| Role             | Token                | Value / Usage                       |
+| ---------------- | -------------------- | ----------------------------------- |
+| App background   | `--bg-main`          | `#f4f5f7`，窗口和工作区底色         |
+| Sidebar / chrome | `--bg-sidebar`       | `#ffffff`，左侧栏和顶部栏           |
+| Card / panel     | `--bg-card`          | `#ffffff`，终端外围、表格面板、弹层 |
+| Hover            | `--bg-hover`         | `#eceff3`，导航 hover、轻按钮 hover |
+| Active           | `--bg-active`        | `#dde2e8`，更强的选中背景           |
+| Main text        | `--text-main`        | `#1f2933`，正文和关键标签           |
+| Muted text       | `--text-muted`       | `#66717f`，辅助信息                 |
+| Soft text        | `--text-soft`        | `#7b8794`，弱辅助信息               |
+| Border           | `--border-light`     | 低对比 1px 分割线                   |
+| Primary          | `--primary`          | 只用于主要动作和通用链接            |
+| Focus outline    | `--focus-outline`    | 焦点、选中态和拖拽目标的描边/光环   |
+| Accent highlight | `--accent-highlight` | 非按钮的图标、辅助文字和状态强调    |
 
 状态色规则：
 
@@ -59,6 +61,9 @@ tokens -> theme vars -> component skins -> terminal colors
 - Warning / memory pressure：使用 `--warning` 或 `--memory-warn`，只作为点、条、数字提示。
 - Danger / destructive：使用 `--danger`、`--danger-text`、`--danger-surface`，只用于删除、关闭、错误。
 - Info / action blue：使用 `--primary`、`--copy-link`、`--folder-accent`，不能随手写新的蓝色。
+- `--focus-outline` 只用于焦点、选中态和拖拽目标的描边或光环；不要把它当作实心按钮背景。
+- 文件图标和发送等文件相关操作使用 `--folder-accent`；实心主按钮使用 `--button-primary-*`。
+- `--accent-highlight` 用于非按钮的图标、辅助文字和状态强调，不替代焦点描边。
 - 侧栏当前项在暗色模式使用白色强调，浅色模式使用主文本色，避免蓝色过度出现。
 
 ## 4. Typography

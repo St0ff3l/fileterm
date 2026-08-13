@@ -3,6 +3,7 @@ import type {
   ConnectionProfile,
   CommandExecutionOptions,
   FileTermDesktopApi,
+  LocalTerminalLaunchOptions,
   PaneFocusDirection,
   PaneNode,
   SessionSnapshot,
@@ -92,7 +93,7 @@ function formatSystemInfoTabTitle(sourceTabTitle: string) {
 }
 
 function formatSessionTabTitle(tab: WorkspaceTab) {
-  return tab.sessionType === 'local' ? t.localTerminal : tab.title
+  return tab.title || (tab.sessionType === 'local' ? t.localTerminal : t.untitledTab)
 }
 
 function areStringArraysEqual(left: string[], right: string[]) {
@@ -916,7 +917,7 @@ export function useWorkspaceTabs({
     await openProfileInCurrentWorkspace(profileId)
   }
 
-  const openLocalTerminal = async () => {
+  const openLocalTerminal = async (options?: LocalTerminalLaunchOptions, startupCommand?: string) => {
     if (!desktopApi) {
       return
     }
@@ -927,7 +928,7 @@ export function useWorkspaceTabs({
 
     try {
       onBusyChange(true)
-      const snapshot = await desktopApi.openLocalTerminal()
+      const snapshot = await desktopApi.openLocalTerminal(options)
       applySnapshot(snapshot)
       onStatusMessage(null)
       if (activeHomeId && snapshot.activeTabId && replacementKey) {
@@ -937,6 +938,13 @@ export function useWorkspaceTabs({
       }
       pendingHomeReplacementKeyRef.current = null
       setActiveLocalTabId(null)
+      if (startupCommand && snapshot.activeTabId) {
+        try {
+          await desktopApi.writeTerminal(snapshot.activeTabId, `${startupCommand}\r`)
+        } catch (error) {
+          onError('启动本地 Agent', error)
+        }
+      }
     } catch (error) {
       pendingHomeReplacementKeyRef.current = null
       onError('打开本地终端', error)
@@ -1075,14 +1083,14 @@ export function useWorkspaceTabs({
   // 分屏（Split Pane）操作
   // ==========================================
 
-  /** 基于指定 pane 的 profile 新建独立 session，不共享 PTY。 */
+  /** 基于指定 pane 新建独立 SSH session 或本地 PTY，不共享运行时。 */
   const splitPane = async (sourceTabId: string, direction: 'row' | 'column') => {
     if (!desktopApi) {
       return
     }
-    // 只对 SSH session 分屏
+    // 仅 SSH 与 Local Terminal 支持分屏；后端仍会执行同一校验。
     const sourceTab = workspace.tabs.find((tab) => tab.id === sourceTabId)
-    if (!sourceTab || sourceTab.sessionType !== 'ssh') {
+    if (!sourceTab || (sourceTab.sessionType !== 'ssh' && sourceTab.sessionType !== 'local')) {
       return
     }
     try {

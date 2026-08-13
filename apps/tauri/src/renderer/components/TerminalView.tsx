@@ -84,6 +84,11 @@ const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
 const TERMINAL_DEFAULT_FONT_SIZE = 12
 const TERMINAL_MIN_FONT_SIZE = 8
 const TERMINAL_MAX_FONT_SIZE = 28
+// Some IMEs can emit the committed composition once through xterm's normal
+// input path and then emit the same text again when the user switches back to
+// an ASCII keyboard layout. Keep this window narrow so this is not a general
+// purpose input de-duplicator for fast, intentional typing.
+const TERMINAL_IME_DUPLICATE_WINDOW_MS = 75
 // WebView2 and WebKitGTK report high-resolution touchpad input in small pixel
 // deltas, while a traditional mouse wheel commonly reports a large line/pixel
 // delta in one event. Normalize and cap each event before accumulating so both
@@ -571,6 +576,14 @@ export const TerminalView = memo(function TerminalView({
   // 后端 worker 异常退出时 writeTerminal 会 reject；记录一次避免每个按键
   // 都刷一行提示，直到 terminal:state 重新同步后复位。
   const inputSendFailedRef = useRef(false)
+  // xterm owns composition events internally, but a few native IMEs can still
+  // produce a second `onData` event while switching input languages. Track
+  // only the current composition transaction so normal repeated input and
+  // paste are unaffected.
+  const imeCompositionActiveRef = useRef(false)
+  const imeCompositionTextRef = useRef('')
+  const imeCompositionEndedAtRef = useRef(0)
+  const imeCompositionDataForwardedRef = useRef(false)
   // `onData` is registered once for the xterm instance.  Reading the prop
   // through a ref prevents a stale terminal-state event from a background
   // tab from swallowing keystrokes after this tab is brought back.
@@ -618,8 +631,44 @@ export const TerminalView = memo(function TerminalView({
   const [activeFindIndex, setActiveFindIndex] = useState(-1)
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
   const [findRegex, setFindRegex] = useState(false)
+  const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
+  const terminalZoomLockedRef = useRef(false)
   const isMac = window.fileterm?.platform === 'darwin'
   const isWin = window.fileterm?.platform === 'win32'
+
+  terminalZoomLockedRef.current = terminalZoomLocked
+
+  useEffect(() => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) {
+      return
+    }
+
+    let canceled = false
+    void desktopApi
+      .getUiPreferences()
+      .then((preferences) => {
+        if (!canceled) {
+          terminalZoomLockedRef.current = preferences.terminalZoomLocked
+          setTerminalZoomLocked(preferences.terminalZoomLocked)
+        }
+      })
+      .catch(() => {
+        // Keep the safe default (unlocked) when the preference cannot be read.
+      })
+
+    const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
+      if (!canceled) {
+        terminalZoomLockedRef.current = preferences.terminalZoomLocked
+        setTerminalZoomLocked(preferences.terminalZoomLocked)
+      }
+    })
+
+    return () => {
+      canceled = true
+      unsubscribe()
+    }
+  }, [])
 
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
@@ -634,7 +683,7 @@ export const TerminalView = memo(function TerminalView({
   const buildTerminalTheme = () => ({
     background: readColor('--terminal-bg', '#1e1e1e'),
     foreground: readColor('--terminal-text', '#e0e0e0'),
-    cursor: readColor('--terminal-cursor', readColor('--accent-primary', '#3b82f6')),
+    cursor: readColor('--terminal-cursor', readColor('--accent-highlight', '#3b82f6')),
     cursorAccent: readColor('--terminal-cursor-accent', readColor('--terminal-bg', '#ffffff')),
     green: readColor('--success', '#39d98a'),
     brightGreen: readColor('--success', '#52f2a0'),
@@ -1060,7 +1109,35 @@ export const TerminalView = memo(function TerminalView({
       setViewportElement(xtermViewport)
     }
     const terminalTextarea = terminal.textarea
+    const onCompositionStart = () => {
+      imeCompositionActiveRef.current = true
+      imeCompositionTextRef.current = ''
+      imeCompositionEndedAtRef.current = 0
+      imeCompositionDataForwardedRef.current = false
+    }
+    const onCompositionUpdate = (event: CompositionEvent) => {
+      imeCompositionTextRef.current = event.data
+    }
+    const onCompositionEnd = (event: CompositionEvent) => {
+      imeCompositionActiveRef.current = false
+      // xterm also avoids relying on CompositionEvent.data because browsers
+      // may report only the last candidate fragment there. The latest update
+      // is the better signal; event.data is only a fallback for IMEs that do
+      // not emit compositionupdate.
+      const compositionText = imeCompositionTextRef.current || event.data
+      imeCompositionTextRef.current = compositionText
+      imeCompositionEndedAtRef.current = compositionText ? Date.now() : 0
+      imeCompositionDataForwardedRef.current = false
+    }
+    terminalTextarea?.addEventListener('compositionstart', onCompositionStart)
+    terminalTextarea?.addEventListener('compositionupdate', onCompositionUpdate)
+    terminalTextarea?.addEventListener('compositionend', onCompositionEnd)
     const adjustTerminalFontSize = (change: number) => {
+      if (terminalZoomLockedRef.current) {
+        logTerminalZoom(terminal, 'font-size-ignored-locked', { change, tabId: tabIdRef.current })
+        return false
+      }
+
       const currentSize = terminal.options.fontSize ?? TERMINAL_DEFAULT_FONT_SIZE
       const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, currentSize + change))
       logTerminalZoom(terminal, 'font-size-requested', { change, currentSize, nextSize, tabId: tabIdRef.current })
@@ -1176,6 +1253,13 @@ export const TerminalView = memo(function TerminalView({
     }
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') {
+        return true
+      }
+
+      // Let xterm's CompositionHelper receive IME key events. In particular,
+      // keyCode 229 / Process events must not be mistaken for reconnect or
+      // terminal shortcuts while a composition is being finalized.
+      if (imeCompositionActiveRef.current || event.isComposing || event.keyCode === 229 || event.key === 'Process') {
         return true
       }
 
@@ -1419,6 +1503,56 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const onDataDispose = terminal.onData((data) => {
+      if (imeCompositionActiveRef.current) {
+        // Intermediate composition text is owned by the IME and must never
+        // reach the remote PTY before compositionend.
+        return
+      }
+
+      const compositionText = imeCompositionTextRef.current
+      const compositionEndedAt = imeCompositionEndedAtRef.current
+      const isWithinCompositionWindow =
+        compositionText.length > 0 && Date.now() - compositionEndedAt <= TERMINAL_IME_DUPLICATE_WINDOW_MS
+      if (isWithinCompositionWindow && data === ' ') {
+        // Switching from a Chinese IME back to an ASCII layout can leave the
+        // candidate-confirmation space as a standalone xterm data event. It
+        // is not part of the user's terminal input in this transition.
+        return
+      }
+      const isAsciiCompositionPayload = /^[\x20-\x7e]*$/.test(compositionText) && /^[\x20-\x7e]*$/.test(data)
+      const compositionTextWithoutSpaces = compositionText.replaceAll(' ', '')
+      const dataWithoutSpaces = data.replaceAll(' ', '')
+      const duplicatedCompositionText = `${compositionTextWithoutSpaces}${compositionTextWithoutSpaces}`
+      const isCompositionPayload =
+        isWithinCompositionWindow &&
+        compositionTextWithoutSpaces.length > 0 &&
+        (dataWithoutSpaces === compositionTextWithoutSpaces || dataWithoutSpaces === duplicatedCompositionText)
+      if (isCompositionPayload) {
+        if (imeCompositionDataForwardedRef.current) {
+          // A language switch can make the same committed composition arrive
+          // twice. Forward the first event only.
+          return
+        }
+        imeCompositionDataForwardedRef.current = true
+        data = dataWithoutSpaces === duplicatedCompositionText ? compositionTextWithoutSpaces : dataWithoutSpaces
+      } else if (
+        isWithinCompositionWindow &&
+        isAsciiCompositionPayload &&
+        data.includes(' ') &&
+        compositionTextWithoutSpaces.length > 0 &&
+        data.length <= compositionText.length + 4 &&
+        (dataWithoutSpaces.includes(compositionTextWithoutSpaces) ||
+          compositionTextWithoutSpaces.includes(dataWithoutSpaces))
+      ) {
+        // The same transition may put the confirmation space inside the
+        // payload (`W n`) instead of emitting it separately. Remove all
+        // spaces from this short-lived IME payload so it becomes `Wn`.
+        data = dataWithoutSpaces
+        if (!data) {
+          return
+        }
+      }
+
       // When disconnected, intercept Enter to trigger reconnect instead of
       // forwarding to the (dead) PTY. Ignore while a reconnect is in flight.
       if (!connectedRef.current) {
@@ -2041,6 +2175,9 @@ export const TerminalView = memo(function TerminalView({
       hostRef.current?.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('wheel', onWheel, true)
       terminalTextarea?.removeEventListener('focus', markTerminalFocused)
+      terminalTextarea?.removeEventListener('compositionstart', onCompositionStart)
+      terminalTextarea?.removeEventListener('compositionupdate', onCompositionUpdate)
+      terminalTextarea?.removeEventListener('compositionend', onCompositionEnd)
       window.removeEventListener('gesturestart', onGestureStart, true)
       window.removeEventListener('gesturechange', onGestureChange, true)
       window.removeEventListener('gestureend', onGestureEnd, true)

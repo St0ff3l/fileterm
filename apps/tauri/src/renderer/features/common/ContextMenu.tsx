@@ -5,6 +5,7 @@ import { t } from '../../i18n'
 export type ContextMenuEntry = {
   label?: string
   shortcut?: string
+  checked?: boolean
   disabled?: boolean
   danger?: boolean
   action?(): void
@@ -162,6 +163,11 @@ export function ContextMenu({
           >
             <span>{item.label}</span>
             {item.shortcut ? <span className="context-menu-shortcut">{item.shortcut}</span> : null}
+            {item.checked !== undefined ? (
+              <span className="context-menu-check" aria-hidden="true">
+                {item.checked ? '✓' : ''}
+              </span>
+            ) : null}
           </button>
         )
       )}

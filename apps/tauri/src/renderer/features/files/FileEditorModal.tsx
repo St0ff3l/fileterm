@@ -44,7 +44,7 @@ function defineFileTermMonacoTheme(monaco: Monaco) {
       'editor.foreground': readCssVariable('--monaco-editor-foreground', '--terminal-text'),
       'editorLineNumber.foreground': readCssVariable('--monaco-line-number', '--text-soft'),
       'editorLineNumber.activeForeground': readCssVariable('--monaco-line-number-active', '--text-muted'),
-      'editorCursor.foreground': readCssVariable('--monaco-cursor', '--accent-primary'),
+      'editorCursor.foreground': readCssVariable('--monaco-cursor', '--accent-highlight'),
       'editor.selectionBackground': readCssVariable('--monaco-selection', '--selection-bg'),
       'editor.inactiveSelectionBackground': readCssVariable('--monaco-inactive-selection', '--selection-bg'),
       'editor.lineHighlightBackground': readCssVariable('--monaco-line-highlight', '--surface-inset'),

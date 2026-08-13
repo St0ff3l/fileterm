@@ -826,7 +826,7 @@
   grid-column: 1 / -1;
   grid-row: 1;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: stretch;
   position: relative;
   -webkit-app-region: drag;

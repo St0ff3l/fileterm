@@ -92,6 +92,7 @@ export function VerticalScrollbar({
       frame = requestAnimationFrame(updateMetrics)
     }
     const resizeObserver = new ResizeObserver(scheduleUpdate)
+    const mutationObserver = new MutationObserver(scheduleUpdate)
     const handleScroll = () => {
       reveal()
       scheduleUpdate()
@@ -101,11 +102,13 @@ export function VerticalScrollbar({
     element.addEventListener('scroll', handleScroll, { passive: true })
     resizeObserver.observe(element)
     if (element.firstElementChild) resizeObserver.observe(element.firstElementChild)
+    mutationObserver.observe(element, { characterData: true, childList: true, subtree: true })
 
     return () => {
       cancelAnimationFrame(frame)
       element.removeEventListener('scroll', handleScroll)
       resizeObserver.disconnect()
+      mutationObserver.disconnect()
     }
   }, [reveal, scrollRef, updateMetrics])
 

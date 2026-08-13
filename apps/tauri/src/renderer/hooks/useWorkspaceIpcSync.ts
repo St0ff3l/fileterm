@@ -40,6 +40,7 @@ export type UseWorkspaceIpcSyncOptions = {
   themeMode: ThemeMode
   locale: AppLocale
   connectionDefaults: SshConnectionDefaults
+  terminalZoomLocked: boolean
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -49,6 +50,7 @@ export type UseWorkspaceIpcSyncOptions = {
   onThemeModeChange(themeMode: ThemeMode): void
   onLocaleChange(locale: AppLocale): void
   onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
+  onTerminalZoomLockedChange(value: boolean): void
   onOverviewShowStatsChange(value: boolean): void
   onOverviewShowRecentChange(value: boolean): void
   onOverviewShowAllConnectionsChange(value: boolean): void
@@ -91,6 +93,7 @@ type SyncedUiPreferences = Pick<
   | 'theme'
   | 'locale'
   | 'connectionDefaults'
+  | 'terminalZoomLocked'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -102,6 +105,7 @@ function sameSyncedUiPreferences(left: SyncedUiPreferences, right: SyncedUiPrefe
   return (
     left.theme === right.theme &&
     left.locale === right.locale &&
+    left.terminalZoomLocked === right.terminalZoomLocked &&
     left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
     left.connectionDefaults.enableExecChannel === right.connectionDefaults.enableExecChannel &&
     left.connectionDefaults.enableResourceMonitoring === right.connectionDefaults.enableResourceMonitoring &&
@@ -123,6 +127,7 @@ function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPreference
     theme: preferences.theme,
     locale: preferences.locale,
     connectionDefaults: { ...preferences.connectionDefaults },
+    terminalZoomLocked: preferences.terminalZoomLocked,
     overviewShowStats: preferences.overviewShowStats,
     overviewShowRecent: preferences.overviewShowRecent,
     overviewShowAllConnections: preferences.overviewShowAllConnections,
@@ -168,6 +173,7 @@ export function useWorkspaceIpcSync({
   themeMode,
   locale,
   connectionDefaults,
+  terminalZoomLocked,
   overviewShowStats,
   overviewShowRecent,
   overviewShowAllConnections,
@@ -177,6 +183,7 @@ export function useWorkspaceIpcSync({
   onThemeModeChange,
   onLocaleChange,
   onConnectionDefaultsChange,
+  onTerminalZoomLockedChange,
   onOverviewShowStatsChange,
   onOverviewShowRecentChange,
   onOverviewShowAllConnectionsChange,
@@ -207,6 +214,7 @@ export function useWorkspaceIpcSync({
   const onThemeModeChangeRef = useLatestRef(onThemeModeChange)
   const onLocaleChangeRef = useLatestRef(onLocaleChange)
   const onConnectionDefaultsChangeRef = useLatestRef(onConnectionDefaultsChange)
+  const onTerminalZoomLockedChangeRef = useLatestRef(onTerminalZoomLockedChange)
   const onOverviewShowStatsChangeRef = useLatestRef(onOverviewShowStatsChange)
   const onOverviewShowRecentChangeRef = useLatestRef(onOverviewShowRecentChange)
   const onOverviewShowAllConnectionsChangeRef = useLatestRef(onOverviewShowAllConnectionsChange)
@@ -305,6 +313,7 @@ export function useWorkspaceIpcSync({
         onLocaleChangeRef.current(preferences.locale)
       }
       onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
+      onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
       onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
       onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
       onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
@@ -337,6 +346,7 @@ export function useWorkspaceIpcSync({
           onLocaleChangeRef.current(preferences.locale)
         }
         onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
+        onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
         onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
         onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
         onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
@@ -369,6 +379,7 @@ export function useWorkspaceIpcSync({
       theme: themeMode,
       locale,
       connectionDefaults,
+      terminalZoomLocked,
       overviewShowStats,
       overviewShowRecent,
       overviewShowAllConnections,
@@ -410,6 +421,7 @@ export function useWorkspaceIpcSync({
     overviewShowStats,
     overviewShowQuickActions,
     overviewSectionOrder,
+    terminalZoomLocked,
     themeMode
   ])
 

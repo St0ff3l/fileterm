@@ -15,7 +15,7 @@
 }
 
 .ssh-key-manager-title .material-symbols-outlined {
-  color: var(--accent-primary);
+  color: var(--accent-highlight);
   font-size: 26px;
 }
 
@@ -26,7 +26,7 @@
 
 .ssh-key-root-drop-target.drag-over {
   background: var(--selection-bg);
-  box-shadow: inset 3px 0 0 var(--accent-primary);
+  box-shadow: inset 3px 0 0 var(--focus-outline);
 }
 
 .ssh-key-manager-layout {

@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useEffect,
   useRef,
   useState,
@@ -472,56 +471,53 @@ export function SessionWorkspace({
       style={{ '--file-panel-height': `${effectiveFilePanelHeight}px` } as CSSProperties}
     >
       {!isFileOnly ? (
-        <Fragment>
-          <div className={`terminal-area has-terminal-dock ${splitRootTab?.paneRoot ? 'is-terminal-split' : ''}`}>
-            {splitRootTab?.paneRoot ? (
-              <SplitPaneLayout
-                rootTab={splitRootTab}
-                sessions={splitPaneSessions}
-                activePaneTabId={activePaneTabId}
-                onClosePane={onClosePane}
-                onCloseTab={onCloseTab}
-                onSplitPane={onSplitPane}
-                onActivatePane={onActivatePane}
-                onResizeEnd={onSetPaneWeights}
-              />
-            ) : (
-              <TerminalView
-                tabId={terminalActiveTab.id}
-                bootText={terminalActiveSession.terminalTranscript ?? ''}
-                connected={terminalActiveSession.connected === true}
-                connecting={terminalActiveTab.status === 'connecting'}
-                onReconnect={reconnectOnEnter}
-                onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
-                onCloseTab={onCloseTab}
-              />
-            )}
-            <TerminalDock
-              activeTab={terminalActiveTab}
-              connected={terminalActiveSession.connected === true}
-              selectedTabIds={terminalDockSelectedTabIds}
-              sendScope={terminalDockSendScope}
-              sendTargets={sendTargets}
-              onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
-              onSendCommand={onSendTerminalCommand}
-              onSendScopeChange={onTerminalDockSendScopeChange}
-              onReconnect={reconnectOnEnter}
+        <div className={`terminal-area has-terminal-dock ${splitRootTab?.paneRoot ? 'is-terminal-split' : ''}`}>
+          {splitRootTab?.paneRoot ? (
+            <SplitPaneLayout
+              rootTab={splitRootTab}
+              sessions={splitPaneSessions}
+              activePaneTabId={activePaneTabId}
+              onClosePane={onClosePane}
+              onCloseTab={onCloseTab}
+              onSplitPane={onSplitPane}
+              onActivatePane={onActivatePane}
+              onResizeEnd={onSetPaneWeights}
             />
-            {!isFileOnly && !isTerminalOnly ? (
-              <button
-                aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
-                aria-pressed={isFilePanelCollapsed}
-                className={`file-panel-drawer-toggle ${isFilePanelCollapsed ? 'is-collapsed' : ''}`}
-                title={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
-                type="button"
-                onClick={handleToggleFilePanelCollapsed}
-              >
-                <AppIcon name={isFilePanelCollapsed ? 'chevron-up' : 'chevron-down'} size={15} />
-              </button>
-            ) : null}
-          </div>
-          <div className="terminal-right-frame" aria-hidden="true" />
-        </Fragment>
+          ) : (
+            <TerminalView
+              tabId={terminalActiveTab.id}
+              bootText={terminalActiveSession.terminalTranscript ?? ''}
+              connected={terminalActiveSession.connected === true}
+              connecting={terminalActiveTab.status === 'connecting'}
+              onReconnect={reconnectOnEnter}
+              onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
+              onCloseTab={onCloseTab}
+            />
+          )}
+          <TerminalDock
+            activeTab={terminalActiveTab}
+            connected={terminalActiveSession.connected === true}
+            selectedTabIds={terminalDockSelectedTabIds}
+            sendScope={terminalDockSendScope}
+            sendTargets={sendTargets}
+            onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
+            onSendCommand={onSendTerminalCommand}
+            onSendScopeChange={onTerminalDockSendScopeChange}
+            onReconnect={reconnectOnEnter}
+          />
+          {!isFileOnly && !isTerminalOnly ? (
+            <button
+              aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
+              aria-pressed={isFilePanelCollapsed}
+              className={`file-panel-drawer-toggle ${isFilePanelCollapsed ? 'is-collapsed' : ''}`}
+              title={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
+              type="button"
+              onClick={handleToggleFilePanelCollapsed}
+            >
+              <AppIcon name={isFilePanelCollapsed ? 'chevron-up' : 'chevron-down'} size={15} />
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {!isFileOnly && !isTerminalOnly && !isFilePanelCollapsed ? (
         <div
@@ -608,6 +604,7 @@ export function SessionWorkspace({
           />
         </div>
       ) : null}
+      <div className="terminal-right-frame" aria-hidden="true" />
     </section>
   )
 }

@@ -11,6 +11,68 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_cli(arguments)
 }
 
+/// Returns whether the first process argument belongs to the non-GUI CLI.
+///
+/// Keep this dispatch list in the library so the binary entrypoint and its
+/// tests share the same contract. In particular, commands that must work
+/// without initializing a desktop window (such as `interactive-exec --help`)
+/// must be recognized before `run()` starts Tauri.
+pub fn is_cli_command(argument: Option<&str>) -> bool {
+    matches!(
+        argument,
+        Some(
+            "cli"
+                | "connections"
+                | "sessions"
+                | "directory"
+                | "ls"
+                | "read"
+                | "cat"
+                | "commands"
+                | "command-templates"
+                | "transfers"
+                | "wait-transfer"
+                | "tunnels"
+                | "open"
+                | "activate"
+                | "reconnect"
+                | "disconnect"
+                | "close"
+                | "exec"
+                | "execute"
+                | "interactive-exec"
+                | "command-template"
+                | "write"
+                | "mkdir"
+                | "touch"
+                | "copy"
+                | "move"
+                | "rename"
+                | "delete"
+                | "chmod"
+                | "access"
+                | "upload"
+                | "download"
+                | "download-directory"
+                | "pause-transfer"
+                | "resume-transfer"
+                | "discard-transfer"
+                | "cancel-transfer"
+                | "clear-transfers"
+                | "create-tunnel"
+                | "start-tunnel"
+                | "stop-tunnel"
+                | "delete-tunnel"
+                | "call"
+                | "help"
+                | "--help"
+                | "-h"
+                | "--version"
+                | "-V"
+        )
+    )
+}
+
 use crate::commands::OpenWindowInput;
 #[cfg(target_os = "linux")]
 use gtk::prelude::GtkWindowExt;
@@ -23,7 +85,7 @@ use std::{
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::image::Image;
 #[cfg(not(target_os = "linux"))]
-use tauri::menu::{PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{CheckMenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{
     menu::{Menu, MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -336,6 +398,9 @@ pub(crate) fn install_localized_tray_menu(
 fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu<Wry>, AppError> {
     let platform = std::env::consts::OS;
     let quit_accelerator = application_quit_accelerator(platform);
+    let terminal_zoom_locked = crate::commands::app_get_ui_preferences(app.clone())
+        .map(|preferences| preferences.terminal_zoom_locked)
+        .unwrap_or(false);
     let new_connection_menu = MenuItemBuilder::with_id(
         "new-connection",
         localized(is_english, "New Connection", "新建连接"),
@@ -486,11 +551,19 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .accelerator("Cmd+0")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-terminal-zoom-lock",
+            localized(is_english, "Lock Terminal Zoom", "锁定终端缩放"),
+        )
+        .checked(terminal_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)
             .item(&terminal_zoom_reset)
+            .item(&terminal_zoom_lock)
     };
     // Windows/Linux use a renderer-owned menubar, but native accelerators are
     // still the only path that reaches us before WebView2/WebKitGTK consumes a
@@ -519,11 +592,19 @@ fn build_application_menu(app: &AppHandle<Wry>, is_english: bool) -> Result<Menu
         .accelerator("Ctrl+0")
         .build(app)
         .map_err(|error| AppError::Window(error.to_string()))?;
+        let terminal_zoom_lock = CheckMenuItemBuilder::with_id(
+            "view-terminal-zoom-lock",
+            localized(is_english, "Lock Terminal Zoom", "锁定终端缩放"),
+        )
+        .checked(terminal_zoom_locked)
+        .build(app)
+        .map_err(|error| AppError::Window(error.to_string()))?;
         view_submenu_builder
             .separator()
             .item(&terminal_zoom_in)
             .item(&terminal_zoom_out)
             .item(&terminal_zoom_reset)
+            .item(&terminal_zoom_lock)
     };
     // macOS uses this native menu instead of the renderer-owned Windows/Linux
     // menu bar, so expose the requested debug-only F12 entry here.
@@ -1407,7 +1488,7 @@ fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool
     }
 }
 
-fn show_main_window(app: &AppHandle<Wry>) {
+pub(crate) fn show_main_window(app: &AppHandle<Wry>) {
     let hidden_labels = {
         let state = app.state::<HiddenWithMainRegistry>();
         let mut labels = state
@@ -1793,6 +1874,15 @@ pub fn run() {
                     let _ = window.emit("app:terminal-zoom-request", "reset");
                 }
             }
+            "view-terminal-zoom-lock" => {
+                if let Err(error) = crate::commands::app_toggle_terminal_zoom_lock(app.clone()) {
+                    crate::services::logging::warn(
+                        app,
+                        "ui-preferences",
+                        format!("failed to toggle terminal zoom lock: {error}"),
+                    );
+                }
+            }
             "workspace-new-tab" => {
                 if let Some(window) = focused_webview_window(app) {
                     let _ = window.emit("app:new-tab-request", ());
@@ -1853,6 +1943,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             crate::commands::app_get_platform,
+            crate::commands::app_get_mcp_agent_setup,
             crate::commands::app_get_arch,
             crate::commands::app_get_runtime_version,
             crate::commands::app_read_clipboard_text,
@@ -1865,6 +1956,22 @@ pub fn run() {
             crate::commands::app_open_logs_directory,
             crate::commands::app_get_ui_preferences,
             crate::commands::app_set_ui_preferences,
+            crate::commands::app_list_ai_providers,
+            crate::commands::app_save_ai_provider,
+            crate::commands::app_delete_ai_provider,
+            crate::commands::app_test_ai_provider,
+            crate::commands::app_list_ai_conversations,
+            crate::commands::app_get_ai_conversation,
+            crate::commands::app_create_ai_conversation,
+            crate::commands::app_rename_ai_conversation,
+            crate::commands::app_summarize_ai_conversation_title,
+            crate::commands::app_delete_ai_conversation,
+            crate::commands::app_create_ai_context_preview,
+            crate::commands::app_start_ai_chat,
+            crate::commands::app_retry_ai_chat,
+            crate::commands::app_cancel_ai_chat,
+            crate::commands::app_insert_ai_command,
+            crate::commands::app_run_ai_review,
             crate::commands::app_get_ui_state_item,
             crate::commands::app_set_ui_state_item,
             crate::commands::app_remove_ui_state_item,
@@ -1916,6 +2023,7 @@ pub fn run() {
             crate::commands::app_open_remote_path,
             crate::commands::app_set_follow_shell_cwd,
             crate::commands::app_execute_remote_command,
+            crate::commands::app_execute_interactive_remote_command,
             crate::commands::app_read_remote_file,
             crate::commands::app_write_remote_file,
             crate::commands::app_create_remote_directory,
@@ -1936,6 +2044,10 @@ pub fn run() {
             crate::commands::app_discard_transfer,
             crate::commands::app_clear_transfers,
             crate::commands::app_resolve_ssh_interaction,
+            crate::commands::app_resolve_remote_exec_interaction,
+            crate::commands::app_set_remote_exec_interaction_renderer_ready,
+            crate::commands::app_resolve_backup_password,
+            crate::commands::app_set_backup_password_renderer_ready,
             crate::commands::app_list_ssh_tunnels,
             crate::commands::app_create_ssh_tunnel,
             crate::commands::app_start_ssh_tunnel,
@@ -1955,6 +2067,7 @@ pub fn run() {
             crate::commands::app_delete_command_template,
             crate::commands::app_execute_command_template,
             crate::commands::app_resolve_mcp_approval,
+            crate::commands::app_resolve_action_approval,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
             crate::sessions::local_files::app_connect_local_network_share,
@@ -2168,5 +2281,14 @@ mod tests {
         assert!(!registry.try_begin());
         registry.cancel();
         assert!(registry.try_begin());
+    }
+
+    #[test]
+    fn cli_dispatch_includes_interactive_exec_without_starting_tauri() {
+        assert!(super::is_cli_command(Some("interactive-exec")));
+        assert!(super::is_cli_command(Some("wait-transfer")));
+        assert!(super::is_cli_command(Some("cli")));
+        assert!(!super::is_cli_command(Some("mcp")));
+        assert!(!super::is_cli_command(Some("unknown")));
     }
 }

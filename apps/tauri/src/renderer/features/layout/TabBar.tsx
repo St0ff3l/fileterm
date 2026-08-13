@@ -16,13 +16,15 @@ export type TabContextTarget =
   | { kind: 'session'; id: string; title: string; status: WorkspaceTab['status'] }
 
 function getSessionTabTitle(tab: WorkspaceTab) {
-  return tab.sessionType === 'local' ? t.localTerminal : tab.title
+  return tab.title || (tab.sessionType === 'local' ? t.localTerminal : t.untitledTab)
 }
 
 export interface TabBarProps {
   activeHomeTabId: string | null
   activeSessionTabId: string | null
   homeBrandContent?: ReactNode
+  isAiCopilotAvailable: boolean
+  isAiCopilotOpen: boolean
   isWorkspaceFocusMode: boolean
   onAddHomeTab(): void
   onActivateHome(id: string): void
@@ -34,6 +36,7 @@ export interface TabBarProps {
   onDragStart(tabKey: string): void
   onOpenTabContext(event: MouseEvent<HTMLDivElement>, target: TabContextTarget): void
   onOpenSettings(): void
+  onToggleAiCopilot(): void
   onToggleWindowMaximize(): void
   onToggleWorkspaceFocus(): void
   orderedTabs: OrderedTabEntry[]
@@ -43,6 +46,8 @@ export function TabBar({
   activeHomeTabId,
   activeSessionTabId,
   homeBrandContent,
+  isAiCopilotAvailable,
+  isAiCopilotOpen,
   isWorkspaceFocusMode,
   onAddHomeTab,
   onActivateHome,
@@ -54,11 +59,13 @@ export function TabBar({
   onDragStart,
   onOpenTabContext,
   onOpenSettings,
+  onToggleAiCopilot,
   onToggleWindowMaximize,
   onToggleWorkspaceFocus,
   orderedTabs
 }: TabBarProps) {
   const focusModeLabel = isWorkspaceFocusMode ? t.exitWorkspaceFocusMode : t.enterWorkspaceFocusMode
+  const aiCopilotLabel = isAiCopilotOpen ? t.closeAiCopilot : t.openAiCopilot
   const suppressTabClickRef = useRef(false)
   const releaseSuppressedClick = () => {
     window.setTimeout(() => {
@@ -216,6 +223,17 @@ export function TabBar({
             <span className="material-symbols-outlined">
               {isWorkspaceFocusMode ? 'close_fullscreen' : 'open_in_full'}
             </span>
+          </button>
+          <button
+            aria-label={isAiCopilotAvailable ? aiCopilotLabel : t.aiCopilotUnavailable}
+            aria-pressed={isAiCopilotOpen}
+            className={`ai-copilot-toggle ${isAiCopilotOpen ? 'is-active' : ''}`}
+            disabled={!isAiCopilotAvailable}
+            title={isAiCopilotAvailable ? aiCopilotLabel : t.aiCopilotUnavailable}
+            type="button"
+            onClick={onToggleAiCopilot}
+          >
+            <span className="material-symbols-outlined">auto_awesome</span>
           </button>
           <button aria-label={t.settings} title={t.settings} type="button" onClick={onOpenSettings}>
             <span className="material-symbols-outlined">settings</span>

@@ -28,7 +28,9 @@ export const APP_EVENT = {
   /** 请求当前终端切换查找栏。 */
   terminalFind: 'fileterm:terminal-find',
   /** 请求最后聚焦的终端调整字号。 */
-  terminalZoom: 'fileterm:terminal-zoom'
+  terminalZoom: 'fileterm:terminal-zoom',
+  /** 已由 Rust 验证过的 AI 命令写入输入框；绝不发送 PTY、绝不附加回车。 */
+  aiInsertTerminalCommand: 'fileterm:ai-insert-terminal-command'
 } as const
 
 export type AppEventName = (typeof APP_EVENT)[keyof typeof APP_EVENT]
@@ -47,6 +49,7 @@ export interface AppEventDetailMap {
   [APP_EVENT.terminalPaste]: never
   [APP_EVENT.terminalFind]: never
   [APP_EVENT.terminalZoom]: TerminalZoomOperation
+  [APP_EVENT.aiInsertTerminalCommand]: { tabId: string; command: string }
 }
 
 /** 派发一个类型化的应用事件。`detail` 为 `never` 的事件不需要传第二参。 */

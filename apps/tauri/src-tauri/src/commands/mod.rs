@@ -95,6 +95,57 @@ pub struct SshConnectionDefaultsInput {
     pub legacy_algorithms: Option<bool>,
 }
 
+/// Non-secret boundary applied to MCP clients that are launched by external
+/// Agents. It deliberately does not contain connection credentials or any
+/// executable configuration path.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAgentPreferences {
+    #[serde(default = "default_mcp_connection_scope")]
+    pub connection_scope: String,
+    #[serde(default = "default_mcp_operation_policy")]
+    pub operation_policy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_profile_id: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAgentPreferencesInput {
+    pub connection_scope: Option<String>,
+    pub operation_policy: Option<String>,
+    pub default_profile_id: Option<Option<String>>,
+}
+
+impl Default for McpAgentPreferences {
+    fn default() -> Self {
+        Self {
+            connection_scope: default_mcp_connection_scope(),
+            operation_policy: default_mcp_operation_policy(),
+            default_profile_id: None,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAgentClientStatus {
+    pub id: String,
+    pub label: String,
+    pub command: String,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub registration_command: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpAgentSetup {
+    pub fileterm_command: String,
+    pub clients: Vec<McpAgentClientStatus>,
+}
+
 impl Default for SshConnectionDefaults {
     fn default() -> Self {
         Self {
@@ -116,7 +167,11 @@ pub struct UiPreferences {
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
     #[serde(default)]
+    pub terminal_zoom_locked: bool,
+    #[serde(default)]
     pub connection_defaults: SshConnectionDefaults,
+    #[serde(default)]
+    pub mcp_agent: McpAgentPreferences,
     #[serde(default = "default_overview_show_stats")]
     pub overview_show_stats: bool,
     #[serde(default = "default_overview_show_recent")]
@@ -135,7 +190,9 @@ pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
     pub auto_check_updates: Option<bool>,
+    pub terminal_zoom_locked: Option<bool>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
+    pub mcp_agent: Option<McpAgentPreferencesInput>,
     pub overview_show_stats: Option<bool>,
     pub overview_show_recent: Option<bool>,
     pub overview_show_all_connections: Option<bool>,
@@ -174,6 +231,14 @@ fn default_reconnect_mode() -> String {
 
 fn default_legacy_algorithms() -> bool {
     false
+}
+
+fn default_mcp_connection_scope() -> String {
+    "all-saved-connections".to_string()
+}
+
+fn default_mcp_operation_policy() -> String {
+    "approved-operations".to_string()
 }
 
 fn default_overview_show_stats() -> bool {
@@ -238,6 +303,31 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
         "none" | "enter" | "auto"
     ) {
         preferences.connection_defaults.reconnect_mode = default_reconnect_mode();
+    }
+    if !matches!(
+        preferences.mcp_agent.connection_scope.as_str(),
+        "all-saved-connections" | "active-session" | "default-connection"
+    ) {
+        preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
+    }
+    if !matches!(
+        preferences.mcp_agent.operation_policy.as_str(),
+        "read-only" | "approved-operations"
+    ) {
+        preferences.mcp_agent.operation_policy = default_mcp_operation_policy();
+    }
+    preferences.mcp_agent.default_profile_id =
+        preferences
+            .mcp_agent
+            .default_profile_id
+            .and_then(|profile_id| {
+                let trimmed = profile_id.trim();
+                (!trimmed.is_empty() && trimmed.len() <= 256).then(|| trimmed.to_string())
+            });
+    if preferences.mcp_agent.connection_scope == "default-connection"
+        && preferences.mcp_agent.default_profile_id.is_none()
+    {
+        preferences.mcp_agent.connection_scope = "active-session".to_string();
     }
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
@@ -367,6 +457,78 @@ pub fn app_get_platform() -> String {
     std::env::consts::OS.to_string()
 }
 
+fn shell_quote_path(path: &std::path::Path) -> String {
+    let raw = path.to_string_lossy();
+    if cfg!(target_os = "windows") {
+        format!("\"{}\"", raw.replace('"', "\\\""))
+    } else {
+        format!("'{}'", raw.replace('\'', "'\\\"'\\\"'"))
+    }
+}
+
+fn resolve_local_cli(command: &str) -> Option<std::path::PathBuf> {
+    let direct = std::path::PathBuf::from(command);
+    if direct.components().count() > 1 && direct.is_file() {
+        return Some(direct);
+    }
+
+    let extensions: &[&str] = if cfg!(target_os = "windows") {
+        &["", ".exe", ".cmd", ".bat"]
+    } else {
+        &[""]
+    };
+    let search_path = std::env::var_os("PATH")?;
+    for directory in std::env::split_paths(&search_path) {
+        for extension in extensions {
+            let candidate = directory.join(format!("{command}{extension}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Discover locally installed Agent CLIs without launching them. This keeps
+/// setup responsive and avoids invoking arbitrary shell startup files on all
+/// three desktop platforms.
+#[tauri::command]
+pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
+    let fileterm_path = std::env::current_exe().map_err(|error| {
+        AppError::Command(format!("Unable to locate the FileTerm executable: {error}"))
+    })?;
+    let fileterm_command = shell_quote_path(&fileterm_path);
+    let make_client = |id: &str, label: &str, command: &str, registration_command: String| {
+        let path = resolve_local_cli(command);
+        McpAgentClientStatus {
+            id: id.to_string(),
+            label: label.to_string(),
+            command: command.to_string(),
+            available: path.is_some(),
+            path: path.map(|path| path.to_string_lossy().to_string()),
+            registration_command,
+        }
+    };
+
+    Ok(McpAgentSetup {
+        fileterm_command: fileterm_command.clone(),
+        clients: vec![
+            make_client(
+                "claude-code",
+                "Claude Code",
+                "claude",
+                format!("claude mcp add --scope user fileterm -- {fileterm_command} mcp"),
+            ),
+            make_client(
+                "codex-cli",
+                "Codex CLI",
+                "codex",
+                format!("codex mcp add fileterm -- {fileterm_command} mcp"),
+            ),
+        ],
+    })
+}
+
 fn canonical_arch(arch: &str) -> String {
     match arch {
         "aarch64" => "arm64".to_string(),
@@ -491,7 +653,9 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             auto_check_updates: default_auto_check_updates(),
+            terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: default_overview_show_stats(),
             overview_show_recent: default_overview_show_recent(),
             overview_show_all_connections: default_overview_show_all_connections(),
@@ -509,6 +673,7 @@ pub fn app_set_ui_preferences(
     let path = crate::storage::state_path(&app)?;
     let mut preferences = app_get_ui_preferences(app.clone())?;
     let previous_locale = preferences.locale.clone();
+    let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
     if let Some(theme) = input.theme {
         preferences.theme = theme;
     }
@@ -517,6 +682,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(auto_check_updates) = input.auto_check_updates {
         preferences.auto_check_updates = auto_check_updates;
+    }
+    if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
+        preferences.terminal_zoom_locked = terminal_zoom_locked;
     }
     if let Some(connection_defaults) = input.connection_defaults {
         if let Some(value) = connection_defaults.use_empty_password {
@@ -540,6 +708,17 @@ pub fn app_set_ui_preferences(
             preferences.connection_defaults.legacy_algorithms = value;
         }
     }
+    if let Some(mcp_agent) = input.mcp_agent {
+        if let Some(connection_scope) = mcp_agent.connection_scope {
+            preferences.mcp_agent.connection_scope = connection_scope;
+        }
+        if let Some(operation_policy) = mcp_agent.operation_policy {
+            preferences.mcp_agent.operation_policy = operation_policy;
+        }
+        if let Some(default_profile_id) = mcp_agent.default_profile_id {
+            preferences.mcp_agent.default_profile_id = default_profile_id;
+        }
+    }
     if let Some(overview_show_stats) = input.overview_show_stats {
         preferences.overview_show_stats = overview_show_stats;
     }
@@ -559,7 +738,9 @@ pub fn app_set_ui_preferences(
     let content = serde_json::to_string_pretty(&preferences)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
-    if previous_locale != preferences.locale {
+    if previous_locale != preferences.locale
+        || previous_terminal_zoom_locked != preferences.terminal_zoom_locked
+    {
         if let Err(error) =
             crate::install_localized_application_menu(&app, preferences.locale == "enUS")
         {
@@ -572,16 +753,42 @@ pub fn app_set_ui_preferences(
                 format!("failed to refresh native menu: {error}"),
             );
         }
-        if let Err(error) = crate::install_localized_tray_menu(&app, preferences.locale == "enUS") {
-            crate::services::logging::warn(
-                &app,
-                "ui-preferences",
-                format!("failed to refresh tray menu: {error}"),
-            );
+        if previous_locale != preferences.locale {
+            if let Err(error) =
+                crate::install_localized_tray_menu(&app, preferences.locale == "enUS")
+            {
+                crate::services::logging::warn(
+                    &app,
+                    "ui-preferences",
+                    format!("failed to refresh tray menu: {error}"),
+                );
+            }
         }
     }
     let _ = app.emit("app:ui-preferences-changed", &preferences);
     Ok(preferences)
+}
+
+/// Toggle terminal font zoom from a native menu item while keeping the
+/// renderer and settings page on the same persisted preference/event path.
+pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError> {
+    let current = app_get_ui_preferences(app.clone())?;
+    app_set_ui_preferences(
+        app,
+        UiPreferencesInput {
+            theme: None,
+            locale: None,
+            auto_check_updates: None,
+            terminal_zoom_locked: Some(!current.terminal_zoom_locked),
+            connection_defaults: None,
+            mcp_agent: None,
+            overview_show_stats: None,
+            overview_show_recent: None,
+            overview_show_all_connections: None,
+            overview_show_quick_actions: None,
+            overview_section_order: None,
+        },
+    )
 }
 
 fn normalize_ui_state(value: Value) -> Result<serde_json::Map<String, Value>, AppError> {
@@ -613,6 +820,133 @@ fn read_ui_state(app: &AppHandle) -> Result<serde_json::Map<String, Value>, AppE
 
 fn write_ui_state(app: &AppHandle, states: serde_json::Map<String, Value>) -> Result<(), AppError> {
     write_json_object(app, "ui-state.json", &Value::Object(states))
+}
+
+#[tauri::command]
+pub fn app_list_ai_providers(
+    app: AppHandle,
+) -> Result<Vec<crate::services::ai::AiProviderSummary>, AppError> {
+    crate::services::ai::list_providers(&app)
+}
+
+#[tauri::command]
+pub fn app_save_ai_provider(
+    app: AppHandle,
+    input: crate::services::ai::SaveAiProviderInput,
+) -> Result<crate::services::ai::AiProviderSummary, AppError> {
+    crate::services::ai::save_provider(&app, input)
+}
+
+#[tauri::command]
+pub fn app_delete_ai_provider(
+    app: AppHandle,
+    provider_id: String,
+) -> Result<Vec<crate::services::ai::AiProviderSummary>, AppError> {
+    crate::services::ai::delete_provider(&app, &provider_id)
+}
+
+#[tauri::command]
+pub async fn app_test_ai_provider(
+    app: AppHandle,
+    input: crate::services::ai::TestAiProviderInput,
+) -> Result<crate::services::ai::AiProviderTestResult, AppError> {
+    crate::services::ai::test_provider(&app, input).await
+}
+
+#[tauri::command]
+pub fn app_list_ai_conversations(
+    app: AppHandle,
+) -> Result<Vec<crate::services::ai::AiConversationSummary>, AppError> {
+    crate::services::ai::list_conversations(&app)
+}
+
+#[tauri::command]
+pub fn app_get_ai_conversation(
+    app: AppHandle,
+    conversation_id: String,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::get_conversation(&app, &conversation_id)
+}
+
+#[tauri::command]
+pub fn app_create_ai_conversation(
+    app: AppHandle,
+    input: crate::services::ai::CreateAiConversationInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::create_conversation(&app, input)
+}
+
+#[tauri::command]
+pub fn app_rename_ai_conversation(
+    app: AppHandle,
+    input: crate::services::ai::RenameAiConversationInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::rename_conversation(&app, input)
+}
+
+#[tauri::command]
+pub async fn app_summarize_ai_conversation_title(
+    app: AppHandle,
+    input: crate::services::ai::SummarizeAiConversationTitleInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::summarize_conversation_title(&app, input).await
+}
+
+#[tauri::command]
+pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Result<(), AppError> {
+    crate::services::ai::delete_conversation(&app, &conversation_id)
+}
+
+#[tauri::command]
+pub async fn app_create_ai_context_preview(
+    app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::CreateAiContextPreviewInput,
+) -> Result<crate::services::ai::AiContextPreview, AppError> {
+    crate::services::ai::create_context_preview(&app, &window, input).await
+}
+
+#[tauri::command]
+pub async fn app_start_ai_chat(
+    app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::StartAiChatInput,
+    channel: Channel<crate::services::ai::AiStreamEvent>,
+) -> Result<crate::services::ai::AiChatRequest, AppError> {
+    crate::services::ai::start_chat(&app, &window, input, channel).await
+}
+
+#[tauri::command]
+pub async fn app_retry_ai_chat(
+    app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::RetryAiChatInput,
+    channel: Channel<crate::services::ai::AiStreamEvent>,
+) -> Result<crate::services::ai::AiChatRequest, AppError> {
+    crate::services::ai::retry_chat(&app, &window, input, channel).await
+}
+
+#[tauri::command]
+pub fn app_cancel_ai_chat(request_id: String) -> Result<(), AppError> {
+    crate::services::ai::cancel_chat(&request_id)
+}
+
+#[tauri::command]
+pub async fn app_insert_ai_command(
+    app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::AiCommandInsertInput,
+) -> Result<crate::services::ai::AiCommandInsertResult, AppError> {
+    crate::services::ai::insert_ai_command(&app, &window, input).await
+}
+
+#[tauri::command]
+pub async fn app_run_ai_review(
+    app: AppHandle,
+    window: WebviewWindow,
+    input: crate::services::ai::RunAiReviewInput,
+) -> Result<crate::services::ai::AiReviewExecution, AppError> {
+    crate::services::ai::run_ai_review(&app, &window, input).await
 }
 
 #[tauri::command]
@@ -1242,7 +1576,15 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
 
     let tabs = state.tabs.read().await.clone();
     let active_tab_id = state.active_tab_id.read().await.clone();
-    let sessions = state.sessions.read().await.clone();
+    let mut sessions = state.sessions.read().await.clone();
+    let ai_session_revisions = state.ai_session_revisions.read().await.clone();
+    for (tab_id, session) in &mut sessions {
+        session.ai_session_revision = ai_session_revisions
+            .get(tab_id)
+            .copied()
+            .unwrap_or_default()
+            .to_string();
+    }
     let transfers = state.transfers.read().await.clone();
     let active_pane_tab_id_by_root = state.active_pane_tab_id_by_root.read().await.clone();
 
@@ -1297,7 +1639,7 @@ async fn send_worker_cmd<T>(
     send_worker_cmd_with_response_timeout(app, tab_id, WORKER_FILE_RESPONSE_TIMEOUT, make_cmd).await
 }
 
-async fn send_worker_cmd_with_response_timeout<T>(
+pub(crate) async fn send_worker_cmd_with_response_timeout<T>(
     app: &AppHandle,
     tab_id: &str,
     response_timeout: Duration,
@@ -1401,77 +1743,43 @@ pub async fn app_execute_remote_command(
     cwd: Option<String>,
     timeout_ms: Option<u64>,
 ) -> Result<serde_json::Value, AppError> {
-    const MAX_COMMAND_BYTES: usize = 64 * 1024;
-    const MAX_CWD_BYTES: usize = 4 * 1024;
-    const DEFAULT_TIMEOUT_MS: u64 = 60_000;
-    const MIN_TIMEOUT_MS: u64 = 1_000;
-    const MAX_TIMEOUT_MS: u64 = 120_000;
-
-    let command = command.trim().to_string();
-    if command.is_empty() {
-        return Err(AppError::Command(
-            "Remote command must not be empty".to_string(),
-        ));
-    }
-    if command.len() > MAX_COMMAND_BYTES {
-        return Err(AppError::Command(format!(
-            "Remote command exceeds the {} KiB limit",
-            MAX_COMMAND_BYTES / 1024
-        )));
-    }
-    let cwd = cwd
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    if cwd
-        .as_ref()
-        .is_some_and(|value| value.len() > MAX_CWD_BYTES)
-    {
-        return Err(AppError::Command(
-            "Remote command working directory is too long".to_string(),
-        ));
-    }
-
-    let timeout_ms = timeout_ms
-        .unwrap_or(DEFAULT_TIMEOUT_MS)
-        .clamp(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS);
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let session_type = {
-        let tabs = state.tabs.read().await;
-        tabs.iter()
-            .find(|tab| tab.id == tab_id)
-            .map(|tab| tab.session_type.clone())
-            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?
-    };
-    if session_type != "ssh" {
-        return Err(AppError::Command(
-            "Remote command execution is only supported for SSH sessions".to_string(),
-        ));
-    }
-    let default_cwd = {
-        let sessions = state.sessions.read().await;
-        let session = sessions
-            .get(&tab_id)
-            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
-        if !session.connected {
-            return Err(AppError::Command(
-                "FileTerm SSH session is not connected".to_string(),
-            ));
-        }
-        cwd.or_else(|| session.shell_cwd.clone())
-    };
-
-    send_worker_cmd_with_response_timeout(
+    let result = crate::services::action_review::execute_remote_command(
         &app,
-        &tab_id,
-        Duration::from_millis(timeout_ms.saturating_add(5_000)),
-        |tx| WorkerCmd::ExecuteRemoteCommand {
+        crate::services::action_review::RemoteExecRequest {
+            tab_id,
             command,
-            cwd: default_cwd,
+            cwd,
             timeout_ms,
-            respond_to: tx,
         },
     )
-    .await
+    .await?;
+    serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
+}
+
+/// Start an explicitly interaction-capable remote exec task. The task has a
+/// temporary SSH PTY of its own; it never writes to `terminal_inputs` or the
+/// visible terminal channel.
+#[tauri::command]
+pub async fn app_execute_interactive_remote_command(
+    app: AppHandle,
+    tab_id: String,
+    expected_session_revision: String,
+    command: String,
+    cwd: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<serde_json::Value, AppError> {
+    let result = crate::services::action_review::execute_interactive_remote_command(
+        &app,
+        crate::services::action_review::InteractiveRemoteExecRequest {
+            tab_id,
+            expected_session_revision,
+            command,
+            cwd,
+            timeout_ms,
+        },
+    )
+    .await?;
+    serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
 }
 
 fn create_tab_layout(profile_type: &str) -> String {
@@ -1519,6 +1827,27 @@ async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState,
         .await
         .remove(tab_id);
     state.terminal_inputs.write().await.remove(tab_id);
+    // Drop any prompt-specific sender for this tab. The isolated exec task
+    // then fails closed instead of carrying a password/MFA prompt across a
+    // disconnect, reconnection, or tab replacement.
+    let cancelled_remote_exec_interactions = {
+        let mut interactions = state.pending_remote_exec_interactions.write().await;
+        let request_ids = interactions
+            .iter()
+            .filter(|(_, pending)| pending.tab_id == tab_id)
+            .map(|(request_id, _)| request_id.clone())
+            .collect::<Vec<_>>();
+        request_ids
+            .into_iter()
+            .filter_map(|request_id| interactions.remove(&request_id))
+            .collect::<Vec<_>>()
+    };
+    drop(cancelled_remote_exec_interactions);
+    state
+        .active_interactive_remote_execs
+        .lock()
+        .await
+        .remove(tab_id);
     let sender = state.workers.write().await.remove(tab_id);
     if let Some(sender) = sender {
         // 超时即放弃：worker 主循环卡死时 channel 已满，send 不进去；
@@ -1530,6 +1859,29 @@ async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState,
         )
         .await;
     }
+}
+
+/// Roll back a session that was created for a split pane but could not be
+/// attached to the current pane tree. Split creation awaits PTY/SSH startup,
+/// so the source tab may be closed or moved by another command before the
+/// tree update gets the write lock. Leaving the newly created worker in that
+/// case would leak a background PTY that is no longer reachable from the UI.
+async fn cleanup_unattached_session(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+) {
+    stop_session_worker(state, tab_id).await;
+
+    state.tabs.write().await.retain(|tab| tab.id != tab_id);
+    state.sessions.write().await.remove(tab_id);
+    state.local_terminal_launches.write().await.remove(tab_id);
+    state.remote_forwards.write().await.remove(tab_id);
+    state
+        .active_pane_tab_id_by_root
+        .write()
+        .await
+        .retain(|root_id, active_tab_id| root_id != tab_id && active_tab_id != tab_id);
+    state.remove_ai_session_revision(tab_id).await;
 }
 
 pub async fn shutdown_session_workers(app: &AppHandle) {
@@ -1557,6 +1909,11 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     }
     state.local_terminal_launches.write().await.clear();
     state.terminal_inputs.write().await.clear();
+    // Cancelling all senders causes awaiting task-local dialogs to end
+    // immediately during app shutdown rather than surviving until timeout.
+    state.pending_remote_exec_interactions.write().await.clear();
+    state.pending_backup_passwords.write().await.clear();
+    state.active_interactive_remote_execs.lock().await.clear();
     let senders = state
         .workers
         .write()
@@ -1633,6 +1990,7 @@ async fn spawn_session_for_profile(
             tab_id.clone(),
             crate::services::SessionSnapshot {
                 profile_id: profile_id.to_string(),
+                ai_session_revision: "0".to_string(),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: "连接主机...\r\n".to_string(),
@@ -1699,8 +2057,10 @@ async fn spawn_local_terminal_tab(
     app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
     launch: crate::sessions::local_terminal::LocalTerminalLaunch,
+    pane_root_tab_id: Option<String>,
 ) -> String {
     let tab_id = format!("local-{}", uuid::Uuid::new_v4());
+    let is_split_pane = pane_root_tab_id.is_some();
     let capabilities =
         crate::services::workspace::ConnectionCapabilities::for_session_type("local");
 
@@ -1710,17 +2070,21 @@ async fn spawn_local_terminal_tab(
             id: tab_id.clone(),
             profile_id: "__local_terminal__".to_string(),
             session_type: "local".to_string(),
-            title: "Local Terminal".to_string(),
+            title: launch
+                .title
+                .clone()
+                .unwrap_or_else(|| "Local Terminal".to_string()),
             layout: "terminal-only".to_string(),
             status: crate::services::WorkspaceTabStatus::Connecting,
             pane_root: None,
-            pane_root_tab_id: None,
+            pane_root_tab_id,
         });
         let mut sessions = state.sessions.write().await;
         sessions.insert(
             tab_id.clone(),
             crate::services::SessionSnapshot {
                 profile_id: "__local_terminal__".to_string(),
+                ai_session_revision: "0".to_string(),
                 access_host: launch.cwd.clone(),
                 summary: launch.shell.clone(),
                 terminal_transcript: "Starting local shell...\r\n".to_string(),
@@ -1745,22 +2109,42 @@ async fn spawn_local_terminal_tab(
 
     match start_local_terminal_for_tab(app, state, &tab_id, launch).await {
         Ok(()) => {
-            crate::sessions::terminal::set_terminal_state(
-                app,
-                &tab_id,
-                "Local shell started".to_string(),
-                crate::services::WorkspaceTabStatus::Connected,
-            )
-            .await;
+            if is_split_pane {
+                crate::sessions::terminal::set_terminal_state_without_snapshot(
+                    app,
+                    &tab_id,
+                    "Local shell started".to_string(),
+                    crate::services::WorkspaceTabStatus::Connected,
+                )
+                .await;
+            } else {
+                crate::sessions::terminal::set_terminal_state(
+                    app,
+                    &tab_id,
+                    "Local shell started".to_string(),
+                    crate::services::WorkspaceTabStatus::Connected,
+                )
+                .await;
+            }
         }
         Err(error) => {
-            crate::sessions::terminal::set_terminal_state(
-                app,
-                &tab_id,
-                error,
-                crate::services::WorkspaceTabStatus::Error,
-            )
-            .await;
+            if is_split_pane {
+                crate::sessions::terminal::set_terminal_state_without_snapshot(
+                    app,
+                    &tab_id,
+                    error,
+                    crate::services::WorkspaceTabStatus::Error,
+                )
+                .await;
+            } else {
+                crate::sessions::terminal::set_terminal_state(
+                    app,
+                    &tab_id,
+                    error,
+                    crate::services::WorkspaceTabStatus::Error,
+                )
+                .await;
+            }
         }
     }
 
@@ -1834,6 +2218,114 @@ async fn start_local_terminal_for_tab(
     Ok(())
 }
 
+fn supports_split_panes(session_type: &str) -> bool {
+    matches!(session_type, "ssh" | "local")
+}
+
+/// Atomically attach a newly created session to the current pane tree.
+///
+/// This function does not start or stop any session. Keeping the tree
+/// mutation synchronous makes it possible for `app_split_tab` to distinguish
+/// a successful attachment from a stale source/tree and roll the new session
+/// back in the latter case.
+fn attach_split_pane_to_tabs(
+    tabs: &mut [crate::services::WorkspaceTab],
+    source_tab_id: &str,
+    new_tab_id: &str,
+    split_direction: crate::services::SplitDirection,
+) -> Result<String, AppError> {
+    if source_tab_id == new_tab_id {
+        return Err(AppError::Storage(
+            "Source and new pane tab IDs must be different".to_string(),
+        ));
+    }
+    if !tabs.iter().any(|tab| tab.id == new_tab_id) {
+        return Err(AppError::Storage("New pane tab vanished".to_string()));
+    }
+
+    // 先找 source 是否已经是 root（有 paneRoot）。
+    let root_idx = tabs
+        .iter()
+        .position(|tab| tab.id == source_tab_id && tab.pane_root.is_some());
+
+    if let Some(idx) = root_idx {
+        let root_tab = &mut tabs[idx];
+        let pane_root = root_tab
+            .pane_root
+            .as_mut()
+            .expect("root_idx only matches tabs with pane_root");
+        let replacement = crate::services::PaneNode::Split {
+            direction: split_direction,
+            children: vec![
+                crate::services::PaneNode::Leaf {
+                    tab_id: source_tab_id.to_string(),
+                },
+                crate::services::PaneNode::Leaf {
+                    tab_id: new_tab_id.to_string(),
+                },
+            ],
+            weights: vec![0.5, 0.5],
+        };
+        if !pane_root.replace_leaf(source_tab_id, replacement) {
+            return Err(AppError::Storage(
+                "Source pane is not present in its root layout".to_string(),
+            ));
+        }
+        return Ok(source_tab_id.to_string());
+    }
+
+    // source 可能是某个 root 的 leaf。
+    if let Some(idx) = tabs.iter().position(|tab| {
+        tab.pane_root
+            .as_ref()
+            .map(|root| root.leaf_tab_ids().iter().any(|id| id == source_tab_id))
+            .unwrap_or(false)
+    }) {
+        let root_tab = &mut tabs[idx];
+        let pane_root = root_tab
+            .pane_root
+            .as_mut()
+            .expect("containing root always has pane_root");
+        let replacement = crate::services::PaneNode::Split {
+            direction: split_direction,
+            children: vec![
+                crate::services::PaneNode::Leaf {
+                    tab_id: source_tab_id.to_string(),
+                },
+                crate::services::PaneNode::Leaf {
+                    tab_id: new_tab_id.to_string(),
+                },
+            ],
+            weights: vec![0.5, 0.5],
+        };
+        if !pane_root.replace_leaf(source_tab_id, replacement) {
+            return Err(AppError::Storage(
+                "Source pane disappeared from its root layout".to_string(),
+            ));
+        }
+        return Ok(root_tab.id.clone());
+    }
+
+    // source 是独立 tab，变成新的 split root。
+    let source_idx = tabs
+        .iter()
+        .position(|tab| tab.id == source_tab_id)
+        .ok_or_else(|| AppError::Storage("Source tab vanished".to_string()))?;
+    tabs[source_idx].pane_root = Some(crate::services::PaneNode::Split {
+        direction: split_direction,
+        children: vec![
+            crate::services::PaneNode::Leaf {
+                tab_id: source_tab_id.to_string(),
+            },
+            crate::services::PaneNode::Leaf {
+                tab_id: new_tab_id.to_string(),
+            },
+        ],
+        weights: vec![0.5, 0.5],
+    });
+    Ok(source_tab_id.to_string())
+}
+
 #[tauri::command]
 pub async fn app_open_profile(
     app: AppHandle,
@@ -1867,7 +2359,8 @@ pub async fn app_open_profile(
 /// - `direction = "row"`：左右分（垂直分屏），新 pane 在右
 /// - `direction = "column"`：上下分（水平分屏），新 pane 在下
 ///
-/// 只支持 SSH session。FTP / Telnet / Serial 暂不支持分屏。
+/// 支持 SSH 与 Local Terminal session。两者都会创建独立 PTY / runtime；
+/// FTP / Telnet / Serial 暂不支持分屏。
 #[tauri::command]
 pub async fn app_split_tab(
     app: AppHandle,
@@ -1890,16 +2383,15 @@ pub async fn app_split_tab(
 
     // 找到 source tab，并解析其所属的顶层 workspace tab。分屏 leaf 始终
     // 归属一个 root，而不是第二个顶栏 tab。
-    let (profile_id, pane_root_tab_id) = {
+    let (profile_id, session_type, pane_root_tab_id) = {
         let tabs = state.tabs.read().await;
         let source = tabs
             .iter()
             .find(|t| t.id == source_tab_id)
             .ok_or_else(|| AppError::Storage(format!("Tab not found: {}", source_tab_id)))?;
-        // 只支持 SSH 分屏
-        if source.session_type != "ssh" {
+        if !supports_split_panes(&source.session_type) {
             return Err(AppError::Storage(format!(
-                "Split pane is only supported for SSH sessions, got: {}",
+                "Split pane is only supported for SSH and local sessions, got: {}",
                 source.session_type
             )));
         }
@@ -1918,97 +2410,84 @@ pub async fn app_split_tab(
                     .unwrap_or_else(|| source.id.clone())
             }
         });
-        (source.profile_id.clone(), root_tab_id)
+        if let Some(root) = tabs.iter().find(|tab| tab.id == root_tab_id) {
+            if let Some(pane_root) = &root.pane_root {
+                let has_mixed_session_types = pane_root.leaf_tab_ids().iter().any(|leaf_tab_id| {
+                    tabs.iter()
+                        .find(|tab| &tab.id == leaf_tab_id)
+                        .map(|tab| tab.session_type != source.session_type)
+                        .unwrap_or(true)
+                });
+                if has_mixed_session_types {
+                    return Err(AppError::Storage(
+                        "Split pane tree contains incompatible session types".to_string(),
+                    ));
+                }
+            }
+        }
+        (
+            source.profile_id.clone(),
+            source.session_type.clone(),
+            root_tab_id,
+        )
     };
 
-    // 读 profile
-    let profiles = read_json_array(&app, "profiles.json")?;
-    let profile = profiles
-        .iter()
-        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
-        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+    // 创建新 session（不 touch_profile，分屏不算独立打开）。本地终端复用当前
+    // pane 的启动参数及已捕获 CWD，但始终新建 runtime、worker 与 PTY。
+    let new_tab_id = match session_type.as_str() {
+        "ssh" => {
+            let profiles = read_json_array(&app, "profiles.json")?;
+            let profile = profiles
+                .iter()
+                .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+                .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+            spawn_session_for_profile(&app, &state, profile, &profile_id, Some(pane_root_tab_id))
+                .await?
+        }
+        "local" => {
+            let mut launch = state
+                .local_terminal_launches
+                .read()
+                .await
+                .get(&source_tab_id)
+                .cloned()
+                .ok_or_else(|| {
+                    AppError::Storage("Local terminal launch settings are unavailable".to_string())
+                })?;
+            if let Some(cwd) = state
+                .sessions
+                .read()
+                .await
+                .get(&source_tab_id)
+                .and_then(|session| session.shell_cwd.clone())
+            {
+                launch.cwd = cwd;
+            }
+            spawn_local_terminal_tab(&app, &state, launch, Some(pane_root_tab_id)).await
+        }
+        _ => unreachable!("session type is checked before creating a split pane"),
+    };
 
-    // 创建新 session（不 touch_profile，分屏不算独立打开）
-    let new_tab_id =
-        spawn_session_for_profile(&app, &state, profile, &profile_id, Some(pane_root_tab_id))
-            .await?;
-
-    // 更新 paneRoot，并保留承载该分屏树的 root tab id。
+    // 更新 paneRoot，并保留承载该分屏树的 root tab id。若 source 在异步
+    // 创建新会话期间消失，必须回收刚创建的 worker/PTY，不能留下孤儿会话。
     let root_tab_id = {
         let mut tabs = state.tabs.write().await;
-
-        // 先找 source 是否已经是 root（有 paneRoot）
-        let root_idx = tabs
-            .iter()
-            .position(|t| t.id == source_tab_id && t.pane_root.is_some());
-
-        if let Some(idx) = root_idx {
-            // source 是 root，在其 paneRoot 里替换 source leaf
-            let root_tab = &mut tabs[idx];
-            if let Some(ref mut pane_root) = root_tab.pane_root {
-                let replacement = crate::services::PaneNode::Split {
-                    direction: split_direction,
-                    children: vec![
-                        crate::services::PaneNode::Leaf {
-                            tab_id: source_tab_id.clone(),
-                        },
-                        crate::services::PaneNode::Leaf {
-                            tab_id: new_tab_id.clone(),
-                        },
-                    ],
-                    weights: vec![0.5, 0.5],
-                };
-                pane_root.replace_leaf(&source_tab_id, replacement);
+        match attach_split_pane_to_tabs(&mut tabs, &source_tab_id, &new_tab_id, split_direction) {
+            Ok(root_tab_id) => {
+                let new_tab = tabs
+                    .iter_mut()
+                    .find(|tab| tab.id == new_tab_id)
+                    .expect("attach_split_pane_to_tabs validates the new tab");
+                // The source may have been promoted into another root while
+                // the new worker was starting. Persist the root that actually
+                // accepted the pane instead of the root captured beforehand.
+                new_tab.pane_root_tab_id = Some(root_tab_id.clone());
+                root_tab_id
             }
-            source_tab_id.clone()
-        } else {
-            // source 不是 root，可能是独立 tab 或某个 root 的 leaf
-            // 先检查它是否是某个 root 的 leaf
-            let containing_root_idx = tabs.iter().position(|t| {
-                t.pane_root
-                    .as_ref()
-                    .map(|root| root.leaf_tab_ids().iter().any(|id| id == &source_tab_id))
-                    .unwrap_or(false)
-            });
-
-            if let Some(idx) = containing_root_idx {
-                // source 是某个 root 的 leaf，在该 root 的 paneRoot 里替换
-                let root_tab = &mut tabs[idx];
-                if let Some(ref mut pane_root) = root_tab.pane_root {
-                    let replacement = crate::services::PaneNode::Split {
-                        direction: split_direction,
-                        children: vec![
-                            crate::services::PaneNode::Leaf {
-                                tab_id: source_tab_id.clone(),
-                            },
-                            crate::services::PaneNode::Leaf {
-                                tab_id: new_tab_id.clone(),
-                            },
-                        ],
-                        weights: vec![0.5, 0.5],
-                    };
-                    pane_root.replace_leaf(&source_tab_id, replacement);
-                }
-                root_tab.id.clone()
-            } else {
-                // source 是独立 tab，变成 root
-                let source_idx = tabs
-                    .iter()
-                    .position(|t| t.id == source_tab_id)
-                    .ok_or_else(|| AppError::Storage("Source tab vanished".to_string()))?;
-                tabs[source_idx].pane_root = Some(crate::services::PaneNode::Split {
-                    direction: split_direction,
-                    children: vec![
-                        crate::services::PaneNode::Leaf {
-                            tab_id: source_tab_id.clone(),
-                        },
-                        crate::services::PaneNode::Leaf {
-                            tab_id: new_tab_id.clone(),
-                        },
-                    ],
-                    weights: vec![0.5, 0.5],
-                });
-                source_tab_id.clone()
+            Err(error) => {
+                drop(tabs);
+                cleanup_unattached_session(&state, &new_tab_id).await;
+                return Err(error);
             }
         }
     };
@@ -2020,8 +2499,10 @@ pub async fn app_split_tab(
         *active_tab = Some(root_tab_id.clone());
 
         let mut active_panes = state.active_pane_tab_id_by_root.write().await;
-        active_panes.insert(root_tab_id, new_tab_id.clone());
+        active_panes.insert(root_tab_id.clone(), new_tab_id.clone());
     }
+    state.touch_ai_session_revision(&source_tab_id).await;
+    state.touch_ai_session_revision(&new_tab_id).await;
 
     get_workspace_snapshot_and_emit(&app).await
 }
@@ -2188,6 +2669,7 @@ pub async fn app_close_pane(
     };
 
     state.sessions.write().await.remove(&pane_tab_id);
+    state.remove_ai_session_revision(&pane_tab_id).await;
 
     {
         let mut active_tab = state.active_tab_id.write().await;
@@ -2206,6 +2688,9 @@ pub async fn app_close_pane(
             active_panes.insert(outcome.root_tab_id, next_active_pane);
         }
     }
+    for remaining_tab_id in &outcome.remaining_pane_tab_ids {
+        state.touch_ai_session_revision(remaining_tab_id).await;
+    }
 
     get_workspace_snapshot_and_emit(&app).await
 }
@@ -2218,9 +2703,19 @@ pub async fn app_set_active_pane(
     pane_tab_id: String,
 ) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let previous_pane_tab_id = {
+        let active_panes = state.active_pane_tab_id_by_root.read().await;
+        active_panes.get(&root_tab_id).cloned()
+    };
     {
         let mut active_panes = state.active_pane_tab_id_by_root.write().await;
-        active_panes.insert(root_tab_id, pane_tab_id);
+        active_panes.insert(root_tab_id, pane_tab_id.clone());
+    }
+    if previous_pane_tab_id.as_deref() != Some(pane_tab_id.as_str()) {
+        if let Some(previous_pane_tab_id) = previous_pane_tab_id {
+            state.touch_ai_session_revision(&previous_pane_tab_id).await;
+        }
+        state.touch_ai_session_revision(&pane_tab_id).await;
     }
     get_workspace_snapshot(app).await
 }
@@ -2317,6 +2812,7 @@ pub async fn app_reconnect_tab(
                         .push_str("Starting local shell...\r\n");
                 }
             }
+            state.touch_ai_session_revision(&tab_id).await;
 
             let mut launch = state
                 .local_terminal_launches
@@ -2417,6 +2913,7 @@ pub async fn app_reconnect_tab(
                     session.system_metrics = None;
                 }
             }
+            state.touch_ai_session_revision(&tab_id).await;
 
             // Renderer-triggered reconnects apply the returned snapshot, but
             // auto-reconnect is initiated by the worker and has no renderer
@@ -2529,6 +3026,7 @@ pub async fn app_disconnect_tab(
             session.system_metrics = None;
         }
     }
+    state.touch_ai_session_revision(&tab_id).await;
 
     // Cancelling an SSH worker intentionally suppresses its normal worker
     // shutdown callback. Emit the same terminal notice/state that a network
@@ -2623,6 +3121,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
                 }
             }
         }
+        state.remove_ai_session_revision(&tab_id).await;
     } else {
         // 普通关闭（可能是独立 tab 或分屏 root）
         let all_ids_to_close = if pane_leaf_ids.is_empty() {
@@ -2657,6 +3156,9 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
             let mut active_panes = state.active_pane_tab_id_by_root.write().await;
             active_panes.remove(&tab_id);
         }
+        for id in &all_ids_to_close {
+            state.remove_ai_session_revision(id).await;
+        }
     }
 
     get_workspace_snapshot(app).await
@@ -2670,7 +3172,7 @@ pub async fn app_open_local_terminal(
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let launch =
         crate::sessions::local_terminal::resolve_launch(options).map_err(AppError::Command)?;
-    let tab_id = spawn_local_terminal_tab(&app, &state, launch).await;
+    let tab_id = spawn_local_terminal_tab(&app, &state, launch, None).await;
     {
         let mut active = state.active_tab_id.write().await;
         *active = Some(tab_id);
@@ -2731,11 +3233,21 @@ pub async fn app_open_remote_path(
 ) -> Result<serde_json::Value, AppError> {
     refresh_remote_files(&app, &tab_id, &target_path).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let target_changed = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&tab_id)
+            .map(|session| session.shell_cwd.is_none() && session.remote_path != target_path)
+            .unwrap_or(false)
+    };
     {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&tab_id) {
             session.remote_path = target_path;
         }
+    }
+    if target_changed {
+        state.touch_ai_session_revision(&tab_id).await;
     }
     get_workspace_snapshot(app).await
 }
@@ -3313,21 +3825,181 @@ pub async fn app_resolve_ssh_interaction(
     Ok(())
 }
 
+/// Return a one-line answer to a temporary interactive exec PTY. This IPC is
+/// intentionally separate from `app_write_terminal`: no external agent can
+/// route a password, MFA code or confirmation into the visible terminal.
+#[tauri::command]
+pub async fn app_resolve_remote_exec_interaction(
+    app: AppHandle,
+    request_id: String,
+    cancelled: bool,
+    value: Option<String>,
+) -> Result<(), AppError> {
+    let request_id = request_id.trim();
+    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            "Invalid remote exec interaction request".to_string(),
+        ));
+    }
+    let value = if cancelled {
+        None
+    } else {
+        let value = value.ok_or_else(|| {
+            AppError::Command("Interactive remote exec response is required".to_string())
+        })?;
+        if value.chars().count() < crate::services::backup_crypto::MIN_PASSWORD_CHARS
+            || value.is_empty()
+            || value.len() > 8 * 1024
+            || value
+                .chars()
+                .any(|character| matches!(character, '\0' | '\r' | '\n' | '\u{1b}'))
+        {
+            return Err(AppError::Command(
+                "Interactive remote exec response must be one non-empty line".to_string(),
+            ));
+        }
+        Some(value)
+    };
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let pending = {
+        let mut interactions = state.pending_remote_exec_interactions.write().await;
+        interactions.remove(request_id)
+    };
+    if let Some(pending) = pending {
+        // The renderer may have had the dialog open while the same tab was
+        // reconnected, changed user, or followed a new CWD. Treat that as a
+        // cancellation before the value reaches the old task channel.
+        let current_revision = state.ai_session_revision(&pending.tab_id).await.to_string();
+        let session_is_still_connected = state
+            .sessions
+            .read()
+            .await
+            .get(&pending.tab_id)
+            .is_some_and(|session| session.connected);
+        let target_is_current =
+            session_is_still_connected && current_revision == pending.expected_session_revision;
+        // The value travels only to the task-local one-shot channel. Do not
+        // log it or retain it in state after this function returns.
+        let _ = pending
+            .sender
+            .send(crate::services::workspace::RemoteExecInteractionResponse {
+                cancelled: cancelled || !target_is_current,
+                value: target_is_current.then_some(value).flatten(),
+            });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_resolve_backup_password(
+    app: AppHandle,
+    request_id: String,
+    cancelled: bool,
+    value: Option<String>,
+) -> Result<(), AppError> {
+    let request_id = request_id.trim();
+    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            "Invalid backup password request".to_string(),
+        ));
+    }
+    let value = if cancelled {
+        None
+    } else {
+        let value =
+            value.ok_or_else(|| AppError::Command("Backup password is required".to_string()))?;
+        if value.is_empty()
+            || value.len() > 8 * 1024
+            || value
+                .chars()
+                .any(|character| matches!(character, '\0' | '\r' | '\n' | '\u{1b}'))
+        {
+            return Err(AppError::Command("Backup password is invalid".to_string()));
+        }
+        Some(value)
+    };
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let pending = state
+        .pending_backup_passwords
+        .write()
+        .await
+        .remove(request_id);
+    if let Some(pending) = pending {
+        let _ = pending
+            .sender
+            .send(crate::services::workspace::BackupPasswordResponse { cancelled, value });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_set_backup_password_renderer_ready(
+    app: AppHandle,
+    window: WebviewWindow,
+    registration_id: String,
+    ready: bool,
+) -> Result<(), AppError> {
+    if window.label() != "main" {
+        return Err(AppError::Window(
+            "Only the FileTerm main window may receive backup password input".to_string(),
+        ));
+    }
+    let registration_id = registration_id.trim();
+    if registration_id.is_empty() || registration_id.len() > 200 {
+        return Err(AppError::Command(
+            "Invalid backup password renderer registration".to_string(),
+        ));
+    }
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .set_backup_password_renderer_ready(registration_id, ready)
+        .await;
+    Ok(())
+}
+
+/// The main workspace registers its task-local secure-input listener only
+/// after Tauri confirms the event subscription. Without that listener an
+/// interactive exec must fail closed: a backend task cannot ask users to type
+/// passwords into either an Agent chat or the visible terminal.
+#[tauri::command]
+pub async fn app_set_remote_exec_interaction_renderer_ready(
+    app: AppHandle,
+    window: WebviewWindow,
+    registration_id: String,
+    ready: bool,
+) -> Result<(), AppError> {
+    if window.label() != "main" {
+        return Err(AppError::Window(
+            "Only the FileTerm main window may receive secure remote-exec input".to_string(),
+        ));
+    }
+    let registration_id = registration_id.trim();
+    if registration_id.is_empty() || registration_id.len() > 200 {
+        return Err(AppError::Command(
+            "Invalid secure remote-exec renderer registration".to_string(),
+        ));
+    }
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .set_remote_exec_interaction_renderer_ready(registration_id, ready)
+        .await;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn app_resolve_mcp_approval(
     app: AppHandle,
     request_id: String,
     approved: bool,
 ) -> Result<(), AppError> {
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let sender = {
-        let mut pending = state.pending_mcp_approvals.write().await;
-        pending.remove(&request_id)
-    };
-    if let Some(tx) = sender {
-        let _ = tx.send(approved);
-    }
-    Ok(())
+    crate::services::action_review::resolve_action_approval(&app, &request_id, approved).await
+}
+
+#[tauri::command]
+pub async fn app_resolve_action_approval(
+    app: AppHandle,
+    request_id: String,
+    approved: bool,
+) -> Result<(), AppError> {
+    crate::services::action_review::resolve_action_approval(&app, &request_id, approved).await
 }
 
 // ==========================================
@@ -3554,8 +4226,42 @@ mod command_template_tests {
 }
 
 #[cfg(test)]
+mod mcp_agent_setup_tests {
+    use super::app_get_mcp_agent_setup;
+
+    #[test]
+    fn generates_stdio_registration_commands_for_supported_clients() {
+        let setup = app_get_mcp_agent_setup().expect("MCP Agent setup should be readable");
+        assert!(!setup.fileterm_command.is_empty());
+        assert!(
+            setup.fileterm_command.starts_with('\'') || setup.fileterm_command.starts_with('"')
+        );
+
+        let claude = setup
+            .clients
+            .iter()
+            .find(|client| client.id == "claude-code")
+            .expect("Claude Code client should be exposed");
+        assert!(claude
+            .registration_command
+            .starts_with("claude mcp add --scope user fileterm -- "));
+        assert!(claude.registration_command.ends_with(" mcp"));
+
+        let codex = setup
+            .clients
+            .iter()
+            .find(|client| client.id == "codex-cli")
+            .expect("Codex CLI client should be exposed");
+        assert!(codex
+            .registration_command
+            .starts_with("codex mcp add fileterm -- "));
+        assert!(codex.registration_command.ends_with(" mcp"));
+    }
+}
+
+#[cfg(test)]
 mod split_pane_close_tests {
-    use super::remove_split_pane_from_tabs;
+    use super::{attach_split_pane_to_tabs, remove_split_pane_from_tabs, supports_split_panes};
     use crate::services::{PaneNode, SplitDirection, WorkspaceTab, WorkspaceTabStatus};
 
     fn tab(id: &str, pane_root: Option<PaneNode>, pane_root_tab_id: Option<&str>) -> WorkspaceTab {
@@ -3565,6 +4271,23 @@ mod split_pane_close_tests {
             session_type: "ssh".to_string(),
             title: "Server".to_string(),
             layout: "terminal-file".to_string(),
+            status: WorkspaceTabStatus::Connected,
+            pane_root,
+            pane_root_tab_id: pane_root_tab_id.map(str::to_string),
+        }
+    }
+
+    fn local_tab(
+        id: &str,
+        pane_root: Option<PaneNode>,
+        pane_root_tab_id: Option<&str>,
+    ) -> WorkspaceTab {
+        WorkspaceTab {
+            id: id.to_string(),
+            profile_id: "__local_terminal__".to_string(),
+            session_type: "local".to_string(),
+            title: "Local Terminal".to_string(),
+            layout: "terminal-only".to_string(),
             status: WorkspaceTabStatus::Connected,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
@@ -3600,6 +4323,45 @@ mod split_pane_close_tests {
         assert_eq!(outcome.remaining_pane_tab_ids, vec!["root"]);
         assert_eq!(tabs.len(), 1);
         assert_eq!(tabs[0].id, "root");
+        assert!(tabs[0].pane_root.is_none());
+    }
+
+    #[test]
+    fn only_ssh_and_local_sessions_can_be_split() {
+        assert!(supports_split_panes("ssh"));
+        assert!(supports_split_panes("local"));
+        assert!(!supports_split_panes("ftp"));
+        assert!(!supports_split_panes("telnet"));
+        assert!(!supports_split_panes("serial"));
+    }
+
+    #[test]
+    fn closing_a_local_child_pane_preserves_the_local_root() {
+        let mut tabs = vec![
+            local_tab(
+                "root",
+                Some(PaneNode::Split {
+                    direction: SplitDirection::Column,
+                    children: vec![
+                        PaneNode::Leaf {
+                            tab_id: "root".to_string(),
+                        },
+                        PaneNode::Leaf {
+                            tab_id: "child".to_string(),
+                        },
+                    ],
+                    weights: vec![0.5, 0.5],
+                }),
+                None,
+            ),
+            local_tab("child", None, Some("root")),
+        ];
+
+        let outcome = remove_split_pane_from_tabs(&mut tabs, "root", "child").unwrap();
+
+        assert_eq!(outcome.root_tab_id, "root");
+        assert_eq!(tabs.len(), 1);
+        assert_eq!(tabs[0].session_type, "local");
         assert!(tabs[0].pane_root.is_none());
     }
 
@@ -3650,6 +4412,68 @@ mod split_pane_close_tests {
                 .find(|tab| tab.id == "third")
                 .and_then(|tab| tab.pane_root_tab_id.as_deref()),
             Some("second")
+        );
+    }
+
+    #[test]
+    fn attaching_a_pane_to_an_independent_tab_creates_a_root_tree() {
+        let mut tabs = vec![tab("root", None, None), tab("child", None, Some("root"))];
+
+        let root_id =
+            attach_split_pane_to_tabs(&mut tabs, "root", "child", SplitDirection::Row).unwrap();
+
+        assert_eq!(root_id, "root");
+        let root = tabs.iter().find(|tab| tab.id == "root").unwrap();
+        assert_eq!(
+            root.pane_root.as_ref().unwrap().leaf_tab_ids(),
+            vec!["root", "child"]
+        );
+    }
+
+    #[test]
+    fn attaching_a_pane_to_an_existing_leaf_preserves_the_root_id() {
+        let mut tabs = vec![
+            tab(
+                "root",
+                Some(PaneNode::Split {
+                    direction: SplitDirection::Row,
+                    children: vec![
+                        PaneNode::Leaf {
+                            tab_id: "root".to_string(),
+                        },
+                        PaneNode::Leaf {
+                            tab_id: "other".to_string(),
+                        },
+                    ],
+                    weights: vec![0.5, 0.5],
+                }),
+                None,
+            ),
+            tab("other", None, Some("root")),
+            tab("child", None, Some("root")),
+        ];
+
+        let root_id =
+            attach_split_pane_to_tabs(&mut tabs, "other", "child", SplitDirection::Column).unwrap();
+
+        assert_eq!(root_id, "root");
+        assert_eq!(
+            tabs[0].pane_root.as_ref().unwrap().leaf_tab_ids(),
+            vec!["root", "other", "child"]
+        );
+    }
+
+    #[test]
+    fn attaching_a_pane_fails_without_mutating_tabs_when_source_vanished() {
+        let mut tabs = vec![tab("root", None, None)];
+        let before = tabs.clone();
+
+        let result = attach_split_pane_to_tabs(&mut tabs, "missing", "child", SplitDirection::Row);
+
+        assert!(result.is_err());
+        assert_eq!(
+            serde_json::to_value(&tabs).unwrap(),
+            serde_json::to_value(&before).unwrap()
         );
     }
 }
@@ -3765,8 +4589,8 @@ mod ui_state_tests {
 mod ui_preferences_tests {
     use super::{
         default_overview_section_order, normalize_ui_preferences,
-        resolve_profile_with_connection_defaults, SshConnectionDefaults, UiPreferences,
-        UiPreferencesInput,
+        resolve_profile_with_connection_defaults, McpAgentPreferences, SshConnectionDefaults,
+        UiPreferences, UiPreferencesInput,
     };
 
     #[test]
@@ -3775,7 +4599,9 @@ mod ui_preferences_tests {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
             auto_check_updates: false,
+            terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: true,
             overview_show_recent: true,
             overview_show_all_connections: true,
@@ -3803,7 +4629,9 @@ mod ui_preferences_tests {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
             auto_check_updates: false,
+            terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,
             overview_show_recent: false,
             overview_show_all_connections: true,
@@ -3819,6 +4647,7 @@ mod ui_preferences_tests {
         assert_eq!(preferences.theme, "default-light");
         assert_eq!(preferences.locale, "enUS");
         assert!(!preferences.auto_check_updates);
+        assert!(preferences.terminal_zoom_locked);
         assert!(!preferences.overview_show_stats);
         assert!(!preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
@@ -3832,6 +4661,61 @@ mod ui_preferences_tests {
                 "quickActions".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn normalizes_invalid_mcp_agent_preferences_fail_closed() {
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            auto_check_updates: true,
+            terminal_zoom_locked: false,
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences {
+                connection_scope: "not-a-scope".to_string(),
+                operation_policy: "not-a-policy".to_string(),
+                default_profile_id: Some("  ".to_string()),
+            },
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert_eq!(
+            preferences.mcp_agent.connection_scope,
+            "all-saved-connections"
+        );
+        assert_eq!(
+            preferences.mcp_agent.operation_policy,
+            "approved-operations"
+        );
+        assert_eq!(preferences.mcp_agent.default_profile_id, None);
+    }
+
+    #[test]
+    fn default_connection_scope_without_profile_falls_back_to_active_session() {
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            auto_check_updates: true,
+            terminal_zoom_locked: false,
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences {
+                connection_scope: "default-connection".to_string(),
+                operation_policy: "read-only".to_string(),
+                default_profile_id: None,
+            },
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert_eq!(preferences.mcp_agent.connection_scope, "active-session");
+        assert_eq!(preferences.mcp_agent.operation_policy, "read-only");
     }
 
     #[test]
@@ -3934,7 +4818,9 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             auto_check_updates: false,
+            terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,
             overview_show_recent: false,
             overview_show_all_connections: true,

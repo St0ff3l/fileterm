@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use hmac::{Hmac, Mac};
@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use tauri::AppHandle;
 use url::{Position, Url};
 
-use crate::services::webdav;
+use crate::services::{backup_crypto, backup_prompt, webdav};
 use crate::storage::workspace_file;
 use crate::AppError;
 
@@ -176,33 +176,85 @@ fn normalize_remote_path(value: &str) -> Result<String, AppError> {
 
 fn read_config(app: &AppHandle) -> Result<StoredConfig, AppError> {
     let path = config_path(app)?;
-    if !path.exists() {
-        return Ok(StoredConfig::default());
+    let (config, migrated) = read_config_at(&path)?;
+    if migrated {
+        write_config_at(&path, &config)?;
     }
-    lock_down_config_file(&path)?;
+    Ok(config)
+}
+
+fn read_config_at(path: &Path) -> Result<(StoredConfig, bool), AppError> {
+    if !path.exists() {
+        return Ok((StoredConfig::default(), false));
+    }
+    lock_down_config_file(path)?;
     let content = fs::read_to_string(path).map_err(|error| AppError::Storage(error.to_string()))?;
     let mut config: StoredConfig = serde_json::from_str(&content)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
+    let storage_root = path
+        .parent()
+        .ok_or_else(|| AppError::Storage("无法解析 S3 凭据存储目录".to_string()))?;
+    let mut migrated = false;
+    if let Some(access_key_id) = config.access_key_id.as_mut() {
+        let (value, should_migrate) = crate::services::secret_crypto::decrypt_or_migrate(
+            storage_root,
+            "s3/access-key-id",
+            access_key_id,
+        )?;
+        *access_key_id = value;
+        migrated |= should_migrate;
+    }
+    if let Some(secret_access_key) = config.secret_access_key.as_mut() {
+        let (value, should_migrate) = crate::services::secret_crypto::decrypt_or_migrate(
+            storage_root,
+            "s3/secret-access-key",
+            secret_access_key,
+        )?;
+        *secret_access_key = value;
+        migrated |= should_migrate;
+    }
     if config.remote_path.trim().is_empty() {
         config.remote_path = DEFAULT_REMOTE_PATH.to_string();
     }
     config.provider = normalize_provider(Some(&config.provider), &config.endpoint);
     apply_provider_defaults(&mut config);
-    Ok(config)
+    Ok((config, migrated))
 }
 
 fn write_config(app: &AppHandle, config: &StoredConfig) -> Result<(), AppError> {
     let path = config_path(app)?;
+    write_config_at(&path, config)
+}
+
+fn write_config_at(path: &Path, config: &StoredConfig) -> Result<(), AppError> {
+    let storage_root = path
+        .parent()
+        .ok_or_else(|| AppError::Storage("无法解析 S3 凭据存储目录".to_string()))?;
     let temporary = path.with_file_name(format!(".s3-backup.json.{}.tmp", uuid::Uuid::new_v4()));
-    let content = serde_json::to_vec_pretty(config)
+    let mut encrypted = config.clone();
+    if let Some(access_key_id) = encrypted.access_key_id.as_mut() {
+        *access_key_id = crate::services::secret_crypto::encrypt(
+            storage_root,
+            "s3/access-key-id",
+            access_key_id,
+        )?;
+    }
+    if let Some(secret_access_key) = encrypted.secret_access_key.as_mut() {
+        *secret_access_key = crate::services::secret_crypto::encrypt(
+            storage_root,
+            "s3/secret-access-key",
+            secret_access_key,
+        )?;
+    }
+    let content = serde_json::to_vec_pretty(&encrypted)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     crate::storage::write_restricted_file(&temporary, &content)?;
     if let Err(error) = lock_down_config_file(&temporary) {
         let _ = fs::remove_file(&temporary);
         return Err(error);
     }
-    crate::storage::replace_file_atomically(&temporary, &path)?;
-    lock_down_config_file(&path)
+    crate::storage::replace_file_atomically(&temporary, path)?;
+    lock_down_config_file(path)
 }
 
 #[cfg(unix)]
@@ -634,7 +686,8 @@ async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
             ));
         }
     }
-    let (payload, content_hash) = webdav::export_bundle(app)?;
+    let password = backup_prompt::request(app, "upload", "S3").await?;
+    let (payload, content_hash) = webdav::export_bundle(app, &password)?;
     let mut headers = BTreeMap::new();
     headers.insert(
         "content-type",
@@ -723,17 +776,37 @@ async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
     if bytes.len() > MAX_BUNDLE_BYTES {
         return Err(command_error("S3 配置包超过 5 MB 限制"));
     }
-    let summary = webdav::import_bundle(app, &bytes)?;
+    let password = if backup_crypto::requires_password(&bytes)
+        .map_err(|error| command_error(error.to_string()))?
+    {
+        Some(backup_prompt::request(app, "download", "S3").await?)
+    } else {
+        None
+    };
+    let summary =
+        webdav::import_bundle(app, &bytes, password.as_ref().map(|value| value.as_str()))?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(webdav::export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
     write_config(app, &config)?;
+    let message = if summary.legacy_plaintext {
+        format!(
+            "已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。该备份未加密，建议重新上传以生成加密备份。",
+            summary.imported, summary.updated, summary.skipped
+        )
+    } else {
+        format!(
+            "已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。",
+            summary.imported, summary.updated, summary.skipped
+        )
+    };
     Ok(serde_json::json!({
         "action": "download",
-        "message": format!("已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。", summary.imported, summary.updated, summary.skipped),
+        "message": message,
         "imported": summary.imported,
         "updated": summary.updated,
         "skipped": summary.skipped,
+        "legacyPlaintext": summary.legacy_plaintext,
     }))
 }
 
@@ -741,9 +814,11 @@ async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
 mod tests {
     use super::{
         apply_provider_defaults, normalize_bucket, normalize_provider, normalize_remote_path,
-        percent_encode, signature, target, validate_config, StoredConfig, BITIFUL_S4_ENDPOINT,
-        BITIFUL_S4_REGION, DEFAULT_REMOTE_PATH, PROVIDER_BITIFUL_S4, PROVIDER_CLOUDFLARE_R2,
+        percent_encode, read_config_at, signature, target, validate_config, write_config_at,
+        StoredConfig, BITIFUL_S4_ENDPOINT, BITIFUL_S4_REGION, DEFAULT_REMOTE_PATH,
+        PROVIDER_BITIFUL_S4, PROVIDER_CLOUDFLARE_R2,
     };
+    use std::fs;
 
     #[test]
     fn uses_cloudflare_r2_defaults_from_its_endpoint() {
@@ -809,6 +884,40 @@ mod tests {
         };
         assert!(validate_config(&config, false).is_ok());
         assert!(validate_config(&config, true).is_err());
+    }
+
+    #[test]
+    fn plaintext_s3_credentials_are_migrated_to_encrypted_storage() {
+        let directory =
+            std::env::temp_dir().join(format!("fileterm-s3-secret-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).expect("fixture directory should be created");
+        let path = directory.join("s3-backup.json");
+        let legacy = StoredConfig {
+            endpoint: "https://account.r2.cloudflarestorage.com".to_string(),
+            access_key_id: Some("s3-access-key".to_string()),
+            secret_access_key: Some("s3-secret-key".to_string()),
+            ..StoredConfig::default()
+        };
+        fs::write(
+            &path,
+            serde_json::to_vec(&legacy).expect("legacy config json"),
+        )
+        .expect("legacy config write");
+
+        let (config, migrated) = read_config_at(&path).expect("legacy config read");
+        assert!(migrated);
+        assert_eq!(config.access_key_id.as_deref(), Some("s3-access-key"));
+        assert_eq!(config.secret_access_key.as_deref(), Some("s3-secret-key"));
+        write_config_at(&path, &config).expect("migrated config write");
+        let raw = fs::read_to_string(&path).expect("migrated config read");
+        assert!(!raw.contains("s3-access-key"));
+        assert!(!raw.contains("s3-secret-key"));
+
+        let (decoded, migrated_again) = read_config_at(&path).expect("encrypted config read");
+        assert!(!migrated_again);
+        assert_eq!(decoded.access_key_id.as_deref(), Some("s3-access-key"));
+        assert_eq!(decoded.secret_access_key.as_deref(), Some("s3-secret-key"));
+        fs::remove_dir_all(directory).expect("fixture directory should be removed");
     }
 
     #[test]

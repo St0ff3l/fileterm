@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
-import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
+import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
@@ -69,6 +69,19 @@ export function TerminalDock({
   const focusTerminal = useCallback(() => {
     dispatchAppEvent(APP_EVENT.focusTerminal, activeTab.id)
   }, [activeTab.id])
+
+  useEffect(() => {
+    return onAppEvent(APP_EVENT.aiInsertTerminalCommand, ({ tabId, command }) => {
+      if (tabId !== activeTab.id || activeTab.sessionType !== 'ssh') {
+        return
+      }
+      // This is intentionally only a controlled-textarea handoff. It does
+      // not call onSendCommand, add a carriage return, or write to the PTY.
+      setCommand(command)
+      setPanel(null)
+      window.requestAnimationFrame(() => inputRef.current?.focus())
+    })
+  }, [activeTab.id, activeTab.sessionType])
 
   useEffect(() => {
     return () => {
@@ -480,7 +493,7 @@ export function TerminalDock({
                       <AppIcon name="play" />
                     </button>
                     <button
-                      className="terminal-dock-action-btn btn-copy"
+                      className="terminal-dock-action-btn terminal-dock-copy-btn btn-copy"
                       type="button"
                       title={t.copy}
                       onClick={(e) => {
@@ -488,7 +501,7 @@ export function TerminalDock({
                         void handleHistoryAction(entry.command, 1)
                       }}
                     >
-                      <AppIcon name="copy" />
+                      <AppIcon name="copy" size={15} strokeWidth={2.1} />
                     </button>
                     <button
                       className="terminal-dock-action-btn btn-delete"
@@ -580,13 +593,18 @@ export function TerminalDock({
           <textarea
             ref={inputRef}
             disabled={activeTab.sessionType !== 'ssh' || isConnecting}
-            placeholder={reconnectFeedbackVisible || isConnecting ? t.terminalReconnecting : placeholderText}
             rows={1}
+            title={placeholderText}
             wrap="off"
             value={command}
             onChange={(event) => setCommand(event.currentTarget.value)}
             onKeyDown={handleInputKeyDown}
           />
+          {!command && (
+            <span className="terminal-dock-placeholder" title={placeholderText}>
+              {reconnectFeedbackVisible || isConnecting ? t.terminalReconnecting : placeholderText}
+            </span>
+          )}
         </label>
         <div className="terminal-dock-actions">
           <button
@@ -612,15 +630,15 @@ export function TerminalDock({
             title={connected ? t.terminalDockDisconnect : t.terminalDockReconnect}
             onClick={handleToggleConnection}
           >
-            <AppIcon name="flash" />
+            <AppIcon name="flash" size={16} strokeWidth={2} />
           </button>
           <button
-            className="terminal-dock-icon-btn"
+            className="terminal-dock-icon-btn terminal-dock-copy-btn"
             type="button"
             title={t.copy}
             onClick={() => dispatchAppEvent(APP_EVENT.terminalCopy)}
           >
-            <AppIcon name="copy" />
+            <AppIcon name="copy" size={15} strokeWidth={2} />
           </button>
           <button
             className="terminal-dock-icon-btn"
@@ -628,7 +646,7 @@ export function TerminalDock({
             title={t.paste}
             onClick={() => dispatchAppEvent(APP_EVENT.terminalPaste)}
           >
-            <AppIcon name="paste" />
+            <AppIcon name="paste" size={15} strokeWidth={2} />
           </button>
           <button
             className="terminal-dock-icon-btn"
@@ -636,7 +654,7 @@ export function TerminalDock({
             title={t.find}
             onClick={() => dispatchAppEvent(APP_EVENT.terminalFind)}
           >
-            <AppIcon name="search" />
+            <AppIcon name="search" size={16} strokeWidth={2} />
           </button>
         </div>
       </div>

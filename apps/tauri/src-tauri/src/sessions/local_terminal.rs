@@ -64,6 +64,7 @@ impl Utf8StreamDecoder {
 #[derive(Clone, Debug)]
 pub struct LocalTerminalLaunch {
     pub shell: String,
+    pub title: Option<String>,
     pub cwd: String,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
@@ -73,6 +74,7 @@ pub struct LocalTerminalLaunch {
 #[serde(rename_all = "camelCase")]
 pub struct LocalTerminalLaunchOptions {
     pub shell: Option<String>,
+    pub title: Option<String>,
     pub cwd: Option<String>,
     pub args: Option<Vec<String>>,
     pub env: Option<BTreeMap<String, String>>,
@@ -340,6 +342,7 @@ fn hex_value(value: u8) -> Option<u8> {
 pub fn default_launch() -> LocalTerminalLaunch {
     LocalTerminalLaunch {
         shell: default_shell(),
+        title: None,
         cwd: default_working_directory(),
         args: Vec::new(),
         env: BTreeMap::new(),
@@ -353,6 +356,10 @@ pub fn resolve_launch(
     let options = options.unwrap_or_default();
     let launch = LocalTerminalLaunch {
         shell: options.shell.unwrap_or(defaults.shell),
+        title: options
+            .title
+            .map(|title| title.trim().to_string())
+            .filter(|title| !title.is_empty()),
         cwd: options.cwd.unwrap_or(defaults.cwd),
         args: options.args.unwrap_or_default(),
         env: options.env.unwrap_or_default(),
@@ -1028,6 +1035,14 @@ fn validate_launch(launch: &LocalTerminalLaunch) -> Result<(), String> {
     if launch.shell.contains('\0') {
         return Err("Local terminal shell contains a NUL byte".to_string());
     }
+    if let Some(title) = &launch.title {
+        const MAX_LOCAL_TITLE_BYTES: usize = 120;
+        if title.contains('\0') || title.len() > MAX_LOCAL_TITLE_BYTES {
+            return Err(format!(
+                "Local terminal title is invalid or longer than {MAX_LOCAL_TITLE_BYTES} bytes"
+            ));
+        }
+    }
     if shell_path_is_unavailable(&launch.shell) {
         return Err(format!(
             "Local terminal shell does not exist: {}",
@@ -1395,6 +1410,7 @@ mod tests {
     fn launch_validation_rejects_empty_or_missing_explicit_shell_paths() {
         assert!(validate_launch(&LocalTerminalLaunch {
             shell: "  ".to_string(),
+            title: None,
             cwd: "/tmp".to_string(),
             args: Vec::new(),
             env: BTreeMap::new(),
@@ -1402,6 +1418,7 @@ mod tests {
         .is_err());
         assert!(validate_launch(&LocalTerminalLaunch {
             shell: "/definitely/missing/fileterm-shell".to_string(),
+            title: None,
             cwd: "/tmp".to_string(),
             args: Vec::new(),
             env: BTreeMap::new(),
@@ -1409,6 +1426,7 @@ mod tests {
         .is_err());
         assert!(validate_launch(&LocalTerminalLaunch {
             shell: "zsh".to_string(),
+            title: None,
             cwd: "/tmp".to_string(),
             args: Vec::new(),
             env: BTreeMap::new(),
@@ -1422,6 +1440,7 @@ mod tests {
         environment.insert("FILETERM_TEST".to_string(), "present".to_string());
         let launch = resolve_launch(Some(LocalTerminalLaunchOptions {
             shell: Some("/bin/sh".to_string()),
+            title: Some("Agent terminal".to_string()),
             cwd: Some("/tmp".to_string()),
             args: Some(vec!["-i".to_string()]),
             env: Some(environment.clone()),
@@ -1429,9 +1448,26 @@ mod tests {
         .expect("valid local launch options should resolve");
 
         assert_eq!(launch.shell, "/bin/sh");
+        assert_eq!(launch.title.as_deref(), Some("Agent terminal"));
         assert_eq!(launch.cwd, "/tmp");
         assert_eq!(launch.args, vec!["-i"]);
         assert_eq!(launch.env, environment);
+    }
+
+    #[test]
+    fn launch_options_trim_optional_tab_title_and_reject_invalid_title() {
+        let launch = resolve_launch(Some(LocalTerminalLaunchOptions {
+            title: Some("  Claude Code  ".to_string()),
+            ..Default::default()
+        }))
+        .expect("a trimmed local terminal title should resolve");
+        assert_eq!(launch.title.as_deref(), Some("Claude Code"));
+
+        let invalid = LocalTerminalLaunch {
+            title: Some("x".repeat(121)),
+            ..default_launch()
+        };
+        assert!(validate_launch(&invalid).is_err());
     }
 
     #[test]
