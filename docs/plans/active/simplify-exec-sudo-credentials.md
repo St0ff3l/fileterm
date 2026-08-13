@@ -401,7 +401,7 @@ scope 字符串：
 
 **三端 CI 矩阵**：
 
-- macOS / Windows / Linux 都执行上述测试
+- macOS / Windows / Linux 都执行上述测试；桌面生命周期矩阵额外运行 `action_review`、profile secret 和 `system_metrics` 的 sudo/su、PTY 提示与加密读写契约
 - 复用 [secret-storage-encryption.md](./secret-storage-encryption.md) 已有的三端 CI 矩阵
 
 ### 9.2 手工验证

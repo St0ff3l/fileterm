@@ -98,15 +98,19 @@ jobs:
         working-directory: apps/tauri/src-tauri
         run: cargo check --locked --all-targets
 
-      - name: Exercise AI Copilot contracts
-        # These tests use loopback protocol fixtures and pure mode/guardrail
-        # state; they do not require a real Provider, SSH target, or GUI.
+      - name: Exercise AI Copilot and secure exec contracts
+        # These tests use loopback protocol fixtures and pure mode/guardrail,
+        # profile-secret, action-review, and PTY prompt state; they do not
+        # require a real Provider, SSH target, or GUI.
         # Keep them on every desktop runner so platform compilation cannot
         # silently drift from the Linux-only full Rust quality job.
         working-directory: apps/tauri/src-tauri
         run: |
           cargo test services::ai::tests --locked -- --test-threads=1
           cargo test services::ai_guardrails::tests --locked -- --test-threads=1
+          cargo test services::action_review::tests --locked -- --test-threads=1
+          cargo test services::profile_ops::tests --locked -- --test-threads=1
+          cargo test sessions::system_metrics::tests --locked -- --test-threads=1
 
       - name: Verify non-GUI interactive CLI dispatch
         working-directory: apps/tauri/src-tauri

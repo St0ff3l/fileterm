@@ -509,7 +509,7 @@ type AiErrorCode =
 
 **三端 CI 矩阵**：
 
-- macOS / Windows / Linux 都执行上述测试。
+- macOS / Windows / Linux 都执行上述测试，并覆盖 `services::action_review::tests`、`services::profile_ops::tests`、`sessions::system_metrics::tests` 的安全 exec / PTY 契约。
 
 ### 10.2 手工验证
 
