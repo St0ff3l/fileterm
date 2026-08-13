@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   AiCopilotMode,
   AiCopilotModeState,
-  AiChatResponseMode,
   AiChatRequest,
   AiConversation,
   AiConversationSummary,
@@ -19,13 +18,11 @@ import type {
 type SendMessageOptions = {
   contextSnapshotId?: string
   contextPreview?: AiContextPreview
-  responseMode?: AiChatResponseMode
   mode?: AiCopilotMode
 }
 
 type RetryMessageOptions = {
   contextSnapshotId?: string
-  responseMode?: AiChatResponseMode
   mode?: AiCopilotMode
 }
 
@@ -103,7 +100,6 @@ export function useAiCopilot() {
   const activeRequestIdRef = useRef<string | null>(null)
   const requestCompletedRef = useRef(false)
   const unmountedRef = useRef(false)
-  const activeResponseModeRef = useRef<AiChatResponseMode>('chat')
   const modeStateRef = useRef<AiCopilotModeState | null>(null)
   const mountedRef = useRef(true)
 
@@ -276,9 +272,6 @@ export function useAiCopilot() {
         return
       }
       if (event.type === 'text-delta') {
-        if (activeResponseModeRef.current === 'command-proposal') {
-          return
-        }
         const assistantMessageId = activeAssistantMessageIdRef.current
         if (!assistantMessageId) return
         setConversation((current) => {
@@ -326,7 +319,6 @@ export function useAiCopilot() {
         setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
-        activeResponseModeRef.current = 'chat'
         return
       }
       if (event.type === 'tool-call') {
@@ -356,7 +348,6 @@ export function useAiCopilot() {
       activeAssistantMessageIdRef.current = null
       activeRequestIdRef.current = null
       requestCompletedRef.current = true
-      activeResponseModeRef.current = 'chat'
       setActiveRequestId(null)
       setIsStreaming(false)
       // A user stop (or a surface teardown) is a successful cancellation
@@ -437,7 +428,6 @@ export function useAiCopilot() {
       const content = value.trim()
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !content || !providerId || isStreaming) return false
-      const responseMode = options.responseMode ?? 'chat'
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       const preview =
         options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
@@ -457,7 +447,6 @@ export function useAiCopilot() {
       setUsage(null)
       setToolActivities([])
       setIsStreaming(true)
-      activeResponseModeRef.current = responseMode
 
       let target = conversationRef.current
       try {
@@ -493,7 +482,6 @@ export function useAiCopilot() {
                 modelOverride,
                 userMessage: content,
                 contextSnapshotId: options.contextSnapshotId,
-                responseMode,
                 mode
               },
               onEvent
@@ -536,7 +524,6 @@ export function useAiCopilot() {
           activeRequestIdRef.current = null
           requestCompletedRef.current = true
           setActiveRequestId(null)
-          activeResponseModeRef.current = 'chat'
           if (options.contextSnapshotId) {
             setContextPreview((current) => (current?.snapshotId === options.contextSnapshotId ? null : current))
           }
@@ -585,14 +572,12 @@ export function useAiCopilot() {
       const currentConversation = conversationRef.current
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
-      const responseMode = options.responseMode ?? 'chat'
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       setErrorMessage(null)
       setUsage(null)
       setToolActivities([])
       setContextPreview(null)
       setIsStreaming(true)
-      activeResponseModeRef.current = responseMode
       try {
         const modelOverride = selectedModelRef.current || undefined
         await startRequest(
@@ -603,7 +588,6 @@ export function useAiCopilot() {
                 providerId: requestProviderId,
                 modelOverride,
                 contextSnapshotId: options.contextSnapshotId,
-                responseMode,
                 mode
               },
               onEvent
@@ -619,7 +603,6 @@ export function useAiCopilot() {
           activeRequestIdRef.current = null
           requestCompletedRef.current = true
           setActiveRequestId(null)
-          activeResponseModeRef.current = 'chat'
         }
         return false
       }

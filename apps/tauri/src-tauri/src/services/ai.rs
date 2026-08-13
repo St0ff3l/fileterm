@@ -512,6 +512,8 @@ pub struct StartAiChatInput {
     #[serde(default)]
     pub context_snapshot_id: Option<String>,
     #[serde(default)]
+    // Compatibility for older renderer callers. New Copilot turns select
+    // behavior exclusively through `mode` and default to ordinary chat.
     pub response_mode: AiChatResponseMode,
     #[serde(default)]
     pub mode: AiCopilotMode,
@@ -527,6 +529,8 @@ pub struct RetryAiChatInput {
     #[serde(default)]
     pub context_snapshot_id: Option<String>,
     #[serde(default)]
+    // Compatibility for older renderer callers. New Copilot turns select
+    // behavior exclusively through `mode` and default to ordinary chat.
     pub response_mode: AiChatResponseMode,
     #[serde(default)]
     pub mode: AiCopilotMode,

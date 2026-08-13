@@ -173,7 +173,6 @@ export function AiCopilotPanel({
     (activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'local') && activeSession?.connected === true
   const [draft, setDraft] = useState('')
   const [referenceTerminal, setReferenceTerminal] = useState(false)
-  const [responseMode, setResponseMode] = useState<'chat' | 'command-proposal'>('chat')
   const [isAutoModeConfirmOpen, setIsAutoModeConfirmOpen] = useState(false)
   const [isAutoModeConfirming, setIsAutoModeConfirming] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
@@ -275,22 +274,13 @@ export function AiCopilotPanel({
   }, [conversation?.id, conversation?.title])
 
   useEffect(() => {
-    if ((!referenceTerminal || !isTerminalTarget) && responseMode === 'command-proposal') {
-      setResponseMode('chat')
-      setCommandActionMessage(null)
-    }
-  }, [isTerminalTarget, referenceTerminal, responseMode])
-
-  useEffect(() => {
     if (!modeState) return
     setReferenceTerminal(modeState.attachTerminalContext)
-    if (modeState.mode !== 'pure-conversation') {
-      setResponseMode('chat')
-    }
   }, [modeState])
 
   const canChat = Boolean(currentProvider)
   const copilotMode: AiCopilotMode = modeState?.mode ?? 'pure-conversation'
+  const requiresTerminalContext = copilotMode !== 'pure-conversation' || referenceTerminal
   const canRetry = Boolean(errorMessage && conversation?.messages.at(-1)?.role === 'user')
 
   const openNewConversation = () => {
@@ -301,12 +291,7 @@ export function AiCopilotPanel({
 
   const send = async () => {
     if (!draft.trim() || isStreaming) return
-    const effectiveResponseMode = copilotMode !== 'pure-conversation' ? 'chat' : responseMode
     const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
-    if (effectiveResponseMode === 'command-proposal' && !shouldAttachContext) {
-      setCommandActionMessage(t.aiCopilotCommandModeRequiresContext)
-      return
-    }
 
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
     if (shouldAttachContext) {
@@ -325,7 +310,6 @@ export function AiCopilotPanel({
     }
 
     const sent = await sendMessage(draft, {
-      responseMode: effectiveResponseMode,
       mode: copilotMode,
       ...(contextSnapshot
         ? {
@@ -341,10 +325,9 @@ export function AiCopilotPanel({
 
   const retryLastRequest = async () => {
     if (isStreaming) return
-    const effectiveResponseMode = copilotMode !== 'pure-conversation' ? 'chat' : responseMode
     const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
-    if (effectiveResponseMode === 'command-proposal' || shouldAttachContext) {
+    if (shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
         setCommandActionMessage(t.aiCopilotContextUnavailable)
         return
@@ -359,7 +342,6 @@ export function AiCopilotPanel({
       if (!contextSnapshot) return
     }
     await retry({
-      responseMode: effectiveResponseMode,
       mode: copilotMode,
       ...(contextSnapshot ? { contextSnapshotId: contextSnapshot.snapshotId } : {})
     })
@@ -1129,8 +1111,7 @@ export function AiCopilotPanel({
                       disabled={
                         !canChat ||
                         !draft.trim() ||
-                        ((copilotMode !== 'pure-conversation' || responseMode === 'command-proposal') &&
-                          (!referenceTerminal || !isTerminalTarget))
+                        (requiresTerminalContext && (!referenceTerminal || !isTerminalTarget))
                       }
                       type="button"
                       onClick={() => void send()}
@@ -1143,47 +1124,6 @@ export function AiCopilotPanel({
                 </div>
               </div>
             </div>
-          </div>
-          <div className="ai-copilot-safety-footer">
-            {canChat ? (
-              <div className="ai-copilot-response-mode" role="group" aria-label={t.aiCopilotResponseMode}>
-                <button
-                  aria-pressed={responseMode === 'chat'}
-                  className={responseMode === 'chat' ? 'is-active' : ''}
-                  disabled={copilotMode !== 'pure-conversation' || isStreaming}
-                  title={t.aiCopilotChatMode}
-                  type="button"
-                  onClick={() => {
-                    setResponseMode('chat')
-                    setCommandActionMessage(null)
-                  }}
-                >
-                  {t.aiCopilotChatMode}
-                </button>
-                <button
-                  aria-pressed={responseMode === 'command-proposal'}
-                  className={responseMode === 'command-proposal' ? 'is-active' : ''}
-                  disabled={
-                    copilotMode !== 'pure-conversation' || !referenceTerminal || !isTerminalTarget || isStreaming
-                  }
-                  title={t.aiCopilotCommandMode}
-                  type="button"
-                  onClick={() => {
-                    setResponseMode('command-proposal')
-                    setCommandActionMessage(null)
-                  }}
-                >
-                  {t.aiCopilotCommandMode}
-                </button>
-              </div>
-            ) : null}
-            {canChat && responseMode === 'command-proposal' ? (
-              <span className="ai-copilot-response-mode-hint">{t.aiCopilotCommandModeHint}</span>
-            ) : canChat && responseMode === 'chat' && !referenceTerminal ? (
-              <span className="ai-copilot-response-mode-hint">{t.aiCopilotCommandModeUnavailable}</span>
-            ) : canChat && responseMode === 'chat' && !isTerminalTarget ? (
-              <span className="ai-copilot-response-mode-hint">{t.aiCopilotContextNeedsTerminal}</span>
-            ) : null}
           </div>
         </footer>
       ) : null}

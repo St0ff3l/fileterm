@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏和安全凭据衔接已落地，待真实 Provider / 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接和三模式 UI 收口已落地；macOS arm64 app/DMG 已通过，待真实 Provider / 远端 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -13,13 +13,13 @@
 - **Copilot 永不接收提权密码**。半自动/全自动只能使用 profile 加密存储或安全本地输入；不得让模型在聊天里索取、转发、回显或持久化 `sudo_password` / `su_password`。
 - **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
 
-当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。旧 `app_run_ai_review` 与通用 interactive exec 仍保留，作为兼容入口和 MFA/验证码等交互式能力；真实 Provider、打包应用和远端 sudo/su 回归仍待验收。
+当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，真实 Provider、远端 sudo/su 和 Windows/Linux 打包回归仍待验收。
 
 ## 1. 结论
 
 把内置 Copilot 的能力边界从「单层保守助手 + 独立 Review Mode」收敛为**三种用户可选模式**，并把上下文级别从 L0/L1/L2/L3 简化为 **L0/L2 两档**：
 
-- **纯对话模式（Pure Conversation）**：默认 L0，可由用户主动开启 L2；模型只生成可复制 / 可写入输入区的命令卡，不发起任何远端执行。
+- **纯对话模式（Pure Conversation）**：默认 L0，可由用户主动开启 L2；模型只进行普通对话，不获得工具调用能力，也不发起任何远端执行。
 - **半自动模式（Semi-Automatic）**：强制 L2；模型可发起工具调用，每次执行必须经用户**逐次审批**后才走独立 SSH exec channel。
 - **全自动模式（Fully Automatic）**：强制 L2；模型可发起工具调用，**无需逐次审批**直接走独立 SSH exec channel，但受危险命令黑名单、操作阈值、不可逆动作白名单和会话级累计上限约束。
 
@@ -43,15 +43,16 @@
 
 ## 2. 模式 × 上下文矩阵
 
-| 模式   | 默认上下文 | 用户可调     | 工具调用  | 执行边界                                 | 适用场景                       |
-| ------ | ---------- | ------------ | --------- | ---------------------------------------- | ------------------------------ |
-| 纯对话 | L0         | ✅ 可开关 L2 | ❌ 不允许 | 仅生成命令卡，复制或写入输入区（不回车） | 学习、解释、排障、生成命令     |
-| 半自动 | L2         | ❌ 锁定 L2   | ✅ 允许   | 每次执行必须用户审批，独立 SSH exec      | 已知目标、可控范围内的运维任务 |
-| 全自动 | L2         | ❌ 锁定 L2   | ✅ 允许   | 无需逐次审批，独立 SSH exec，受护栏约束  | 重复性查询、批处理、链式排障   |
+| 模式   | 默认上下文 | 用户可调     | 工具调用  | 执行边界                                | 适用场景                       |
+| ------ | ---------- | ------------ | --------- | --------------------------------------- | ------------------------------ |
+| 纯对话 | L0         | ✅ 可开关 L2 | ❌ 不允许 | 普通 Markdown 对话，不执行远端命令      | 学习、解释、排障               |
+| 半自动 | L2         | ❌ 锁定 L2   | ✅ 允许   | 每次执行必须用户审批，独立 SSH exec     | 已知目标、可控范围内的运维任务 |
+| 全自动 | L2         | ❌ 锁定 L2   | ✅ 允许   | 无需逐次审批，独立 SSH exec，受护栏约束 | 重复性查询、批处理、链式排障   |
 
 UI 约束：
 
 - 模式选择器位于 Copilot 面板顶部，三选一单选按钮组。
+- 三模式选择器是新回合的唯一运行模式入口，直接替换旧的“普通对话 / 生成命令卡”底部切换；新 UI 不再同时展示 `responseMode` 选择器。
 - 上下文开关仅在纯对话模式下可交互；半自动 / 全自动模式下开关被**禁用并置灰**，旁边提示"该模式强制附带完整终端上下文"。
 - 全自动模式首次启用时弹 `<ConfirmActionDialog>` 警告："全自动模式允许 AI 不经审批直接在远端主机执行命令。请确认你信任当前 Provider 与目标主机。"
 
@@ -86,13 +87,9 @@ UI 约束：
   ↓
 Rust 组装 prompt（L0 或 L2，按开关）
   ↓
-Provider 流式回答（文本 + 可选命令卡）
+Provider 流式普通回答
   ↓
-UI 渲染：Markdown + 命令卡
-  ↓
-命令卡动作：
-  ├─ 复制命令（始终可用）
-  └─ 写入当前终端输入区（不回车，仅 SSH/local 交互终端可用）
+UI 渲染 Markdown
   ↓
 不发起任何远端执行
 ```
@@ -100,10 +97,8 @@ UI 渲染：Markdown + 命令卡
 约束：
 
 - 模型不获得任何工具调用能力；Provider 请求里不携带 `tools` 字段。
-- 命令卡仍按 [ai-copilot-integration.md](./ai-copilot-integration.md) §7 走严格 JSON schema 校验 + 本地风险升级。
-- `app_insert_ai_command` 拒绝 `\r`、`\n`、NUL 和控制序列，且永不追加 Enter。
-- 多行命令只允许复制，不允许一键写入。
 - L2 开关开启时，每条消息发送前自动生成并消费一份新的 Rust 快照；关闭后回到 L0。
+- 旧会话中的 `AiMessage.commands` 仍按兼容路径显示，允许复制 / 写入 / 审核；新回合不再通过 renderer 选择或生成命令卡。
 
 ### 4.2 半自动模式（Semi-Automatic）
 
@@ -128,7 +123,7 @@ Provider 流式回答 + 工具调用提案（structured output）
 
 约束：
 
-- 每次工具调用都走 `ActionReviewService`，沿用 [ai-copilot-integration.md](./ai-copilot-integration.md) §5 L3 的全部执行约束（独立 exec channel、不劫持 PTY、不提供"本会话始终允许"、不自动多步循环）。
+- 每次工具调用都走 `ActionReviewService`，沿用 [ai-copilot-integration.md](./ai-copilot-integration.md) §5 L3 的执行约束（独立 exec channel、不劫持 PTY、不提供"本会话始终允许"）；Provider 可以继续提出下一步，但每一步都必须重新审批。
 - 工具调用提案必须经过本地风险分类器升级；`destructive` / `privileged` 风险在审批弹窗里**红色高亮**并要求二次确认（点击"我已知晓风险"复选框后才能点批准）。
 - 审批弹窗的目标绑定沿用 L3 的 sessionRevision 校验：tab 关闭、root/pane 归属变化、CWD 或 user 变化时拒绝执行。
 - 模型可以提出多步调用，但每步独立审批；不允许"批准链"或"批量批准"。
@@ -434,7 +429,7 @@ type AiErrorCode =
 
 ### Renderer
 
-- `features/ai/AiCopilotPanel.tsx`：三模式选择器、上下文锁定提示、全自动确认、护栏状态和工具活动 / 输出展示。
+- `features/ai/AiCopilotPanel.tsx`：三模式选择器、上下文锁定提示、全自动确认、护栏状态和工具活动 / 输出展示；不再渲染普通对话 / 命令卡二选一入口。
 - `features/ai/useAiCopilot.ts`：接通 mode 状态、上下文开关锁定逻辑、工具调用和工具结果事件，并在新消息 / 重试 / 新会话时清理活动状态。
 - 审批复用现有 `ActionReviewDialog`；工具活动卡和有界输出直接收敛在 Copilot 面板，不新增绕过通用组件的执行 UI。
 - 设置页高级设置区增加全自动模式阈值配置（默认折叠）。
@@ -468,13 +463,13 @@ type AiErrorCode =
 - sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
 - 已覆盖 schema、三 Provider history、流式 tool-call 重组和工具参数安全校验；真实 Provider 端到端仍待执行。
 
-### 阶段三：审批与结果 UI（实现完成，待视觉 / 打包回归）
+### 阶段三：审批与结果 UI（实现完成，macOS arm64 打包通过，待真实 Provider / 跨平台回归）
 
 - `AiCopilotPanel.tsx` 展示工具调用状态、执行结果、失败原因和截断输出；纯对话不携带 Provider tools。
 - pure-conversation 可交互，半自动 / 全自动上下文开关禁用并置灰；全自动启用仍弹 `<ConfirmActionDialog>` 警告。
 - 半自动 destructive / privileged 执行要求风险确认；全自动不弹逐次审批，只允许 Rust 护栏放行。
 - 复用 `<DropdownSelect>` / `<AppIcon>` / `<VerticalScrollbar>` / `--focus-outline` 等项目边界。
-- 已通过前端 typecheck、lint、Prettier；待打包应用和真实 Provider 交互验证。
+- 已通过前端 typecheck、lint、Prettier；macOS arm64 app/DMG 已通过，真实 Provider 交互和 Windows/Linux 打包仍待验证。
 
 ### 阶段四：Review Mode 迁移收口（最后）
 
@@ -515,7 +510,7 @@ type AiErrorCode =
 
 ### 10.2 手工验证
 
-- 纯对话模式：L0 默认、L2 开关可切换、命令卡仅复制 / 写入输入区不回车、不发起执行。
+- 纯对话模式：L0 默认、L2 开关可切换、只显示普通对话，不携带 Provider tools、不发起执行。
 - 半自动模式：L2 强制、上下文开关置灰、每次工具调用弹审批弹窗、destructive 红色高亮 + 二次确认、拒绝 / 超时不执行。
 - 全自动模式：L2 强制、首次启用弹警告、护栏通过直接执行、护栏命中返回错误码、阈值触发暂停。
 - 模式切换：纯对话 → 半自动 → 全自动 → 半自动 → 纯对话，状态正确转换，上下文开关按模式禁用 / 启用。
@@ -573,7 +568,7 @@ type AiErrorCode =
 
 ## 14. 当前阶段不做的事
 
-- 不用 UI 模拟工具循环；纯对话仍保持 Provider 请求不带 `tools`，半自动 / 全自动才携带对应 Provider 的严格 schema。
+- 不用 UI 模拟工具循环；三模式是唯一新回合入口，纯对话仍保持 Provider 请求不带 `tools`，半自动 / 全自动才携带对应 Provider 的严格 schema。
 - 不动 API Key 存储与 secret 加密层。
 - 不动 MCP / CLI 通道（外部 Agent 走自己的路径，不受三模式影响）。
 - 不动 SFTP / 传输 / 隧道工具。
@@ -586,7 +581,7 @@ type AiErrorCode =
 
 ## 15. 拍板记录
 
-1. ✅ 三模式：纯对话 / 半自动 / 全自动
+1. ✅ 三模式：纯对话 / 半自动 / 全自动，直接替换旧的普通对话 / 命令卡切换
 2. ✅ 移除 L1 上下文级别，简化为 L0 / L2 两档
 3. ✅ 半自动 / 全自动模式强制 L2，不允许 L0
 4. ✅ 纯对话模式 L2 可开关（默认关闭）

@@ -1320,7 +1320,11 @@ export interface AiMessage {
   createdAt: string
   /** Present only for an explicitly approved L2 user turn; never contains raw transcript text. */
   context?: AiContextAttachment
-  /** Present only after a strict JSON command-proposal response validates locally. */
+  /**
+   * Legacy command-card data retained for existing local conversations.
+   * New Copilot turns use the three permission modes instead of selecting a
+   * separate command-card response mode.
+   */
   commands?: AiCommandSuggestion[]
   /** Present only for one-time AI Review Mode audit messages. */
   review?: AiReviewRecord
@@ -1365,6 +1369,11 @@ export interface CreateAiContextPreviewInput {
   mode: AiContextLevel
 }
 
+/**
+ * @deprecated Kept as a wire-compatibility field while older local callers
+ * and fixtures migrate. The renderer no longer exposes a command-card mode;
+ * new turns are selected through AiCopilotMode.
+ */
 export type AiChatResponseMode = 'chat' | 'command-proposal'
 
 /**
@@ -1377,6 +1386,7 @@ export interface StartAiChatInput {
   modelOverride?: string
   userMessage: string
   contextSnapshotId?: string
+  /** @deprecated Compatibility only; the renderer does not send this field. */
   responseMode?: AiChatResponseMode
   /** Optional for old callers; Rust defaults and validates the active mode. */
   mode?: AiCopilotMode
@@ -1388,6 +1398,7 @@ export interface RetryAiChatInput {
   providerId: string
   modelOverride?: string
   contextSnapshotId?: string
+  /** @deprecated Compatibility only; the renderer does not send this field. */
   responseMode?: AiChatResponseMode
   mode?: AiCopilotMode
 }

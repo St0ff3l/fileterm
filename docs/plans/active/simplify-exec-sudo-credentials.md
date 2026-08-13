@@ -1,6 +1,6 @@
 # 简化远程 exec 与 sudo 凭据自动化
 
-状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地，待打包 / 真实远端回归）
+状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 已通过，待 Windows/Linux 打包和真实远端回归）
 关联：[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[本机凭据字段加密](./secret-storage-encryption.md)、[本地终端与 Agent MCP 接入](./local-terminal-mcp.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -436,7 +436,7 @@ scope 字符串：
 ## 11. 待完成
 
 1. ✅ 重新跑并记录完整 typecheck + lint + clippy + test + prettier 门禁。
-2. macOS arm64 release 构建通过。
+2. ✅ macOS arm64 release app/DMG 构建通过；已验证 arm64 Mach-O、UDZO DMG 校验和以及 MCP/interactive-exec CLI 帮助。
 3. Windows / Linux 打包环境验证 sudo/su 包装、加密读写、三层优先级在真实打包应用里跑得通。
 4. 真实 Claude Code / Codex CLI 端到端验证三层兜底全跑通。
 5. ✅ 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；保留通用 interactive exec 章节。

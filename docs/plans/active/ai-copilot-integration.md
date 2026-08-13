@@ -1,6 +1,6 @@
 # AI Copilot 功能集成计划
 
-状态：进行中（Phase 0–5 的代码实现已完成；跨平台打包应用发行验收待收口）
+状态：进行中（Provider/历史/上下文和三模式核心实现已完成；macOS arm64 app/DMG 已通过，跨平台与真实 Provider/远端发行验收待收口）
 前置工作：[AI Copilot 同窗 UI 草案](../completed/ai-copilot-companion-window.md)
 
 ## 1. 结论
@@ -9,16 +9,16 @@ FileTerm 内置 AI 首先定位为**保守的终端助手**，不是无人值守
 
 - 支持用户自带 Provider、本地对话历史和流式回答。
 - 默认不读取终端输出；每次提问是否附带上下文由用户决定，并在发送前展示准确预览。
-- 模型可以生成结构化命令卡；用户可以复制，或把单行命令写入当前终端输入区，但 FileTerm 不自动按回车。
-- 第一阶段不开放模型工具调用、自动执行、循环修复、文件修改和后台任务。
+- 迁移期仍可读取结构化命令卡；用户可以复制，或把历史单行命令写入当前终端输入区，但 FileTerm 不自动按回车。新回合由三种 Copilot 权限模式直接决定是否允许工具调用。
+- 历史 Phase 0–2 不开放模型工具调用、自动执行、循环修复、文件修改和后台任务；后续三模式计划已在 Rust 侧接入受控的 SSH exec 工具循环，仍不开放文件修改、传输和后台任务。
 - 已有 MCP/CLI 继续服务 Claude Code、Codex CLI 等外部 Agent。内置 AI 不通过本机 MCP 回环调用自己，后续只复用 MCP 已有的 action、审批和独立 SSH exec 边界。
 
 这使两套入口保持清晰：
 
-| 入口             | 面向用户              | 首要能力                   | 执行边界                                                    |
-| ---------------- | --------------------- | -------------------------- | ----------------------------------------------------------- |
-| 内置 Copilot     | 普通终端用户          | 解释、排障、生成可检查命令 | 默认只复制或写入输入区；Review Mode 每次单独审批后独立 exec |
-| FileTerm MCP/CLI | 熟悉 Agent 的高级用户 | 远程执行、文件、传输、隧道 | MCP 修改操作逐次审批，CLI 为用户显式调用                    |
+| 入口             | 面向用户              | 首要能力                   | 执行边界                                             |
+| ---------------- | --------------------- | -------------------------- | ---------------------------------------------------- |
+| 内置 Copilot     | 普通终端用户          | 纯对话 / 半自动 / 全自动   | 纯对话不执行；半自动逐次审批；全自动受 Rust 护栏约束 |
+| FileTerm MCP/CLI | 熟悉 Agent 的高级用户 | 远程执行、文件、传输、隧道 | MCP 修改操作逐次审批，CLI 为用户显式调用             |
 
 ## 2. 产品权限级别
 
@@ -28,7 +28,7 @@ FileTerm 内置 AI 首先定位为**保守的终端助手**，不是无人值守
 - 不附带主机、路径或终端内容。
 - Provider 配置完成后默认进入该级别。
 
-### L1：目标元数据
+### L1：目标元数据（迁移兼容，不再作为新 UI 级别）
 
 - 用户按次开启后，可附带当前会话的协议、公开主机标签、登录用户、远端平台、shell CWD 和连接状态。
 - 不包含连接凭据、IP 之外的 secret、文件内容或终端 transcript。
@@ -40,14 +40,14 @@ FileTerm 内置 AI 首先定位为**保守的终端助手**，不是无人值守
 - UI 展示将发送的准确文本，用户确认后才随本次消息发送。
 - 不持续同步，不在后台上传，不默认写入对话历史。
 
-### L3：Review Mode（已完成独立阶段）
+### L3：Review Mode（迁移兼容，能力已并入三模式）
 
 - 模型只能提出结构化 action proposal。
 - 用户点击“审核并运行”后，FileTerm 展示目标主机、CWD、完整命令、风险提示和超时，再进入一次性审批。
 - 执行使用独立 SSH exec channel，不劫持交互式 PTY；结果作为工具结果回到对话。
-- 不提供“本会话始终允许”、自动批准或无人值守循环。
+- 不提供“本会话始终允许”或批量批准；多步工具循环由三模式计划统一控制，每个半自动调用仍需重新审批。
 
-基础交付为 L0–L2；Phase 5 在独立安全评审后增加 opt-in L3，且不改变 L0–L2 的默认行为。
+新 UI 只暴露纯对话 / 半自动 / 全自动三种模式；L1/L3 名称和旧 command/review 数据仅用于迁移兼容，具体矩阵以 [ai-copilot-modes.md](./ai-copilot-modes.md) 为准。
 
 ## 3. 总体架构
 
@@ -74,7 +74,7 @@ AiCopilotPanel / AI Settings
 - `packages/core` 是公开模型和 IPC 类型的 single source of truth。
 - API Key 只在用户录入/替换时短暂存在于 renderer 表单内存，并通过一次保存 IPC 交给 Rust；保存后的读取、持久化、Provider 请求、流式解析、上下文快照与历史全部留在 Rust，renderer 不直接调用模型服务，也不能回读 Key。
 - 每次生成使用独立 Tauri `Channel<AiStreamEvent>`，避免用全局 event 混合多个窗口或多个请求。
-- Provider adapter 只负责外部协议差异，统一输出 FileTerm 自有的文本增量、命令卡、usage、完成和错误事件。
+- Provider adapter 只负责外部协议差异，统一输出 FileTerm 自有的文本增量、迁移期命令卡、usage、完成和错误事件。
 
 ## 4. Provider 设计
 
@@ -310,28 +310,29 @@ interface AiCommandError {
 - Rust 使用快照对应的准确内容组装 prompt，保证预览内容与发送内容一致。
 - 终端文本使用明确的 data delimiter，并在 system prompt 中声明它是不可信数据，不能覆盖 FileTerm 的安全规则。
 
-Renderer 的“参考终端”只是用户主动开启的会话面板开关，不是永久授权：开关开启期间，每次发送前都生成并消费一份新的 Rust 快照；关闭后回到 L0 纯对话。上下文开关不负责选择命令卡片模式。
+Renderer 的“参考终端”只是用户主动开启的会话面板开关，不是永久授权：开关开启期间，每次发送前都生成并消费一份新的 Rust 快照；关闭后回到 L0 纯对话。三种 Copilot 权限模式由面板顶部选择器统一控制，参考终端开关不再负责选择命令卡片模式。
 
 ### 6.3 历史
 
-- 默认持久化用户消息、助手回答和命令卡。
+- 默认持久化用户消息和助手回答；已有会话中的命令卡继续保留，以便迁移期读取和处理。
 - 默认不持久化原始终端 excerpt，只记录 `contextAttached`、目标摘要、截断和遮盖计数。
 - `ai-conversations.json` 只保存索引；每个会话写入 `ai-conversations/{id}.json`，使用原子替换并按 owner-only 权限创建，避免一个不断膨胀的全局 JSON。
 - 首版限制最多 50 个会话、每个会话最多 200 条消息和 1 MiB；达到上限时提示用户清理，不静默删除历史。
 - 向 Provider 发送历史时设置总字符/token 预算，优先保留 system policy、最近消息和本次上下文，超限时从最旧普通消息开始裁剪。
 - 删除会话必须在本地立即删除；Provider 侧的数据处理仍受用户选择的 Provider 政策约束，FileTerm 不宣称能控制第三方保留。
 
-## 7. 回答与命令卡
+## 7. 回答与迁移期命令卡兼容
 
 - 普通解释使用 Markdown 文本流式显示；不启用 raw HTML 或远程图片，链接只接受 HTTP(S) 并经桌面外链 command 打开。
 - 命令不能依靠扫描 Markdown code fence 推断；Provider 支持结构化输出时使用 schema，否则要求严格 JSON envelope，并在 Rust 中校验。
 - “不开放工具调用”指不向模型提供任何可产生副作用的 FileTerm action；Provider 原生 structured output 或仅用于返回 `AiCommandSuggestion` 的 output-only schema 不属于执行工具。
-- 普通解释回合可以直接流式显示；需要返回命令卡的结构化回合先在 Rust 缓冲并完成 schema 校验，再一次性提交回答和命令卡，不能把未闭合的 JSON 增量直接渲染为可信命令。
+- 普通解释回合可以直接流式显示；旧 command-proposal 回合需要返回命令卡时，仍先在 Rust 缓冲并完成 schema 校验，再一次性提交回答和命令卡，不能把未闭合的 JSON 增量直接渲染为可信命令。新 renderer 不再发起该模式。
 - 结构化解析失败时降级为普通文本，不自动提取或执行疑似命令。
 - FileTerm 本地风险分类器可以提高模型给出的风险等级，不能降低；出现 `rm`、重定向覆盖、磁盘/分区、账号权限、包管理、服务重启、sudo/su 等模式时至少标记为 mutating/privileged/unknown。
-- 普通对话默认使用 chat 模式；命令卡生成通过输入框底部的紧凑“对话 / 命令卡”模式切换显式开启，不与“参考终端”开关混在一起。命令模式必须同时开启参考终端并绑定已连接目标，继续经过结构化校验和用户审核。
+- 三个 Copilot 权限模式是新回合唯一的模式入口：纯对话直接承担普通 chat 语义，半自动 / 全自动直接承担工具调用语义；不再在输入框底部额外展示“普通对话 / 生成命令卡”切换。
+- 旧 `responseMode=command-proposal` 和已保存的 `AiMessage.commands` 仅作为迁移期 wire/history 兼容保留。新 renderer 不发送该字段，也不再生成新的命令卡；历史命令卡仍可复制、写入输入区或进入旧审核路径。
 
-命令卡动作：
+历史命令卡动作：
 
 - “复制命令”：始终可用。
 - “写入当前终端”：仅 SSH/local 交互终端可用，调用专用 `app_insert_ai_command`。
@@ -440,7 +441,7 @@ Renderer 的“参考终端”只是用户主动开启的会话面板开关，�
 ### 自动化
 
 - Provider adapter：SSE 分片、未知事件、错误事件、截断流、取消、usage 和结构化输出 fixtures。
-- 命令模式回归：`qa:ai-copilot-fixture-smoke` 覆盖前一轮普通回答后切换命令卡模式、用户仅输入“重新来”仍返回严格 JSON，以及失败后重试恢复。
+- 迁移期 command-proposal 回归：`qa:ai-copilot-fixture-smoke` 覆盖旧 envelope 和失败后重试恢复；三模式 UI 的模式替换由 renderer typecheck 与手工视觉验收覆盖。
 - Context：L1 不调用 transcript accessor、ANSI/CRLF/control 清理、UTF-8 边界、长行、截断、secret patterns、目标 revision、一次性消费、重放/跨窗口拒绝和快照过期。
 - Storage：Key 不进入公开配置/snapshot/log，Unix 权限收紧，空值保留与显式清除。
 - Command：单行约束、控制字符拒绝、风险只升不降、目标变化。
@@ -469,8 +470,7 @@ Phase 0–2 已在不读取终端的前提下完成：
 4. 经 commands 与 `tauri-api.ts` 接通设置页、会话持久化与 per-request 流式 channel。
 5. 补齐 secret、URL、SSE、错误、取消和核心 stream-event contract 测试。
 
-右侧 Copilot 现在会识别可用 Provider、保存本地会话并显示流式纯对话回答。当前仍为 L0：
-它不会读取终端、不会上传上下文，也不会生成可执行动作或执行命令。
+右侧 Copilot 现在会识别可用 Provider、保存本地会话并显示流式回答。新回合由顶部三模式选择器决定：纯对话默认保持 L0，半自动 / 全自动自动附带 L2 并进入 Rust-owned 工具循环；旧命令卡仅作为历史和 wire 兼容保留。
 
 ## 13. 参考
 
