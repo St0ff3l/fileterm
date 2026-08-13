@@ -1,6 +1,6 @@
 # 简化远程 exec 与 sudo 凭据自动化
 
-状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 与 disposable SSH 的 sudo/su/interactive-exec 真实回归已通过，Claude Code / Codex CLI 已通过真实 interactive-exec MCP 调用，待 Windows/Linux 打包和外部调用方的真实 sudo/su 提权回归）
+状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 与 disposable SSH 的 sudo/su/interactive-exec 真实回归已通过，Claude Code / Codex CLI 已通过 interactive-exec 真实 MCP 调用，Claude Code 另已通过普通 exec 的 sudo/su 外部调用边界子集；待真实 Linux sudo/su、Windows/Linux 打包和完整三层凭据回归）
 关联：[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[本机凭据字段加密](./secret-storage-encryption.md)、[本地终端与 Agent MCP 接入](./local-terminal-mcp.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -439,6 +439,7 @@ scope 字符串：
 2. ✅ macOS arm64 release app/DMG 构建通过；已验证 arm64 Mach-O、UDZO DMG 校验和以及 MCP/interactive-exec CLI 帮助。
 3. ✅ macOS arm64 QA bundle 已用 disposable SSH 跑通已保存凭据的 sudo exec、未启用 `sudoSameAsLogin` 时的 Copilot sudo 安全弹窗与“仅本次执行”分支，以及 CLI `su -c 'id -u'` 的一次性密码和错误密码路径；PTY 密码现在等待远端提示后再发送。Windows / Linux 打包环境仍需验证 sudo/su 包装、加密读写和三层优先级。
 4. ✅ Claude Code / Codex CLI 已通过 FileTerm MCP 真实调用 interactive-exec，验证任务级安全输入、脱敏结果和输入原文不回传；外部调用方的 sudo/su 三层凭据兜底仍待单独验收。
+   - 2026-08-14 补充：Claude Code 通过 MCP 普通 exec 在 macOS arm64 disposable loopback forced-command fixture 上完成 `sudo id -u` 与 `su -c "id -u"`；无密码参数、经过 FileTerm action approval、读取 profile 加密测试 secret 并返回退出码 0。该证据只覆盖外部调用边界和 FileTerm 执行包装，不是真实 Linux root 提权，因此不勾选完整三层凭据验收。
 5. ✅ 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；保留通用 interactive exec 章节。
 6. 另立兼容迁移任务，评估是否将 `docs/plans/active/mcp-cli-interactive-exec.md` 标记 superseded。
 7. 全部验收通过后，将本计划移至 `docs/plans/completed/`。

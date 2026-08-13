@@ -221,3 +221,20 @@ notes:
   - Codex 对一次会回显 secret-like 输入的测试命令先执行了客户端安全拒绝；改用不回显输入的安全命令后，FileTerm 交互和结果回传均通过。
   - 测试使用 disposable localhost 目标和合成输入；完成后已关闭 tab，删除临时 profile/key/私钥并停止临时 sshd。
 ```
+
+### 2026-08-14 — Claude MCP 普通 exec 的 sudo/su 凭据边界
+
+```text
+platform: macOS / arm64
+fileterm commit: local release bundle（当前分支基线 d4438978）
+provider: Claude Code 2.1.229（MCP stdio）
+target: disposable loopback SSH forced-command fixture（127.0.0.1:22225；非真实 root 主机）
+network: local stdio + direct loopback
+result: pass（外部调用边界子集；不等同生产提权）
+notes:
+  - Claude Code 实际调用 `fileterm_execute_remote_command`，分别执行 `sudo id -u` 与 `su -c "id -u"`；请求没有携带密码参数。
+  - FileTerm 对两次 MCP mutation 都先显示 action approval；批准后从 profile 的加密 secret store 读取合成测试凭据，sudo 返回退出码 0 / uid 0，su 返回退出码 0 / uid 0。
+  - 外部客户端只收到结构化执行结果，密码未进入 command 文本、聊天提示或 MCP 审计内容；错误 sudo 参数的稳定 `SUDO_AUTH_FAILURE` 也已由 FileTerm bridge 直接回归。
+  - SSHD 使用仅用于验证 FileTerm 包装、stdin/PTY、审批和结果回传的确定性 forced-command fixture，不提供真实系统 root 权限；真实 Linux sudo/su、Windows/Linux 打包和三层凭据完整验收仍保持未完成。
+  - 测试完成后已关闭 tab，删除临时 profile、加密 sudo/su secret、私钥和 SSHD。
+```
