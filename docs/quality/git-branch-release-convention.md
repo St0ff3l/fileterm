@@ -14,14 +14,14 @@ FileTerm 采用标准 GitHub 流程：所有功能、修复和版本号更新先
 1. 在功能、修复或版本分支完成改动；版本号只修改根 `package.json`，随后运行 `npm run sync:version`。
 2. 提 Pull Request 到 `main`，并确认 CI、类型检查、测试与构建全部通过。
 3. 合并 Pull Request 后，从最新 `main` 创建并推送 `release/<version>`。
-4. 在该 release 分支对应提交创建 `v<version>` tag 并推送；GitHub Actions 验证 tag 位于 `release/*` 后执行 macOS 与 Windows 打包。
+4. 在该 release 分支对应提交创建 `v<version>` tag 并推送；GitHub Actions 验证 tag 位于 `release/*` 后执行各平台打包。
 5. 稳定版本 tag（如 `v1.0.0`）创建正式 GitHub Release；带预发布后缀的 tag（如 `v1.0.1-beta.1`）创建 prerelease。
 
 ## Release notes 与贡献者展示
 
 ### 正文格式
 
-正式版本可以新增 `docs/quality/release-notes-x.y.z.md`，正文结构参考 2.1.7：
+每个版本可以新增 `docs/quality/release-notes-<version>.md`，例如 `docs/quality/release-notes-2.2.0-beta.1.md`；正文结构可参考仓库中现有的 `docs/quality/release-notes-*.md` 文件：
 
 - 版本简介
 - 更新重点
