@@ -155,3 +155,21 @@ notes:
 ```
 
 本条补齐 macOS 当前源码的 Provider、三模式工具循环、真实 disposable SSH 和 sudo 安全输入证据；Windows/Linux、真实外部 Provider、代理、睡眠恢复和 Claude/Codex 仍未签收。
+
+### 2026-08-14 — macOS QA bundle，su PTY 密码竞态回归
+
+```text
+platform: macOS / arm64
+fileterm commit: local PTY prompt-gated stdin fix
+artifact: debug FileTerm QA.app（唯一 bundle id com.fileterm.qa）
+provider: n/a（fileterm CLI / Rust action-review exec path）
+target: disposable Debian 13-slim sshd（127.0.0.1:22222，测试用户 filetermqa）
+network: direct loopback
+result: pass（macOS 本机远程 exec 回归）
+notes:
+  - `su -c 'id -u'` 使用一次性密码返回退出码 0、输出 root uid 0，且不再出现 PTY stdin 竞态导致的超时。
+  - 错误 su 密码稳定返回 `SU_AUTH_FAILURE`，没有残留 su 进程；普通 `sudo id -u` 仍返回退出码 0。
+  - 修复后 PTY 输入仅在检测到密码提示后发送，并保留终端 VEOF；非 PTY 的 sudo stdin 路径不变。
+```
+
+本条验证了真实远端 `su` / `sudo` 的一次性安全输入与认证失败收敛；Windows/Linux 打包、真实外部 Provider、代理、睡眠恢复和 Claude/Codex 仍未签收。

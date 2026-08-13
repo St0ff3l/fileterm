@@ -1,6 +1,6 @@
 # 简化远程 exec 与 sudo 凭据自动化
 
-状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 已通过，待 Windows/Linux 打包和真实远端回归）
+状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 真实回归已通过，待 Windows/Linux 打包和外部调用方回归）
 关联：[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[本机凭据字段加密](./secret-storage-encryption.md)、[本地终端与 Agent MCP 接入](./local-terminal-mcp.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -431,13 +431,13 @@ scope 字符串：
 - MCP 普通 exec 参数与 tool description；普通 exec 与 interactive exec 保持独立。
 - 本地 sudo/su prompt 的 ready 生命周期、一次性 / 保存分支、sessionRevision 绑定和取消清理。
 - Copilot 工具调用不携带密码字段；半自动走逐次审批，全自动未预存凭据返回 `*_PASSWORD_NEEDED`，不弹本地密码窗。
-- ✅ 本机最终门禁：Rust lib test 343/343、clippy、Tauri typecheck、lint 和 Prettier 全部通过。
+- ✅ 本机最终门禁：Rust lib test 350/350、clippy、Tauri typecheck、lint 和 Prettier 全部通过。
 
 ## 11. 待完成
 
 1. ✅ 重新跑并记录完整 typecheck + lint + clippy + test + prettier 门禁。
 2. ✅ macOS arm64 release app/DMG 构建通过；已验证 arm64 Mach-O、UDZO DMG 校验和以及 MCP/interactive-exec CLI 帮助。
-3. ✅ macOS arm64 QA bundle 已用 disposable SSH 跑通已保存凭据的 sudo exec，以及未启用 `sudoSameAsLogin` 时的 Copilot sudo 安全弹窗与“仅本次执行”分支；Windows / Linux 打包环境仍需验证 sudo/su 包装、加密读写和三层优先级。
+3. ✅ macOS arm64 QA bundle 已用 disposable SSH 跑通已保存凭据的 sudo exec、未启用 `sudoSameAsLogin` 时的 Copilot sudo 安全弹窗与“仅本次执行”分支，以及 CLI `su -c 'id -u'` 的一次性密码和错误密码路径；PTY 密码现在等待远端提示后再发送。Windows / Linux 打包环境仍需验证 sudo/su 包装、加密读写和三层优先级。
 4. 真实 Claude Code / Codex CLI 端到端验证三层兜底全跑通。
 5. ✅ 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；保留通用 interactive exec 章节。
 6. 另立兼容迁移任务，评估是否将 `docs/plans/active/mcp-cli-interactive-exec.md` 标记 superseded。

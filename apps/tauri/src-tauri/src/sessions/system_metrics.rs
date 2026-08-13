@@ -269,23 +269,19 @@ async fn exec_command_internal<H: Handler>(
             .map_err(|e| e.to_string())?;
     }
     channel.exec(true, cmd).await.map_err(|e| e.to_string())?;
-    if let Some(stdin) = stdin {
+    // `su` reads its password from the controlling PTY only after it has
+    // emitted the prompt. Sending the password immediately after `exec`
+    // races PAM on several OpenSSH/PAM combinations and leaves `su -c`
+    // blocked forever. Keep PTY input pending until the prompt arrives;
+    // non-PTY execs (notably `sudo -S`) continue to use pipe semantics.
+    let mut pending_pty_stdin = if request_pty { stdin } else { None };
+    if let Some(stdin) = stdin.filter(|_| !request_pty) {
         channel.data(stdin).await.map_err(|e| e.to_string())?;
-        if request_pty {
-            // A PTY is a terminal, not a pipe: SSH channel EOF does not
-            // reliably become stdin EOF for programs such as base64 -d.
-            // Send the terminal's VEOF byte at the start of a fresh line so
-            // the remote process observes the same end-of-input as Ctrl+D.
-            channel
-                .data_bytes(vec![0x04])
-                .await
-                .map_err(|e| e.to_string())?;
-        } else {
-            channel.eof().await.map_err(|e| e.to_string())?;
-        }
+        channel.eof().await.map_err(|e| e.to_string())?;
     }
 
     let mut output: Vec<u8> = Vec::new();
+    let mut pty_prompt_window: Vec<u8> = Vec::new();
     let mut exit_status = None;
     let mut draining_after_close = false;
     let mut capped = false;
@@ -324,10 +320,36 @@ async fn exec_command_internal<H: Handler>(
                 if !capped {
                     extend_with_cap(&mut output, data.as_ref(), &mut capped);
                 }
+                append_pty_prompt_window(&mut pty_prompt_window, data.as_ref());
+                if pending_pty_stdin.is_some() && pty_password_prompt_detected(&pty_prompt_window) {
+                    let stdin = pending_pty_stdin
+                        .take()
+                        .expect("pending PTY input was checked above");
+                    channel.data(stdin).await.map_err(|e| e.to_string())?;
+                    // A PTY is a terminal, not a pipe: SSH channel EOF does
+                    // not reliably become stdin EOF. Send the terminal's VEOF
+                    // byte after the password's newline so `su -c` observes
+                    // the same end-of-input as Ctrl+D if it needs it.
+                    channel
+                        .data_bytes(vec![0x04])
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
             }
             Some(ChannelMsg::ExtendedData { data, .. }) => {
                 if !capped {
                     extend_with_cap(&mut output, data.as_ref(), &mut capped);
+                }
+                append_pty_prompt_window(&mut pty_prompt_window, data.as_ref());
+                if pending_pty_stdin.is_some() && pty_password_prompt_detected(&pty_prompt_window) {
+                    let stdin = pending_pty_stdin
+                        .take()
+                        .expect("pending PTY input was checked above");
+                    channel.data(stdin).await.map_err(|e| e.to_string())?;
+                    channel
+                        .data_bytes(vec![0x04])
+                        .await
+                        .map_err(|e| e.to_string())?;
                 }
             }
             Some(ChannelMsg::ExitStatus {
@@ -349,6 +371,22 @@ async fn exec_command_internal<H: Handler>(
         output_truncated: capped,
         timed_out,
     })
+}
+
+const PTY_PROMPT_WINDOW_BYTES: usize = 2 * 1024;
+
+fn append_pty_prompt_window(window: &mut Vec<u8>, chunk: &[u8]) {
+    window.extend_from_slice(chunk);
+    if window.len() > PTY_PROMPT_WINDOW_BYTES {
+        let keep_from = window.len() - PTY_PROMPT_WINDOW_BYTES;
+        window.drain(..keep_from);
+    }
+}
+
+fn pty_password_prompt_detected(window: &[u8]) -> bool {
+    let visible = String::from_utf8_lossy(window);
+    let lower = visible.to_ascii_lowercase();
+    lower.contains("password") || visible.contains("密码")
 }
 
 /// Run a command via the exec channel, write `stdin` to the channel, then
@@ -1770,10 +1808,10 @@ pub fn build_windows_streaming_metrics_exec_command(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_posix_metrics_command, build_windows_metrics_command,
+        append_pty_prompt_window, build_posix_metrics_command, build_windows_metrics_command,
         build_windows_streaming_metrics_command, build_windows_streaming_metrics_exec_command,
         classify_posix_probe_body, classify_windows_probe_output, extend_with_cap,
-        parse_system_metrics, EXEC_COMMAND_OUTPUT_CAP,
+        parse_system_metrics, pty_password_prompt_detected, EXEC_COMMAND_OUTPUT_CAP,
     };
 
     #[test]
@@ -1787,6 +1825,17 @@ mod tests {
         assert_eq!(output.len(), EXEC_COMMAND_OUTPUT_CAP);
         assert!(capped);
         assert_eq!(&output[EXEC_COMMAND_OUTPUT_CAP - 2..], b"ab");
+    }
+
+    #[test]
+    fn pty_password_prompt_detection_handles_fragmented_prompts() {
+        let mut window = Vec::new();
+        append_pty_prompt_window(&mut window, b"Pass");
+        assert!(!pty_password_prompt_detected(&window));
+        append_pty_prompt_window(&mut window, b"word: ");
+        assert!(pty_password_prompt_detected(&window));
+        assert!(pty_password_prompt_detected("请输入密码：".as_bytes()));
+        assert!(!pty_password_prompt_detected(b"uid=0(root) gid=0(root)"));
     }
 
     #[test]
