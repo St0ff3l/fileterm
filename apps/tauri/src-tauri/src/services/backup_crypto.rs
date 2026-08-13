@@ -27,7 +27,11 @@ const KEY_BYTES: usize = 32;
 const SALT_BYTES: usize = 16;
 const NONCE_BYTES: usize = 12;
 const TAG_BYTES: usize = 16;
+// Remote exec interaction keeps its existing minimum-length policy. Backup
+// passwords have a separate policy because they are explicitly confirmed in
+// the backup dialog before being submitted.
 pub(crate) const MIN_PASSWORD_CHARS: usize = 12;
+pub(crate) const MIN_BACKUP_PASSWORD_CHARS: usize = 8;
 const MAX_PASSWORD_BYTES: usize = 8 * 1024;
 
 // Argon2id target: 64 MiB, three passes, one lane. The actual latency is
@@ -48,8 +52,10 @@ const PBKDF2_DEFAULT_ITERATIONS: u32 = 600_000;
 pub(crate) enum BackupCryptoError {
     #[error("远程备份需要输入主密码。")]
     PasswordRequired,
-    #[error("备份主密码至少需要 {MIN_PASSWORD_CHARS} 个字符。")]
+    #[error("备份主密码至少需要 {MIN_BACKUP_PASSWORD_CHARS} 个字符。")]
     PasswordTooShort,
+    #[error("备份主密码必须同时包含大写字母和小写字母。")]
+    PasswordMustContainUpperAndLowerCase,
     #[error("备份主密码无效或备份包已损坏。")]
     InvalidPasswordOrBundle,
     #[error("远程备份格式不受支持。")]
@@ -109,8 +115,17 @@ fn random_bytes<const N: usize>() -> [u8; N] {
 }
 
 fn validate_password(password: &str) -> Result<(), BackupCryptoError> {
-    if password.chars().count() < MIN_PASSWORD_CHARS {
+    if password.chars().count() < MIN_BACKUP_PASSWORD_CHARS {
         return Err(BackupCryptoError::PasswordTooShort);
+    }
+    if !password
+        .chars()
+        .any(|character| character.is_ascii_uppercase())
+        || !password
+            .chars()
+            .any(|character| character.is_ascii_lowercase())
+    {
+        return Err(BackupCryptoError::PasswordMustContainUpperAndLowerCase);
     }
     if password.is_empty()
         || password.len() > MAX_PASSWORD_BYTES
@@ -405,16 +420,15 @@ mod tests {
             "port": 22,
             "password": "super-secret-password"
         })];
-        let (bytes, _) = encrypt_profiles(&profiles, "a sufficiently long backup password", "now")
+        let (bytes, _) = encrypt_profiles(&profiles, "Backup password 8", "now")
             .expect("v3 encryption should succeed");
         let raw = String::from_utf8(bytes.clone()).expect("envelope is json");
         assert!(raw.contains("\"schemaVersion\": 3"));
         assert!(!raw.contains("super-secret-password"));
-        let decoded = decode_bundle(&bytes, Some("a sufficiently long backup password"))
-            .expect("v3 should decrypt");
+        let decoded = decode_bundle(&bytes, Some("Backup password 8")).expect("v3 should decrypt");
         assert!(!decoded.legacy_plaintext);
         assert_eq!(decoded.profiles, profiles);
-        let wrong_password = "wrong backup password".repeat(2);
+        let wrong_password = "Wrong password 8";
         assert!(decode_bundle(&bytes, Some(&wrong_password)).is_err());
     }
 
@@ -446,7 +460,7 @@ mod tests {
 
     #[test]
     fn pbkdf2_v3_bundle_is_still_decryptable() {
-        let password = "a sufficiently long backup password";
+        let password = "Backup password 8";
         let salt = [7_u8; 16];
         let nonce = [9_u8; 12];
         let metadata = EncryptionMetadata {

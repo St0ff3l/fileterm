@@ -871,8 +871,7 @@ mod tests {
             "passphrase": "key-secret",
             "proxy": { "type": "http", "password": "proxy-secret" }
         })];
-        let (bytes, _) =
-            build_export_bundle(&profiles, "a sufficiently long backup password").unwrap();
+        let (bytes, _) = build_export_bundle(&profiles, "Backup password 8").unwrap();
         let payload: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(payload["schemaVersion"], 3);
         assert_eq!(payload["containsSecrets"], true);
