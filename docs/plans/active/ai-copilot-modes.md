@@ -35,7 +35,7 @@
 
 ### 1.1 参考 Catty Agent 的实现边界
 
-本计划参考 [Netcatty 的 Catty Agent](https://github.com/binaricat/Netcatty) 的公开实现方式，但不复制其 Electron / visible-terminal 执行边界：
+本计划参考 [Netcatty 的 Catty Agent](https://github.com/binaricat/Netcatty) 的公开实现方式，重点核对其 [权限类型定义](https://github.com/binaricat/Netcatty/blob/main/infrastructure/ai/types.ts) 与 [MCP bridge](https://github.com/binaricat/Netcatty/blob/main/electron/bridges/mcpServerBridge.cjs)，但不复制其 Electron / visible-terminal 执行边界：
 
 - Catty 的 `observer / confirm / auto` 对应 FileTerm 的纯对话 / 半自动 / 全自动；权限模式由运行时传入工具执行器，而不是只由 UI 文案决定。
 - Catty 使用真实的 `tool-call → approval → tool-result` 循环，并以工具目录、会话作用域和最大迭代数约束 Agent；FileTerm 也必须先具备这条 Rust-owned loop，才能启用全自动。
