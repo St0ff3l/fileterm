@@ -15,7 +15,7 @@
 
 当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，真实 Provider、远端 sudo/su 和 Windows/Linux 打包回归仍待验收。
 
-本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传和全自动护栏预算预占测试均已通过；真实 Provider、远端 sudo/su 与 Windows/Linux 打包回归仍保持未验收。
+本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；真实 Provider、远端 sudo/su 与 Windows/Linux 打包回归仍保持未验收。
 
 ## 1. 结论
 

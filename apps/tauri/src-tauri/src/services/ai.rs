@@ -725,6 +725,7 @@ struct StoredAiCommandCapability {
 struct StoredAiModeState {
     mode: AiCopilotMode,
     attach_terminal_context: bool,
+    session_generation: u64,
     counters: crate::services::ai_guardrails::AutoModeCounters,
     thresholds: AiAutoModeThresholds,
 }
@@ -741,6 +742,7 @@ fn default_ai_mode_state() -> StoredAiModeState {
     StoredAiModeState {
         mode: AiCopilotMode::PureConversation,
         attach_terminal_context: false,
+        session_generation: 0,
         counters: crate::services::ai_guardrails::AutoModeCounters::default(),
         thresholds: crate::services::ai_guardrails::default_thresholds(),
     }
@@ -802,6 +804,7 @@ pub fn set_copilot_mode(
     if mode_changed {
         // The registry is process-local, so a restart also requires a new
         // full-auto opt-in. Switching modes starts a fresh budget.
+        state.session_generation = state.session_generation.wrapping_add(1);
         state.counters = crate::services::ai_guardrails::AutoModeCounters::default();
     }
     Ok(public_mode_state(state))
@@ -832,6 +835,7 @@ pub fn reset_auto_mode_session_counts(
     let state = registry
         .entry(window.label().to_string())
         .or_insert_with(default_ai_mode_state);
+    state.session_generation = state.session_generation.wrapping_add(1);
     state.counters = crate::services::ai_guardrails::AutoModeCounters::default();
     Ok(public_mode_state(state))
 }
@@ -2836,6 +2840,7 @@ struct PreparedChatRequest {
     prompt_context: Option<AiPromptContext>,
     response_mode: AiChatResponseMode,
     copilot_mode: AiCopilotMode,
+    copilot_session_generation: u64,
     source_window_label: Option<String>,
 }
 
@@ -2851,6 +2856,14 @@ fn prepare_copilot_mode(
         ));
     }
     Ok(state)
+}
+
+fn copilot_mode_state_is_current(
+    state: &StoredAiModeState,
+    mode: AiCopilotMode,
+    session_generation: u64,
+) -> bool {
+    state.mode == mode && state.session_generation == session_generation && state.mode.uses_tools()
 }
 
 fn validate_context_for_mode(
@@ -2945,6 +2958,7 @@ async fn prepare_start_chat(
         prompt_context,
         response_mode,
         copilot_mode: mode_state.mode,
+        copilot_session_generation: mode_state.session_generation,
         source_window_label: Some(window_label.to_string()),
     })
 }
@@ -3026,6 +3040,7 @@ async fn prepare_retry_chat(
         prompt_context,
         response_mode,
         copilot_mode: mode_state.mode,
+        copilot_session_generation: mode_state.session_generation,
         source_window_label: Some(window_label.to_string()),
     })
 }
@@ -3721,7 +3736,11 @@ async fn execute_copilot_tool_call(
         .as_deref()
         .ok_or_else(|| ai_error("AI_CONTEXT_FORBIDDEN", "Copilot 缺少来源窗口绑定"))?;
     let mode_state = mode_state_for_window(source_window_label)?;
-    if mode_state.mode != prepared.copilot_mode || !mode_state.mode.uses_tools() {
+    if !copilot_mode_state_is_current(
+        &mode_state,
+        prepared.copilot_mode,
+        prepared.copilot_session_generation,
+    ) {
         return Ok(copilot_tool_result(
             &proposal.id,
             "rejected",
@@ -3790,7 +3809,11 @@ async fn execute_copilot_tool_call(
     // opening the SSH exec channel so a mode switch cannot authorize a stale
     // tool call.
     let latest_mode_state = mode_state_for_window(source_window_label)?;
-    if latest_mode_state.mode != prepared.copilot_mode || !latest_mode_state.mode.uses_tools() {
+    if !copilot_mode_state_is_current(
+        &latest_mode_state,
+        prepared.copilot_mode,
+        prepared.copilot_session_generation,
+    ) {
         return Ok(copilot_tool_result(
             &proposal.id,
             "rejected",
@@ -3820,7 +3843,11 @@ async fn execute_copilot_tool_call(
                 Some("Copilot 自动模式状态不可用，工具调用未执行".to_string()),
             ));
         };
-        if latest_state.mode != prepared.copilot_mode || !latest_state.mode.uses_tools() {
+        if !copilot_mode_state_is_current(
+            latest_state,
+            prepared.copilot_mode,
+            prepared.copilot_session_generation,
+        ) {
             return Ok(copilot_tool_result(
                 &proposal.id,
                 "rejected",
@@ -3868,10 +3895,14 @@ async fn execute_copilot_tool_call(
     if prepared.copilot_mode == AiCopilotMode::FullyAutomatic {
         let mut registry = mode_registry_lock()?;
         if let Some(state) = registry.get_mut(source_window_label) {
-            crate::services::ai_guardrails::record_execution_duration(
-                &mut state.counters,
-                duration,
-            );
+            if state.mode == prepared.copilot_mode
+                && state.session_generation == prepared.copilot_session_generation
+            {
+                crate::services::ai_guardrails::record_execution_duration(
+                    &mut state.counters,
+                    duration,
+                );
+            }
         }
     }
     let duration_ms = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
@@ -5706,30 +5737,30 @@ mod tests {
     use super::{
         ai_error, anthropic_history_messages_with_tools, anthropic_tool_schema, apply_secret_patch,
         cancellation_or_request_error, command_has_unsafe_input,
-        context_mode_reads_terminal_transcript, copilot_tool_call_arguments,
-        decrypt_provider_secrets, default_ai_mode_state, encrypt_provider_secrets,
-        ensure_conversation_fits, escape_review_prompt_value, normalize_ai_title_suggestion,
-        normalize_base_url, normalize_conversation_title, now_millis, openai_chat_tool_schema,
-        parse_command_proposal, process_anthropic_payload, process_openai_payload,
-        process_openai_responses_payload, provider_history_items, provider_history_messages,
-        provider_history_messages_with_tools, provider_is_usable, provider_summary,
-        prune_expired_context_snapshots, public_mode_state, repair_default_provider,
-        responses_input_items_with_tools, responses_tool_schema, sanitize_recent_terminal_output,
-        stream_anthropic_messages, stream_anthropic_messages_with_tools, stream_error_event,
-        stream_openai_compatible_chat, stream_openai_compatible_chat_with_tools,
-        stream_openai_responses, stream_openai_responses_with_tools, system_prompt,
-        test_openai_compatible_chat, title_from_user_message, title_summary_chat_messages,
-        title_summary_history_items, validate_context_for_mode, write_json_file,
-        AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
-        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
-        AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary,
-        AiReviewOutcome, AiReviewRecord, AiStreamEvent, ChatStreamResult, ProviderToolCall,
-        SseDecoder, StoredAiContextSnapshot, StoredAiModeState, StoredAiProvider,
-        StoredConversation, StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets,
-        ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS,
-        CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
-        MAX_AI_TITLE_SUGGESTION_LENGTH, MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
-        MAX_CONVERSATION_TITLE_LENGTH,
+        context_mode_reads_terminal_transcript, copilot_mode_state_is_current,
+        copilot_tool_call_arguments, decrypt_provider_secrets, default_ai_mode_state,
+        encrypt_provider_secrets, ensure_conversation_fits, escape_review_prompt_value,
+        normalize_ai_title_suggestion, normalize_base_url, normalize_conversation_title,
+        now_millis, openai_chat_tool_schema, parse_command_proposal, process_anthropic_payload,
+        process_openai_payload, process_openai_responses_payload, provider_history_items,
+        provider_history_messages, provider_history_messages_with_tools, provider_is_usable,
+        provider_summary, prune_expired_context_snapshots, public_mode_state,
+        repair_default_provider, responses_input_items_with_tools, responses_tool_schema,
+        sanitize_recent_terminal_output, stream_anthropic_messages,
+        stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
+        stream_openai_compatible_chat_with_tools, stream_openai_responses,
+        stream_openai_responses_with_tools, system_prompt, test_openai_compatible_chat,
+        title_from_user_message, title_summary_chat_messages, title_summary_history_items,
+        validate_context_for_mode, write_json_file, AiChatResponseMode, AiCommandRisk,
+        AiContextAttachment, AiContextMode, AiContextRedactionKind, AiContextRegistry,
+        AiContextTarget, AiCopilotMode, AiMessage, AiMessageRole, AiPromptContext, AiProviderKind,
+        AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome, AiReviewRecord, AiStreamEvent,
+        ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot, StoredAiModeState,
+        StoredAiProvider, StoredConversation, StoredProviderConfig, StoredProviderSecret,
+        StoredProviderSecrets, ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION,
+        ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
+        COPILOT_EXECUTE_REMOTE_COMMAND_TOOL, MAX_AI_TITLE_SUGGESTION_LENGTH,
+        MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES, MAX_CONVERSATION_TITLE_LENGTH,
     };
     use reqwest::Client;
     use serde_json::{json, Value};
@@ -6664,6 +6695,16 @@ mod tests {
             attach_terminal_context: true,
             ..default_ai_mode_state()
         };
+        assert!(copilot_mode_state_is_current(
+            &automatic_state,
+            AiCopilotMode::FullyAutomatic,
+            automatic_state.session_generation
+        ));
+        assert!(!copilot_mode_state_is_current(
+            &automatic_state,
+            AiCopilotMode::FullyAutomatic,
+            automatic_state.session_generation.wrapping_add(1)
+        ));
         assert!(
             validate_context_for_mode(&automatic_state, None, AiChatResponseMode::Chat)
                 .unwrap_err()
