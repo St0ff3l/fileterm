@@ -314,6 +314,7 @@ running-on-shared-ssh-transport
 - [x] 审计只记录来源、公开 target、命令摘要 / hash、开始 / 完成 / 取消、交互轮次与结果；不记录 prompt 原文、用户回答或输出中的 secret。审计文件 2 MiB 轮转，Unix 强制 `0600`、Windows 使用 per-user application-data ACL；建立审计失败时任务不启动。
 - [x] macOS 正在运行的 FileTerm runtime 已通过真实 stdio `initialize`、`tools/list`、`fileterm_list_connections` 与 `fileterm_get_session_context` 冒烟；新增 `scripts/mcp-stdio-smoke.mjs`，并由 macOS / Windows / Linux package smoke 对打包 binary 真实校验 `initialize`、`tools/list`、交互式执行和 sudo/su schema。初始化指令和 tool descriptions 均明确要求任务专属安全输入，而非 Agent 聊天或可见终端。
 - [x] 将 `fileterm interactive-exec` 纳入 macOS、Windows、Linux 的 non-GUI CLI dispatch smoke；`interactive-exec --help` 在不初始化 Tauri 窗口的情况下进入交互式 CLI 路由。
+- [x] 在 macOS arm64 的隔离 FileTerm QA bundle 中，用 disposable Debian 13-slim SSHD 真实跑通 `fileterm interactive-exec`：任务弹出 masked password dialog，提交后返回脱敏结构化结果；取消后 CLI 结束，远端 PTY channel 关闭且无残留 `su` 进程。期间修复了 russh `Channel` 仅 drop 不发送 `SSH_MSG_CHANNEL_CLOSE` 导致的取消清理缺口，并完成成功/取消回归。
 - [ ] 用真实 Claude Code、Codex CLI 与一个已连接 FileTerm runtime 的纯 `fileterm interactive-exec` 验证：Agent 等待 FileTerm prompt，用户输入 password 后 Agent 获得最终脱敏输出。
 - [x] 更新 `docs/architecture.md`，只记录已落地的 transport、输入隔离、脱敏与审计边界；不把三端手工验证描述为已完成。
 

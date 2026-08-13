@@ -174,6 +174,23 @@ notes:
 
 本条验证了真实远端 `su` / `sudo` 的一次性安全输入与认证失败收敛；Windows/Linux 打包、真实外部 Provider、代理、睡眠恢复和 Claude/Codex 仍未签收。
 
+### 2026-08-14 — macOS QA bundle，interactive-exec 安全输入与取消清理
+
+```text
+platform: macOS / arm64
+artifact: 本地 debug FileTerm QA bundle（隔离 HOME；非生产连接数据）
+provider: n/a（FileTerm CLI / MCP runtime bridge）
+target: disposable Debian 13-slim sshd（127.0.0.1:22223，测试用户 filetermqa）
+network: direct loopback
+result: pass（macOS 本机 interactive-exec 子集）
+notes:
+  - `fileterm interactive-exec --tab-id ... --expected-session-revision ... --command "su -c 'id -u'"` 在 CLI 等待期间由 FileTerm 主窗口弹出任务级 masked `Password:` 输入框；提交后返回 `interactionCount: 1`、退出状态 0 和 root uid 0，结果未包含输入原文。
+  - 取消同一任务后 CLI 快速结束，后续无交互 `pgrep` 未发现残留 `su` 进程；可见 SSH 终端仍保持连接。
+  - 回归期间修复了 russh interactive channel 仅 drop 不发送 `SSH_MSG_CHANNEL_CLOSE` 的 PTY 清理缺口；成功、取消和超时路径现在统一执行有界 channel close。
+```
+
+本条补齐 macOS 的真实 FileTerm CLI → 安全输入框 → 同一 SSH task channel 验收；真实 Claude/Codex 模型调用、Windows/Linux 桌面手测、代理、睡眠恢复和生产环境仍未签收。
+
 ### 2026-08-14 — Claude/Codex MCP 配置健康检查（非模型端到端）
 
 ```text

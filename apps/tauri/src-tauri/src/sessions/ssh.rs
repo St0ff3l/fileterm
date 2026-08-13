@@ -5490,29 +5490,34 @@ async fn execute_interactive_remote_command_task(
         .map_err(|error| {
             format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to open an isolated SSH exec channel: {error}")
         })?;
-    request_interactive_remote_exec_pty(&channel).await?;
-    channel
-        .exec(true, command)
-        .await
-        .map_err(|error| {
-            format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to start interactive remote command: {error}")
-        })?;
+    // Keep channel shutdown in one place. Dropping a russh Channel does not
+    // send SSH_MSG_CHANNEL_CLOSE, so an interactive command can otherwise
+    // remain attached to the server-side PTY when the local prompt is
+    // cancelled or times out.
+    let task_result = async {
+        request_interactive_remote_exec_pty(&channel).await?;
+        channel
+            .exec(true, command)
+            .await
+            .map_err(|error| {
+                format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to start interactive remote command: {error}")
+            })?;
 
-    let mut output = Vec::new();
-    let mut prompt_window = String::new();
-    let mut redactions = Vec::new();
-    let mut exit_status = None;
-    let mut prompt_count = 0_u8;
-    let mut last_prompt_output_len = 0_usize;
-    let mut output_truncated = false;
-    let mut timed_out = false;
-    // The command budget applies while the isolated SSH channel is running.
-    // Waiting for a user response is governed by the separate interaction
-    // timeout and the outer task lifetime, so a password dialog does not
-    // consume the command's execution budget.
-    let mut remaining_command_time = Duration::from_millis(timeout_ms);
+        let mut output = Vec::new();
+        let mut prompt_window = String::new();
+        let mut redactions = Vec::new();
+        let mut exit_status = None;
+        let mut prompt_count = 0_u8;
+        let mut last_prompt_output_len = 0_usize;
+        let mut output_truncated = false;
+        let mut timed_out = false;
+        // The command budget applies while the isolated SSH channel is running.
+        // Waiting for a user response is governed by the separate interaction
+        // timeout and the outer task lifetime, so a password dialog does not
+        // consume the command's execution budget.
+        let mut remaining_command_time = Duration::from_millis(timeout_ms);
 
-    loop {
+        loop {
         let wait_started = Instant::now();
         let message = match timeout(remaining_command_time, channel.wait()).await {
             Ok(message) => message,
@@ -5599,20 +5604,25 @@ async fn execute_interactive_remote_command_task(
             ChannelMsg::Eof | ChannelMsg::Close => break,
             _ => {}
         }
-    }
+        }
 
-    let output = redact_interactive_remote_exec_output(
-        String::from_utf8_lossy(&output).into_owned(),
-        &redactions,
-    );
-    Ok(serde_json::json!({
-        "output": output,
-        "exitCode": exit_status,
-        "timedOut": timed_out,
-        "outputTruncated": output_truncated,
-        "inputRequired": false,
-        "interactionCount": audit_context.interaction_count(),
-    }))
+        let output = redact_interactive_remote_exec_output(
+            String::from_utf8_lossy(&output).into_owned(),
+            &redactions,
+        );
+        Ok(serde_json::json!({
+            "output": output,
+            "exitCode": exit_status,
+            "timedOut": timed_out,
+            "outputTruncated": output_truncated,
+            "inputRequired": false,
+            "interactionCount": audit_context.interaction_count(),
+        }))
+    }
+    .await;
+
+    let _ = timeout(TERMINAL_WRITE_TIMEOUT, channel.close()).await;
+    task_result
 }
 
 async fn request_interactive_remote_exec_input(
