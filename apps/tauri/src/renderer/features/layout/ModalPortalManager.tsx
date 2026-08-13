@@ -8,6 +8,7 @@ import { SshHostVerificationModal } from '../connections/SshHostVerificationModa
 import { SshKeyboardInteractiveModal } from '../connections/SshKeyboardInteractiveModal'
 import { SshKeyPassphraseModal } from '../connections/SshKeyPassphraseModal'
 import { RemoteExecInteractionModal } from '../connections/RemoteExecInteractionModal'
+import { BackupPasswordModal } from '../connections/BackupPasswordModal'
 import { FileActionModal } from '../files/FileActionModal'
 import { FilePermissionModal } from '../files/FilePermissionModal'
 import { RootAccessModal } from '../files/RootAccessModal'
@@ -38,6 +39,7 @@ export type SshHostVerificationModalBinding = ModalBinding<typeof SshHostVerific
 export type SshKeyboardInteractiveModalBinding = ModalBinding<typeof SshKeyboardInteractiveModal>
 export type SshKeyPassphraseModalBinding = ModalBinding<typeof SshKeyPassphraseModal>
 export type RemoteExecInteractionModalBinding = ModalBinding<typeof RemoteExecInteractionModal>
+export type BackupPasswordModalBinding = ModalBinding<typeof BackupPasswordModal>
 export type ConfirmActionDialogBinding = ModalBinding<typeof ConfirmActionDialog>
 export type FileEditorModalBinding = NonStandaloneModalBinding<typeof FileEditorModal>
 export type TabContextMenuBinding = ModalBinding<typeof TabContextMenu>
@@ -71,6 +73,7 @@ export interface ModalPortalManagerProps {
   sshKeyboardInteractive: SshKeyboardInteractiveModalBinding
   sshKeyPassphrase: SshKeyPassphraseModalBinding
   remoteExecInteraction: RemoteExecInteractionModalBinding
+  backupPassword: BackupPasswordModalBinding
   tabContextMenu?: TabContextMenuBinding
   windowCloseConfirm: ConfirmActionDialogBinding
 }
@@ -93,6 +96,7 @@ export function ModalPortalManager({
   sshKeyboardInteractive,
   sshKeyPassphrase,
   remoteExecInteraction,
+  backupPassword,
   tabContextMenu,
   windowCloseConfirm
 }: ModalPortalManagerProps) {
@@ -122,6 +126,7 @@ export function ModalPortalManager({
       {sshKeyboardInteractive ? <SshKeyboardInteractiveModal {...sshKeyboardInteractive} /> : null}
       {sshKeyPassphrase ? <SshKeyPassphraseModal {...sshKeyPassphrase} /> : null}
       {remoteExecInteraction ? <RemoteExecInteractionModal {...remoteExecInteraction} /> : null}
+      {backupPassword ? <BackupPasswordModal {...backupPassword} /> : null}
       {shortcutCloseConfirm ? <ConfirmActionDialog {...shortcutCloseConfirm} /> : null}
       {windowCloseConfirm ? <ConfirmActionDialog {...windowCloseConfirm} /> : null}
     </>

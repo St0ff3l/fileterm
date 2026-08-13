@@ -444,6 +444,14 @@ const zhCN = {
   remoteExecInteractionPromptFallback: '远程命令正在等待输入',
   remoteExecInteractionPrivacy: '输入只会发送给这一次远程命令，不会写入终端、聊天记录或发送给 Agent。',
   remoteExecInteractionSend: '发送到远程命令',
+  backupPasswordTitle: '输入远程备份主密码',
+  backupPasswordUploadDescription: '远程备份会使用此密码加密。密码只用于本次上传，不会保存。',
+  backupPasswordDownloadDescription: '请输入创建该远程备份时使用的主密码。密码只用于本次下载，不会保存。',
+  backupPasswordProvider: '同步目标',
+  backupPasswordLabel: '备份主密码',
+  backupPasswordPlaceholder: '至少 12 个字符',
+  backupPasswordPrivacy: '忘记主密码将无法恢复加密备份；用户导出的 JSON 文件仍保持原有明文格式。',
+  backupPasswordContinue: '继续',
   sshHostVerificationTitle: '安全警告',
   sshHostVerificationDescription: '该主机的密钥尚未信任。请确认主机公钥指纹后再继续连接。',
   sshHostVerificationChanged: '检测到该主机保存过的指纹与当前返回值不一致，请谨慎确认。',
@@ -968,7 +976,7 @@ const zhCN = {
   configSync: '配置同步',
   webdavConfigSync: 'WebDAV 配置同步',
   webdavConfigSyncDescription:
-    '手动上传和下载完整连接配置，包括密码、私钥口令和代理密码。同步文件是含明文凭据的 JSON，请仅使用可信的 HTTPS WebDAV 和受控存储。',
+    '手动上传和下载完整连接配置，包括密码、私钥口令和代理密码。远程备份会用你每次输入的主密码加密；不会保存主密码。旧版明文备份仍可导入，但建议重新上传加密。',
   webdavUrl: 'WebDAV 地址',
   webdavRemoteFile: '远端文件',
   webdavUsername: '用户名',
@@ -979,7 +987,7 @@ const zhCN = {
   webdavTestConnection: '测试连接',
   s3Backup: 'S3 配置备份',
   s3BackupDescription:
-    '手动备份和恢复完整连接配置（含密码、私钥口令和代理密码）。凭据和配置包仅在本机 Rust 服务中处理；请使用仅授予目标 Bucket 读写权限的 Access Key。内置 Cloudflare R2、缤纷云 S4 预设；其他兼容 S3 协议的服务可通过自定义 Endpoint 接入。',
+    '手动备份和恢复完整连接配置（含密码、私钥口令和代理密码）。远程备份会用你每次输入的主密码加密；不会保存主密码。请使用仅授予目标 Bucket 读写权限的 Access Key。',
   s3Provider: '存储提供商',
   s3ProviderCloudflareR2: 'Cloudflare R2',
   s3ProviderBitifulS4: '缤纷云 Bitiful S4',
@@ -1503,6 +1511,17 @@ const enUS: typeof zhCN = {
   remoteExecInteractionPrivacy:
     'This value is sent only to this remote command. It is not added to the terminal, chat history, or returned to the agent.',
   remoteExecInteractionSend: 'Send to remote command',
+  backupPasswordTitle: 'Enter remote backup password',
+  backupPasswordUploadDescription:
+    'This password encrypts the remote backup. It is used only for this upload and is never saved.',
+  backupPasswordDownloadDescription:
+    'Enter the password used when this remote backup was created. It is used only for this download and is never saved.',
+  backupPasswordProvider: 'Sync target',
+  backupPasswordLabel: 'Backup password',
+  backupPasswordPlaceholder: 'At least 12 characters',
+  backupPasswordPrivacy:
+    'If you lose this password, the encrypted backup cannot be restored. User-exported JSON keeps its existing plaintext format.',
+  backupPasswordContinue: 'Continue',
   sshHostVerificationTitle: 'Security Warning',
   sshHostVerificationDescription: 'This host key is not trusted yet. Confirm the fingerprint before continuing.',
   sshHostVerificationChanged:
@@ -2052,7 +2071,7 @@ const enUS: typeof zhCN = {
   configSync: 'Config Sync',
   webdavConfigSync: 'WebDAV Config Sync',
   webdavConfigSyncDescription:
-    'Manually upload and download the complete connection configuration, including passwords, key passphrases, and proxy passwords. The sync file is JSON with plaintext credentials; use only trusted HTTPS WebDAV and controlled storage.',
+    'Upload and download the complete connection configuration, including passwords, key passphrases, and proxy passwords. Remote backups are encrypted with a password you enter for each operation; the password is never saved. Older plaintext backups remain importable, but re-upload them to encrypt them.',
   webdavUrl: 'WebDAV URL',
   webdavRemoteFile: 'Remote File',
   webdavUsername: 'Username',
@@ -2063,7 +2082,7 @@ const enUS: typeof zhCN = {
   webdavTestConnection: 'Test connection',
   s3Backup: 'S3 Config Backup',
   s3BackupDescription:
-    'Manually back up and restore the complete connection configuration, including passwords, key passphrases, and proxy passwords. Credentials and the bundle stay in the local Rust service; use an Access Key limited to the target bucket. Cloudflare R2 and Bitiful S4 have built-in presets; use a custom endpoint for any other S3-compatible provider.',
+    'Back up and restore the complete connection configuration, including passwords, key passphrases, and proxy passwords. Remote backups are encrypted with a password you enter for each operation; the password is never saved. Use an Access Key limited to the target bucket.',
   s3Provider: 'Storage provider',
   s3ProviderCloudflareR2: 'Cloudflare R2',
   s3ProviderBitifulS4: 'Bitiful S4',

@@ -25,6 +25,7 @@ import type {
   SessionMetricsUpdate,
   SshInteractionRequest,
   RemoteExecInteractionRequest,
+  BackupPasswordRequest,
   SshKeyFileSelection,
   SshKeyImportResult,
   SshKeyMetadata,
@@ -680,6 +681,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       }),
     setRemoteExecInteractionRendererReady: (registrationId: string, ready: boolean) =>
       invoke<void>('app_set_remote_exec_interaction_renderer_ready', { registrationId, ready }),
+    resolveBackupPassword: (requestId: string, cancelled: boolean, value?: string) =>
+      invoke<void>('app_resolve_backup_password', {
+        requestId,
+        cancelled,
+        value: cancelled ? null : (value ?? null)
+      }),
+    setBackupPasswordRendererReady: (registrationId: string, ready: boolean) =>
+      invoke<void>('app_set_backup_password_renderer_ready', { registrationId, ready }),
     resolveMcpApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
     resolveActionApproval: (requestId: string, approved: boolean) =>
@@ -711,6 +720,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
     onRemoteExecInteraction: (listener: (request: RemoteExecInteractionRequest) => void) =>
       subscribeReady('remote-exec:interaction-request', listener),
+    onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>
+      subscribeReady('backup:password-request', listener),
     onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>
       subscribe('action:approval-request', listener),
     onMcpApprovalRequest: (listener: (request: McpApprovalRequest) => void) =>

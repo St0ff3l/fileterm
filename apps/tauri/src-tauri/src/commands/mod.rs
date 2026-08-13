@@ -1912,6 +1912,7 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     // Cancelling all senders causes awaiting task-local dialogs to end
     // immediately during app shutdown rather than surviving until timeout.
     state.pending_remote_exec_interactions.write().await.clear();
+    state.pending_backup_passwords.write().await.clear();
     state.active_interactive_remote_execs.lock().await.clear();
     let senders = state
         .workers
@@ -3846,7 +3847,8 @@ pub async fn app_resolve_remote_exec_interaction(
         let value = value.ok_or_else(|| {
             AppError::Command("Interactive remote exec response is required".to_string())
         })?;
-        if value.is_empty()
+        if value.chars().count() < crate::services::backup_crypto::MIN_PASSWORD_CHARS
+            || value.is_empty()
             || value.len() > 8 * 1024
             || value
                 .chars()
@@ -3885,6 +3887,72 @@ pub async fn app_resolve_remote_exec_interaction(
                 value: target_is_current.then_some(value).flatten(),
             });
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_resolve_backup_password(
+    app: AppHandle,
+    request_id: String,
+    cancelled: bool,
+    value: Option<String>,
+) -> Result<(), AppError> {
+    let request_id = request_id.trim();
+    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            "Invalid backup password request".to_string(),
+        ));
+    }
+    let value = if cancelled {
+        None
+    } else {
+        let value =
+            value.ok_or_else(|| AppError::Command("Backup password is required".to_string()))?;
+        if value.is_empty()
+            || value.len() > 8 * 1024
+            || value
+                .chars()
+                .any(|character| matches!(character, '\0' | '\r' | '\n' | '\u{1b}'))
+        {
+            return Err(AppError::Command("Backup password is invalid".to_string()));
+        }
+        Some(value)
+    };
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let pending = state
+        .pending_backup_passwords
+        .write()
+        .await
+        .remove(request_id);
+    if let Some(pending) = pending {
+        let _ = pending
+            .sender
+            .send(crate::services::workspace::BackupPasswordResponse { cancelled, value });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_set_backup_password_renderer_ready(
+    app: AppHandle,
+    window: WebviewWindow,
+    registration_id: String,
+    ready: bool,
+) -> Result<(), AppError> {
+    if window.label() != "main" {
+        return Err(AppError::Window(
+            "Only the FileTerm main window may receive backup password input".to_string(),
+        ));
+    }
+    let registration_id = registration_id.trim();
+    if registration_id.is_empty() || registration_id.len() > 200 {
+        return Err(AppError::Command(
+            "Invalid backup password renderer registration".to_string(),
+        ));
+    }
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .set_backup_password_renderer_ready(registration_id, ready)
+        .await;
     Ok(())
 }
 

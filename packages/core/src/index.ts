@@ -752,6 +752,7 @@ export interface WebDavSyncResult {
   imported?: number
   updated?: number
   skipped?: number
+  legacyPlaintext?: boolean
 }
 
 export type S3BackupProvider = 'custom' | 'cloudflare-r2' | 'bitiful-s4'
@@ -783,6 +784,7 @@ export interface S3BackupResult {
   imported?: number
   updated?: number
   skipped?: number
+  legacyPlaintext?: boolean
 }
 
 export interface SshKeyMetadata {
@@ -941,6 +943,15 @@ export interface RemoteExecInteractionRequest {
   attempt: number
   maxAttempts: number
   inputKind: 'secret' | 'text'
+}
+
+export type BackupPasswordOperation = 'upload' | 'download'
+
+/** One-time password request for a cross-device WebDAV/S3 backup. */
+export interface BackupPasswordRequest {
+  requestId: string
+  operation: BackupPasswordOperation
+  provider: 'WebDAV' | 'S3'
 }
 
 export type ActionApprovalSource = 'mcp' | 'ai-review'
@@ -1595,6 +1606,8 @@ export interface FileTermDesktopApi {
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
   resolveRemoteExecInteraction(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setRemoteExecInteractionRendererReady(registrationId: string, ready: boolean): Promise<void>
+  resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
+  setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
   /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
@@ -1611,6 +1624,8 @@ export interface FileTermDesktopApi {
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
   /** Resolves only after the main renderer has registered its secure-input listener. */
   onRemoteExecInteraction(listener: (request: RemoteExecInteractionRequest) => void): Promise<() => void>
+  /** Resolves only after the main renderer has registered the password prompt listener. */
+  onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>
   onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void
   /** @deprecated Use onActionApprovalRequest. */
   onMcpApprovalRequest(listener: (request: McpApprovalRequest) => void): () => void

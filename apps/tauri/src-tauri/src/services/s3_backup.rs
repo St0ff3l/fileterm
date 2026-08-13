@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use tauri::AppHandle;
 use url::{Position, Url};
 
-use crate::services::webdav;
+use crate::services::{backup_crypto, backup_prompt, webdav};
 use crate::storage::workspace_file;
 use crate::AppError;
 
@@ -686,7 +686,8 @@ async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
             ));
         }
     }
-    let (payload, content_hash) = webdav::export_bundle(app)?;
+    let password = backup_prompt::request(app, "upload", "S3").await?;
+    let (payload, content_hash) = webdav::export_bundle(app, &password)?;
     let mut headers = BTreeMap::new();
     headers.insert(
         "content-type",
@@ -775,17 +776,37 @@ async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
     if bytes.len() > MAX_BUNDLE_BYTES {
         return Err(command_error("S3 配置包超过 5 MB 限制"));
     }
-    let summary = webdav::import_bundle(app, &bytes)?;
+    let password = if backup_crypto::requires_password(&bytes)
+        .map_err(|error| command_error(error.to_string()))?
+    {
+        Some(backup_prompt::request(app, "download", "S3").await?)
+    } else {
+        None
+    };
+    let summary =
+        webdav::import_bundle(app, &bytes, password.as_ref().map(|value| value.as_str()))?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(webdav::export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
     write_config(app, &config)?;
+    let message = if summary.legacy_plaintext {
+        format!(
+            "已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。该备份未加密，建议重新上传以生成加密备份。",
+            summary.imported, summary.updated, summary.skipped
+        )
+    } else {
+        format!(
+            "已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。",
+            summary.imported, summary.updated, summary.skipped
+        )
+    };
     Ok(serde_json::json!({
         "action": "download",
-        "message": format!("已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。", summary.imported, summary.updated, summary.skipped),
+        "message": message,
         "imported": summary.imported,
         "updated": summary.updated,
         "skipped": summary.skipped,
+        "legacyPlaintext": summary.legacy_plaintext,
     }))
 }
 

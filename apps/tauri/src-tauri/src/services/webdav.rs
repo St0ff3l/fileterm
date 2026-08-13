@@ -1,7 +1,8 @@
 //! Manual, conflict-aware WebDAV synchronization for the complete profile
-//! bundle. Connection credentials stay inside the Rust service boundary but
-//! are intentionally included in the remote bundle so another FileTerm
-//! installation can reconnect after downloading it.
+//! bundle. Connection credentials stay inside the Rust service boundary,
+//! are encrypted with the user's one-time backup password, and can therefore
+//! be restored by another FileTerm installation without being uploaded as
+//! plaintext.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -15,7 +16,7 @@ use sha2::{Digest, Sha256};
 use tauri::AppHandle;
 use url::Url;
 
-use crate::services::profile_ops;
+use crate::services::{backup_crypto, backup_prompt, profile_ops};
 use crate::storage::workspace_file;
 use crate::AppError;
 
@@ -270,25 +271,17 @@ pub fn export_timestamp() -> String {
 /// Serializes the complete connection bundle for an explicit user-initiated
 /// backup. S3 backup shares this payload format with WebDAV so both targets
 /// preserve the same secret-handling and integrity semantics.
-pub(crate) fn export_bundle(app: &AppHandle) -> Result<(Vec<u8>, String), AppError> {
+pub(crate) fn export_bundle(
+    app: &AppHandle,
+    password: &str,
+) -> Result<(Vec<u8>, String), AppError> {
     let (profiles, _) = profile_ops::read_and_heal_profiles(app)?;
-    build_export_bundle(&profiles)
+    build_export_bundle(&profiles, password)
 }
 
-fn build_export_bundle(profiles: &[Value]) -> Result<(Vec<u8>, String), AppError> {
-    let profile_bytes = serde_json::to_vec(&profiles)
-        .map_err(|error| AppError::Serialization(error.to_string()))?;
-    let content_hash = sha256_hex(&profile_bytes);
-    let payload = serde_json::json!({
-        "schemaVersion": 2,
-        "containsSecrets": true,
-        "generatedAt": export_timestamp(),
-        "contentHash": content_hash,
-        "profiles": profiles,
-    });
-    let bytes = serde_json::to_vec_pretty(&payload)
-        .map_err(|error| AppError::Serialization(error.to_string()))?;
-    Ok((bytes, content_hash))
+fn build_export_bundle(profiles: &[Value], password: &str) -> Result<(Vec<u8>, String), AppError> {
+    backup_crypto::encrypt_profiles(profiles, password, &export_timestamp())
+        .map_err(|error| command_error(error.to_string()))
 }
 
 fn profile_fingerprint(profile: &Value) -> Option<(String, String, String, u64, String)> {
@@ -383,34 +376,18 @@ fn merge_synced_profile(existing: &Value, incoming: &Value) -> Result<Value, Str
     Ok(Value::Object(merged))
 }
 
-fn parse_bundle(bytes: &[u8]) -> Result<Vec<Value>, AppError> {
-    let value: Value = serde_json::from_slice(bytes)
-        .map_err(|error| command_error(format!("WebDAV 配置包无效: {error}")))?;
-    let profiles = match &value {
-        Value::Array(items) => items.clone(),
-        Value::Object(object) => object
-            .get("profiles")
-            .and_then(Value::as_array)
-            .cloned()
-            .ok_or_else(|| command_error("WebDAV 配置包缺少 profiles"))?,
-        _ => return Err(command_error("WebDAV 配置包格式无效")),
-    };
-    if let Some(expected_hash) = value.get("contentHash").and_then(Value::as_str) {
-        let canonical = serde_json::to_vec(&profiles)
-            .map_err(|error| AppError::Serialization(error.to_string()))?;
-        if sha256_hex(&canonical) != expected_hash {
-            return Err(command_error(
-                "WebDAV 配置包 hash 校验失败，文件可能已损坏或被篡改",
-            ));
-        }
-    }
-    Ok(profiles)
+fn parse_bundle(
+    bytes: &[u8],
+    password: Option<&str>,
+) -> Result<backup_crypto::DecodedBundle, AppError> {
+    backup_crypto::decode_bundle(bytes, password).map_err(|error| command_error(error.to_string()))
 }
 
 pub(crate) struct ProfileImportSummary {
     pub imported: u64,
     pub updated: u64,
     pub skipped: u64,
+    pub legacy_plaintext: bool,
 }
 
 /// Imports a verified FileTerm profile bundle. Transport services call this
@@ -419,8 +396,10 @@ pub(crate) struct ProfileImportSummary {
 pub(crate) fn import_bundle(
     app: &AppHandle,
     bytes: &[u8],
+    password: Option<&str>,
 ) -> Result<ProfileImportSummary, AppError> {
-    let profiles = parse_bundle(bytes)?;
+    let decoded = parse_bundle(bytes, password)?;
+    let profiles = decoded.profiles;
     let (existing, _) = profile_ops::read_and_heal_profiles(app)?;
     let mut known = existing
         .iter()
@@ -472,6 +451,7 @@ pub(crate) fn import_bundle(
         imported,
         updated,
         skipped,
+        legacy_plaintext: decoded.legacy_plaintext,
     })
 }
 
@@ -579,7 +559,8 @@ pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
 async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
-    let (payload, content_hash) = export_bundle(app)?;
+    let password = backup_prompt::request(app, "upload", "WebDAV").await?;
+    let (payload, content_hash) = export_bundle(app, &password)?;
     let next_etag = upload_payload(&client, &config, payload).await?;
     config.last_etag = next_etag;
     config.last_synced_at = Some(export_timestamp());
@@ -670,17 +651,36 @@ async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
     let (bytes, remote_etag) = download_payload(&client, &config).await?;
-    let summary = import_bundle(app, &bytes)?;
+    let password = if backup_crypto::requires_password(&bytes)
+        .map_err(|error| command_error(error.to_string()))?
+    {
+        Some(backup_prompt::request(app, "download", "WebDAV").await?)
+    } else {
+        None
+    };
+    let summary = import_bundle(app, &bytes, password.as_ref().map(|value| value.as_str()))?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
     write_config(app, &config)?;
+    let message = if summary.legacy_plaintext {
+        format!(
+            "已从 WebDAV 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。该备份未加密，建议重新上传以生成加密备份。",
+            summary.imported, summary.updated, summary.skipped
+        )
+    } else {
+        format!(
+            "已从 WebDAV 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。",
+            summary.imported, summary.updated, summary.skipped
+        )
+    };
     Ok(serde_json::json!({
         "action": "download",
-        "message": format!("已从 WebDAV 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。", summary.imported, summary.updated, summary.skipped),
+        "message": message,
         "imported": summary.imported,
         "updated": summary.updated,
         "skipped": summary.skipped,
+        "legacyPlaintext": summary.legacy_plaintext,
     }))
 }
 
@@ -830,8 +830,9 @@ mod tests {
         let hash = sha256_hex(&serde_json::to_vec(&profiles).unwrap());
         let payload = json!({ "profiles": profiles, "contentHash": hash });
         assert_eq!(
-            parse_bundle(&serde_json::to_vec(&payload).unwrap())
+            parse_bundle(&serde_json::to_vec(&payload).unwrap(), None)
                 .unwrap()
+                .profiles
                 .len(),
             1
         );
@@ -870,13 +871,15 @@ mod tests {
             "passphrase": "key-secret",
             "proxy": { "type": "http", "password": "proxy-secret" }
         })];
-        let (bytes, _) = build_export_bundle(&profiles).unwrap();
+        let (bytes, _) =
+            build_export_bundle(&profiles, "a sufficiently long backup password").unwrap();
         let payload: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(payload["schemaVersion"], 2);
+        assert_eq!(payload["schemaVersion"], 3);
         assert_eq!(payload["containsSecrets"], true);
-        assert_eq!(payload["profiles"][0]["password"], "secret");
-        assert_eq!(payload["profiles"][0]["passphrase"], "key-secret");
-        assert_eq!(payload["profiles"][0]["proxy"]["password"], "proxy-secret");
+        assert!(payload.get("profiles").is_none());
+        assert!(!bytes
+            .windows("proxy-secret".len())
+            .any(|window| window == b"proxy-secret"));
     }
 
     #[test]
@@ -1043,7 +1046,7 @@ mod tests {
         let (downloaded, etag) = download_payload(&test_client(), &config).await.unwrap();
         assert_eq!(downloaded, payload);
         assert_eq!(etag.as_deref(), Some("\"etag-download\""));
-        assert_eq!(parse_bundle(&downloaded).unwrap().len(), 1);
+        assert_eq!(parse_bundle(&downloaded, None).unwrap().profiles.len(), 1);
         server.await.unwrap();
     }
 }

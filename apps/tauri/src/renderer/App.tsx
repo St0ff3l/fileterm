@@ -68,6 +68,7 @@ import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
 import { useRemoteExecInteractions } from './hooks/useRemoteExecInteractions'
+import { useBackupPasswordInteractions } from './hooks/useBackupPasswordInteractions'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
 import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
@@ -783,6 +784,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     cancel: cancelRemoteExecInteraction,
     submit: submitRemoteExecInteraction
   } = useRemoteExecInteractions({
+    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
+    onError: (scope, err) => reportError(setError, scope, err)
+  })
+
+  const {
+    request: backupPasswordRequest,
+    errorMessage: backupPasswordError,
+    isResolving: isBackupPasswordResolving,
+    cancel: cancelBackupPassword,
+    submit: submitBackupPassword
+  } = useBackupPasswordInteractions({
     desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
     onError: (scope, err) => reportError(setError, scope, err)
   })
@@ -1940,6 +1952,21 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 },
                 onSubmit: (value) => {
                   void submitRemoteExecInteraction(value)
+                }
+              }
+            : null
+        }
+        backupPassword={
+          backupPasswordRequest
+            ? {
+                request: backupPasswordRequest,
+                errorMessage: backupPasswordError,
+                isSubmitting: isBackupPasswordResolving,
+                onCancel: () => {
+                  void cancelBackupPassword()
+                },
+                onSubmit: (value) => {
+                  void submitBackupPassword(value)
                 }
               }
             : null

@@ -410,6 +410,17 @@ pub struct PendingRemoteExecInteraction {
     pub sender: oneshot::Sender<RemoteExecInteractionResponse>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupPasswordResponse {
+    pub cancelled: bool,
+    pub value: Option<String>,
+}
+
+pub struct PendingBackupPassword {
+    pub sender: oneshot::Sender<BackupPasswordResponse>,
+}
+
 pub struct WorkspaceState {
     pub tabs: Arc<RwLock<Vec<WorkspaceTab>>>,
     pub active_tab_id: Arc<RwLock<Option<String>>>,
@@ -455,6 +466,10 @@ pub struct WorkspaceState {
     /// readiness that has already been re-established by the next renderer
     /// instance.
     pub remote_exec_interaction_renderer_registration: Arc<RwLock<Option<String>>>,
+    /// One-time password prompts for cross-device remote backup encryption.
+    /// These are intentionally separate from terminal and remote-exec input.
+    pub pending_backup_passwords: Arc<RwLock<HashMap<String, PendingBackupPassword>>>,
+    pub backup_password_renderer_registration: Arc<RwLock<Option<String>>>,
     /// At most one interactive command may await input for a tab. The value
     /// identifies its task, so cleanup from a cancelled old worker cannot
     /// unlock a newer task that reuses the same tab id after reconnect.
@@ -530,6 +545,8 @@ impl Default for WorkspaceState {
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
             pending_remote_exec_interactions: Arc::new(RwLock::new(HashMap::new())),
             remote_exec_interaction_renderer_registration: Arc::new(RwLock::new(None)),
+            pending_backup_passwords: Arc::new(RwLock::new(HashMap::new())),
+            backup_password_renderer_registration: Arc::new(RwLock::new(None)),
             active_interactive_remote_execs: Arc::new(Mutex::new(HashMap::new())),
             pending_action_approvals: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
@@ -555,6 +572,39 @@ impl Default for WorkspaceState {
 }
 
 impl WorkspaceState {
+    pub async fn set_backup_password_renderer_ready(&self, registration_id: &str, ready: bool) {
+        let registration_id = registration_id.trim();
+        if registration_id.is_empty() || registration_id.len() > 200 {
+            return;
+        }
+        let mut active = self.backup_password_renderer_registration.write().await;
+        if ready {
+            *active = Some(registration_id.to_string());
+            return;
+        }
+        if active.as_deref() != Some(registration_id) {
+            return;
+        }
+        *active = None;
+        self.pending_backup_passwords.write().await.clear();
+    }
+
+    pub async fn insert_pending_backup_password(
+        &self,
+        request_id: String,
+        pending: PendingBackupPassword,
+    ) -> bool {
+        let active = self.backup_password_renderer_registration.read().await;
+        if active.is_none() {
+            return false;
+        }
+        self.pending_backup_passwords
+            .write()
+            .await
+            .insert(request_id, pending);
+        true
+    }
+
     /// Mark one main-workspace renderer's secure-input route available or
     /// unavailable. Only the matching registration can withdraw readiness,
     /// so stale React cleanup cannot turn off a newer listener.
