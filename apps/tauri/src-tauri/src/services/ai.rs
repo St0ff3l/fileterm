@@ -3236,6 +3236,7 @@ pub async fn retry_chat(
 #[derive(Clone, Debug)]
 struct ProviderToolCall {
     id: String,
+    item_id: Option<String>,
     name: String,
     arguments: String,
 }
@@ -3243,6 +3244,7 @@ struct ProviderToolCall {
 #[derive(Default)]
 struct ToolCallAccumulator {
     id: String,
+    item_id: String,
     name: String,
     arguments: String,
 }
@@ -3286,6 +3288,7 @@ impl ChatStreamResult {
                 } else {
                     call.id.clone()
                 },
+                item_id: (!call.item_id.trim().is_empty()).then(|| call.item_id.clone()),
                 name: call.name.clone(),
                 arguments: call.arguments.clone(),
             })
@@ -4358,12 +4361,15 @@ fn responses_input_items_with_tools(
             }));
         }
         for call in &turn.calls {
-            items.push(json!({
+            let mut function_call = json!({
                 "type": "function_call",
                 "call_id": call.id,
                 "name": call.name,
                 "arguments": call.arguments
-            }));
+            });
+            let item_id = call.item_id.as_deref().unwrap_or(call.id.as_str());
+            function_call["id"] = json!(item_id);
+            items.push(function_call);
         }
         for result in &turn.results {
             items.push(json!({
@@ -4650,8 +4656,10 @@ fn append_tool_call_fragment(
     arguments: Option<&str>,
 ) {
     let entry = stream.tool_call_accumulators.entry(key.into()).or_default();
-    if let Some(id) = id.filter(|value| !value.is_empty()) {
-        entry.id = id.to_string();
+    if entry.id.is_empty() {
+        if let Some(id) = id.filter(|value| !value.is_empty()) {
+            entry.id = id.to_string();
+        }
     }
     if let Some(name) = name.filter(|value| !value.is_empty()) {
         entry.name.push_str(name);
@@ -4669,11 +4677,24 @@ fn append_complete_tool_call(
     arguments: Option<&str>,
 ) {
     let key = key.into();
-    append_tool_call_fragment(stream, key.clone(), id, name, None);
-    if let Some(arguments) = arguments {
-        if let Some(entry) = stream.tool_call_accumulators.get_mut(&key) {
+    append_tool_call_fragment(stream, key.clone(), id, None, None);
+    if let Some(entry) = stream.tool_call_accumulators.get_mut(&key) {
+        if let Some(name) = name.filter(|value| !value.is_empty()) {
+            entry.name = name.to_string();
+        }
+        if let Some(arguments) = arguments {
             entry.arguments = arguments.to_string();
         }
+    }
+}
+
+fn set_tool_call_item_id(stream: &mut ChatStreamResult, key: &str, item_id: Option<&str>) {
+    if let Some(item_id) = item_id.filter(|value| !value.is_empty()) {
+        stream
+            .tool_call_accumulators
+            .entry(key.to_string())
+            .or_default()
+            .item_id = item_id.to_string();
     }
 }
 
@@ -4813,11 +4834,12 @@ fn process_openai_responses_payload(
                 let key = format!("responses:{}", key_id.unwrap_or("unknown"));
                 append_complete_tool_call(
                     stream,
-                    key,
+                    key.clone(),
                     call_id,
                     item.get("name").and_then(Value::as_str),
                     item.get("arguments").and_then(Value::as_str),
                 );
+                set_tool_call_item_id(stream, &key, item.get("id").and_then(Value::as_str));
             }
         }
         Some("response.function_call_arguments.delta") => {
@@ -4825,26 +4847,36 @@ fn process_openai_responses_payload(
                 .get("item_id")
                 .and_then(Value::as_str)
                 .or_else(|| payload.get("call_id").and_then(Value::as_str));
+            let key = format!("responses:{}", id.unwrap_or("unknown"));
             append_tool_call_fragment(
                 stream,
-                format!("responses:{}", id.unwrap_or("unknown")),
-                payload.get("call_id").and_then(Value::as_str),
+                key.clone(),
+                payload
+                    .get("call_id")
+                    .and_then(Value::as_str)
+                    .or_else(|| payload.get("item_id").and_then(Value::as_str)),
                 None,
                 payload.get("delta").and_then(Value::as_str),
             );
+            set_tool_call_item_id(stream, &key, payload.get("item_id").and_then(Value::as_str));
         }
         Some("response.function_call_arguments.done") => {
             let id = payload
                 .get("item_id")
                 .and_then(Value::as_str)
                 .or_else(|| payload.get("call_id").and_then(Value::as_str));
+            let key = format!("responses:{}", id.unwrap_or("unknown"));
             append_complete_tool_call(
                 stream,
-                format!("responses:{}", id.unwrap_or("unknown")),
-                payload.get("call_id").and_then(Value::as_str),
+                key.clone(),
+                payload
+                    .get("call_id")
+                    .and_then(Value::as_str)
+                    .or_else(|| payload.get("item_id").and_then(Value::as_str)),
                 payload.get("name").and_then(Value::as_str),
                 payload.get("arguments").and_then(Value::as_str),
             );
+            set_tool_call_item_id(stream, &key, payload.get("item_id").and_then(Value::as_str));
         }
         Some("response.completed") => {
             let response = payload.get("response").unwrap_or(&payload);
@@ -4869,13 +4901,15 @@ fn process_openai_responses_payload(
                         .and_then(Value::as_str)
                         .or_else(|| item.get("id").and_then(Value::as_str));
                     let key_id = item.get("id").and_then(Value::as_str).or(call_id);
+                    let key = format!("responses:{}", key_id.unwrap_or("unknown"));
                     append_complete_tool_call(
                         stream,
-                        format!("responses:{}", key_id.unwrap_or("unknown")),
+                        key.clone(),
                         call_id,
                         item.get("name").and_then(Value::as_str),
                         item.get("arguments").and_then(Value::as_str),
                     );
+                    set_tool_call_item_id(stream, &key, item.get("id").and_then(Value::as_str));
                 }
             }
         }
@@ -5673,26 +5707,27 @@ mod tests {
         ai_error, anthropic_history_messages_with_tools, anthropic_tool_schema, apply_secret_patch,
         cancellation_or_request_error, command_has_unsafe_input,
         context_mode_reads_terminal_transcript, copilot_tool_call_arguments,
-        decrypt_provider_secrets, encrypt_provider_secrets, ensure_conversation_fits,
-        escape_review_prompt_value, normalize_ai_title_suggestion, normalize_base_url,
-        normalize_conversation_title, now_millis, openai_chat_tool_schema, parse_command_proposal,
-        process_anthropic_payload, process_openai_payload, process_openai_responses_payload,
-        provider_history_items, provider_history_messages, provider_history_messages_with_tools,
-        provider_is_usable, provider_summary, prune_expired_context_snapshots,
-        repair_default_provider, responses_input_items_with_tools, responses_tool_schema,
-        sanitize_recent_terminal_output, stream_anthropic_messages,
-        stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
-        stream_openai_compatible_chat_with_tools, stream_openai_responses,
-        stream_openai_responses_with_tools, system_prompt, test_openai_compatible_chat,
-        title_from_user_message, title_summary_chat_messages, title_summary_history_items,
-        write_json_file, AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
-        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiMessage, AiMessageRole,
-        AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome,
-        AiReviewRecord, AiStreamEvent, ChatStreamResult, ProviderToolCall, SseDecoder,
-        StoredAiContextSnapshot, StoredAiProvider, StoredConversation, StoredProviderConfig,
-        StoredProviderSecret, StoredProviderSecrets, ToolLoopResult, ToolLoopTurn,
-        ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL,
-        CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
+        decrypt_provider_secrets, default_ai_mode_state, encrypt_provider_secrets,
+        ensure_conversation_fits, escape_review_prompt_value, normalize_ai_title_suggestion,
+        normalize_base_url, normalize_conversation_title, now_millis, openai_chat_tool_schema,
+        parse_command_proposal, process_anthropic_payload, process_openai_payload,
+        process_openai_responses_payload, provider_history_items, provider_history_messages,
+        provider_history_messages_with_tools, provider_is_usable, provider_summary,
+        prune_expired_context_snapshots, public_mode_state, repair_default_provider,
+        responses_input_items_with_tools, responses_tool_schema, sanitize_recent_terminal_output,
+        stream_anthropic_messages, stream_anthropic_messages_with_tools, stream_error_event,
+        stream_openai_compatible_chat, stream_openai_compatible_chat_with_tools,
+        stream_openai_responses, stream_openai_responses_with_tools, system_prompt,
+        test_openai_compatible_chat, title_from_user_message, title_summary_chat_messages,
+        title_summary_history_items, validate_context_for_mode, write_json_file,
+        AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
+        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
+        AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary,
+        AiReviewOutcome, AiReviewRecord, AiStreamEvent, ChatStreamResult, ProviderToolCall,
+        SseDecoder, StoredAiContextSnapshot, StoredAiModeState, StoredAiProvider,
+        StoredConversation, StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets,
+        ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS,
+        CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
         MAX_AI_TITLE_SUGGESTION_LENGTH, MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
         MAX_CONVERSATION_TITLE_LENGTH,
     };
@@ -5827,6 +5862,7 @@ mod tests {
     fn copilot_tool_arguments_reject_credentials_unknown_fields_and_multiline_commands() {
         let call = |arguments: &str| ProviderToolCall {
             id: "call-1".to_string(),
+            item_id: None,
             name: COPILOT_EXECUTE_REMOTE_COMMAND_TOOL.to_string(),
             arguments: arguments.to_string(),
         };
@@ -5858,6 +5894,7 @@ mod tests {
             assistant_text: "I will inspect it.".to_string(),
             calls: vec![ProviderToolCall {
                 id: "call-1".to_string(),
+                item_id: Some("item-1".to_string()),
                 name: COPILOT_EXECUTE_REMOTE_COMMAND_TOOL.to_string(),
                 arguments: r#"{"command":"systemctl status app"}"#.to_string(),
             }],
@@ -5883,6 +5920,13 @@ mod tests {
         );
         let responses =
             responses_input_items_with_tools(&conversation, std::slice::from_ref(&turn));
+        let response_call = responses
+            .iter()
+            .find(|item| item["type"] == "function_call")
+            .expect("Responses function call should be preserved");
+        assert_eq!(response_call["id"], "item-1");
+        assert_eq!(response_call["call_id"], "call-1");
+        assert_eq!(response_call["name"], COPILOT_EXECUTE_REMOTE_COMMAND_TOOL);
         assert_eq!(
             responses.last().expect("function result should exist")["type"],
             "function_call_output"
@@ -5934,9 +5978,20 @@ mod tests {
             &channel,
         )
         .expect("Responses tool arguments should parse");
+        process_openai_responses_payload(
+            json!({"type":"response.output_item.done","item":{"type":"function_call","id":"item-1","call_id":"call-responses","name":COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,"arguments":"{\"command\":\"id\"}"}}),
+            &mut responses,
+            &channel,
+        )
+        .expect("Responses completed tool item should parse");
         responses.finalize_tool_calls();
         assert_eq!(responses.tool_calls.len(), 1);
         assert_eq!(responses.tool_calls[0].id, "call-responses");
+        assert_eq!(responses.tool_calls[0].item_id.as_deref(), Some("item-1"));
+        assert_eq!(
+            responses.tool_calls[0].name,
+            COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+        );
         assert_eq!(
             serde_json::from_str::<Value>(&responses.tool_calls[0].arguments)
                 .expect("Responses arguments should be JSON")["command"],
@@ -6137,6 +6192,7 @@ mod tests {
 
         assert_eq!(result.tool_calls.len(), 1);
         assert_eq!(result.tool_calls[0].id, "call-responses");
+        assert_eq!(result.tool_calls[0].item_id.as_deref(), Some("item-1"));
         assert_eq!(
             result.tool_calls[0].name,
             COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
@@ -6575,6 +6631,73 @@ mod tests {
         assert!(context_mode_reads_terminal_transcript(
             AiContextMode::Level2
         ));
+    }
+
+    #[test]
+    fn copilot_modes_enforce_context_and_tool_boundaries() {
+        assert!(!AiCopilotMode::PureConversation.requires_l2());
+        assert!(!AiCopilotMode::PureConversation.uses_tools());
+        assert!(AiCopilotMode::SemiAutomatic.requires_l2());
+        assert!(AiCopilotMode::SemiAutomatic.uses_tools());
+        assert!(AiCopilotMode::FullyAutomatic.requires_l2());
+        assert!(AiCopilotMode::FullyAutomatic.uses_tools());
+
+        let default_state = public_mode_state(&default_ai_mode_state());
+        assert_eq!(default_state.mode, AiCopilotMode::PureConversation);
+        assert!(!default_state.attach_terminal_context);
+        assert_eq!(
+            default_state.auto_mode_guardrails.session_tool_call_count,
+            0
+        );
+
+        let pure_state = default_ai_mode_state();
+        assert!(validate_context_for_mode(&pure_state, None, AiChatResponseMode::Chat).is_ok());
+        assert!(
+            validate_context_for_mode(&pure_state, None, AiChatResponseMode::CommandProposal)
+                .unwrap_err()
+                .to_string()
+                .contains("AI_CONTEXT_NOT_FOUND")
+        );
+
+        let automatic_state = StoredAiModeState {
+            mode: AiCopilotMode::FullyAutomatic,
+            attach_terminal_context: true,
+            ..default_ai_mode_state()
+        };
+        assert!(
+            validate_context_for_mode(&automatic_state, None, AiChatResponseMode::Chat)
+                .unwrap_err()
+                .to_string()
+                .contains("AI_CONTEXT_NOT_FOUND")
+        );
+
+        let level0_attachment = AiContextAttachment {
+            mode: AiContextMode::Level0,
+            target: context_target(),
+            redactions: Vec::new(),
+            truncated: false,
+        };
+        assert!(validate_context_for_mode(
+            &automatic_state,
+            Some(&level0_attachment),
+            AiChatResponseMode::Chat
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("AI_CONTEXT_TARGET_CHANGED"));
+
+        let level2_attachment = AiContextAttachment {
+            mode: AiContextMode::Level2,
+            target: context_target(),
+            redactions: Vec::new(),
+            truncated: false,
+        };
+        assert!(validate_context_for_mode(
+            &automatic_state,
+            Some(&level2_attachment),
+            AiChatResponseMode::Chat
+        )
+        .is_ok());
     }
 
     #[test]
