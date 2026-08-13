@@ -1,6 +1,6 @@
 # 简化远程 exec 与 sudo 凭据自动化
 
-状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 真实回归已通过，待 Windows/Linux 打包和外部调用方回归）
+状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地；macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 真实回归已通过，Claude Code / Codex CLI 的只读 MCP tool smoke 已通过，待 Windows/Linux 打包和外部调用方的真实提权回归）
 关联：[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[本机凭据字段加密](./secret-storage-encryption.md)、[本地终端与 Agent MCP 接入](./local-terminal-mcp.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正

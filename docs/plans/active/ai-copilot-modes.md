@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，待真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 的只读 MCP tool smoke 已通过，待真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -15,7 +15,7 @@
 
 当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，并补齐了唯一 bundle id QA app 的 loopback Provider、三模式工具循环、disposable SSH、sudo 安全输入和 su PTY 密码回归；真实外部 Provider、远端生产环境和 Windows/Linux 打包回归仍待验收。
 
-本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH、任务专属 sudo prompt 和 CLI su PTY 密码回归；真实外部 Provider、远端生产环境与 Windows/Linux 打包回归仍保持未验收。
+本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH、任务专属 sudo prompt 和 CLI su PTY 密码回归；Claude Code 与 Codex CLI 已通过临时 MCP 配置实际调用只读 `fileterm_list_connections`，但这不等同于真实 Provider 对话或 interactive-exec 远端验收；真实外部 Provider、远端生产环境与 Windows/Linux 打包回归仍保持未验收。
 
 ## 1. 结论
 
