@@ -1,0 +1,6 @@
+interface:
+  display_name: 'FileTerm Release'
+  short_description: '按规范发布 GitHub Release 并保留官方贡献者区'
+  default_prompt: '使用 $fileterm-release 按 FileTerm 发布规范准备并验收一个 GitHub Release。'
+policy:
+  allow_implicit_invocation: true
