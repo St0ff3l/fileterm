@@ -35,7 +35,7 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 - `fixture:fail-once`：首个请求返回 HTTP 503；对同一消息点击“重试”后成功。
 - `fixture:disconnect-once`：首个请求在首个 SSE chunk 后断开；对同一消息重试后成功。
 - `fixture:markdown`：流式返回标题、列表、表格、代码块和链接，并带有应被忽略的原始 HTML、图片和 `javascript:` 链接。
-- 在已授权 L1/L2 上下文并打开“命令建议”时发送 `fixture:command` 或 `fixture:multiline`：分别返回只读 `pwd` 卡和多行卡。
+- 迁移期 command-proposal 兼容回归：在已授权 L2 上下文发送 `fixture:command` 或 `fixture:multiline`，分别返回只读 `pwd` 卡和多行卡；新 UI 不再提供“命令建议”切换，三模式选择器直接决定新回合语义。
 
 该 fixture 故意绑定 `127.0.0.1`，而应用会对 loopback Provider 禁用系统代理，避免本机 API Key 被意外转发。因此它**不能**替代 HTTP CONNECT / SOCKS5 验收；代理项仍须使用一个受控的非 loopback Provider 或相应测试网络。
 
@@ -64,7 +64,7 @@ codex mcp add fileterm -- /Applications/FileTerm.app/Contents/MacOS/fileterm mcp
 - [ ] 流式输出中点击“停止”，确认请求停止、对话可继续且没有残留忙碌状态；随后关闭 AI 面板或整个窗口，确认不会崩溃或继续向已关闭窗口写事件。
 - [ ] 经 HTTP CONNECT 或 SOCKS5 代理完成一轮流式聊天；停止代理后确认出现可重试连接错误，恢复网络后重试成功。
 - [ ] 设备睡眠后唤醒，再发送一条消息；确认明确失败并可重试，或直接恢复，不得静默卡在生成中。
-- [ ] 在 SSH tab 预览 L1/L2 上下文后切换 tab、分屏、CWD 或身份；旧预览和旧命令卡必须显示“终端目标已变化”，且不能写入输入框。
+- [ ] 在 SSH tab 预览 L2 上下文后切换 tab、分屏、CWD 或身份；旧预览和迁移期历史命令卡必须显示“终端目标已变化”，且不能写入输入框。
 - [ ] 命令卡只能复制或写入受控输入框，写入后不自动回车；多行、危险或已过期目标的命令不得一键写入。
 - [ ] 对非敏感 SSH 测试命令点击“审核并运行”：确认框展示 host、CWD、完整命令、风险和超时；拒绝、关闭或超时都不启动远端 exec。批准后验证执行不写入交互式 PTY、结果/退出码/超时/截断显示为本地审核记录，且正在审核的对话不能被删除。
 
