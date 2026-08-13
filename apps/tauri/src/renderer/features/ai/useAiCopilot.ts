@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  AiCopilotMode,
+  AiCopilotModeState,
   AiChatResponseMode,
   AiChatRequest,
   AiConversation,
@@ -16,11 +18,13 @@ type SendMessageOptions = {
   contextSnapshotId?: string
   contextPreview?: AiContextPreview
   responseMode?: AiChatResponseMode
+  mode?: AiCopilotMode
 }
 
 type RetryMessageOptions = {
   contextSnapshotId?: string
   responseMode?: AiChatResponseMode
+  mode?: AiCopilotMode
 }
 
 function toMessage(error: unknown) {
@@ -82,6 +86,7 @@ export function useAiCopilot() {
   const [usage, setUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null)
   const [contextPreview, setContextPreview] = useState<AiContextPreview | null>(null)
   const [isContextPreviewing, setIsContextPreviewing] = useState(false)
+  const [modeState, setModeState] = useState<AiCopilotModeState | null>(null)
   const conversationRef = useRef<AiConversation | null>(null)
   const selectedProviderIdRef = useRef<string | null>(null)
   const selectedModelRef = useRef<string | null>(null)
@@ -91,6 +96,7 @@ export function useAiCopilot() {
   const requestCompletedRef = useRef(false)
   const unmountedRef = useRef(false)
   const activeResponseModeRef = useRef<AiChatResponseMode>('chat')
+  const modeStateRef = useRef<AiCopilotModeState | null>(null)
   const mountedRef = useRef(true)
 
   const applyConversation = useCallback((next: AiConversation | null) => {
@@ -146,11 +152,14 @@ export function useAiCopilot() {
       return
     }
     try {
-      const [nextProviders, nextConversations] = await Promise.all([
+      const [nextProviders, nextConversations, nextModeState] = await Promise.all([
         desktopApi.listAiProviders(),
-        desktopApi.listAiConversations()
+        desktopApi.listAiConversations(),
+        desktopApi.getAiCopilotModeState()
       ])
       if (!mountedRef.current) return
+      modeStateRef.current = nextModeState
+      setModeState(nextModeState)
       const availableProviders = nextProviders.filter(isChatProvider)
       setProviders(availableProviders)
       setConversations(sortConversations(nextConversations))
@@ -311,6 +320,12 @@ export function useAiCopilot() {
         activeResponseModeRef.current = 'chat'
         return
       }
+      if (event.type === 'tool-call' || event.type === 'tool-result') {
+        // The Rust-owned provider tool loop is not enabled yet. Keep these
+        // discriminants in the bridge contract so the renderer can adopt the
+        // Catty-style stream later without treating progress as an error.
+        return
+      }
       activeAssistantMessageIdRef.current = null
       activeRequestIdRef.current = null
       requestCompletedRef.current = true
@@ -396,6 +411,7 @@ export function useAiCopilot() {
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !content || !providerId || isStreaming) return false
       const responseMode = options.responseMode ?? 'chat'
+      const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       const preview =
         options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
           ? options.contextPreview
@@ -449,7 +465,8 @@ export function useAiCopilot() {
                 modelOverride,
                 userMessage: content,
                 contextSnapshotId: options.contextSnapshotId,
-                responseMode
+                responseMode,
+                mode
               },
               onEvent
             ),
@@ -541,6 +558,7 @@ export function useAiCopilot() {
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
       const responseMode = options.responseMode ?? 'chat'
+      const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       setErrorMessage(null)
       setUsage(null)
       setContextPreview(null)
@@ -556,7 +574,8 @@ export function useAiCopilot() {
                 providerId: requestProviderId,
                 modelOverride,
                 contextSnapshotId: options.contextSnapshotId,
-                responseMode
+                responseMode,
+                mode
               },
               onEvent
             ),
@@ -578,6 +597,64 @@ export function useAiCopilot() {
     },
     [isStreaming, startRequest]
   )
+
+  const setCopilotMode = useCallback(
+    async (mode: AiCopilotMode, confirmed = false) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return null
+      setErrorMessage(null)
+      try {
+        const next = await desktopApi.setAiCopilotMode({ mode, confirmed })
+        if (mountedRef.current) {
+          modeStateRef.current = next
+          setModeState(next)
+          setContextPreview(null)
+        }
+        return next
+      } catch (error) {
+        if (mountedRef.current) setErrorMessage(toMessage(error))
+        return null
+      }
+    },
+    [isStreaming]
+  )
+
+  const setContextAttach = useCallback(
+    async (attachTerminalContext: boolean) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return null
+      setErrorMessage(null)
+      try {
+        const next = await desktopApi.setAiContextAttach({ attachTerminalContext })
+        if (mountedRef.current) {
+          modeStateRef.current = next
+          setModeState(next)
+          setContextPreview(null)
+        }
+        return next
+      } catch (error) {
+        if (mountedRef.current) setErrorMessage(toMessage(error))
+        return null
+      }
+    },
+    [isStreaming]
+  )
+
+  const resetAutoModeSessionCounts = useCallback(async () => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) return null
+    try {
+      const next = await desktopApi.resetAiAutoModeSessionCounts()
+      if (mountedRef.current) {
+        modeStateRef.current = next
+        setModeState(next)
+      }
+      return next
+    } catch (error) {
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+      return null
+    }
+  }, [])
 
   const stop = useCallback(async () => {
     const desktopApi = window.fileterm
@@ -693,6 +770,7 @@ export function useAiCopilot() {
     usage,
     contextPreview,
     isContextPreviewing,
+    modeState,
     selectProvider,
     selectModel,
     loadConversation,
@@ -704,6 +782,9 @@ export function useAiCopilot() {
     clearContextPreview,
     sendMessage,
     runReview,
+    setCopilotMode,
+    setContextAttach,
+    resetAutoModeSessionCounts,
     retry,
     stop
   }

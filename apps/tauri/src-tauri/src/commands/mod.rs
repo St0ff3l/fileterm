@@ -898,6 +898,36 @@ pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Re
 }
 
 #[tauri::command]
+pub fn app_get_ai_copilot_mode_state(
+    window: WebviewWindow,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::get_copilot_mode_state(&window)
+}
+
+#[tauri::command]
+pub fn app_set_ai_copilot_mode(
+    window: WebviewWindow,
+    input: crate::services::ai::SetAiCopilotModeInput,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::set_copilot_mode(&window, input)
+}
+
+#[tauri::command]
+pub fn app_set_ai_context_attach(
+    window: WebviewWindow,
+    input: crate::services::ai::SetAiContextAttachInput,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::set_context_attach(&window, input)
+}
+
+#[tauri::command]
+pub fn app_reset_ai_auto_mode_session_counts(
+    window: WebviewWindow,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::reset_auto_mode_session_counts(&window)
+}
+
+#[tauri::command]
 pub async fn app_create_ai_context_preview(
     app: AppHandle,
     window: WebviewWindow,

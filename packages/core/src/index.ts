@@ -1177,8 +1177,49 @@ export interface AiProviderTestResult {
   message: string
 }
 
-/** Per-request context modes. Neither mode becomes a provider-wide default. */
-export type AiContextMode = 'metadata' | 'recent-terminal'
+/** The user-visible Copilot execution mode. */
+export type AiCopilotMode = 'pure-conversation' | 'semi-automatic' | 'fully-automatic'
+
+/** The only context levels exposed by the new Copilot contract. */
+export type AiContextLevel = 'L0' | 'L2'
+
+/**
+ * Context values accepted while old conversations and renderers migrate.
+ * Rust normalizes `metadata` to L2 instead of preserving the old L1 meaning.
+ */
+export type AiContextMode = AiContextLevel | 'metadata' | 'recent-terminal'
+
+export interface AiAutoModeThresholds {
+  maxToolCallsPerSession: number
+  maxDestructiveCallsPerSession: number
+  maxPrivilegedCallsPerSession: number
+  maxTotalExecDurationSecs: number
+}
+
+export interface AiAutoModeGuardrailState {
+  sessionToolCallCount: number
+  sessionDestructiveCount: number
+  sessionPrivilegedCount: number
+  sessionTotalExecDurationSecs: number
+  thresholds: AiAutoModeThresholds
+}
+
+export interface AiCopilotModeState {
+  mode: AiCopilotMode
+  /** Only pure-conversation mode can change this flag. */
+  attachTerminalContext: boolean
+  autoModeGuardrails: AiAutoModeGuardrailState
+}
+
+export interface SetAiCopilotModeInput {
+  mode: AiCopilotMode
+  /** Required only when entering fully-automatic mode. */
+  confirmed?: boolean
+}
+
+export interface SetAiContextAttachInput {
+  attachTerminalContext: boolean
+}
 
 /** A target identity that a one-time context snapshot is bound to. */
 export interface AiContextTarget {
@@ -1264,7 +1305,7 @@ export interface AiMessage {
   role: 'user' | 'assistant' | 'review'
   content: string
   createdAt: string
-  /** Present only for an explicitly approved L1/L2 user turn; never contains raw transcript text. */
+  /** Present only for an explicitly approved L2 user turn; never contains raw transcript text. */
   context?: AiContextAttachment
   /** Present only after a strict JSON command-proposal response validates locally. */
   commands?: AiCommandSuggestion[]
@@ -1308,7 +1349,7 @@ export interface CreateAiContextPreviewInput {
   /** Optional renderer hint. Rust resolves and validates the actual root relation. */
   rootTabId?: string
   providerId: string
-  mode: AiContextMode
+  mode: AiContextLevel
 }
 
 export type AiChatResponseMode = 'chat' | 'command-proposal'
@@ -1324,6 +1365,8 @@ export interface StartAiChatInput {
   userMessage: string
   contextSnapshotId?: string
   responseMode?: AiChatResponseMode
+  /** Optional for old callers; Rust defaults and validates the active mode. */
+  mode?: AiCopilotMode
 }
 
 /** Retries the latest user turn without duplicating it in local history. */
@@ -1333,6 +1376,7 @@ export interface RetryAiChatInput {
   modelOverride?: string
   contextSnapshotId?: string
   responseMode?: AiChatResponseMode
+  mode?: AiCopilotMode
 }
 
 export interface AiChatRequest {
@@ -1361,11 +1405,32 @@ export interface AiReviewExecution {
   review: AiReviewRecord
 }
 
+export interface AiToolCallProposal {
+  id: string
+  toolName: 'execute_remote_command'
+  command: string
+  risk: AiCommandRisk
+  target: AiContextTarget
+  explanation?: string
+}
+
+export interface AiToolCallResult {
+  proposalId: string
+  status: 'approved' | 'rejected' | 'auto-blocked' | 'executed' | 'failed' | 'timeout' | 'target-changed'
+  exitCode?: number
+  stdout?: string
+  stderr?: string
+  durationMs?: number
+  reason?: string
+}
+
 /** Per-request stream events; never emitted through a global application event. */
 export type AiStreamEvent =
   | { type: 'started'; requestId: string; messageId: string }
   | { type: 'text-delta'; text: string }
   | { type: 'command'; command: AiCommandSuggestion }
+  | { type: 'tool-call'; proposal: AiToolCallProposal }
+  | { type: 'tool-result'; result: AiToolCallResult }
   | { type: 'usage'; inputTokens?: number; outputTokens?: number }
   | { type: 'completed'; conversation: AiConversation; finishReason?: string }
   | { type: 'error'; code: AiErrorCode; message: string; retryable: boolean }
@@ -1390,6 +1455,17 @@ export type AiErrorCode =
   | 'AI_COMMAND_UNSAFE_INPUT'
   | 'AI_REVIEW_IN_PROGRESS'
   | 'AI_REVIEW_UNAVAILABLE'
+  | 'AI_MODE_CONFIRMATION_REQUIRED'
+  | 'AI_MODE_CHANGED'
+  | 'AI_CONTEXT_LOCKED'
+  | 'AI_AUTO_MODE_UNAVAILABLE'
+  | 'AI_AUTO_MODE_BLOCKED_COMMAND'
+  | 'AI_AUTO_MODE_IRREVERSIBLE_NOT_WHITELISTED'
+  | 'AI_AUTO_MODE_SESSION_LIMIT_REACHED'
+  | 'AI_AUTO_MODE_RISK_LIMIT_REACHED'
+  | 'AI_AUTO_MODE_DURATION_LIMIT_REACHED'
+  | 'AI_AUTO_MODE_TARGET_CHANGED'
+  | 'AI_TOOL_CALL_REJECTED'
   | 'AI_CONVERSATION_LIMIT'
   | 'AI_CONVERSATION_NOT_FOUND'
   | 'AI_CONVERSATION_INVALID_INPUT'
@@ -1429,6 +1505,10 @@ export interface FileTermDesktopApi {
   renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
   summarizeAiConversationTitle(input: SummarizeAiConversationTitleInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
+  getAiCopilotModeState(): Promise<AiCopilotModeState>
+  setAiCopilotMode(input: SetAiCopilotModeInput): Promise<AiCopilotModeState>
+  setAiContextAttach(input: SetAiContextAttachInput): Promise<AiCopilotModeState>
+  resetAiAutoModeSessionCounts(): Promise<AiCopilotModeState>
   createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
   startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type {
+  AiContextMode,
+  AiCopilotMode,
   AiCommandRisk,
   AiCommandSuggestion,
   AiContextTarget,
@@ -11,6 +13,7 @@ import type {
 import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
+import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
@@ -32,8 +35,8 @@ function commandRiskLabel(risk: AiCommandRisk) {
   }
 }
 
-function contextModeLabel(mode: 'metadata' | 'recent-terminal') {
-  return mode === 'metadata' ? t.aiCopilotContextMetadata : t.aiCopilotContextRecentTerminal
+function contextModeLabel(mode: AiContextMode) {
+  return mode === 'L0' || mode === 'metadata' ? t.aiCopilotContextMetadata : t.aiCopilotContextRecentTerminal
 }
 
 function reviewOutcomeLabel(outcome: AiReviewOutcome) {
@@ -134,6 +137,8 @@ export function AiCopilotPanel({
   const [draft, setDraft] = useState('')
   const [referenceTerminal, setReferenceTerminal] = useState(false)
   const [responseMode, setResponseMode] = useState<'chat' | 'command-proposal'>('chat')
+  const [isAutoModeConfirmOpen, setIsAutoModeConfirmOpen] = useState(false)
+  const [isAutoModeConfirming, setIsAutoModeConfirming] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
   const [writingCommandIds, setWritingCommandIds] = useState<Set<string>>(() => new Set())
   const writingCommandIdsRef = useRef<Set<string>>(new Set())
@@ -196,6 +201,7 @@ export function AiCopilotPanel({
     errorMessage,
     usage,
     isContextPreviewing,
+    modeState,
     selectProvider,
     selectModel,
     loadConversation,
@@ -205,6 +211,8 @@ export function AiCopilotPanel({
     createContextPreview,
     sendMessage,
     runReview,
+    setCopilotMode,
+    setContextAttach,
     retry,
     stop
   } = useAiCopilot()
@@ -235,7 +243,16 @@ export function AiCopilotPanel({
     }
   }, [isTerminalTarget, referenceTerminal, responseMode])
 
+  useEffect(() => {
+    if (!modeState) return
+    setReferenceTerminal(modeState.attachTerminalContext)
+    if (modeState.mode !== 'pure-conversation') {
+      setResponseMode('command-proposal')
+    }
+  }, [modeState])
+
   const canChat = Boolean(currentProvider)
+  const copilotMode: AiCopilotMode = modeState?.mode ?? 'pure-conversation'
   const canRetry = Boolean(errorMessage && conversation?.messages.at(-1)?.role === 'user')
 
   const openNewConversation = () => {
@@ -246,13 +263,15 @@ export function AiCopilotPanel({
 
   const send = async () => {
     if (!draft.trim() || isStreaming) return
-    if (responseMode === 'command-proposal' && !referenceTerminal) {
+    const effectiveResponseMode = copilotMode === 'semi-automatic' ? 'command-proposal' : responseMode
+    const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
+    if (effectiveResponseMode === 'command-proposal' && !shouldAttachContext) {
       setCommandActionMessage(t.aiCopilotCommandModeRequiresContext)
       return
     }
 
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
-    if (referenceTerminal) {
+    if (shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
         setCommandActionMessage(t.aiCopilotContextUnavailable)
         return
@@ -262,13 +281,14 @@ export function AiCopilotPanel({
         tabId: activeTab.id,
         rootTabId: rootTab.id,
         providerId: currentProvider.id,
-        mode: 'recent-terminal'
+        mode: 'L2'
       })
       if (!contextSnapshot) return
     }
 
     const sent = await sendMessage(draft, {
-      responseMode,
+      responseMode: effectiveResponseMode,
+      mode: copilotMode,
       ...(contextSnapshot
         ? {
             contextSnapshotId: contextSnapshot.snapshotId,
@@ -283,8 +303,10 @@ export function AiCopilotPanel({
 
   const retryLastRequest = async () => {
     if (isStreaming) return
+    const effectiveResponseMode = copilotMode === 'semi-automatic' ? 'command-proposal' : responseMode
+    const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
-    if (responseMode === 'command-proposal' || referenceTerminal) {
+    if (effectiveResponseMode === 'command-proposal' || shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
         setCommandActionMessage(t.aiCopilotContextUnavailable)
         return
@@ -294,12 +316,13 @@ export function AiCopilotPanel({
         tabId: activeTab.id,
         rootTabId: rootTab.id,
         providerId: currentProvider.id,
-        mode: 'recent-terminal'
+        mode: 'L2'
       })
       if (!contextSnapshot) return
     }
     await retry({
-      responseMode,
+      responseMode: effectiveResponseMode,
+      mode: copilotMode,
       ...(contextSnapshot ? { contextSnapshotId: contextSnapshot.snapshotId } : {})
     })
   }
@@ -307,7 +330,27 @@ export function AiCopilotPanel({
   const toggleTerminalReference = () => {
     if (isStreaming || isContextPreviewing) return
     setCommandActionMessage(null)
-    setReferenceTerminal((current) => !current)
+    const next = !referenceTerminal
+    setReferenceTerminal(next)
+    void setContextAttach(next).then((state) => {
+      if (!state) setReferenceTerminal(referenceTerminal)
+    })
+  }
+
+  const selectCopilotMode = (nextMode: AiCopilotMode) => {
+    if (isStreaming || nextMode === copilotMode) return
+    if (nextMode === 'fully-automatic') {
+      setIsAutoModeConfirmOpen(true)
+      return
+    }
+    void setCopilotMode(nextMode)
+  }
+
+  const confirmFullyAutomaticMode = async () => {
+    setIsAutoModeConfirming(true)
+    const next = await setCopilotMode('fully-automatic', true)
+    setIsAutoModeConfirming(false)
+    if (next) setIsAutoModeConfirmOpen(false)
   }
 
   const saveConversationTitle = async () => {
@@ -457,6 +500,45 @@ export function AiCopilotPanel({
           <CloseButton aria-label={t.closeAiCopilot} onClick={onClose} size="compact" />
         </div>
       </header>
+
+      {canChat ? (
+        <section className="ai-copilot-mode-dock" aria-label={t.aiCopilotModeLabel}>
+          <div className="ai-copilot-mode-selector" role="group" aria-label={t.aiCopilotModeLabel}>
+            {(
+              [
+                ['pure-conversation', t.aiCopilotModePure],
+                ['semi-automatic', t.aiCopilotModeSemi],
+                ['fully-automatic', t.aiCopilotModeFull]
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                aria-pressed={copilotMode === value}
+                className={copilotMode === value ? 'is-active' : ''}
+                disabled={isStreaming}
+                title={value === 'fully-automatic' ? t.aiCopilotModeFullHint : undefined}
+                type="button"
+                onClick={() => selectCopilotMode(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="ai-copilot-mode-hint">
+            {copilotMode === 'fully-automatic'
+              ? t.aiCopilotModeFullUnavailable
+              : copilotMode === 'semi-automatic'
+                ? t.aiCopilotModeSemiHint
+                : t.aiCopilotModePureHint}
+          </span>
+          {copilotMode === 'fully-automatic' && modeState ? (
+            <span className="ai-copilot-mode-guardrails">
+              {modeState.autoModeGuardrails.sessionToolCallCount}/
+              {modeState.autoModeGuardrails.thresholds.maxToolCallsPerSession}
+            </span>
+          ) : null}
+        </section>
+      ) : null}
 
       <div
         className={`ai-copilot-content ${canChat ? 'has-chat' : ''} ${isConversationListOpen ? 'is-conversation-list' : ''}`}
@@ -908,7 +990,12 @@ export function AiCopilotPanel({
                     aria-pressed={referenceTerminal}
                     aria-label={t.aiCopilotReferenceTerminal}
                     className={`ai-copilot-context-switch ${referenceTerminal ? 'is-active' : ''}`}
-                    disabled={isStreaming || isContextPreviewing || (!isTerminalTarget && !referenceTerminal)}
+                    disabled={
+                      isStreaming ||
+                      isContextPreviewing ||
+                      copilotMode !== 'pure-conversation' ||
+                      (!isTerminalTarget && !referenceTerminal)
+                    }
                     type="button"
                     onClick={toggleTerminalReference}
                   >
@@ -925,11 +1012,13 @@ export function AiCopilotPanel({
                     </span>
                   </button>
                   <span className="ai-copilot-context-dock-hint">
-                    {referenceTerminal
-                      ? isTerminalTarget
-                        ? t.aiCopilotContextAutoHint
-                        : t.aiCopilotContextNeedsTerminal
-                      : t.aiCopilotL0ComposerHint}
+                    {copilotMode !== 'pure-conversation'
+                      ? t.aiCopilotContextLockedByMode
+                      : referenceTerminal
+                        ? isTerminalTarget
+                          ? t.aiCopilotContextAutoHint
+                          : t.aiCopilotContextNeedsTerminal
+                        : t.aiCopilotL0ComposerHint}
                   </span>
                 </div>
                 {commandActionMessage ? (
@@ -995,7 +1084,8 @@ export function AiCopilotPanel({
                       disabled={
                         !canChat ||
                         !draft.trim() ||
-                        (responseMode === 'command-proposal' && (!referenceTerminal || !isTerminalTarget))
+                        ((copilotMode === 'semi-automatic' || responseMode === 'command-proposal') &&
+                          (!referenceTerminal || !isTerminalTarget))
                       }
                       type="button"
                       onClick={() => void send()}
@@ -1048,6 +1138,19 @@ export function AiCopilotPanel({
             ) : null}
           </div>
         </footer>
+      ) : null}
+      {isAutoModeConfirmOpen ? (
+        <ConfirmActionDialog
+          confirmLabel={t.aiCopilotModeFullConfirm}
+          confirmVariant="danger"
+          description={t.aiCopilotModeFullWarning}
+          isSubmitting={isAutoModeConfirming}
+          onClose={() => {
+            if (!isAutoModeConfirming) setIsAutoModeConfirmOpen(false)
+          }}
+          onConfirm={() => void confirmFullyAutomaticMode()}
+          title={t.aiCopilotModeFullTitle}
+        />
       ) : null}
     </aside>
   )

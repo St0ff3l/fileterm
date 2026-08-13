@@ -49,6 +49,7 @@ import type {
   AiConversation,
   AiConversationSummary,
   AiContextPreview,
+  AiCopilotModeState,
   AiStreamEvent,
   CreateAiConversationInput,
   CreateAiContextPreviewInput,
@@ -56,6 +57,8 @@ import type {
   RetryAiChatInput,
   RunAiReviewInput,
   SaveAiProviderInput,
+  SetAiContextAttachInput,
+  SetAiCopilotModeInput,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
@@ -394,6 +397,12 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     summarizeAiConversationTitle: (input: SummarizeAiConversationTitleInput) =>
       invoke<AiConversation>('app_summarize_ai_conversation_title', { input }),
     deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
+    getAiCopilotModeState: () => invoke<AiCopilotModeState>('app_get_ai_copilot_mode_state'),
+    setAiCopilotMode: (input: SetAiCopilotModeInput) =>
+      invoke<AiCopilotModeState>('app_set_ai_copilot_mode', { input }),
+    setAiContextAttach: (input: SetAiContextAttachInput) =>
+      invoke<AiCopilotModeState>('app_set_ai_context_attach', { input }),
+    resetAiAutoModeSessionCounts: () => invoke<AiCopilotModeState>('app_reset_ai_auto_mode_session_counts'),
     createAiContextPreview: (input: CreateAiContextPreviewInput) =>
       invoke<AiContextPreview>('app_create_ai_context_preview', { input }),
     startAiChat: (input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
