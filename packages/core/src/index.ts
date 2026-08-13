@@ -1431,7 +1431,7 @@ export interface AiReviewExecution {
 
 export interface AiToolCallProposal {
   id: string
-  toolName: 'execute_remote_command'
+  toolName: 'fileterm_execute_remote_command'
   command: string
   risk: AiCommandRisk
   target: AiContextTarget
@@ -1440,7 +1440,7 @@ export interface AiToolCallProposal {
 
 export interface AiToolCallResult {
   proposalId: string
-  status: 'approved' | 'rejected' | 'auto-blocked' | 'executed' | 'failed' | 'timeout' | 'target-changed'
+  status: 'approved' | 'rejected' | 'auto-blocked' | 'executed' | 'failed' | 'timeout' | 'target-changed' | 'invalid'
   exitCode?: number
   stdout?: string
   stderr?: string

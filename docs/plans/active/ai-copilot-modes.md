@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏、安全凭据衔接和三模式 UI 收口已落地；macOS arm64 app/DMG 已通过，待真实 Provider / 远端 / Windows/Linux 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接和三模式 UI 收口已落地；三类 Provider 的本机 loopback 工具契约测试与 macOS arm64 app/DMG 已通过，待真实 Provider / 远端 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -14,6 +14,8 @@
 - **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
 
 当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，真实 Provider、远端 sudo/su 和 Windows/Linux 打包回归仍待验收。
+
+本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传和全自动护栏预算预占测试均已通过；真实 Provider、远端 sudo/su 与 Windows/Linux 打包回归仍保持未验收。
 
 ## 1. 结论
 
@@ -331,7 +333,7 @@ interface AiAutoModeThresholds {
 // 工具调用提案（半自动 / 全自动模式用）
 interface AiToolCallProposal {
   id: string
-  toolName: 'execute_remote_command'
+  toolName: 'fileterm_execute_remote_command'
   command: string
   risk: 'read-only' | 'mutating' | 'destructive' | 'privileged' | 'unknown'
   target: AiContextTarget
@@ -341,7 +343,7 @@ interface AiToolCallProposal {
 // 工具调用结果（回传给模型）
 interface AiToolCallResult {
   proposalId: string
-  status: 'approved' | 'rejected' | 'auto-blocked' | 'executed' | 'failed' | 'timeout' | 'target-changed'
+  status: 'approved' | 'rejected' | 'auto-blocked' | 'executed' | 'failed' | 'timeout' | 'target-changed' | 'invalid'
   exitCode?: number
   stdout?: string
   stderr?: string
@@ -454,14 +456,14 @@ type AiErrorCode =
 - 全自动模式已允许进入工具循环，但每次执行前必须通过 Rust 护栏；半自动不再依赖命令卡模拟执行。
 - sudo/su profile secret、普通 exec stdin/PTY 分支、本地密码弹窗和连接编辑表单已接通。
 
-### 阶段二：Catty-style Provider 工具循环（实现完成，待真实 Provider 回归）
+### 阶段二：Catty-style Provider 工具循环（实现完成，本机 loopback 契约通过，待真实 Provider 回归）
 
 - `services/ai.rs` 已接入三类 Provider 的工具 schema、tool-call 增量重组、tool history 和最多 8 轮的 Rust-owned loop。
 - 半自动模式走现有 ActionApproval 队列；全自动模式跳过逐次审批但复用独立 SSH exec channel。
 - `AiStreamEvent` 发 `tool-call` / `tool-result` 事件给 renderer，结果回传 Provider 继续下一轮。
 - 全自动模式下护栏通过后直接执行；护栏未通过返回稳定状态和原因，不自动重试。
 - sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
-- 已覆盖 schema、三 Provider history、流式 tool-call 重组和工具参数安全校验；真实 Provider 端到端仍待执行。
+- 已覆盖 schema、三 Provider history、流式 tool-call 重组、工具参数安全校验和三类 Provider 的 loopback 请求/响应契约；真实 Provider 端到端仍待执行。
 
 ### 阶段三：审批与结果 UI（实现完成，macOS arm64 打包通过，待真实 Provider / 跨平台回归）
 
@@ -520,6 +522,7 @@ type AiErrorCode =
 
 ### 10.3 Provider 端到端
 
+- 本机 loopback 契约：三类 Provider 的认证头、请求路径、严格工具 schema、工具调用 SSE 解析和结果 usage 已通过 Rust fixture。
 - OpenAI-compatible-chat：三模式 × L0/L2 组合，工具调用提案通过 structured output 返回。
 - OpenAI-responses：同上。
 - Anthropic-messages：同上。

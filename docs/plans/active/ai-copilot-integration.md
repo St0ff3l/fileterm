@@ -427,6 +427,7 @@ Renderer 的“参考终端”只是用户主动开启的会话面板开关，�
 - [x] 本地历史搜索、重命名、删除和容量上限。
 - [x] 展示 Provider、model、usage、目标变化和 context attached 状态。
 - [x] 普通助手回答以安全 Markdown/GFM 流式显示；原始 HTML、远程图片和非 HTTP(S) 链接保持不可激活。
+- [x] 三类 Provider 的工具调用 loopback 契约：认证头、请求 schema、严格工具定义、SSE tool-call 解析和 usage 回传。
 - [ ] macOS、Windows、Linux 真机验证流式取消、代理、睡眠恢复、窗口关闭和断网重试（见 `docs/quality/ai-copilot-platform-regression.md`；不能由当前单一开发机伪造）。
 
 ### Phase 5：Review Mode（已完成）

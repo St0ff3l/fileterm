@@ -1368,7 +1368,8 @@
 .ai-copilot-tool-activity.is-rejected,
 .ai-copilot-tool-activity.is-auto-blocked,
 .ai-copilot-tool-activity.is-failed,
-.ai-copilot-tool-activity.is-timeout {
+.ai-copilot-tool-activity.is-timeout,
+.ai-copilot-tool-activity.is-invalid {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--border-light));
 }
 

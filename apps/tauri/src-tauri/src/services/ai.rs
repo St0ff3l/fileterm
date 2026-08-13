@@ -5680,17 +5680,19 @@ mod tests {
         provider_history_items, provider_history_messages, provider_history_messages_with_tools,
         provider_is_usable, provider_summary, prune_expired_context_snapshots,
         repair_default_provider, responses_input_items_with_tools, responses_tool_schema,
-        sanitize_recent_terminal_output, stream_anthropic_messages, stream_error_event,
-        stream_openai_compatible_chat, stream_openai_responses, system_prompt,
-        test_openai_compatible_chat, title_from_user_message, title_summary_chat_messages,
-        title_summary_history_items, write_json_file, AiChatResponseMode, AiCommandRisk,
-        AiContextAttachment, AiContextMode, AiContextRedactionKind, AiContextRegistry,
-        AiContextTarget, AiMessage, AiMessageRole, AiPromptContext, AiProviderKind,
-        AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome, AiReviewRecord, AiStreamEvent,
-        ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot, StoredAiProvider,
-        StoredConversation, StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets,
-        ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS,
-        CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
+        sanitize_recent_terminal_output, stream_anthropic_messages,
+        stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
+        stream_openai_compatible_chat_with_tools, stream_openai_responses,
+        stream_openai_responses_with_tools, system_prompt, test_openai_compatible_chat,
+        title_from_user_message, title_summary_chat_messages, title_summary_history_items,
+        write_json_file, AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
+        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiMessage, AiMessageRole,
+        AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome,
+        AiReviewRecord, AiStreamEvent, ChatStreamResult, ProviderToolCall, SseDecoder,
+        StoredAiContextSnapshot, StoredAiProvider, StoredConversation, StoredProviderConfig,
+        StoredProviderSecret, StoredProviderSecrets, ToolLoopResult, ToolLoopTurn,
+        ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL,
+        CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
         MAX_AI_TITLE_SUGGESTION_LENGTH, MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
         MAX_CONVERSATION_TITLE_LENGTH,
     };
@@ -5962,6 +5964,290 @@ mod tests {
                 .expect("Anthropic arguments should be JSON")["command"],
             "whoami"
         );
+    }
+
+    #[tokio::test]
+    async fn openai_compatible_tool_adapter_sends_strict_schema_and_parses_tool_call() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("fixture should bind");
+        let address = listener.local_addr().expect("fixture should have address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("fixture should accept");
+            let request = read_request(&mut socket).await;
+            assert!(request.starts_with("POST /v1/chat/completions HTTP/1.1"));
+            assert!(request
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case("authorization: Bearer test-key")));
+            let body = request
+                .split("\r\n\r\n")
+                .nth(1)
+                .expect("request should include body");
+            let body: Value = serde_json::from_str(body).expect("body should be json");
+            assert_eq!(body["stream"], true);
+            assert_eq!(body["tool_choice"], "auto");
+            assert_eq!(body["tools"][0]["type"], "function");
+            assert_eq!(
+                body["tools"][0]["function"]["name"],
+                COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+            );
+            assert_eq!(
+                body["tools"][0]["function"]["parameters"]["additionalProperties"],
+                false
+            );
+            assert!(body["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|prompt| prompt.contains("exactly one FileTerm tool")));
+            assert_eq!(body["messages"][1]["content"], "Inspect the service");
+
+            let response_body = concat!(
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-openai\",\"function\":{\"name\":\"fileterm_execute_remote_command\",\"arguments\":\"{\\\"command\\\":\\\"pwd\\\"}\"}}]}}]}\n\n",
+                "data: [DONE]\n\n"
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            socket
+                .write_all(response.as_bytes())
+                .await
+                .expect("fixture should respond");
+        });
+
+        let mut provider = provider(&format!("http://{address}/v1"));
+        provider.allow_insecure_http = true;
+        let conversation = conversation(vec![AiMessage {
+            id: "message-user".to_string(),
+            role: AiMessageRole::User,
+            content: "Inspect the service".to_string(),
+            created_at: "1".to_string(),
+            context: None,
+            commands: Vec::new(),
+            review: None,
+        }]);
+        let result = stream_openai_compatible_chat_with_tools(
+            &provider,
+            Some("test-key"),
+            &conversation,
+            None,
+            AiChatResponseMode::Chat,
+            &[],
+            true,
+            &stream_channel(Arc::new(Mutex::new(Vec::new()))),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("tool-enabled compatible stream should succeed");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "call-openai");
+        assert_eq!(
+            result.tool_calls[0].name,
+            COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&result.tool_calls[0].arguments)
+                .expect("tool arguments should be JSON")["command"],
+            "pwd"
+        );
+        server.await.expect("fixture should finish");
+    }
+
+    #[tokio::test]
+    async fn openai_responses_tool_adapter_sends_strict_schema_and_parses_tool_call() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("fixture should bind");
+        let address = listener.local_addr().expect("fixture should have address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("fixture should accept");
+            let request = read_request(&mut socket).await;
+            assert!(request.starts_with("POST /v1/responses HTTP/1.1"));
+            assert!(request
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case("authorization: Bearer test-key")));
+            let body = request
+                .split("\r\n\r\n")
+                .nth(1)
+                .expect("request should include body");
+            let body: Value = serde_json::from_str(body).expect("body should be json");
+            assert_eq!(body["stream"], true);
+            assert_eq!(body["store"], false);
+            assert_eq!(body["tool_choice"], "auto");
+            assert_eq!(body["tools"][0]["type"], "function");
+            assert_eq!(
+                body["tools"][0]["name"],
+                COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+            );
+            assert_eq!(body["tools"][0]["strict"], true);
+            assert_eq!(
+                body["tools"][0]["parameters"]["additionalProperties"],
+                false
+            );
+            assert!(body["instructions"]
+                .as_str()
+                .is_some_and(|prompt| prompt.contains("exactly one FileTerm tool")));
+            assert_eq!(body["input"][0]["content"], "Inspect the service");
+
+            let response_body = concat!(
+                "event: response.output_item.added\n",
+                "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item-1\",\"call_id\":\"call-responses\",\"name\":\"fileterm_execute_remote_command\"}}\n\n",
+                "event: response.function_call_arguments.delta\n",
+                "data: {\"type\":\"response.function_call_arguments.delta\",\"item_id\":\"item-1\",\"call_id\":\"call-responses\",\"delta\":\"{\\\"command\\\":\\\"id\\\"}\"}\n\n",
+                "event: response.completed\n",
+                "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"output\":[]}}\n\n"
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            socket
+                .write_all(response.as_bytes())
+                .await
+                .expect("fixture should respond");
+        });
+
+        let mut provider = provider(&format!("http://{address}/v1"));
+        provider.kind = AiProviderKind::OpenaiResponses;
+        provider.allow_insecure_http = true;
+        let conversation = conversation(vec![AiMessage {
+            id: "message-user".to_string(),
+            role: AiMessageRole::User,
+            content: "Inspect the service".to_string(),
+            created_at: "1".to_string(),
+            context: None,
+            commands: Vec::new(),
+            review: None,
+        }]);
+        let result = stream_openai_responses_with_tools(
+            &provider,
+            Some("test-key"),
+            &conversation,
+            None,
+            AiChatResponseMode::Chat,
+            &[],
+            true,
+            &stream_channel(Arc::new(Mutex::new(Vec::new()))),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("tool-enabled Responses stream should succeed");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "call-responses");
+        assert_eq!(
+            result.tool_calls[0].name,
+            COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&result.tool_calls[0].arguments)
+                .expect("tool arguments should be JSON")["command"],
+            "id"
+        );
+        server.await.expect("fixture should finish");
+    }
+
+    #[tokio::test]
+    async fn anthropic_tool_adapter_sends_strict_schema_and_parses_tool_call() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("fixture should bind");
+        let address = listener.local_addr().expect("fixture should have address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("fixture should accept");
+            let request = read_request(&mut socket).await;
+            assert!(request.starts_with("POST /v1/messages HTTP/1.1"));
+            assert!(request
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case("x-api-key: test-key")));
+            assert!(request
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case("anthropic-version: 2023-06-01")));
+            let body = request
+                .split("\r\n\r\n")
+                .nth(1)
+                .expect("request should include body");
+            let body: Value = serde_json::from_str(body).expect("body should be json");
+            assert_eq!(body["stream"], true);
+            assert_eq!(body["tool_choice"]["type"], "auto");
+            assert_eq!(
+                body["tools"][0]["name"],
+                COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+            );
+            assert_eq!(
+                body["tools"][0]["input_schema"]["additionalProperties"],
+                false
+            );
+            assert!(body["system"]
+                .as_str()
+                .is_some_and(|prompt| prompt.contains("exactly one FileTerm tool")));
+            assert_eq!(body["messages"][0]["content"], "Inspect the service");
+
+            let response_body = concat!(
+                "event: message_start\n",
+                "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":4}}}\n\n",
+                "event: content_block_start\n",
+                "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call-anthropic\",\"name\":\"fileterm_execute_remote_command\",\"input\":{}}}\n\n",
+                "event: content_block_delta\n",
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"command\\\":\\\"whoami\\\"}\"}}\n\n",
+                "event: message_delta\n",
+                "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":1}}\n\n",
+                "event: message_stop\n",
+                "data: {\"type\":\"message_stop\"}\n\n"
+            );
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            socket
+                .write_all(response.as_bytes())
+                .await
+                .expect("fixture should respond");
+        });
+
+        let mut provider = provider(&format!("http://{address}/v1"));
+        provider.kind = AiProviderKind::AnthropicMessages;
+        provider.allow_insecure_http = true;
+        let conversation = conversation(vec![AiMessage {
+            id: "message-user".to_string(),
+            role: AiMessageRole::User,
+            content: "Inspect the service".to_string(),
+            created_at: "1".to_string(),
+            context: None,
+            commands: Vec::new(),
+            review: None,
+        }]);
+        let result = stream_anthropic_messages_with_tools(
+            &provider,
+            Some("test-key"),
+            &conversation,
+            None,
+            AiChatResponseMode::Chat,
+            &[],
+            true,
+            &stream_channel(Arc::new(Mutex::new(Vec::new()))),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("tool-enabled Anthropic stream should succeed");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "call-anthropic");
+        assert_eq!(
+            result.tool_calls[0].name,
+            COPILOT_EXECUTE_REMOTE_COMMAND_TOOL
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&result.tool_calls[0].arguments)
+                .expect("tool arguments should be JSON")["command"],
+            "whoami"
+        );
+        assert_eq!(result.input_tokens, Some(4));
+        assert_eq!(result.output_tokens, Some(1));
+        server.await.expect("fixture should finish");
     }
 
     #[test]

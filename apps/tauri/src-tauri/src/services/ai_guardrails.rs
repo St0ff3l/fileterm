@@ -405,6 +405,74 @@ mod tests {
     }
 
     #[test]
+    fn reserves_count_and_risk_budget_before_execution_finishes() {
+        let mut thresholds = default_thresholds();
+        thresholds.max_tool_calls_per_session = 1;
+        let mut counters = AutoModeCounters::default();
+        assert!(authorize_command(
+            "pwd",
+            AiCommandRisk::ReadOnly,
+            &counters,
+            &thresholds,
+            None,
+            None,
+        )
+        .is_ok());
+        reserve_execution(&mut counters, AiCommandRisk::ReadOnly);
+        assert_eq!(counters.tool_calls, 1);
+        assert_eq!(
+            authorize_command(
+                "id",
+                AiCommandRisk::ReadOnly,
+                &counters,
+                &thresholds,
+                None,
+                None,
+            )
+            .unwrap_err()
+            .code,
+            AUTO_MODE_SESSION_LIMIT_REACHED
+        );
+
+        thresholds.max_tool_calls_per_session = default_thresholds().max_tool_calls_per_session;
+        thresholds.max_destructive_calls_per_session = 1;
+        let mut destructive_counters = AutoModeCounters::default();
+        reserve_execution(&mut destructive_counters, AiCommandRisk::Destructive);
+        assert_eq!(destructive_counters.destructive_calls, 1);
+        assert_eq!(
+            authorize_command(
+                "rm /tmp/fileterm",
+                AiCommandRisk::Destructive,
+                &destructive_counters,
+                &thresholds,
+                None,
+                None,
+            )
+            .unwrap_err()
+            .code,
+            AUTO_MODE_RISK_LIMIT_REACHED
+        );
+
+        thresholds.max_privileged_calls_per_session = 1;
+        let mut privileged_counters = AutoModeCounters::default();
+        reserve_execution(&mut privileged_counters, AiCommandRisk::Privileged);
+        assert_eq!(privileged_counters.privileged_calls, 1);
+        assert_eq!(
+            authorize_command(
+                "sudo systemctl restart ssh",
+                AiCommandRisk::Privileged,
+                &privileged_counters,
+                &thresholds,
+                None,
+                None,
+            )
+            .unwrap_err()
+            .code,
+            AUTO_MODE_RISK_LIMIT_REACHED
+        );
+    }
+
+    #[test]
     fn record_execution_updates_risk_and_duration_counters() {
         let mut counters = AutoModeCounters::default();
         record_execution(
