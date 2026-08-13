@@ -38,7 +38,7 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 ### 2. 发布说明正文格式
 
-推荐结构：
+推荐结构：中文正文、英文正文、GitHub 官方生成区。中文和英文都属于自定义正文，英文版本紧跟在中文版本后面；官方生成区必须由 GitHub 在最后追加。
 
 ```md
 ## FileTerm <version>
@@ -59,6 +59,27 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
 
 也可以打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#社区交流) 加入社区。
+
+---
+
+## FileTerm <version>
+
+One-sentence release summary in English.
+
+### Highlights
+
+- **Feature theme**: Describe the user-visible change and its boundaries.
+- **Stability and compatibility**: Describe platform or core workflow changes.
+- **Security and privacy**: Describe data scope, permissions, credentials, and confirmation boundaries.
+
+### Main PRs and issues
+
+- [PR #123](https://github.com/St0ff3l/fileterm/pull/123): Short description.
+- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456): Short description.
+
+For problems, open a [GitHub Issue](https://github.com/St0ff3l/fileterm/issues) with the operating system, FileTerm version, connection type, reproduction steps, and redacted logs. Do not submit passwords, private keys, or tokens.
+
+Join the community through the [README community section](https://github.com/St0ff3l/fileterm#社区交流).
 ```
 
 链接要求：
@@ -69,6 +90,7 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
   `[Full Changelog](https://github.com/St0ff3l/fileterm/compare/v2.1.6...v2.2.0-beta.1)`。
 - README 社区入口使用 README 锚点的完整链接，并确认锚点与 README 标题一致。
 - 发布正文中的链接必须是 Markdown 链接，不要只写裸 URL，也不要把本地文件路径写入 release notes。
+- 中文正文之后必须紧跟英文正文；英文正文应翻译相同的功能范围、安全边界和反馈信息，不要新增未在中文正文确认的功能。
 
 禁止在自定义正文中添加：
 
