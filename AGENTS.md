@@ -153,41 +153,18 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 
 ## 10. 发版操作规范
 
-### 版本号管理（硬性要求）
+发版任务的完整流程、Release Notes 模板、流水线监督和失败处理见：
 
-**禁止手动单独修改任何 workspace 的 `version` 或 `dependencies` 里的内部包版本。**
+- `.agents/skills/fileterm-release/SKILL.md`：智能体执行流程与验收清单。
+- `docs/quality/git-branch-release-convention.md`：项目正式分支、tag 和 Release Notes 规范。
+- `.github/workflows/release.yml`：当前实际的构建与发布行为。
 
-正确做法：
+必须保持的硬性约束：
 
-1. 只改根目录 `package.json` 的 `version` 字段
-2. 立即运行 `npm run sync:version`
-3. 脚本会自动同步所有 workspace 的 `version` + `dependencies` 里的 `@fileterm/*` 引用 + `package-lock.json`
-
-### 发版 SOP
-
-```
-# 1. 在功能分支完成开发和版本号更新，提 PR 合入 main，确认 CI 全绿
-# 2. 从已合并的 main 创建仅用于打包发布的 release 分支
-git checkout main
-git pull origin main
-git checkout -b release/x.x.x
-git push origin release/x.x.x
-
-# 3. 仅在 release 分支对应提交打 tag，自动触发构建和 GitHub Release
-git tag vx.x.x
-git push origin vx.x.x
-```
-
-版本号更新必须在合入 `main` 前完成：
-
-```
-# 只改根 package.json 的 version 字段
-npm run sync:version
-```
-
-**关键约束**：tag 必须指向 `release/*` 分支上的 commit，否则 `validate-release-tag` 步骤会拒绝构建。
-
-发布说明正文可参考 2.1.7 的结构（版本简介、更新重点、主要 PR/问题和使用提示），但不要手写 `Contributors` 名单。发布 workflow 会在保留自定义正文的同时调用 GitHub 自动生成 Release Notes，由 GitHub 负责生成贡献者头像区域；详细规则见 `docs/quality/git-branch-release-convention.md`。
+- 版本号只修改根目录 `package.json` 的 `version` 字段，随后立即运行 `npm run sync:version`；禁止手动修改 workspace 版本或内部依赖版本。
+- 日常改动和版本说明先通过 Pull Request 合入 `main`；`release/<version>` 只从最新 `main` 创建，作为不可变发布快照，不接收常规开发改动。
+- tag 必须使用 `v<version>`，并与根版本号、workspace 同步版本和 Release Notes 文件名一致；tag 必须指向 `origin/release/*` 中的提交，否则发布工作流会拒绝构建。
+- 发布说明只维护自定义正文；发布工作流必须同时保留 `--notes` 和 `--generate-notes`，禁止手写 `Contributors`、`What's Changed` 或 `Full Changelog`。
 
 ## 11. 文档维护规则
 
