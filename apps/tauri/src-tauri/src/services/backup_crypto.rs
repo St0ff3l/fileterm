@@ -429,7 +429,7 @@ mod tests {
         assert!(!decoded.legacy_plaintext);
         assert_eq!(decoded.profiles, profiles);
         let wrong_password = "Wrong password 8";
-        assert!(decode_bundle(&bytes, Some(&wrong_password)).is_err());
+        assert!(decode_bundle(&bytes, Some(wrong_password)).is_err());
     }
 
     #[test]
