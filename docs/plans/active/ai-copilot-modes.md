@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 的只读 MCP tool smoke 已通过，待真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 已通过 MCP interactive-exec 真实客户端回归，待内置真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -13,9 +13,9 @@
 - **Copilot 永不接收提权密码**。半自动/全自动只能使用 profile 加密存储或安全本地输入；不得让模型在聊天里索取、转发、回显或持久化 `sudo_password` / `su_password`。
 - **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
 
-当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，并补齐了唯一 bundle id QA app 的 loopback Provider、三模式工具循环、disposable SSH、sudo 安全输入和 su PTY 密码回归；真实外部 Provider、远端生产环境和 Windows/Linux 打包回归仍待验收。
+当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，并补齐了唯一 bundle id QA app 的 loopback Provider、三模式工具循环、disposable SSH、sudo 安全输入和 su PTY 密码回归；Claude Code / Codex CLI 也已通过 MCP interactive-exec 真实调用，验证任务级安全输入和脱敏结果；内置真实 Provider、远端生产环境和 Windows/Linux 打包回归仍待验收。
 
-本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH、任务专属 sudo prompt 和 CLI su PTY 密码回归；Claude Code 与 Codex CLI 已通过临时 MCP 配置实际调用只读 `fileterm_list_connections`，但这不等同于真实 Provider 对话或 interactive-exec 远端验收；真实外部 Provider、远端生产环境与 Windows/Linux 打包回归仍保持未验收。
+本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH、任务专属 sudo prompt 和 CLI su PTY 密码回归；Claude Code 与 Codex CLI 已通过临时 MCP 配置实际调用打包 binary 的 interactive-exec，均完成一次任务级安全输入并只获得脱敏结果；这验证了外部 MCP 客户端到 FileTerm 交互任务的链路，但不等同于内置真实 Provider 对话、三端桌面手工验收或远端生产环境回归。
 
 ## 1. 结论
 
@@ -465,14 +465,14 @@ type AiErrorCode =
 - sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
 - 已覆盖 schema、三 Provider history、流式 tool-call 重组、工具参数安全校验和三类 Provider 的 loopback 请求/响应契约；真实 Provider 端到端仍待执行。
 
-### 阶段三：审批与结果 UI（实现完成，macOS arm64 打包通过，待真实 Provider / 跨平台回归）
+### 阶段三：审批与结果 UI（实现完成，macOS arm64 打包与外部 MCP interactive-exec 通过，待真实 Provider / 跨平台回归）
 
 - `AiCopilotPanel.tsx` 展示工具调用状态、执行结果、失败原因和截断输出；纯对话不携带 Provider tools。
 - pure-conversation 可交互，半自动 / 全自动上下文开关禁用并置灰；全自动启用仍弹 `<ConfirmActionDialog>` 警告。
 - 全自动护栏阈值可在设置页默认折叠的高级区域调整；Rust 强制默认安全下限，Copilot 面板可带确认重置当前窗口的会话累计。
 - 半自动 destructive / privileged 执行要求风险确认；全自动不弹逐次审批，只允许 Rust 护栏放行。
 - 复用 `<DropdownSelect>` / `<AppIcon>` / `<VerticalScrollbar>` / `--focus-outline` 等项目边界。
-- 已通过前端 typecheck、lint、Prettier；macOS arm64 app/DMG 已通过，真实 Provider 交互和 Windows/Linux 打包仍待验证。
+- 已通过前端 typecheck、lint、Prettier；macOS arm64 app/DMG 与 Claude Code / Codex CLI 的 MCP interactive-exec 真实调用已通过，内置真实 Provider 交互和 Windows/Linux 打包仍待验证。
 
 ### 阶段四：Review Mode 迁移收口（最后）
 

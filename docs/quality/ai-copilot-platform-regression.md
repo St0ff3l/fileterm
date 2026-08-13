@@ -189,7 +189,7 @@ notes:
   - 回归期间修复了 russh interactive channel 仅 drop 不发送 `SSH_MSG_CHANNEL_CLOSE` 的 PTY 清理缺口；成功、取消和超时路径现在统一执行有界 channel close。
 ```
 
-本条补齐 macOS 的真实 FileTerm CLI → 安全输入框 → 同一 SSH task channel 验收；真实 Claude/Codex 模型调用、Windows/Linux 桌面手测、代理、睡眠恢复和生产环境仍未签收。
+本条补齐 macOS 的真实 FileTerm CLI → 安全输入框 → 同一 SSH task channel 验收；内置 Provider 真实对话、Windows/Linux 桌面手测、代理、睡眠恢复和生产环境仍未签收。
 
 ### 2026-08-14 — Claude/Codex MCP 只读 tool 调用
 
@@ -203,5 +203,21 @@ notes:
   - Claude Code 使用 `--bare`、临时内联 MCP 配置和只读 tool allowlist，实际调用 `fileterm_list_connections`，返回 `total=12`。
   - Codex CLI 使用 `--ephemeral` 与 `-c mcp_servers.fileterm=...` 临时注册 release binary，实际调用同一只读 tool，返回 `total=12`。
   - 两次调用均未写入 Claude/Codex 持久配置、未打开连接、未执行远程命令，也未暴露 profile secret。
-  - 真实 Claude/Codex 远程 sudo / interactive-exec 仍需一个已连接 SSH session 和用户可见的任务级安全输入；本条不能替代该端到端验收。
+  - 本条只读调用不能替代需要已连接 SSH session 和用户可见任务级安全输入的 interactive-exec 端到端验收。
+```
+
+### 2026-08-14 — Claude/Codex MCP interactive-exec 真实调用
+
+```text
+platform: macOS / arm64
+fileterm commit: 22d0fd78（本地 release bundle）
+provider: Claude Code 2.1.229 / Codex CLI 0.147.0-alpha.6.5（MCP stdio）
+target: disposable loopback SSH session（临时 profile/key/sshd）
+network: local stdio + direct loopback
+result: pass（两个真实客户端均完成一次交互）
+notes:
+  - Claude Code 与 Codex CLI 均实际调用 `fileterm_execute_interactive_remote_command`；FileTerm 先弹出 MCP action approval，再弹出任务级 masked 输入框。
+  - 两次调用均完成 `interactionCount=1`，最终结果只包含脱敏后的命令输出，`inputRequired=false`，输入原文不在客户端结果中。
+  - Codex 对一次会回显 secret-like 输入的测试命令先执行了客户端安全拒绝；改用不回显输入的安全命令后，FileTerm 交互和结果回传均通过。
+  - 测试使用 disposable localhost 目标和合成输入；完成后已关闭 tab，删除临时 profile/key/私钥并停止临时 sshd。
 ```
