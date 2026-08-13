@@ -431,7 +431,8 @@ scope 字符串：
 - MCP 普通 exec 参数与 tool description；普通 exec 与 interactive exec 保持独立。
 - 本地 sudo/su prompt 的 ready 生命周期、一次性 / 保存分支、sessionRevision 绑定和取消清理。
 - Copilot 工具调用不携带密码字段；半自动走逐次审批，全自动未预存凭据返回 `*_PASSWORD_NEEDED`，不弹本地密码窗。
-- ✅ 本机最终门禁：Rust lib test 351/351、clippy、Tauri typecheck、lint 和 Prettier 全部通过；新增 sudo/su 三层密码源优先级纯单测，锁定“一次性参数 > profile secret > sudoSameAsLogin（仅 sudo）”且 su 不回退登录密码。
+- 旧 `responseMode=command-proposal` 只允许纯对话兼容路径；半自动 / 全自动的 Provider prompt 不得出现严格命令卡 JSON 指令，只能通过 FileTerm tool loop 产生执行提案。
+- ✅ 本机最终门禁：Rust lib test 352/352、clippy、Tauri typecheck、lint 和 Prettier 全部通过；新增 sudo/su 三层密码源优先级纯单测，锁定“一次性参数 > profile secret > sudoSameAsLogin（仅 sudo）”且 su 不回退登录密码。
 
 ## 11. 待完成
 

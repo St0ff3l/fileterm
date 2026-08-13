@@ -2897,6 +2897,17 @@ fn copilot_mode_state_is_current(
     state.mode == mode && state.session_generation == session_generation && state.mode.uses_tools()
 }
 
+fn effective_copilot_response_mode(
+    mode: AiCopilotMode,
+    requested: AiChatResponseMode,
+) -> AiChatResponseMode {
+    if mode.uses_tools() {
+        AiChatResponseMode::Chat
+    } else {
+        requested
+    }
+}
+
 fn validate_context_for_mode(
     mode_state: &StoredAiModeState,
     context_attachment: Option<&AiContextAttachment>,
@@ -2933,11 +2944,7 @@ async fn prepare_start_chat(
     let provider_id = normalize_provider_id(&input.provider_id)?;
     let user_message = normalize_user_message(&input.user_message)?;
     let mode_state = prepare_copilot_mode(window_label, input.mode)?;
-    let response_mode = if mode_state.mode.uses_tools() {
-        AiChatResponseMode::Chat
-    } else {
-        input.response_mode
-    };
+    let response_mode = effective_copilot_response_mode(mode_state.mode, input.response_mode);
     let (mut provider, api_key) = resolve_chat_provider(app, &provider_id)?;
     if let Some(ref model_override) = input.model_override {
         let m = model_override.trim();
@@ -3002,11 +3009,7 @@ async fn prepare_retry_chat(
     let conversation_id = validate_conversation_id(&input.conversation_id)?;
     let provider_id = normalize_provider_id(&input.provider_id)?;
     let mode_state = prepare_copilot_mode(window_label, input.mode)?;
-    let response_mode = if mode_state.mode.uses_tools() {
-        AiChatResponseMode::Chat
-    } else {
-        input.response_mode
-    };
+    let response_mode = effective_copilot_response_mode(mode_state.mode, input.response_mode);
     let (mut provider, api_key) = resolve_chat_provider(app, &provider_id)?;
     if let Some(ref model_override) = input.model_override {
         let m = model_override.trim();
@@ -5770,28 +5773,29 @@ mod tests {
         cancellation_or_request_error, command_has_unsafe_input,
         context_mode_reads_terminal_transcript, copilot_mode_state_is_current,
         copilot_tool_call_arguments, decrypt_provider_secrets, default_ai_mode_state,
-        encrypt_provider_secrets, ensure_conversation_fits, escape_review_prompt_value,
-        normalize_ai_title_suggestion, normalize_base_url, normalize_conversation_title,
-        now_millis, openai_chat_tool_schema, parse_command_proposal, process_anthropic_payload,
-        process_openai_payload, process_openai_responses_payload, provider_history_items,
-        provider_history_messages, provider_history_messages_with_tools, provider_is_usable,
-        provider_summary, prune_expired_context_snapshots, public_mode_state,
+        effective_copilot_response_mode, encrypt_provider_secrets, ensure_conversation_fits,
+        escape_review_prompt_value, normalize_ai_title_suggestion, normalize_base_url,
+        normalize_conversation_title, now_millis, openai_chat_tool_schema, parse_command_proposal,
+        process_anthropic_payload, process_openai_payload, process_openai_responses_payload,
+        provider_history_items, provider_history_messages, provider_history_messages_with_tools,
+        provider_is_usable, provider_summary, prune_expired_context_snapshots, public_mode_state,
         repair_default_provider, responses_input_items_with_tools, responses_tool_schema,
         sanitize_recent_terminal_output, stream_anthropic_messages,
         stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
         stream_openai_compatible_chat_with_tools, stream_openai_responses,
-        stream_openai_responses_with_tools, system_prompt, test_openai_compatible_chat,
-        title_from_user_message, title_summary_chat_messages, title_summary_history_items,
-        validate_context_for_mode, write_json_file, AiChatResponseMode, AiCommandRisk,
-        AiContextAttachment, AiContextMode, AiContextRedactionKind, AiContextRegistry,
-        AiContextTarget, AiCopilotMode, AiMessage, AiMessageRole, AiPromptContext, AiProviderKind,
-        AiProviderSecretPatch, AiProviderSummary, AiReviewOutcome, AiReviewRecord, AiStreamEvent,
-        ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot, StoredAiModeState,
-        StoredAiProvider, StoredConversation, StoredProviderConfig, StoredProviderSecret,
-        StoredProviderSecrets, ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION,
-        ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
-        COPILOT_EXECUTE_REMOTE_COMMAND_TOOL, MAX_AI_TITLE_SUGGESTION_LENGTH,
-        MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES, MAX_CONVERSATION_TITLE_LENGTH,
+        stream_openai_responses_with_tools, system_prompt, system_prompt_for_request,
+        test_openai_compatible_chat, title_from_user_message, title_summary_chat_messages,
+        title_summary_history_items, validate_context_for_mode, write_json_file,
+        AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
+        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
+        AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary,
+        AiReviewOutcome, AiReviewRecord, AiStreamEvent, ChatStreamResult, ProviderToolCall,
+        SseDecoder, StoredAiContextSnapshot, StoredAiModeState, StoredAiProvider,
+        StoredConversation, StoredProviderConfig, StoredProviderSecret, StoredProviderSecrets,
+        ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS,
+        CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
+        MAX_AI_TITLE_SUGGESTION_LENGTH, MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
+        MAX_CONVERSATION_TITLE_LENGTH,
     };
     use reqwest::Client;
     use serde_json::{json, Value};
@@ -6781,6 +6785,43 @@ mod tests {
             AiChatResponseMode::Chat
         )
         .is_ok());
+    }
+
+    #[test]
+    fn tool_modes_replace_the_legacy_command_proposal_response_contract() {
+        assert_eq!(
+            effective_copilot_response_mode(
+                AiCopilotMode::PureConversation,
+                AiChatResponseMode::CommandProposal
+            ),
+            AiChatResponseMode::CommandProposal
+        );
+        assert_eq!(
+            effective_copilot_response_mode(
+                AiCopilotMode::SemiAutomatic,
+                AiChatResponseMode::CommandProposal
+            ),
+            AiChatResponseMode::Chat
+        );
+        assert_eq!(
+            effective_copilot_response_mode(
+                AiCopilotMode::FullyAutomatic,
+                AiChatResponseMode::CommandProposal
+            ),
+            AiChatResponseMode::Chat
+        );
+
+        let tool_prompt = system_prompt_for_request(
+            None,
+            effective_copilot_response_mode(
+                AiCopilotMode::SemiAutomatic,
+                AiChatResponseMode::CommandProposal,
+            ),
+            true,
+        );
+        assert!(tool_prompt.contains("enables exactly one FileTerm tool"));
+        assert!(!tool_prompt.contains("Return exactly one JSON object and nothing else"));
+        assert!(!tool_prompt.contains("Do not answer in normal prose"));
     }
 
     #[test]

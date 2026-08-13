@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 已通过 MCP interactive-exec 真实客户端回归，待内置真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、旧命令卡协议隔离测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 已通过 MCP interactive-exec 真实客户端回归，待内置真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -464,6 +464,7 @@ type AiErrorCode =
 - 全自动模式下护栏通过后直接执行；护栏未通过返回稳定状态和原因，不自动重试。
 - sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
 - 已覆盖 schema、三 Provider history、流式 tool-call 重组、工具参数安全校验和三类 Provider 的 loopback 请求/响应契约；真实 Provider 端到端仍待执行。
+- 新增 `effective_copilot_response_mode` 契约：半自动 / 全自动即使收到兼容期的 `command-proposal` 也强制归一为普通对话，只有纯对话保留旧命令卡解析入口；新 renderer 不再发送 `responseMode`。
 
 ### 阶段三：审批与结果 UI（实现完成，macOS arm64 打包与外部 MCP interactive-exec 通过，待真实 Provider / 跨平台回归）
 

@@ -206,6 +206,21 @@ notes:
   - 本条只读调用不能替代需要已连接 SSH session 和用户可见任务级安全输入的 interactive-exec 端到端验收。
 ```
 
+### 2026-08-14 — macOS 隔离 QA bundle，Provider 明文 HTTP 安全门禁
+
+```text
+platform: macOS / arm64
+artifact: 临时复制并重新签名的 FileTerm QA.app（bundle id com.fileterm.qa）
+provider: OpenAI-compatible Chat / loopback QA fixture
+network: direct loopback
+result: pass（安全门禁；未执行 Provider 对话）
+notes:
+  - 在隔离应用数据目录中填写测试 Provider、模型和 API Key；Key 在设置界面保持掩码显示。
+  - 未勾选“允许不安全 HTTP”时，点击 Provider 连接测试在发送请求前稳定返回 `AI_PROVIDER_INSECURE_HTTP`；没有通过测试流程替用户打开该安全选项。
+  - 本条只证明明文 HTTP 的显式授权门禁，不把 loopback fixture 当成真实 Provider，也不宣称三模式桌面运行时回归已由本条完成。
+  - QA bundle、临时 fixture、隔离应用数据和测试 Key 已清理，日常 `com.fileterm.desktop` 数据未修改。
+```
+
 ### 2026-08-14 — Claude/Codex MCP interactive-exec 真实调用
 
 ```text
