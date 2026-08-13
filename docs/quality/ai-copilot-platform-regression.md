@@ -191,16 +191,17 @@ notes:
 
 本条补齐 macOS 的真实 FileTerm CLI → 安全输入框 → 同一 SSH task channel 验收；真实 Claude/Codex 模型调用、Windows/Linux 桌面手测、代理、睡眠恢复和生产环境仍未签收。
 
-### 2026-08-14 — Claude/Codex MCP 配置健康检查（非模型端到端）
+### 2026-08-14 — Claude/Codex MCP 只读 tool 调用
 
 ```text
 platform: macOS / arm64
-fileterm commit: 1eb0652f
-provider: n/a（MCP stdio health check）
+fileterm commit: 1dc35a85
+provider: n/a（MCP stdio，fileterm_list_connections）
 network: local stdio
-result: partial（未执行模型请求或远程命令）
+result: partial（客户端实际 tool 调用通过；未执行远程命令）
 notes:
-  - `claude mcp list` 已显示本地 FileTerm MCP `Connected`。
-  - Codex 使用临时 `CODEX_HOME` 注册 FileTerm 后，`codex mcp get fileterm` 正确显示 stdio command/args；未修改持久 Codex 配置。
-  - 真实 Claude/Codex 模型调用、三层凭据兜底和远端命令仍需明确的 Provider/API 与测试目标授权，不能由本条健康检查代替。
+  - Claude Code 使用 `--bare`、临时内联 MCP 配置和只读 tool allowlist，实际调用 `fileterm_list_connections`，返回 `total=12`。
+  - Codex CLI 使用 `--ephemeral` 与 `-c mcp_servers.fileterm=...` 临时注册 release binary，实际调用同一只读 tool，返回 `total=12`。
+  - 两次调用均未写入 Claude/Codex 持久配置、未打开连接、未执行远程命令，也未暴露 profile secret。
+  - 真实 Claude/Codex 远程 sudo / interactive-exec 仍需一个已连接 SSH session 和用户可见的任务级安全输入；本条不能替代该端到端验收。
 ```
