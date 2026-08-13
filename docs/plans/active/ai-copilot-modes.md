@@ -3,6 +3,16 @@
 状态：规划确认，待开工
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
+## 0. 审查结论与实施修正
+
+三模式和 L0/L2 的产品方向合理，但当前代码还没有 Provider 工具调用循环，现有 `AiContextMode` 仍是 `metadata` / `recent-terminal`，而 Review Mode 也有独立 command。因此实施必须遵守以下迁移契约：
+
+- **先兼容、后删除**。旧的 `metadata` 输入迁移为新的 L2 语义，旧会话缺少 mode 时按纯对话处理；在所有调用方和 fixture 完成迁移前，不直接删除旧 enum 值或 `app_run_ai_review`。
+- **Review Mode 先映射为半自动**。只有新的工具调用、逐次审批、目标绑定和结果回传链路全部可用后，才移除旧入口；不能仅改 UI 文案就声称半自动已完成。
+- **全自动需要真实工具循环**。类型、模式选择器和护栏状态不足以构成全自动。Provider 的工具调用解析、Rust 侧 schema 校验、sessionRevision 绑定、黑名单/阈值 fail-closed、执行结果回传和会话计数必须一起落地，缺一项就不得执行。
+- **Copilot 永不接收提权密码**。半自动/全自动只能使用 profile 加密存储或安全本地输入；不得让模型在聊天里索取、转发、回显或持久化 `sudo_password` / `su_password`。
+- **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
+
 ## 1. 结论
 
 把内置 Copilot 的能力边界从「单层保守助手 + 独立 Review Mode」收敛为**三种用户可选模式**，并把上下文级别从 L0/L1/L2/L3 简化为 **L0/L2 两档**：
@@ -261,19 +271,19 @@ struct AutoModeThresholds {
 
 ## 6. 三层 sudo 凭据与模式的衔接
 
-[simplify-exec-sudo-credentials.md](./simplify-exec-sudo-credentials.md) 定义的三层密码源（Agent 参数 > profile 加密存储 > 主窗口弹窗 > 聊天问）与三模式的衔接：
+[simplify-exec-sudo-credentials.md](./simplify-exec-sudo-credentials.md) 定义的凭据来源（用户已明确提供的一次性参数 > profile 加密存储 > 安全本地输入）与三模式的衔接：
 
-| 模式   | sudo 密码首选源   | 主窗口隐藏时                          | 密码进 LLM 上下文             |
-| ------ | ----------------- | ------------------------------------- | ----------------------------- |
-| 纯对话 | N/A（不发起执行） | N/A                                   | N/A                           |
-| 半自动 | profile 加密存储  | 弹审批弹窗时同步弹密码弹窗            | ❌ 不进（除非用户在聊天里给） |
-| 全自动 | profile 加密存储  | 聊天问（返回 `SUDO_PASSWORD_NEEDED`） | ❌ 不进（首选 profile 存储）  |
+| 模式   | sudo 密码首选源   | 主窗口隐藏时                            | 密码进 LLM 上下文            |
+| ------ | ----------------- | --------------------------------------- | ---------------------------- |
+| 纯对话 | N/A（不发起执行） | N/A                                     | N/A                          |
+| 半自动 | profile 加密存储  | 弹审批弹窗时同步弹安全密码输入          | ❌ 不进                      |
+| 全自动 | profile 加密存储  | 返回 `SUDO_PASSWORD_NEEDED`，不自动索取 | ❌ 不进（首选 profile 存储） |
 
 关键约束：
 
-- **全自动模式下，sudo 密码必须优先来自 profile 加密存储**；存储无密码且主窗口不可见时，返回 `SUDO_PASSWORD_NEEDED` 让模型在聊天里向用户索取，**不自动降级到弹窗**（因为全自动模式的语义是无人值守）。
+- **全自动模式下，sudo 密码必须优先来自 profile 加密存储**；存储无密码且主窗口不可见时，返回 `SUDO_PASSWORD_NEEDED` 并停止执行，**不让模型在聊天里索取密码，也不自动降级到弹窗**。
 - 半自动模式下，审批弹窗和密码弹窗可以合并显示（如果用户已预存密码，则审批弹窗只显示命令；未预存则同时显示密码输入框）。
-- 全自动模式下首次需要 sudo 密码且未预存时，建议模型在聊天里直接告诉用户："请在 FileTerm 连接管理器预存 sudo 密码，或在此处提供（会进入我的上下文一次）。"
+- 全自动模式下首次需要 sudo 密码且未预存时，只提示用户在 FileTerm 连接管理器配置凭据；一次性 secret 不进入 Copilot 上下文。
 
 ## 7. 领域模型变更
 
@@ -372,8 +382,8 @@ type AiErrorCode =
 
 ### 7.3 移除的类型
 
-- `AiContextPreview.mode` 的 `'metadata'` 取值（L1 移除）。
-- 现有 L3 Review Mode 相关的独立类型（合并进半自动模式）。
+- 目标状态移除 `AiContextPreview.mode` 的 `'metadata'` 取值（L1 移除）；迁移期间仍接受旧值并归一化到 L2。
+- 目标状态合并现有 L3 Review Mode 相关类型；迁移期间保留兼容解析和 command，直到半自动工具调用链路完成。
 
 ## 8. IPC 与代码落点
 
@@ -381,7 +391,7 @@ type AiErrorCode =
 
 - 新增 `AiCopilotMode` / `AiContextLevel` / `AiCopilotModeState` / `AiAutoModeThresholds` / `AiToolCallProposal` / `AiToolCallResult` 类型。
 - 修改 `StartAiChatInput` / `CreateAiContextPreviewInput` / `AiStreamEvent` / `AiErrorCode`。
-- 移除 L1 相关字段和 L3 独立类型。
+- 在迁移层归一化 L1 字段和 L3 独立类型；不在第一阶段物理删除旧字段，避免旧会话和旧 renderer 失效。
 
 ### `apps/tauri/src-tauri/src/services/ai/`
 
