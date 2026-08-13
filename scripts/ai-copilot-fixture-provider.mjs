@@ -107,6 +107,8 @@ function isCommandProposal(messages) {
 }
 
 function requestedMode(prompt, commandProposal) {
+  if (/fixture:tool-sudo\b/i.test(prompt)) return 'tool-sudo'
+  if (/fixture:tool\b/i.test(prompt)) return 'tool'
   if (commandProposal && /fixture:multiline\b/i.test(prompt)) {
     return 'multiline-command'
   }
@@ -127,6 +129,9 @@ function requestedMode(prompt, commandProposal) {
 }
 
 function responseText(mode) {
+  if (mode === 'tool-final') {
+    return 'Fixture tool loop completed. The Rust-owned remote command result was returned to the provider.'
+  }
   if (mode === 'command') {
     return JSON.stringify({
       answer: 'Fixture prepared a read-only command card. Review it before using it.',
@@ -224,6 +229,45 @@ function streamCompletion(request, response, { mode, model, promptLength }) {
   })
   response.flushHeaders()
 
+  if (mode === 'tool' || mode === 'tool-sudo') {
+    const command = mode === 'tool-sudo' ? 'sudo id -u' : 'id -u'
+    writeSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call-fileterm-fixture',
+                type: 'function',
+                function: {
+                  name: 'fileterm_execute_remote_command',
+                  arguments: JSON.stringify({ command })
+                }
+              }
+            ]
+          },
+          finish_reason: null,
+          index: 0
+        }
+      ],
+      id: 'fileterm-fixture-tool-call',
+      model,
+      object: 'chat.completion.chunk'
+    })
+    writeSse(response, {
+      choices: [{ delta: {}, finish_reason: 'tool_calls', index: 0 }],
+      id: 'fileterm-fixture-tool-call',
+      model,
+      object: 'chat.completion.chunk',
+      usage: { completion_tokens: 1, prompt_tokens: Math.max(1, Math.ceil(promptLength / 4)) }
+    })
+    response.write('data: [DONE]\n\n')
+    response.end()
+    log('fixture-tool-call-completed', { mode, promptLength })
+    return
+  }
+
   const emitNext = () => {
     if (closed || response.writableEnded) return
 
@@ -264,7 +308,9 @@ function handleCompletion(request, response, payload) {
   const model = typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : 'fileterm-fixture'
   const prompt = latestUserMessage(payload?.messages)
   const commandProposal = isCommandProposal(payload?.messages)
-  const mode = requestedMode(prompt, commandProposal)
+  const requested = requestedMode(prompt, commandProposal)
+  const hasToolResult = Array.isArray(payload?.messages) && payload.messages.some((message) => message?.role === 'tool')
+  const mode = (requested === 'tool' || requested === 'tool-sudo') && hasToolResult ? 'tool-final' : requested
   const onceKey = oneTimeKey(mode, prompt)
   const firstAttempt = !completedOneTimeModes.has(onceKey)
 
