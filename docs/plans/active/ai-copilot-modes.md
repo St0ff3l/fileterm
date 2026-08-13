@@ -1,11 +1,11 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（第一阶段已落地，Provider 工具调用循环待实现）
+状态：进行中（核心工具循环、审批、护栏和安全凭据衔接已落地，待真实 Provider / 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
 
-三模式和 L0/L2 的产品方向合理，但当前代码还没有 Provider 工具调用循环，现有 `AiContextMode` 仍是 `metadata` / `recent-terminal`，而 Review Mode 也有独立 command。因此实施必须遵守以下迁移契约：
+三模式和 L0/L2 的产品方向合理。初稿审查时 Provider 工具调用循环尚未接通，现已补齐 Provider 适配、Rust-owned 工具循环、逐次审批、全自动护栏、结果回传和目标绑定；以下迁移契约仍然有效：
 
 - **先兼容、后删除**。旧的 `metadata` 输入迁移为新的 L2 语义，旧会话缺少 mode 时按纯对话处理；在所有调用方和 fixture 完成迁移前，不直接删除旧 enum 值或 `app_run_ai_review`。
 - **Review Mode 先映射为半自动**。只有新的工具调用、逐次审批、目标绑定和结果回传链路全部可用后，才移除旧入口；不能仅改 UI 文案就声称半自动已完成。
@@ -13,7 +13,7 @@
 - **Copilot 永不接收提权密码**。半自动/全自动只能使用 profile 加密存储或安全本地输入；不得让模型在聊天里索取、转发、回显或持久化 `sudo_password` / `su_password`。
 - **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
 
-当前分支已完成第一阶段：核心类型、Rust 侧模式状态、L0/L2 约束、半自动兼容路径、全自动护栏骨架和面板入口已经接通。由于 Provider 还没有统一的工具调用循环，半自动暂时复用命令卡 + `ActionReviewService`；全自动在模式切换和发送入口均 fail-closed，不声称已经具备自动执行能力。
+当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。旧 `app_run_ai_review` 与通用 interactive exec 仍保留，作为兼容入口和 MFA/验证码等交互式能力；真实 Provider、打包应用和远端 sudo/su 回归仍待验收。
 
 ## 1. 结论
 
@@ -39,7 +39,7 @@
 - Catty 使用真实的 `tool-call → approval → tool-result` 循环，并以工具目录、会话作用域和最大迭代数约束 Agent；FileTerm 也必须先具备这条 Rust-owned loop，才能启用全自动。
 - Catty 的 `terminal_execute` 仍要经过 session scope、命令安全策略和 permission mode；FileTerm 进一步要求工具调用绑定 leaf/root、`sessionRevision`、CWD/user，并使用独立 SSH exec，不写入可见 PTY。
 - Catty 的审批是一次性工具调用审批；FileTerm 不提供“本会话始终允许”或批量批准，提权/破坏性命令继续走更高等级确认。
-- Catty 的工具结果会回到模型继续下一步；在这条回传链完成前，FileTerm 的半自动兼容路径只能使用现有命令卡 + `ActionReviewService`，全自动必须 fail-closed。
+- Catty 的工具结果会回到模型继续下一步；FileTerm 已实现同样的回传链，但执行仍由 Rust 负责校验、审批、护栏和独立 SSH exec，旧 Review 入口在兼容迁移完成前继续保留。
 
 ## 2. 模式 × 上下文矩阵
 
@@ -413,14 +413,14 @@ type AiErrorCode =
 
 ### `apps/tauri/src-tauri/src/services/ai.rs` / `ai_guardrails.rs`
 
-- `ai.rs`：增加 process-local mode 状态、L2 强制校验、旧上下文别名归一化，以及半自动到现有 Review Mode 的兼容映射。
-- `ai_guardrails.rs`：黑名单 / 白名单 / 阈值累计 / sessionRevision 校验；当前只提供纯校验模块，尚未接入自动执行。
-- `action_review.rs`：继续作为现有一次性审批 + 独立 SSH exec 后端；新的 Provider 工具循环接入前不删除。
+- `ai.rs`：增加 process-local mode 状态、L2 强制校验、旧上下文别名归一化、OpenAI Chat / Responses / Anthropic 三套工具 schema 与流式解析，以及带上限的 Rust-owned 工具循环。
+- `ai_guardrails.rs`：黑名单 / 白名单 / 阈值累计 / sessionRevision 校验，已接入全自动执行前检查和执行后计数。
+- `action_review.rs`：继续作为一次性审批 + 独立 SSH exec 后端；半自动 Copilot 与旧 Review 共用，并保留通用 interactive exec。
 
 ### `apps/tauri/src-tauri/src/commands/mod.rs`
 
 - `app_get_ai_copilot_mode_state`：返回当前模式 + 上下文开关 + 护栏状态。
-- `app_set_ai_copilot_mode`：切换模式；切到全自动先要求用户确认，确认后在工具循环未落地前仍返回 `AI_AUTO_MODE_UNAVAILABLE`。
+- `app_set_ai_copilot_mode`：切换模式；切到全自动先要求用户确认，确认后允许进入真实工具循环，具体执行仍受 Rust 护栏约束。
 - `app_set_ai_context_attach`：仅 pure-conversation 模式下可调；其他模式返回 `ContextLockedByMode` 错误。
 - `app_get_ai_auto_mode_thresholds` / `app_set_ai_auto_mode_thresholds`：预留给后续高级设置；第一阶段阈值由 Rust 默认值托管，尚未开放 renderer 修改。
 - `app_reset_ai_auto_mode_session_counts`：手动重置会话级累计（用户主动操作）。
@@ -429,14 +429,14 @@ type AiErrorCode =
 ### `apps/tauri/src/bridge/tauri-api.ts`
 
 - 暴露上述类型安全 API。
-- `onAiToolCallApproval` / `resolveAiToolCallApproval`：待 Provider 工具调用循环落地后接入；第一阶段继续使用现有 Review Mode 事件。
+- 工具调用和工具结果通过 `AiStreamEvent` 进入现有 Copilot stream；半自动审批复用现有 ActionApproval 事件与 resolve command，不新增一套永久授权接口。
 - 现有 `onAiContextPreview` 等保留。
 
 ### Renderer
 
-- `features/ai/AiCopilotPanel.tsx`：第一阶段增加三模式选择器、上下文锁定提示、全自动确认弹窗和护栏计数占位。
-- `features/ai/useAiCopilot.ts`：接通 mode 状态、上下文开关锁定逻辑和未来工具事件的兼容解析；工具事件真正执行仍待后续阶段。
-- `ToolCallApprovalDialog.tsx` / `ToolCallResultCard.tsx` / `AutoModeGuardrailIndicator.tsx`：待真实工具循环接通后拆分为独立组件。
+- `features/ai/AiCopilotPanel.tsx`：三模式选择器、上下文锁定提示、全自动确认、护栏状态和工具活动 / 输出展示。
+- `features/ai/useAiCopilot.ts`：接通 mode 状态、上下文开关锁定逻辑、工具调用和工具结果事件，并在新消息 / 重试 / 新会话时清理活动状态。
+- 审批复用现有 `ActionReviewDialog`；工具活动卡和有界输出直接收敛在 Copilot 面板，不新增绕过通用组件的执行 UI。
 - 设置页高级设置区增加全自动模式阈值配置（默认折叠）。
 
 ### UI 公用组件边界
@@ -449,43 +449,40 @@ type AiErrorCode =
 
 不再按原先的 8 个机械 commit 切分；每个阶段完成后仍必须通过 typecheck + lint + clippy + test + prettier。
 
-### 阶段一：类型、状态与安全边界（当前分支已落地）
+### 阶段一：类型、状态与安全边界（已完成）
 
 - `packages/core` 增加三模式、L0/L2 类型、工具调用事件与护栏状态；旧上下文别名仍可兼容解析。
-- `services/ai.rs` 增加 process-local 模式状态、L2 强制校验和半自动到现有 Review Mode 的兼容映射。
+- `services/ai.rs` 增加 process-local 模式状态、L2 强制校验；旧 Review API 保留为兼容入口，半自动直接复用 ActionApproval + 独立 exec。
 - `services/ai_guardrails.rs` 增加危险命令黑名单、不可逆动作白名单、会话计数和 `sessionRevision` 校验。
 - `app_get_ai_copilot_mode_state`、`app_set_ai_copilot_mode`、`app_set_ai_context_attach`、`app_reset_ai_auto_mode_session_counts` 已接入 Rust command / bridge。
 - `AiCopilotPanel` 和 `useAiCopilot` 已接通模式选择、L2 锁定、全自动确认提示和护栏计数展示。
-- 全自动目前在模式切换和发送入口 fail-closed；半自动仍使用命令卡 + `ActionReviewService` 兼容路径。
-- 已通过当前阶段的 typecheck、lint、Prettier、Rust check；完整 clippy / test 结果以本次提交前实测为准。
+- 全自动模式已允许进入工具循环，但每次执行前必须通过 Rust 护栏；半自动不再依赖命令卡模拟执行。
+- sudo/su profile secret、普通 exec stdin/PTY 分支、本地密码弹窗和连接编辑表单已接通。
 
-### 阶段二：Catty-style Provider 工具循环（下一步）
+### 阶段二：Catty-style Provider 工具循环（实现完成，待真实 Provider 回归）
 
-- `services/ai/action_review.rs` 扩展：半自动模式走现有审批队列；全自动模式跳过审批但复用独立 SSH exec channel。
-- `AiStreamEvent` 发 `tool-call` / `tool-result` 事件给 renderer。
-- 半自动模式下 `onAiToolCallApproval` 触发 renderer 审批弹窗；`resolveAiToolCallApproval` 回传决策。
-- 全自动模式下护栏通过后直接执行；护栏未通过返回对应错误码。
-- sudo / su 包装复用 [simplify-exec-sudo-credentials.md](./simplify-exec-sudo-credentials.md) 的三层密码源。
-- 单元测试：半自动审批通过 / 拒绝 / 超时、全自动护栏通过 / 命中黑名单 / 命中阈值、sudo 密码源衔接。
+- `services/ai.rs` 已接入三类 Provider 的工具 schema、tool-call 增量重组、tool history 和最多 8 轮的 Rust-owned loop。
+- 半自动模式走现有 ActionApproval 队列；全自动模式跳过逐次审批但复用独立 SSH exec channel。
+- `AiStreamEvent` 发 `tool-call` / `tool-result` 事件给 renderer，结果回传 Provider 继续下一轮。
+- 全自动模式下护栏通过后直接执行；护栏未通过返回稳定状态和原因，不自动重试。
+- sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
+- 已覆盖 schema、三 Provider history、流式 tool-call 重组和工具参数安全校验；真实 Provider 端到端仍待执行。
 
-### 阶段三：审批与结果 UI（阶段二完成后）
+### 阶段三：审批与结果 UI（实现完成，待视觉 / 打包回归）
 
-- 保留第一阶段已经落地的 `AiCopilotPanel.tsx` 模式选择器，并在工具循环接通后补齐审批状态联动。
-- 补齐独立 `ContextToggle.tsx` 和工具调用审批状态展示；pure-conversation 可交互，其他模式禁用并置灰。
-- 切到全自动模式时弹 `<ConfirmActionDialog>` 警告。
-- 扩展 `useAiCopilot.ts` 处理逐次审批、拒绝和工具结果回传。
-- 复用 `<DropdownSelect>` / `<AppIcon>` / `--focus-outline` 等 token 与公用组件。
-- typecheck + prettier 通过。
+- `AiCopilotPanel.tsx` 展示工具调用状态、执行结果、失败原因和截断输出；纯对话不携带 Provider tools。
+- pure-conversation 可交互，半自动 / 全自动上下文开关禁用并置灰；全自动启用仍弹 `<ConfirmActionDialog>` 警告。
+- 半自动 destructive / privileged 执行要求风险确认；全自动不弹逐次审批，只允许 Rust 护栏放行。
+- 复用 `<DropdownSelect>` / `<AppIcon>` / `<VerticalScrollbar>` / `--focus-outline` 等项目边界。
+- 已通过前端 typecheck、lint、Prettier；待打包应用和真实 Provider 交互验证。
 
 ### 阶段四：Review Mode 迁移收口（最后）
 
-本阶段只有在工具循环、审批、结果回传、sessionRevision 和兼容数据迁移全部验证后才开始；届时再移除独立 `app_run_ai_review`，同步相关架构文档，并把本计划移动到 `docs/plans/completed/`。
+本阶段仍未开始：需要先完成真实 Provider、三端打包和兼容迁移验证，再评估移除独立 `app_run_ai_review`，同步架构文档，并把本计划移动到 `docs/plans/completed/`。
 
-- `ToolCallApprovalDialog.tsx` 半自动审批弹窗：显示目标 / CWD / 命令 / 风险 / 超时；`destructive` / `privileged` 红色高亮 + 二次确认复选框。
-- `ToolCallResultCard.tsx` 工具调用结果展示卡。
-- `AutoModeGuardrailIndicator.tsx` 全自动模式下显示会话级累计计数和剩余配额。
-- `onAiToolCallApproval` / `resolveAiToolCallApproval` bridge 接通。
-- typecheck + prettier 通过。
+- 将现有 `app_run_ai_review` 的兼容数据和历史记录迁移到统一 Copilot 工具结果后，再删除旧 command。
+- 真实 Provider 三模式回归、三端打包验证、窗口隐藏 / 重连 / CWD 变化场景验证。
+- 同步 `docs/architecture.md`、相关 MCP / CLI 迁移计划和 release 质量文档。
 
 当前不做：
 
@@ -576,12 +573,12 @@ type AiErrorCode =
 
 ## 14. 当前阶段不做的事
 
-- 第一阶段不改 Provider adapter 的既有保守文本 / JSON 路径；阶段二必须增加各 Provider 的工具 schema、tool-call 增量解析和 tool-result 回传，不能用 UI 模拟工具循环。
+- 不用 UI 模拟工具循环；纯对话仍保持 Provider 请求不带 `tools`，半自动 / 全自动才携带对应 Provider 的严格 schema。
 - 不动 API Key 存储与 secret 加密层。
 - 不动 MCP / CLI 通道（外部 Agent 走自己的路径，不受三模式影响）。
 - 不动 SFTP / 传输 / 隧道工具。
 - 不动 [simplify-exec-sudo-credentials.md](./simplify-exec-sudo-credentials.md) 的三层密码源实现（本计划只衔接，不重写）。
-- 不做"自动多步循环"（半自动模式每步独立审批；全自动模式由模型决定是否继续，但每步仍受护栏）。
+- 不做无界或 UI 模拟的自动循环；Provider-owned 多步工具循环仅限 Rust 侧最多 8 轮，每个半自动调用逐次审批、每个全自动调用逐次过护栏。
 - 不做"批量批准"或"会话级永久授权"（违背保守助手定位）。
 - 不做跨会话的护栏状态持久化（护栏累计按会话计，新建会话自动重置）。
 - 不做 L1 级别保留（明确移除，不提供兼容开关）。
@@ -600,5 +597,5 @@ type AiErrorCode =
 9. ✅ 半自动模式 destructive / privileged 红色高亮 + 二次确认
 10. ✅ 全自动模式 sudo 密码首选 profile 加密存储；未预存时 fail-closed，不进入 Copilot 聊天
 11. ✅ 阈值默认保守（20 / 5 / 3 / 600s），高级设置可调，下限不低于默认
-12. ✅ 不做自动多步循环、批量批准、会话级永久授权
+12. ✅ 不做无界工具循环、批量批准、会话级永久授权（工具循环最多 8 轮）
 13. ✅ 不做远端文件修改 / 传输自动执行（首版只开放 SSH exec）

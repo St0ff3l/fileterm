@@ -966,6 +966,17 @@ export interface RemoteExecCredentials {
   saveSuPassword?: boolean
 }
 
+/** One-time local prompt for a privileged command when no saved credential exists. */
+export interface SudoPasswordRequest {
+  requestId: string
+  tabId: string
+  kind: 'sudo' | 'su'
+  host: string
+  shellUser?: string
+  cwd?: string
+  command: string
+}
+
 export type BackupPasswordOperation = 'upload' | 'download'
 
 /** One-time password request for a cross-device WebDAV/S3 backup. */
@@ -975,7 +986,7 @@ export interface BackupPasswordRequest {
   provider: 'WebDAV' | 'S3'
 }
 
-export type ActionApprovalSource = 'mcp' | 'ai-review'
+export type ActionApprovalSource = 'mcp' | 'ai-review' | 'ai-copilot'
 
 /** One-time in-app approval shared by MCP and AI Review Mode. */
 export interface ActionApprovalRequest {
@@ -987,6 +998,8 @@ export interface ActionApprovalRequest {
   target?: string
   details?: string
   destructive: boolean
+  /** Requires an explicit risk acknowledgement before the final approval. */
+  requiresRiskAcknowledgement?: boolean
 }
 
 /** @deprecated Use ActionApprovalRequest. */
@@ -1466,6 +1479,8 @@ export type AiErrorCode =
   | 'AI_AUTO_MODE_DURATION_LIMIT_REACHED'
   | 'AI_AUTO_MODE_TARGET_CHANGED'
   | 'AI_TOOL_CALL_REJECTED'
+  | 'AI_TOOL_CALL_INVALID'
+  | 'AI_TOOL_LOOP_LIMIT'
   | 'AI_CONVERSATION_LIMIT'
   | 'AI_CONVERSATION_NOT_FOUND'
   | 'AI_CONVERSATION_INVALID_INPUT'
@@ -1708,6 +1723,8 @@ export interface FileTermDesktopApi {
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
   resolveRemoteExecInteraction(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setRemoteExecInteractionRendererReady(registrationId: string, ready: boolean): Promise<void>
+  resolveSudoPasswordPrompt(requestId: string, cancelled: boolean, value?: string, save?: boolean): Promise<void>
+  setSudoPasswordPromptRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
@@ -1726,6 +1743,7 @@ export interface FileTermDesktopApi {
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
   /** Resolves only after the main renderer has registered its secure-input listener. */
   onRemoteExecInteraction(listener: (request: RemoteExecInteractionRequest) => void): Promise<() => void>
+  onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>
   /** Resolves only after the main renderer has registered the password prompt listener. */
   onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>
   onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void

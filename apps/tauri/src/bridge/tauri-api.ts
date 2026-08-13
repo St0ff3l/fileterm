@@ -26,6 +26,7 @@ import type {
   SshInteractionRequest,
   RemoteExecInteractionRequest,
   RemoteExecCredentials,
+  SudoPasswordRequest,
   BackupPasswordRequest,
   SshKeyFileSelection,
   SshKeyImportResult,
@@ -701,6 +702,15 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       }),
     setRemoteExecInteractionRendererReady: (registrationId: string, ready: boolean) =>
       invoke<void>('app_set_remote_exec_interaction_renderer_ready', { registrationId, ready }),
+    resolveSudoPasswordPrompt: (requestId: string, cancelled: boolean, value?: string, save?: boolean) =>
+      invoke<void>('app_resolve_sudo_password_prompt', {
+        requestId,
+        cancelled,
+        value: cancelled ? null : (value ?? null),
+        save: cancelled ? false : (save ?? false)
+      }),
+    setSudoPasswordPromptRendererReady: (registrationId: string, ready: boolean) =>
+      invoke<void>('app_set_sudo_password_renderer_ready', { registrationId, ready }),
     resolveBackupPassword: (requestId: string, cancelled: boolean, value?: string) =>
       invoke<void>('app_resolve_backup_password', {
         requestId,
@@ -740,6 +750,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
     onRemoteExecInteraction: (listener: (request: RemoteExecInteractionRequest) => void) =>
       subscribeReady('remote-exec:interaction-request', listener),
+    onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>
+      subscribeReady('sudo:password-request', listener),
     onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>
       subscribeReady('backup:password-request', listener),
     onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>

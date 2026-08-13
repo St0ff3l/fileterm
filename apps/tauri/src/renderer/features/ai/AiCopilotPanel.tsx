@@ -18,7 +18,7 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
 import { AiCopilotMarkdown } from './AiCopilotMarkdown'
-import { useAiCopilot } from './useAiCopilot'
+import { useAiCopilot, type AiToolActivity } from './useAiCopilot'
 
 function commandRiskLabel(risk: AiCommandRisk) {
   switch (risk) {
@@ -74,6 +74,43 @@ function AiCopilotReviewOutput({ output }: { output: string }) {
         <VerticalScrollbar ariaLabel={t.aiCopilotReviewOutput} scrollRef={outputScrollRef} />
       </div>
     </div>
+  )
+}
+
+function AiCopilotToolActivity({ activity }: { activity: AiToolActivity }) {
+  const outputScrollRef = useRef<HTMLPreElement>(null)
+  const result = activity.result
+  const status = result?.status ?? 'pending'
+  const statusLabel = result
+    ? status === 'executed'
+      ? t.aiCopilotToolExecuted
+      : status === 'rejected' || status === 'auto-blocked'
+        ? t.aiCopilotToolRejected
+        : t.aiCopilotToolFailed
+    : t.aiCopilotToolPending
+  return (
+    <section className={`ai-copilot-tool-activity is-${status}`}>
+      <header>
+        <span>{statusLabel}</span>
+        <span className={`ai-copilot-command-risk is-${activity.proposal.risk}`}>
+          {commandRiskLabel(activity.proposal.risk)}
+        </span>
+      </header>
+      <div className="ai-copilot-code-block ai-copilot-command-code-block">
+        <code>{activity.proposal.command}</code>
+        <AiCopilotCopyButton text={activity.proposal.command} />
+      </div>
+      {activity.proposal.explanation ? <p>{activity.proposal.explanation}</p> : null}
+      {result?.reason ? <p className="is-warning">{result.reason}</p> : null}
+      {result?.stdout ? (
+        <div className="ai-copilot-tool-output-wrap">
+          <pre ref={outputScrollRef} className="ai-copilot-tool-output">
+            {result.stdout}
+          </pre>
+          <VerticalScrollbar ariaLabel={t.aiCopilotToolActivity} scrollRef={outputScrollRef} />
+        </div>
+      ) : null}
+    </section>
   )
 }
 
@@ -200,6 +237,7 @@ export function AiCopilotPanel({
     isStreaming,
     errorMessage,
     usage,
+    toolActivities,
     isContextPreviewing,
     modeState,
     selectProvider,
@@ -247,7 +285,7 @@ export function AiCopilotPanel({
     if (!modeState) return
     setReferenceTerminal(modeState.attachTerminalContext)
     if (modeState.mode !== 'pure-conversation') {
-      setResponseMode('command-proposal')
+      setResponseMode('chat')
     }
   }, [modeState])
 
@@ -263,7 +301,7 @@ export function AiCopilotPanel({
 
   const send = async () => {
     if (!draft.trim() || isStreaming) return
-    const effectiveResponseMode = copilotMode === 'semi-automatic' ? 'command-proposal' : responseMode
+    const effectiveResponseMode = copilotMode !== 'pure-conversation' ? 'chat' : responseMode
     const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
     if (effectiveResponseMode === 'command-proposal' && !shouldAttachContext) {
       setCommandActionMessage(t.aiCopilotCommandModeRequiresContext)
@@ -303,7 +341,7 @@ export function AiCopilotPanel({
 
   const retryLastRequest = async () => {
     if (isStreaming) return
-    const effectiveResponseMode = copilotMode === 'semi-automatic' ? 'command-proposal' : responseMode
+    const effectiveResponseMode = copilotMode !== 'pure-conversation' ? 'chat' : responseMode
     const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
     if (effectiveResponseMode === 'command-proposal' || shouldAttachContext) {
@@ -526,7 +564,7 @@ export function AiCopilotPanel({
           </div>
           <span className="ai-copilot-mode-hint">
             {copilotMode === 'fully-automatic'
-              ? t.aiCopilotModeFullUnavailable
+              ? t.aiCopilotModeFullHint
               : copilotMode === 'semi-automatic'
                 ? t.aiCopilotModeSemiHint
                 : t.aiCopilotModePureHint}
@@ -947,6 +985,13 @@ export function AiCopilotPanel({
                     </article>
                   ))
                 )}
+                {toolActivities.length > 0 ? (
+                  <div className="ai-copilot-tool-activities" aria-label={t.aiCopilotToolActivity}>
+                    {toolActivities.map((activity) => (
+                      <AiCopilotToolActivity key={activity.proposal.id} activity={activity} />
+                    ))}
+                  </div>
+                ) : null}
                 {isStreaming ? (
                   <div className="ai-copilot-streaming-indicator">
                     <span aria-hidden="true" className="material-symbols-outlined">
@@ -1084,7 +1129,7 @@ export function AiCopilotPanel({
                       disabled={
                         !canChat ||
                         !draft.trim() ||
-                        ((copilotMode === 'semi-automatic' || responseMode === 'command-proposal') &&
+                        ((copilotMode !== 'pure-conversation' || responseMode === 'command-proposal') &&
                           (!referenceTerminal || !isTerminalTarget))
                       }
                       type="button"
@@ -1105,6 +1150,7 @@ export function AiCopilotPanel({
                 <button
                   aria-pressed={responseMode === 'chat'}
                   className={responseMode === 'chat' ? 'is-active' : ''}
+                  disabled={copilotMode !== 'pure-conversation' || isStreaming}
                   title={t.aiCopilotChatMode}
                   type="button"
                   onClick={() => {
@@ -1117,7 +1163,9 @@ export function AiCopilotPanel({
                 <button
                   aria-pressed={responseMode === 'command-proposal'}
                   className={responseMode === 'command-proposal' ? 'is-active' : ''}
-                  disabled={!referenceTerminal || !isTerminalTarget || isStreaming}
+                  disabled={
+                    copilotMode !== 'pure-conversation' || !referenceTerminal || !isTerminalTarget || isStreaming
+                  }
                   title={t.aiCopilotCommandMode}
                   type="button"
                   onClick={() => {

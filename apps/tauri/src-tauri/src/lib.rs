@@ -2050,6 +2050,8 @@ pub fn run() {
             crate::commands::app_resolve_ssh_interaction,
             crate::commands::app_resolve_remote_exec_interaction,
             crate::commands::app_set_remote_exec_interaction_renderer_ready,
+            crate::commands::app_resolve_sudo_password_prompt,
+            crate::commands::app_set_sudo_password_renderer_ready,
             crate::commands::app_resolve_backup_password,
             crate::commands::app_set_backup_password_renderer_ready,
             crate::commands::app_list_ssh_tunnels,

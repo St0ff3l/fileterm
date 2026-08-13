@@ -105,23 +105,43 @@ pub fn read_and_heal_profiles(app: &AppHandle) -> Result<(Vec<Value>, Vec<Value>
     let mut profiles = read_json_array(app, "profiles.json")?;
     let mut secret_shape_dirty = false;
     for profile in &mut profiles {
+        let had_public_secret_fields = profile_contains_secret_fields(profile);
         if profile
             .as_object_mut()
             .is_some_and(|profile| normalize_profile_secret_input(profile, None))
         {
             secret_shape_dirty = true;
         }
+        secret_shape_dirty |= had_public_secret_fields;
     }
+    hydrate_profile_secrets(&secrets_path, &mut profiles)?;
     let folders = read_and_heal_connection_folders(app)?;
     let dirty = secret_shape_dirty || heal_profiles(&mut profiles, &folders);
+    reconcile_profile_secrets(app, &profiles)?;
     if dirty {
         // Strip secrets before writing back. Secrets live in
         // profile-secrets.json; profiles.json should never contain them.
         let stripped: Vec<Value> = profiles.iter().map(strip_secret_fields).collect();
         write_json_array(app, "profiles.json", &stripped)?;
     }
-    reconcile_profile_secrets(app, &profiles)?;
     Ok((profiles, folders))
+}
+
+fn profile_contains_secret_fields(profile: &Value) -> bool {
+    [
+        "password",
+        "passphrase",
+        "privateKeyPath",
+        "proxyPassword",
+        "sudoPassword",
+        "suPassword",
+    ]
+    .iter()
+    .any(|field| profile.get(*field).is_some_and(|value| !value.is_null()))
+        || profile
+            .get("proxy")
+            .and_then(Value::as_object)
+            .is_some_and(|proxy| proxy.get("password").is_some_and(|value| !value.is_null()))
 }
 
 fn strip_secret_fields(profile: &Value) -> Value {
@@ -515,16 +535,104 @@ fn read_profile_secret(
     profile_id: &str,
     field: &str,
 ) -> Result<Option<String>, AppError> {
+    let path = workspace_file(app, "profile-secrets.json")?;
+    if path.exists() {
+        lock_down_secret_file(&path)?;
+    }
     let profiles = read_json_array(app, "profiles.json")?;
-    let profile = profiles
+    if !profiles
         .iter()
-        .find(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
-        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
-    Ok(profile
-        .get(field)
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned))
+        .any(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
+    {
+        return Err(AppError::Storage("Profile not found".to_string()));
+    }
+    let Some(mut store) = read_profile_secret_store(&path)? else {
+        return Ok(None);
+    };
+    let Some(stored_value) =
+        current_profile_secret(Some(&store), profile_id, field).and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    let storage_root = profile_secret_storage_root(&path)?;
+    let scope = format!("profile/{profile_id}/{field}");
+    let (value, should_migrate) =
+        crate::services::secret_crypto::decrypt_or_migrate(storage_root, &scope, stored_value)?;
+    if should_migrate {
+        let encrypted = crate::services::secret_crypto::encrypt(storage_root, &scope, &value)?;
+        if let Some(secret) = store
+            .get_mut("profiles")
+            .and_then(Value::as_object_mut)
+            .and_then(|profiles| profiles.get_mut(profile_id))
+            .and_then(Value::as_object_mut)
+            .and_then(|profile| profile.get_mut(field))
+            .and_then(Value::as_object_mut)
+        {
+            secret.insert(
+                "storage".to_string(),
+                Value::String(crate::services::secret_crypto::ENCRYPTED_STORAGE.to_string()),
+            );
+            secret.insert("value".to_string(), Value::String(encrypted));
+            let content = serde_json::to_vec_pretty(&store)
+                .map_err(|error| AppError::Serialization(error.to_string()))?;
+            write_secure_secret_file(&path, &content)?;
+        }
+    }
+    Ok(Some(value))
+}
+
+fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Result<(), AppError> {
+    let Some(store) = read_profile_secret_store(path)? else {
+        return Ok(());
+    };
+    let storage_root = profile_secret_storage_root(path)?;
+    for profile in profiles {
+        let Some(profile_id) = profile.get("id").and_then(Value::as_str).map(str::to_owned) else {
+            continue;
+        };
+        let Some(profile_object) = profile.as_object_mut() else {
+            continue;
+        };
+        for field in [
+            "password",
+            "passphrase",
+            "privateKeyPath",
+            "sudoPassword",
+            "suPassword",
+        ] {
+            let Some(stored_value) =
+                current_profile_secret(Some(&store), &profile_id, field).and_then(Value::as_str)
+            else {
+                continue;
+            };
+            let scope = format!("profile/{profile_id}/{field}");
+            let (value, _) = crate::services::secret_crypto::decrypt_or_migrate(
+                storage_root,
+                &scope,
+                stored_value,
+            )?;
+            profile_object.insert(field.to_string(), Value::String(value));
+        }
+        if let Some(stored_value) =
+            current_profile_secret(Some(&store), &profile_id, "proxyPassword")
+                .and_then(Value::as_str)
+        {
+            let scope = format!("profile/{profile_id}/proxyPassword");
+            let (value, _) = crate::services::secret_crypto::decrypt_or_migrate(
+                storage_root,
+                &scope,
+                stored_value,
+            )?;
+            if let Some(proxy) = profile_object
+                .entry("proxy")
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+            {
+                proxy.insert("password".to_string(), Value::String(value));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn read_login_password(app: &AppHandle, profile_id: &str) -> Result<Option<String>, AppError> {
@@ -1484,6 +1592,46 @@ mod tests {
             stored["profile-current"]["suPassword"]["storage"].as_str(),
             Some(crate::services::secret_crypto::ENCRYPTED_STORAGE)
         );
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn hydrates_encrypted_profile_secrets_only_into_internal_profile_values() {
+        let directory =
+            std::env::temp_dir().join(format!("fileterm-profile-hydrate-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("profile-secrets.json");
+        let source = vec![json!({
+            "id": "profile-current",
+            "password": "login-password",
+            "sudoPassword": "sudo-password",
+            "suPassword": "su-password",
+            "proxy": { "password": "proxy-password" }
+        })];
+        let stored = build_profile_secrets(&path, &source, None).unwrap();
+        write_secure_secret_file(
+            &path,
+            &serde_json::to_vec_pretty(&stored).expect("secret store should serialize"),
+        )
+        .unwrap();
+
+        let mut public_profiles = vec![json!({
+            "id": "profile-current",
+            "name": "Server",
+            "proxy": { "type": "http" }
+        })];
+        hydrate_profile_secrets(&path, &mut public_profiles).unwrap();
+
+        assert_eq!(public_profiles[0]["password"], "login-password");
+        assert_eq!(public_profiles[0]["sudoPassword"], "sudo-password");
+        assert_eq!(public_profiles[0]["suPassword"], "su-password");
+        assert_eq!(public_profiles[0]["proxy"]["password"], "proxy-password");
+        let public = strip_secret_fields_public(&public_profiles[0]);
+        assert!(!public.as_object().unwrap().contains_key("password"));
+        assert!(!public.as_object().unwrap().contains_key("sudoPassword"));
+        assert_eq!(public["hasSavedSudoPassword"], true);
+        assert_eq!(public["hasSavedSuPassword"], true);
 
         std::fs::remove_dir_all(directory).unwrap();
     }

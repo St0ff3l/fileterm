@@ -9,6 +9,8 @@ import type {
   AiContextAttachment,
   AiContextPreview,
   AiMessage,
+  AiToolCallProposal,
+  AiToolCallResult,
   AiProviderSummary,
   AiStreamEvent,
   CreateAiContextPreviewInput
@@ -25,6 +27,11 @@ type RetryMessageOptions = {
   contextSnapshotId?: string
   responseMode?: AiChatResponseMode
   mode?: AiCopilotMode
+}
+
+export type AiToolActivity = {
+  proposal: AiToolCallProposal
+  result?: AiToolCallResult
 }
 
 function toMessage(error: unknown) {
@@ -84,6 +91,7 @@ export function useAiCopilot() {
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null)
+  const [toolActivities, setToolActivities] = useState<AiToolActivity[]>([])
   const [contextPreview, setContextPreview] = useState<AiContextPreview | null>(null)
   const [isContextPreviewing, setIsContextPreviewing] = useState(false)
   const [modeState, setModeState] = useState<AiCopilotModeState | null>(null)
@@ -264,6 +272,7 @@ export function useAiCopilot() {
       if (!mountedRef.current || activeConversationIdRef.current !== conversationId) return
       if (event.type === 'started') {
         activeAssistantMessageIdRef.current = event.messageId
+        setToolActivities([])
         return
       }
       if (event.type === 'text-delta') {
@@ -320,10 +329,28 @@ export function useAiCopilot() {
         activeResponseModeRef.current = 'chat'
         return
       }
-      if (event.type === 'tool-call' || event.type === 'tool-result') {
-        // The Rust-owned provider tool loop is not enabled yet. Keep these
-        // discriminants in the bridge contract so the renderer can adopt the
-        // Catty-style stream later without treating progress as an error.
+      if (event.type === 'tool-call') {
+        setToolActivities((current) => {
+          const existing = current.find((item) => item.proposal.id === event.proposal.id)
+          if (existing) return current
+          return [...current, { proposal: event.proposal }]
+        })
+        return
+      }
+      if (event.type === 'tool-result') {
+        setToolActivities((current) =>
+          current.map((item) =>
+            item.proposal.id === event.result.proposalId ? { ...item, result: event.result } : item
+          )
+        )
+        void window.fileterm
+          ?.getAiCopilotModeState()
+          .then((nextModeState) => {
+            if (!mountedRef.current || activeConversationIdRef.current !== conversationId) return
+            modeStateRef.current = nextModeState
+            setModeState(nextModeState)
+          })
+          .catch(() => undefined)
         return
       }
       activeAssistantMessageIdRef.current = null
@@ -428,6 +455,7 @@ export function useAiCopilot() {
         : undefined
       setErrorMessage(null)
       setUsage(null)
+      setToolActivities([])
       setIsStreaming(true)
       activeResponseModeRef.current = responseMode
 
@@ -561,6 +589,7 @@ export function useAiCopilot() {
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       setErrorMessage(null)
       setUsage(null)
+      setToolActivities([])
       setContextPreview(null)
       setIsStreaming(true)
       activeResponseModeRef.current = responseMode
@@ -749,6 +778,7 @@ export function useAiCopilot() {
     activeAssistantMessageIdRef.current = null
     setErrorMessage(null)
     setUsage(null)
+    setToolActivities([])
     applyConversation(null)
   }, [applyConversation, isStreaming])
 
@@ -768,6 +798,7 @@ export function useAiCopilot() {
     isStreaming,
     errorMessage,
     usage,
+    toolActivities,
     contextPreview,
     isContextPreviewing,
     modeState,

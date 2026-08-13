@@ -32,6 +32,8 @@ pub const MAX_REMOTE_EXEC_TIMEOUT_MS: u64 = 120_000;
 const MAX_REMOTE_EXEC_SECRET_BYTES: usize = 4 * 1024;
 pub const SUDO_PASSWORD_NEEDED: &str = "SUDO_PASSWORD_NEEDED";
 pub const SU_PASSWORD_NEEDED: &str = "SU_PASSWORD_NEEDED";
+pub const SUDO_PASSWORD_CANCELLED: &str = "SUDO_PASSWORD_CANCELLED";
+pub const SU_PASSWORD_CANCELLED: &str = "SU_PASSWORD_CANCELLED";
 pub const SUDO_AUTH_FAILURE: &str = "SUDO_AUTH_FAILURE";
 pub const SU_AUTH_FAILURE: &str = "SU_AUTH_FAILURE";
 /// Interactive exec keeps its own SSH PTY, so it can wait for a FileTerm
@@ -56,6 +58,7 @@ pub const INTERACTIVE_REMOTE_EXEC_BUSY: &str = "INTERACTIVE_REMOTE_EXEC_BUSY";
 pub enum ActionApprovalSource {
     Mcp,
     AiReview,
+    AiCopilot,
 }
 
 #[derive(Clone, Debug)]
@@ -65,6 +68,7 @@ pub struct ActionApprovalDetails {
     pub target: Option<String>,
     pub details: Option<String>,
     pub destructive: bool,
+    pub requires_risk_acknowledgement: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -80,6 +84,7 @@ pub struct ActionApprovalRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
     pub destructive: bool,
+    pub requires_risk_acknowledgement: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,6 +112,15 @@ impl ActionApprovalDecision {
             }
             (ActionApprovalSource::AiReview, Self::TimedOut) => {
                 "AI review approval timed out; the command was not started"
+            }
+            (ActionApprovalSource::AiCopilot, Self::Rejected) => {
+                "Copilot tool call was rejected by the user"
+            }
+            (ActionApprovalSource::AiCopilot, Self::Dismissed) => {
+                "Copilot approval dialog was closed"
+            }
+            (ActionApprovalSource::AiCopilot, Self::TimedOut) => {
+                "Copilot approval timed out; the command was not started"
             }
         }
     }
@@ -141,6 +155,7 @@ pub async fn request_action_approval(
         target: details.target,
         details: details.details,
         destructive: details.destructive,
+        requires_risk_acknowledgement: details.requires_risk_acknowledgement,
     };
     if let Err(error) = app.emit("action:approval-request", payload) {
         state
@@ -210,12 +225,20 @@ pub struct RemoteExecRequest {
     pub command: String,
     pub cwd: Option<String>,
     pub timeout_ms: Option<u64>,
+    /// Optional identity binding used by Copilot. External callers leave it
+    /// unset; a bound request is rejected if the SSH target changes before
+    /// the isolated exec channel starts.
+    pub expected_session_revision: Option<String>,
     /// One-shot values supplied by a trusted local caller. They are never
     /// logged, persisted, or returned to the caller.
     pub sudo_password: Option<String>,
     pub su_password: Option<String>,
     pub save_sudo_password: bool,
     pub save_su_password: bool,
+    /// Whether a missing privileged credential may be resolved through the
+    /// local FileTerm password prompt. Copilot full-auto keeps this false so
+    /// an unattended tool call fails closed with `*_PASSWORD_NEEDED`.
+    pub allow_local_privileged_prompt: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -323,7 +346,13 @@ pub async fn execute_remote_command(
             "Remote command execution is only supported for SSH sessions".to_string(),
         ));
     }
-    let (cwd, profile_id) = {
+    ensure_expected_session_revision(
+        &state,
+        &tab_id,
+        request.expected_session_revision.as_deref(),
+    )
+    .await?;
+    let (cwd, profile_id, host, shell_user) = {
         let sessions = state.sessions.read().await;
         let session = sessions
             .get(&tab_id)
@@ -336,18 +365,70 @@ pub async fn execute_remote_command(
         (
             cwd.or_else(|| session.shell_cwd.clone()),
             session.profile_id.clone(),
+            session.access_host.clone(),
+            session.shell_user.clone(),
         )
     };
 
-    let prepared = prepare_remote_exec(
+    let initial_prepared = prepare_remote_exec(
         app,
         &profile_id,
         &command,
-        request.sudo_password,
-        request.su_password,
+        request.sudo_password.clone(),
+        request.su_password.clone(),
         request.save_sudo_password,
         request.save_su_password,
-    )?;
+    );
+    let prepared = match initial_prepared {
+        Ok(prepared) => prepared,
+        Err(error)
+            if matches!(
+                &error,
+                AppError::Command(message)
+                    if message == SUDO_PASSWORD_NEEDED || message == SU_PASSWORD_NEEDED
+            ) =>
+        {
+            if !request.allow_local_privileged_prompt {
+                return Err(error);
+            }
+            let kind = privileged_command_kind(&command).ok_or(error)?;
+            let (password, save) = request_sudo_password_prompt(
+                app,
+                &state,
+                &tab_id,
+                request.expected_session_revision.as_deref(),
+                kind,
+                &host,
+                shell_user.as_deref(),
+                cwd.as_deref(),
+                &command,
+            )
+            .await?;
+            ensure_expected_session_revision(
+                &state,
+                &tab_id,
+                request.expected_session_revision.as_deref(),
+            )
+            .await?;
+            prepare_remote_exec(
+                app,
+                &profile_id,
+                &command,
+                matches!(kind, PrivilegedCommandKind::Sudo).then_some(password.clone()),
+                matches!(kind, PrivilegedCommandKind::Su).then_some(password),
+                matches!(kind, PrivilegedCommandKind::Sudo) && save,
+                matches!(kind, PrivilegedCommandKind::Su) && save,
+            )?
+        }
+        Err(error) => return Err(error),
+    };
+
+    ensure_expected_session_revision(
+        &state,
+        &tab_id,
+        request.expected_session_revision.as_deref(),
+    )
+    .await?;
 
     let result = crate::commands::send_worker_cmd_with_response_timeout(
         app,
@@ -386,6 +467,131 @@ pub async fn execute_remote_command(
         }
     }
     Ok(parsed)
+}
+
+async fn ensure_expected_session_revision(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    expected_session_revision: Option<&str>,
+) -> Result<(), AppError> {
+    let Some(expected_session_revision) = expected_session_revision else {
+        return Ok(());
+    };
+    let expected_session_revision = expected_session_revision.trim();
+    if expected_session_revision.is_empty()
+        || expected_session_revision.len() > 64
+        || expected_session_revision.chars().any(char::is_control)
+    {
+        return Err(AppError::Command("AI_AUTO_MODE_TARGET_CHANGED".to_string()));
+    }
+    let current_session_revision = state.ai_session_revision(tab_id).await.to_string();
+    if current_session_revision != expected_session_revision {
+        return Err(AppError::Command("AI_AUTO_MODE_TARGET_CHANGED".to_string()));
+    }
+    Ok(())
+}
+
+// The prompt payload is kept explicit at this boundary so the password source,
+// target identity, and local-only display fields cannot be accidentally mixed
+// with the visible terminal input route.
+#[allow(clippy::too_many_arguments)]
+async fn request_sudo_password_prompt(
+    app: &AppHandle,
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    expected_session_revision: Option<&str>,
+    kind: PrivilegedCommandKind,
+    host: &str,
+    shell_user: Option<&str>,
+    cwd: Option<&str>,
+    command: &str,
+) -> Result<(String, bool), AppError> {
+    let needed_code = match kind {
+        PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
+        PrivilegedCommandKind::Su => SU_PASSWORD_NEEDED,
+    };
+    if !state.has_sudo_password_renderer().await {
+        return Err(AppError::Command(needed_code.to_string()));
+    }
+    let current_session_revision = state.ai_session_revision(tab_id).await.to_string();
+    let expected_session_revision = expected_session_revision
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&current_session_revision)
+        .to_string();
+    let request_id = format!("sudo-password-{}", uuid::Uuid::new_v4());
+    let (sender, receiver) = oneshot::channel();
+    let pending = crate::services::workspace::PendingSudoPassword {
+        tab_id: tab_id.to_string(),
+        expected_session_revision,
+        sender,
+    };
+    if !state
+        .insert_pending_sudo_password(request_id.clone(), pending)
+        .await
+    {
+        return Err(AppError::Command(needed_code.to_string()));
+    }
+    let payload = serde_json::json!({
+        "requestId": request_id,
+        "tabId": tab_id,
+        "kind": match kind {
+            PrivilegedCommandKind::Sudo => "sudo",
+            PrivilegedCommandKind::Su => "su",
+        },
+        "host": host,
+        "shellUser": shell_user,
+        "cwd": cwd,
+        "command": command,
+    });
+    if let Err(error) = app.emit("sudo:password-request", payload) {
+        state
+            .pending_sudo_passwords
+            .write()
+            .await
+            .remove(&request_id);
+        return Err(AppError::Command(format!(
+            "Unable to show privileged password prompt: {error}"
+        )));
+    }
+
+    let response = match timeout(Duration::from_secs(120), receiver).await {
+        Ok(Ok(response)) => response,
+        Ok(Err(_)) | Err(_) => {
+            state
+                .pending_sudo_passwords
+                .write()
+                .await
+                .remove(&request_id);
+            return Err(AppError::Command(
+                match kind {
+                    PrivilegedCommandKind::Sudo => SUDO_PASSWORD_CANCELLED,
+                    PrivilegedCommandKind::Su => SU_PASSWORD_CANCELLED,
+                }
+                .to_string(),
+            ));
+        }
+    };
+    if response.cancelled {
+        return Err(AppError::Command(
+            match kind {
+                PrivilegedCommandKind::Sudo => SUDO_PASSWORD_CANCELLED,
+                PrivilegedCommandKind::Su => SU_PASSWORD_CANCELLED,
+            }
+            .to_string(),
+        ));
+    }
+    let password = response.value.ok_or_else(|| {
+        AppError::Command(
+            match kind {
+                PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
+                PrivilegedCommandKind::Su => SU_PASSWORD_NEEDED,
+            }
+            .to_string(),
+        )
+    })?;
+    validate_privileged_password(&password)?;
+    Ok((password, response.save))
 }
 
 /// Run a command through an isolated SSH PTY only when the caller explicitly

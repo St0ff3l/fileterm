@@ -257,7 +257,10 @@ pub fn authorize_command(
     Ok(())
 }
 
-pub fn record_execution(counters: &mut AutoModeCounters, risk: AiCommandRisk, duration: Duration) {
+/// Reserve the count and risk budget before an automatic command starts.
+/// Keeping this reservation under the caller's mode-state lock prevents two
+/// concurrent Copilot requests from both observing the same remaining budget.
+pub fn reserve_execution(counters: &mut AutoModeCounters, risk: AiCommandRisk) {
     counters.tool_calls = counters.tool_calls.saturating_add(1);
     if matches!(risk, AiCommandRisk::Destructive) {
         counters.destructive_calls = counters.destructive_calls.saturating_add(1);
@@ -265,10 +268,18 @@ pub fn record_execution(counters: &mut AutoModeCounters, risk: AiCommandRisk, du
     if matches!(risk, AiCommandRisk::Privileged) {
         counters.privileged_calls = counters.privileged_calls.saturating_add(1);
     }
+}
+
+pub fn record_execution_duration(counters: &mut AutoModeCounters, duration: Duration) {
     let seconds = duration
         .as_secs()
         .saturating_add(u64::from(duration.subsec_nanos() > 0));
     counters.total_exec_duration_secs = counters.total_exec_duration_secs.saturating_add(seconds);
+}
+
+pub fn record_execution(counters: &mut AutoModeCounters, risk: AiCommandRisk, duration: Duration) {
+    reserve_execution(counters, risk);
+    record_execution_duration(counters, duration);
 }
 
 #[cfg(test)]

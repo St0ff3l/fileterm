@@ -880,6 +880,7 @@ async fn approval_details(
                 | "clear_transfers"
                 | "delete_ssh_tunnel"
         ),
+        requires_risk_acknowledgement: false,
     })
 }
 

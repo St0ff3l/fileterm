@@ -199,9 +199,9 @@ platform probe
 - 本地文件面板访问 SMB/UNC 路径时，首次认证失败由 Rust 返回稳定的 `SMB_CREDENTIALS_REQUIRED` 标记，经 `tauri-api.ts` 进入 renderer 凭据弹窗，再通过 `app_connect_local_network_share` 重试。macOS 主机级路径先查询可访问共享目录并由 renderer 让用户选择，再只挂载所选 `smbfs` 共享；Windows 使用临时 WNet 连接。SMB 系统命令有超时保护，账号和密码只在本次 IPC/系统连接期间驻留内存，不写入 profile、日志或 workspace snapshot；macOS 挂载会在应用退出时卸载。
 - Tauri workspace tab 状态由 Rust 枚举限制为 core `TabStatus` 的 `idle/connecting/connected/error/closed`；正常或主动断开使用 `closed`，worker/连接失败使用 `error`，renderer 不接受运行时自造状态字符串。
 - profile、folder、command 的持久化 mutation 由 Rust workspace 级锁串行化，成功后统一广播 `workspace:snapshot`；完整快照读取使用同一把锁，不能观察跨文件级联写入的中间态。广播失败只记录告警，不能把已经落盘的操作伪装成失败并诱发重复提交。
-- Rust 存储层可在 main-side 读取时合并 `profile-secrets.json`，但 `workspace:snapshot` 与独立窗口使用的 connection library 在跨 IPC 前必须统一剥离密码、私钥口令、私钥路径和代理密码；公开 profile 仅可携带 `hasSavedPassword` 这类非敏感存在标记。renderer 编辑脱敏 profile 时提交的空白 secret 只表示“未替换”，由 main-side 保留原值；显式 `null` 才表示清除。表单层 `proxyPassword` 必须在 main-side 规范化为 `proxy.password` 后进入 secret 文件，不能落入公开 `profiles.json`。
+- Rust 存储层可在 main-side 读取时解密并合并 `profile-secrets.json` 到短生命周期的内部 profile，但 `workspace:snapshot` 与独立窗口使用的 connection library 在跨 IPC 前必须统一剥离密码、私钥口令、私钥路径、代理密码、sudo 密码和 su 密码；公开 profile 仅可携带 `hasSavedPassword` / `hasSavedSudoPassword` / `hasSavedSuPassword` 这类非敏感存在标记，`sudoSameAsLogin` 属于公开非敏感元数据。renderer 编辑脱敏 profile 时提交的空白 secret 只表示“未替换”，由 main-side 保留原值；显式 `null` 才表示清除。表单层 `proxyPassword` 必须在 main-side 规范化为 `proxy.password` 后进入 secret 文件，不能落入公开 `profiles.json`。
 - Rust backend 在 Tauri userData 缺少迁移 marker 时，最多一次导入旧 Electron 用户目录中的应用自有 JSON/SSH key 数据；Tauri 当前数据按 ID 优先，legacy 只补缺失记录，整批 staging/commit 失败会回滚且不写 marker。迁移成功后不再 live merge，Chromium session、缓存与日志始终不迁移。
-- 本地凭据字段（AI API Key、SSH 私钥口令、profile 密码/代理密码、WebDAV 密码及 S3 Access/Secret Key）在 Rust 存储层以 AES-256-GCM 加密后再写入 JSON；密钥由每安装随机 seed 与当前设备稳定标识经 HMAC-SHA256 派生，并以字段用途/记录 ID 作为 AAD 绑定，旧版明文在首次读取后原子迁移。该实现不接入 macOS safeStorage/钥匙串、Windows DPAPI 或 Linux credential store，不触发系统授权弹窗；Unix seed/secret/key 文件在创建、迁移和读取自愈时收紧为 `0600`，Windows 依赖应用数据目录的用户 ACL。它防止静态文件被直接读取或被单独误传，不对获得当前用户运行权限的本机主动攻击者提供保护。WebDAV/S3 的远程备份包和用户显式导出的 JSON 仍是跨设备迁移载体，按既有行为可包含连接凭据；它们仅在 main/Rust 服务层序列化，不进入公开 snapshot、renderer 预览或日志。
+- 本地凭据字段（AI API Key、SSH 私钥口令、profile 密码/代理密码、sudo/su 密码、WebDAV 密码及 S3 Access/Secret Key）在 Rust 存储层以 AES-256-GCM 加密后再写入 JSON；密钥由每安装随机 seed 与当前设备稳定标识经 HMAC-SHA256 派生，并以字段用途/记录 ID 作为 AAD 绑定，旧版明文在首次读取后原子迁移。该实现不接入 macOS safeStorage/钥匙串、Windows DPAPI 或 Linux credential store，不触发系统授权弹窗；Unix seed/secret/key 文件在创建、迁移和读取自愈时收紧为 `0600`，Windows 依赖应用数据目录的用户 ACL。它防止静态文件被直接读取或被单独误传，不对获得当前用户运行权限的本机主动攻击者提供保护。WebDAV/S3 的远程备份包和用户显式导出的 JSON 仍是跨设备迁移载体，按既有行为可包含连接凭据；它们仅在 main/Rust 服务层序列化，不进入公开 snapshot、renderer 预览或日志。
 - Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入日志。
 
 ## 4.3 传输暂停与恢复边界
@@ -219,11 +219,12 @@ platform probe
 - 每个 SSH controller 的首次用户上报是登录身份；后续终端用户变化会单向驱动文件访问身份，并在切换成功后按最新 cwd 重新跟随。
 - 文件区手动切换 user/root 只改变独立的 SFTP/exec 文件通道，不向交互终端写命令；相同 shell 用户的重复 prompt 不会覆盖手动选择。
 - 终端与文件通道不是同一远端进程。文件区进入特权身份会通过独立 exec channel 重建与终端一致的 sudo 或 su 策略；优先复用终端输入期间已捕获的授权，也支持远端免密 sudo / su。
+- 普通远程 exec 的 `sudo` / `su` 前缀由 Rust 在独立 exec channel 中处理：sudo 使用 `-S` 通过 stdin 发送凭据，su 使用任务专属 PTY；密码不进入命令文本、可见终端、日志或 Copilot 上下文。凭据优先使用一次性受信输入、加密 profile，缺失时由主窗口本地安全 prompt 处理；全自动 Copilot 禁止弹 prompt，直接返回 `*_PASSWORD_NEEDED`。
 - 特权上传的字节流仍走登录用户可写的随机 /tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY。
 
 ## 4.5 MCP / CLI 外部 Agent 桥接边界
 
-FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。两者唯一共享的是 `services/action_review.rs` 的一次性审批队列和独立 SSH exec channel（`ActionApprovalSource` 枚举两个值 `Mcp` 与 `AiReview`）。
+FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；`ActionApprovalSource` 分为 `Mcp`、`AiReview` 与 `AiCopilot`。
 
 ```txt
 外部 Agent                        shell 脚本
@@ -255,13 +256,14 @@ fileterm mcp                    fileterm <cmd>
 - `mcp-runtime.json` 路径在三平台：macOS `$HOME/Library/Application Support/com.fileterm.desktop/`、Windows `%APPDATA%\com.fileterm.desktop\`、Linux `$XDG_DATA_HOME/com.fileterm.desktop/` 或 `$HOME/.local/share/com.fileterm.desktop/`。CLI 端用 `#[cfg(target_os)]` 硬编码读取，依赖 `tauri.conf.json` 的 identifier 保持 `com.fileterm.desktop` 不变；可用 `FILETERM_MCP_RUNTIME_FILE` 环境变量覆盖。
 - 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，未实现 `resources/*` / `prompts/*` / `logging/*` / `notifications/progress`。
 - 暴露 35 个 `fileterm_*` 工具，覆盖连接管理、会话状态、远程命令执行、远程文件操作、传输调度、SSH 隧道；tool annotations 标注 `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`。普通 `fileterm_execute_remote_command` 始终走独立、非交互 SSH exec channel，不污染可见 PTY；FTP / Telnet / Serial 不伪装支持远程 exec。
+- `fileterm_execute_remote_command` 可接收受信调用方明确提供的一次性 sudo/su 参数或复用加密 profile；`SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED` 只提示通过连接管理器配置凭据，不引导 Agent 在聊天中索取、复述或保存密码。主窗口可见时的缺失凭据由 FileTerm 本地 prompt 处理，CLI/MCP 和 Copilot 的模型上下文永远不接收 prompt secret。
 - `fileterm_execute_interactive_remote_command` 是明确选择的受限例外：它只复用当前已认证 SSH `Handle` 创建任务专属的临时 PTY channel，不新建后台登录连接，也绝不写入可见终端。任务创建前主 renderer 必须已经确认订阅安全输入事件；否则直接返回 `INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE`，不会启动后台 PTY。远端确实等待密码、MFA 或确认文本时，renderer 才显示 FileTerm 本地安全输入框，回答只回送同一任务，永不进入 MCP/CLI 参数、Agent 聊天、可见终端、日志、workspace snapshot 或结果文本；任务完成前会按内存 redaction 集清理可能的回显。
 - 每次交互任务写入轮转上限 2 MiB 的本地 `interactive-remote-exec-audit.jsonl`：Unix 每次写入都会强制 `0600`，Windows 依赖 per-user application-data 目录 ACL。记录仅含来源（MCP / CLI / desktop）、公开主机/用户/实际工作目录、命令程序摘要与 SHA-256 标识、开始/请求输入/结束状态、交互轮数和退出元数据；不保存命令全文、远端 prompt、用户输入或任何输出。审计建立失败时不启动任务，结束记录失败只写无敏感信息的本地 warning，避免调用者重试已运行命令。
 - Agent / MCP 设置存于 `UiPreferences.mcpAgent`，只含非敏感策略：连接范围（全部已保存连接 / 当前活动会话 / 默认连接）与操作策略（仅只读 / 经确认操作）。该策略在桌面 bridge 的 action route 前执行；连接列表、会话上下文、传输列表与等待传输也必须按范围过滤，不能只依赖 renderer 隐藏。设置页仅检测 `PATH` 并生成 Claude Code / Codex CLI 的可复制注册命令，不执行客户端、不自动写配置文件。
 - 设置页还可以按用户点击创建新的本地 PTY tab 并写入固定的 `claude` 或 `codex` 启动命令；它不是后台 Agent 进程或隐藏终端代理。密码、MFA、登录确认和 TUI 输入只会出现在这个可见的本地终端，MCP 不能触发或向该 terminal 注入任意连续键盘输入。Agent tab 使用可选、受 Rust 校验的本地 terminal title，renderer 只对枚举的受信任 client id 选择启动命令。本地 terminal 允许复用统一 pane tree 拆分，但同一树只含 local pane；每一个 pane 都启动独立 PTY/runtime、输入通道和取消令牌，不能与 SSH pane 混合或共享 shell 状态。
 - 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 超时 5s、client 超时 130s（设计上大于审批 + bridge 之和，保证审批超时不触发 client 读超时）。
 - **MCP 与 CLI 的关键差异**：MCP `tools/call` 的写操作必须经桌面审批对话框（外部 Agent 调用，需要二次确认）；CLI 是用户显式启动，视为已授权，不重复弹审批。两者共用同一份 action 路由和 bridge 实现。
-- **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。详见 `docs/plans/active/ai-copilot-integration.md` 第 9 节。
+- **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。纯对话请求不携带 Provider tools；半自动 / 全自动使用 Rust-owned 的 `tool-call -> approval/guardrail -> isolated exec -> tool-result` 循环，工具调用绑定 L2、leaf/root、CWD/user 和 `sessionRevision`。详见 `docs/plans/active/ai-copilot-modes.md`。
 - 当前完成度：核心代码已构建、已注册，且覆盖协议、交互提示识别、脱敏与审计纯函数测试；真实 Claude Code / Codex CLI 端到端及 macOS / Windows / Linux 的打包产物手工验收仍待完成。
 
 ## 5. 当前仓库结构

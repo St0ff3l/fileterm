@@ -1,6 +1,6 @@
 # 简化远程 exec 与 sudo 凭据自动化
 
-状态：规划确认，待开工
+状态：进行中（profile secret、普通 exec 安全输入、MCP/CLI 契约、连接表单和 Copilot 衔接已落地，待打包 / 真实远端回归）
 关联：[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[本机凭据字段加密](./secret-storage-encryption.md)、[本地终端与 Agent MCP 接入](./local-terminal-mcp.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -11,7 +11,7 @@
 - **Agent 不得被引导索取密码**。`sudo_password` / `su_password` 只接受用户已经明确提供的一次性参数；MCP tool description、CLI 帮助和错误提示不得要求 Agent 在聊天里询问或复述密码，也不得把密码写入日志、上下文或审计记录。优先使用 profile 加密存储，其次才是安全的本地输入；没有凭据时 fail-closed 返回稳定错误。
 - **密码绝不拼入远端命令文本**。不能使用 `echo '<pw>' | ...`、`-c '<pw>'` 或其他会进入 shell history / `ps` / 审计文本的方式。密码通过 SSH exec channel 的 stdin 发送；`sudo` 使用 `-S`，`su` 按远端要求使用 stdin/PTY，并对输入通道做最小化生命周期管理。
 - **旧交互式 exec 先保留**。它仍承担 MFA、一次性验证码和通用交互式程序的安全输入。在 sudo/su 的安全 stdin 路径和替代 UX 经过真实回归前，不删除 `interactive-exec`、`interactive_exec_audit` 或相关 renderer；后续只能按兼容迁移单独收敛。
-- **分阶段验收**。第一阶段只实现 secret schema、普通 exec 的结构化 sudo/su 输入和 MCP/CLI 契约；本地密码弹窗、连接表单和内置 Copilot 衔接分别完成并验收，不能用“接口已增加”代替端到端能力。
+- **分阶段验收**。secret schema、普通 exec 的结构化 sudo/su 输入、MCP/CLI 契约、本地密码弹窗、连接表单和内置 Copilot 衔接均已实现；仍需真实打包和远端 sudo/su 回归，不能用“接口已增加”代替端到端能力。
 
 ## 1. 结论
 
@@ -32,18 +32,18 @@
 
 ## 2. 覆盖范围
 
-| 维度            | 改动                                                                                                                                                                                                           |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/core` | `SshProfile` 加 `sudoPassword` / `suPassword` / `sudoSameAsLogin` 三个可选字段                                                                                                                                 |
-| Rust services   | `profile_ops` 加 `ftsec:v1:` 加密读写；`ssh.rs` 普通 exec 加 sudo/su 包装；删除 `run_interaction_capable_command` 与 `interactive_exec_audit`                                                                  |
-| Rust commands   | 删除 `app_resolve_remote_exec_interaction`；保留 `app_execute_remote_command`（接口扩展）                                                                                                                      |
-| MCP             | 删除 `fileterm_execute_interactive_remote_command` 工具；`fileterm_execute_remote_command` 加 `sudo_password` / `su_password` / `save_sudo_password` / `save_su_password` 可选参数；更新 tool description 引导 |
-| CLI             | 删除 `fileterm interactive-exec` 子命令；`fileterm exec` 加 `--sudo-password` / `--su-password` / `--save-sudo-password` / `--save-su-password` flag                                                           |
-| Bridge          | 删除旧 `onRemoteExecInteraction` / `resolveRemoteExecInteraction`；新增 `onSudoPasswordPrompt` / `resolveSudoPasswordPrompt`                                                                                   |
-| Renderer        | 删除 `RemoteExecInteractionModal` + `useRemoteExecInteractions`；新增 `SudoPasswordPromptModal` + `useSudoPasswordPrompt`；连接编辑表单加 sudo/su 密码字段 + “sudo 密码与登录密码相同”复选框                   |
-| 测试            | 删除交互式 exec 全套测试；新增 sudo/su 包装、三层优先级、错误路径、加密往返、转义、弹窗三按钮测试                                                                                                              |
+| 维度            | 改动                                                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core` | `SshProfile` 加 `sudoPassword` / `suPassword` / `sudoSameAsLogin` 三个可选字段                                                                                                      |
+| Rust services   | `profile_ops` 使用 `ftsec:v1:` 加密读写；`action_review` 普通 exec 增加 sudo/su stdin/PTY 分支、认证失败检测、sessionRevision 和全自动不弹窗 fail-closed；保留通用 interactive exec |
+| Rust commands   | 保留 `app_resolve_remote_exec_interaction` 兼容入口；`app_execute_remote_command` 扩展 sudo/su 参数，新增本地 sudo 密码 prompt command                                              |
+| MCP             | 保留通用 interactive exec；`fileterm_execute_remote_command` 增加 `sudo_password` / `su_password` / `save_sudo_password` / `save_su_password` 可选参数与安全描述                    |
+| CLI             | 保留现有交互式 exec；`fileterm exec` 复用扩展后的普通 exec 参数                                                                                                                     |
+| Bridge          | 保留旧交互式 exec bridge；新增 `onSudoPasswordPrompt` / `resolveSudoPasswordPrompt`                                                                                                 |
+| Renderer        | 保留通用交互式输入；新增 `SudoPasswordPromptModal` + `useSudoPasswordPrompt`，连接编辑表单增加 sudo/su 密码字段和“sudo 密码与登录密码相同”复选框                                    |
+| 测试            | 保留交互式 exec 回归；新增 sudo/su 包装、三层优先级、错误路径、加密往返、脱敏、弹窗三按钮和 Copilot 衔接测试                                                                        |
 
-> 以上旧表中的“删除 interactive-exec / 将密码交给 Agent / 命令文本包装”均由第 0 节的实施修正覆盖。当前交付范围是：公开 profile 脱敏、加密 sudo/su secret、普通 exec 的 stdin/PTY 分支、MCP/CLI 参数契约；通用交互式 exec 暂不删除。
+> 以上旧方案中的“删除 interactive-exec / 将密码交给 Agent / 命令文本包装”均由第 0 节的实施修正覆盖。当前交付范围是：公开 profile 脱敏、加密 sudo/su secret、普通 exec 的 stdin/PTY 分支、MCP/CLI 参数契约、本地密码弹窗、连接表单和 Copilot 衔接；通用交互式 exec 暂不删除。
 
 不在本计划范围：
 
@@ -308,33 +308,35 @@ scope 字符串：
 
 按“secret schema → exec stdin → MCP/CLI 契约 → renderer UX”四个阶段推进；每个阶段必须通过 typecheck + lint + clippy + test + prettier。interactive-exec 的后续收敛另行验收。
 
-### Commit 1: `feat(core): profile 加 sudo/su 密码字段`
+当前进度：阶段 1-6 已实现并通过本机自动化门禁；阶段 7 明确延期，必须等通用交互式程序的替代安全入口和跨平台回归完成后另立迁移任务。
+
+### 阶段 1（已完成）：`feat(core): profile 加 sudo/su 密码字段`
 
 - `packages/core` 加 `sudoPassword` / `suPassword` / `sudoSameAsLogin` 可选字段
 - typecheck 通过
 - 不动其他层
 
-### Commit 2: `feat(services): sudo/su 密码加密存储 + 读写`
+### 阶段 2（已完成）：`feat(services): sudo/su 密码加密存储 + 读写`
 
 - `profile_ops.rs` 加 `ftsec:v1:` 加密读写（复用 `secret_crypto::encrypt` / `decrypt_or_migrate`）
 - 旧 profile 兼容读取（无字段按 None）
 - 单元测试：加密往返、scope 绑定、旧 profile 兼容、`sudoSameAsLogin` 复用连接密码
 
-### Commit 3: `feat(services): 普通 exec 加 sudo/su 包装 + 三层密码优先级`
+### 阶段 3（已完成）：`feat(services): 普通 exec 加 sudo/su 包装 + 三层密码优先级`
 
 - `ssh.rs` 修改 `run_remote_command`
 - 检测 sudo/su + 三层优先级 + 命令包装 + 密码错误检测
 - 错误类型：`SudoPasswordNeeded` / `SuPasswordNeeded` / `SudoAuthFailure` / `SuAuthFailure`
 - 单元测试：包装正确性、三层优先级、错误路径、密码转义（单引号、双引号、`$`、反斜杠）、`sudoSameAsLogin` 但连接用私钥无密码
 
-### Commit 4: `feat(mcp-cli): execute_remote_command 加 sudo_password / save_sudo_password`
+### 阶段 4（已完成）：`feat(mcp-cli): execute_remote_command 加 sudo_password / save_sudo_password`
 
 - MCP 工具签名加可选参数 `sudo_password` / `su_password` / `save_sudo_password` / `save_su_password`
 - CLI `exec` 加 `--sudo-password` / `--su-password` / `--save-sudo-password` / `--save-su-password` flag
 - tool description 明确：`SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED` 只提示用户通过连接管理器配置凭据；不在 Agent 聊天里索取、转发或复述密码；`SUDO_AUTH_FAILURE` / `SU_AUTH_FAILURE` 不自动重试。
 - 测试：MCP 参数解析、CLI flag 解析、错误码传递
 
-### Commit 5: `feat(renderer): sudo 密码弹窗 + hook + bridge`
+### 阶段 5（已完成）：`feat(renderer): sudo 密码弹窗 + hook + bridge`
 
 - 新弹窗组件 `SudoPasswordPromptModal.tsx`：
   - 显示目标主机、用户、CWD、完整命令
@@ -345,17 +347,17 @@ scope 字符串：
 - Bridge `onSudoPasswordPrompt` / `resolveSudoPasswordPrompt`
 - `app_resolve_sudo_password_prompt` command
 - `set_sudo_prompt_renderer_ready` / `has_sudo_prompt_renderer` 状态管理
-- 主窗口不可见时 fail-closed（跳过弹窗走聊天问）
+- 主窗口不可见时 fail-closed（跳过弹窗，返回 `*_PASSWORD_NEEDED`，不走聊天问）
 - 测试：弹窗三按钮行为、fail-closed、renderer ready 注册/注销
 
-### Commit 6: `refactor(renderer): 连接编辑表单加提权凭据字段`
+### 阶段 6（已完成）：`refactor(renderer): 连接编辑表单加提权凭据字段`
 
 - 表单加 sudo 密码 / su 密码字段（type=password + 显示/隐藏 + 清空）
 - 加“sudo 密码与登录密码相同”复选框（勾上后 sudo 密码字段禁用并提示"将使用登录密码"）
 - 复用现有密码输入框组件，遵循 UI 公用组件边界
 - typecheck + prettier 通过
 
-### Commit 7: `refactor: 砍掉旧交互式 exec 全套`
+### 阶段 7（延期，不属于当前交付）：`refactor: 砍掉旧交互式 exec 全套`
 
 - 删除 MCP `fileterm_execute_interactive_remote_command` 工具
 - 删除 CLI `fileterm interactive-exec` 子命令
@@ -387,7 +389,7 @@ scope 字符串：
 - 旧 profile 兼容读取（无字段按 None）
 - 密码含特殊字符（单引号、双引号、`$`、反斜杠、中文）转义
 - 弹窗三按钮（取消 / 仅本次 / 保存）行为
-- 弹窗 fail-closed（主窗口不可见 → 跳过弹窗走聊天问）
+- 弹窗 fail-closed（主窗口不可见 → 跳过弹窗并返回 `*_PASSWORD_NEEDED`，不引导聊天问）
 - `sudoSameAsLogin` 复用连接密码
 - `sudoSameAsLogin` 但连接用私钥无密码时报错
 - 密码错误检测（`Sorry, try again` / `authentication failure`）
@@ -407,7 +409,7 @@ scope 字符串：
 - macOS 真机：连接一台 Linux 服务器，三层场景全跑通
 - 真实 Claude Code 端到端：调用 `fileterm_execute_remote_command` 跑 sudo，验证无弹窗 + 拿到结果
 - 真实 Codex CLI 端到端：同上
-- 主窗口隐藏/关闭场景：验证聊天问路径
+- 主窗口隐藏/关闭场景：验证返回 `*_PASSWORD_NEEDED`，不弹窗、不引导聊天索取密码
 - su 命令：连一台只有 su 没有 sudo 的服务器，配 su 密码，Agent 跑 `su -c 'whoami'`
 - 复选框：勾上"sudo 密码与登录密码相同"，验证不用重复填
 - 密码含特殊字符（单引号、双引号、`$`）：验证转义正确
@@ -418,21 +420,26 @@ scope 字符串：
 
 - Claude Code 调用 `fileterm_execute_remote_command` 跑 sudo（已配密码）：验证无弹窗 + 拿到结果
 - Claude Code 调用跑 sudo（未配密码 + 主窗口可见）：验证弹窗 + 引导保存
-- Claude Code 调用跑 sudo（未配密码 + 主窗口隐藏）：验证聊天问 + 引导保存
+- Claude Code 调用跑 sudo（未配密码 + 主窗口隐藏）：验证返回 `*_PASSWORD_NEEDED`，不弹窗、不引导聊天索取密码
 - CLI `fileterm exec --tab-id X --command 'sudo apt update'`：验证同上
 - CLI `fileterm exec --tab-id X --command 'sudo apt update' --sudo-password pw --save-sudo-password`：验证存进 profile
 
 ## 10. 已覆盖回归
 
-（待实施后填写）
+- profile 公开快照不泄露 sudo/su secret，`ftsec:v1:` 加密读写和旧 profile 兼容。
+- sudo/su stdin/PTY 包装、登录密码复用、认证失败检测、超时和输出脱敏。
+- MCP 普通 exec 参数与 tool description；普通 exec 与 interactive exec 保持独立。
+- 本地 sudo/su prompt 的 ready 生命周期、一次性 / 保存分支、sessionRevision 绑定和取消清理。
+- Copilot 工具调用不携带密码字段；半自动走逐次审批，全自动未预存凭据返回 `*_PASSWORD_NEEDED`，不弹本地密码窗。
+- ✅ 本机最终门禁：Rust lib test 343/343、clippy、Tauri typecheck、lint 和 Prettier 全部通过。
 
 ## 11. 待完成
 
-1. 按四个阶段推进实施，每阶段通过 typecheck + lint + clippy + test + prettier。
+1. ✅ 重新跑并记录完整 typecheck + lint + clippy + test + prettier 门禁。
 2. macOS arm64 release 构建通过。
 3. Windows / Linux 打包环境验证 sudo/su 包装、加密读写、三层优先级在真实打包应用里跑得通。
 4. 真实 Claude Code / Codex CLI 端到端验证三层兜底全跑通。
-5. 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；不移除通用 interactive exec 章节。
+5. ✅ 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；保留通用 interactive exec 章节。
 6. 另立兼容迁移任务，评估是否将 `docs/plans/active/mcp-cli-interactive-exec.md` 标记 superseded。
 7. 全部验收通过后，将本计划移至 `docs/plans/completed/`。
 
@@ -445,7 +452,7 @@ scope 字符串：
 | 密码错误 sudo 卡 3 次重试                  | 检测 `Sorry, try again` 立即返回 `SudoAuthFailure`              |
 | Agent 重复跑 sudo 浪费                     | tool description 明确"密码错误不要重试"                         |
 | Agent 把聊天密码回显                       | tool description 明确"不要在回复里复述密码"                     |
-| 弹窗主窗口不可见 fail-closed               | 三层兜底里第三层自动降级到聊天问                                |
+| 弹窗主窗口不可见 fail-closed               | 全自动 / 无 UI 场景直接返回 `*_PASSWORD_NEEDED`，不降级到聊天问 |
 | 旧 profile 兼容                            | 读取时无字段按 None，不强制迁移                                 |
 | `sudoSameAsLogin` 但连接用私钥无密码       | 运行时报错引导单独配 sudo 密码                                  |
 | `save_sudo_password=true` 但密码错误       | 不存，直接返回 `SudoAuthFailure`                                |

@@ -51,6 +51,22 @@
   border-color: var(--text-muted);
 }
 
+.sudo-password-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sudo-password-input-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.sudo-password-visibility {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .file-action-hint {
   margin-top: -8px;
   margin-bottom: 12px;

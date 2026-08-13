@@ -421,6 +421,20 @@ pub struct PendingBackupPassword {
     pub sender: oneshot::Sender<BackupPasswordResponse>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SudoPasswordResponse {
+    pub cancelled: bool,
+    pub value: Option<String>,
+    pub save: bool,
+}
+
+pub struct PendingSudoPassword {
+    pub tab_id: String,
+    pub expected_session_revision: String,
+    pub sender: oneshot::Sender<SudoPasswordResponse>,
+}
+
 pub struct WorkspaceState {
     pub tabs: Arc<RwLock<Vec<WorkspaceTab>>>,
     pub active_tab_id: Arc<RwLock<Option<String>>>,
@@ -470,6 +484,10 @@ pub struct WorkspaceState {
     /// These are intentionally separate from terminal and remote-exec input.
     pub pending_backup_passwords: Arc<RwLock<HashMap<String, PendingBackupPassword>>>,
     pub backup_password_renderer_registration: Arc<RwLock<Option<String>>>,
+    /// One-time sudo/su prompts for the normal isolated exec channel. These
+    /// values are never routed through terminal input or an Agent context.
+    pub pending_sudo_passwords: Arc<RwLock<HashMap<String, PendingSudoPassword>>>,
+    pub sudo_password_renderer_registration: Arc<RwLock<Option<String>>>,
     /// At most one interactive command may await input for a tab. The value
     /// identifies its task, so cleanup from a cancelled old worker cannot
     /// unlock a newer task that reuses the same tab id after reconnect.
@@ -547,6 +565,8 @@ impl Default for WorkspaceState {
             remote_exec_interaction_renderer_registration: Arc::new(RwLock::new(None)),
             pending_backup_passwords: Arc::new(RwLock::new(HashMap::new())),
             backup_password_renderer_registration: Arc::new(RwLock::new(None)),
+            pending_sudo_passwords: Arc::new(RwLock::new(HashMap::new())),
+            sudo_password_renderer_registration: Arc::new(RwLock::new(None)),
             active_interactive_remote_execs: Arc::new(Mutex::new(HashMap::new())),
             pending_action_approvals: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
@@ -603,6 +623,50 @@ impl WorkspaceState {
             .await
             .insert(request_id, pending);
         true
+    }
+
+    pub async fn set_sudo_password_renderer_ready(&self, registration_id: &str, ready: bool) {
+        let registration_id = registration_id.trim();
+        if registration_id.is_empty() || registration_id.len() > 200 {
+            return;
+        }
+        let mut active = self.sudo_password_renderer_registration.write().await;
+        if ready {
+            *active = Some(registration_id.to_string());
+            return;
+        }
+        if active.as_deref() != Some(registration_id) {
+            return;
+        }
+        *active = None;
+        self.pending_sudo_passwords.write().await.clear();
+    }
+
+    pub async fn insert_pending_sudo_password(
+        &self,
+        request_id: String,
+        pending: PendingSudoPassword,
+    ) -> bool {
+        // Keep the registration write lock across the readiness check and
+        // pending-map insertion. Renderer teardown takes the same lock before
+        // clearing pending senders, so a prompt can never be inserted after
+        // readiness has been withdrawn.
+        let active = self.sudo_password_renderer_registration.write().await;
+        if active.is_none() {
+            return false;
+        }
+        self.pending_sudo_passwords
+            .write()
+            .await
+            .insert(request_id, pending);
+        true
+    }
+
+    pub async fn has_sudo_password_renderer(&self) -> bool {
+        self.sudo_password_renderer_registration
+            .read()
+            .await
+            .is_some()
     }
 
     /// Mark one main-workspace renderer's secure-input route available or
