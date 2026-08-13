@@ -93,7 +93,10 @@ function latestUserMessage(messages) {
   return ''
 }
 
-function isCommandProposal(messages) {
+function isCommandProposal(messages, hasTools) {
+  // A tool-enabled Copilot turn owns the new mode contract even if an old
+  // command-card instruction is accidentally left in a compatibility caller.
+  if (hasTools) return false
   return (
     Array.isArray(messages) &&
     messages.some((message) => {
@@ -106,9 +109,8 @@ function isCommandProposal(messages) {
   )
 }
 
-function requestedMode(prompt, commandProposal) {
+function requestedMode(prompt, commandProposal, hasTools) {
   if (/fixture:tool-sudo\b/i.test(prompt)) return 'tool-sudo'
-  if (/fixture:tool\b/i.test(prompt)) return 'tool'
   if (commandProposal && /fixture:multiline\b/i.test(prompt)) {
     return 'multiline-command'
   }
@@ -118,6 +120,8 @@ function requestedMode(prompt, commandProposal) {
     // where a user first asks for an explanation and then sends "重新来".
     return 'command'
   }
+  if (/fixture:tool-compat\b/i.test(prompt)) return hasTools ? 'tool' : 'normal'
+  if (/fixture:tool\b/i.test(prompt)) return 'tool'
   if (/fixture:(command|multiline)\b/i.test(prompt)) {
     return /fixture:multiline\b/i.test(prompt) ? 'multiline-command' : 'command'
   }
@@ -307,8 +311,9 @@ function streamCompletion(request, response, { mode, model, promptLength }) {
 function handleCompletion(request, response, payload) {
   const model = typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : 'fileterm-fixture'
   const prompt = latestUserMessage(payload?.messages)
-  const commandProposal = isCommandProposal(payload?.messages)
-  const requested = requestedMode(prompt, commandProposal)
+  const hasTools = Array.isArray(payload?.tools) && payload.tools.length > 0
+  const commandProposal = isCommandProposal(payload?.messages, hasTools)
+  const requested = requestedMode(prompt, commandProposal, hasTools)
   const hasToolResult = Array.isArray(payload?.messages) && payload.messages.some((message) => message?.role === 'tool')
   const mode = (requested === 'tool' || requested === 'tool-sudo') && hasToolResult ? 'tool-final' : requested
   const onceKey = oneTimeKey(mode, prompt)

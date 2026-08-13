@@ -429,12 +429,15 @@ Renderer 的“参考终端”只是用户主动开启的会话面板开关，�
 - [x] 三类 Provider 的工具调用 loopback 契约：认证头、请求 schema、严格工具定义、SSE tool-call 解析和 usage 回传。
 - [ ] macOS、Windows、Linux 真机验证流式取消、代理、睡眠恢复、窗口关闭和断网重试（见 `docs/quality/ai-copilot-platform-regression.md`；不能由当前单一开发机伪造）。
 
-### Phase 5：Review Mode（已完成）
+### Phase 5：Legacy Review Mode（兼容实现已完成，迁移收口待执行）
 
 - [x] 抽取 MCP/AI 共用的一次性 action approval 与独立 SSH exec service。
 - [x] 只开放已绑定目标的 SSH 单步、单行命令 proposal。
 - [x] 完整审批、结果回传、超时/截断和本地审计元数据；远端输出在入库前清理控制序列、截断并 best-effort 脱敏。
 - [x] 不做自动多步循环、交互式 PTY 注入或永久授权；Review Mode 不能向终端输入框写入或自动回车。
+- [ ] 在真实 Provider、三端打包和历史兼容验收完成后，评估将 `app_run_ai_review`、旧 command/review 数据和历史操作迁移到统一 Copilot 工具结果，并再删除独立兼容入口。
+
+这里的“兼容实现已完成”只表示旧 Review 执行链路仍然安全可用，不表示它已经从产品和协议中删除；迁移收口以 [ai-copilot-modes.md](./ai-copilot-modes.md) 的阶段四为准。
 
 ## 11. 测试与验收
 

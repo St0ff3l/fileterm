@@ -64,14 +64,14 @@ async function readSseText(response) {
   return text
 }
 
-async function sendChat(url, messages, stream = true) {
+async function sendChat(url, messages, stream = true, extra = {}) {
   const response = await fetch(`${url}/v1/chat/completions`, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     method: 'POST',
-    body: JSON.stringify({ messages, model: 'fileterm-fixture', stream })
+    body: JSON.stringify({ messages, model: 'fileterm-fixture', stream, ...extra })
   })
   const body = stream && response.ok ? await readSseText(response) : await response.text()
   return { body, response }
@@ -121,7 +121,14 @@ try {
   assert.equal(recovered.response.status, 200, '重试请求没有恢复')
   assert.match(recovered.body, /Fixture response received/)
 
-  const toolMessages = [{ content: 'fixture:tool', role: 'user' }]
+  const toolMessages = [
+    {
+      content:
+        'Compatibility text only. The old command-proposal caller once required: Return exactly one JSON object and nothing else.',
+      role: 'system'
+    },
+    { content: 'fixture:tool-compat', role: 'user' }
+  ]
   const toolCallResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -138,22 +145,28 @@ try {
   const toolCallBody = await toolCallResponse.text()
   assert.equal(toolCallResponse.status, 200, 'tool-call fixture 请求失败')
   assert.match(toolCallBody, /fileterm_execute_remote_command/, 'tool-call fixture 没有返回 FileTerm tool')
+  assert.doesNotMatch(toolCallBody, /commands/, '带工具目录的新模式不应退回命令卡 envelope')
 
-  const toolResult = await sendChat(baseUrl, [
-    ...toolMessages,
-    {
-      content: null,
-      role: 'assistant',
-      tool_calls: [
-        {
-          id: 'call-fileterm-fixture',
-          type: 'function',
-          function: { name: 'fileterm_execute_remote_command', arguments: '{"command":"id -u"}' }
-        }
-      ]
-    },
-    { content: '0\\n', role: 'tool', tool_call_id: 'call-fileterm-fixture' }
-  ])
+  const toolResult = await sendChat(
+    baseUrl,
+    [
+      ...toolMessages,
+      {
+        content: null,
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call-fileterm-fixture',
+            type: 'function',
+            function: { name: 'fileterm_execute_remote_command', arguments: '{"command":"id -u"}' }
+          }
+        ]
+      },
+      { content: '0\\n', role: 'tool', tool_call_id: 'call-fileterm-fixture' }
+    ],
+    true,
+    { tools: [{ type: 'function' }] }
+  )
   assert.equal(toolResult.response.status, 200, 'tool-call fixture 二次请求失败')
   assert.match(toolResult.body, /Fixture tool loop completed/, 'tool-call fixture 没有消费 tool result')
 

@@ -463,6 +463,7 @@ type AiErrorCode =
 - `AiStreamEvent` 发 `tool-call` / `tool-result` 事件给 renderer，结果回传 Provider 继续下一轮。
 - 全自动模式下护栏通过后直接执行；护栏未通过返回稳定状态和原因，不自动重试。
 - sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
+- 新建 Copilot 对话会通过 Rust command 重置当前窗口的自动执行累计，并在下一条消息发送前等待重置完成，避免旧对话预算泄漏到新对话。
 - 已覆盖 schema、三 Provider history、流式 tool-call 重组、工具参数安全校验和三类 Provider 的 loopback 请求/响应契约；真实 Provider 端到端仍待执行。
 - 新增 `effective_copilot_response_mode` 契约：半自动 / 全自动即使收到兼容期的 `command-proposal` 也强制归一为普通对话，只有纯对话保留旧命令卡解析入口；新 renderer 不再发送 `responseMode`。
 
@@ -475,9 +476,9 @@ type AiErrorCode =
 - 复用 `<DropdownSelect>` / `<AppIcon>` / `<VerticalScrollbar>` / `--focus-outline` 等项目边界。
 - 已通过前端 typecheck、lint、Prettier；macOS arm64 app/DMG 与 Claude Code / Codex CLI 的 MCP interactive-exec 真实调用已通过，内置真实 Provider 交互和 Windows/Linux 打包仍待验证。
 
-### 阶段四：Review Mode 迁移收口（最后）
+### 阶段四：Legacy Review/命令卡迁移收口（最后）
 
-本阶段仍未开始：需要先完成真实 Provider、三端打包和兼容迁移验证，再评估移除独立 `app_run_ai_review`，同步架构文档，并把本计划移动到 `docs/plans/completed/`。
+本阶段仍未开始：需要先完成真实 Provider、三端打包和兼容迁移验证，再评估移除独立 `app_run_ai_review`、旧 command/review 数据和历史操作入口，最后同步架构文档并把本计划移动到 `docs/plans/completed/`。
 
 - 将现有 `app_run_ai_review` 的兼容数据和历史记录迁移到统一 Copilot 工具结果后，再删除旧 command。
 - 真实 Provider 三模式回归、三端打包验证、窗口隐藏 / 重连 / CWD 变化场景验证。

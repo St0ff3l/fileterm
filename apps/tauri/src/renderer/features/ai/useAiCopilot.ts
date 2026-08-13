@@ -101,6 +101,7 @@ export function useAiCopilot() {
   const requestCompletedRef = useRef(false)
   const unmountedRef = useRef(false)
   const modeStateRef = useRef<AiCopilotModeState | null>(null)
+  const modeResetPromiseRef = useRef<Promise<AiCopilotModeState | null> | null>(null)
   const mountedRef = useRef(true)
 
   const applyConversation = useCallback((next: AiConversation | null) => {
@@ -424,6 +425,22 @@ export function useAiCopilot() {
     []
   )
 
+  const resetAutoModeSessionCounts = useCallback(async () => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) return null
+    try {
+      const next = await desktopApi.resetAiAutoModeSessionCounts()
+      if (mountedRef.current) {
+        modeStateRef.current = next
+        setModeState(next)
+      }
+      return next
+    } catch (error) {
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+      return null
+    }
+  }, [])
+
   const sendMessage = useCallback(
     async (value: string, options: SendMessageOptions = {}) => {
       const desktopApi = window.fileterm
@@ -431,6 +448,16 @@ export function useAiCopilot() {
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !content || !providerId || isStreaming) return false
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
+      const pendingModeReset = modeResetPromiseRef.current
+      if (pendingModeReset) {
+        const resetState = await pendingModeReset
+        if (!resetState) return false
+      }
+      const needsNewConversation = !conversationRef.current
+      if (needsNewConversation && !pendingModeReset) {
+        const resetState = await resetAutoModeSessionCounts()
+        if (!resetState) return false
+      }
       const preview =
         options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
           ? options.contextPreview
@@ -533,7 +560,15 @@ export function useAiCopilot() {
         return false
       }
     },
-    [applyConversation, autoSummarizeConversationTitle, contextPreview, createConversation, isStreaming, startRequest]
+    [
+      applyConversation,
+      autoSummarizeConversationTitle,
+      contextPreview,
+      createConversation,
+      isStreaming,
+      resetAutoModeSessionCounts,
+      startRequest
+    ]
   )
 
   const createContextPreview = useCallback(
@@ -654,22 +689,6 @@ export function useAiCopilot() {
     [isStreaming]
   )
 
-  const resetAutoModeSessionCounts = useCallback(async () => {
-    const desktopApi = window.fileterm
-    if (!desktopApi) return null
-    try {
-      const next = await desktopApi.resetAiAutoModeSessionCounts()
-      if (mountedRef.current) {
-        modeStateRef.current = next
-        setModeState(next)
-      }
-      return next
-    } catch (error) {
-      if (mountedRef.current) setErrorMessage(toMessage(error))
-      return null
-    }
-  }, [])
-
   const stop = useCallback(async () => {
     const desktopApi = window.fileterm
     if (!desktopApi || !activeRequestId) return
@@ -764,8 +783,21 @@ export function useAiCopilot() {
     setErrorMessage(null)
     setUsage(null)
     setToolActivities([])
+    // Guardrail counters belong to the active Copilot conversation window,
+    // not to the historical conversation being left behind. Starting a new
+    // chat therefore gets a fresh automatic-execution budget in Rust.
+    const resetPromise = resetAutoModeSessionCounts()
+    modeResetPromiseRef.current = resetPromise
+    void resetPromise.then(
+      () => {
+        if (modeResetPromiseRef.current === resetPromise) modeResetPromiseRef.current = null
+      },
+      () => {
+        if (modeResetPromiseRef.current === resetPromise) modeResetPromiseRef.current = null
+      }
+    )
     applyConversation(null)
-  }, [applyConversation, isStreaming])
+  }, [applyConversation, isStreaming, resetAutoModeSessionCounts])
 
   const currentProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
   // Effective model: user-selected override > provider's default model

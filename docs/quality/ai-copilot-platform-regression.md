@@ -43,7 +43,7 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 
 ### 已自动化的 CI 证据
 
-- `npm run qa:ai-copilot-fixture-smoke` 会启动随机 loopback 端口，真实发送 OpenAI-compatible 请求，验证“先普通回答、再切到命令卡模式并只输入‘重新来’”仍返回严格命令卡 JSON、一次 503 后的重试恢复，以及 tool-call / sudo tool-call 契约。
+- `npm run qa:ai-copilot-fixture-smoke` 会启动随机 loopback 端口，真实发送 OpenAI-compatible 请求，验证“先普通回答、再切到命令卡模式并只输入‘重新来’”仍返回严格命令卡 JSON、一次 503 后的重试恢复，以及 tool-call / sudo tool-call 契约；其中还会故意混入旧 command-proposal 提示，确认新请求的 `tools` 目录优先，不会退回命令卡 envelope。
 - PR CI 的 `tauri-socket-lifecycle` macOS、Windows、Linux 矩阵会额外运行 AI Copilot 的三类 Provider 解析/schema、历史回放、模式边界、自动护栏，以及 `action_review`、profile secret、PTY 密码提示契约测试；这补足跨平台编译与纯逻辑回归，但仍不替代下面的真实 Provider、桌面 UI 或远端 SSH 验收。
 - PR CI 的 `tauri-package-smoke` 会在 macOS、Windows、Linux 生成无签名包，检查 `.app/.dmg`、NSIS installer、`.deb/.AppImage`，运行 release binary 的 `mcp --help` 与 `interactive-exec --help`，并通过 `scripts/mcp-stdio-smoke.mjs` 真实完成 MCP `initialize`、`tools/list` 和交互/提权 schema 校验。这证明打包产物内的 MCP runtime 可被 stdio 客户端握手，但不代表签名、公证、真实桌面交互或真实 Claude/Codex 模型验收已完成。
 
