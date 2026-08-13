@@ -18,12 +18,24 @@ export function BackupPasswordModal({
   onSubmit(value: string): void
 }) {
   const [value, setValue] = useState('')
-  useEffect(() => setValue(''), [request.requestId])
+  const [confirmation, setConfirmation] = useState('')
+  const requiresConfirmation = request.operation === 'upload'
+  useEffect(() => {
+    setValue('')
+    setConfirmation('')
+  }, [request.requestId])
+
+  const hasUppercase = /[A-Z]/.test(value)
+  const hasLowercase = /[a-z]/.test(value)
+  const hasValidLength = value.length >= 8
+  const isMatching = value === confirmation
+  const isValid = hasValidLength && hasUppercase && hasLowercase && (!requiresConfirmation || isMatching)
 
   const submit = () => {
-    if (!value || isSubmitting) return
+    if (!isValid || isSubmitting) return
     const password = value
     setValue('')
+    setConfirmation('')
     onSubmit(password)
   }
 
@@ -55,13 +67,32 @@ export function BackupPasswordModal({
             }}
           />
         </label>
+        {requiresConfirmation ? (
+          <label className="file-action-field">
+            <span>{t.backupPasswordConfirmLabel}</span>
+            <input
+              disabled={isSubmitting}
+              type="password"
+              value={confirmation}
+              placeholder={t.backupPasswordConfirmPlaceholder}
+              onChange={(event) => setConfirmation(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') submit()
+              }}
+            />
+          </label>
+        ) : null}
+        <p className="file-action-hint">{t.backupPasswordPolicy}</p>
+        {requiresConfirmation && confirmation && !isMatching ? (
+          <div className="modal-error">{t.backupPasswordMismatch}</div>
+        ) : null}
         <p className="file-action-hint">{t.backupPasswordPrivacy}</p>
         {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
         <div className="form-actions">
           <button className="flat-button" disabled={isSubmitting} onClick={onCancel} type="button">
             {t.cancel}
           </button>
-          <button className="primary-button" disabled={!value || isSubmitting} onClick={submit} type="button">
+          <button className="primary-button" disabled={!isValid || isSubmitting} onClick={submit} type="button">
             {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
             <span>{t.backupPasswordContinue}</span>
           </button>

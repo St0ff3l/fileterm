@@ -40,7 +40,7 @@
 固定约束：
 
 - salt 16 bytes，nonce 12 bytes，密钥 32 bytes。
-- Argon2id 使用 64 MiB、3 passes、1 lane，密码至少 12 个字符。
+- Argon2id 使用 64 MiB、3 passes、1 lane，密码至少 8 个字符，并且必须同时包含大写字母和小写字母。
 - 加密元数据作为 AES-GCM AAD，篡改参数、密文或 hash 都会失败。
 - 允许解读 `PBKDF2-HMAC-SHA256` v3 兼容包（100,000–1,000,000 次迭代），新上传不再使用 PBKDF2。
 - 不使用本机设备绑定密钥；同一备份可以跨设备恢复，只要用户记得主密码。
