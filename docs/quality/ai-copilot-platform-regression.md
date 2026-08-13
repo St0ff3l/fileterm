@@ -133,7 +133,7 @@ result: pass（production bundle）
 notes:
   - `npm run release:mac -w @fileterm/tauri` 完整通过，包含 renderer production build、Rust release 编译、adhoc 签名和 DMG 打包。
   - 未执行 notarization：本机未设置 Apple 发布凭据。这不影响开发/QA 构建结果，但不能替代正式发布公证。
-- 本条只证明 release 打包链路；Provider 流式、代理、睡眠恢复和三端 UI 行为仍按上方清单在对应环境验收。
+  - 本条只证明 release 打包链路；Provider 流式、代理、睡眠恢复和三端 UI 行为仍按上方清单在对应环境验收。
 ```
 
 ### 2026-08-14 — macOS QA bundle，三模式工具循环与 sudo 安全输入
