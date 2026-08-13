@@ -533,7 +533,7 @@ export function AiCopilotPanel({
 
       {canChat ? (
         <section className="ai-copilot-mode-dock" aria-label={t.aiCopilotModeLabel}>
-          <div className="ai-copilot-mode-selector" role="group" aria-label={t.aiCopilotModeLabel}>
+          <div className="ai-copilot-mode-selector" role="radiogroup" aria-label={t.aiCopilotModeLabel}>
             {(
               [
                 ['pure-conversation', t.aiCopilotModePure],
@@ -543,9 +543,10 @@ export function AiCopilotPanel({
             ).map(([value, label]) => (
               <button
                 key={value}
-                aria-pressed={copilotMode === value}
+                aria-checked={copilotMode === value}
                 className={copilotMode === value ? 'is-active' : ''}
                 disabled={isStreaming}
+                role="radio"
                 title={value === 'fully-automatic' ? t.aiCopilotModeFullHint : undefined}
                 type="button"
                 onClick={() => selectCopilotMode(value)}

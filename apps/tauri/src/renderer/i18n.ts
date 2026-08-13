@@ -124,9 +124,6 @@ const zhCN = {
   aiCopilotContextTruncated: '已截取最近可读内容',
   aiCopilotContextTargetChanged: '终端目标已变化',
   aiCopilotContextTargetChangedHint: '当前预览或命令卡已绑定旧目标；请重新预览或重新生成。',
-  aiCopilotCommandProposal: '命令卡片',
-  aiCopilotCommandProposalHint: '命令模式 · 只返回可检查的命令卡片',
-  aiCopilotCommandProposalRequiresContext: '请先开启“参考终端”，命令模式才会生成命令卡片。',
   aiCopilotCommandWriteUnavailable: '当前命令只能复制，不能写入输入框。',
   aiCopilotReviewCommand: '审核并运行',
   aiCopilotReviewCommandHint: '仅通过独立 SSH exec 通道运行一次；仍需在确认框中批准，不会向交互终端写入或自动回车。',
@@ -1231,10 +1228,6 @@ const enUS: typeof zhCN = {
   aiCopilotContextTargetChanged: 'Terminal target changed',
   aiCopilotContextTargetChangedHint:
     'This preview or command card is bound to the previous target. Preview again or generate a new command.',
-  aiCopilotCommandProposal: 'Command cards',
-  aiCopilotCommandProposalHint: 'Command mode · returns reviewable command cards only',
-  aiCopilotCommandProposalRequiresContext:
-    'Turn on “Reference terminal” before using command mode to generate a command card.',
   aiCopilotCommandWriteUnavailable: 'This command can only be copied, not written to the terminal input.',
   aiCopilotReviewCommand: 'Review & run',
   aiCopilotReviewCommandHint:

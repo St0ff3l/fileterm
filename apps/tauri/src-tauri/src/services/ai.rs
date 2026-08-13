@@ -730,7 +730,10 @@ struct StoredAiCommandCapability {
 #[derive(Clone, Debug)]
 struct StoredAiModeState {
     mode: AiCopilotMode,
-    attach_terminal_context: bool,
+    // Pure mode owns this preference. Semi/full mode expose an effective
+    // `true` value without overwriting it, so returning to pure mode restores
+    // the user's L0/L2 choice instead of leaking the forced L2 state.
+    pure_context_preference: bool,
     session_generation: u64,
     counters: crate::services::ai_guardrails::AutoModeCounters,
     thresholds: AiAutoModeThresholds,
@@ -747,7 +750,7 @@ fn default_conversation_schema_version() -> u32 {
 fn default_ai_mode_state() -> StoredAiModeState {
     StoredAiModeState {
         mode: AiCopilotMode::PureConversation,
-        attach_terminal_context: false,
+        pure_context_preference: false,
         session_generation: 0,
         counters: crate::services::ai_guardrails::AutoModeCounters::default(),
         thresholds: crate::services::ai_guardrails::default_thresholds(),
@@ -769,10 +772,14 @@ fn mode_state_for_window(window_label: &str) -> Result<StoredAiModeState, AppErr
         .clone())
 }
 
+fn effective_context_attachment(state: &StoredAiModeState) -> bool {
+    state.mode.requires_l2() || state.pure_context_preference
+}
+
 fn public_mode_state(state: &StoredAiModeState) -> AiCopilotModeState {
     AiCopilotModeState {
         mode: state.mode,
-        attach_terminal_context: state.attach_terminal_context,
+        attach_terminal_context: effective_context_attachment(state),
         auto_mode_guardrails: AiAutoModeGuardrailState {
             session_tool_call_count: state.counters.tool_calls,
             session_destructive_count: state.counters.destructive_calls,
@@ -806,7 +813,6 @@ pub fn set_copilot_mode(
     }
     let mode_changed = state.mode != input.mode;
     state.mode = input.mode;
-    state.attach_terminal_context = input.mode.requires_l2() || state.attach_terminal_context;
     if mode_changed {
         // The registry is process-local, so a restart also requires a new
         // full-auto opt-in. Switching modes starts a fresh budget.
@@ -830,7 +836,7 @@ pub fn set_context_attach(
             "半自动和全自动模式必须附带 L2 终端上下文",
         ));
     }
-    state.attach_terminal_context = input.attach_terminal_context;
+    state.pure_context_preference = input.attach_terminal_context;
     Ok(public_mode_state(state))
 }
 
@@ -2896,7 +2902,7 @@ fn validate_context_for_mode(
     context_attachment: Option<&AiContextAttachment>,
     response_mode: AiChatResponseMode,
 ) -> Result<(), AppError> {
-    let needs_context = mode_state.attach_terminal_context || mode_state.mode.requires_l2();
+    let needs_context = effective_context_attachment(mode_state);
     if needs_context && context_attachment.is_none() {
         return Err(ai_error(
             "AI_CONTEXT_NOT_FOUND",
@@ -6717,9 +6723,20 @@ mod tests {
 
         let automatic_state = StoredAiModeState {
             mode: AiCopilotMode::FullyAutomatic,
-            attach_terminal_context: true,
+            pure_context_preference: false,
             ..default_ai_mode_state()
         };
+        assert!(public_mode_state(&automatic_state).attach_terminal_context);
+        let pure_after_automatic = StoredAiModeState {
+            mode: AiCopilotMode::PureConversation,
+            ..automatic_state.clone()
+        };
+        assert!(!public_mode_state(&pure_after_automatic).attach_terminal_context);
+        let pure_with_opted_in_l2 = StoredAiModeState {
+            pure_context_preference: true,
+            ..pure_after_automatic
+        };
+        assert!(public_mode_state(&pure_with_opted_in_l2).attach_terminal_context);
         assert!(copilot_mode_state_is_current(
             &automatic_state,
             AiCopilotMode::FullyAutomatic,
