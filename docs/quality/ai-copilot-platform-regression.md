@@ -35,13 +35,15 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 - `fixture:fail-once`：首个请求返回 HTTP 503；对同一消息点击“重试”后成功。
 - `fixture:disconnect-once`：首个请求在首个 SSE chunk 后断开；对同一消息重试后成功。
 - `fixture:markdown`：流式返回标题、列表、表格、代码块和链接，并带有应被忽略的原始 HTML、图片和 `javascript:` 链接。
+- `fixture:tool`：返回一次 `fileterm_execute_remote_command` 的 `id -u` tool call；Provider 收到 Rust 工具结果后返回最终回答，可验证半自动审批和全自动工具循环。
+- `fixture:tool-sudo`：返回一次 `sudo id -u` tool call；在测试 profile 未配置 sudo 复用时，可验证 FileTerm 任务专属 sudo 密码弹窗和一次性执行。
 - 迁移期 command-proposal 兼容回归：在已授权 L2 上下文发送 `fixture:command` 或 `fixture:multiline`，分别返回只读 `pwd` 卡和多行卡；新 UI 不再提供“命令建议”切换，三模式选择器直接决定新回合语义。
 
 该 fixture 故意绑定 `127.0.0.1`，而应用会对 loopback Provider 禁用系统代理，避免本机 API Key 被意外转发。因此它**不能**替代 HTTP CONNECT / SOCKS5 验收；代理项仍须使用一个受控的非 loopback Provider 或相应测试网络。
 
 ### 已自动化的 CI 证据
 
-- `npm run qa:ai-copilot-fixture-smoke` 会启动随机 loopback 端口，真实发送 OpenAI-compatible 请求，验证“先普通回答、再切到命令卡模式并只输入‘重新来’”仍返回严格命令卡 JSON，同时验证一次 503 后的重试恢复。
+- `npm run qa:ai-copilot-fixture-smoke` 会启动随机 loopback 端口，真实发送 OpenAI-compatible 请求，验证“先普通回答、再切到命令卡模式并只输入‘重新来’”仍返回严格命令卡 JSON、一次 503 后的重试恢复，以及 tool-call / sudo tool-call 契约。
 - PR CI 的 `tauri-socket-lifecycle` macOS、Windows、Linux 矩阵会额外运行 AI Copilot 的三类 Provider 解析/schema、历史回放、模式边界和自动护栏契约测试；这补足跨平台编译与纯逻辑回归，但仍不替代下面的真实 Provider、桌面 UI 或远端 SSH 验收。
 - PR CI 的 `tauri-package-smoke` 会在 macOS、Windows、Linux 生成无签名包，检查 `.app/.dmg`、NSIS installer、`.deb/.AppImage`，并直接运行 release binary 的 `mcp --help` 与 `interactive-exec --help`。这只证明打包产物和非 GUI CLI 路由可生成/启动，不代表签名、公证、真实桌面交互或真实 Claude/Codex 验收已完成。
 
@@ -131,5 +133,25 @@ result: pass（production bundle）
 notes:
   - `npm run release:mac -w @fileterm/tauri` 完整通过，包含 renderer production build、Rust release 编译、adhoc 签名和 DMG 打包。
   - 未执行 notarization：本机未设置 Apple 发布凭据。这不影响开发/QA 构建结果，但不能替代正式发布公证。
-  - 本条只证明 release 打包链路；Provider 流式、代理、睡眠恢复和三端 UI 行为仍按上方清单在对应环境验收。
+- 本条只证明 release 打包链路；Provider 流式、代理、睡眠恢复和三端 UI 行为仍按上方清单在对应环境验收。
 ```
+
+### 2026-08-14 — macOS QA bundle，三模式工具循环与 sudo 安全输入
+
+```text
+platform: macOS / arm64
+fileterm commit: 3449bc55（fixture tool-call）；Copilot/Rust 基线为 0f3ebf4d
+artifact: debug FileTerm QA.app（唯一 bundle id com.fileterm.qa）
+provider: OpenAI-compatible Chat / loopback QA fixture（fixture:tool、fixture:tool-sudo）
+target: disposable Debian 13-slim sshd（127.0.0.1:22222，测试用户 filetermqa）
+network: direct loopback
+result: pass（macOS 本机 QA 子集）
+notes:
+  - Provider 设置连接测试成功；重开设置只显示 Key 已保存状态，不回填 Key。
+  - 纯对话完成真实 SSE Markdown 流式渲染；原始 HTML、远程图片和 javascript: 链接未成为可执行内容。
+  - 半自动 `fixture:tool` 显示 host / CWD / 风险 / 30 秒超时审批框，批准后独立 exec 返回 `1000`；可见终端未被写入。
+  - 全自动 `fixture:tool` 在 Rust 护栏通过后直接执行，界面计数从 `0/20` 增至 `1/20`，没有逐次审批框。
+  - 关闭 profile 的 sudoSameAsLogin 后，半自动 `fixture:tool-sudo` 显示任务专属 sudo 密码弹窗；选择“仅本次执行”后返回 `0`，密码只显示为掩码且未进入 Provider 结果。
+```
+
+本条补齐 macOS 当前源码的 Provider、三模式工具循环、真实 disposable SSH 和 sudo 安全输入证据；Windows/Linux、真实外部 Provider、代理、睡眠恢复和 Claude/Codex 仍未签收。

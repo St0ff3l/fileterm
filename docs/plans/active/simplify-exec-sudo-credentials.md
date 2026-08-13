@@ -437,7 +437,7 @@ scope 字符串：
 
 1. ✅ 重新跑并记录完整 typecheck + lint + clippy + test + prettier 门禁。
 2. ✅ macOS arm64 release app/DMG 构建通过；已验证 arm64 Mach-O、UDZO DMG 校验和以及 MCP/interactive-exec CLI 帮助。
-3. Windows / Linux 打包环境验证 sudo/su 包装、加密读写、三层优先级在真实打包应用里跑得通。
+3. ✅ macOS arm64 QA bundle 已用 disposable SSH 跑通已保存凭据的 sudo exec，以及未启用 `sudoSameAsLogin` 时的 Copilot sudo 安全弹窗与“仅本次执行”分支；Windows / Linux 打包环境仍需验证 sudo/su 包装、加密读写和三层优先级。
 4. 真实 Claude Code / Codex CLI 端到端验证三层兜底全跑通。
 5. ✅ 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；保留通用 interactive exec 章节。
 6. 另立兼容迁移任务，评估是否将 `docs/plans/active/mcp-cli-interactive-exec.md` 标记 superseded。

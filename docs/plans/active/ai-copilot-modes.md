@@ -13,9 +13,9 @@
 - **Copilot 永不接收提权密码**。半自动/全自动只能使用 profile 加密存储或安全本地输入；不得让模型在聊天里索取、转发、回显或持久化 `sudo_password` / `su_password`。
 - **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
 
-当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，真实 Provider、远端 sudo/su 和 Windows/Linux 打包回归仍待验收。
+当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，并补齐了唯一 bundle id QA app 的 loopback Provider、三模式工具循环、disposable SSH 和 sudo 安全输入回归；真实外部 Provider、远端生产环境和 Windows/Linux 打包回归仍待验收。
 
-本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；真实 Provider、远端 sudo/su 与 Windows/Linux 打包回归仍保持未验收。
+本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH 和任务专属 sudo prompt；真实外部 Provider、远端生产环境与 Windows/Linux 打包回归仍保持未验收。
 
 ## 1. 结论
 
