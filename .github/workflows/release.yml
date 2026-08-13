@@ -194,16 +194,10 @@ jobs:
           if (-not (Test-Path -LiteralPath $portableBinary -PathType Leaf)) {
             throw "Portable Windows binary was not generated: $portableBinary"
           }
-          $portableDir = Join-Path $env:RUNNER_TEMP "FileTerm-$version-windows-x64-portable"
-          if (Test-Path -LiteralPath $portableDir) {
-            Remove-Item -LiteralPath $portableDir -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $portableDir | Out-Null
-          Copy-Item -LiteralPath $portableBinary -Destination (Join-Path $portableDir 'FileTerm.exe')
-          $portableArchive = Join-Path $bundleDir "FileTerm-$version-windows-x64-portable.zip"
-          Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $portableArchive -CompressionLevel Optimal -Force
-          if (-not (Test-Path -LiteralPath $portableArchive -PathType Leaf)) {
-            throw "Portable Windows archive was not generated: $portableArchive"
+          $portableTarget = Join-Path $bundleDir "FileTerm-$version-windows-x64-portable.exe"
+          Copy-Item -LiteralPath $portableBinary -Destination $portableTarget -Force
+          if (-not (Test-Path -LiteralPath $portableTarget -PathType Leaf)) {
+            throw "Portable Windows executable was not generated: $portableTarget"
           }
 
       - name: Create GitHub Release updater manifest
@@ -217,7 +211,7 @@ jobs:
           $bundleDir = 'apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
           if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*.exe' -File)) { throw 'NSIS installer was not generated.' }
           if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-setup.exe.sig' -File)) { throw 'NSIS updater signature was not generated.' }
-          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.zip' -File)) { throw 'Portable Windows archive was not generated.' }
+          if (-not (Get-ChildItem -LiteralPath $bundleDir -Filter '*-portable.exe' -File)) { throw 'Portable Windows executable was not generated.' }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v6
@@ -227,7 +221,6 @@ jobs:
             apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sig
             apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/latest.json
-            apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.zip
           if-no-files-found: error
 
   build-linux:
