@@ -929,12 +929,63 @@ pub fn delete_command_template(app: &AppHandle, command_id: &str) -> Result<(), 
     Ok(())
 }
 
-// ── Plain-text secrets persistence ──────────────────────────────────────────
+// ── Encrypted secrets persistence ───────────────────────────────────────────
 
 /// Build the complete secret store from the current profile set. Rebuilding
 /// instead of incrementally merging guarantees that deleted profiles cannot
 /// leave orphan credentials behind.
-fn build_profile_secrets(profiles: &[Value]) -> Value {
+fn profile_secret_storage_root(path: &std::path::Path) -> Result<&std::path::Path, AppError> {
+    path.parent()
+        .ok_or_else(|| AppError::Storage("无法解析连接凭据存储目录".to_string()))
+}
+
+fn current_profile_secret<'a>(
+    current: Option<&'a Value>,
+    profile_id: &str,
+    field: &str,
+) -> Option<&'a Value> {
+    current?
+        .get("profiles")?
+        .get(profile_id)?
+        .get(field)?
+        .get("value")
+}
+
+fn encrypted_profile_secret(
+    storage_root: &std::path::Path,
+    current: Option<&Value>,
+    profile_id: &str,
+    field: &str,
+    plaintext: &str,
+) -> Result<Value, AppError> {
+    let scope = format!("profile/{profile_id}/{field}");
+    if let Some(existing) = current_profile_secret(current, profile_id, field)
+        .and_then(Value::as_str)
+        .filter(|existing| crate::services::secret_crypto::is_encrypted(existing))
+    {
+        if crate::services::secret_crypto::decrypt(storage_root, &scope, existing)? == plaintext {
+            return Ok(serde_json::json!({
+                "storage": crate::services::secret_crypto::ENCRYPTED_STORAGE,
+                "value": existing,
+            }));
+        }
+    }
+    Ok(serde_json::json!({
+        "storage": crate::services::secret_crypto::ENCRYPTED_STORAGE,
+        "value": crate::services::secret_crypto::encrypt(storage_root, &scope, plaintext)?,
+    }))
+}
+
+/// Build the complete secret store from the current profile set. Rebuilding
+/// instead of incrementally merging guarantees that deleted profiles cannot
+/// leave orphan credentials behind. Existing matching ciphertext is reused so
+/// normal reads do not rotate values just because AES-GCM has a fresh nonce.
+fn build_profile_secrets(
+    path: &std::path::Path,
+    profiles: &[Value],
+    current: Option<&Value>,
+) -> Result<Value, AppError> {
+    let storage_root = profile_secret_storage_root(path)?;
     let mut secrets_profiles = Map::new();
     for profile in profiles {
         let id = match profile.get("id").and_then(|v| v.as_str()) {
@@ -943,23 +994,25 @@ fn build_profile_secrets(profiles: &[Value]) -> Value {
         };
         let mut entry = Map::new();
         for key in ["password", "passphrase", "privateKeyPath"] {
-            if let Some(v) = profile.get(key) {
-                if !v.is_null() {
-                    entry.insert(
-                        key.to_string(),
-                        serde_json::json!({ "storage": "plain-text-fallback", "value": v }),
-                    );
-                }
+            if let Some(value) = profile.get(key).and_then(Value::as_str) {
+                entry.insert(
+                    key.to_string(),
+                    encrypted_profile_secret(storage_root, current, &id, key, value)?,
+                );
             }
         }
         if let Some(proxy) = profile.get("proxy").and_then(|v| v.as_object()) {
-            if let Some(pw) = proxy.get("password") {
-                if !pw.is_null() {
-                    entry.insert(
-                        "proxyPassword".to_string(),
-                        serde_json::json!({ "storage": "plain-text-fallback", "value": pw }),
-                    );
-                }
+            if let Some(password) = proxy.get("password").and_then(Value::as_str) {
+                entry.insert(
+                    "proxyPassword".to_string(),
+                    encrypted_profile_secret(
+                        storage_root,
+                        current,
+                        &id,
+                        "proxyPassword",
+                        password,
+                    )?,
+                );
             }
         }
         if !entry.is_empty() {
@@ -967,10 +1020,10 @@ fn build_profile_secrets(profiles: &[Value]) -> Value {
         }
     }
 
-    serde_json::json!({
+    Ok(serde_json::json!({
         "version": 1,
         "profiles": secrets_profiles,
-    })
+    }))
 }
 
 #[cfg(unix)]
@@ -1085,9 +1138,21 @@ fn write_secure_secret_file(path: &std::path::Path, content: &[u8]) -> Result<()
     Ok(())
 }
 
+fn read_profile_secret_store(path: &std::path::Path) -> Result<Option<Value>, AppError> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => serde_json::from_str(&content)
+            .map(Some)
+            .map_err(|error| AppError::Serialization(error.to_string())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(AppError::Storage(error.to_string())),
+    }
+}
+
 fn persist_profile_secrets_at(path: &std::path::Path, profiles: &[Value]) -> Result<(), AppError> {
-    let content = serde_json::to_vec_pretty(&build_profile_secrets(profiles))
-        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    let current = read_profile_secret_store(path)?;
+    let content =
+        serde_json::to_vec_pretty(&build_profile_secrets(path, profiles, current.as_ref())?)
+            .map_err(|error| AppError::Serialization(error.to_string()))?;
     write_secure_secret_file(path, &content)
 }
 
@@ -1134,21 +1199,16 @@ fn persist_profiles(app: &AppHandle, profiles: &[Value]) -> Result<(), AppError>
 /// Heal legacy modes and prune stale secret IDs on normal profile reads.
 fn reconcile_profile_secrets(app: &AppHandle, profiles: &[Value]) -> Result<(), AppError> {
     let path = workspace_file(app, "profile-secrets.json")?;
-    let expected = build_profile_secrets(profiles);
-    let current = match std::fs::read_to_string(&path) {
-        Ok(content) => Some(
-            serde_json::from_str::<Value>(&content)
-                .map_err(|error| AppError::Serialization(error.to_string()))?,
-        ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(AppError::Storage(error.to_string())),
-    };
+    let current = read_profile_secret_store(&path)?;
+    let expected = build_profile_secrets(&path, profiles, current.as_ref())?;
 
     let expected_has_secrets = expected["profiles"]
         .as_object()
         .is_some_and(|profiles| !profiles.is_empty());
     if current.as_ref() != Some(&expected) && (path.exists() || expected_has_secrets) {
-        persist_profile_secrets_at(&path, profiles)?;
+        let content = serde_json::to_vec_pretty(&expected)
+            .map_err(|error| AppError::Serialization(error.to_string()))?;
+        write_secure_secret_file(&path, &content)?;
     }
     if path.exists() {
         lock_down_secret_file(&path)?;
@@ -1266,13 +1326,17 @@ mod tests {
     }
 
     #[test]
-    fn rebuilding_secrets_prunes_deleted_profile_ids() {
+    fn rebuilding_secrets_prunes_deleted_profile_ids_and_encrypts_values() {
+        let directory =
+            std::env::temp_dir().join(format!("fileterm-profile-secrets-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("profile-secrets.json");
         let profiles = vec![serde_json::json!({
             "id": "profile-current",
             "password": "plain-text-password",
             "proxy": { "password": "plain-text-proxy-password" }
         })];
-        let secrets = build_profile_secrets(&profiles);
+        let secrets = build_profile_secrets(&path, &profiles, None).unwrap();
         let stored = secrets["profiles"].as_object().unwrap();
 
         assert_eq!(stored.len(), 1);
@@ -1280,8 +1344,14 @@ mod tests {
         assert!(!stored.contains_key("profile-deleted"));
         assert_eq!(
             stored["profile-current"]["password"]["storage"].as_str(),
-            Some("plain-text-fallback")
+            Some(crate::services::secret_crypto::ENCRYPTED_STORAGE)
         );
+        assert_ne!(
+            stored["profile-current"]["password"]["value"].as_str(),
+            Some("plain-text-password")
+        );
+
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

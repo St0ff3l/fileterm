@@ -440,6 +440,7 @@ Renderer 的“参考终端”只是用户主动开启的会话面板开关，�
 ### 自动化
 
 - Provider adapter：SSE 分片、未知事件、错误事件、截断流、取消、usage 和结构化输出 fixtures。
+- 命令模式回归：`qa:ai-copilot-fixture-smoke` 覆盖前一轮普通回答后切换命令卡模式、用户仅输入“重新来”仍返回严格 JSON，以及失败后重试恢复。
 - Context：L1 不调用 transcript accessor、ANSI/CRLF/control 清理、UTF-8 边界、长行、截断、secret patterns、目标 revision、一次性消费、重放/跨窗口拒绝和快照过期。
 - Storage：Key 不进入公开配置/snapshot/log，Unix 权限收紧，空值保留与显式清除。
 - Command：单行约束、控制字符拒绝、风险只升不降、目标变化。

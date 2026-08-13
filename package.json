@@ -28,6 +28,7 @@
     "release:win": "node ./scripts/workspace-run.mjs release:win apps/tauri",
     "release:linux": "node ./scripts/workspace-run.mjs release:linux apps/tauri",
     "qa:ai-copilot-fixture": "node ./scripts/ai-copilot-fixture-provider.mjs",
+    "qa:ai-copilot-fixture-smoke": "node ./scripts/ai-copilot-fixture-smoke.mjs",
     "postinstall": "node ./vendor/cpu-features-shim/apply-shim.mjs"
   },
   "engines": {

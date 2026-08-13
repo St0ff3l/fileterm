@@ -16,7 +16,7 @@ export type TabContextTarget =
   | { kind: 'session'; id: string; title: string; status: WorkspaceTab['status'] }
 
 function getSessionTabTitle(tab: WorkspaceTab) {
-  return tab.sessionType === 'local' ? t.localTerminal : tab.title
+  return tab.title || (tab.sessionType === 'local' ? t.localTerminal : t.untitledTab)
 }
 
 export interface TabBarProps {

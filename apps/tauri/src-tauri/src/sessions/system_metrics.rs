@@ -35,6 +35,10 @@ pub struct ExecCommandResult {
     pub output: String,
     pub exit_code: Option<u32>,
     pub output_truncated: bool,
+    /// The command deadline elapsed after the exec channel was opened. Any
+    /// safely collected bytes are still returned so callers can distinguish a
+    /// command that never produced output from one that ran partially.
+    pub timed_out: bool,
 }
 
 pub async fn probe_remote_platform<H: Handler>(handle: &Handle<H>) -> String {
@@ -154,7 +158,19 @@ pub async fn exec_command_with_status_detailed<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<ExecCommandResult, String> {
-    exec_command_internal(handle, cmd, None, false).await
+    exec_command_internal(handle, cmd, None, false, None).await
+}
+
+/// Like [`exec_command_with_status_detailed`], but bounds the remote command
+/// without discarding output already received before the deadline. This is
+/// used for externally visible remote-exec results where a partial diagnostic
+/// can be more useful than an empty timeout response.
+pub async fn exec_command_with_status_timeout_detailed<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    command_timeout: Duration,
+) -> Result<ExecCommandResult, String> {
+    exec_command_internal(handle, cmd, None, false, Some(command_timeout)).await
 }
 
 /// Run a command via the exec channel, write `stdin`, and retain the SSH
@@ -164,7 +180,7 @@ pub async fn exec_command_with_stdin_status<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false)
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), false, None)
         .await
         .map(|result| (result.output, result.exit_code))
 }
@@ -176,7 +192,7 @@ pub async fn exec_command_with_status_pty<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, None, true)
+    exec_command_internal(handle, cmd, None, true, None)
         .await
         .map(|result| (result.output, result.exit_code))
 }
@@ -190,7 +206,7 @@ pub async fn exec_command_with_stdin_status_pty<H: Handler>(
     cmd: &str,
     stdin: &str,
 ) -> Result<(String, Option<u32>), String> {
-    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true)
+    exec_command_internal(handle, cmd, Some(stdin.as_bytes()), true, None)
         .await
         .map(|result| (result.output, result.exit_code))
 }
@@ -200,7 +216,9 @@ async fn exec_command_internal<H: Handler>(
     cmd: &str,
     stdin: Option<&[u8]>,
     request_pty: bool,
+    command_timeout: Option<Duration>,
 ) -> Result<ExecCommandResult, String> {
+    let deadline = command_timeout.map(|duration| tokio::time::Instant::now() + duration);
     let mut channel = handle
         .channel_open_session()
         .await
@@ -250,14 +268,35 @@ async fn exec_command_internal<H: Handler>(
     let mut exit_status = None;
     let mut draining_after_close = false;
     let mut capped = false;
+    let mut timed_out = false;
     loop {
-        let message = if draining_after_close {
-            match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
+        let message = match (draining_after_close, deadline) {
+            (true, Some(deadline)) => {
+                tokio::select! {
+                    message = timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()) => match message {
+                        Ok(message) => message,
+                        Err(_) => break,
+                    },
+                    _ = tokio::time::sleep_until(deadline) => {
+                        timed_out = true;
+                        break;
+                    }
+                }
+            }
+            (true, None) => match timeout(EXEC_CHANNEL_DRAIN_TIMEOUT, channel.wait()).await {
                 Ok(message) => message,
                 Err(_) => break,
+            },
+            (false, Some(deadline)) => {
+                tokio::select! {
+                    message = channel.wait() => message,
+                    _ = tokio::time::sleep_until(deadline) => {
+                        timed_out = true;
+                        break;
+                    }
+                }
             }
-        } else {
-            channel.wait().await
+            (false, None) => channel.wait().await,
         };
         match message {
             Some(ChannelMsg::Data { data }) => {
@@ -287,6 +326,7 @@ async fn exec_command_internal<H: Handler>(
         output: String::from_utf8_lossy(&output).into_owned(),
         exit_code: exit_status,
         output_truncated: capped,
+        timed_out,
     })
 }
 

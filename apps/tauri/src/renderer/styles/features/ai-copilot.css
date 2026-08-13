@@ -2513,6 +2513,252 @@
   opacity: 0.5;
 }
 
+/* Local Agent / MCP setup lives beside AI Provider settings, but is deliberately
+ * configuration-only: it exposes neither credentials nor a one-click install.
+ * Keep the controls dense enough for the desktop settings workspace. */
+.settings-agent-mcp-panel {
+  gap: 18px;
+}
+
+.agent-mcp-runtime-card,
+.agent-mcp-keep-open {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.agent-mcp-runtime-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--folder-accent);
+  background: color-mix(in srgb, var(--folder-accent) 14%, var(--bg-card));
+}
+
+.agent-mcp-runtime-card > div,
+.agent-mcp-keep-open > div {
+  min-width: 0;
+}
+
+.agent-mcp-runtime-card strong,
+.agent-mcp-keep-open strong {
+  display: block;
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+.agent-mcp-runtime-card p,
+.agent-mcp-keep-open p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.agent-mcp-keep-open {
+  padding: 10px 12px;
+}
+
+.agent-mcp-keep-open > .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+
+.agent-mcp-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.agent-mcp-form label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agent-mcp-form label > small,
+.agent-mcp-registration-hint {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.agent-mcp-client-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-mcp-client-actions .agent-mcp-registration-hint {
+  min-width: 0;
+}
+
+.agent-mcp-launch-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+/* Keep the native shell layout-only. Styling both the shell and its select
+ * creates a second border/ring on macOS and makes the label sit against it. */
+.agent-mcp-select.dropdown-select-trigger,
+.agent-mcp-select.ft-select-shell select {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--input-bg, var(--bg-primary));
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.agent-mcp-select.ft-select-shell {
+  width: 100%;
+  height: 36px;
+}
+
+.agent-mcp-select.ft-select-shell .ft-select-shell__icon {
+  right: 10px;
+}
+
+.agent-mcp-select.dropdown-select-trigger:hover:not(:disabled),
+.agent-mcp-select.ft-select-shell select:hover:not(:disabled) {
+  border-color: var(--focus-outline);
+}
+
+.agent-mcp-select.dropdown-select-trigger:focus-visible,
+.agent-mcp-select.ft-select-shell select:focus-visible {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.agent-mcp-clients {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-mcp-clients h4 {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.agent-mcp-client-card {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.agent-mcp-client-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-mcp-client-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.agent-mcp-client-heading strong {
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+.agent-mcp-client-heading small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.agent-mcp-client-status {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.agent-mcp-client-status.is-available {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border-light));
+}
+
+.agent-mcp-registration {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--terminal-bg, var(--bg-primary));
+}
+
+.agent-mcp-registration code {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 8px 4px 8px 9px;
+  overflow-x: auto;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.agent-mcp-copy-button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  margin: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.agent-mcp-copy-button:hover:not(:disabled) {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.agent-mcp-operation-message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .agent-mcp-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 1180px) {
   .fs-shell.has-ai-copilot {
     --ai-copilot-joiner-width: 12px;

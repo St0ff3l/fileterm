@@ -39,6 +39,22 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 
 该 fixture 故意绑定 `127.0.0.1`，而应用会对 loopback Provider 禁用系统代理，避免本机 API Key 被意外转发。因此它**不能**替代 HTTP CONNECT / SOCKS5 验收；代理项仍须使用一个受控的非 loopback Provider 或相应测试网络。
 
+### 已自动化的 CI 证据
+
+- `npm run qa:ai-copilot-fixture-smoke` 会启动随机 loopback 端口，真实发送 OpenAI-compatible 请求，验证“先普通回答、再切到命令卡模式并只输入‘重新来’”仍返回严格命令卡 JSON，同时验证一次 503 后的重试恢复。
+- PR CI 的 `tauri-package-smoke` 会在 macOS、Windows、Linux 生成无签名包，检查 `.app/.dmg`、NSIS installer、`.deb/.AppImage`，并直接运行 release binary 的 `mcp --help` 与 `interactive-exec --help`。这只证明打包产物和非 GUI CLI 路由可生成/启动，不代表签名、公证、真实桌面交互或真实 Claude/Codex 验收已完成。
+
+### 真实 Claude/Codex 接入命令
+
+设置页只生成命令，不自动改写外部客户端配置。以 macOS 安装包为例，两个客户端都使用 stdio，并指向同一个 FileTerm 可执行文件：
+
+```sh
+claude mcp add --scope user fileterm -- /Applications/FileTerm.app/Contents/MacOS/fileterm mcp
+codex mcp add fileterm -- /Applications/FileTerm.app/Contents/MacOS/fileterm mcp
+```
+
+设置页当前为 Claude 生成 `--scope user`；用户若只想写入当前项目，可自行改为 Claude 支持的 `--scope local`。真实接入验收时，先确保 FileTerm 主窗口和一个非敏感 SSH tab 保持打开，再让 Agent 调用交互式执行 tool。需要密码、MFA 或确认输入时，输入必须由 FileTerm 的任务专属安全弹窗收集；Agent 不应要求用户写入可见终端、聊天或 MCP 参数。密码提交后 Agent 只能获得脱敏结果，取消、超时、切换 tab 或断线应安全结束任务。不要使用生产凭据或生产主机。
+
 ## 每个平台：macOS、Windows、Linux
 
 - [ ] Provider 配置保存后重新打开设置：只显示 `hasApiKey`，不得回填 Key；默认 Provider、禁用和删除状态正确。
@@ -103,3 +119,16 @@ notes:
 ```
 
 本条仅覆盖本机普通 build + 一次性 localhost 容器，不等同于签名/公证发行包验证；Windows、Linux、代理、睡眠恢复、SSH 目标变更与真实远端环境仍需按清单验收。
+
+### 2026-08-13 — macOS release 构建产物
+
+```text
+platform: macOS / arm64
+fileterm commit: f1be6ad4 + local working tree
+artifact: release FileTerm.app + FileTerm_2.1.8_aarch64.dmg
+result: pass（production bundle）
+notes:
+  - `npm run release:mac -w @fileterm/tauri` 完整通过，包含 renderer production build、Rust release 编译、adhoc 签名和 DMG 打包。
+  - 未执行 notarization：本机未设置 Apple 发布凭据。这不影响开发/QA 构建结果，但不能替代正式发布公证。
+  - 本条只证明 release 打包链路；Provider 流式、代理、睡眠恢复和三端 UI 行为仍按上方清单在对应环境验收。
+```

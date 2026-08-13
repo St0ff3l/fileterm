@@ -24,6 +24,7 @@ import type {
   TransferTask,
   SessionMetricsUpdate,
   SshInteractionRequest,
+  RemoteExecInteractionRequest,
   SshKeyFileSelection,
   SshKeyImportResult,
   SshKeyMetadata,
@@ -56,6 +57,7 @@ import type {
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
+  McpAgentSetup,
   UiPreferences,
   UiPreferencesInput
 } from '@fileterm/core'
@@ -303,6 +305,53 @@ function subscribe<T>(eventName: string, listener: (payload: T) => void) {
   }
 }
 
+/**
+ * A subscription whose promise resolves only once Tauri has registered the
+ * native event listener. Secure remote-exec prompts use this so the backend
+ * never starts a task that can only wait for an unobservable renderer event.
+ */
+function subscribeReady<T>(eventName: string, listener: (payload: T) => void): Promise<() => void> {
+  const internals = window as unknown as {
+    __TAURI_INTERNALS__?: { unregisterCallback?: (id: number) => void }
+    __TAURI_EVENT_PLUGIN_INTERNALS__?: { unregisterListener?: (event: string, eventId: number) => void }
+  }
+  let active = true
+  let eventId: number | null = null
+  let unlistenStarted = false
+  const callbackId = transformCallback((event: unknown) => {
+    if (!active) return
+    const payload = (event as { payload?: T })?.payload
+    if (payload !== undefined) listener(payload)
+  })
+  const stopListening = () => {
+    active = false
+    if (eventId === null || unlistenStarted) return
+    unlistenStarted = true
+    const registeredEventId = eventId
+    void invoke<void>('plugin:event|unlisten', { event: eventName, eventId: registeredEventId })
+      .then(() => {
+        internals.__TAURI_EVENT_PLUGIN_INTERNALS__?.unregisterListener?.(eventName, registeredEventId)
+        internals.__TAURI_INTERNALS__?.unregisterCallback?.(callbackId)
+      })
+      .catch(() => undefined)
+  }
+
+  return invoke<number>('plugin:event|listen', {
+    event: eventName,
+    target: { kind: 'Any' },
+    handler: callbackId
+  })
+    .then((id) => {
+      eventId = id
+      return stopListening
+    })
+    .catch((error) => {
+      active = false
+      internals.__TAURI_INTERNALS__?.unregisterCallback?.(callbackId)
+      throw error
+    })
+}
+
 export async function createTauriApi(): Promise<FileTermDesktopApi> {
   const [nativePlatform, arch, runtimeVersion, appVersion, appName] = await Promise.all([
     invoke<string>('app_get_platform'),
@@ -328,6 +377,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
+    getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
     saveAiProvider: (input: SaveAiProviderInput) => invoke<AiProviderSummary>('app_save_ai_provider', { input }),
     deleteAiProvider: (providerId: string) => invoke<AiProviderSummary[]>('app_delete_ai_provider', { providerId }),
@@ -543,15 +593,41 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         options: options ?? null
       }),
     executeRemoteCommand: (tabId: string, command: string, cwd?: string, timeoutMs?: number) =>
-      invoke<{ output: string; exitCode: number | null; timedOut: boolean; outputTruncated: boolean }>(
-        'app_execute_remote_command',
-        {
-          tabId,
-          command,
-          cwd: cwd ?? null,
-          timeoutMs: timeoutMs ?? null
-        }
-      ),
+      invoke<{
+        output: string
+        exitCode: number | null
+        timedOut: boolean
+        outputTruncated: boolean
+        inputRequired: boolean
+        inputKind?: 'secret' | 'text'
+      }>('app_execute_remote_command', {
+        tabId,
+        command,
+        cwd: cwd ?? null,
+        timeoutMs: timeoutMs ?? null
+      }),
+    executeInteractiveRemoteCommand: (
+      tabId: string,
+      expectedSessionRevision: string,
+      command: string,
+      cwd?: string,
+      timeoutMs?: number
+    ) =>
+      invoke<{
+        output: string
+        exitCode: number | null
+        timedOut: boolean
+        outputTruncated: boolean
+        inputRequired: boolean
+        inputKind?: 'secret' | 'text'
+        interactionCount?: number
+      }>('app_execute_interactive_remote_command', {
+        tabId,
+        expectedSessionRevision,
+        command,
+        cwd: cwd ?? null,
+        timeoutMs: timeoutMs ?? null
+      }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
@@ -596,6 +672,14 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>
       invoke<void>('app_resolve_ssh_interaction', { requestId, response }),
+    resolveRemoteExecInteraction: (requestId: string, cancelled: boolean, value?: string) =>
+      invoke<void>('app_resolve_remote_exec_interaction', {
+        requestId,
+        cancelled,
+        value: cancelled ? null : (value ?? null)
+      }),
+    setRemoteExecInteractionRendererReady: (registrationId: string, ready: boolean) =>
+      invoke<void>('app_set_remote_exec_interaction_renderer_ready', { registrationId, ready }),
     resolveMcpApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
     resolveActionApproval: (requestId: string, approved: boolean) =>
@@ -625,6 +709,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
+    onRemoteExecInteraction: (listener: (request: RemoteExecInteractionRequest) => void) =>
+      subscribeReady('remote-exec:interaction-request', listener),
     onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>
       subscribe('action:approval-request', listener),
     onMcpApprovalRequest: (listener: (request: McpApprovalRequest) => void) =>

@@ -9,11 +9,12 @@ use crate::services::action_review::{
     request_action_approval, ActionApprovalDecision, ActionApprovalDetails, ActionApprovalSource,
     ACTION_APPROVAL_TIMEOUT,
 };
+use crate::services::interactive_exec_audit::InteractiveRemoteExecAuditSource;
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env, fs,
     io::{self, BufRead, BufReader, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
@@ -35,11 +36,92 @@ const MCP_PROTOCOL_VERSION: u32 = 1;
 const MCP_JSONRPC_PROTOCOL_VERSION: &str = "2025-06-18";
 const MCP_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(130);
+const MCP_INTERACTIVE_EXEC_TIMEOUT: Duration = Duration::from_secs(32 * 60);
+const MCP_TRANSFER_WAIT_TIMEOUT: Duration = Duration::from_secs(125);
 const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
 const MCP_DEFAULT_PAGE_SIZE: usize = 20;
 const MCP_MAX_PAGE_SIZE: usize = 100;
 const MCP_MAX_FILE_CONTENT_BYTES: usize = 512 * 1024;
+const MCP_TRANSFER_WAIT_DEFAULT_MS: u64 = 30_000;
+const MCP_TRANSFER_WAIT_MAX_MS: u64 = 120_000;
+const MCP_TRANSFER_NOT_FOUND: &str = "FILETERM_TRANSFER_NOT_FOUND";
+const MCP_POLICY_READ_ONLY: &str = "MCP_POLICY_READ_ONLY";
+const MCP_SCOPE_DENIED: &str = "MCP_SCOPE_DENIED";
+
+#[derive(Clone, Debug)]
+struct McpAccessPolicy {
+    connection_scope: String,
+    operation_policy: String,
+    default_profile_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum McpVisibilityScope {
+    AllSavedConnections,
+    ActiveSession,
+    DefaultConnection,
+}
+
+#[derive(Clone, Debug)]
+struct McpVisibility {
+    scope: McpVisibilityScope,
+    profile_ids: HashSet<String>,
+    tab_ids: HashSet<String>,
+}
+
+impl McpVisibility {
+    fn all_saved_connections() -> Self {
+        Self {
+            scope: McpVisibilityScope::AllSavedConnections,
+            profile_ids: HashSet::new(),
+            tab_ids: HashSet::new(),
+        }
+    }
+
+    fn allows_profile(&self, profile_id: Option<&str>) -> bool {
+        match self.scope {
+            McpVisibilityScope::AllSavedConnections => true,
+            McpVisibilityScope::ActiveSession | McpVisibilityScope::DefaultConnection => {
+                profile_id.is_some_and(|profile_id| self.profile_ids.contains(profile_id))
+            }
+        }
+    }
+
+    fn allows_tab(&self, tab_id: Option<&str>) -> bool {
+        match self.scope {
+            McpVisibilityScope::AllSavedConnections => true,
+            McpVisibilityScope::ActiveSession => {
+                tab_id.is_some_and(|tab_id| self.tab_ids.contains(tab_id))
+            }
+            McpVisibilityScope::DefaultConnection => {
+                tab_id.is_some_and(|tab_id| self.tab_ids.contains(tab_id))
+            }
+        }
+    }
+
+    fn allows_transfer_value(&self, transfer: &Value) -> bool {
+        match self.scope {
+            McpVisibilityScope::AllSavedConnections => true,
+            McpVisibilityScope::ActiveSession => {
+                self.allows_tab(transfer.get("tabId").and_then(Value::as_str))
+            }
+            McpVisibilityScope::DefaultConnection => {
+                self.allows_profile(transfer.get("profileId").and_then(Value::as_str))
+            }
+        }
+    }
+
+    fn allows_transfer_task(&self, task: &crate::services::transfers::TransferTask) -> bool {
+        match self.scope {
+            McpVisibilityScope::AllSavedConnections => true,
+            McpVisibilityScope::ActiveSession => self.allows_tab(task.tab_id.as_deref()),
+            McpVisibilityScope::DefaultConnection => {
+                self.allows_profile(task.profile_id.as_deref())
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -199,13 +281,7 @@ async fn handle_runtime_connection(
         return Err("invalid MCP bridge token".to_string());
     }
 
-    let request_timeout = if envelope.request.requires_approval
-        && action_requires_approval(&envelope.request.action)
-    {
-        ACTION_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
-    } else {
-        MCP_BRIDGE_TIMEOUT
-    };
+    let request_timeout = bridge_request_timeout(&envelope.request);
     let response = match timeout(
         request_timeout,
         dispatch_bridge_request(&app, envelope.request),
@@ -221,6 +297,25 @@ async fn handle_runtime_connection(
     write_bridge_response_to_writer(&mut writer, response)
         .await
         .map_err(|error| error.to_string())
+}
+
+fn bridge_request_timeout(request: &BridgeRequest) -> Duration {
+    if request.action == "execute_interactive_remote_command" {
+        // Visible approval + a task-local UI input prompt can legitimately
+        // outlive the ordinary MCP round trip. This is still bounded, and no
+        // other action inherits the longer timeout.
+        MCP_INTERACTIVE_EXEC_TIMEOUT
+    } else if request.action == "wait_for_transfer" {
+        // This is a read-only, bounded observation call. Keep its bridge
+        // timeout slightly above the public 120-second wait ceiling so the
+        // stdio client receives the final task snapshot instead of a socket
+        // timeout at the boundary.
+        MCP_TRANSFER_WAIT_TIMEOUT
+    } else if request.requires_approval && action_requires_approval(&request.action) {
+        ACTION_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
+    } else {
+        MCP_BRIDGE_TIMEOUT
+    }
 }
 
 async fn read_bridge_line(
@@ -294,10 +389,16 @@ impl BridgeResponse {
 }
 
 async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Result<Value, String> {
+    enforce_mcp_access_policy(app, &request).await?;
     if request.requires_approval && action_requires_approval(&request.action) {
         request_mcp_approval(app, &request.action, &request.params).await?;
     }
 
+    let interactive_audit_source = if request.requires_approval {
+        InteractiveRemoteExecAuditSource::Mcp
+    } else {
+        InteractiveRemoteExecAuditSource::Cli
+    };
     match request.action.as_str() {
         "list_connections" => list_connections(app, &request.params).await,
         "get_session_context" => get_session_context(app, &request.params).await,
@@ -305,6 +406,7 @@ async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Res
         "list_remote_directory" => list_remote_directory(app, &request.params).await,
         "read_remote_file" => read_remote_file(app, &request.params).await,
         "list_transfers" => list_transfers(app, &request.params).await,
+        "wait_for_transfer" => wait_for_transfer(app, &request.params).await,
         "list_ssh_tunnels" => list_ssh_tunnels(app, &request.params).await,
         "open_connection" => open_connection(app, &request.params).await,
         "activate_session" => activate_session(app, &request.params).await,
@@ -312,6 +414,9 @@ async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Res
         "disconnect_session" => disconnect_session(app, &request.params).await,
         "close_session" => close_session(app, &request.params).await,
         "execute_remote_command" => execute_remote_command(app, &request.params).await,
+        "execute_interactive_remote_command" => {
+            execute_interactive_remote_command(app, &request.params, interactive_audit_source).await
+        }
         "execute_command_template" => execute_command_template(app, &request.params).await,
         "write_remote_file" => write_remote_file(app, &request.params).await,
         "create_remote_directory" => create_remote_directory(app, &request.params).await,
@@ -337,6 +442,220 @@ async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Res
     }
 }
 
+/// External Agents never get a wider capability than the policy selected in
+/// FileTerm settings. This check belongs on the desktop bridge rather than in
+/// the stdio MCP child process so MCP, the explicit CLI and future local
+/// clients share the same decision point.
+async fn enforce_mcp_access_policy(app: &AppHandle, request: &BridgeRequest) -> Result<(), String> {
+    let policy = mcp_access_policy(app)?;
+    if policy.operation_policy == "read-only" && action_requires_approval(&request.action) {
+        return Err(format!(
+            "{MCP_POLICY_READ_ONLY}: FileTerm is configured to allow only read-only Agent operations"
+        ));
+    }
+
+    match policy.connection_scope.as_str() {
+        "all-saved-connections" => Ok(()),
+        "active-session" => enforce_active_session_scope(app, request).await,
+        "default-connection" => enforce_default_connection_scope(app, request, &policy).await,
+        _ => Err(format!(
+            "{MCP_SCOPE_DENIED}: invalid saved connection scope"
+        )),
+    }
+}
+
+fn mcp_access_policy(app: &AppHandle) -> Result<McpAccessPolicy, String> {
+    let preferences =
+        crate::commands::app_get_ui_preferences(app.clone()).map_err(public_app_error)?;
+    Ok(McpAccessPolicy {
+        connection_scope: preferences.mcp_agent.connection_scope,
+        operation_policy: preferences.mcp_agent.operation_policy,
+        default_profile_id: preferences.mcp_agent.default_profile_id,
+    })
+}
+
+async fn enforce_active_session_scope(
+    app: &AppHandle,
+    request: &BridgeRequest,
+) -> Result<(), String> {
+    if matches!(
+        request.action.as_str(),
+        "get_command_templates"
+            | "list_transfers"
+            | "wait_for_transfer"
+            | "pause_transfer"
+            | "resume_transfer"
+            | "discard_transfer"
+            | "clear_transfers"
+    ) {
+        return Ok(());
+    }
+    if request.action == "list_connections" {
+        return Ok(());
+    }
+    if request.action == "open_connection" {
+        return Err(format!(
+            "{MCP_SCOPE_DENIED}: active-session scope cannot open another saved connection"
+        ));
+    }
+    let active_tab_id = active_session_tab_id(app).await?;
+    let requested_tab_id = optional_string(&request.params, "tab_id", 256)?;
+    match requested_tab_id {
+        Some(tab_id) if tab_id == active_tab_id => Ok(()),
+        Some(_) => Err(format!(
+            "{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's active session"
+        )),
+        None if request.action == "get_session_context" => Ok(()),
+        None => Err(format!(
+            "{MCP_SCOPE_DENIED}: this operation requires the active FileTerm session"
+        )),
+    }
+}
+
+async fn enforce_default_connection_scope(
+    app: &AppHandle,
+    request: &BridgeRequest,
+    policy: &McpAccessPolicy,
+) -> Result<(), String> {
+    let Some(default_profile_id) = policy.default_profile_id.as_deref() else {
+        return Err(format!(
+            "{MCP_SCOPE_DENIED}: choose a default connection in FileTerm settings first"
+        ));
+    };
+    if matches!(
+        request.action.as_str(),
+        "get_command_templates"
+            | "list_transfers"
+            | "wait_for_transfer"
+            | "pause_transfer"
+            | "resume_transfer"
+            | "discard_transfer"
+            | "clear_transfers"
+    ) {
+        return Ok(());
+    }
+    if request.action == "list_connections" {
+        return Ok(());
+    }
+    if request.action == "open_connection" {
+        let requested_profile = required_string(&request.params, "profile_id", 256)?;
+        return (requested_profile == default_profile_id)
+            .then_some(())
+            .ok_or_else(|| {
+                format!(
+                    "{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's default connection"
+                )
+            });
+    }
+    let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+        .await
+        .map_err(public_app_error)?;
+    let allowed_tab_ids = session_tab_ids_for_profile(&snapshot, default_profile_id);
+    if request.action == "get_session_context" {
+        let requested_profile = optional_string(&request.params, "profile_id", 256)?;
+        return requested_profile
+            .is_none_or(|profile_id| profile_id == default_profile_id)
+            .then_some(())
+            .ok_or_else(|| {
+                format!(
+                    "{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's default connection"
+                )
+            });
+    }
+    let requested_tab_id = required_string(&request.params, "tab_id", 256)?;
+    allowed_tab_ids
+        .iter()
+        .any(|tab_id| tab_id == &requested_tab_id)
+        .then_some(())
+        .ok_or_else(|| {
+            format!("{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's default connection")
+        })
+}
+
+async fn active_session_tab_id(app: &AppHandle) -> Result<String, String> {
+    let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+        .await
+        .map_err(public_app_error)?;
+    active_session_tab_id_from_snapshot(&snapshot)
+}
+
+fn active_session_tab_id_from_snapshot(snapshot: &Value) -> Result<String, String> {
+    let active_root = snapshot
+        .get("activeTabId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{MCP_SCOPE_DENIED}: no active FileTerm session"))?;
+    Ok(snapshot
+        .get("activePaneTabIdByRoot")
+        .and_then(Value::as_object)
+        .and_then(|values| values.get(active_root))
+        .and_then(Value::as_str)
+        .unwrap_or(active_root)
+        .to_string())
+}
+
+fn session_tab_ids_for_profile(snapshot: &Value, profile_id: &str) -> Vec<String> {
+    snapshot
+        .get("tabs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|tab| tab.get("profileId").and_then(Value::as_str) == Some(profile_id))
+        .filter_map(|tab| tab.get("id").and_then(Value::as_str).map(ToOwned::to_owned))
+        .collect()
+}
+
+async fn mcp_visibility(app: &AppHandle) -> Result<McpVisibility, String> {
+    let policy = mcp_access_policy(app)?;
+    match policy.connection_scope.as_str() {
+        "all-saved-connections" => Ok(McpVisibility::all_saved_connections()),
+        "active-session" => {
+            let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+                .await
+                .map_err(public_app_error)?;
+            let active_tab_id = active_session_tab_id_from_snapshot(&snapshot)?;
+            let mut visibility = McpVisibility {
+                scope: McpVisibilityScope::ActiveSession,
+                profile_ids: HashSet::new(),
+                tab_ids: HashSet::from([active_tab_id.clone()]),
+            };
+            if let Some(profile_id) = snapshot
+                .get("tabs")
+                .and_then(Value::as_array)
+                .and_then(|tabs| {
+                    tabs.iter().find(|tab| {
+                        tab.get("id").and_then(Value::as_str) == Some(active_tab_id.as_str())
+                    })
+                })
+                .and_then(|tab| tab.get("profileId"))
+                .and_then(Value::as_str)
+            {
+                visibility.profile_ids.insert(profile_id.to_string());
+            }
+            Ok(visibility)
+        }
+        "default-connection" => {
+            let Some(default_profile_id) = policy.default_profile_id else {
+                return Err(format!(
+                    "{MCP_SCOPE_DENIED}: choose a default connection in FileTerm settings first"
+                ));
+            };
+            let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+                .await
+                .map_err(public_app_error)?;
+            Ok(McpVisibility {
+                scope: McpVisibilityScope::DefaultConnection,
+                profile_ids: HashSet::from([default_profile_id.clone()]),
+                tab_ids: session_tab_ids_for_profile(&snapshot, &default_profile_id)
+                    .into_iter()
+                    .collect(),
+            })
+        }
+        _ => Err(format!(
+            "{MCP_SCOPE_DENIED}: invalid saved connection scope"
+        )),
+    }
+}
+
 fn action_requires_approval(action: &str) -> bool {
     matches!(
         action,
@@ -345,6 +664,7 @@ fn action_requires_approval(action: &str) -> bool {
             | "disconnect_session"
             | "close_session"
             | "execute_remote_command"
+            | "execute_interactive_remote_command"
             | "execute_command_template"
             | "write_remote_file"
             | "create_remote_directory"
@@ -428,7 +748,7 @@ async fn approval_details(
         _ => tab_id.clone(),
     };
     let details = match action {
-        "execute_remote_command" => Some(truncate_text(
+        "execute_remote_command" | "execute_interactive_remote_command" => Some(truncate_text(
             &required_text(params, "command", 64 * 1024)?,
             4 * 1024,
         )),
@@ -521,6 +841,7 @@ async fn approval_details(
         "disconnect_session" => "断开 FileTerm 会话".to_string(),
         "close_session" => "关闭 FileTerm 标签页".to_string(),
         "execute_remote_command" => "在远程 SSH 主机执行命令".to_string(),
+        "execute_interactive_remote_command" => "在远程 SSH 主机执行可交互命令".to_string(),
         "execute_command_template" => "执行 FileTerm 命令模板".to_string(),
         "write_remote_file" => "写入远程文件".to_string(),
         "create_remote_directory" => "创建远程目录".to_string(),
@@ -564,6 +885,7 @@ async fn approval_details(
 
 async fn list_connections(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let (limit, offset) = pagination(params)?;
+    let visibility = mcp_visibility(app).await?;
     let library = crate::commands::app_get_connection_library(app.clone())
         .await
         .map_err(public_app_error)?;
@@ -571,6 +893,10 @@ async fn list_connections(app: &AppHandle, params: &Value) -> Result<Value, Stri
         .get("profiles")
         .and_then(Value::as_array)
         .ok_or_else(|| "FileTerm returned an invalid connection library".to_string())?;
+    let profiles = profiles
+        .iter()
+        .filter(|profile| visibility.allows_profile(profile.get("id").and_then(Value::as_str)))
+        .collect::<Vec<_>>();
     let total = profiles.len();
     let items = profiles
         .iter()
@@ -591,6 +917,7 @@ async fn list_connections(app: &AppHandle, params: &Value) -> Result<Value, Stri
 
 async fn get_session_context(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let profile_id = optional_string(params, "profile_id", 256)?;
+    let visibility = mcp_visibility(app).await?;
     let snapshot = crate::commands::get_workspace_snapshot(app.clone())
         .await
         .map_err(public_app_error)?;
@@ -605,7 +932,12 @@ async fn get_session_context(app: &AppHandle, params: &Value) -> Result<Value, S
 
     let items = tabs
         .iter()
-        .filter(|tab| tab.get("paneRootTabId").is_none())
+        .filter(|tab| {
+            matches!(visibility.scope, McpVisibilityScope::ActiveSession)
+                || tab.get("paneRootTabId").is_none()
+        })
+        .filter(|tab| visibility.allows_tab(tab.get("id").and_then(Value::as_str)))
+        .filter(|tab| visibility.allows_profile(tab.get("profileId").and_then(Value::as_str)))
         .filter(|tab| {
             profile_id.as_deref().is_none_or(|profile_id| {
                 tab.get("profileId").and_then(Value::as_str) == Some(profile_id)
@@ -704,6 +1036,7 @@ async fn read_remote_file(app: &AppHandle, params: &Value) -> Result<Value, Stri
 
 async fn list_transfers(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let (limit, offset) = pagination(params)?;
+    let visibility = mcp_visibility(app).await?;
     let snapshot = crate::commands::get_workspace_snapshot(app.clone())
         .await
         .map_err(public_app_error)?;
@@ -711,6 +1044,10 @@ async fn list_transfers(app: &AppHandle, params: &Value) -> Result<Value, String
         .get("transfers")
         .and_then(Value::as_array)
         .ok_or_else(|| "FileTerm returned invalid transfer state".to_string())?;
+    let transfers = transfers
+        .iter()
+        .filter(|transfer| visibility.allows_transfer_value(transfer))
+        .collect::<Vec<_>>();
     let total = transfers.len();
     let items = transfers
         .iter()
@@ -727,6 +1064,58 @@ async fn list_transfers(app: &AppHandle, params: &Value) -> Result<Value, String
         "hasMore": next_offset < total,
         "nextOffset": (next_offset < total).then_some(next_offset),
     }))
+}
+
+/// Wait locally for a transfer to complete, without forcing an MCP client to
+/// repeatedly poll the desktop bridge. A timeout is a successful observation
+/// result: the task is returned in its latest known state so an Agent can make
+/// an explicit next decision instead of mistaking a still-running transfer for
+/// a failed request.
+async fn wait_for_transfer(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let transfer_id = required_string(params, "transfer_id", 256)?;
+    let timeout_ms = optional_u64(params, "timeout_ms")?.unwrap_or(MCP_TRANSFER_WAIT_DEFAULT_MS);
+    if !(1_000..=MCP_TRANSFER_WAIT_MAX_MS).contains(&timeout_ms) {
+        return Err(format!(
+            "timeout_ms must be between 1000 and {MCP_TRANSFER_WAIT_MAX_MS}"
+        ));
+    }
+
+    let visibility = mcp_visibility(app).await?;
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+    loop {
+        let task = crate::services::transfers::list(app)
+            .await
+            .map_err(public_app_error)?
+            .into_iter()
+            .find(|task| task.id == transfer_id)
+            .ok_or_else(|| format!("{MCP_TRANSFER_NOT_FOUND}: transfer was not found"))?;
+        if !visibility.allows_transfer_task(&task) {
+            return Err(format!(
+                "{MCP_SCOPE_DENIED}: this Agent cannot access the requested transfer"
+            ));
+        }
+        let terminal = matches!(task.status.as_str(), "done" | "failed" | "canceled");
+        if terminal {
+            return Ok(json!({
+                "transferId": transfer_id,
+                "transfer": task,
+                "timedOut": false,
+            }));
+        }
+
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            return Ok(json!({
+                "transferId": transfer_id,
+                "transfer": task,
+                "timedOut": true,
+            }));
+        }
+        // Transfer workers already update their durable task state at a
+        // throttled cadence. Waiting here keeps that cadence local to
+        // FileTerm and avoids external Agent-side polling loops.
+        tokio::time::sleep((deadline - now).min(Duration::from_millis(250))).await;
+    }
 }
 
 async fn list_ssh_tunnels(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -800,6 +1189,32 @@ async fn execute_remote_command(app: &AppHandle, params: &Value) -> Result<Value
         command,
         cwd,
         timeout_ms,
+    )
+    .await
+    .map(|result| json!({ "tabId": tab_id, "result": result }))
+    .map_err(public_app_error)
+}
+
+async fn execute_interactive_remote_command(
+    app: &AppHandle,
+    params: &Value,
+    audit_source: InteractiveRemoteExecAuditSource,
+) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let expected_session_revision = required_string(params, "expected_session_revision", 64)?;
+    let command = required_text(params, "command", 64 * 1024)?;
+    let cwd = optional_string(params, "cwd", 4_096)?;
+    let timeout_ms = optional_u64(params, "timeout_ms")?;
+    crate::services::action_review::execute_interactive_remote_command_from_source(
+        app,
+        crate::services::action_review::InteractiveRemoteExecRequest {
+            tab_id: tab_id.clone(),
+            expected_session_revision,
+            command,
+            cwd,
+            timeout_ms,
+        },
+        audit_source,
     )
     .await
     .map(|result| json!({ "tabId": tab_id, "result": result }))
@@ -1065,6 +1480,7 @@ async fn download_remote_directory(app: &AppHandle, params: &Value) -> Result<Va
 
 async fn transfer_action(app: &AppHandle, params: &Value, action: &str) -> Result<Value, String> {
     let transfer_id = required_string(params, "transfer_id", 256)?;
+    ensure_transfer_in_mcp_scope(app, &transfer_id).await?;
     let snapshot = match action {
         "pause" => crate::commands::app_pause_transfer(app.clone(), transfer_id.clone()).await,
         "resume" => crate::commands::app_resume_transfer(app.clone(), transfer_id.clone()).await,
@@ -1081,6 +1497,9 @@ async fn transfer_action(app: &AppHandle, params: &Value, action: &str) -> Resul
 
 async fn clear_transfers(app: &AppHandle, params: &Value) -> Result<Value, String> {
     let transfer_ids = required_string_array(params, "transfer_ids", 256, 256)?;
+    for transfer_id in &transfer_ids {
+        ensure_transfer_in_mcp_scope(app, transfer_id).await?;
+    }
     let snapshot = crate::commands::app_clear_transfers(app.clone(), transfer_ids.clone())
         .await
         .map_err(public_app_error)?;
@@ -1089,6 +1508,22 @@ async fn clear_transfers(app: &AppHandle, params: &Value) -> Result<Value, Strin
         "transferIds": transfer_ids,
         "remaining": snapshot.get("transfers").cloned().unwrap_or_else(|| json!([])),
     }))
+}
+
+async fn ensure_transfer_in_mcp_scope(app: &AppHandle, transfer_id: &str) -> Result<(), String> {
+    let visibility = mcp_visibility(app).await?;
+    let task = crate::services::transfers::list(app)
+        .await
+        .map_err(public_app_error)?
+        .into_iter()
+        .find(|task| task.id == transfer_id)
+        .ok_or_else(|| format!("{MCP_TRANSFER_NOT_FOUND}: transfer was not found"))?;
+    visibility
+        .allows_transfer_task(&task)
+        .then_some(())
+        .ok_or_else(|| {
+            format!("{MCP_SCOPE_DENIED}: this Agent cannot access the requested transfer")
+        })
 }
 
 async fn create_ssh_tunnel(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -1126,6 +1561,7 @@ async fn tunnel_action(app: &AppHandle, params: &Value, action: &str) -> Result<
 fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
     json!({
         "tabId": tab_id,
+        "rootTabId": tab.get("paneRootTabId").cloned().unwrap_or_else(|| Value::String(tab_id.to_string())),
         "profileId": tab.get("profileId"),
         "title": tab.get("title"),
         "sessionType": tab.get("sessionType"),
@@ -1134,6 +1570,7 @@ fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
         "remotePath": session.get("remotePath"),
         "shellCwd": session.get("shellCwd"),
         "shellUser": session.get("shellUser"),
+        "sessionRevision": session.get("aiSessionRevision"),
         "fileAccessMode": session.get("fileAccessMode"),
         "capabilities": session.get("capabilities"),
     })
@@ -1491,6 +1928,12 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             &["tab-id", "path"],
         ),
         "transfers" => cli_action("list_transfers", options, &["limit", "offset"], &[]),
+        "wait-transfer" => cli_action(
+            "wait_for_transfer",
+            options,
+            &["transfer-id", "timeout-ms"],
+            &["transfer-id"],
+        ),
         "tunnels" => cli_action("list_ssh_tunnels", options, &["tab-id"], &["tab-id"]),
         "open" => cli_action("open_connection", options, &["profile-id"], &["profile-id"]),
         "activate" => cli_action("activate_session", options, &["tab-id"], &["tab-id"]),
@@ -1502,6 +1945,18 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             options,
             &["tab-id", "command", "cwd", "timeout-ms"],
             &["tab-id", "command"],
+        ),
+        "interactive-exec" => cli_action(
+            "execute_interactive_remote_command",
+            options,
+            &[
+                "tab-id",
+                "expected-session-revision",
+                "command",
+                "cwd",
+                "timeout-ms",
+            ],
+            &["tab-id", "expected-session-revision", "command"],
         ),
         "command-template" => cli_action(
             "execute_command_template",
@@ -1775,7 +2230,7 @@ fn print_cli_result(result: Value) -> Result<(), String> {
 
 fn print_cli_help() {
     println!(
-        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path PATH --local-directory PATH\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm transfers|pause-transfer|resume-transfer|discard-transfer ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\nCLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
+        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm interactive-exec --tab-id TAB_ID --expected-session-revision REVISION --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` remains non-interactive and preserves safely collected partial output when it times out. `interactive-exec` uses a temporary PTY on the current SSH transport; FileTerm asks the local user for password, MFA, or confirmation input and never reads it from CLI stdin. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -1789,6 +2244,8 @@ fn print_cli_command_help(command: &str) {
         ),
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
         "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]"),
+        "execute_interactive_remote_command" => println!("Usage: fileterm interactive-exec --tab-id TAB_ID --expected-session-revision REVISION --command COMMAND [--cwd PATH] [--timeout-ms N]"),
+        "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
         "write_remote_file" => println!("Usage: fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT [--encoding utf-8]"),
         "upload_file" => println!("Usage: fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH [--target-name NAME]"),
         "download_file" => println!("Usage: fileterm download --tab-id TAB_ID --remote-path PATH --local-directory PATH [--target-name NAME]"),
@@ -1828,7 +2285,7 @@ fn initialize_result(_params: &Value) -> Result<Value, String> {
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed."
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command only for commands that are known to be non-interactive. When the requested command can require a password, MFA code, Y/N confirmation, or any stdin response (for example sudo, su, passwd, ssh authentication, installers, or a known interactive program), use fileterm_execute_interactive_remote_command directly after refreshing session context. Do not first tell the user to type in FileTerm's visible terminal: that terminal is a different channel and cannot answer this task. FileTerm will show its own task-local secure prompt to the user and send the answer only to the waiting command; the answer is never returned to you. If a normal exec unexpectedly reports that input is needed and the user already authorized the requested operation, immediately start a new secure interactive task so FileTerm—not the agent chat and not the visible terminal—asks the user for the required input. Only ask before retrying when the original command may already have caused an unknown side effect. Never ask for a secret in agent chat, never ask the user to put it in the visible terminal, and never attempt to pass stdin, passwords, OTPs, or answers through tool arguments. 中文规则：遇到需要输入的远程命令，必须让 FileTerm 弹出安全输入框；由 FileTerm 向用户索取输入，不要让用户在终端或聊天里输入密码、验证码或确认值。"
     }))
 }
 
@@ -1852,7 +2309,7 @@ fn call_tool(params: &Value) -> Result<Value, String> {
     };
     match call_desktop_bridge(request) {
         Ok(result) => Ok(tool_result(result, false)),
-        Err(error) => Ok(tool_result(json!({ "error": error }), true)),
+        Err(error) => Ok(tool_error_result(error)),
     }
 }
 
@@ -1861,6 +2318,7 @@ fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> 
         "fileterm_list_connections"
         | "fileterm_list_transfers"
         | "fileterm_get_command_templates" => &["limit", "offset"],
+        "fileterm_wait_for_transfer" => &["transfer_id", "timeout_ms"],
         "fileterm_get_session_context" => &["profile_id"],
         "fileterm_list_remote_directory" => &["tab_id", "path", "limit", "offset"],
         "fileterm_read_remote_file" => &["tab_id", "path", "encoding"],
@@ -1871,6 +2329,13 @@ fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> 
         | "fileterm_close_session" => &["tab_id"],
         "fileterm_open_connection" => &["profile_id"],
         "fileterm_execute_remote_command" => &["tab_id", "command", "cwd", "timeout_ms"],
+        "fileterm_execute_interactive_remote_command" => &[
+            "tab_id",
+            "expected_session_revision",
+            "command",
+            "cwd",
+            "timeout_ms",
+        ],
         "fileterm_execute_command_template" => &["tab_id", "command_id", "args", "options"],
         "fileterm_write_remote_file" => &["tab_id", "path", "content", "encoding"],
         "fileterm_create_remote_directory" | "fileterm_create_remote_file" => {
@@ -1918,6 +2383,74 @@ fn tool_result(value: Value, is_error: bool) -> Value {
     })
 }
 
+fn tool_error_result(error: String) -> Value {
+    let code = mcp_error_code(&error);
+    tool_result(
+        json!({
+            "error": {
+                "code": code,
+                "message": error,
+                "retryable": mcp_error_is_retryable(code),
+            }
+        }),
+        true,
+    )
+}
+
+/// The desktop service still owns detailed error text, but MCP consumers need
+/// a compact stable decision key. Preserve explicitly emitted runtime codes
+/// first and classify the common local bridge failures without exposing
+/// credentials, paths, prompts, or terminal content.
+fn mcp_error_code(error: &str) -> &'static str {
+    let upper = error.to_ascii_uppercase();
+    for code in [
+        MCP_POLICY_READ_ONLY,
+        MCP_SCOPE_DENIED,
+        "INTERACTIVE_REMOTE_EXEC_UNAVAILABLE",
+        "INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED",
+        "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE",
+        "INTERACTIVE_REMOTE_EXEC_USER_CANCELLED",
+        "INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT",
+        "INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS",
+        "INTERACTIVE_REMOTE_EXEC_BUSY",
+        MCP_TRANSFER_NOT_FOUND,
+    ] {
+        if upper.contains(code) {
+            return code;
+        }
+    }
+    if upper.contains("APP IS NOT RUNNING") || upper.contains("DESKTOP APP IS UNAVAILABLE") {
+        "FILETERM_APP_UNAVAILABLE"
+    } else if upper.contains("BRIDGE IS BUSY") {
+        "FILETERM_BRIDGE_BUSY"
+    } else if upper.contains("TIMED OUT") {
+        "FILETERM_REQUEST_TIMEOUT"
+    } else if upper.contains("REJECTED BY THE USER") || upper.contains("APPROVAL") {
+        "FILETERM_OPERATION_REJECTED"
+    } else if upper.contains("SESSION") && upper.contains("NOT FOUND") {
+        "FILETERM_SESSION_NOT_FOUND"
+    } else if upper.contains("NOT CONNECTED") {
+        "FILETERM_SESSION_DISCONNECTED"
+    } else {
+        "FILETERM_OPERATION_FAILED"
+    }
+}
+
+fn mcp_error_is_retryable(code: &str) -> bool {
+    matches!(
+        code,
+        "FILETERM_APP_UNAVAILABLE"
+            | "FILETERM_BRIDGE_BUSY"
+            | "FILETERM_REQUEST_TIMEOUT"
+            | "FILETERM_SESSION_DISCONNECTED"
+            | "INTERACTIVE_REMOTE_EXEC_UNAVAILABLE"
+            | "INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED"
+            | "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE"
+            | "INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT"
+            | "INTERACTIVE_REMOTE_EXEC_BUSY"
+    )
+}
+
 fn tool_definitions() -> Vec<Value> {
     vec![
         tool_definition("fileterm_list_connections", "List FileTerm connections", "List saved profiles without credentials.", json!({
@@ -1946,18 +2479,29 @@ fn tool_definitions() -> Vec<Value> {
             "limit": { "type": "integer", "minimum": 1, "maximum": MCP_MAX_PAGE_SIZE },
             "offset": { "type": "integer", "minimum": 0 }
         }), &[], true, false, true, false),
+        tool_definition("fileterm_wait_for_transfer", "Wait for a FileTerm transfer", "Wait locally for a transfer to reach a terminal state and return its latest task snapshot. A timed-out wait returns the latest still-running task; it does not cancel the transfer.", json!({
+            "transfer_id": { "type": "string" },
+            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": MCP_TRANSFER_WAIT_MAX_MS, "default": MCP_TRANSFER_WAIT_DEFAULT_MS }
+        }), &["transfer_id"], true, false, true, false),
         tool_definition("fileterm_list_ssh_tunnels", "List SSH tunnels", "List tunnels attached to an open SSH session.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], true, false, true, false),
         tool_definition("fileterm_open_connection", "Open a FileTerm connection", "Open a saved profile in a new FileTerm session. The user must approve the connection attempt.", json!({ "profile_id": { "type": "string" } }), &["profile_id"], false, false, false, true),
         tool_definition("fileterm_activate_session", "Activate a FileTerm session", "Make an existing session the active workspace session.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_reconnect_session", "Reconnect a FileTerm session", "Reconnect an existing session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, false, true),
         tool_definition("fileterm_disconnect_session", "Disconnect a FileTerm session", "Disconnect an open session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_close_session", "Close a FileTerm session", "Close a workspace tab after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, true, true, false),
-        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel. The interactive terminal is not hijacked.", json!({
+        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded non-interactive command on an open SSH session through a dedicated exec channel. The interactive terminal is not hijacked. Do not use this tool for commands likely to prompt for a password, MFA code, confirmation, or other stdin input; use fileterm_execute_interactive_remote_command instead. If the result has inputRequired=true, inputKind is only a redacted routing hint (secret or text), not a command success signal or a place to provide the answer. Do not tell the user to type in the visible terminal or agent chat. If the requested operation is already authorized, start a new secure interactive task so FileTerm can collect the input; ask before retrying only when the first command may have caused an unknown side effect.", json!({
             "tab_id": { "type": "string" },
             "command": { "type": "string" },
             "cwd": { "type": "string" },
             "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 120000 }
         }), &["tab_id", "command"], false, false, false, true),
+        tool_definition("fileterm_execute_interactive_remote_command", "Execute an interactive remote command", "Run a command on an existing SSH transport using an isolated temporary PTY. Use this tool directly for commands expected to request a password, MFA code, confirmation, or other stdin response. FileTerm prompts the user in a task-local dialog and sends the answer to this exact command; never tell the user to type into the visible terminal or agent chat. The answer is not returned to the agent. 中文：密码、MFA、确认输入均由 FileTerm 安全弹窗采集，Agent 只等待最终结果。", json!({
+            "tab_id": { "type": "string" },
+            "expected_session_revision": { "type": "string", "description": "sessionRevision from fileterm_get_session_context; refresh context before calling" },
+            "command": { "type": "string" },
+            "cwd": { "type": "string" },
+            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 600000 }
+        }), &["tab_id", "expected_session_revision", "command"], false, false, false, true),
         tool_definition("fileterm_execute_command_template", "Execute a command template", "Execute a saved FileTerm command template with optional positional arguments after approval.", json!({
             "tab_id": { "type": "string" },
             "command_id": { "type": "string" },
@@ -2011,6 +2555,7 @@ fn tool_definition(
             "required": required,
             "additionalProperties": false
         },
+        "outputSchema": tool_output_schema(name),
         "annotations": {
             "readOnlyHint": read_only,
             "destructiveHint": destructive,
@@ -2018,6 +2563,74 @@ fn tool_definition(
             "openWorldHint": open_world
         }
     })
+}
+
+fn tool_output_schema(name: &str) -> Value {
+    match name {
+        "fileterm_execute_remote_command" | "fileterm_execute_interactive_remote_command" => {
+            json!({
+                "type": "object",
+                "properties": {
+                    "tabId": { "type": "string" },
+                    "result": {
+                        "type": "object",
+                        "properties": {
+                            "output": { "type": "string" },
+                            "exitCode": { "type": ["integer", "null"], "minimum": 0 },
+                            "timedOut": { "type": "boolean" },
+                            "outputTruncated": { "type": "boolean" },
+                            "inputRequired": { "type": "boolean" },
+                            "inputKind": { "type": "string", "enum": ["secret", "text"] },
+                            "interactionCount": { "type": "integer", "minimum": 0, "maximum": 3 }
+                        },
+                        "required": ["output", "exitCode", "timedOut", "outputTruncated", "inputRequired"],
+                        "additionalProperties": false
+                    }
+                },
+                "required": ["tabId", "result"],
+                "additionalProperties": false
+            })
+        }
+        "fileterm_wait_for_transfer" => json!({
+            "type": "object",
+            "properties": {
+                "transferId": { "type": "string" },
+                "transfer": { "type": "object" },
+                "timedOut": { "type": "boolean" }
+            },
+            "required": ["transferId", "transfer", "timedOut"],
+            "additionalProperties": false
+        }),
+        "fileterm_list_connections"
+        | "fileterm_get_command_templates"
+        | "fileterm_list_remote_directory"
+        | "fileterm_list_transfers" => json!({
+            "type": "object",
+            "properties": {
+                "total": { "type": "integer", "minimum": 0 },
+                "count": { "type": "integer", "minimum": 0 },
+                "offset": { "type": "integer", "minimum": 0 },
+                "items": { "type": "array" },
+                "hasMore": { "type": "boolean" },
+                "nextOffset": { "type": ["integer", "null"], "minimum": 0 }
+            },
+            "required": ["total", "count", "offset", "items", "hasMore", "nextOffset"],
+            "additionalProperties": true
+        }),
+        "fileterm_read_remote_file" => json!({
+            "type": "object",
+            "properties": {
+                "tabId": { "type": "string" },
+                "path": { "type": "string" },
+                "encoding": { "type": "string" },
+                "content": { "type": "string" },
+                "truncated": { "type": "boolean" }
+            },
+            "required": ["tabId", "path", "encoding", "content", "truncated"],
+            "additionalProperties": false
+        }),
+        _ => json!({ "type": "object" }),
+    }
 }
 
 fn jsonrpc_error(id: Value, code: i32, message: &str) -> Value {
@@ -2049,14 +2662,19 @@ fn call_desktop_bridge(request: BridgeRequest) -> Result<Value, String> {
         return Err("FileTerm MCP rejected a non-local runtime address.".to_string());
     }
 
+    let request_timeout = if request.action == "execute_interactive_remote_command" {
+        MCP_INTERACTIVE_EXEC_TIMEOUT
+    } else {
+        MCP_CLIENT_TIMEOUT
+    };
     let mut stream = StdTcpStream::connect_timeout(&address, MCP_BRIDGE_TIMEOUT).map_err(|_| {
         "FileTerm desktop app is unavailable. Open or restart FileTerm, then retry this MCP tool.".to_string()
     })?;
     stream
-        .set_read_timeout(Some(MCP_CLIENT_TIMEOUT))
+        .set_read_timeout(Some(request_timeout))
         .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
     stream
-        .set_write_timeout(Some(MCP_CLIENT_TIMEOUT))
+        .set_write_timeout(Some(request_timeout))
         .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
     let envelope = BridgeEnvelope {
         token: descriptor.token,
@@ -2136,8 +2754,8 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_jsonrpc_request, optional_string, pagination, tool_definitions,
-        validate_tool_arguments, MCP_JSONRPC_PROTOCOL_VERSION,
+        handle_jsonrpc_request, initialize_result, optional_string, pagination, tool_definitions,
+        tool_error_result, validate_tool_arguments, MCP_JSONRPC_PROTOCOL_VERSION,
     };
     use serde_json::json;
 
@@ -2146,6 +2764,7 @@ mod tests {
         for tool in tool_definitions() {
             assert!(tool["name"].as_str().unwrap().starts_with("fileterm_"));
             assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+            assert_eq!(tool["outputSchema"]["type"], "object");
         }
         let read_tool = tool_definitions()
             .into_iter()
@@ -2158,6 +2777,51 @@ mod tests {
             .unwrap();
         assert_eq!(write_tool["annotations"]["readOnlyHint"], false);
         assert_eq!(write_tool["annotations"]["destructiveHint"], true);
+        let interactive_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_execute_interactive_remote_command")
+            .unwrap();
+        assert_eq!(interactive_tool["annotations"]["readOnlyHint"], false);
+        assert_eq!(
+            interactive_tool["inputSchema"]["required"],
+            json!(["tab_id", "expected_session_revision", "command"])
+        );
+        assert!(interactive_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("never tell the user to type into the visible terminal or agent chat"));
+        let remote_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_execute_remote_command")
+            .unwrap();
+        assert!(remote_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("inputRequired=true"));
+        assert!(
+            remote_tool["outputSchema"]["properties"]["result"]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field == "inputRequired")
+        );
+        assert_eq!(
+            remote_tool["outputSchema"]["properties"]["result"]["properties"]["inputKind"],
+            json!({ "type": "string", "enum": ["secret", "text"] })
+        );
+
+        let transfer_wait_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_wait_for_transfer")
+            .unwrap();
+        assert_eq!(
+            transfer_wait_tool["inputSchema"]["required"],
+            json!(["transfer_id"])
+        );
+        assert_eq!(
+            transfer_wait_tool["outputSchema"]["required"],
+            json!(["transferId", "transfer", "timedOut"])
+        );
     }
 
     #[test]
@@ -2200,6 +2864,19 @@ mod tests {
     }
 
     #[test]
+    fn initialize_instructions_require_local_secure_input_for_interactive_exec() {
+        let result = initialize_result(&json!({})).expect("initialize result should be valid");
+        let instructions = result["instructions"].as_str().unwrap();
+        assert!(instructions.contains("fileterm_execute_interactive_remote_command"));
+        assert!(instructions.contains("visible terminal"));
+        assert!(instructions.contains("agent chat"));
+        assert!(instructions.contains("different channel"));
+        assert!(instructions.contains("FileTerm—not the agent chat and not the visible terminal"));
+        assert!(instructions.contains("必须让 FileTerm 弹出安全输入框"));
+        assert!(instructions.contains("由 FileTerm 向用户索取输入"));
+    }
+
+    #[test]
     fn notifications_produce_no_stdio_response() {
         assert!(handle_jsonrpc_request(json!({
             "jsonrpc": "2.0",
@@ -2215,5 +2892,46 @@ mod tests {
                 .is_err()
         );
         assert!(validate_tool_arguments("fileterm_get_session_context", &json!("bad")).is_err());
+        assert!(validate_tool_arguments(
+            "fileterm_execute_interactive_remote_command",
+            &json!({ "stdin": "never allowed" })
+        )
+        .is_err());
+        assert!(validate_tool_arguments(
+            "fileterm_execute_interactive_remote_command",
+            &json!({
+                "tab_id": "tab-1",
+                "expected_session_revision": "3",
+                "command": "sudo id"
+            })
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_wait_for_transfer",
+            &json!({
+                "transfer_id": "transfer-1",
+                "timeout_ms": 30_000
+            })
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn tool_errors_include_stable_codes_and_retry_semantics() {
+        let unavailable = tool_error_result(
+            "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE: main window is not ready".to_string(),
+        );
+        assert_eq!(
+            unavailable["structuredContent"]["error"]["code"],
+            "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE"
+        );
+        assert_eq!(unavailable["structuredContent"]["error"]["retryable"], true);
+
+        let rejected = tool_error_result("MCP operation was rejected by the user".to_string());
+        assert_eq!(
+            rejected["structuredContent"]["error"]["code"],
+            "FILETERM_OPERATION_REJECTED"
+        );
+        assert_eq!(rejected["structuredContent"]["error"]["retryable"], false);
     }
 }

@@ -4866,6 +4866,7 @@ async fn run_worker_loop(
                                 &mut sudo_user,
                                 &mut sudo_password,
                                 tab_id,
+                                app,
                                 &state,
                                 &tunnel_command_tx,
                                 sftp_unavailable_reason.as_deref().unwrap_or(SFTP_UNAVAILABLE_FALLBACK),
@@ -5312,28 +5313,515 @@ fn spawn_remote_command(
         .unwrap_or(command);
     let timeout_duration = Duration::from_millis(timeout_ms);
     tokio::spawn(async move {
-        let result = match timeout(
+        let result = match super::system_metrics::exec_command_with_status_timeout_detailed(
+            &handle,
+            &command,
             timeout_duration,
-            super::system_metrics::exec_command_with_status_detailed(&handle, &command),
         )
         .await
         {
-            Ok(Ok(result)) => Ok(serde_json::json!({
-                "output": result.output,
-                "exitCode": result.exit_code,
-                "timedOut": false,
-                "outputTruncated": result.output_truncated,
-            })),
+            Ok(result) => {
+                let input_kind =
+                    detect_remote_exec_input_kind(&result.output).map(ToOwned::to_owned);
+                let input_required = input_kind.is_some();
+                // This is only a redacted routing hint. The normal exec
+                // channel never accepts stdin, so an Agent must switch to
+                // FileTerm's secure interactive tool when this is true.
+                Ok(serde_json::json!({
+                    "output": result.output,
+                    "exitCode": result.exit_code,
+                    "timedOut": result.timed_out,
+                    "outputTruncated": result.output_truncated,
+                    "inputRequired": input_required,
+                    "inputKind": input_kind,
+                }))
+            }
+            Err(error) => Err(error),
+        };
+        let _ = respond_to.send(result);
+    });
+}
+
+const INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS: u8 = 3;
+const INTERACTIVE_REMOTE_EXEC_OUTPUT_CAP: usize = 256 * 1024;
+const INTERACTIVE_REMOTE_EXEC_PROMPT_CAP: usize = 2 * 1024;
+use crate::services::action_review::{
+    INTERACTIVE_REMOTE_EXEC_BUSY, INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT_CODE,
+    INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE, INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED,
+    INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS, INTERACTIVE_REMOTE_EXEC_UNAVAILABLE,
+    INTERACTIVE_REMOTE_EXEC_USER_CANCELLED,
+};
+
+struct InteractiveRemoteExecTask {
+    expected_session_revision: String,
+    command: String,
+    cwd: Option<String>,
+    timeout_ms: u64,
+    audit_context: crate::services::interactive_exec_audit::InteractiveRemoteExecAuditContext,
+    respond_to: oneshot::Sender<Result<Value, String>>,
+}
+
+/// Run an interaction-capable command on a short-lived, isolated SSH PTY.
+/// This deliberately does not use `terminal_inputs`: the visible terminal is
+/// a separate user-owned channel and must never be used as a proxy for MCP.
+fn spawn_interactive_remote_command(
+    app: &AppHandle,
+    tab_id: &str,
+    handle: &Arc<Handle<ClientHandler>>,
+    request: InteractiveRemoteExecTask,
+) {
+    let app = app.clone();
+    let tab_id = tab_id.to_string();
+    let handle = Arc::clone(handle);
+    let command = request
+        .cwd
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| format!("cd -- {} && {}", shell_quote(path.trim()), request.command))
+        .unwrap_or(request.command);
+    let expected_session_revision = request.expected_session_revision;
+    let timeout_ms = request.timeout_ms;
+    let audit_context = request.audit_context;
+    let respond_to = request.respond_to;
+    tokio::spawn(async move {
+        let execution_id = format!("interactive-remote-exec-{}", uuid::Uuid::new_v4());
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        let cancellation = state.worker_controls.read().await.get(&tab_id).cloned();
+        let acquired = {
+            let mut active = state.active_interactive_remote_execs.lock().await;
+            if active.contains_key(&tab_id) {
+                false
+            } else {
+                active.insert(tab_id.clone(), execution_id.clone());
+                true
+            }
+        };
+        if !acquired {
+            let _ = respond_to.send(Err(
+                format!("{INTERACTIVE_REMOTE_EXEC_BUSY}: another interactive remote command is already awaiting input for this SSH session"),
+            ));
+            return;
+        }
+
+        let execution_timeout = Duration::from_millis(timeout_ms).saturating_add(
+            crate::services::action_review::INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT
+                .saturating_mul(INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS as u32),
+        );
+        let task = timeout(
+            execution_timeout,
+            execute_interactive_remote_command_task(
+                &app,
+                &tab_id,
+                &handle,
+                &expected_session_revision,
+                &command,
+                timeout_ms,
+                &execution_id,
+                &audit_context,
+            ),
+        );
+        let task_result = if let Some(cancellation) = cancellation {
+            tokio::select! {
+                result = task => result,
+                _ = cancellation.cancelled() => {
+                    release_interactive_remote_exec(&state, &tab_id, &execution_id).await;
+                    let _ = respond_to.send(Err(
+                        "Interactive remote command was cancelled because its SSH session closed".to_string(),
+                    ));
+                    return;
+                }
+            }
+        } else {
+            task.await
+        };
+        let result = match task_result {
+            Ok(Ok(result)) => Ok(result),
             Ok(Err(error)) => Err(error),
             Err(_) => Ok(serde_json::json!({
                 "output": "",
                 "exitCode": Value::Null,
                 "timedOut": true,
                 "outputTruncated": false,
+                "inputRequired": false,
+                "interactionCount": audit_context.interaction_count(),
             })),
         };
+
+        release_interactive_remote_exec(&state, &tab_id, &execution_id).await;
         let _ = respond_to.send(result);
     });
+}
+
+async fn release_interactive_remote_exec(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    execution_id: &str,
+) {
+    state.active_interactive_remote_execs.lock().await.retain(
+        |active_tab_id, active_execution_id| {
+            active_tab_id != tab_id || active_execution_id != execution_id
+        },
+    );
+    state
+        .pending_remote_exec_interactions
+        .write()
+        .await
+        .retain(|_, pending| pending.execution_id != execution_id);
+}
+
+#[allow(clippy::too_many_arguments)] // Keep the task boundary explicit; each argument has a distinct lifecycle/security role.
+async fn execute_interactive_remote_command_task(
+    app: &AppHandle,
+    tab_id: &str,
+    handle: &Handle<ClientHandler>,
+    expected_session_revision: &str,
+    command: &str,
+    timeout_ms: u64,
+    execution_id: &str,
+    audit_context: &crate::services::interactive_exec_audit::InteractiveRemoteExecAuditContext,
+) -> Result<Value, String> {
+    validate_interactive_remote_exec_target(app, tab_id, expected_session_revision).await?;
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| {
+            format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to open an isolated SSH exec channel: {error}")
+        })?;
+    request_interactive_remote_exec_pty(&channel).await?;
+    channel
+        .exec(true, command)
+        .await
+        .map_err(|error| {
+            format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to start interactive remote command: {error}")
+        })?;
+
+    let mut output = Vec::new();
+    let mut prompt_window = String::new();
+    let mut redactions = Vec::new();
+    let mut exit_status = None;
+    let mut prompt_count = 0_u8;
+    let mut last_prompt_output_len = 0_usize;
+    let mut output_truncated = false;
+    let mut timed_out = false;
+    // The command budget applies while the isolated SSH channel is running.
+    // Waiting for a user response is governed by the separate interaction
+    // timeout and the outer task lifetime, so a password dialog does not
+    // consume the command's execution budget.
+    let mut remaining_command_time = Duration::from_millis(timeout_ms);
+
+    loop {
+        let wait_started = Instant::now();
+        let message = match timeout(remaining_command_time, channel.wait()).await {
+            Ok(message) => message,
+            Err(_) => {
+                timed_out = true;
+                break;
+            }
+        };
+        remaining_command_time = remaining_command_time.saturating_sub(wait_started.elapsed());
+        let Some(message) = message else {
+            break;
+        };
+        match message {
+            ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
+                let data = data.as_ref();
+                if output.len() < INTERACTIVE_REMOTE_EXEC_OUTPUT_CAP {
+                    let remaining = INTERACTIVE_REMOTE_EXEC_OUTPUT_CAP - output.len();
+                    output.extend_from_slice(&data[..data.len().min(remaining)]);
+                    output_truncated |= data.len() > remaining;
+                } else {
+                    output_truncated = true;
+                }
+
+                prompt_window.push_str(&String::from_utf8_lossy(data));
+                trim_string_front(&mut prompt_window, INTERACTIVE_REMOTE_EXEC_PROMPT_CAP);
+                if output.len() > last_prompt_output_len
+                    && interactive_remote_exec_prompt(&prompt_window).is_some()
+                {
+                    prompt_count = prompt_count.saturating_add(1);
+                    if prompt_count > INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS {
+                        return Err(format!(
+                            "{INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS}: maximum supported input prompts exceeded"
+                        ));
+                    }
+                    audit_context.note_interaction(prompt_count);
+                    crate::services::interactive_exec_audit::record(
+                        app,
+                        audit_context,
+                        crate::services::interactive_exec_audit::InteractiveRemoteExecAuditEvent::InputRequested,
+                        prompt_count,
+                        None,
+                    )
+                    .await
+                    .map_err(|_| {
+                        "FileTerm could not prepare the local secure-input audit; interactive command stopped"
+                            .to_string()
+                    })?;
+                    last_prompt_output_len = output.len();
+                    let prompt = interactive_remote_exec_prompt(&prompt_window)
+                        .unwrap_or_else(|| "Remote command is waiting for input".to_string());
+                    let answer = request_interactive_remote_exec_input(
+                        app,
+                        tab_id,
+                        expected_session_revision,
+                        command,
+                        execution_id,
+                        prompt,
+                        prompt_count,
+                    )
+                    .await?;
+                    // The renderer validates the target before accepting the
+                    // response, but the tab could still reconnect or change
+                    // directory in the short interval before this write.
+                    // Revalidate on the SSH task itself so a secret never
+                    // reaches a stale channel.
+                    validate_interactive_remote_exec_target(app, tab_id, expected_session_revision)
+                        .await?;
+                    channel
+                        .data_bytes(format!("{answer}\n").into_bytes())
+                        .await
+                        .map_err(|error| {
+                            format!("Unable to send interactive remote input: {error}")
+                        })?;
+                    redactions.push(answer);
+                    // Avoid mistaking the already-consumed prompt for a new
+                    // one when the command next emits ordinary output.
+                    prompt_window.clear();
+                }
+            }
+            ChannelMsg::ExitStatus {
+                exit_status: status,
+            } => exit_status = Some(status),
+            ChannelMsg::Eof | ChannelMsg::Close if exit_status.is_some() => break,
+            ChannelMsg::Eof | ChannelMsg::Close => break,
+            _ => {}
+        }
+    }
+
+    let output = redact_interactive_remote_exec_output(
+        String::from_utf8_lossy(&output).into_owned(),
+        &redactions,
+    );
+    Ok(serde_json::json!({
+        "output": output,
+        "exitCode": exit_status,
+        "timedOut": timed_out,
+        "outputTruncated": output_truncated,
+        "inputRequired": false,
+        "interactionCount": audit_context.interaction_count(),
+    }))
+}
+
+async fn request_interactive_remote_exec_input(
+    app: &AppHandle,
+    tab_id: &str,
+    expected_session_revision: &str,
+    command: &str,
+    execution_id: &str,
+    prompt: String,
+    attempt: u8,
+) -> Result<String, String> {
+    let request_id = format!("remote-exec-input-{}", uuid::Uuid::new_v4());
+    let (sender, receiver) = oneshot::channel();
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let main_window = app.get_webview_window("main").ok_or_else(|| {
+        format!(
+            "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: FileTerm's main window is unavailable"
+        )
+    })?;
+    if !main_window.is_visible().unwrap_or(false) {
+        // A listener is registered but the user hid FileTerm in the tray.
+        // Restore the main window before emitting so the prompt is visible;
+        // the answer still only targets this isolated task channel.
+        crate::show_main_window(app);
+    }
+    validate_interactive_remote_exec_target(app, tab_id, expected_session_revision).await?;
+    let (host, shell_user, cwd) = {
+        let sessions = state.sessions.read().await;
+        let session = sessions
+            .get(tab_id)
+            .ok_or_else(|| "FileTerm SSH session closed while awaiting input".to_string())?;
+        (
+            session.access_host.clone(),
+            session.shell_user.clone(),
+            session.shell_cwd.clone(),
+        )
+    };
+    if !state
+        .insert_pending_remote_exec_interaction(
+            request_id.clone(),
+            crate::services::workspace::PendingRemoteExecInteraction {
+                tab_id: tab_id.to_string(),
+                expected_session_revision: expected_session_revision.to_string(),
+                execution_id: execution_id.to_string(),
+                sender,
+            },
+        )
+        .await
+    {
+        return Err(format!(
+            "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: FileTerm's main window is not ready to collect secure local input"
+        ));
+    }
+
+    let payload = serde_json::json!({
+        "requestId": request_id,
+        "executionId": execution_id,
+        "tabId": tab_id,
+        "command": command,
+        "host": host,
+        "shellUser": shell_user,
+        "cwd": cwd,
+        "prompt": prompt,
+        "attempt": attempt,
+        "maxAttempts": INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS,
+        "inputKind": interactive_remote_exec_input_kind(&prompt),
+    });
+    if let Err(error) = app.emit("remote-exec:interaction-request", payload) {
+        state
+            .pending_remote_exec_interactions
+            .write()
+            .await
+            .remove(&request_id);
+        return Err(format!(
+            "Unable to show interactive remote input dialog: {error}"
+        ));
+    }
+
+    let response = timeout(
+        crate::services::action_review::INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT,
+        receiver,
+    )
+    .await;
+    state
+        .pending_remote_exec_interactions
+        .write()
+        .await
+        .remove(&request_id);
+    let response = match response {
+        Ok(Ok(response)) => response,
+        Ok(Err(_)) => {
+            return Err(format!(
+                "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: secure input dialog was dismissed"
+            ));
+        }
+        Err(_) => {
+            return Err(format!(
+                "{INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT_CODE}: secure input was not provided before timeout"
+            ));
+        }
+    };
+    if response.cancelled {
+        return Err(format!(
+            "{INTERACTIVE_REMOTE_EXEC_USER_CANCELLED}: the user cancelled secure local input"
+        ));
+    }
+    response.value.ok_or_else(|| {
+        format!("{INTERACTIVE_REMOTE_EXEC_USER_CANCELLED}: no secure local input was provided")
+    })
+}
+
+/// A prompt response remains valid only while the current SSH tab refers to
+/// the same session snapshot the MCP caller inspected. Terminal output does
+/// not advance this revision; reconnects, targets, users and CWD changes do.
+async fn validate_interactive_remote_exec_target(
+    app: &AppHandle,
+    tab_id: &str,
+    expected_session_revision: &str,
+) -> Result<(), String> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let revision = state.ai_session_revision(tab_id).await.to_string();
+    let sessions = state.sessions.read().await;
+    let session = sessions
+        .get(tab_id)
+        .ok_or_else(|| "Interactive remote command target is no longer available".to_string())?;
+    if !session.connected || revision != expected_session_revision {
+        return Err(format!(
+            "{INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED}: refresh session context before retrying"
+        ));
+    }
+    Ok(())
+}
+
+async fn request_interactive_remote_exec_pty(
+    channel: &Channel<russh::client::Msg>,
+) -> Result<(), String> {
+    timeout(
+        SUDO_VERIFY_TIMEOUT,
+        channel.request_pty(
+            true,
+            "xterm-256color",
+            80,
+            24,
+            0,
+            0,
+            &[
+                (russh::Pty::ECHO, 0),
+                (russh::Pty::ECHOE, 0),
+                (russh::Pty::ECHOK, 0),
+                (russh::Pty::ECHONL, 0),
+                (russh::Pty::TTY_OP_ISPEED, 115200),
+                (russh::Pty::TTY_OP_OSPEED, 115200),
+            ],
+        ),
+    )
+    .await
+    .map_err(|_| {
+        format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: timed out while requesting an isolated PTY")
+    })?
+    .map_err(|error| {
+        format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: could not request an isolated PTY: {error}")
+    })
+}
+
+fn interactive_remote_exec_prompt(window: &str) -> Option<String> {
+    let visible = visible_shell_text(window).replace('\r', "\n");
+    let candidate = visible
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())?
+        .trim()
+        .to_string();
+    let lower = candidate.to_ascii_lowercase();
+    let needs_input = lower.contains("password")
+        || candidate.contains("密码")
+        || lower.contains("passphrase")
+        || lower.contains("verification code")
+        || lower.contains("one-time")
+        || lower.contains("otp")
+        || lower.contains("[y/n]")
+        || lower.contains("[yes/no]")
+        || lower.contains("(y/n)")
+        || lower.contains("confirm")
+        || candidate.contains("确认");
+    needs_input.then(|| candidate.chars().take(512).collect())
+}
+
+fn interactive_remote_exec_input_kind(prompt: &str) -> &'static str {
+    let lower = prompt.to_ascii_lowercase();
+    if lower.contains("password")
+        || prompt.contains("密码")
+        || lower.contains("passphrase")
+        || lower.contains("verification code")
+        || lower.contains("one-time")
+        || lower.contains("otp")
+    {
+        "secret"
+    } else {
+        "text"
+    }
+}
+
+fn detect_remote_exec_input_kind(output: &str) -> Option<&'static str> {
+    interactive_remote_exec_prompt(output).map(|prompt| interactive_remote_exec_input_kind(&prompt))
+}
+
+fn redact_interactive_remote_exec_output(mut output: String, redactions: &[String]) -> String {
+    for value in redactions {
+        if !value.is_empty() {
+            output = output.replace(value, "[REDACTED]");
+        }
+    }
+    output
 }
 
 /// Returns `Ok(true)` when the worker should exit (Disconnect requested),
@@ -5353,6 +5841,7 @@ async fn handle_worker_cmd_without_sftp(
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
     tab_id: &str,
+    app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
     tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     unavailable_reason: &str,
@@ -5389,6 +5878,33 @@ async fn handle_worker_cmd_without_sftp(
         } => {
             if exec_channel_enabled {
                 spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+            } else {
+                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
+            }
+            Ok(false)
+        }
+        WorkerCmd::ExecuteInteractiveRemoteCommand {
+            expected_session_revision,
+            command,
+            cwd,
+            timeout_ms,
+            audit_context,
+            respond_to,
+        } => {
+            if exec_channel_enabled {
+                spawn_interactive_remote_command(
+                    app,
+                    tab_id,
+                    handle,
+                    InteractiveRemoteExecTask {
+                        expected_session_revision,
+                        command,
+                        cwd,
+                        timeout_ms,
+                        audit_context,
+                        respond_to,
+                    },
+                );
             } else {
                 let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
             }
@@ -5638,6 +6154,33 @@ async fn handle_worker_cmd(
         } => {
             if exec_channel_enabled {
                 spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+            } else {
+                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
+            }
+            Ok(false)
+        }
+        WorkerCmd::ExecuteInteractiveRemoteCommand {
+            expected_session_revision,
+            command,
+            cwd,
+            timeout_ms,
+            audit_context,
+            respond_to,
+        } => {
+            if exec_channel_enabled {
+                spawn_interactive_remote_command(
+                    app,
+                    tab_id,
+                    handle,
+                    InteractiveRemoteExecTask {
+                        expected_session_revision,
+                        command,
+                        cwd,
+                        timeout_ms,
+                        audit_context,
+                        respond_to,
+                    },
+                );
             } else {
                 let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
             }
@@ -8272,16 +8815,18 @@ mod tests {
     use super::{
         build_http_connect_request, build_legacy_preferred, capture_root_access_password_input,
         coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
-        effective_remote_forward_port, enqueue_tunnel_command, exec_channel_enabled,
-        finish_shell_setup_suppression, format_sftp_unavailable_reason, is_password_prompt,
+        detect_remote_exec_input_kind, effective_remote_forward_port, enqueue_tunnel_command,
+        exec_channel_enabled, finish_shell_setup_suppression, format_sftp_unavailable_reason,
+        interactive_remote_exec_input_kind, interactive_remote_exec_prompt, is_password_prompt,
         is_root_upload_staging_path, looks_like_mfa_prompt, looks_like_root_prompt,
         looks_like_shell_prompt, missing_password_credential, parent_remote_item,
         parent_remote_path, parse_root_file_access_method, password_for_authentication,
-        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
-        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
-        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
-        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        privilege_command_from_terminal_input, redact_interactive_remote_exec_output,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        resource_monitoring_interval_seconds, root_access_auth_failed, root_file_command,
+        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
+        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, strip_su_exec_output,
+        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule,
@@ -8327,6 +8872,47 @@ mod tests {
         assert!(!exec_channel_enabled(&serde_json::json!({
             "enableExecChannel": false
         })));
+    }
+
+    #[test]
+    fn interactive_remote_exec_only_recognizes_bounded_supported_prompts() {
+        assert_eq!(
+            interactive_remote_exec_prompt("ordinary output\nPassword for ops: "),
+            Some("Password for ops:".to_string())
+        );
+        assert_eq!(
+            interactive_remote_exec_prompt("Proceed with installation? [y/N]"),
+            Some("Proceed with installation? [y/N]".to_string())
+        );
+        assert!(interactive_remote_exec_prompt("service started successfully").is_none());
+        assert_eq!(
+            interactive_remote_exec_input_kind("Enter verification code:"),
+            "secret"
+        );
+        assert_eq!(
+            interactive_remote_exec_input_kind("Continue? [y/n]"),
+            "text"
+        );
+        assert_eq!(
+            detect_remote_exec_input_kind("partial output\nPassword for ops: "),
+            Some("secret")
+        );
+        assert_eq!(
+            detect_remote_exec_input_kind("Proceed with installation? [y/N]"),
+            Some("text")
+        );
+        assert_eq!(detect_remote_exec_input_kind("service started"), None);
+    }
+
+    #[test]
+    fn interactive_remote_exec_redacts_every_submitted_value_from_result() {
+        assert_eq!(
+            redact_interactive_remote_exec_output(
+                "password=correct horse\nconfirmation=YES".to_string(),
+                &["correct horse".to_string(), "YES".to_string()],
+            ),
+            "password=[REDACTED]\nconfirmation=[REDACTED]"
+        );
     }
 
     #[test]
@@ -9689,6 +10275,28 @@ mod tests {
             .await
             .expect("cancel remote forward did not release the requested port");
         drop(rebound);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn bounded_exec_timeout_preserves_partial_remote_output() {
+        let fixture = start_openssh_fixture();
+        wait_for_openssh(fixture.port).await;
+
+        let profile = serde_json::json!({ "proxy": { "type": "none" } });
+        let handle = authenticate_openssh_fixture(&fixture, &profile).await;
+        let result = crate::sessions::system_metrics::exec_command_with_status_timeout_detailed(
+            &handle,
+            "printf 'partial-diagnostic'; sleep 1",
+            Duration::from_millis(100),
+        )
+        .await
+        .expect("bounded exec should return the collected partial output");
+
+        assert!(result.timed_out);
+        assert_eq!(result.output, "partial-diagnostic");
+        assert_eq!(result.exit_code, None);
+        assert!(!result.output_truncated);
     }
 
     #[cfg(unix)]

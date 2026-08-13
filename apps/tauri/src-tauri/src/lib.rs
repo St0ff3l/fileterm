@@ -11,6 +11,68 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_cli(arguments)
 }
 
+/// Returns whether the first process argument belongs to the non-GUI CLI.
+///
+/// Keep this dispatch list in the library so the binary entrypoint and its
+/// tests share the same contract. In particular, commands that must work
+/// without initializing a desktop window (such as `interactive-exec --help`)
+/// must be recognized before `run()` starts Tauri.
+pub fn is_cli_command(argument: Option<&str>) -> bool {
+    matches!(
+        argument,
+        Some(
+            "cli"
+                | "connections"
+                | "sessions"
+                | "directory"
+                | "ls"
+                | "read"
+                | "cat"
+                | "commands"
+                | "command-templates"
+                | "transfers"
+                | "wait-transfer"
+                | "tunnels"
+                | "open"
+                | "activate"
+                | "reconnect"
+                | "disconnect"
+                | "close"
+                | "exec"
+                | "execute"
+                | "interactive-exec"
+                | "command-template"
+                | "write"
+                | "mkdir"
+                | "touch"
+                | "copy"
+                | "move"
+                | "rename"
+                | "delete"
+                | "chmod"
+                | "access"
+                | "upload"
+                | "download"
+                | "download-directory"
+                | "pause-transfer"
+                | "resume-transfer"
+                | "discard-transfer"
+                | "cancel-transfer"
+                | "clear-transfers"
+                | "create-tunnel"
+                | "start-tunnel"
+                | "stop-tunnel"
+                | "delete-tunnel"
+                | "call"
+                | "help"
+                | "--help"
+                | "-h"
+                | "--version"
+                | "-V"
+        )
+    )
+}
+
 use crate::commands::OpenWindowInput;
 #[cfg(target_os = "linux")]
 use gtk::prelude::GtkWindowExt;
@@ -1426,7 +1488,7 @@ fn restore_window(app: &AppHandle<Wry>, window: &WebviewWindow<Wry>, focus: bool
     }
 }
 
-fn show_main_window(app: &AppHandle<Wry>) {
+pub(crate) fn show_main_window(app: &AppHandle<Wry>) {
     let hidden_labels = {
         let state = app.state::<HiddenWithMainRegistry>();
         let mut labels = state
@@ -1881,6 +1943,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             crate::commands::app_get_platform,
+            crate::commands::app_get_mcp_agent_setup,
             crate::commands::app_get_arch,
             crate::commands::app_get_runtime_version,
             crate::commands::app_read_clipboard_text,
@@ -1960,6 +2023,7 @@ pub fn run() {
             crate::commands::app_open_remote_path,
             crate::commands::app_set_follow_shell_cwd,
             crate::commands::app_execute_remote_command,
+            crate::commands::app_execute_interactive_remote_command,
             crate::commands::app_read_remote_file,
             crate::commands::app_write_remote_file,
             crate::commands::app_create_remote_directory,
@@ -1980,6 +2044,8 @@ pub fn run() {
             crate::commands::app_discard_transfer,
             crate::commands::app_clear_transfers,
             crate::commands::app_resolve_ssh_interaction,
+            crate::commands::app_resolve_remote_exec_interaction,
+            crate::commands::app_set_remote_exec_interaction_renderer_ready,
             crate::commands::app_list_ssh_tunnels,
             crate::commands::app_create_ssh_tunnel,
             crate::commands::app_start_ssh_tunnel,
@@ -2213,5 +2279,14 @@ mod tests {
         assert!(!registry.try_begin());
         registry.cancel();
         assert!(registry.try_begin());
+    }
+
+    #[test]
+    fn cli_dispatch_includes_interactive_exec_without_starting_tauri() {
+        assert!(super::is_cli_command(Some("interactive-exec")));
+        assert!(super::is_cli_command(Some("wait-transfer")));
+        assert!(super::is_cli_command(Some("cli")));
+        assert!(!super::is_cli_command(Some("mcp")));
+        assert!(!super::is_cli_command(Some("unknown")));
     }
 }

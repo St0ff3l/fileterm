@@ -107,7 +107,16 @@ function isCommandProposal(messages) {
 }
 
 function requestedMode(prompt, commandProposal) {
-  if (commandProposal && /fixture:(command|multiline)\b/i.test(prompt)) {
+  if (commandProposal && /fixture:multiline\b/i.test(prompt)) {
+    return 'multiline-command'
+  }
+  if (commandProposal) {
+    // Command-proposal mode is selected by the request envelope, not by a
+    // magic phrase in the user message. This lets QA cover the real flow
+    // where a user first asks for an explanation and then sends "重新来".
+    return 'command'
+  }
+  if (/fixture:(command|multiline)\b/i.test(prompt)) {
     return /fixture:multiline\b/i.test(prompt) ? 'multiline-command' : 'command'
   }
   if (/fixture:fail-once\b/i.test(prompt)) return 'fail-once'

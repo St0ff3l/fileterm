@@ -813,55 +813,77 @@ pub fn read_json_array(app: &AppHandle, name: &str) -> Result<Vec<Value>, AppErr
     };
 
     if name == "profiles.json" {
-        let secrets = read_json_object(app, "profile-secrets.json")?;
-        if let Some(secrets_profiles) = secrets.get("profiles").and_then(Value::as_object) {
+        let secrets_path = workspace_file(app, "profile-secrets.json")?;
+        let storage_root = secrets_path
+            .parent()
+            .ok_or_else(|| AppError::Storage("无法解析连接凭据存储目录".to_string()))?;
+        let mut secrets = if secrets_path.exists() {
+            read_json_file(&secrets_path)?
+        } else {
+            serde_json::json!({})
+        };
+        let mut migrated = false;
+        if let Some(secrets_profiles) = secrets.get_mut("profiles").and_then(Value::as_object_mut) {
             for profile in &mut values {
                 if let Some(profile_obj) = profile.as_object_mut() {
-                    if let Some(profile_id) = profile_obj.get("id").and_then(Value::as_str) {
-                        if let Some(profile_secrets) =
-                            secrets_profiles.get(profile_id).and_then(Value::as_object)
+                    if let Some(profile_id) = profile_obj
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(ToOwned::to_owned)
+                    {
+                        if let Some(profile_secrets) = secrets_profiles
+                            .get_mut(&profile_id)
+                            .and_then(Value::as_object_mut)
                         {
-                            if let Some(password) = profile_secrets
-                                .get("password")
-                                .and_then(|value| value.get("value"))
-                                .and_then(Value::as_str)
-                            {
-                                profile_obj.insert(
-                                    "password".to_string(),
-                                    Value::String(password.to_string()),
-                                );
+                            let (password, password_migrated) = profile_secret_value(
+                                storage_root,
+                                &profile_id,
+                                "password",
+                                profile_secrets,
+                            )?;
+                            migrated |= password_migrated;
+                            if let Some(password) = password {
+                                profile_obj.insert("password".to_string(), Value::String(password));
                             }
-                            if let Some(passphrase) = profile_secrets
-                                .get("passphrase")
-                                .and_then(|value| value.get("value"))
-                                .and_then(Value::as_str)
-                            {
-                                profile_obj.insert(
-                                    "passphrase".to_string(),
-                                    Value::String(passphrase.to_string()),
-                                );
+                            let (passphrase, passphrase_migrated) = profile_secret_value(
+                                storage_root,
+                                &profile_id,
+                                "passphrase",
+                                profile_secrets,
+                            )?;
+                            migrated |= passphrase_migrated;
+                            if let Some(passphrase) = passphrase {
+                                profile_obj
+                                    .insert("passphrase".to_string(), Value::String(passphrase));
                             }
-                            if let Some(private_key_path) = profile_secrets
-                                .get("privateKeyPath")
-                                .and_then(|value| value.get("value"))
-                                .and_then(Value::as_str)
-                            {
+                            let (private_key_path, private_key_path_migrated) =
+                                profile_secret_value(
+                                    storage_root,
+                                    &profile_id,
+                                    "privateKeyPath",
+                                    profile_secrets,
+                                )?;
+                            migrated |= private_key_path_migrated;
+                            if let Some(private_key_path) = private_key_path {
                                 profile_obj.insert(
                                     "privateKeyPath".to_string(),
-                                    Value::String(private_key_path.to_string()),
+                                    Value::String(private_key_path),
                                 );
                             }
-                            if let Some(proxy_password) = profile_secrets
-                                .get("proxyPassword")
-                                .and_then(|value| value.get("value"))
-                                .and_then(Value::as_str)
-                            {
+                            let (proxy_password, proxy_password_migrated) = profile_secret_value(
+                                storage_root,
+                                &profile_id,
+                                "proxyPassword",
+                                profile_secrets,
+                            )?;
+                            migrated |= proxy_password_migrated;
+                            if let Some(proxy_password) = proxy_password {
                                 if let Some(proxy_obj) =
                                     profile_obj.get_mut("proxy").and_then(Value::as_object_mut)
                                 {
                                     proxy_obj.insert(
                                         "password".to_string(),
-                                        Value::String(proxy_password.to_string()),
+                                        Value::String(proxy_password),
                                     );
                                 }
                             }
@@ -870,9 +892,61 @@ pub fn read_json_array(app: &AppHandle, name: &str) -> Result<Vec<Value>, AppErr
                 }
             }
         }
+        if migrated {
+            write_restricted_json(&secrets_path, &secrets)?;
+        }
     }
 
     Ok(values)
+}
+
+fn profile_secret_value(
+    storage_root: &Path,
+    profile_id: &str,
+    field: &str,
+    profile_secrets: &mut Map<String, Value>,
+) -> Result<(Option<String>, bool), AppError> {
+    let Some(value) = profile_secrets
+        .get(field)
+        .and_then(|value| value.get("value"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+    else {
+        return Ok((None, false));
+    };
+    let scope = format!("profile/{profile_id}/{field}");
+    let (plaintext, should_migrate) =
+        crate::services::secret_crypto::decrypt_or_migrate(storage_root, &scope, &value)?;
+    if should_migrate {
+        let encrypted = crate::services::secret_crypto::encrypt(storage_root, &scope, &plaintext)?;
+        if let Some(entry) = profile_secrets
+            .get_mut(field)
+            .and_then(Value::as_object_mut)
+        {
+            entry.insert(
+                "storage".to_string(),
+                Value::String(crate::services::secret_crypto::ENCRYPTED_STORAGE.to_string()),
+            );
+            entry.insert("value".to_string(), Value::String(encrypted));
+        }
+    }
+    Ok((Some(plaintext), should_migrate))
+}
+
+fn write_restricted_json(path: &Path, value: &Value) -> Result<(), AppError> {
+    let temporary = path.with_file_name(format!(
+        ".{}.{}.tmp",
+        path.file_name().unwrap_or_default().to_string_lossy(),
+        uuid::Uuid::new_v4()
+    ));
+    let content = serde_json::to_vec_pretty(value)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    crate::storage::write_restricted_file(&temporary, &content)?;
+    if let Err(error) = replace_file_atomically(&temporary, path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    Ok(())
 }
 
 pub fn write_json_array(app: &AppHandle, name: &str, values: &[Value]) -> Result<(), AppError> {

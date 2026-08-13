@@ -66,12 +66,17 @@
   z-index: 5;
 }
 
-.local-terminal-surface > .terminal-view {
+.local-terminal-surface > .terminal-view,
+.local-terminal-surface > .split-pane-root {
   box-sizing: border-box;
-  height: auto;
+  height: 100%;
   min-height: 0;
   border: 0;
   background: var(--terminal-bg);
+}
+
+.local-terminal-surface > .split-pane-root {
+  height: 100%;
 }
 
 .local-terminal-workspace .terminal-host {

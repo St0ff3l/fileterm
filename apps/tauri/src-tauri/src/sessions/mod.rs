@@ -22,6 +22,20 @@ pub enum WorkerCmd {
         timeout_ms: u64,
         respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
     },
+    /// Execute through a temporary, isolated PTY on the existing SSH
+    /// transport. Any password / MFA / confirmation prompt is resolved by a
+    /// FileTerm dialog, never by writing to the visible terminal PTY.
+    ExecuteInteractiveRemoteCommand {
+        /// The current session revision returned by session context. The
+        /// worker rechecks it before requesting local user input so answers
+        /// cannot be routed to a target that changed after approval.
+        expected_session_revision: String,
+        command: String,
+        cwd: Option<String>,
+        timeout_ms: u64,
+        audit_context: crate::services::interactive_exec_audit::InteractiveRemoteExecAuditContext,
+        respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
+    },
     ListRemoteFiles {
         path: String,
         respond_to: tokio::sync::oneshot::Sender<Result<Vec<serde_json::Value>, String>>,

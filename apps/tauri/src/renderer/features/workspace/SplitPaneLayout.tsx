@@ -13,6 +13,9 @@ interface SplitPaneLayoutProps {
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onResizeEnd(panePath: number[], weights: number[]): void
+  onReconnectPane?(paneTabId: string): void | Promise<void>
+  closedMessage?: string
+  reconnectHint?: string
 }
 
 /**
@@ -20,7 +23,8 @@ interface SplitPaneLayoutProps {
  *
  * 每个 leaf 渲染一个 TerminalView（独立 session，不共享 PTY）。
  * split 节点按 direction（row=左右，column=上下）排列子节点，中间有 resizer；
- * 组件由 SessionWorkspace 挂进终端区域，因此文件、命令和侧栏仍是共享工作区。
+ * SSH workspace 与 LocalTerminalWorkspace 都复用本组件；叶子始终是独立
+ * runtime，容器只负责布局、焦点、尺寸权重与关闭行为。
  */
 export function SplitPaneLayout({
   rootTab,
@@ -30,7 +34,10 @@ export function SplitPaneLayout({
   onCloseTab,
   onSplitPane,
   onActivatePane,
-  onResizeEnd
+  onResizeEnd,
+  onReconnectPane,
+  closedMessage,
+  reconnectHint
 }: SplitPaneLayoutProps) {
   if (!rootTab.paneRoot) {
     return null
@@ -54,6 +61,9 @@ export function SplitPaneLayout({
         onSplitPane={onSplitPane}
         onActivatePane={onActivatePane}
         onResizeEnd={onResizeEnd}
+        onReconnectPane={onReconnectPane}
+        closedMessage={closedMessage}
+        reconnectHint={reconnectHint}
       />
     </div>
   )
@@ -78,6 +88,9 @@ interface PaneRendererProps {
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onResizeEnd(panePath: number[], weights: number[]): void
+  onReconnectPane?(paneTabId: string): void | Promise<void>
+  closedMessage?: string
+  reconnectHint?: string
 }
 
 function PaneRenderer({
@@ -91,7 +104,10 @@ function PaneRenderer({
   canClosePane,
   onSplitPane,
   onActivatePane,
-  onResizeEnd
+  onResizeEnd,
+  onReconnectPane,
+  closedMessage,
+  reconnectHint
 }: PaneRendererProps) {
   if (node.kind === 'leaf') {
     const session = sessions[node.tabId]
@@ -105,6 +121,9 @@ function PaneRenderer({
             connected={session?.connected ?? false}
             connecting={session?.connected === false}
             isActive={isActive}
+            onReconnect={onReconnectPane ? () => onReconnectPane(node.tabId) : undefined}
+            closedMessage={closedMessage}
+            reconnectHint={reconnectHint}
             onSplitPane={(direction) => onSplitPane(node.tabId, direction)}
             onClosePane={() => onClosePane(node.tabId)}
             onCloseTab={onCloseTab}
@@ -147,6 +166,9 @@ function PaneRenderer({
       onSplitPane={onSplitPane}
       onActivatePane={onActivatePane}
       onResizeEnd={onResizeEnd}
+      onReconnectPane={onReconnectPane}
+      closedMessage={closedMessage}
+      reconnectHint={reconnectHint}
     />
   )
 }
@@ -165,6 +187,9 @@ interface SplitContainerProps {
   onSplitPane(paneTabId: string, direction: 'row' | 'column'): void
   onActivatePane(paneTabId: string): void
   onResizeEnd(panePath: number[], weights: number[]): void
+  onReconnectPane?(paneTabId: string): void | Promise<void>
+  closedMessage?: string
+  reconnectHint?: string
 }
 
 function SplitContainer({
@@ -180,7 +205,10 @@ function SplitContainer({
   canClosePane,
   onSplitPane,
   onActivatePane,
-  onResizeEnd
+  onResizeEnd,
+  onReconnectPane,
+  closedMessage,
+  reconnectHint
 }: SplitContainerProps) {
   const [weights, setWeights] = useState(initialWeights)
   const [dragging, setDragging] = useState(false)
@@ -251,6 +279,9 @@ function SplitContainer({
           onSplitPane={onSplitPane}
           onActivatePane={onActivatePane}
           onResizeEnd={onResizeEnd}
+          onReconnectPane={onReconnectPane}
+          closedMessage={closedMessage}
+          reconnectHint={reconnectHint}
         />
       </div>
     )

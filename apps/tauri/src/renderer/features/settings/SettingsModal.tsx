@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type AppUpdateStatus,
   type AiProviderDraft,
   type AiProviderKind,
   type AiProviderSummary,
+  type ConnectionProfile,
+  type McpAgentClientStatus,
+  type McpAgentPreferences,
+  type McpAgentSetup,
   type OverviewSectionId,
   type S3BackupConfig,
   type SshConnectionDefaults,
@@ -21,7 +26,7 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 
-type SettingsTab = 'ai' | 'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+type SettingsTab = 'ai' | 'agent' | 'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
@@ -254,6 +259,7 @@ export function SettingsModal({
   onOpenCommandManager,
   onOpenConnectionManager,
   onOpenLogsDirectory,
+  onLaunchLocalAgent,
   onClose,
   initialTab = 'interface',
   standalone = false,
@@ -266,6 +272,8 @@ export function SettingsModal({
   onOpenCommandManager(): void
   onOpenConnectionManager(): void
   onOpenLogsDirectory(): void
+  /** Opens an Agent in a visible local terminal; secrets never pass through MCP. */
+  onLaunchLocalAgent?(client: McpAgentClientStatus): void
   onClose(): void
   initialTab?: SettingsTab
   standalone?: boolean
@@ -280,6 +288,13 @@ export function SettingsModal({
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
+  const [mcpAgentPreferences, setMcpAgentPreferences] = useState<McpAgentPreferences>(() => ({
+    ...DEFAULT_MCP_AGENT_PREFERENCES
+  }))
+  const [mcpAgentSetup, setMcpAgentSetup] = useState<McpAgentSetup | null>(null)
+  const [mcpAgentProfiles, setMcpAgentProfiles] = useState<ConnectionProfile[]>([])
+  const [mcpAgentOperation, setMcpAgentOperation] = useState<'load' | 'save' | null>(null)
+  const [mcpAgentMessage, setMcpAgentMessage] = useState<string | null>(null)
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS
   }))
@@ -371,6 +386,7 @@ export function SettingsModal({
         if (!canceled) {
           setAutoCheckUpdates(preferences.autoCheckUpdates)
           setTerminalZoomLocked(preferences.terminalZoomLocked)
+          setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
           setOverviewShowStats(preferences.overviewShowStats)
           setOverviewShowRecent(preferences.overviewShowRecent)
@@ -393,6 +409,7 @@ export function SettingsModal({
       if (!canceled) {
         setAutoCheckUpdates(preferences.autoCheckUpdates)
         setTerminalZoomLocked(preferences.terminalZoomLocked)
+        setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
         setOverviewShowStats(preferences.overviewShowStats)
         setOverviewShowRecent(preferences.overviewShowRecent)
@@ -430,6 +447,35 @@ export function SettingsModal({
           setSyncOperation(null)
         }
       })
+  }, [activeTab, desktopApi])
+
+  useEffect(() => {
+    if (activeTab !== 'agent') return
+    if (!desktopApi) {
+      setMcpAgentMessage(t.agentMcpDesktopOnly)
+      return
+    }
+    let canceled = false
+    setMcpAgentOperation('load')
+    setMcpAgentMessage(null)
+    void Promise.all([desktopApi.getMcpAgentSetup(), desktopApi.getConnectionLibrary(), desktopApi.getUiPreferences()])
+      .then(([setup, library, preferences]) => {
+        if (canceled) return
+        setMcpAgentSetup(setup)
+        setMcpAgentProfiles(library.profiles)
+        setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setMcpAgentMessage(error instanceof Error ? error.message : String(error))
+        }
+      })
+      .finally(() => {
+        if (!canceled) setMcpAgentOperation(null)
+      })
+    return () => {
+      canceled = true
+    }
   }, [activeTab, desktopApi])
 
   useEffect(() => {
@@ -762,6 +808,51 @@ export function SettingsModal({
       .finally(() => setIsSavingTerminalZoomPreference(false))
   }
 
+  const saveMcpAgentPreferences = (patch: Partial<McpAgentPreferences>) => {
+    if (!desktopApi || mcpAgentOperation === 'save') {
+      return
+    }
+
+    const previousPreferences = mcpAgentPreferences
+    const nextPreferences = { ...mcpAgentPreferences, ...patch }
+    if (
+      nextPreferences.connectionScope === previousPreferences.connectionScope &&
+      nextPreferences.operationPolicy === previousPreferences.operationPolicy &&
+      nextPreferences.defaultProfileId === previousPreferences.defaultProfileId
+    ) {
+      return
+    }
+    setMcpAgentPreferences(nextPreferences)
+    setMcpAgentMessage(null)
+    setMcpAgentOperation('save')
+    void desktopApi
+      .setUiPreferences({ mcpAgent: nextPreferences })
+      .then((preferences) => {
+        setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
+        setMcpAgentMessage(t.agentMcpSaved)
+      })
+      .catch((error: unknown) => {
+        setMcpAgentPreferences(previousPreferences)
+        setMcpAgentMessage(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => setMcpAgentOperation(null))
+  }
+
+  const copyMcpAgentRegistrationCommand = (command: string) => {
+    if (!desktopApi || !command) return
+    setMcpAgentMessage(null)
+    void desktopApi
+      .writeClipboardText(command)
+      .then(() => setMcpAgentMessage(t.agentMcpCommandCopied))
+      .catch((error: unknown) => setMcpAgentMessage(error instanceof Error ? error.message : String(error)))
+  }
+
+  const launchMcpAgentInLocalTerminal = (client: McpAgentClientStatus) => {
+    if (!client.available || !onLaunchLocalAgent) return
+    setMcpAgentMessage(null)
+    onLaunchLocalAgent(client)
+  }
+
   const applyOverviewPreferences = (preferences: UiPreferences) => {
     setOverviewShowStats(preferences.overviewShowStats)
     setOverviewShowRecent(preferences.overviewShowRecent)
@@ -983,6 +1074,16 @@ export function SettingsModal({
               <span className="material-symbols-outlined">auto_awesome</span>
             </span>
             <span className="connection-manager-sidebar-label">{t.aiSettings}</span>
+          </button>
+          <button
+            className={`connection-manager-sidebar-item ${activeTab === 'agent' ? 'active' : ''}`}
+            type="button"
+            onClick={() => setActiveTab('agent')}
+          >
+            <span className="connection-manager-sidebar-icon">
+              <AppIcon name="terminal-file" size={17} />
+            </span>
+            <span className="connection-manager-sidebar-label">{t.agentMcpSettings}</span>
           </button>
           <button
             className={`connection-manager-sidebar-item ${activeTab === 'connections' ? 'active' : ''}`}
@@ -1451,6 +1552,153 @@ export function SettingsModal({
                     title="删除 Provider 确认"
                   />
                 ) : null}
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === 'agent' ? (
+            <div className="settings-panel settings-agent-mcp-panel">
+              <section className="settings-section">
+                <h3>{t.agentMcpSettings}</h3>
+                <p className="settings-tools-hint">{t.agentMcpDescription}</p>
+
+                <div className="agent-mcp-runtime-card">
+                  <span className="agent-mcp-runtime-icon">
+                    <AppIcon name="terminal-file" size={17} strokeWidth={2} />
+                  </span>
+                  <div>
+                    <strong>{t.agentMcpRuntimeTitle}</strong>
+                    <p>{t.agentMcpRuntimeDescription}</p>
+                  </div>
+                </div>
+
+                <div className="agent-mcp-form">
+                  <label>
+                    <span>{t.agentMcpConnectionScope}</span>
+                    <DropdownSelect
+                      className="agent-mcp-select"
+                      disabled={!desktopApi || mcpAgentOperation !== null}
+                      options={[
+                        { value: 'all-saved-connections', label: t.agentMcpScopeAll },
+                        { value: 'active-session', label: t.agentMcpScopeActive },
+                        {
+                          value: 'default-connection',
+                          label: t.agentMcpScopeDefault,
+                          disabled: !mcpAgentProfiles.length
+                        }
+                      ]}
+                      value={mcpAgentPreferences.connectionScope}
+                      onChange={(value) => {
+                        saveMcpAgentPreferences({
+                          connectionScope: value as McpAgentPreferences['connectionScope'],
+                          ...(value === 'default-connection' && !mcpAgentPreferences.defaultProfileId
+                            ? { defaultProfileId: mcpAgentProfiles[0]?.id }
+                            : {})
+                        })
+                      }}
+                    />
+                    <small>
+                      {mcpAgentPreferences.connectionScope === 'all-saved-connections'
+                        ? t.agentMcpScopeAllHint
+                        : mcpAgentPreferences.connectionScope === 'active-session'
+                          ? t.agentMcpScopeActiveHint
+                          : t.agentMcpScopeDefaultHint}
+                    </small>
+                  </label>
+
+                  {mcpAgentPreferences.connectionScope === 'default-connection' ? (
+                    <label>
+                      <span>{t.agentMcpDefaultConnection}</span>
+                      <DropdownSelect
+                        className="agent-mcp-select"
+                        disabled={!desktopApi || mcpAgentOperation !== null || !mcpAgentProfiles.length}
+                        options={mcpAgentProfiles.map((profile) => ({
+                          value: profile.id,
+                          label: `${profile.name || profile.host}:${profile.port}`
+                        }))}
+                        placeholder={t.agentMcpDefaultConnectionPlaceholder}
+                        value={mcpAgentPreferences.defaultProfileId ?? ''}
+                        onChange={(value) => saveMcpAgentPreferences({ defaultProfileId: value })}
+                      />
+                      {!mcpAgentProfiles.length ? <small>{t.agentMcpNoProfiles}</small> : null}
+                    </label>
+                  ) : null}
+
+                  <label>
+                    <span>{t.agentMcpOperationPolicy}</span>
+                    <DropdownSelect
+                      className="agent-mcp-select"
+                      disabled={!desktopApi || mcpAgentOperation !== null}
+                      options={[
+                        { value: 'read-only', label: t.agentMcpReadOnly },
+                        { value: 'approved-operations', label: t.agentMcpApprovedOperations }
+                      ]}
+                      value={mcpAgentPreferences.operationPolicy}
+                      onChange={(value) =>
+                        saveMcpAgentPreferences({
+                          operationPolicy: value as McpAgentPreferences['operationPolicy']
+                        })
+                      }
+                    />
+                    <small>
+                      {mcpAgentPreferences.operationPolicy === 'read-only'
+                        ? t.agentMcpReadOnlyHint
+                        : t.agentMcpApprovedOperationsHint}
+                    </small>
+                  </label>
+                </div>
+
+                <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
+                  <h4>{t.agentMcpClients}</h4>
+                  {mcpAgentSetup?.clients.map((client) => (
+                    <article key={client.id} className="agent-mcp-client-card">
+                      <div className="agent-mcp-client-heading">
+                        <div>
+                          <strong>{client.label}</strong>
+                          <small>{client.available ? t.agentMcpClientAvailable : t.agentMcpClientUnavailable}</small>
+                        </div>
+                        <span className={`agent-mcp-client-status ${client.available ? 'is-available' : ''}`}>
+                          {client.command}
+                        </span>
+                      </div>
+                      <div className="agent-mcp-registration">
+                        <code>{client.registrationCommand}</code>
+                        <button
+                          aria-label={t.agentMcpRegistration}
+                          className="copy-icon-button agent-mcp-copy-button"
+                          disabled={!desktopApi}
+                          title={t.agentMcpRegistration}
+                          type="button"
+                          onClick={() => copyMcpAgentRegistrationCommand(client.registrationCommand)}
+                        >
+                          <AppIcon name="copy" size={14} strokeWidth={2} />
+                        </button>
+                      </div>
+                      <div className="agent-mcp-client-actions">
+                        <small className="agent-mcp-registration-hint">{t.agentMcpRegistrationDescription}</small>
+                        <button
+                          className="settings-secondary-button agent-mcp-launch-button"
+                          disabled={!client.available || !onLaunchLocalAgent}
+                          title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
+                          type="button"
+                          onClick={() => launchMcpAgentInLocalTerminal(client)}
+                        >
+                          <AppIcon name="terminal-file" size={14} strokeWidth={2} />
+                          {t.agentMcpLaunch}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="agent-mcp-keep-open">
+                  <AppIcon name="server" size={15} />
+                  <div>
+                    <strong>{t.agentMcpKeepOpenTitle}</strong>
+                    <p>{t.agentMcpKeepOpenDescription}</p>
+                  </div>
+                </div>
+                {mcpAgentMessage ? <p className="agent-mcp-operation-message">{mcpAgentMessage}</p> : null}
               </section>
             </div>
           ) : null}

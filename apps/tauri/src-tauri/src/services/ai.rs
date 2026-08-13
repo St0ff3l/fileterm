@@ -630,7 +630,7 @@ fn read_public_config(app: &AppHandle) -> Result<StoredProviderConfig, AppError>
     if !path.exists() {
         return Ok(StoredProviderConfig::default());
     }
-    let bytes = fs::read(path).map_err(|error| AppError::Storage(error.to_string()))?;
+    let bytes = fs::read(&path).map_err(|error| AppError::Storage(error.to_string()))?;
     serde_json::from_slice(&bytes).map_err(|error| AppError::Serialization(error.to_string()))
 }
 
@@ -639,8 +639,51 @@ fn read_secret_config(app: &AppHandle) -> Result<StoredProviderSecrets, AppError
     if !path.exists() {
         return Ok(StoredProviderSecrets::default());
     }
-    let bytes = fs::read(path).map_err(|error| AppError::Storage(error.to_string()))?;
-    serde_json::from_slice(&bytes).map_err(|error| AppError::Serialization(error.to_string()))
+    let bytes = fs::read(&path).map_err(|error| AppError::Storage(error.to_string()))?;
+    let mut config: StoredProviderSecrets = serde_json::from_slice(&bytes)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    if decrypt_provider_secrets(&path, &mut config)? {
+        write_secret_config(app, &config)?;
+    }
+    Ok(config)
+}
+
+fn decrypt_provider_secrets(
+    path: &Path,
+    config: &mut StoredProviderSecrets,
+) -> Result<bool, AppError> {
+    let storage_root = path
+        .parent()
+        .ok_or_else(|| AppError::Storage("无法解析 AI 凭据存储目录".to_string()))?;
+    let mut migrated = false;
+    for (provider_id, secret) in &mut config.providers {
+        let (api_key, should_migrate) = crate::services::secret_crypto::decrypt_or_migrate(
+            storage_root,
+            &format!("ai-provider/{provider_id}/api-key"),
+            &secret.api_key,
+        )?;
+        secret.api_key = api_key;
+        migrated |= should_migrate;
+    }
+    Ok(migrated)
+}
+
+fn encrypt_provider_secrets(
+    path: &Path,
+    config: &StoredProviderSecrets,
+) -> Result<StoredProviderSecrets, AppError> {
+    let storage_root = path
+        .parent()
+        .ok_or_else(|| AppError::Storage("无法解析 AI 凭据存储目录".to_string()))?;
+    let mut encrypted = config.clone();
+    for (provider_id, secret) in &mut encrypted.providers {
+        secret.api_key = crate::services::secret_crypto::encrypt(
+            storage_root,
+            &format!("ai-provider/{provider_id}/api-key"),
+            &secret.api_key,
+        )?;
+    }
+    Ok(encrypted)
 }
 
 fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<(), AppError> {
@@ -660,7 +703,9 @@ fn write_public_config(app: &AppHandle, config: &StoredProviderConfig) -> Result
 }
 
 fn write_secret_config(app: &AppHandle, config: &StoredProviderSecrets) -> Result<(), AppError> {
-    write_json_file(&secret_config_path(app)?, config)
+    let path = secret_config_path(app)?;
+    let encrypted = encrypt_provider_secrets(&path, config)?;
+    write_json_file(&path, &encrypted)
 }
 
 fn conversation_store_lock() -> Result<std::sync::MutexGuard<'static, ()>, AppError> {
@@ -3086,7 +3131,16 @@ fn parse_command_proposal(
     value: &str,
     target: &AiContextTarget,
 ) -> Result<(String, Vec<AiCommandSuggestion>), AppError> {
-    let value = value.trim();
+    // Reasoning-capable models may emit a completed private reasoning block
+    // before the requested JSON envelope. It is not part of the proposal and
+    // must never be rendered as an answer or make an otherwise valid card
+    // disappear. An unfinished block remains invalid and therefore keeps the
+    // command mode fail-closed.
+    let value = value
+        .split_once("</think>")
+        .map(|(_, answer)| answer)
+        .unwrap_or(value)
+        .trim();
     // A few providers wrap an otherwise complete JSON response in a single
     // code fence despite the instruction not to. Accept only that exact
     // shape; prose before/after the fence remains invalid and is never
@@ -3308,7 +3362,7 @@ fn system_prompt(context: Option<&AiPromptContext>, response_mode: AiChatRespons
         prompt.push_str("\n</fileterm-user-approved-context>");
     }
     if response_mode == AiChatResponseMode::CommandProposal {
-        prompt.push_str("\n\nThis request is in command-proposal mode. This mode applies to the current turn even if earlier assistant messages used ordinary Markdown. Interpret short follow-ups such as 'start over', 'try again', '重新来', '再来一次', '换一种', or their equivalent as a request to regenerate the command proposal for the current task, using the preceding user intent and conversation context. Return exactly one JSON object and nothing else. Its schema is {\"answer\": string, \"commands\": [{\"command\": string, \"explanation\": string | null, \"risk\": \"read-only\" | \"mutating\" | \"destructive\" | \"privileged\" | \"unknown\"}]}. Do not use Markdown, code fences, or prose outside the JSON object. For an operational request, include one or more actionable shell commands; only use an empty commands array when no command can be responsibly proposed because required information is missing. Include only commands that the user should review manually; do not imply they were executed.");
+        prompt.push_str("\n\nThis request is in command-proposal mode. The request mode is authoritative for this turn, even if earlier assistant messages used ordinary Markdown or the latest user message is only a short follow-up. Interpret 'start over', 'try again', '重新来', '再来一次', '换一种', or their equivalent as a request to regenerate a command proposal for the current task, using the preceding user intent and conversation context. Return exactly one JSON object and nothing else. Its schema is {\"answer\": string, \"commands\": [{\"command\": string, \"explanation\": string | null, \"risk\": \"read-only\" | \"mutating\" | \"destructive\" | \"privileged\" | \"unknown\"}]}. Do not answer in normal prose. Do not use Markdown, code fences, or any text outside the JSON object. For an operational request, include one or more actionable shell commands; only use an empty commands array when no command can be responsibly proposed because required information is missing. Include only commands that the user should review manually; do not imply they were executed.");
     }
     prompt
 }
@@ -4293,10 +4347,10 @@ async fn test_anthropic_messages(
 mod tests {
     use super::{
         ai_error, apply_secret_patch, cancellation_or_request_error, command_has_unsafe_input,
-        context_mode_reads_terminal_transcript, ensure_conversation_fits,
-        escape_review_prompt_value, normalize_ai_title_suggestion, normalize_base_url,
-        normalize_conversation_title, now_millis, parse_command_proposal, provider_history_items,
-        provider_history_messages, provider_is_usable, provider_summary,
+        context_mode_reads_terminal_transcript, decrypt_provider_secrets, encrypt_provider_secrets,
+        ensure_conversation_fits, escape_review_prompt_value, normalize_ai_title_suggestion,
+        normalize_base_url, normalize_conversation_title, now_millis, parse_command_proposal,
+        provider_history_items, provider_history_messages, provider_is_usable, provider_summary,
         prune_expired_context_snapshots, repair_default_provider, sanitize_recent_terminal_output,
         stream_anthropic_messages, stream_error_event, stream_openai_compatible_chat,
         stream_openai_responses, system_prompt, test_openai_compatible_chat,
@@ -4838,6 +4892,30 @@ mod tests {
     }
 
     #[test]
+    fn command_mode_prompt_is_authoritative_for_short_regeneration_followups() {
+        let prompt = system_prompt(None, AiChatResponseMode::CommandProposal);
+
+        assert!(prompt.contains("request mode is authoritative"));
+        assert!(prompt.contains("重新来"));
+        assert!(prompt.contains("Return exactly one JSON object and nothing else"));
+        assert!(prompt.contains("Do not answer in normal prose"));
+    }
+
+    #[test]
+    fn command_cards_can_discard_a_completed_reasoning_block() {
+        let value = concat!(
+            "<think>先分析用户之前的自然语言回答</think>",
+            r#"{"answer":"重新整理为只读检查命令。","commands":[{"command":"docker ps","explanation":"查看运行中的容器。","risk":"read-only"}]}"#
+        );
+
+        let (_, commands) = parse_command_proposal(value, &context_target())
+            .expect("a completed reasoning block must not prevent command parsing");
+
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].command, "docker ps");
+    }
+
+    #[test]
     fn command_input_handoff_rejects_newlines_and_controls() {
         assert!(!command_has_unsafe_input("journalctl -u nginx -n 100"));
         assert!(command_has_unsafe_input("echo one\necho two"));
@@ -5355,6 +5433,44 @@ mod tests {
             .mode()
             & 0o777;
         assert_eq!(mode, 0o600);
+
+        fs::remove_dir_all(directory).expect("fixture directory should be removed");
+    }
+
+    #[test]
+    fn provider_secret_storage_encrypts_and_migrates_plaintext() {
+        let directory = std::env::temp_dir().join(format!(
+            "fileterm-ai-provider-secret-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).expect("fixture directory should be created");
+        let path = directory.join("ai-provider-secrets.json");
+        let secrets = StoredProviderSecrets {
+            schema_version: 1,
+            providers: BTreeMap::from([(
+                "provider-1".to_string(),
+                StoredProviderSecret {
+                    api_key: "test-api-key".to_string(),
+                },
+            )]),
+        };
+
+        let encrypted = encrypt_provider_secrets(&path, &secrets).expect("secrets encrypt");
+        write_json_file(&path, &encrypted).expect("encrypted secrets write");
+        let raw = fs::read_to_string(&path).expect("encrypted file read");
+        assert!(!raw.contains("test-api-key"));
+
+        let mut decoded: StoredProviderSecrets =
+            serde_json::from_str(&raw).expect("encrypted store json");
+        assert!(!decrypt_provider_secrets(&path, &mut decoded).expect("secrets decrypt"));
+        assert_eq!(decoded.providers["provider-1"].api_key, "test-api-key");
+
+        write_json_file(&path, &secrets).expect("legacy plaintext write");
+        let mut legacy: StoredProviderSecrets =
+            serde_json::from_slice(&fs::read(&path).expect("legacy plaintext read"))
+                .expect("legacy store json");
+        assert!(decrypt_provider_secrets(&path, &mut legacy).expect("legacy decrypt"));
+        assert_eq!(legacy.providers["provider-1"].api_key, "test-api-key");
 
         fs::remove_dir_all(directory).expect("fixture directory should be removed");
     }

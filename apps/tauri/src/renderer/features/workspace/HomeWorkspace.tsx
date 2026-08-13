@@ -4,6 +4,7 @@ import type {
   CommandTemplateInput,
   ConnectionFolder,
   ConnectionProfile,
+  McpAgentClientStatus,
   OverviewSectionId,
   AppUpdateStatus
 } from '@fileterm/core'
@@ -51,6 +52,7 @@ export function HomeWorkspace({
   onSetTheme,
   onSetLocale,
   onOpenLogsDirectory,
+  onLaunchLocalAgent,
   isSidebarCollapsed,
   tabBarProps,
   isResizingSidebar,
@@ -92,6 +94,7 @@ export function HomeWorkspace({
   onSetTheme(value: 'default-dark' | 'default-light'): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
+  onLaunchLocalAgent?(client: McpAgentClientStatus): void
   isSidebarCollapsed: boolean
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
@@ -398,6 +401,7 @@ export function HomeWorkspace({
                 onOpenCommandManager={() => selectTab('command-manager')}
                 onOpenConnectionManager={() => selectTab('connection-manager')}
                 onOpenLogsDirectory={onOpenLogsDirectory}
+                onLaunchLocalAgent={onLaunchLocalAgent}
                 onClose={() => selectTab('overview')}
                 inline={true}
               />

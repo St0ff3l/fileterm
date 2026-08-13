@@ -7,6 +7,8 @@ export type WorkspaceSessionType = SessionType | 'local'
 export interface LocalTerminalLaunchOptions {
   /** Shell executable name or absolute path. Defaults to the platform shell. */
   shell?: string
+  /** User-visible label for this one local terminal tab. Defaults to Local Terminal. */
+  title?: string
   /** Initial working directory. Defaults to the current user's home directory. */
   cwd?: string
   /** Additional shell options. These are not persisted in a connection profile. */
@@ -152,6 +154,43 @@ export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
   resourceMonitoringIntervalSeconds: 1,
   reconnectMode: 'none',
   legacyAlgorithms: false
+}
+
+/** Scope exposed to externally launched MCP Agents such as Codex and Claude. */
+export type McpConnectionScope = 'all-saved-connections' | 'active-session' | 'default-connection'
+
+/** Whether an external MCP Agent may request state-changing operations. */
+export type McpOperationPolicy = 'read-only' | 'approved-operations'
+
+/** Non-secret local policy for an external MCP Agent connection. */
+export interface McpAgentPreferences {
+  connectionScope: McpConnectionScope
+  operationPolicy: McpOperationPolicy
+  /** Saved connection profile used when `connectionScope` is `default-connection`. */
+  defaultProfileId?: string
+}
+
+export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
+  connectionScope: 'all-saved-connections',
+  operationPolicy: 'approved-operations'
+}
+
+export type McpAgentClientId = 'claude-code' | 'codex-cli'
+
+/** Local client discovery result. Detection only reads PATH and never runs the client. */
+export interface McpAgentClientStatus {
+  id: McpAgentClientId
+  label: string
+  command: string
+  available: boolean
+  path?: string
+  registrationCommand: string
+}
+
+/** Backend-generated configuration help for local stdio MCP clients. */
+export interface McpAgentSetup {
+  filetermCommand: string
+  clients: McpAgentClientStatus[]
 }
 
 export interface SshProfile extends NetworkProfile {
@@ -886,6 +925,24 @@ export type SshInteractionRequest =
   | SshKeyPassphrasePromptRequest
   | SshKeyboardInteractiveRequest
 
+/**
+ * A task-local prompt from an isolated SSH exec PTY. This is not a terminal
+ * input request: the response goes only to the one MCP/CLI task that raised
+ * it and is never added to the terminal transcript or returned to the agent.
+ */
+export interface RemoteExecInteractionRequest {
+  requestId: string
+  tabId: string
+  command: string
+  host: string
+  shellUser?: string
+  cwd?: string
+  prompt: string
+  attempt: number
+  maxAttempts: number
+  inputKind: 'secret' | 'text'
+}
+
 export type ActionApprovalSource = 'mcp' | 'ai-review'
 
 /** One-time in-app approval shared by MCP and AI Review Mode. */
@@ -988,6 +1045,7 @@ export interface UiPreferences {
   autoCheckUpdates: boolean
   terminalZoomLocked: boolean
   connectionDefaults: SshConnectionDefaults
+  mcpAgent: McpAgentPreferences
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -1001,6 +1059,7 @@ export interface UiPreferencesInput {
   autoCheckUpdates?: boolean
   terminalZoomLocked?: boolean
   connectionDefaults?: Partial<SshConnectionDefaults>
+  mcpAgent?: Partial<McpAgentPreferences>
   overviewShowStats?: boolean
   overviewShowRecent?: boolean
   overviewShowAllConnections?: boolean
@@ -1327,6 +1386,7 @@ export interface FileTermDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
+  getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
   saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
   deleteAiProvider(providerId: string): Promise<AiProviderSummary[]>
@@ -1422,7 +1482,32 @@ export interface FileTermDesktopApi {
     command: string,
     cwd?: string,
     timeoutMs?: number
-  ): Promise<{ output: string; exitCode: number | null; timedOut: boolean; outputTruncated: boolean }>
+  ): Promise<{
+    output: string
+    exitCode: number | null
+    timedOut: boolean
+    outputTruncated: boolean
+    /** The non-interactive channel saw a supported input prompt. */
+    inputRequired: boolean
+    /** A bounded routing hint; the input itself is never returned. */
+    inputKind?: 'secret' | 'text'
+  }>
+  executeInteractiveRemoteCommand(
+    tabId: string,
+    expectedSessionRevision: string,
+    command: string,
+    cwd?: string,
+    timeoutMs?: number
+  ): Promise<{
+    output: string
+    exitCode: number | null
+    timedOut: boolean
+    outputTruncated: boolean
+    inputRequired: boolean
+    inputKind?: 'secret' | 'text'
+    /** Number of local secure-input rounds; answers themselves never leave FileTerm. */
+    interactionCount?: number
+  }>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
   getCommandSendPreferences(): Promise<CommandSendPreferences>
@@ -1508,6 +1593,8 @@ export interface FileTermDesktopApi {
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
+  resolveRemoteExecInteraction(requestId: string, cancelled: boolean, value?: string): Promise<void>
+  setRemoteExecInteractionRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
   /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
@@ -1522,6 +1609,8 @@ export interface FileTermDesktopApi {
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  /** Resolves only after the main renderer has registered its secure-input listener. */
+  onRemoteExecInteraction(listener: (request: RemoteExecInteractionRequest) => void): Promise<() => void>
   onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void
   /** @deprecated Use onActionApprovalRequest. */
   onMcpApprovalRequest(listener: (request: McpApprovalRequest) => void): () => void

@@ -5,6 +5,7 @@ import type {
   CommandTemplateInput,
   ConnectionFolder,
   ConnectionProfile,
+  McpAgentClientStatus,
   LocalFileItem,
   OverviewSectionId,
   RemoteFileItem,
@@ -120,6 +121,7 @@ export function WorkspaceStage({
   onSetTheme,
   onSetLocale,
   onOpenLogsDirectory,
+  onLaunchLocalAgent,
   isSidebarCollapsed,
   isWorkspaceFocusMode,
   tabBarProps,
@@ -239,6 +241,7 @@ export function WorkspaceStage({
   onSetTheme(value: 'default-dark' | 'default-light'): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
+  onLaunchLocalAgent?(client: McpAgentClientStatus): void
   isSidebarCollapsed: boolean
   isWorkspaceFocusMode: boolean
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
@@ -268,7 +271,14 @@ export function WorkspaceStage({
         activeSession={activeSession}
         activeTab={activeTab}
         onCloseTab={onCloseTab}
-        onRestart={() => onReconnectLocalTerminal(activeTab.id)}
+        onRestart={onReconnectLocalTerminal}
+        splitRootTab={splitRootTab}
+        splitPaneSessions={sessions}
+        activePaneTabId={activePaneTabId}
+        onClosePane={onClosePane}
+        onSplitPane={onSplitPane}
+        onActivatePane={onActivatePane}
+        onSetPaneWeights={onSetPaneWeights}
       />
     )
   }
@@ -384,6 +394,7 @@ export function WorkspaceStage({
       onSetTheme={onSetTheme}
       onSetLocale={onSetLocale}
       onOpenLogsDirectory={onOpenLogsDirectory}
+      onLaunchLocalAgent={onLaunchLocalAgent}
       isSidebarCollapsed={isSidebarCollapsed}
       profiles={profiles}
       tabBarProps={tabBarProps}

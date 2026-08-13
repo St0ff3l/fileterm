@@ -23,7 +23,8 @@ import {
   type OverviewSectionId,
   type RemoteFileItem,
   type SshConnectionDefaults,
-  type UiPreferences
+  type UiPreferences,
+  type McpAgentClientStatus
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import { profileToForm } from './app/app-data'
@@ -66,6 +67,7 @@ import { useWorkspaceTabs } from './hooks/useWorkspaceTabs'
 import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
+import { useRemoteExecInteractions } from './hooks/useRemoteExecInteractions'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
 import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
@@ -431,6 +433,16 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
   const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
   const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
+  const launchLocalAgent = useCallback(
+    (client: McpAgentClientStatus) => {
+      const launch =
+        client.id === 'claude-code'
+          ? { title: 'Claude Code', command: 'claude' }
+          : { title: 'Codex CLI', command: 'codex' }
+      void openLocalTerminal({ title: launch.title }, launch.command)
+    },
+    [openLocalTerminal]
+  )
   const isSystemSidebarCollapsed =
     isSystemSidebarUserCollapsed || isWorkspaceFocusMode || Boolean(activeTab && !isResourceMonitoringAvailable)
   const activeTabId = activeTab?.id ?? null
@@ -761,6 +773,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     acceptHostAndSave
   } = useSshInteractions({
     desktopApi,
+    onError: (scope, err) => reportError(setError, scope, err)
+  })
+
+  const {
+    request: remoteExecInteractionRequest,
+    errorMessage: remoteExecInteractionError,
+    isResolving: isRemoteExecInteractionResolving,
+    cancel: cancelRemoteExecInteraction,
+    submit: submitRemoteExecInteraction
+  } = useRemoteExecInteractions({
+    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
     onError: (scope, err) => reportError(setError, scope, err)
   })
 
@@ -1567,6 +1590,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLocalTerminal={() => {
                   void openLocalTerminal()
                 }}
+                onLaunchLocalAgent={launchLocalAgent}
                 onReconnectLocalTerminal={reconnectSessionTab}
                 onOpenRemoteItem={handleOpenRemoteItem}
                 onOpenRemotePath={handleOpenRemotePath}
@@ -1827,6 +1851,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLogsDirectory: () => {
                   openLogsDirectory()
                 },
+                onLaunchLocalAgent: launchLocalAgent,
                 initialTab: settingsInitialTab,
                 onClose: () => setShowSettings(false)
               }
@@ -1900,6 +1925,21 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 },
                 onSubmit: (answers) => {
                   void submitKeyboardInteractive(answers)
+                }
+              }
+            : null
+        }
+        remoteExecInteraction={
+          remoteExecInteractionRequest
+            ? {
+                request: remoteExecInteractionRequest,
+                errorMessage: remoteExecInteractionError,
+                isSubmitting: isRemoteExecInteractionResolving,
+                onCancel: () => {
+                  void cancelRemoteExecInteraction()
+                },
+                onSubmit: (value) => {
+                  void submitRemoteExecInteraction(value)
                 }
               }
             : null

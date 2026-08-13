@@ -149,6 +149,30 @@ pub async fn set_terminal_state(
     summary: String,
     status: crate::services::WorkspaceTabStatus,
 ) {
+    set_terminal_state_with_snapshot(app, tab_id, summary, status, true).await;
+}
+
+/// Update a terminal state while allowing a compound workspace mutation to
+/// defer its snapshot until the full invariant has been written. This is used
+/// when a newly spawned local PTY is immediately inserted into a pane tree:
+/// broadcasting the transient standalone tab would make the renderer flash a
+/// second top-level tab before the split root is installed.
+pub async fn set_terminal_state_without_snapshot(
+    app: &AppHandle,
+    tab_id: &str,
+    summary: String,
+    status: crate::services::WorkspaceTabStatus,
+) {
+    set_terminal_state_with_snapshot(app, tab_id, summary, status, false).await;
+}
+
+async fn set_terminal_state_with_snapshot(
+    app: &AppHandle,
+    tab_id: &str,
+    summary: String,
+    status: crate::services::WorkspaceTabStatus,
+    emit_workspace_snapshot: bool,
+) {
     let connected = status.is_connected();
     let (transcript, target_changed) = {
         let state = app.state::<crate::services::workspace::WorkspaceState>();
@@ -185,7 +209,9 @@ pub async fn set_terminal_state(
             "status": status,
         }),
     );
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    if emit_workspace_snapshot {
+        if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+            let _ = app.emit("workspace:snapshot", snapshot);
+        }
     }
 }

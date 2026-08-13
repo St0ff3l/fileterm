@@ -36,13 +36,14 @@ struct StoredSshKeyIndex {
     keys: Vec<StoredSshKey>,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 struct StoredSshKeySecrets {
     version: u32,
     passphrases: HashMap<String, String>,
 }
 
 struct KeyPaths {
+    storage_root: PathBuf,
     keys_dir: PathBuf,
     index_path: PathBuf,
     secrets_path: PathBuf,
@@ -56,6 +57,7 @@ impl KeyPaths {
             .map(Path::to_path_buf)
             .ok_or_else(|| AppError::Storage("无法解析 SSH 密钥存储目录".to_string()))?;
         Ok(Self {
+            storage_root: base_dir.clone(),
             keys_dir: base_dir.join("ssh-keys"),
             secrets_path: base_dir.join("ssh-key-secrets.json"),
             index_path,
@@ -304,17 +306,39 @@ fn read_secrets(paths: &KeyPaths) -> Result<StoredSshKeySecrets, AppError> {
     if paths.secrets_path.exists() {
         lock_down_file(&paths.secrets_path)?;
     }
-    read_json(
+    let mut secrets = read_json(
         &paths.secrets_path,
         StoredSshKeySecrets {
             version: 1,
             passphrases: HashMap::new(),
         },
-    )
+    )?;
+    let mut migrated = false;
+    for (key_id, passphrase) in &mut secrets.passphrases {
+        let (value, should_migrate) = crate::services::secret_crypto::decrypt_or_migrate(
+            &paths.storage_root,
+            &format!("ssh-key/{key_id}/passphrase"),
+            passphrase,
+        )?;
+        *passphrase = value;
+        migrated |= should_migrate;
+    }
+    if migrated {
+        write_secrets(paths, &secrets)?;
+    }
+    Ok(secrets)
 }
 
 fn write_secrets(paths: &KeyPaths, secrets: &StoredSshKeySecrets) -> Result<(), AppError> {
-    write_json_atomic(&paths.secrets_path, secrets)?;
+    let mut encrypted = secrets.clone();
+    for (key_id, passphrase) in &mut encrypted.passphrases {
+        *passphrase = crate::services::secret_crypto::encrypt(
+            &paths.storage_root,
+            &format!("ssh-key/{key_id}/passphrase"),
+            passphrase,
+        )?;
+    }
+    write_json_atomic(&paths.secrets_path, &encrypted)?;
     lock_down_file(&paths.secrets_path)
 }
 
@@ -497,7 +521,12 @@ fn lock_down_dir(_path: &Path) -> Result<(), AppError> {
 mod tests {
     #[cfg(unix)]
     use super::write_bytes_atomic;
-    use super::{inspect_private_key_text, probably_encrypted, MAX_PRIVATE_KEY_BYTES};
+    use super::{
+        inspect_private_key_text, probably_encrypted, read_secrets, KeyPaths, StoredSshKeySecrets,
+        MAX_PRIVATE_KEY_BYTES,
+    };
+    use std::collections::HashMap;
+    use std::fs;
 
     #[test]
     fn inspects_pasted_openssh_private_key_text() {
@@ -528,6 +557,43 @@ mod tests {
             Ok(_) => panic!("oversized private key text should be rejected"),
         };
         assert!(error.to_string().contains("超过 1 MB"));
+    }
+
+    #[test]
+    fn plaintext_ssh_key_passphrase_is_migrated_to_encrypted_storage() {
+        let directory =
+            std::env::temp_dir().join(format!("fileterm-ssh-key-secret-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).expect("fixture directory should be created");
+        let paths = KeyPaths {
+            storage_root: directory.clone(),
+            keys_dir: directory.join("ssh-keys"),
+            index_path: directory.join("ssh-keys.json"),
+            secrets_path: directory.join("ssh-key-secrets.json"),
+        };
+        let legacy = StoredSshKeySecrets {
+            version: 1,
+            passphrases: HashMap::from([("key-1".to_string(), "ssh-key-passphrase".to_string())]),
+        };
+        fs::write(
+            &paths.secrets_path,
+            serde_json::to_vec(&legacy).expect("legacy secrets json"),
+        )
+        .expect("legacy secrets write");
+
+        let secrets = read_secrets(&paths).expect("legacy secrets read");
+        assert_eq!(
+            secrets.passphrases.get("key-1").map(String::as_str),
+            Some("ssh-key-passphrase")
+        );
+        let raw = fs::read_to_string(&paths.secrets_path).expect("migrated secrets read");
+        assert!(!raw.contains("ssh-key-passphrase"));
+
+        let decoded = read_secrets(&paths).expect("encrypted secrets read");
+        assert_eq!(
+            decoded.passphrases.get("key-1").map(String::as_str),
+            Some("ssh-key-passphrase")
+        );
+        fs::remove_dir_all(directory).expect("fixture directory should be removed");
     }
 
     #[test]

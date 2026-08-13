@@ -34,6 +34,8 @@ sha2 = "0.10"
 hmac = "0.12"
 subtle = "2.6"
 base64 = "0.22"
+aes-gcm = "0.11"
+zeroize = "1.8"
 flate2 = "1"
 tokio-socks = "0.5"
 tokio-serial = "5.5"
@@ -53,6 +55,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_Storage_FileSystem",
   "Win32_Security",
   "Win32_System_JobObjects",
+  "Win32_System_Registry",
   "Win32_System_Threading",
 ] }
 

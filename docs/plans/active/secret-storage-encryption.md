@@ -1,211 +1,77 @@
-# 凭据存储加密计划
+# 本机凭据字段加密
 
-状态：规划中（方案选型已确定，尚未开始改代码）
-关联：[ai-copilot-integration.md](./ai-copilot-integration.md)、[local-terminal-mcp.md](./local-terminal-mcp.md)
+状态：进行中（字段加密、旧数据迁移、全量质量门禁与 macOS release 构建已通过；待 Windows / Linux 打包环境验收）
+关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 1. 结论
 
-FileTerm 当前所有凭据（AI Provider API Key、SSH 私钥口令、WebDAV 同步密码、S3 兼容备份密码、profile 密码、代理密码）以**明文 + Unix `0600` 权限 + 原子替换**存于本地文件。本计划在不动用户交互、不引入系统弹窗的前提下，给这些凭据文件增加**对称加密层**：
+FileTerm 不使用 macOS Keychain、Windows DPAPI 或 Linux credential store，因此不会在读取已保存连接时触发系统授权弹窗。为避免本地 JSON 中直接暴露凭据，Rust 存储层对各凭据字段采用 AES-256-GCM 加密：调用方仍只读写明文 `String`，加解密与迁移完全留在 main-side。
 
-- 存盘前 AES-256-GCM 加密、读盘后解密，对调用方完全透明。
-- 密钥从机器指纹派生，启动时自动解锁，**无主密码、无 Keychain 弹窗、无用户交互**。
-- 与现有硬性边界兼容：不调用 macOS Keychain / Windows DPAPI / libsecret / KWallet。
-
-## 2. 目标与非目标
-
-### 目标
-
-1. 凭据文件 `cat` 看不到明文。
-2. 凭据文件被备份到云盘 / 误传 GitHub 时不泄露 API Key。
-3. 合规扫描器扫不到明文 API Key、密码、私钥口令。
-4. 多用户机器上其他用户读到凭据文件无法直接使用。
-5. 调用方代码无感：读出来还是 `String` 明文，写进去还是 `String` 明文，加解密在存储层内部完成。
-
-### 非目标
-
-1. **不解决本机主动攻击者**：攻击者拿到本机用户权限 + 二进制 + machine-id = 仍可解密。这是任何应用级加密都解决不了的，只能靠 OS 用户隔离（已经通过 `0600` 权限做到）。
-2. **不引入用户主密码**：不开机输密码、不弹密码设置窗。
-3. **不接入系统钥匙串**：不动 macOS Keychain / Windows Credential Manager / libsecret / KWallet。
-4. **不替代 `0600` 权限**：加密是额外层，文件权限保持不变。
-5. **不改跨设备同步模型**：凭据本就不支持跨设备同步（设计如此），加密后依然不支持。
-
-## 3. 威胁模型
-
-| 威胁场景                    | 当前明文方案 | 加密后                              |
-| --------------------------- | ------------ | ----------------------------------- |
-| 用户 `cat` 文件看到 API Key | ❌ 暴露      | ✅ 解决（看到的是 base64 密文）     |
-| 备份到云盘 / 误传 GitHub    | ❌ 暴露      | ✅ 解决（密文不可读）               |
-| 合规扫描器扫到明文          | ❌ 触发      | ✅ 解决（无明文 pattern）           |
-| 多用户机器其他用户读到      | ❌ 暴露      | ✅ 解决（需他们也没有本机用户权限） |
-| 本机主动攻击者窃取          | ❌ 暴露      | ❌ 不解决（machine-id 可读）        |
-| 撞库 / 字典攻击             | ❌ 直接暴露  | ✅ 解决（AES-GCM 不可字典攻击）     |
-
-## 4. 方案选型
-
-### 入选方案：AES-256-GCM + 机器指纹派生密钥
-
-```
-machine_id (OS-level)              app_salt (hardcoded)
-   │                                  │
-   └────── concat ───────────────────┘
-                  │
-                  ▼
-            SHA-256 (32 bytes)
-                  │
-                  ▼
-       AES-256-GCM key
-                  │
-   ┌──────────────┴──────────────┐
-   │                             │
-encrypt(plaintext)           decrypt(ciphertext)
-   │                             │
-   ▼                             ▼
-base64(nonce || ciphertext || tag)
-   │
-   ▼
-写入 ai-provider-secrets.json (替换原明文字段)
+```text
+安装目录内随机 seed（0600） ─┐
+                              ├─ HMAC-SHA256 ─ AES-256-GCM key
+当前设备稳定标识 ───────────────┘
+                                       │
+字段用途 + 记录 ID（AAD） ─────────────┼─ 加密 / 认证
+                                       ▼
+                         ftsec:v1:base64(nonce || ciphertext || tag)
 ```
 
-**核心库**：`aes-gcm` + `sha2` + `base64`（均为纯 Rust、轻量、已审计的 crate）
+每安装生成一次 32-byte 随机 seed；它和当前设备标识共同参与派生，因此单独复制一个凭据 JSON 到其他设备不能解密。每次写入都会使用新的 96-bit nonce，字段 scope 作为 AAD，阻止将某个密文复制到另一个 Provider、profile 或凭据类型后继续解密。
 
-**密钥派生**：
+## 2. 覆盖范围
 
-- macOS：`IOPlatformUUID`（通过 `IOKit` 调用）
-- Windows：`MachineGuid`（注册表 `HKLM\SOFTWARE\Microsoft\Cryptography`）
-- Linux：`/etc/machine-id`（systemd 标准文件）
-- 全部都是 OS 级稳定标识，重装系统 / 换机器才会变
+| 本地文件                   | 加密字段                          | scope 示例                                 |
+| -------------------------- | --------------------------------- | ------------------------------------------ |
+| `ai-provider-secrets.json` | `api_key`                         | `ai-provider/<provider-id>/api-key`        |
+| `ssh-key-secrets.json`     | 私钥口令                          | `ssh-key/<key-id>/passphrase`              |
+| `profile-secrets.json`     | 连接密码、私钥口令/路径、代理密码 | `profile/<profile-id>/<field>`             |
+| `webdav-sync.json`         | WebDAV 密码                       | `webdav/password`                          |
+| `s3-backup.json`           | Access Key ID、Secret Access Key  | `s3/access-key-id`、`s3/secret-access-key` |
 
-**加密格式**：
+`webdav-sync.json` 与 `s3-backup.json` 是本机配置文件，不是加密的远程备份包。WebDAV/S3 的远程备份，以及用户显式导出的 JSON，仍是既有跨设备迁移载体，按原有行为可能包含连接凭据；本计划不改变它们的导入导出语义。
 
-```
-base64( nonce[12] || ciphertext[N] || tag[16] )
-```
+## 3. 存储与迁移契约
 
-### 不入选方案及理由
+1. 新值写入时，先对字段加密，再沿用现有 `write_restricted_file` 和原子替换链路落盘。
+2. 读取 `ftsec:v1:` 密文时解密给 Rust 服务层；renderer、公开 workspace snapshot 和日志始终只得到非敏感标记。
+3. 读取旧版明文时保留内存中的明文给本次调用，并立即通过加密写入器原子迁移；迁移后的字段不再出现明文。
+4. 解密失败不覆盖原文件，返回“请在此设备重新配置该凭据”的通用错误，日志不记录密文、明文、nonce 或派生材料。
+5. Unix 上 seed、key 和 secret 文件都保持 `0600`；Windows 依赖应用数据目录的 per-user ACL。
 
-| 方案                             | 不选理由                                                                                                 |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **Tauri Stronghold**             | 二进制 +5MB，启动 +100~300ms（Argon2id 派生），Stronghold 是 KV store 与现有 JSON 结构不兼容，过度工程化 |
-| **macOS Keychain / safeStorage** | 违反 AGENTS.md 硬性边界「macOS 钥匙串规避」，首次访问弹系统授权窗                                        |
-| **Windows DPAPI 单平台**         | 三平台行为不一致，要写两套逻辑，违背「跨平台一致」原则                                                   |
-| **用户主密码 + Argon2id**        | 体验最差（每次启动输密码），跟现有所有凭据策略不一致，需要写一整套密码强度 / 密钥派生 / 内存清零逻辑     |
-| **`age` / SOPS**                 | 密钥文件本身要存哪？绕一圈回到原点                                                                       |
-| **机器指纹派生 + 硬编码密钥**    | 本机攻击者拿到二进制 = 拿到密钥，安全性等同明文                                                          |
+## 4. 威胁模型
 
-## 5. 影响范围
+| 场景                                 | 结果                                                 |
+| ------------------------------------ | ---------------------------------------------------- |
+| 在磁盘上直接 `cat` 单个凭据 JSON     | 看不到 API Key、密码或私钥口令明文                   |
+| 单独误传一个凭据 JSON / 合规扫描     | 不包含可用明文；另一设备缺少 seed 和本机标识不能解密 |
+| 密文被复制到另一个记录或字段         | AAD scope 不匹配，认证解密失败                       |
+| 当前本机用户权限被攻破               | 不提供额外保护；应用可解密的内容，攻击者也可能取得   |
+| 同时窃取完整应用数据与受害者运行环境 | 不作为本方案防御目标                                 |
 
-### 5.1 凭据文件清单
+这不是用户主密码或系统钥匙串替代品。目标是降低静态文件、备份误操作和日志/扫描误泄漏风险，同时保持 FileTerm 现有无弹窗体验。
 
-| 文件                       | 内容                                               | 加密策略                 |
-| -------------------------- | -------------------------------------------------- | ------------------------ |
-| `ai-provider-secrets.json` | AI Provider API Key                                | `api_key` 字段加密       |
-| `ssh-key-secrets.json`     | SSH 私钥口令                                       | `passphrase` 字段加密    |
-| `profile-secrets.json`     | profile 密码、代理密码、WebDAV 密码、S3 Secret Key | 对应字段加密             |
-| `webdav-sync.json`         | WebDAV 完整同步包                                  | 已是完整加密包，整体加密 |
-| `s3-backup.json`           | S3 备份完整包                                      | 同上                     |
+## 5. 实现位置
 
-### 5.2 代码改动点
+- `apps/tauri/src-tauri/src/services/secret_crypto.rs`：seed 创建、三端设备标识、HMAC 派生、AES-GCM、版本前缀和 legacy 判断。
+- `services/ai.rs`、`services/ssh_keys.rs`、`services/profile_ops.rs`、`storage/mod.rs`、`services/webdav.rs`、`services/s3_backup.rs`：字段级加密、读取迁移与原子持久化。
+- `Cargo.toml`：`aes-gcm`、`zeroize`；Windows 仅额外启用只读 `MachineGuid` Registry feature。
 
-- 新建 `apps/tauri/src-tauri/src/services/secret_crypto.rs`：
-  - `derive_key() -> [u8; 32]`：三平台机器指纹派生
-  - `encrypt(plaintext: &str) -> Result<String>`：返回 base64 密文
-  - `decrypt(encrypted: &str) -> Result<String>`：解密
-  - `is_encrypted(value: &str) -> bool`：判断字段是否已是密文（迁移用）
-- 改 `services/ai.rs`：`StoredProviderSecret.api_key` 写入前 `encrypt`、读取后 `decrypt`
-- 改 `services/ssh_keys.rs`：`StoredKeySecret.passphrase` 同上
-- 改 `services/profiles.rs` / `storage/profile_repository.rs`：profile / WebDAV / S3 凭据同上
-- 改 `services/webdav.rs` / `services/s3_backup.rs`：完整加密包整体加密
+实现明确不使用 safeStorage、Keychain、Credential Manager、DPAPI、libsecret、KWallet 或外部网络服务。
 
-### 5.3 不改动的部分
+## 6. 已覆盖回归
 
-- `packages/core` 类型：`AiProviderDraft` / `SshProfile` / `FtpProfile` 等 renderer 类型保持不变，加密只在 Rust 存储层。
-- Bridge 层：`tauri-api.ts` 不动，读写接口签名不变。
-- Renderer：UI 完全无感，`hasApiKey` / `hasSavedPassword` 标记语义不变。
-- 文件权限：Unix `0600` 保持不变。
-- 原子替换：`write_restricted_file` + `replace_file_atomically` 链路保持不变。
-- MCP / CLI：通过 bridge 走桌面进程，桌面进程在内存里解密后传给子进程，子进程拿到的还是明文（这部分架构天然契合，无需改动）。
+- AES-GCM 往返、随机 nonce、篡改拒绝、scope 绑定与 legacy 明文迁移。
+- Unix 下 installation seed 为 owner-only。
+- AI Provider 密钥真实 JSON 加密与旧明文读取迁移。
+- SSH 私钥口令、WebDAV 密码、S3 access/secret key 的旧明文读取迁移与二次读取稳定性。
+- Profile secrets 在重建时加密、保留匹配密文、清理已删除 profile 的孤儿字段。
+- `cargo fmt --check`、clippy、320 个 Rust unit tests、19 个 contract tests、Tauri typecheck、lint、Prettier 以及 macOS arm64 release `.app` / `.dmg` 构建。
+- macOS、Windows、Linux CI 矩阵执行 `secret_crypto` 往返、篡改拒绝、scope 绑定与 legacy 判断测试，覆盖三端设备标识分支的编译与运行路径。
+- PR CI 的 macOS、Windows、Linux package smoke 已确认无签名包可以生成；它不读取真实安装包中的既有凭据，因此不能替代下一节的跨平台迁移验收。
 
-## 6. 迁移逻辑
+## 7. 待完成
 
-启动时读凭据文件，对每个字段：
-
-1. `is_encrypted(value)` 判断是否已是 base64 密文
-2. 如果是明文：`encrypt` 后写回，标记为已迁移
-3. 如果已是密文：`decrypt` 给调用方使用
-
-迁移是一次性的：首次启动加密所有明文，后续直接读密文。失败回滚：解密失败时保留原文件 + 写日志，不破坏数据。
-
-## 7. 测试覆盖
-
-### 7.1 单元测试（`secret_crypto.rs`）
-
-- `encrypt_decrypt_round_trip`：明文 → 加密 → 解密 → 还原
-- `encrypt_produces_different_ciphertext`：相同明文每次加密结果不同（随机 nonce）
-- `decrypt_rejects_truncated_data`：截断的 base64 密文解密失败
-- `decrypt_rejects_tampered_tag`：篡改 GCM tag 解密失败
-- `is_encrypted_correctly_detects_plaintext`：明文不被误判为密文
-- `derive_key_is_stable_across_calls`：同一机器多次派生密钥一致
-- `derive_key_changes_with_different_salt`：不同 salt 派生不同密钥
-- `empty_string_encrypts_to_nonempty_ciphertext`：空字符串也能加密
-
-### 7.2 集成测试
-
-- `ai_provider_secret_migration_from_plaintext`：旧版明文 `ai-provider-secrets.json` 启动后自动迁移为密文
-- `ssh_key_secret_migration_from_plaintext`：同上
-- `profile_secret_migration_from_plaintext`：同上
-- `migration_is_idempotent`：已是密文不会再次迁移
-- `migration_failure_preserves_original_file`：解密失败的文件保留原样
-
-### 7.3 跨平台机器指纹读取
-
-- macOS：`IOPlatformUUID` 非空
-- Windows：`MachineGuid` 注册表读取成功
-- Linux：`/etc/machine-id` 文件存在且非空
-- 三平台派生密钥长度 = 32 字节
-
-## 8. 安全审计要点
-
-1. **nonce 唯一性**：每次加密生成新随机 nonce（`OsRng`），不复用。
-2. **GCM tag 校验**：解密时严格校验 16 字节 tag，篡改即失败。
-3. **密钥内存清零**：派生密钥在函数返回前 `zeroize`（引入 `zeroize` crate）。
-4. **明文内存清零**：解密后的明文 String 在 drop 前 `zeroize`。
-5. **日志脱敏**：加密 / 解密日志不写明文、不写密钥、不写 nonce。
-6. **错误消息脱敏**：解密失败返回通用错误「凭据解密失败」，不暴露内部细节。
-
-## 9. 二进制与启动开销预估
-
-| 维度            | 增量                                                   |
-| --------------- | ------------------------------------------------------ |
-| 二进制体积      | +约 200KB（`aes-gcm` + `sha2` + `base64` + `zeroize`） |
-| 启动耗时        | +5~15ms（首次派生密钥 + 读凭据解密）                   |
-| 内存占用        | +几 KB（解密后的明文缓存）                             |
-| Cargo.toml 依赖 | +4 个 crate                                            |
-
-## 10. 风险
-
-1. **machine-id 读取失败**：某些 Linux 容器没有 `/etc/machine-id`。**降级方案**：回退到应用首次启动生成的随机 UUID，存 `0600` 文件（这种场景下加密弱化但仍不弹窗）。
-2. **跨平台密钥派生不一致**：如果未来 FileTerm 支持凭据跨设备同步，不同机器派生的密钥不同，密文无法解密。**当前不是问题**：凭据本就不支持跨设备同步。
-3. **加密迁移失败**：解密失败时保留原文件 + 日志，不破坏数据，用户可手动恢复。
-4. **AGENTS.md 硬性边界变更**：当前「macOS 钥匙串规避」边界不变，本方案不调用 Keychain，符合精神；但需要在 [architecture.md](../../architecture.md) 12.2 节补充加密层描述。
-
-## 11. 推进步骤
-
-1. 新建 `services/secret_crypto.rs` + 8 个单元测试
-2. 改 `ai.rs` 的 `StoredProviderSecret.api_key` 走加密层
-3. 改 `ssh_keys.rs` 的 `StoredKeySecret.passphrase` 走加密层
-4. 改 profile / WebDAV / S3 凭据字段走加密层
-5. 写迁移逻辑（自动判断明文 vs 密文）
-6. 补 5 个集成测试
-7. 三平台机器指纹读取 + 测试
-8. typecheck + clippy + test:tauri 验收
-9. 更新 [architecture.md](../../architecture.md) 12.2 节描述加密层
-10. PR draft
-
-## 12. 决策记录
-
-- **为什么不做 Stronghold**：5MB 二进制 + 200ms 启动开销过大，Stronghold 是 KV store 与现有 JSON 结构不兼容，过度工程化。
-- **为什么不做用户主密码**：体验最差，跟现有所有凭据策略不一致。
-- **为什么不做 Windows DPAPI 单平台**：三平台行为不一致。
-- **为什么接受本机攻击者弱点**：FileTerm 是个人 / 小团队桌面工具，威胁模型不包含本机主动攻击者；OS 用户隔离（`0600` 权限）已经覆盖该场景。
-- **为什么不动 `packages/core` 类型**：加密只在 Rust 存储层，对调用方完全透明。
-- **为什么选 AES-256-GCM**：纯 Rust 实现、crate 成熟、API 简单、性能足够、跨平台一致。
+1. 在 Windows、Linux 打包环境验证设备标识读取与加解密往返；macOS arm64 release 构建已在 2026-08-13 通过。
+2. 在三个实际打包应用中读取既有凭据并保存一次，确认旧明文会迁移、密文在重启后可用、公开 bridge 仍只返回 `has*` 标记。
+3. Windows / Linux 验收通过后，将本计划移至 `docs/plans/completed/`。

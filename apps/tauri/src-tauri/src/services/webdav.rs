@@ -4,7 +4,7 @@
 //! installation can reconnect after downloading it.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, ETAG, IF_MATCH, IF_NONE_MATCH};
@@ -123,31 +123,64 @@ fn public_config(config: &StoredConfig) -> Value {
 
 fn read_config(app: &AppHandle) -> Result<StoredConfig, AppError> {
     let path = config_path(app)?;
-    if !path.exists() {
-        return Ok(StoredConfig::default());
-    }
-    lock_down_config_file(&path)?;
-    let content = fs::read_to_string(path).map_err(|error| AppError::Storage(error.to_string()))?;
-    let mut config: StoredConfig = serde_json::from_str(&content)
-        .map_err(|error| AppError::Serialization(error.to_string()))?;
-    if config.remote_path.trim().is_empty() {
-        config.remote_path = DEFAULT_REMOTE_PATH.to_string();
+    let (config, migrated) = read_config_at(&path)?;
+    if migrated {
+        write_config_at(&path, &config)?;
     }
     Ok(config)
 }
 
+fn read_config_at(path: &Path) -> Result<(StoredConfig, bool), AppError> {
+    if !path.exists() {
+        return Ok((StoredConfig::default(), false));
+    }
+    lock_down_config_file(path)?;
+    let content = fs::read_to_string(path).map_err(|error| AppError::Storage(error.to_string()))?;
+    let mut config: StoredConfig = serde_json::from_str(&content)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    let storage_root = path
+        .parent()
+        .ok_or_else(|| AppError::Storage("无法解析 WebDAV 凭据存储目录".to_string()))?;
+    let mut migrated = false;
+    if let Some(password) = config.password.as_mut() {
+        let (value, should_migrate) = crate::services::secret_crypto::decrypt_or_migrate(
+            storage_root,
+            "webdav/password",
+            password,
+        )?;
+        *password = value;
+        migrated = should_migrate;
+    }
+    if config.remote_path.trim().is_empty() {
+        config.remote_path = DEFAULT_REMOTE_PATH.to_string();
+    }
+    Ok((config, migrated))
+}
+
 fn write_config(app: &AppHandle, config: &StoredConfig) -> Result<(), AppError> {
     let path = config_path(app)?;
+    write_config_at(&path, config)
+}
+
+fn write_config_at(path: &Path, config: &StoredConfig) -> Result<(), AppError> {
+    let storage_root = path
+        .parent()
+        .ok_or_else(|| AppError::Storage("无法解析 WebDAV 凭据存储目录".to_string()))?;
     let temporary = path.with_file_name(format!(".webdav-sync.json.{}.tmp", uuid::Uuid::new_v4()));
-    let content = serde_json::to_vec_pretty(config)
+    let mut encrypted = config.clone();
+    if let Some(password) = encrypted.password.as_mut() {
+        *password =
+            crate::services::secret_crypto::encrypt(storage_root, "webdav/password", password)?;
+    }
+    let content = serde_json::to_vec_pretty(&encrypted)
         .map_err(|error| AppError::Serialization(error.to_string()))?;
     crate::storage::write_restricted_file(&temporary, &content)?;
     if let Err(error) = lock_down_config_file(&temporary) {
         let _ = fs::remove_file(&temporary);
         return Err(error);
     }
-    crate::storage::replace_file_atomically(&temporary, &path)?;
-    lock_down_config_file(&path)
+    crate::storage::replace_file_atomically(&temporary, path)?;
+    lock_down_config_file(path)
 }
 
 #[cfg(unix)]
@@ -686,11 +719,12 @@ async fn download_payload(
 mod tests {
     use super::{
         build_export_bundle, download_payload, merge_synced_profile, normalize_remote_path,
-        parse_bundle, sanitize_import_profile, sha256_hex, upload_payload, validate_config,
-        StoredConfig,
+        parse_bundle, read_config_at, sanitize_import_profile, sha256_hex, upload_payload,
+        validate_config, write_config_at, StoredConfig,
     };
     use reqwest::Client;
     use serde_json::json;
+    use std::fs;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -757,6 +791,36 @@ mod tests {
         };
         assert!(validate_config(&config, false).is_ok());
         assert!(validate_config(&config, true).is_err());
+    }
+
+    #[test]
+    fn plaintext_webdav_password_is_migrated_to_encrypted_storage() {
+        let directory =
+            std::env::temp_dir().join(format!("fileterm-webdav-secret-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&directory).expect("fixture directory should be created");
+        let path = directory.join("webdav-sync.json");
+        let legacy = StoredConfig {
+            url: "https://dav.example.test".to_string(),
+            password: Some("webdav-password".to_string()),
+            ..StoredConfig::default()
+        };
+        fs::write(
+            &path,
+            serde_json::to_vec(&legacy).expect("legacy config json"),
+        )
+        .expect("legacy config write");
+
+        let (config, migrated) = read_config_at(&path).expect("legacy config read");
+        assert!(migrated);
+        assert_eq!(config.password.as_deref(), Some("webdav-password"));
+        write_config_at(&path, &config).expect("migrated config write");
+        let raw = fs::read_to_string(&path).expect("migrated config read");
+        assert!(!raw.contains("webdav-password"));
+
+        let (decoded, migrated_again) = read_config_at(&path).expect("encrypted config read");
+        assert!(!migrated_again);
+        assert_eq!(decoded.password.as_deref(), Some("webdav-password"));
+        fs::remove_dir_all(directory).expect("fixture directory should be removed");
     }
 
     #[test]

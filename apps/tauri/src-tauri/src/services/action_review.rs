@@ -14,6 +14,11 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
+use crate::services::interactive_exec_audit::{
+    self, InteractiveRemoteExecAuditContext, InteractiveRemoteExecAuditEvent,
+    InteractiveRemoteExecAuditResult, InteractiveRemoteExecAuditSource,
+    InteractiveRemoteExecAuditTarget,
+};
 use crate::sessions::WorkerCmd;
 use crate::AppError;
 
@@ -24,6 +29,22 @@ const MAX_REMOTE_EXEC_TAB_ID_BYTES: usize = 256;
 pub const DEFAULT_REMOTE_EXEC_TIMEOUT_MS: u64 = 60_000;
 pub const MIN_REMOTE_EXEC_TIMEOUT_MS: u64 = 1_000;
 pub const MAX_REMOTE_EXEC_TIMEOUT_MS: u64 = 120_000;
+/// Interactive exec keeps its own SSH PTY, so it can wait for a FileTerm
+/// dialog without hijacking the visible terminal. Its execution budget is
+/// deliberately longer than the normal fire-and-forget exec budget.
+pub const DEFAULT_INTERACTIVE_REMOTE_EXEC_TIMEOUT_MS: u64 = 300_000;
+pub const MAX_INTERACTIVE_REMOTE_EXEC_TIMEOUT_MS: u64 = 600_000;
+pub const INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT: Duration = Duration::from_secs(300);
+pub const INTERACTIVE_REMOTE_EXEC_UNAVAILABLE: &str = "INTERACTIVE_REMOTE_EXEC_UNAVAILABLE";
+pub const INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE: &str =
+    "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE";
+pub const INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED: &str = "INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED";
+pub const INTERACTIVE_REMOTE_EXEC_USER_CANCELLED: &str = "INTERACTIVE_REMOTE_EXEC_USER_CANCELLED";
+pub const INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT_CODE: &str =
+    "INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT";
+pub const INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS: &str =
+    "INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS";
+pub const INTERACTIVE_REMOTE_EXEC_BUSY: &str = "INTERACTIVE_REMOTE_EXEC_BUSY";
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -186,6 +207,17 @@ pub struct RemoteExecRequest {
     pub timeout_ms: Option<u64>,
 }
 
+#[derive(Clone, Debug)]
+pub struct InteractiveRemoteExecRequest {
+    pub tab_id: String,
+    /// Monotonic target identity returned by get_session_context. This rejects
+    /// a request that was planned for an earlier login/user/CWD target.
+    pub expected_session_revision: String,
+    pub command: String,
+    pub cwd: Option<String>,
+    pub timeout_ms: Option<u64>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteExecResult {
@@ -193,6 +225,18 @@ pub struct RemoteExecResult {
     pub exit_code: Option<u32>,
     pub timed_out: bool,
     pub output_truncated: bool,
+    /// The isolated non-interactive channel detected a supported input prompt
+    /// in its bounded output. This is only a routing hint for the Agent; no
+    /// input value is ever collected or returned on this path.
+    pub input_required: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_kind: Option<String>,
+    #[serde(skip_serializing_if = "is_zero")]
+    pub interaction_count: u8,
+}
+
+fn is_zero(value: &u8) -> bool {
+    *value == 0
 }
 
 /// Run one explicit command through the SSH worker's independent exec
@@ -281,6 +325,261 @@ pub async fn execute_remote_command(
     parse_remote_exec_result(result)
 }
 
+/// Run a command through an isolated SSH PTY only when the caller explicitly
+/// opted into an interaction-capable operation. Passwords, MFA tokens and
+/// confirmations are requested by the FileTerm renderer and are redacted from
+/// the eventual result before it returns to MCP / CLI.
+pub async fn execute_interactive_remote_command(
+    app: &AppHandle,
+    request: InteractiveRemoteExecRequest,
+) -> Result<RemoteExecResult, AppError> {
+    execute_interactive_remote_command_from_source(
+        app,
+        request,
+        InteractiveRemoteExecAuditSource::Desktop,
+    )
+    .await
+}
+
+/// Run an interactive remote task from a named local integration surface.
+/// This is intentionally separate from the normal exec path: only this
+/// function creates the task-local secure-input flow and its minimal audit.
+pub async fn execute_interactive_remote_command_from_source(
+    app: &AppHandle,
+    request: InteractiveRemoteExecRequest,
+    audit_source: InteractiveRemoteExecAuditSource,
+) -> Result<RemoteExecResult, AppError> {
+    let tab_id = validate_remote_exec_tab_id(&request.tab_id)?;
+    let expected_session_revision = request.expected_session_revision.trim();
+    if expected_session_revision.is_empty()
+        || expected_session_revision.len() > 64
+        || expected_session_revision.chars().any(char::is_control)
+    {
+        return Err(AppError::Command(
+            "Interactive remote exec requires a valid session revision".to_string(),
+        ));
+    }
+    let command = validate_remote_exec_command(&request.command)?;
+    let cwd = validate_remote_exec_cwd(request.cwd)?;
+    let timeout_ms = request
+        .timeout_ms
+        .unwrap_or(DEFAULT_INTERACTIVE_REMOTE_EXEC_TIMEOUT_MS)
+        .clamp(
+            MIN_REMOTE_EXEC_TIMEOUT_MS,
+            MAX_INTERACTIVE_REMOTE_EXEC_TIMEOUT_MS,
+        );
+
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let session_type = {
+        let tabs = state.tabs.read().await;
+        tabs.iter()
+            .find(|tab| tab.id == tab_id)
+            .map(|tab| tab.session_type.clone())
+            .ok_or_else(|| {
+                AppError::Command(format!(
+                    "{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: FileTerm session was not found"
+                ))
+            })?
+    };
+    if session_type != "ssh" {
+        return Err(AppError::Command(
+            format!(
+                "{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: interactive remote command execution is only supported for SSH sessions"
+            ),
+        ));
+    }
+    let current_session_revision = state.ai_session_revision(&tab_id).await.to_string();
+    let (cwd, audit_target) = {
+        let sessions = state.sessions.read().await;
+        let session = sessions.get(&tab_id).ok_or_else(|| {
+            AppError::Command(format!(
+                "{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: FileTerm session was not found"
+            ))
+        })?;
+        if !session.connected {
+            return Err(AppError::Command(format!(
+                "{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: FileTerm SSH session is not connected"
+            )));
+        }
+        if current_session_revision != expected_session_revision {
+            return Err(AppError::Command(
+                format!(
+                    "{INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED}: refresh session context before interactive exec"
+                ),
+            ));
+        }
+        let effective_cwd = cwd.or_else(|| session.shell_cwd.clone());
+        (
+            effective_cwd.clone(),
+            InteractiveRemoteExecAuditTarget {
+                host: session.access_host.clone(),
+                shell_user: session.shell_user.clone(),
+                cwd: effective_cwd,
+            },
+        )
+    };
+    // Interactive exec is explicitly the secure local-input route. Refuse
+    // before opening the isolated PTY when the main renderer cannot show a
+    // task-local prompt, rather than creating a background SSH command that
+    // might later ask the Agent to use the visible terminal.
+    if !state.has_remote_exec_interaction_renderer().await {
+        return Err(AppError::Command(format!(
+            "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: FileTerm's main window is not ready to collect secure local input"
+        )));
+    }
+    let audit_context =
+        InteractiveRemoteExecAuditContext::new(audit_source, audit_target, &command);
+    // Do not start an interaction-capable task if we cannot establish the
+    // local, owner-only audit trail. This is the only fail-closed I/O before
+    // the remote command can receive user-provided secrets.
+    interactive_exec_audit::record(
+        app,
+        &audit_context,
+        InteractiveRemoteExecAuditEvent::Started,
+        0,
+        None,
+    )
+    .await?;
+
+    let response_timeout = Duration::from_millis(timeout_ms.saturating_add(10_000))
+        .saturating_add(INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT.saturating_mul(3));
+    let worker_result = crate::commands::send_worker_cmd_with_response_timeout(
+        app,
+        &tab_id,
+        response_timeout,
+        |respond_to| WorkerCmd::ExecuteInteractiveRemoteCommand {
+            expected_session_revision: expected_session_revision.to_string(),
+            command,
+            cwd,
+            timeout_ms,
+            audit_context: audit_context.clone(),
+            respond_to,
+        },
+    )
+    .await;
+    let result = worker_result.and_then(parse_remote_exec_result);
+
+    let (event, details) = match &result {
+        Ok(result) if result.timed_out => (
+            InteractiveRemoteExecAuditEvent::TimedOut,
+            Some(InteractiveRemoteExecAuditResult {
+                exit_code: result.exit_code,
+                timed_out: true,
+                output_truncated: result.output_truncated,
+            }),
+        ),
+        Ok(result) => (
+            InteractiveRemoteExecAuditEvent::Completed,
+            Some(InteractiveRemoteExecAuditResult {
+                exit_code: result.exit_code,
+                timed_out: false,
+                output_truncated: result.output_truncated,
+            }),
+        ),
+        Err(error) => (interactive_remote_exec_audit_error_event(error), None),
+    };
+    if interactive_exec_audit::record(
+        app,
+        &audit_context,
+        event,
+        audit_context.interaction_count(),
+        details,
+    )
+    .await
+    .is_err()
+    {
+        // The task already started or ended. Do not surface another error
+        // that would cause callers to retry a remote command; the warning has
+        // no command, prompt, answer, or output data.
+        crate::services::logging::warn(
+            app,
+            "interactive-remote-exec",
+            "unable to persist terminal interactive-exec audit completion",
+        );
+    }
+    result
+}
+
+fn interactive_remote_exec_audit_error_event(error: &AppError) -> InteractiveRemoteExecAuditEvent {
+    let text = match error {
+        AppError::Clipboard(message)
+        | AppError::Storage(message)
+        | AppError::Serialization(message)
+        | AppError::Window(message)
+        | AppError::Command(message) => message.to_ascii_lowercase(),
+    };
+    if text.contains(&INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE.to_ascii_lowercase())
+        || text.contains(&INTERACTIVE_REMOTE_EXEC_UNAVAILABLE.to_ascii_lowercase())
+        || text.contains("not connected")
+        || text.contains("session not found")
+        || text.contains("exec 通道")
+    {
+        InteractiveRemoteExecAuditEvent::Unavailable
+    } else if text.contains(&INTERACTIVE_REMOTE_EXEC_USER_CANCELLED.to_ascii_lowercase())
+        || text.contains("cancelled")
+        || text.contains("dismissed")
+        || text.contains("empty")
+    {
+        InteractiveRemoteExecAuditEvent::Cancelled
+    } else if text.contains(&INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT_CODE.to_ascii_lowercase())
+        || text.contains("timed out")
+        || text.contains("超时")
+    {
+        InteractiveRemoteExecAuditEvent::TimedOut
+    } else if text.contains(&INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED.to_ascii_lowercase())
+        || text.contains("target changed")
+        || text.contains("target is no longer")
+    {
+        InteractiveRemoteExecAuditEvent::TargetChanged
+    } else {
+        InteractiveRemoteExecAuditEvent::Failed
+    }
+}
+
+fn validate_remote_exec_tab_id(raw_tab_id: &str) -> Result<String, AppError> {
+    let tab_id = raw_tab_id.trim().to_string();
+    if tab_id.is_empty()
+        || tab_id.len() > MAX_REMOTE_EXEC_TAB_ID_BYTES
+        || tab_id.chars().any(char::is_control)
+    {
+        return Err(AppError::Command(
+            "FileTerm session was not found".to_string(),
+        ));
+    }
+    Ok(tab_id)
+}
+
+fn validate_remote_exec_command(raw_command: &str) -> Result<String, AppError> {
+    let command = raw_command.trim().to_string();
+    if command.is_empty() {
+        return Err(AppError::Command(
+            "Remote command must not be empty".to_string(),
+        ));
+    }
+    if command.len() > MAX_REMOTE_EXEC_COMMAND_BYTES {
+        return Err(AppError::Command(format!(
+            "Remote command exceeds the {} KiB limit",
+            MAX_REMOTE_EXEC_COMMAND_BYTES / 1024
+        )));
+    }
+    Ok(command)
+}
+
+fn validate_remote_exec_cwd(cwd: Option<String>) -> Result<Option<String>, AppError> {
+    let cwd = cwd
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if cwd
+        .as_ref()
+        .is_some_and(|value| value.len() > MAX_REMOTE_EXEC_CWD_BYTES)
+    {
+        return Err(AppError::Command(
+            "Remote command working directory is too long".to_string(),
+        ));
+    }
+    Ok(cwd)
+}
+
 fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> {
     let output = value
         .get("output")
@@ -303,17 +602,45 @@ fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> 
         .get("outputTruncated")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let input_kind = value
+        .get("inputKind")
+        .and_then(Value::as_str)
+        .filter(|kind| matches!(*kind, "secret" | "text"))
+        .map(ToOwned::to_owned);
+    let input_required = value
+        .get("inputRequired")
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| input_kind.is_some());
+    let input_required = input_required && input_kind.is_some();
+    let interaction_count = value
+        .get("interactionCount")
+        .and_then(Value::as_u64)
+        .map(u8::try_from)
+        .transpose()
+        .map_err(|_| {
+            AppError::Serialization("Remote command interaction count was invalid".to_string())
+        })?
+        .unwrap_or(0);
     Ok(RemoteExecResult {
         output,
         exit_code,
         timed_out,
         output_truncated,
+        input_required,
+        input_kind,
+        interaction_count,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_remote_exec_result, ActionApprovalDecision, ActionApprovalSource};
+    use super::{
+        interactive_remote_exec_audit_error_event, parse_remote_exec_result,
+        validate_remote_exec_command, validate_remote_exec_cwd, validate_remote_exec_tab_id,
+        ActionApprovalDecision, ActionApprovalSource, InteractiveRemoteExecAuditEvent,
+        INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE, INTERACTIVE_REMOTE_EXEC_USER_CANCELLED,
+    };
+    use crate::AppError;
     use serde_json::json;
 
     #[test]
@@ -342,5 +669,80 @@ mod tests {
         assert_eq!(result.exit_code, Some(0));
         assert!(!result.timed_out);
         assert!(result.output_truncated);
+        assert!(!result.input_required);
+        assert_eq!(result.input_kind, None);
+        assert_eq!(result.interaction_count, 0);
+    }
+
+    #[test]
+    fn remote_exec_parser_exposes_only_a_bounded_input_hint() {
+        let result = parse_remote_exec_result(json!({
+            "output": "Password: ",
+            "exitCode": null,
+            "timedOut": true,
+            "outputTruncated": false,
+            "inputRequired": true,
+            "inputKind": "secret",
+        }))
+        .expect("remote exec input hint should parse");
+
+        assert!(result.input_required);
+        assert_eq!(result.input_kind.as_deref(), Some("secret"));
+
+        let invalid_kind = parse_remote_exec_result(json!({
+            "output": "Continue? [y/N]",
+            "exitCode": null,
+            "timedOut": true,
+            "outputTruncated": false,
+            "inputRequired": true,
+            "inputKind": "password",
+        }))
+        .expect("invalid input kind should not break result parsing");
+        assert!(!invalid_kind.input_required);
+        assert_eq!(invalid_kind.input_kind, None);
+    }
+
+    #[test]
+    fn remote_exec_validators_reject_empty_and_unsafe_routing_values() {
+        assert!(validate_remote_exec_tab_id("\n").is_err());
+        assert!(validate_remote_exec_command("  ").is_err());
+        assert!(validate_remote_exec_cwd(Some("x".repeat(4_097))).is_err());
+        assert_eq!(
+            validate_remote_exec_cwd(Some(" /srv/app ".to_string())).unwrap(),
+            Some("/srv/app".to_string())
+        );
+    }
+
+    #[test]
+    fn interactive_exec_keeps_renderer_loss_distinct_from_user_cancellation() {
+        let unavailable = AppError::Storage(format!(
+            "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: main workspace is unavailable"
+        ));
+        assert!(matches!(
+            interactive_remote_exec_audit_error_event(&unavailable),
+            InteractiveRemoteExecAuditEvent::Unavailable
+        ));
+
+        let cancelled = AppError::Storage(format!(
+            "{INTERACTIVE_REMOTE_EXEC_USER_CANCELLED}: user cancelled secure local input"
+        ));
+        assert!(matches!(
+            interactive_remote_exec_audit_error_event(&cancelled),
+            InteractiveRemoteExecAuditEvent::Cancelled
+        ));
+    }
+
+    #[test]
+    fn interactive_exec_parser_returns_the_local_prompt_count() {
+        let result = parse_remote_exec_result(json!({
+            "output": "[REDACTED]",
+            "exitCode": 0,
+            "timedOut": false,
+            "outputTruncated": false,
+            "interactionCount": 2,
+        }))
+        .expect("interactive remote exec result should parse");
+
+        assert_eq!(result.interaction_count, 2);
     }
 }

@@ -1353,6 +1353,7 @@ dependencies = [
 name = "fileterm"
 version = "2.1.8"
 dependencies = [
+ "aes-gcm",
  "arboard",
  "async-trait",
  "base64 0.22.1",
@@ -1391,6 +1392,7 @@ dependencies = [
  "webview2-com",
  "windows 0.61.3",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
