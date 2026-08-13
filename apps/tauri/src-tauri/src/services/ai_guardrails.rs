@@ -484,4 +484,19 @@ mod tests {
         assert_eq!(counters.privileged_calls, 1);
         assert_eq!(counters.total_exec_duration_secs, 2);
     }
+
+    #[test]
+    fn threshold_validation_preserves_the_default_safety_floor() {
+        let defaults = default_thresholds();
+        assert!(validate_thresholds(&defaults).is_ok());
+
+        let mut lowered = defaults.clone();
+        lowered.max_tool_calls_per_session -= 1;
+        assert!(validate_thresholds(&lowered).is_err());
+
+        let mut raised = defaults;
+        raised.max_tool_calls_per_session += 10;
+        raised.max_total_exec_duration_secs += 60;
+        assert!(validate_thresholds(&raised).is_ok());
+    }
 }

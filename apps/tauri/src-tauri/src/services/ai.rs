@@ -301,6 +301,12 @@ pub struct SetAiContextAttachInput {
     pub attach_terminal_context: bool,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetAiAutoModeThresholdsInput {
+    pub thresholds: AiAutoModeThresholds,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiContextTarget {
@@ -825,6 +831,25 @@ pub fn set_context_attach(
         ));
     }
     state.attach_terminal_context = input.attach_terminal_context;
+    Ok(public_mode_state(state))
+}
+
+pub fn get_auto_mode_thresholds(window: &WebviewWindow) -> Result<AiAutoModeThresholds, AppError> {
+    Ok(mode_state_for_window(window.label())?.thresholds)
+}
+
+pub fn set_auto_mode_thresholds(
+    window: &WebviewWindow,
+    input: SetAiAutoModeThresholdsInput,
+) -> Result<AiCopilotModeState, AppError> {
+    crate::services::ai_guardrails::validate_thresholds(&input.thresholds)
+        .map_err(|reason| ai_error("AI_AUTO_MODE_INVALID_THRESHOLDS", reason))?;
+
+    let mut registry = mode_registry_lock()?;
+    let state = registry
+        .entry(window.label().to_string())
+        .or_insert_with(default_ai_mode_state);
+    state.thresholds = input.thresholds;
     Ok(public_mode_state(state))
 }
 

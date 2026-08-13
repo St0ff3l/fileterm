@@ -1,6 +1,6 @@
 # AI Copilot 功能集成计划
 
-状态：进行中（Provider/历史/上下文和三模式核心实现已完成；macOS arm64 app/DMG 已通过，跨平台与真实 Provider/远端发行验收待收口）
+状态：进行中（Provider/历史/上下文、三模式工具循环和全自动护栏高级设置已完成；macOS arm64 app/DMG 已通过，跨平台与真实 Provider/远端发行验收待收口）
 前置工作：[AI Copilot 同窗 UI 草案](../completed/ai-copilot-companion-window.md)
 
 ## 1. 结论
@@ -28,26 +28,25 @@ FileTerm 内置 AI 首先定位为**保守的终端助手**，不是无人值守
 - 不附带主机、路径或终端内容。
 - Provider 配置完成后默认进入该级别。
 
-### L1：目标元数据（迁移兼容，不再作为新 UI 级别）
-
-- 用户按次开启后，可附带当前会话的协议、公开主机标签、登录用户、远端平台、shell CWD 和连接状态。
-- 不包含连接凭据、IP 之外的 secret、文件内容或终端 transcript。
-- 发送前显示上下文摘要。
-
 ### L2：最近终端上下文
 
-- 用户按次开启“附带最近终端”后，Rust 从当前 tab 的 runtime transcript 生成一次性快照。
+- 半自动 / 全自动模式强制附带 L2；纯对话模式由用户按次开启“参考终端”。Rust 从当前 tab 的 runtime transcript 生成一次性快照，并一并携带安全的目标元数据。
 - UI 展示将发送的准确文本，用户确认后才随本次消息发送。
 - 不持续同步，不在后台上传，不默认写入对话历史。
 
-### L3：Review Mode（迁移兼容，能力已并入三模式）
+### 兼容输入（不再作为新 UI 级别）
+
+- 旧 `metadata` / `recent-terminal` 上下文值在 Rust 侧统一归一到 L2；不再提供单独的 L1 元数据开关。
+- 旧 `responseMode=command-proposal`、`AiMessage.commands` 和 Review 数据继续保留，直到迁移期历史与兼容入口完成收口。
+
+### Review Mode（迁移兼容，能力已并入三模式）
 
 - 模型只能提出结构化 action proposal。
 - 用户点击“审核并运行”后，FileTerm 展示目标主机、CWD、完整命令、风险提示和超时，再进入一次性审批。
 - 执行使用独立 SSH exec channel，不劫持交互式 PTY；结果作为工具结果回到对话。
 - 不提供“本会话始终允许”或批量批准；多步工具循环由三模式计划统一控制，每个半自动调用仍需重新审批。
 
-新 UI 只暴露纯对话 / 半自动 / 全自动三种模式；L1/L3 名称和旧 command/review 数据仅用于迁移兼容，具体矩阵以 [ai-copilot-modes.md](./ai-copilot-modes.md) 为准。
+新 UI 只暴露纯对话 / 半自动 / 全自动三种模式；L3 名称和旧 command/review 数据仅用于迁移兼容，具体矩阵以 [ai-copilot-modes.md](./ai-copilot-modes.md) 为准。
 
 ## 3. 总体架构
 
@@ -294,7 +293,7 @@ interface AiCommandError {
 `app_create_ai_context_preview(input: CreateAiContextPreviewInput)` 在 Rust 中完成；来源窗口 label 由 Tauri command context 注入，不接受 renderer 伪造：
 
 1. 校验 tab 仍存在且目标能力符合 `mode`。
-2. 按 `mode` 从 workspace runtime 读取数据：L1 只读取目标元数据，且不得调用 transcript accessor；L2 才读取 transcript。
+2. 按 `mode` 从 workspace runtime 读取数据：L0 不读取 transcript，L2 才读取 transcript，并携带必要目标元数据。
 3. CRLF 归一化，移除 ANSI escape、不可见控制字符和异常长行。
 4. 仅截取末尾有限行/字符；初始上限建议 120 行且不超过 16 KiB UTF-8。
 5. 对 Bearer token、常见 API Key、密码赋值、私钥块等做 best-effort 遮盖。
@@ -304,7 +303,7 @@ interface AiCommandError {
 
 ### 6.2 发送
 
-- `app_start_ai_chat(input: StartAiChatInput)` 接受用户消息、会话和 Provider；L0 省略 `contextSnapshotId`，L1/L2 只能引用 Rust 生成的 `snapshotId`，不能携带 renderer 自行拼出的隐藏 transcript。
+- `app_start_ai_chat(input: StartAiChatInput)` 接受用户消息、会话和 Provider；L0 省略 `contextSnapshotId`，L2 只能引用 Rust 生成的 `snapshotId`，不能携带 renderer 自行拼出的隐藏 transcript。
 - 快照仅存内存，建议 TTL 5 分钟，并绑定创建它的窗口、leaf tab、root/pane 关系、`sessionRevision`、Provider 和 context mode。
 - 发送时原子消费快照；过期、重放、跨窗口使用、tab 已关闭、Provider/目标/CWD/用户或连接 generation 变化时拒绝发送并要求重新预览。
 - Rust 使用快照对应的准确内容组装 prompt，保证预览内容与发送内容一致。
@@ -418,7 +417,7 @@ Renderer 的“参考终端”只是用户主动开启的会话面板开关，�
 ### Phase 3：按次上下文与命令卡
 
 - [x] 接入 context preview、5 分钟 TTL、一次性消费、清理、截断和 best-effort 遮盖。
-- [x] 支持 L1/L2 按次授权，不提供全局“永久读取终端”默认值；L1 不读取 runtime transcript，L2 才生成不可变预览。
+- [x] 支持 L0/L2 按次授权，不提供全局“永久读取终端”默认值；旧 `metadata` / `recent-terminal` 输入在迁移期归一到 L2。
 - [x] UI 使用默认关闭的“参考终端”开关；开启后每条消息自动刷新并消费上下文快照，不展示大段终端预览，也不按对话重复确认。
 - [x] 接入严格 JSON 命令卡、复制和单行“写入但不回车”；写入动作只更新受控终端输入框，不经过 PTY。
 
@@ -443,7 +442,7 @@ Renderer 的“参考终端”只是用户主动开启的会话面板开关，�
 
 - Provider adapter：SSE 分片、未知事件、错误事件、截断流、取消、usage 和结构化输出 fixtures。
 - 迁移期 command-proposal 回归：`qa:ai-copilot-fixture-smoke` 覆盖旧 envelope 和失败后重试恢复；三模式 UI 的模式替换由 renderer typecheck 与手工视觉验收覆盖。
-- Context：L1 不调用 transcript accessor、ANSI/CRLF/control 清理、UTF-8 边界、长行、截断、secret patterns、目标 revision、一次性消费、重放/跨窗口拒绝和快照过期。
+- Context：L0 不调用 transcript accessor；L2 覆盖 ANSI/CRLF/control 清理、UTF-8 边界、长行、截断、secret patterns、目标 revision、一次性消费、重放/跨窗口拒绝和快照过期。
 - Storage：Key 不进入公开配置/snapshot/log，Unix 权限收紧，空值保留与显式清除。
 - Command：单行约束、控制字符拒绝、风险只升不降、目标变化。
 - Contract：TypeScript/Rust 序列化一致，稳定错误码和 stream event 完整。

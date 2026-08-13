@@ -175,6 +175,8 @@ export function AiCopilotPanel({
   const [referenceTerminal, setReferenceTerminal] = useState(false)
   const [isAutoModeConfirmOpen, setIsAutoModeConfirmOpen] = useState(false)
   const [isAutoModeConfirming, setIsAutoModeConfirming] = useState(false)
+  const [isAutoModeResetOpen, setIsAutoModeResetOpen] = useState(false)
+  const [isAutoModeResetting, setIsAutoModeResetting] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
   const [writingCommandIds, setWritingCommandIds] = useState<Set<string>>(() => new Set())
   const writingCommandIdsRef = useRef<Set<string>>(new Set())
@@ -250,6 +252,7 @@ export function AiCopilotPanel({
     runReview,
     setCopilotMode,
     setContextAttach,
+    resetAutoModeSessionCounts,
     retry,
     stop
   } = useAiCopilot()
@@ -371,6 +374,13 @@ export function AiCopilotPanel({
     const next = await setCopilotMode('fully-automatic', true)
     setIsAutoModeConfirming(false)
     if (next) setIsAutoModeConfirmOpen(false)
+  }
+
+  const confirmAutoModeReset = async () => {
+    setIsAutoModeResetting(true)
+    const next = await resetAutoModeSessionCounts()
+    setIsAutoModeResetting(false)
+    if (next) setIsAutoModeResetOpen(false)
   }
 
   const saveConversationTitle = async () => {
@@ -555,6 +565,16 @@ export function AiCopilotPanel({
             <span className="ai-copilot-mode-guardrails">
               {modeState.autoModeGuardrails.sessionToolCallCount}/
               {modeState.autoModeGuardrails.thresholds.maxToolCallsPerSession}
+              <button
+                aria-label={t.aiCopilotAutoModeResetTitle}
+                className="ai-copilot-mode-reset-button"
+                disabled={isStreaming}
+                title={t.aiCopilotAutoModeReset}
+                type="button"
+                onClick={() => setIsAutoModeResetOpen(true)}
+              >
+                {t.aiCopilotAutoModeReset}
+              </button>
             </span>
           ) : null}
         </section>
@@ -1138,6 +1158,19 @@ export function AiCopilotPanel({
           }}
           onConfirm={() => void confirmFullyAutomaticMode()}
           title={t.aiCopilotModeFullTitle}
+        />
+      ) : null}
+      {isAutoModeResetOpen ? (
+        <ConfirmActionDialog
+          confirmLabel={t.aiCopilotAutoModeResetConfirm}
+          confirmVariant="danger"
+          description={t.aiCopilotAutoModeResetDescription}
+          isSubmitting={isAutoModeResetting}
+          onClose={() => {
+            if (!isAutoModeResetting) setIsAutoModeResetOpen(false)
+          }}
+          onConfirm={() => void confirmAutoModeReset()}
+          title={t.aiCopilotAutoModeResetTitle}
         />
       ) : null}
     </aside>

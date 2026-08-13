@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_AI_AUTO_MODE_THRESHOLDS,
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type AppUpdateStatus,
+  type AiAutoModeThresholds,
   type AiProviderDraft,
   type AiProviderKind,
   type AiProviderSummary,
@@ -332,6 +334,12 @@ export function SettingsModal({
   const [clearAiApiKey, setClearAiApiKey] = useState(false)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
+  const [aiAutoModeThresholds, setAiAutoModeThresholds] = useState<AiAutoModeThresholds>(() => ({
+    ...DEFAULT_AI_AUTO_MODE_THRESHOLDS
+  }))
+  const [isAiAutoModeThresholdsOpen, setIsAiAutoModeThresholdsOpen] = useState(false)
+  const [isSavingAiAutoModeThresholds, setIsSavingAiAutoModeThresholds] = useState(false)
+  const [aiAutoModeThresholdMessage, setAiAutoModeThresholdMessage] = useState<string | null>(null)
   // React's disabled state is applied on the next render. Keep a synchronous
   // guard as well so rapid clicks cannot submit the same AI operation twice.
   const aiActionInFlightRef = useRef(false)
@@ -515,6 +523,27 @@ export function SettingsModal({
     }
     // selectAiProvider is a stable inline function and intentionally not listed
     // in deps — this effect runs once per tab activation, matching original behaviour.
+  }, [activeTab, desktopApi])
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !desktopApi) return
+    let canceled = false
+    setAiAutoModeThresholdMessage(null)
+    void desktopApi
+      .getAiAutoModeThresholds()
+      .then((thresholds) => {
+        if (!canceled) {
+          setAiAutoModeThresholds(thresholds)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!canceled) {
+          setAiAutoModeThresholdMessage(error instanceof Error ? error.message : String(error))
+        }
+      })
+    return () => {
+      canceled = true
+    }
   }, [activeTab, desktopApi])
 
   const runSyncOperation = async (
@@ -722,6 +751,37 @@ export function SettingsModal({
       aiActionInFlightRef.current = false
       aiProviderActionInFlight = false
       setAiOperation(null)
+    }
+  }
+
+  const patchAiAutoModeThreshold = (key: keyof AiAutoModeThresholds, value: string) => {
+    const parsed = Number.parseInt(value, 10)
+    if (!Number.isFinite(parsed)) return
+    setAiAutoModeThresholds((current) => ({ ...current, [key]: parsed }))
+    setAiAutoModeThresholdMessage(null)
+  }
+
+  const saveAiAutoModeThresholds = async () => {
+    if (!desktopApi || isSavingAiAutoModeThresholds) return
+    const belowFloor = Object.entries(DEFAULT_AI_AUTO_MODE_THRESHOLDS).some(
+      ([key, minimum]) => aiAutoModeThresholds[key as keyof AiAutoModeThresholds] < minimum
+    )
+    if (belowFloor) {
+      setAiAutoModeThresholdMessage(t.aiSettingsAutoModeThresholdsFloorError)
+      return
+    }
+
+    setIsSavingAiAutoModeThresholds(true)
+    setAiAutoModeThresholdMessage(null)
+    try {
+      const next = await desktopApi.setAiAutoModeThresholds({ thresholds: aiAutoModeThresholds })
+      setAiAutoModeThresholds(next.autoModeGuardrails.thresholds)
+      window.dispatchEvent(new Event('fileterm:ai-auto-mode-thresholds-changed'))
+      setAiAutoModeThresholdMessage(t.aiSettingsAutoModeThresholdsSaved)
+    } catch (error) {
+      setAiAutoModeThresholdMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsSavingAiAutoModeThresholds(false)
     }
   }
 
@@ -1178,6 +1238,94 @@ export function SettingsModal({
                     {selectedAiProvider?.hasApiKey ? t.aiSettingsApiKeySaved : t.aiCopilotPreview}
                   </span>
                 </div>
+
+                <section className="ai-settings-advanced-card" aria-labelledby="ai-auto-mode-thresholds-title">
+                  <button
+                    aria-controls="ai-auto-mode-thresholds-content"
+                    aria-expanded={isAiAutoModeThresholdsOpen}
+                    className="ai-settings-advanced-toggle"
+                    type="button"
+                    onClick={() => setIsAiAutoModeThresholdsOpen((open) => !open)}
+                  >
+                    <span>
+                      <strong id="ai-auto-mode-thresholds-title">{t.aiSettingsAutoModeThresholds}</strong>
+                      <small>{t.aiSettingsAutoModeThresholdsHint}</small>
+                    </span>
+                    <AppIcon name={isAiAutoModeThresholdsOpen ? 'chevron-up' : 'chevron-down'} size={14} />
+                  </button>
+                  {isAiAutoModeThresholdsOpen ? (
+                    <div id="ai-auto-mode-thresholds-content" className="ai-settings-advanced-content">
+                      <p className="ai-settings-advanced-description">{t.aiSettingsAutoModeThresholdsDescription}</p>
+                      <fieldset
+                        className="ai-settings-threshold-fields"
+                        disabled={!desktopApi || isSavingAiAutoModeThresholds}
+                      >
+                        <label>
+                          <span>{t.aiSettingsAutoModeMaxToolCalls}</span>
+                          <input
+                            min={DEFAULT_AI_AUTO_MODE_THRESHOLDS.maxToolCallsPerSession}
+                            step="1"
+                            type="number"
+                            value={aiAutoModeThresholds.maxToolCallsPerSession}
+                            onChange={(event) => patchAiAutoModeThreshold('maxToolCallsPerSession', event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>{t.aiSettingsAutoModeMaxDestructiveCalls}</span>
+                          <input
+                            min={DEFAULT_AI_AUTO_MODE_THRESHOLDS.maxDestructiveCallsPerSession}
+                            step="1"
+                            type="number"
+                            value={aiAutoModeThresholds.maxDestructiveCallsPerSession}
+                            onChange={(event) =>
+                              patchAiAutoModeThreshold('maxDestructiveCallsPerSession', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          <span>{t.aiSettingsAutoModeMaxPrivilegedCalls}</span>
+                          <input
+                            min={DEFAULT_AI_AUTO_MODE_THRESHOLDS.maxPrivilegedCallsPerSession}
+                            step="1"
+                            type="number"
+                            value={aiAutoModeThresholds.maxPrivilegedCallsPerSession}
+                            onChange={(event) =>
+                              patchAiAutoModeThreshold('maxPrivilegedCallsPerSession', event.target.value)
+                            }
+                          />
+                        </label>
+                        <label>
+                          <span>{t.aiSettingsAutoModeMaxDuration}</span>
+                          <input
+                            min={DEFAULT_AI_AUTO_MODE_THRESHOLDS.maxTotalExecDurationSecs}
+                            step="1"
+                            type="number"
+                            value={aiAutoModeThresholds.maxTotalExecDurationSecs}
+                            onChange={(event) =>
+                              patchAiAutoModeThreshold('maxTotalExecDurationSecs', event.target.value)
+                            }
+                          />
+                        </label>
+                      </fieldset>
+                      <div className="ai-settings-threshold-footer">
+                        <small role="status">
+                          {aiAutoModeThresholdMessage || t.aiSettingsAutoModeThresholdsFloorHint}
+                        </small>
+                        <button
+                          className="ai-settings-secondary-button"
+                          disabled={!desktopApi || isSavingAiAutoModeThresholds}
+                          type="button"
+                          onClick={() => void saveAiAutoModeThresholds()}
+                        >
+                          <AppIcon name="disk" size={13} />
+                          {isSavingAiAutoModeThresholds
+                            ? t.aiSettingsAutoModeThresholdsSaving
+                            : t.aiSettingsAutoModeThresholdsSave}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
 
                 <div className="ai-settings-provider-picker">
                   <label>

@@ -43,6 +43,7 @@ import type {
   LocalTerminalLaunchOptions,
   AiProviderSummary,
   AiProviderTestResult,
+  AiAutoModeThresholds,
   AiChatRequest,
   AiCommandInsertInput,
   AiCommandInsertResult,
@@ -59,6 +60,7 @@ import type {
   RunAiReviewInput,
   SaveAiProviderInput,
   SetAiContextAttachInput,
+  SetAiAutoModeThresholdsInput,
   SetAiCopilotModeInput,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
@@ -403,6 +405,9 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<AiCopilotModeState>('app_set_ai_copilot_mode', { input }),
     setAiContextAttach: (input: SetAiContextAttachInput) =>
       invoke<AiCopilotModeState>('app_set_ai_context_attach', { input }),
+    getAiAutoModeThresholds: () => invoke<AiAutoModeThresholds>('app_get_ai_auto_mode_thresholds'),
+    setAiAutoModeThresholds: (input: SetAiAutoModeThresholdsInput) =>
+      invoke<AiCopilotModeState>('app_set_ai_auto_mode_thresholds', { input }),
     resetAiAutoModeSessionCounts: () => invoke<AiCopilotModeState>('app_reset_ai_auto_mode_session_counts'),
     createAiContextPreview: (input: CreateAiContextPreviewInput) =>
       invoke<AiContextPreview>('app_create_ai_context_preview', { input }),

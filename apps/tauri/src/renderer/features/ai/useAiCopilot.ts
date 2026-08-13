@@ -208,9 +208,11 @@ export function useAiCopilot() {
     void refresh()
     const reload = () => void refresh()
     window.addEventListener('fileterm:ai-providers-changed', reload)
+    window.addEventListener('fileterm:ai-auto-mode-thresholds-changed', reload)
     return () => {
       mountedRef.current = false
       window.removeEventListener('fileterm:ai-providers-changed', reload)
+      window.removeEventListener('fileterm:ai-auto-mode-thresholds-changed', reload)
     }
   }, [refresh])
 

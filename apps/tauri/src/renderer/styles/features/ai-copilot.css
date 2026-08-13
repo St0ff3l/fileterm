@@ -1842,6 +1842,29 @@
   font-variant-numeric: tabular-nums;
 }
 
+.ai-copilot-mode-reset-button {
+  margin-left: 5px;
+  padding: 1px 4px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.ai-copilot-mode-reset-button:hover:not(:disabled) {
+  border-color: var(--focus-outline);
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.ai-copilot-mode-reset-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .ai-copilot-composer-select.dropdown-select-trigger,
 .ai-copilot-composer-select.ft-select-shell select {
   height: 27px;
@@ -2023,6 +2046,122 @@
   color: var(--text-muted);
   font-size: 10px;
   white-space: nowrap;
+}
+
+.ai-settings-advanced-card {
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.ai-settings-advanced-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0;
+  color: var(--text-main);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-settings-advanced-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.ai-settings-advanced-toggle:focus-visible {
+  outline: 1px solid var(--focus-outline);
+  outline-offset: -2px;
+}
+
+.ai-settings-advanced-toggle > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.ai-settings-advanced-toggle strong {
+  font-size: 12px;
+}
+
+.ai-settings-advanced-toggle small,
+.ai-settings-advanced-description,
+.ai-settings-threshold-footer small {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ai-settings-advanced-content {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border-light);
+}
+
+.ai-settings-advanced-description {
+  margin: 12px 0 0;
+}
+
+.ai-settings-threshold-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ai-settings-threshold-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ai-settings-threshold-fields input {
+  width: 100%;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 9px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  outline: 0;
+  color: var(--text-main);
+  background: var(--input-bg, var(--bg-primary));
+  font: inherit;
+  font-size: 12px;
+}
+
+.ai-settings-threshold-fields input:focus {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.ai-settings-threshold-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-settings-threshold-footer small {
+  min-width: 0;
+}
+
+.ai-settings-threshold-footer .ai-settings-secondary-button {
+  flex: 0 0 auto;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 10px;
 }
 
 .ai-settings-provider-picker {
@@ -2917,6 +3056,15 @@
 
   .ai-settings-toggle-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-settings-threshold-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-settings-threshold-footer {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏、安全凭据衔接和三模式 UI 收口已落地；三类 Provider 的本机 loopback 工具契约测试与 macOS arm64 app/DMG 已通过，待真实 Provider / 远端 / Windows/Linux 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试与 macOS arm64 app/DMG 已通过，待真实 Provider / 远端 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -274,7 +274,7 @@ struct AutoModeThresholds {
 - `max_destructive_calls_per_session` / `max_privileged_calls_per_session`：暂停自动执行，返回 `AUTO_MODE_RISK_LIMIT_REACHED`，提示用户切回半自动。
 - `max_total_exec_duration_secs`：暂停自动执行，返回 `AUTO_MODE_DURATION_LIMIT_REACHED`。
 
-第一阶段由 Rust 默认值托管且不开放 renderer 修改；后续高级设置开放前仍必须保留不低于默认值的下限校验。
+默认值由 Rust 托管，设置页高级区域允许提高这些上限；每次保存仍由 Rust 校验，禁止低于默认安全下限。
 
 ### 5.4 目标绑定与 sessionRevision
 
@@ -419,7 +419,7 @@ type AiErrorCode =
 - `app_get_ai_copilot_mode_state`：返回当前模式 + 上下文开关 + 护栏状态。
 - `app_set_ai_copilot_mode`：切换模式；切到全自动先要求用户确认，确认后允许进入真实工具循环，具体执行仍受 Rust 护栏约束。
 - `app_set_ai_context_attach`：仅 pure-conversation 模式下可调；其他模式返回 `ContextLockedByMode` 错误。
-- `app_get_ai_auto_mode_thresholds` / `app_set_ai_auto_mode_thresholds`：预留给后续高级设置；第一阶段阈值由 Rust 默认值托管，尚未开放 renderer 修改。
+- `app_get_ai_auto_mode_thresholds` / `app_set_ai_auto_mode_thresholds`：已接入设置页高级设置；阈值按当前 FileTerm 窗口生效，Rust 拒绝低于默认安全下限的值。
 - `app_reset_ai_auto_mode_session_counts`：手动重置会话级累计（用户主动操作）。
 - 现有 `app_start_ai_chat` / `app_create_ai_context_preview` / `app_run_ai_review` 按 §7 类型变更调整。
 
@@ -434,7 +434,7 @@ type AiErrorCode =
 - `features/ai/AiCopilotPanel.tsx`：三模式选择器、上下文锁定提示、全自动确认、护栏状态和工具活动 / 输出展示；不再渲染普通对话 / 命令卡二选一入口。
 - `features/ai/useAiCopilot.ts`：接通 mode 状态、上下文开关锁定逻辑、工具调用和工具结果事件，并在新消息 / 重试 / 新会话时清理活动状态。
 - 审批复用现有 `ActionReviewDialog`；工具活动卡和有界输出直接收敛在 Copilot 面板，不新增绕过通用组件的执行 UI。
-- 设置页高级设置区增加全自动模式阈值配置（默认折叠）。
+- 设置页高级设置区增加全自动模式阈值配置（默认折叠），保存走 Rust 校验后的 mode state；Copilot 面板提供带二次确认的会话累计重置。
 
 ### UI 公用组件边界
 
@@ -469,6 +469,7 @@ type AiErrorCode =
 
 - `AiCopilotPanel.tsx` 展示工具调用状态、执行结果、失败原因和截断输出；纯对话不携带 Provider tools。
 - pure-conversation 可交互，半自动 / 全自动上下文开关禁用并置灰；全自动启用仍弹 `<ConfirmActionDialog>` 警告。
+- 全自动护栏阈值可在设置页默认折叠的高级区域调整；Rust 强制默认安全下限，Copilot 面板可带确认重置当前窗口的会话累计。
 - 半自动 destructive / privileged 执行要求风险确认；全自动不弹逐次审批，只允许 Rust 护栏放行。
 - 复用 `<DropdownSelect>` / `<AppIcon>` / `<VerticalScrollbar>` / `--focus-outline` 等项目边界。
 - 已通过前端 typecheck、lint、Prettier；macOS arm64 app/DMG 已通过，真实 Provider 交互和 Windows/Linux 打包仍待验证。
