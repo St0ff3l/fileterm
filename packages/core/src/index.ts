@@ -89,6 +89,10 @@ export interface BaseProfile extends BaseEntity {
   lastUsedAt?: number
   /** Non-secret indicator for redacted desktop snapshots. */
   hasSavedPassword?: boolean
+  /** Non-secret indicator for a saved privileged-command password. */
+  hasSavedSudoPassword?: boolean
+  /** Non-secret indicator for a saved `su` password. */
+  hasSavedSuPassword?: boolean
 }
 
 export type NetworkProfile = BaseProfile
@@ -219,6 +223,8 @@ export interface SshProfile extends NetworkProfile {
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
+  /** Reuse the saved SSH login password for sudo when explicitly enabled. */
+  sudoSameAsLogin?: boolean
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
 }
@@ -851,6 +857,12 @@ export interface CreateProfileInput {
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
+  /** Transient only; persisted by Rust in profile-secrets.json. */
+  sudoPassword?: string
+  /** Transient only; persisted by Rust in profile-secrets.json. */
+  suPassword?: string
+  /** Reuse the saved SSH login password for sudo when explicitly enabled. */
+  sudoSameAsLogin?: boolean
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
   devicePath?: string
@@ -943,6 +955,15 @@ export interface RemoteExecInteractionRequest {
   attempt: number
   maxAttempts: number
   inputKind: 'secret' | 'text'
+}
+
+/** One-shot privileged-command input. Values must never be persisted or sent
+ * to an AI provider; the desktop bridge forwards them only to Rust. */
+export interface RemoteExecCredentials {
+  sudoPassword?: string
+  suPassword?: string
+  saveSudoPassword?: boolean
+  saveSuPassword?: boolean
 }
 
 export type BackupPasswordOperation = 'upload' | 'download'
@@ -1492,7 +1513,8 @@ export interface FileTermDesktopApi {
     tabId: string,
     command: string,
     cwd?: string,
-    timeoutMs?: number
+    timeoutMs?: number,
+    credentials?: RemoteExecCredentials
   ): Promise<{
     output: string
     exitCode: number | null

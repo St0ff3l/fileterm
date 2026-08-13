@@ -1736,12 +1736,17 @@ pub(crate) async fn mcp_list_remote_directory(
 /// separate from the interactive terminal so an external CLI/MCP caller
 /// receives deterministic output without stealing the user's PTY input.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn app_execute_remote_command(
     app: AppHandle,
     tab_id: String,
     command: String,
     cwd: Option<String>,
     timeout_ms: Option<u64>,
+    sudo_password: Option<String>,
+    su_password: Option<String>,
+    save_sudo_password: Option<bool>,
+    save_su_password: Option<bool>,
 ) -> Result<serde_json::Value, AppError> {
     let result = crate::services::action_review::execute_remote_command(
         &app,
@@ -1750,6 +1755,10 @@ pub async fn app_execute_remote_command(
             command,
             cwd,
             timeout_ms,
+            sudo_password,
+            su_password,
+            save_sudo_password: save_sudo_password.unwrap_or(false),
+            save_su_password: save_su_password.unwrap_or(false),
         },
     )
     .await?;

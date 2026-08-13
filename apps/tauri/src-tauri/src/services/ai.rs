@@ -2289,6 +2289,10 @@ async fn run_ai_review_inner(
                     command: capability.command.command.clone(),
                     cwd: capability.command.target.cwd.clone(),
                     timeout_ms: Some(AI_REVIEW_TIMEOUT_MS),
+                    sudo_password: None,
+                    su_password: None,
+                    save_sudo_password: false,
+                    save_su_password: false,
                 },
             )
             .await

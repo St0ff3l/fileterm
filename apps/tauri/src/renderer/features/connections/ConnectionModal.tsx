@@ -32,6 +32,8 @@ export function ConnectionModal({
   mode,
   form,
   hasSavedPassword = false,
+  hasSavedSudoPassword = false,
+  hasSavedSuPassword = false,
   setForm,
   onClearHostFingerprint,
   onSubmit,
@@ -46,6 +48,8 @@ export function ConnectionModal({
   mode: ConnectionFormMode
   form: CreateProfileInput
   hasSavedPassword?: boolean
+  hasSavedSudoPassword?: boolean
+  hasSavedSuPassword?: boolean
   setForm(value: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)): void
   onClearHostFingerprint?(): void
   onSubmit(event: FormEvent<HTMLFormElement>): void
@@ -379,6 +383,47 @@ export function ConnectionModal({
                           />
                         </label>
                         <div className="span-2 ssh-auth-hint">{t.ftpAuthHint}</div>
+                      </>
+                    ) : null}
+                    {form.type === 'ssh' ? (
+                      <>
+                        <label className="span-2">
+                          {t.sudoPassword}:
+                          <input
+                            disabled={form.sudoSameAsLogin === true}
+                            type="password"
+                            value={form.sudoPassword ?? ''}
+                            onChange={(event) => setForm((prev) => ({ ...prev, sudoPassword: event.target.value }))}
+                          />
+                        </label>
+                        <div className="span-2 ssh-auth-hint">
+                          {mode === 'edit' && hasSavedSudoPassword
+                            ? t.privilegedPasswordSavedHint
+                            : t.privilegedPasswordHint}
+                        </div>
+                        <label className="span-2">
+                          {t.suPassword}:
+                          <input
+                            type="password"
+                            value={form.suPassword ?? ''}
+                            onChange={(event) => setForm((prev) => ({ ...prev, suPassword: event.target.value }))}
+                          />
+                        </label>
+                        <div className="span-2 ssh-auth-hint">
+                          {mode === 'edit' && hasSavedSuPassword
+                            ? t.privilegedPasswordSavedHint
+                            : t.privilegedPasswordHint}
+                        </div>
+                        <label className="span-2 ssh-checkbox">
+                          <input
+                            checked={form.sudoSameAsLogin === true}
+                            type="checkbox"
+                            onChange={(event) =>
+                              setForm((prev) => ({ ...prev, sudoSameAsLogin: event.target.checked }))
+                            }
+                          />
+                          <span>{t.sudoSameAsLogin}</span>
+                        </label>
                       </>
                     ) : null}
                     {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (

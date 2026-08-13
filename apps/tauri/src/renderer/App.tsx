@@ -1260,6 +1260,16 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                   ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedPassword === true
                   : false
               }
+              hasSavedSudoPassword={
+                editingProfileId
+                  ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedSudoPassword === true
+                  : false
+              }
+              hasSavedSuPassword={
+                editingProfileId
+                  ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedSuPassword === true
+                  : false
+              }
               isSubmitting={isBusy}
               setForm={updateForm}
               onClearHostFingerprint={() => {

@@ -211,6 +211,27 @@ pub async fn exec_command_with_stdin_status_pty<H: Handler>(
         .map(|result| (result.output, result.exit_code))
 }
 
+/// Run an exec command with optional stdin/PTY while retaining the bounded
+/// output and timeout metadata used by the remote-exec service. The caller is
+/// responsible for ensuring that `stdin` never contains data that should be
+/// logged or returned to an untrusted surface.
+pub async fn exec_command_with_stdin_status_timeout_detailed<H: Handler>(
+    handle: &Handle<H>,
+    cmd: &str,
+    stdin: &str,
+    request_pty: bool,
+    command_timeout: Duration,
+) -> Result<ExecCommandResult, String> {
+    exec_command_internal(
+        handle,
+        cmd,
+        Some(stdin.as_bytes()),
+        request_pty,
+        Some(command_timeout),
+    )
+    .await
+}
+
 async fn exec_command_internal<H: Handler>(
     handle: &Handle<H>,
     cmd: &str,

@@ -29,6 +29,11 @@ const MAX_REMOTE_EXEC_TAB_ID_BYTES: usize = 256;
 pub const DEFAULT_REMOTE_EXEC_TIMEOUT_MS: u64 = 60_000;
 pub const MIN_REMOTE_EXEC_TIMEOUT_MS: u64 = 1_000;
 pub const MAX_REMOTE_EXEC_TIMEOUT_MS: u64 = 120_000;
+const MAX_REMOTE_EXEC_SECRET_BYTES: usize = 4 * 1024;
+pub const SUDO_PASSWORD_NEEDED: &str = "SUDO_PASSWORD_NEEDED";
+pub const SU_PASSWORD_NEEDED: &str = "SU_PASSWORD_NEEDED";
+pub const SUDO_AUTH_FAILURE: &str = "SUDO_AUTH_FAILURE";
+pub const SU_AUTH_FAILURE: &str = "SU_AUTH_FAILURE";
 /// Interactive exec keeps its own SSH PTY, so it can wait for a FileTerm
 /// dialog without hijacking the visible terminal. Its execution budget is
 /// deliberately longer than the normal fire-and-forget exec budget.
@@ -205,6 +210,27 @@ pub struct RemoteExecRequest {
     pub command: String,
     pub cwd: Option<String>,
     pub timeout_ms: Option<u64>,
+    /// One-shot values supplied by a trusted local caller. They are never
+    /// logged, persisted, or returned to the caller.
+    pub sudo_password: Option<String>,
+    pub su_password: Option<String>,
+    pub save_sudo_password: bool,
+    pub save_su_password: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PrivilegedCommandKind {
+    Sudo,
+    Su,
+}
+
+#[derive(Debug)]
+struct PreparedRemoteExec {
+    command: String,
+    stdin: Option<String>,
+    request_pty: bool,
+    kind: Option<PrivilegedCommandKind>,
+    save_password: Option<(String, PrivilegedCommandKind, String)>,
 }
 
 #[derive(Clone, Debug)]
@@ -297,7 +323,7 @@ pub async fn execute_remote_command(
             "Remote command execution is only supported for SSH sessions".to_string(),
         ));
     }
-    let cwd = {
+    let (cwd, profile_id) = {
         let sessions = state.sessions.read().await;
         let session = sessions
             .get(&tab_id)
@@ -307,22 +333,59 @@ pub async fn execute_remote_command(
                 "FileTerm SSH session is not connected".to_string(),
             ));
         }
-        cwd.or_else(|| session.shell_cwd.clone())
+        (
+            cwd.or_else(|| session.shell_cwd.clone()),
+            session.profile_id.clone(),
+        )
     };
+
+    let prepared = prepare_remote_exec(
+        app,
+        &profile_id,
+        &command,
+        request.sudo_password,
+        request.su_password,
+        request.save_sudo_password,
+        request.save_su_password,
+    )?;
 
     let result = crate::commands::send_worker_cmd_with_response_timeout(
         app,
         &tab_id,
         Duration::from_millis(timeout_ms.saturating_add(5_000)),
         |respond_to| WorkerCmd::ExecuteRemoteCommand {
-            command,
+            command: prepared.command.clone(),
             cwd,
             timeout_ms,
+            stdin: prepared.stdin.clone(),
+            request_pty: prepared.request_pty,
             respond_to,
         },
     )
     .await?;
-    parse_remote_exec_result(result)
+    let parsed = parse_remote_exec_result(result)?;
+    if let Some(kind) = prepared.kind {
+        if detect_privileged_auth_failure(&parsed.output, kind) {
+            return Err(AppError::Command(
+                match kind {
+                    PrivilegedCommandKind::Sudo => SUDO_AUTH_FAILURE,
+                    PrivilegedCommandKind::Su => SU_AUTH_FAILURE,
+                }
+                .to_string(),
+            ));
+        }
+    }
+    if let Some((profile_id, kind, password)) = prepared.save_password.as_ref() {
+        match kind {
+            PrivilegedCommandKind::Sudo => {
+                crate::services::profile_ops::set_sudo_password(app, profile_id, Some(password))?
+            }
+            PrivilegedCommandKind::Su => {
+                crate::services::profile_ops::set_su_password(app, profile_id, Some(password))?
+            }
+        }
+    }
+    Ok(parsed)
 }
 
 /// Run a command through an isolated SSH PTY only when the caller explicitly
@@ -536,6 +599,169 @@ fn interactive_remote_exec_audit_error_event(error: &AppError) -> InteractiveRem
     }
 }
 
+fn privileged_command_kind(command: &str) -> Option<PrivilegedCommandKind> {
+    let trimmed = command.trim_start();
+    if trimmed == "sudo"
+        || trimmed
+            .strip_prefix("sudo")
+            .is_some_and(starts_with_shell_space)
+    {
+        return Some(PrivilegedCommandKind::Sudo);
+    }
+    if trimmed == "su"
+        || trimmed
+            .strip_prefix("su")
+            .is_some_and(starts_with_shell_space)
+    {
+        return Some(PrivilegedCommandKind::Su);
+    }
+    None
+}
+
+fn starts_with_shell_space(value: &str) -> bool {
+    value.chars().next().is_some_and(char::is_whitespace)
+}
+
+fn validate_privileged_password(password: &str) -> Result<(), AppError> {
+    if password.is_empty()
+        || password.len() > MAX_REMOTE_EXEC_SECRET_BYTES
+        || password.chars().any(char::is_control)
+    {
+        return Err(AppError::Command(
+            "Privileged command password input is invalid".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn wrap_sudo_command(command: &str) -> String {
+    let trimmed = command.trim_start();
+    let suffix = trimmed.strip_prefix("sudo").unwrap_or_default();
+    format!("sudo -S -p ''{suffix}")
+}
+
+fn detect_privileged_auth_failure(output: &str, kind: PrivilegedCommandKind) -> bool {
+    let output = output.to_ascii_lowercase();
+    let patterns: &[&str] = match kind {
+        PrivilegedCommandKind::Sudo => &[
+            "sorry, try again",
+            "sudo: incorrect password",
+            "sudo: authentication failure",
+            "sudo: a password is required",
+        ],
+        PrivilegedCommandKind::Su => &[
+            "su: authentication failure",
+            "su: incorrect password",
+            "su: sorry",
+            "authentication failure",
+        ],
+    };
+    patterns.iter().any(|pattern| output.contains(pattern))
+}
+
+fn prepare_remote_exec(
+    app: &AppHandle,
+    profile_id: &str,
+    command: &str,
+    sudo_password: Option<String>,
+    su_password: Option<String>,
+    save_sudo_password: bool,
+    save_su_password: bool,
+) -> Result<PreparedRemoteExec, AppError> {
+    let kind = privileged_command_kind(command);
+    let has_any_credential_input =
+        sudo_password.is_some() || su_password.is_some() || save_sudo_password || save_su_password;
+    let Some(kind) = kind else {
+        if has_any_credential_input {
+            return Err(AppError::Command(
+                "Privileged password parameters require a sudo or su command".to_string(),
+            ));
+        }
+        return Ok(PreparedRemoteExec {
+            command: command.to_string(),
+            stdin: None,
+            request_pty: false,
+            kind: None,
+            save_password: None,
+        });
+    };
+
+    let (explicit_password, save_password) = match kind {
+        PrivilegedCommandKind::Sudo => {
+            if su_password.is_some() || save_su_password {
+                return Err(AppError::Command(
+                    "su password parameters cannot be used with a sudo command".to_string(),
+                ));
+            }
+            (sudo_password, save_sudo_password)
+        }
+        PrivilegedCommandKind::Su => {
+            if sudo_password.is_some() || save_sudo_password {
+                return Err(AppError::Command(
+                    "sudo password parameters cannot be used with a su command".to_string(),
+                ));
+            }
+            (su_password, save_su_password)
+        }
+    };
+
+    if save_password && explicit_password.is_none() {
+        return Err(AppError::Command(
+            "Saving a privileged password requires a one-shot password value".to_string(),
+        ));
+    }
+    if let Some(password) = explicit_password.as_deref() {
+        validate_privileged_password(password)?;
+    }
+
+    let password = if let Some(password) = explicit_password {
+        Some(password)
+    } else {
+        match kind {
+            PrivilegedCommandKind::Sudo => {
+                if let Some(password) =
+                    crate::services::profile_ops::read_sudo_password(app, profile_id)?
+                {
+                    Some(password)
+                } else if crate::services::profile_ops::sudo_same_as_login(app, profile_id)? {
+                    crate::services::profile_ops::read_login_password(app, profile_id)?
+                } else {
+                    None
+                }
+            }
+            PrivilegedCommandKind::Su => {
+                crate::services::profile_ops::read_su_password(app, profile_id)?
+            }
+        }
+    };
+    let Some(password) = password else {
+        return Err(AppError::Command(
+            match kind {
+                PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
+                PrivilegedCommandKind::Su => SU_PASSWORD_NEEDED,
+            }
+            .to_string(),
+        ));
+    };
+    validate_privileged_password(&password)?;
+
+    let save_password = if save_password {
+        Some((profile_id.to_string(), kind, password.clone()))
+    } else {
+        None
+    };
+    Ok(PreparedRemoteExec {
+        command: match kind {
+            PrivilegedCommandKind::Sudo => wrap_sudo_command(command),
+            PrivilegedCommandKind::Su => command.to_string(),
+        },
+        stdin: Some(format!("{password}\n")),
+        request_pty: matches!(kind, PrivilegedCommandKind::Su),
+        kind: Some(kind),
+        save_password,
+    })
+}
+
 fn validate_remote_exec_tab_id(raw_tab_id: &str) -> Result<String, AppError> {
     let tab_id = raw_tab_id.trim().to_string();
     if tab_id.is_empty()
@@ -635,10 +861,13 @@ fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> 
 #[cfg(test)]
 mod tests {
     use super::{
-        interactive_remote_exec_audit_error_event, parse_remote_exec_result,
+        detect_privileged_auth_failure, interactive_remote_exec_audit_error_event,
+        parse_remote_exec_result, privileged_command_kind, validate_privileged_password,
         validate_remote_exec_command, validate_remote_exec_cwd, validate_remote_exec_tab_id,
-        ActionApprovalDecision, ActionApprovalSource, InteractiveRemoteExecAuditEvent,
+        wrap_sudo_command, ActionApprovalDecision, ActionApprovalSource,
+        InteractiveRemoteExecAuditEvent, PrivilegedCommandKind,
         INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE, INTERACTIVE_REMOTE_EXEC_USER_CANCELLED,
+        SUDO_AUTH_FAILURE,
     };
     use crate::AppError;
     use serde_json::json;
@@ -711,6 +940,51 @@ mod tests {
             validate_remote_exec_cwd(Some(" /srv/app ".to_string())).unwrap(),
             Some("/srv/app".to_string())
         );
+    }
+
+    #[test]
+    fn privileged_detection_only_accepts_a_leading_shell_token() {
+        assert_eq!(
+            privileged_command_kind("  sudo -S id"),
+            Some(PrivilegedCommandKind::Sudo)
+        );
+        assert_eq!(
+            privileged_command_kind("su -c 'id'"),
+            Some(PrivilegedCommandKind::Su)
+        );
+        assert_eq!(privileged_command_kind("sudoers --check"), None);
+        assert_eq!(privileged_command_kind("echo sudo id"), None);
+    }
+
+    #[test]
+    fn sudo_wrapper_keeps_password_out_of_the_command_text() {
+        let command = wrap_sudo_command("  sudo -u root id");
+        assert_eq!(command, "sudo -S -p '' -u root id");
+        assert!(!command.contains("secret"));
+    }
+
+    #[test]
+    fn privileged_auth_failures_are_classified_without_returning_remote_output() {
+        assert!(detect_privileged_auth_failure(
+            "sudo: incorrect password",
+            PrivilegedCommandKind::Sudo
+        ));
+        assert!(detect_privileged_auth_failure(
+            "su: Authentication failure",
+            PrivilegedCommandKind::Su
+        ));
+        assert!(!detect_privileged_auth_failure(
+            "command completed",
+            PrivilegedCommandKind::Sudo
+        ));
+        assert_eq!(SUDO_AUTH_FAILURE, "SUDO_AUTH_FAILURE");
+    }
+
+    #[test]
+    fn privileged_password_validation_rejects_control_input() {
+        assert!(validate_privileged_password("secret").is_ok());
+        assert!(validate_privileged_password("").is_err());
+        assert!(validate_privileged_password("secret\n").is_err());
     }
 
     #[test]

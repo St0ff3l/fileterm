@@ -5304,6 +5304,8 @@ fn spawn_remote_command(
     command: String,
     cwd: Option<String>,
     timeout_ms: u64,
+    stdin: Option<String>,
+    request_pty: bool,
     respond_to: oneshot::Sender<Result<Value, String>>,
 ) {
     let handle = Arc::clone(handle);
@@ -5313,9 +5315,11 @@ fn spawn_remote_command(
         .unwrap_or(command);
     let timeout_duration = Duration::from_millis(timeout_ms);
     tokio::spawn(async move {
-        let result = match super::system_metrics::exec_command_with_status_timeout_detailed(
+        let result = match super::system_metrics::exec_command_with_stdin_status_timeout_detailed(
             &handle,
             &command,
+            stdin.as_deref().unwrap_or(""),
+            request_pty,
             timeout_duration,
         )
         .await
@@ -5323,10 +5327,10 @@ fn spawn_remote_command(
             Ok(result) => {
                 let input_kind =
                     detect_remote_exec_input_kind(&result.output).map(ToOwned::to_owned);
-                let input_required = input_kind.is_some();
-                // This is only a redacted routing hint. The normal exec
-                // channel never accepts stdin, so an Agent must switch to
-                // FileTerm's secure interactive tool when this is true.
+                let input_required = stdin.is_none() && input_kind.is_some();
+                // This is only a redacted routing hint. A privileged exec
+                // has already received its one-shot stdin and must not route
+                // the prompt to a second input surface.
                 Ok(serde_json::json!({
                     "output": result.output,
                     "exitCode": result.exit_code,
@@ -5874,10 +5878,20 @@ async fn handle_worker_cmd_without_sftp(
             command,
             cwd,
             timeout_ms,
+            stdin,
+            request_pty,
             respond_to,
         } => {
             if exec_channel_enabled {
-                spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+                spawn_remote_command(
+                    handle,
+                    command,
+                    cwd,
+                    timeout_ms,
+                    stdin,
+                    request_pty,
+                    respond_to,
+                );
             } else {
                 let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
             }
@@ -6150,10 +6164,20 @@ async fn handle_worker_cmd(
             command,
             cwd,
             timeout_ms,
+            stdin,
+            request_pty,
             respond_to,
         } => {
             if exec_channel_enabled {
-                spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
+                spawn_remote_command(
+                    handle,
+                    command,
+                    cwd,
+                    timeout_ms,
+                    stdin,
+                    request_pty,
+                    respond_to,
+                );
             } else {
                 let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
             }

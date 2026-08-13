@@ -25,6 +25,7 @@ import type {
   SessionMetricsUpdate,
   SshInteractionRequest,
   RemoteExecInteractionRequest,
+  RemoteExecCredentials,
   BackupPasswordRequest,
   SshKeyFileSelection,
   SshKeyImportResult,
@@ -593,7 +594,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         args,
         options: options ?? null
       }),
-    executeRemoteCommand: (tabId: string, command: string, cwd?: string, timeoutMs?: number) =>
+    executeRemoteCommand: (
+      tabId: string,
+      command: string,
+      cwd?: string,
+      timeoutMs?: number,
+      credentials?: RemoteExecCredentials
+    ) =>
       invoke<{
         output: string
         exitCode: number | null
@@ -605,7 +612,11 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         tabId,
         command,
         cwd: cwd ?? null,
-        timeoutMs: timeoutMs ?? null
+        timeoutMs: timeoutMs ?? null,
+        sudoPassword: credentials?.sudoPassword ?? null,
+        suPassword: credentials?.suPassword ?? null,
+        saveSudoPassword: credentials?.saveSudoPassword ?? null,
+        saveSuPassword: credentials?.saveSuPassword ?? null
       }),
     executeInteractiveRemoteCommand: (
       tabId: string,

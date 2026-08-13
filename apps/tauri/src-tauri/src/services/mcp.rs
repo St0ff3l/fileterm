@@ -1183,12 +1183,20 @@ async fn execute_remote_command(app: &AppHandle, params: &Value) -> Result<Value
     let command = required_text(params, "command", 64 * 1024)?;
     let cwd = optional_string(params, "cwd", 4_096)?;
     let timeout_ms = optional_u64(params, "timeout_ms")?;
+    let sudo_password = optional_secret_string(params, "sudo_password", 4 * 1024)?;
+    let su_password = optional_secret_string(params, "su_password", 4 * 1024)?;
+    let save_sudo_password = optional_bool(params, "save_sudo_password")?.unwrap_or(false);
+    let save_su_password = optional_bool(params, "save_su_password")?.unwrap_or(false);
     crate::commands::app_execute_remote_command(
         app.clone(),
         tab_id.clone(),
         command,
         cwd,
         timeout_ms,
+        sudo_password,
+        su_password,
+        Some(save_sudo_password),
+        Some(save_su_password),
     )
     .await
     .map(|result| json!({ "tabId": tab_id, "result": result }))
@@ -1688,6 +1696,29 @@ fn optional_string(params: &Value, key: &str, maximum: usize) -> Result<Option<S
     Ok(Some(value.to_string()))
 }
 
+/// Parse a one-shot secret without trimming it. Passwords may legitimately
+/// contain leading/trailing spaces; control characters are rejected later by
+/// the execution service before the value reaches SSH stdin.
+fn optional_secret_string(
+    params: &Value,
+    key: &str,
+    maximum: usize,
+) -> Result<Option<String>, String> {
+    let Some(value) = params.get(key) else {
+        return Ok(None);
+    };
+    let value = value
+        .as_str()
+        .ok_or_else(|| format!("{key} must be a string"))?;
+    if value.is_empty() {
+        return Err(format!("{key} must not be empty"));
+    }
+    if value.len() > maximum {
+        return Err(format!("{key} exceeds the FileTerm MCP limit"));
+    }
+    Ok(Some(value.to_string()))
+}
+
 fn required_text(params: &Value, key: &str, maximum: usize) -> Result<String, String> {
     let value = params
         .get(key)
@@ -1943,7 +1974,16 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
         "exec" | "execute" => cli_action(
             "execute_remote_command",
             options,
-            &["tab-id", "command", "cwd", "timeout-ms"],
+            &[
+                "tab-id",
+                "command",
+                "cwd",
+                "timeout-ms",
+                "sudo-password",
+                "su-password",
+                "save-sudo-password",
+                "save-su-password",
+            ],
             &["tab-id", "command"],
         ),
         "interactive-exec" => cli_action(
@@ -2168,6 +2208,7 @@ fn cli_values_to_params(values: &HashMap<String, String>) -> Result<Value, Strin
                     .collect(),
             ),
             "recursive" => Value::Bool(parse_cli_bool("recursive", value)?),
+            "save-sudo-password" | "save-su-password" => Value::Bool(parse_cli_bool(key, value)?),
             "limit" | "offset" | "timeout-ms" => json!(parse_cli_usize(key, value)?),
             _ => Value::String(value.clone()),
         };
@@ -2243,7 +2284,7 @@ fn print_cli_command_help(command: &str) {
             "Usage: fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n       fileterm ls --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]"
         ),
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
-        "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]"),
+        "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD --save-sudo-password true] [--su-password PASSWORD --save-su-password true]"),
         "execute_interactive_remote_command" => println!("Usage: fileterm interactive-exec --tab-id TAB_ID --expected-session-revision REVISION --command COMMAND [--cwd PATH] [--timeout-ms N]"),
         "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
         "write_remote_file" => println!("Usage: fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT [--encoding utf-8]"),
@@ -2285,7 +2326,7 @@ fn initialize_result(_params: &Value) -> Result<Value, String> {
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command only for commands that are known to be non-interactive. When the requested command can require a password, MFA code, Y/N confirmation, or any stdin response (for example sudo, su, passwd, ssh authentication, installers, or a known interactive program), use fileterm_execute_interactive_remote_command directly after refreshing session context. Do not first tell the user to type in FileTerm's visible terminal: that terminal is a different channel and cannot answer this task. FileTerm will show its own task-local secure prompt to the user and send the answer only to the waiting command; the answer is never returned to you. If a normal exec unexpectedly reports that input is needed and the user already authorized the requested operation, immediately start a new secure interactive task so FileTerm—not the agent chat and not the visible terminal—asks the user for the required input. Only ask before retrying when the original command may already have caused an unknown side effect. Never ask for a secret in agent chat, never ask the user to put it in the visible terminal, and never attempt to pass stdin, passwords, OTPs, or answers through tool arguments. 中文规则：遇到需要输入的远程命令，必须让 FileTerm 弹出安全输入框；由 FileTerm 向用户索取输入，不要让用户在终端或聊天里输入密码、验证码或确认值。"
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded commands; saved sudo/su credentials are consumed through SSH stdin without entering command text. The optional privileged password fields are reserved for an already-authorized local caller and must never be populated from model conversation. Never ask for, repeat, log, or persist a secret from agent chat. For MFA, Y/N confirmation, installers, passwd, ssh authentication, or another generic interactive program, use fileterm_execute_interactive_remote_command directly after refreshing session context. Do not tell the user to type in FileTerm's visible terminal: that terminal is a different channel. FileTerm—not the agent chat and not the visible terminal—will show its own task-local secure prompt and send the answer only to the waiting command; the answer is never returned to you. 中文规则：遇到需要输入的远程命令，必须让 FileTerm 弹出安全输入框；由 FileTerm 向用户索取输入，不要让用户在终端或聊天里输入密码、验证码或确认值。"
     }))
 }
 
@@ -2328,7 +2369,16 @@ fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> 
         | "fileterm_disconnect_session"
         | "fileterm_close_session" => &["tab_id"],
         "fileterm_open_connection" => &["profile_id"],
-        "fileterm_execute_remote_command" => &["tab_id", "command", "cwd", "timeout_ms"],
+        "fileterm_execute_remote_command" => &[
+            "tab_id",
+            "command",
+            "cwd",
+            "timeout_ms",
+            "sudo_password",
+            "su_password",
+            "save_sudo_password",
+            "save_su_password",
+        ],
         "fileterm_execute_interactive_remote_command" => &[
             "tab_id",
             "expected_session_revision",
@@ -2489,11 +2539,15 @@ fn tool_definitions() -> Vec<Value> {
         tool_definition("fileterm_reconnect_session", "Reconnect a FileTerm session", "Reconnect an existing session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, false, true),
         tool_definition("fileterm_disconnect_session", "Disconnect a FileTerm session", "Disconnect an open session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_close_session", "Close a FileTerm session", "Close a workspace tab after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, true, true, false),
-        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded non-interactive command on an open SSH session through a dedicated exec channel. The interactive terminal is not hijacked. Do not use this tool for commands likely to prompt for a password, MFA code, confirmation, or other stdin input; use fileterm_execute_interactive_remote_command instead. If the result has inputRequired=true, inputKind is only a redacted routing hint (secret or text), not a command success signal or a place to provide the answer. Do not tell the user to type in the visible terminal or agent chat. If the requested operation is already authorized, start a new secure interactive task so FileTerm can collect the input; ask before retrying only when the first command may have caused an unknown side effect.", json!({
+        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel; the visible terminal is not hijacked. Ordinary commands remain non-interactive. A command whose first token is sudo or su may use a saved profile credential through SSH stdin without exposing it to the command text. Optional sudo_password/su_password values are one-shot inputs for a trusted caller only: never ask for, repeat, log, persist, or place them in agent chat; save_* is honored only together with an explicitly supplied value. If no safe credential is available, FileTerm returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED. If a normal command reports inputRequired=true, inputKind is only a redacted routing hint; use fileterm_execute_interactive_remote_command for MFA, confirmation, or other generic interactive programs.", json!({
             "tab_id": { "type": "string" },
             "command": { "type": "string" },
             "cwd": { "type": "string" },
-            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 120000 }
+            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 120000 },
+            "sudo_password": { "type": "string", "description": "One-shot trusted-caller input only. Never ask the user for this in agent chat or repeat it." },
+            "su_password": { "type": "string", "description": "One-shot trusted-caller input only. Never ask the user for this in agent chat or repeat it." },
+            "save_sudo_password": { "type": "boolean", "description": "Persist the explicitly supplied sudo_password in the encrypted profile store after a non-authentication-failure run." },
+            "save_su_password": { "type": "boolean", "description": "Persist the explicitly supplied su_password in the encrypted profile store after a non-authentication-failure run." }
         }), &["tab_id", "command"], false, false, false, true),
         tool_definition("fileterm_execute_interactive_remote_command", "Execute an interactive remote command", "Run a command on an existing SSH transport using an isolated temporary PTY. Use this tool directly for commands expected to request a password, MFA code, confirmation, or other stdin response. FileTerm prompts the user in a task-local dialog and sends the answer to this exact command; never tell the user to type into the visible terminal or agent chat. The answer is not returned to the agent. 中文：密码、MFA、确认输入均由 FileTerm 安全弹窗采集，Agent 只等待最终结果。", json!({
             "tab_id": { "type": "string" },

@@ -50,6 +50,8 @@ export function ConnectionFormHost({
       mode={mode}
       form={form}
       hasSavedPassword={editingProfile?.hasSavedPassword === true}
+      hasSavedSudoPassword={editingProfile?.hasSavedSudoPassword === true}
+      hasSavedSuPassword={editingProfile?.hasSavedSuPassword === true}
       profiles={profiles}
       setForm={setForm}
       onClearHostFingerprint={clearHostFingerprint}

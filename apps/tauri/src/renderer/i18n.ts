@@ -428,6 +428,11 @@ const zhCN = {
   passwordAuthHint:
     '为保护凭据，已保存密码不会在编辑页回显。留空保存会保留原密码；输入新密码才会覆盖。若没有已保存密码，连接时会提示补充。',
   passwordSavedHint: '本机已保存密码。为保护凭据不会回显；留空保存会保留原密码，输入新密码才会覆盖。',
+  sudoPassword: 'sudo 密码',
+  suPassword: 'su 密码',
+  sudoSameAsLogin: 'sudo 密码与 SSH 登录密码相同',
+  privilegedPasswordHint: '密码只会加密保存在本机 profile 中，执行时通过独立 SSH 通道发送；留空会保留已保存值。',
+  privilegedPasswordSavedHint: '本机已保存该提权密码，不会在编辑页回显；留空保存会保留原值。',
   useEmptyPassword: '使用空密码认证',
   useEmptyPasswordHint: '仅适用于明确允许空密码的可信测试服务器。启用后不会发送或保留已保存密码。',
   emptyPasswordAuthEnabledHint: '已启用空密码认证：连接时会明确发送空密码，且不会保留此连接之前保存的密码。',
@@ -1494,6 +1499,13 @@ const enUS: typeof zhCN = {
     'Saved passwords are never shown again in this form. Saving with this field empty keeps the existing password; enter a new value only to replace it. If no password is saved, FileTerm will ask for one when connecting.',
   passwordSavedHint:
     'A password is saved on this computer. It is never shown again in this form; saving with this field empty keeps it, while entering a new value replaces it.',
+  sudoPassword: 'sudo password',
+  suPassword: 'su password',
+  sudoSameAsLogin: 'Use the SSH login password for sudo',
+  privilegedPasswordHint:
+    'This password is encrypted in the local profile and sent through a dedicated SSH channel at execution time; leaving it empty keeps the saved value.',
+  privilegedPasswordSavedHint:
+    'This privileged password is saved on this computer and is never shown again; leaving it empty keeps it.',
   useEmptyPassword: 'Use empty password authentication',
   useEmptyPasswordHint:
     'Only use this with trusted test servers that explicitly allow empty passwords. Enabling it sends and retains no saved password.',

@@ -20,6 +20,8 @@ pub enum WorkerCmd {
         command: String,
         cwd: Option<String>,
         timeout_ms: u64,
+        stdin: Option<String>,
+        request_pty: bool,
         respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
     },
     /// Execute through a temporary, isolated PTY on the existing SSH

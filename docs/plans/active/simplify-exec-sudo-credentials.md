@@ -43,6 +43,8 @@
 | Renderer        | 删除 `RemoteExecInteractionModal` + `useRemoteExecInteractions`；新增 `SudoPasswordPromptModal` + `useSudoPasswordPrompt`；连接编辑表单加 sudo/su 密码字段 + “sudo 密码与登录密码相同”复选框                   |
 | 测试            | 删除交互式 exec 全套测试；新增 sudo/su 包装、三层优先级、错误路径、加密往返、转义、弹窗三按钮测试                                                                                                              |
 
+> 以上旧表中的“删除 interactive-exec / 将密码交给 Agent / 命令文本包装”均由第 0 节的实施修正覆盖。当前交付范围是：公开 profile 脱敏、加密 sudo/su secret、普通 exec 的 stdin/PTY 分支、MCP/CLI 参数契约；通用交互式 exec 暂不删除。
+
 不在本计划范围：
 
 - 不动 `ftsec:v1:` 加密层本身（复用 [secret-storage-encryption.md](./secret-storage-encryption.md) 已有能力）。
@@ -64,7 +66,7 @@ Rust 检测 sudo 前缀
   ↓
 从 profile 加密存储取 sudo 密码
   ↓
-包装为 echo '<pw>' | sudo -S apt update
+包装为 `sudo -S -p '' apt update`，密码通过 SSH exec channel stdin 发送
   ↓
 exec channel 跑完
   ↓
@@ -127,45 +129,19 @@ Rust 立即返回 SUDO_AUTH_FAILURE（不重试，不耗尽 sudo 3 次重试）
 ### 4.1 优先级
 
 ```rust
-async fn resolve_sudo_password(
-    session: &SshSession,
-    command: &str,
-    sudo_password_param: Option<&str>,
-    save_sudo_password: bool,
-    state: &AppState,
+fn resolve_sudo_password(
+    profile_id: &str,
+    explicit_password: Option<&str>,
+    saved_password: Option<String>,
+    login_password_if_enabled: Option<String>,
 ) -> Result<String, AppError> {
-    // 优先级 1: Agent 参数（用户在聊天里给的）
-    if let Some(pw) = sudo_password_param {
-        if save_sudo_password {
-            session.save_sudo_password(&pw).await?;
-        }
-        return Ok(pw.to_string());
-    }
-
-    // 优先级 2: profile 加密存储（用户在连接管理器预存的）
-    if let Some(pw) = session.get_sudo_password_from_storage().await? {
-        return Ok(pw);
-    }
-
-    // 优先级 3: 主窗口可见 → 弹窗收集
-    if state.has_sudo_prompt_renderer().await {
-        return request_sudo_password_dialog(session.target(), command).await
-            .and_then(|collected| match collected {
-                SudoPasswordCollection::Cancelled => Err(AppError::SudoPasswordCancelled),
-                SudoPasswordCollection::OnceOnly(pw) => Ok(pw),
-                SudoPasswordCollection::SaveAndRun(pw) => {
-                    session.save_sudo_password(&pw).await?;
-                    Ok(pw)
-                }
-            });
-    }
-
-    // 优先级 4: 都不可用 → 返回 SUDO_PASSWORD_NEEDED
-    Err(AppError::SudoPasswordNeeded {
-        command: command.to_string(),
-        target: session.target().to_string(),
-        hint: "请在聊天里提供 sudo 密码，或在 FileTerm 连接管理器预存".to_string(),
-    })
+    // 一次性参数只接受调用方已经明确提供的值；FileTerm 不引导 Agent
+    // 在聊天里索取它，也不把它写入日志或上下文。
+    explicit_password
+        .map(str::to_owned)
+        .or(saved_password)
+        .or(login_password_if_enabled)
+        .ok_or_else(|| AppError::Command("SUDO_PASSWORD_NEEDED".to_string()))
 }
 ```
 
@@ -307,6 +283,8 @@ scope 字符串：
 
 以下删除项只有在通用交互式程序（MFA、验证码、REPL 等）已有等价安全入口，并完成跨平台回归后才允许执行；第一阶段保留它们。
 
+当前阶段不执行下列删除，也不把它们计入 sudo/su 能力的完成条件；它们是独立的后续迁移议题。
+
 - `apps/tauri/src-tauri/src/sessions/ssh.rs`：`run_interaction_capable_command` 函数（~800 行）。
 - `apps/tauri/src-tauri/src/services/interactive_exec_audit.rs`：整个文件（~300 行）。
 - `apps/tauri/src-tauri/src/services/mcp.rs`：`fileterm_execute_interactive_remote_command` 工具注册与 handler（~250 行）。
@@ -328,7 +306,7 @@ scope 字符串：
 
 ## 8. 实施步骤
 
-按 7 个 commit 推进，每个 commit 必须通过 typecheck + lint + clippy + test + prettier。
+按“secret schema → exec stdin → MCP/CLI 契约 → renderer UX”四个阶段推进；每个阶段必须通过 typecheck + lint + clippy + test + prettier。interactive-exec 的后续收敛另行验收。
 
 ### Commit 1: `feat(core): profile 加 sudo/su 密码字段`
 
@@ -353,13 +331,7 @@ scope 字符串：
 
 - MCP 工具签名加可选参数 `sudo_password` / `su_password` / `save_sudo_password` / `save_su_password`
 - CLI `exec` 加 `--sudo-password` / `--su-password` / `--save-sudo-password` / `--save-su-password` flag
-- tool description 引导文案：
-  - 收到 `SUDO_PASSWORD_NEEDED` 时引导 Agent 在聊天里问用户
-  - 询问用户"要不要存起来下次自动用"
-  - 用户同意 → 重试时带 `save_sudo_password=true`
-  - 密码错误（`SUDO_AUTH_FAILURE`）不要重试，问用户要新密码
-  - 不要让用户去 FileTerm 可见终端手动跑 sudo
-  - 不要在回复里复述密码
+- tool description 明确：`SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED` 只提示用户通过连接管理器配置凭据；不在 Agent 聊天里索取、转发或复述密码；`SUDO_AUTH_FAILURE` / `SU_AUTH_FAILURE` 不自动重试。
 - 测试：MCP 参数解析、CLI flag 解析、错误码传递
 
 ### Commit 5: `feat(renderer): sudo 密码弹窗 + hook + bridge`
@@ -456,30 +428,29 @@ scope 字符串：
 
 ## 11. 待完成
 
-1. 按 7 个 commit 推进实施，每个 commit 通过 typecheck + lint + clippy + test + prettier。
+1. 按四个阶段推进实施，每阶段通过 typecheck + lint + clippy + test + prettier。
 2. macOS arm64 release 构建通过。
 3. Windows / Linux 打包环境验证 sudo/su 包装、加密读写、三层优先级在真实打包应用里跑得通。
 4. 真实 Claude Code / Codex CLI 端到端验证三层兜底全跑通。
-5. 更新 `docs/architecture.md` 移除交互式 exec 相关章节，新增 sudo/su 自动包装章节。
-6. 将 `docs/plans/active/mcp-cli-interactive-exec.md` 移至 `docs/plans/completed/` 或标记 superseded。
+5. 更新 `docs/architecture.md`，补充 sudo/su stdin 执行边界；不移除通用 interactive exec 章节。
+6. 另立兼容迁移任务，评估是否将 `docs/plans/active/mcp-cli-interactive-exec.md` 标记 superseded。
 7. 全部验收通过后，将本计划移至 `docs/plans/completed/`。
 
 ## 12. 风险与缓解
 
-| 风险                                       | 缓解                                                                    |
-| ------------------------------------------ | ----------------------------------------------------------------------- |
-| 密码进 LLM 服务商日志（场景 3.3）          | 用户可选择预存或弹窗避免；文档明确告知风险                              |
-| `echo 'pw' \| sudo -S` 进远端 history      | 文档提示 `HISTCONTROL=ignorespace`；可选改进用 here-string（要求 bash） |
-| 密码出现在远端 `ps aux`                    | 多数服务器单用户，风险低；可选用 stdin pipe 不带 echo（未来改进）       |
-| 密码错误 sudo 卡 3 次重试                  | 检测 `Sorry, try again` 立即返回 `SudoAuthFailure`                      |
-| Agent 重复跑 sudo 浪费                     | tool description 明确"密码错误不要重试"                                 |
-| Agent 把聊天密码回显                       | tool description 明确"不要在回复里复述密码"                             |
-| 弹窗主窗口不可见 fail-closed               | 三层兜底里第三层自动降级到聊天问                                        |
-| 旧 profile 兼容                            | 读取时无字段按 None，不强制迁移                                         |
-| `sudoSameAsLogin` 但连接用私钥无密码       | 运行时报错引导单独配 sudo 密码                                          |
-| `save_sudo_password=true` 但密码错误       | 不存，直接返回 `SudoAuthFailure`                                        |
-| 复杂命令包装（`bash -c "sudo xxx"`）不识别 | 按普通命令走 exec，sudo 因非 TTY 拒绝，Agent 收到错误后自行处理         |
-| 用户在 Agent 聊天里输密码后又被 Agent 复述 | tool description 明确禁止复述；密码错误时也只说"密码错误"不回显         |
+| 风险                                       | 缓解                                                            |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| 密码进 LLM 服务商日志（未配置凭据）        | FileTerm 返回 `*_PASSWORD_NEEDED`，不要求 Agent 在聊天索取密码  |
+| 密码进入远端 history / `ps aux`            | 命令文本不包含密码；通过 SSH exec channel stdin 发送            |
+| 密码错误 sudo 卡 3 次重试                  | 检测 `Sorry, try again` 立即返回 `SudoAuthFailure`              |
+| Agent 重复跑 sudo 浪费                     | tool description 明确"密码错误不要重试"                         |
+| Agent 把聊天密码回显                       | tool description 明确"不要在回复里复述密码"                     |
+| 弹窗主窗口不可见 fail-closed               | 三层兜底里第三层自动降级到聊天问                                |
+| 旧 profile 兼容                            | 读取时无字段按 None，不强制迁移                                 |
+| `sudoSameAsLogin` 但连接用私钥无密码       | 运行时报错引导单独配 sudo 密码                                  |
+| `save_sudo_password=true` 但密码错误       | 不存，直接返回 `SudoAuthFailure`                                |
+| 复杂命令包装（`bash -c "sudo xxx"`）不识别 | 按普通命令走 exec，sudo 因非 TTY 拒绝，Agent 收到错误后自行处理 |
+| 用户在 Agent 聊天里输密码后又被 Agent 复述 | tool description 明确禁止复述；密码错误时也只说"密码错误"不回显 |
 
 ## 13. 不做的事
 
@@ -490,33 +461,32 @@ scope 字符串：
 - 不动本机凭据加密的其他 4 个文件
 - 不做输出 redaction（用户自负其责）
 - 不做跨平台系统通知（X1 思路不在本计划）
-- 不做 here-string 改进（未来可选）
-- 不做 stdin pipe 改进（未来可选）
+- 不使用 here-string 或命令文本注入；stdin 是当前实现的必要安全边界
 - 不识别复杂命令包装（`bash -c "sudo xxx"` 等）
 
 ## 14. 与同行做法对比
 
-| 同行                       | 加密算法            | 密钥来源             | 存储位置                             | 喂法                              | 本计划对比                                                          |
-| -------------------------- | ------------------- | -------------------- | ------------------------------------ | --------------------------------- | ------------------------------------------------------------------- |
-| mcp-sudo                   | Fernet              | machine-id           | `~/.config/.../credential.enc` (600) | PTY + sudo -S + stdin 灌          | 本计划加密更严（AES-256-GCM + scope AAD），喂法相同                 |
-| @htmitech/mcp-ssh-executor | AES-256-GCM         | 用户 masterKey (env) | `servers.json` 配置文件              | PTY + 提示检测 + 写 stdin         | 本计划加密密钥来源更便利（设备标识自动派生），喂法用 sudo -S 更简单 |
-| mcp-interactive-bash       | 加密 secret storage | 配置文件             | `config.yaml`                        | PTY + 规则匹配                    | 本计划更简单（不维护规则匹配，直接前缀检测）                        |
-| mcp-ssh-session            | 无加密              | -                    | MCP 参数（明文进 Agent 上下文）      | 直接 sudo_password 参数           | 本计划三层兜底，密码不必然进 Agent 上下文                           |
-| FileTerm 当前（旧架构）    | AES-256-GCM         | 设备标识 + seed      | `profile-secrets.json` (ftsec:v1:)   | 隔离 PTY + 弹窗代收 + 脱敏 + 审计 | 本计划砍掉隔离 PTY，保留加密，新增三层兜底                          |
+| 同行                       | 加密算法            | 密钥来源             | 存储位置                             | 喂法                       | 本计划对比                                                          |
+| -------------------------- | ------------------- | -------------------- | ------------------------------------ | -------------------------- | ------------------------------------------------------------------- |
+| mcp-sudo                   | Fernet              | machine-id           | `~/.config/.../credential.enc` (600) | PTY + sudo -S + stdin 灌   | 本计划加密更严（AES-256-GCM + scope AAD），喂法相同                 |
+| @htmitech/mcp-ssh-executor | AES-256-GCM         | 用户 masterKey (env) | `servers.json` 配置文件              | PTY + 提示检测 + 写 stdin  | 本计划加密密钥来源更便利（设备标识自动派生），喂法用 sudo -S 更简单 |
+| mcp-interactive-bash       | 加密 secret storage | 配置文件             | `config.yaml`                        | PTY + 规则匹配             | 本计划更简单（不维护规则匹配，直接前缀检测）                        |
+| mcp-ssh-session            | 无加密              | -                    | MCP 参数（明文进 Agent 上下文）      | 直接 sudo_password 参数    | 本计划三层兜底，密码不必然进 Agent 上下文                           |
+| FileTerm 当前（旧架构）    | AES-256-GCM         | 设备标识 + seed      | `profile-secrets.json` (ftsec:v1:)   | 普通 exec + 通用交互式 PTY | 本阶段保留交互式 PTY，新增 sudo/su 安全 stdin 分支                  |
 
 本计划落地后，FileTerm 在加密严格度上与 mcp-sudo / @htmitech 相当，在用户体验上（三层兜底 + 无人值守）超过所有同行，在代码复杂度上比当前架构简化 ~1110 行。
 
 ## 15. 拍板记录
 
-1. ✅ 三层密码源（Agent 参数 > profile 存储 > 弹窗 > 聊天问）
-2. ✅ 聊天问也帮忙存（`save_sudo_password` / `save_su_password` 参数）
+1. ✅ 凭据来源（用户已明确提供的一次性参数 > profile 存储 > 安全本地输入）
+2. ✅ 一次性参数可在明确保存标志下写入加密 profile；不从 Agent 聊天索取
 3. ✅ 新弹窗组件（含三按钮：取消 / 仅本次 / 保存并执行）
 4. ✅ 连接编辑表单加 sudo/su 密码字段 + “sudo 密码与登录密码相同”复选框
-5. ✅ 砍掉旧交互式 exec 全套（隔离 PTY / 旧弹窗 / 审计 / redaction）
+5. ⏳ 保留旧交互式 exec；是否收敛另立兼容迁移任务
 6. ✅ su 命令同样支持
 7. ✅ tool description 引导 Agent 行为
 8. ✅ 主窗口可见时弹窗收集（密码不进 LLM）
-9. ✅ 主窗口隐藏时聊天问（密码进 LLM 一次，引导配置后不再进）
-10. ✅ 不做输出 redaction（用户自负其责，仅应用日志做命令基本脱敏）
-11. ✅ 接受 `echo 'pw' \| sudo -S` 进远端 history（文档提示缓解）
-12. ✅ 密码错误立即返回，不重试
+9. ✅ 主窗口隐藏且未配置时 fail-closed 返回 `*_PASSWORD_NEEDED`
+10. ✅ interactive exec 继续保持既有的本地输入脱敏和审计
+11. ✅ 密码通过 SSH exec channel stdin 发送，不进入远端命令文本
+12. ✅ 密码错误立即返回，不自动重试
