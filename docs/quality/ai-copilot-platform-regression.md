@@ -42,6 +42,7 @@ fixture 只记录请求模式和长度，绝不记录 prompt 或 `Authorization`
 ### 已自动化的 CI 证据
 
 - `npm run qa:ai-copilot-fixture-smoke` 会启动随机 loopback 端口，真实发送 OpenAI-compatible 请求，验证“先普通回答、再切到命令卡模式并只输入‘重新来’”仍返回严格命令卡 JSON，同时验证一次 503 后的重试恢复。
+- PR CI 的 `tauri-socket-lifecycle` macOS、Windows、Linux 矩阵会额外运行 AI Copilot 的三类 Provider 解析/schema、历史回放、模式边界和自动护栏契约测试；这补足跨平台编译与纯逻辑回归，但仍不替代下面的真实 Provider、桌面 UI 或远端 SSH 验收。
 - PR CI 的 `tauri-package-smoke` 会在 macOS、Windows、Linux 生成无签名包，检查 `.app/.dmg`、NSIS installer、`.deb/.AppImage`，并直接运行 release binary 的 `mcp --help` 与 `interactive-exec --help`。这只证明打包产物和非 GUI CLI 路由可生成/启动，不代表签名、公证、真实桌面交互或真实 Claude/Codex 验收已完成。
 
 ### 真实 Claude/Codex 接入命令
