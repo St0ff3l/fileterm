@@ -101,6 +101,17 @@ async function runSmoke(binaryPath) {
     const remoteProperties = byName.get('fileterm_execute_remote_command').inputSchema?.properties ?? {}
     assert(remoteProperties.sudo_password, 'remote exec schema is missing sudo_password')
     assert(remoteProperties.su_password, 'remote exec schema is missing su_password')
+    assert(
+      remoteProperties.save_sudo_password?.type === 'boolean',
+      'remote exec schema has an invalid save_sudo_password type'
+    )
+    assert(
+      remoteProperties.save_su_password?.type === 'boolean',
+      'remote exec schema has an invalid save_su_password type'
+    )
+    for (const forbidden of ['stdin', 'password', 'answers']) {
+      assert(!Object.hasOwn(remoteProperties, forbidden), `remote exec exposes forbidden ${forbidden}`)
+    }
 
     const interactiveTool = byName.get('fileterm_execute_interactive_remote_command')
     const interactiveProperties = interactiveTool.inputSchema?.properties ?? {}
