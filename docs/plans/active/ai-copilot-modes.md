@@ -510,6 +510,7 @@ type AiErrorCode =
 **三端 CI 矩阵**：
 
 - macOS / Windows / Linux 都执行上述测试，并覆盖 `services::action_review::tests`、`services::profile_ops::tests`、`sessions::system_metrics::tests` 的安全 exec / PTY 契约。
+- 三端无签名 package smoke 还会启动打包后的 MCP binary，校验 stdio `initialize` / `tools/list` 以及三模式相关的远程执行 schema；这不替代 GUI 和真实 Provider 验收。
 
 ### 10.2 手工验证
 

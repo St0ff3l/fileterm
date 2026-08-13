@@ -239,6 +239,7 @@ jobs:
           test -n "$(find "$bundle_root/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm" mcp --help
           "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm" interactive-exec --help
+          node ./scripts/mcp-stdio-smoke.mjs "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm"
 
       - name: Verify Windows package
         if: matrix.platform == 'windows'
@@ -254,6 +255,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $binary)) { throw 'Release Windows CLI binary was not generated.' }
           & $binary mcp --help
           & $binary interactive-exec --help
+          node ./scripts/mcp-stdio-smoke.mjs $binary
 
       - name: Verify Linux package
         if: matrix.platform == 'linux'
@@ -270,6 +272,7 @@ jobs:
           test -x "$binary"
           "$binary" mcp --help
           "$binary" interactive-exec --help
+          node ./scripts/mcp-stdio-smoke.mjs "$binary"
 
   tauri-serial-virtual:
     name: Tauri virtual serial (ubuntu-latest)
