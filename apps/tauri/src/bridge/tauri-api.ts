@@ -688,6 +688,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
     resolveActionApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_action_approval', { requestId, approved }),
+    resolveAiTerminalHandoff: (requestId: string) => invoke<void>('app_resolve_ai_terminal_handoff', { requestId }),
     setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
       invoke<WorkspaceSnapshot>('app_set_remote_file_access_mode', { tabId, mode, options }),
     listSshTunnels: (tabId: string) => invoke<SshTunnelSnapshot[]>('app_list_ssh_tunnels', { tabId }),

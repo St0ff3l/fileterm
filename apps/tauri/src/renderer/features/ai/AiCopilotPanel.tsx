@@ -103,9 +103,11 @@ function AiCopilotToolActivity({
       ? t.aiCopilotToolExecuted
       : status === 'input-required'
         ? t.aiCopilotToolWaitingForInput
-        : status === 'rejected' || status === 'auto-blocked'
-          ? t.aiCopilotToolRejected
-          : t.aiCopilotToolFailed
+        : status === 'executed-in-terminal'
+          ? t.aiCopilotToolExecutedInTerminal
+          : status === 'rejected' || status === 'auto-blocked'
+            ? t.aiCopilotToolRejected
+            : t.aiCopilotToolFailed
     : approval
       ? t.aiCopilotToolApprovalPending
       : t.aiCopilotToolPending
@@ -122,7 +124,11 @@ function AiCopilotToolActivity({
         <AiCopilotCopyButton text={activity.proposal.command} />
       </div>
       {activity.proposal.explanation ? <p>{activity.proposal.explanation}</p> : null}
-      {result?.reason ? <p className="is-warning">{result.reason}</p> : null}
+      {result?.reason && status !== 'executed-in-terminal' ? (
+        <p className="is-warning">{result.reason}</p>
+      ) : status === 'executed-in-terminal' ? (
+        <p>{t.aiCopilotToolExecutedInTerminalDescription}</p>
+      ) : null}
       {result?.stdout ? (
         <div className="ai-copilot-tool-output-wrap">
           <pre ref={outputScrollRef} className="ai-copilot-tool-output">
@@ -295,6 +301,7 @@ export function AiCopilotPanel({
     setContextAttach,
     setDangerousCommandRestrictions,
     resolveToolApproval,
+    resolveToolApprovalAsTerminal,
     retry,
     stop
   } = useAiCopilot()
@@ -455,8 +462,8 @@ export function AiCopilotPanel({
         execute: true,
         onComplete: () => {
           const approvalRequestId = activity.proposal.approvalRequestId
-          const skipApproval = approvalRequestId ? resolveToolApproval(approvalRequestId, false) : Promise.resolve()
-          void skipApproval
+          const handoff = approvalRequestId ? resolveToolApprovalAsTerminal(approvalRequestId) : Promise.resolve()
+          void handoff
             .then(() => {
               showCommandActionMessage(t.aiCopilotTerminalInputWritten)
               resolve()

@@ -2067,6 +2067,7 @@ pub fn run() {
             crate::commands::app_execute_command_template,
             crate::commands::app_resolve_mcp_approval,
             crate::commands::app_resolve_action_approval,
+            crate::commands::app_resolve_ai_terminal_handoff,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
             crate::sessions::local_files::app_connect_local_network_share,

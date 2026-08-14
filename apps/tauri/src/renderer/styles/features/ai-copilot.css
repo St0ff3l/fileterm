@@ -1126,8 +1126,8 @@
 .ai-copilot-command-card {
   display: grid;
   min-width: 0;
-  gap: 7px;
-  padding: 9px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid var(--border-light);
   border-radius: 9px;
   background: color-mix(in srgb, var(--bg-elevated) 86%, var(--surface-inset));
@@ -1139,7 +1139,7 @@
   min-width: 0;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ai-copilot-command-card header > span:last-child {
@@ -1222,18 +1222,21 @@
 
 .ai-copilot-command-card footer button {
   display: inline-flex;
-  min-height: 26px;
+  min-height: 32px;
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: 4px;
-  padding: 0 7px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   color: var(--text-secondary);
   background: var(--surface-inset);
   font: inherit;
   font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .ai-copilot-command-card footer button:hover:not(:disabled) {
@@ -1411,6 +1414,10 @@
 }
 
 .ai-copilot-tool-approval-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
   justify-content: flex-end;
 }
 
@@ -1483,6 +1490,10 @@
     justify-content: center;
   }
 
+  .ai-copilot-command-card .ai-copilot-tool-approval-actions {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+
   .ai-copilot-review-card dl {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1499,6 +1510,10 @@
   }
 
   .ai-copilot-command-card footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-copilot-command-card .ai-copilot-tool-approval-actions {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -2183,6 +2198,16 @@
 .ai-copilot-composer-send:not(:disabled) {
   color: var(--button-primary-text);
   background: var(--button-primary-bg);
+}
+
+.ai-copilot-composer-send.is-stop:not(:disabled) {
+  color: var(--dialog-button-danger-text);
+  background: var(--dialog-button-danger-bg);
+}
+
+.ai-copilot-composer-send.is-stop:hover:not(:disabled) {
+  color: var(--dialog-button-danger-hover-text);
+  background: var(--dialog-button-danger-hover-bg);
 }
 
 .ai-copilot-composer-send .material-symbols-outlined {

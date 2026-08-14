@@ -81,12 +81,19 @@ pub enum ActionApprovalDecision {
     Rejected,
     Dismissed,
     TimedOut,
+    /// The user chose to run a Copilot proposal through the visible terminal.
+    /// This is intentionally distinct from `Approved`: the background exec
+    /// channel must not start a second copy of the command.
+    DelegatedToTerminal,
 }
 
 impl ActionApprovalDecision {
     pub fn rejection_message(self, source: ActionApprovalSource) -> &'static str {
         match (source, self) {
             (_, Self::Approved) => "",
+            (_, Self::DelegatedToTerminal) => {
+                "Copilot command was delegated to the visible terminal"
+            }
             (ActionApprovalSource::Mcp, Self::Rejected) => "MCP operation was rejected by the user",
             (ActionApprovalSource::Mcp, Self::Dismissed) => "MCP approval dialog was closed",
             (ActionApprovalSource::Mcp, Self::TimedOut) => {
@@ -105,8 +112,8 @@ impl ActionApprovalDecision {
 
 /// Queue a one-time visible approval. The caller decides how a denied or
 /// timed-out decision should be represented to its own user (MCP returns an
-/// error; Copilot persists a tool result), but neither caller can execute
-/// before this method returns `Approved`.
+/// error; Copilot persists a tool result). A Copilot call may also return
+/// `DelegatedToTerminal`, which explicitly skips the background exec path.
 pub async fn request_action_approval(
     app: &AppHandle,
     source: ActionApprovalSource,
@@ -159,8 +166,7 @@ pub async fn request_action_approval_with_id(
     }
 
     let decision = match timeout(ACTION_APPROVAL_TIMEOUT, receiver).await {
-        Ok(Ok(true)) => ActionApprovalDecision::Approved,
-        Ok(Ok(false)) => ActionApprovalDecision::Rejected,
+        Ok(Ok(decision)) => decision,
         Ok(Err(_)) => ActionApprovalDecision::Dismissed,
         Err(_) => ActionApprovalDecision::TimedOut,
     };
@@ -175,6 +181,7 @@ pub async fn request_action_approval_with_id(
         ActionApprovalDecision::Rejected => "denied",
         ActionApprovalDecision::Dismissed => "dismissed",
         ActionApprovalDecision::TimedOut => "timed-out",
+        ActionApprovalDecision::DelegatedToTerminal => "delegated-to-terminal",
     };
     crate::services::logging::info(
         app,
@@ -192,6 +199,26 @@ pub async fn resolve_action_approval(
     request_id: &str,
     approved: bool,
 ) -> Result<(), AppError> {
+    resolve_action_approval_decision(
+        app,
+        request_id,
+        if approved {
+            ActionApprovalDecision::Approved
+        } else {
+            ActionApprovalDecision::Rejected
+        },
+    )
+    .await
+}
+
+/// Resolve an in-app approval with a specific outcome. This is kept separate
+/// from the boolean approval API so the visible-terminal handoff cannot be
+/// persisted or reported as a user rejection.
+pub async fn resolve_action_approval_decision(
+    app: &AppHandle,
+    request_id: &str,
+    decision: ActionApprovalDecision,
+) -> Result<(), AppError> {
     let request_id = request_id.trim();
     if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
         return Err(AppError::Command(
@@ -204,9 +231,20 @@ pub async fn resolve_action_approval(
         pending.remove(request_id)
     };
     if let Some(sender) = sender {
-        let _ = sender.send(approved);
+        let _ = sender.send(decision);
     }
     Ok(())
+}
+
+/// Resolve a Copilot approval by handing the command to the already-visible
+/// terminal. The Copilot tool loop receives a distinct result and must not
+/// open its independent SSH exec channel afterwards.
+pub async fn resolve_action_approval_as_terminal(
+    app: &AppHandle,
+    request_id: &str,
+) -> Result<(), AppError> {
+    resolve_action_approval_decision(app, request_id, ActionApprovalDecision::DelegatedToTerminal)
+        .await
 }
 
 #[derive(Clone)]

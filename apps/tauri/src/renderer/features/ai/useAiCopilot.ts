@@ -799,6 +799,22 @@ export function useAiCopilot() {
     }
   }, [])
 
+  const resolveToolApprovalAsTerminal = useCallback(async (requestId: string) => {
+    const desktopApi = window.fileterm
+    const request = toolApprovalRequestsRef.current.find((item) => item.requestId === requestId)
+    if (!desktopApi || !request || resolvingToolApprovalIdsRef.current.has(requestId)) return
+
+    resolvingToolApprovalIdsRef.current.add(requestId)
+    setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+    try {
+      await desktopApi.resolveAiTerminalHandoff(requestId)
+    } catch (error) {
+      resolvingToolApprovalIdsRef.current.delete(requestId)
+      setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+    }
+  }, [])
+
   const renameConversation = useCallback(
     async (conversationId: string, title: string) => {
       const desktopApi = window.fileterm
@@ -896,6 +912,7 @@ export function useAiCopilot() {
     setContextAttach,
     setDangerousCommandRestrictions,
     resolveToolApproval,
+    resolveToolApprovalAsTerminal,
     retry,
     stop
   }

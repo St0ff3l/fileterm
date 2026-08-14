@@ -3964,6 +3964,14 @@ pub async fn app_resolve_action_approval(
     crate::services::action_review::resolve_action_approval(&app, &request_id, approved).await
 }
 
+#[tauri::command]
+pub async fn app_resolve_ai_terminal_handoff(
+    app: AppHandle,
+    request_id: String,
+) -> Result<(), AppError> {
+    crate::services::action_review::resolve_action_approval_as_terminal(&app, &request_id).await
+}
+
 // ==========================================
 // Phase 2 commands: profile / folder / command CRUD
 // ==========================================

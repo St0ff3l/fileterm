@@ -460,9 +460,17 @@ pub struct WorkspaceState {
     pub sudo_password_renderer_registration: Arc<RwLock<Option<String>>>,
     /// Pending one-time action approvals. MCP and Copilot share this
     /// queue; the renderer resolves each request through
-    /// `app_resolve_action_approval`. Dropping or timing out a request denies
-    /// it, so there is no durable approval state.
-    pub pending_action_approvals: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
+    /// `app_resolve_action_approval` or the Copilot terminal-handoff command.
+    /// Dropping or timing out a request denies it, so there is no durable
+    /// approval state.
+    pub pending_action_approvals: Arc<
+        RwLock<
+            HashMap<
+                String,
+                oneshot::Sender<crate::services::action_review::ActionApprovalDecision>,
+            >,
+        >,
+    >,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A

@@ -1254,6 +1254,7 @@ export type AiToolCallStatus =
   | 'rejected'
   | 'auto-blocked'
   | 'executed'
+  | 'executed-in-terminal'
   | 'failed'
   | 'timeout'
   | 'target-changed'
@@ -1641,6 +1642,8 @@ export interface FileTermDesktopApi {
   resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
+  /** Hand a pending Copilot command to the already-visible terminal. */
+  resolveAiTerminalHandoff(requestId: string): Promise<void>
   /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
