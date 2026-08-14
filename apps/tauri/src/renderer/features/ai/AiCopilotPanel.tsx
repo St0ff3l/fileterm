@@ -8,6 +8,7 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { t } from '../../i18n'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { AppIcon, type AppIconName } from '../common/AppIcon'
@@ -53,6 +54,8 @@ function copilotModeIconName(mode: AiCopilotMode): AppIconName {
       return 'flash'
   }
 }
+
+const COMMAND_FEEDBACK_DISMISS_MS = 4_000
 
 function AiCopilotToolActivity({
   activity,
@@ -194,6 +197,26 @@ export function AiCopilotPanel({
   const composerCompositionRef = useRef(false)
   const panelRef = useRef<HTMLElement>(null)
   const messageViewportRef = useRef<HTMLDivElement>(null)
+  const commandFeedbackTimerRef = useRef<number | null>(null)
+
+  const showCommandActionMessage = (message: string) => {
+    if (commandFeedbackTimerRef.current !== null) {
+      window.clearTimeout(commandFeedbackTimerRef.current)
+    }
+    setCommandActionMessage(message)
+    commandFeedbackTimerRef.current = window.setTimeout(() => {
+      setCommandActionMessage(null)
+      commandFeedbackTimerRef.current = null
+    }, COMMAND_FEEDBACK_DISMISS_MS)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (commandFeedbackTimerRef.current !== null) {
+        window.clearTimeout(commandFeedbackTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -315,7 +338,7 @@ export function AiCopilotPanel({
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
     if (shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
-        setCommandActionMessage(t.aiCopilotContextUnavailable)
+        showCommandActionMessage(t.aiCopilotContextUnavailable)
         return
       }
       setCommandActionMessage(null)
@@ -348,7 +371,7 @@ export function AiCopilotPanel({
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
     if (shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
-        setCommandActionMessage(t.aiCopilotContextUnavailable)
+        showCommandActionMessage(t.aiCopilotContextUnavailable)
         return
       }
       setCommandActionMessage(null)
@@ -405,17 +428,21 @@ export function AiCopilotPanel({
       !window.fileterm ||
       !activeTab ||
       activeTab.id !== targetTabId ||
+      activeTab.sessionType !== 'ssh' ||
       !isTerminalTarget ||
       /[\r\n]/.test(activity.proposal.command)
     ) {
-      setCommandActionMessage(t.aiCopilotCommandWriteUnavailable)
+      showCommandActionMessage(t.aiCopilotCommandWriteUnavailable)
       return
     }
     try {
-      await window.fileterm.writeTerminal(targetTabId, activity.proposal.command)
-      setCommandActionMessage(t.aiCopilotTerminalInputWritten)
+      dispatchAppEvent(APP_EVENT.aiInsertTerminalCommand, {
+        tabId: targetTabId,
+        command: activity.proposal.command
+      })
+      showCommandActionMessage(t.aiCopilotTerminalInputWritten)
     } catch {
-      setCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+      showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
     }
   }
 
@@ -742,6 +769,11 @@ export function AiCopilotPanel({
                   ) : null}
                 </section>
               </div>
+              {commandActionMessage ? (
+                <div className="ai-copilot-command-feedback" role="status" aria-live="polite">
+                  {commandActionMessage}
+                </div>
+              ) : null}
             </div>
 
             <div className="ai-copilot-message-scroll-region">
@@ -871,11 +903,6 @@ export function AiCopilotPanel({
                         : t.aiCopilotL0ComposerHint}
                   </span>
                 </div>
-                {commandActionMessage ? (
-                  <div className="ai-copilot-command-feedback" role="status">
-                    {commandActionMessage}
-                  </div>
-                ) : null}
               </section>
             ) : null}
             <div className={`ai-copilot-composer ${!canChat ? 'is-disabled' : ''}`}>

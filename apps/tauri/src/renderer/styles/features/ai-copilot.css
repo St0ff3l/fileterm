@@ -769,13 +769,14 @@
 }
 
 .ai-copilot-command-feedback {
+  display: flex;
   min-width: 0;
-  margin: 0 0 8px;
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--focus-outline) 28%, var(--border-light));
-  border-radius: 7px;
-  color: var(--text-secondary);
-  background: var(--accent-tint-weak);
+  align-items: center;
+  padding: 7px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--focus-outline) 28%, var(--border-light));
+  border-bottom: 1px solid color-mix(in srgb, var(--focus-outline) 28%, var(--border-light));
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--accent-tint-weak) 72%, var(--bg-card));
   font-size: 10px;
   line-height: 1.4;
   overflow-wrap: anywhere;
