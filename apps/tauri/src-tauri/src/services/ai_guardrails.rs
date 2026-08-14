@@ -1,7 +1,7 @@
-//! Guardrails for the fully-automatic Copilot execution path.
+//! Guardrails for Copilot command execution in collaboration and autopilot modes.
 //!
 //! This module answers only whether a locally validated command is eligible
-//! for automatic execution. No function here starts a remote process or
+//! for execution. No function here starts a remote process or
 //! receives a secret.
 
 use super::ai::AiCommandRisk;

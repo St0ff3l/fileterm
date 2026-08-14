@@ -285,6 +285,7 @@ export function SettingsModal({
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
   const [syncSubTab, setSyncSubTab] = useState<'webdav' | 's3'>('webdav')
+  const [agentSubTab, setAgentSubTab] = useState<'mcp' | 'cli'>('mcp')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
@@ -1570,181 +1571,225 @@ export function SettingsModal({
                 <h3>{t.agentMcpSettings}</h3>
                 <p className="settings-tools-hint">{t.agentMcpDescription}</p>
 
-                <div className="agent-mcp-runtime-card">
-                  <span className="agent-mcp-runtime-icon">
-                    <AppIcon name="terminal-file" size={17} strokeWidth={2} />
-                  </span>
-                  <div>
-                    <strong>{t.agentMcpRuntimeTitle}</strong>
-                    <p>{t.agentMcpRuntimeDescription}</p>
-                  </div>
+                <div className="agent-mcp-subtabs" role="tablist" aria-label={t.agentMcpSubTabs}>
+                  <button
+                    id="agent-mcp-tab-mcp"
+                    aria-controls="agent-mcp-panel-mcp"
+                    aria-selected={agentSubTab === 'mcp'}
+                    className={`agent-mcp-subtab-button ${agentSubTab === 'mcp' ? 'active' : ''}`}
+                    role="tab"
+                    type="button"
+                    onClick={() => setAgentSubTab('mcp')}
+                  >
+                    {t.agentMcpTabMcp}
+                  </button>
+                  <button
+                    id="agent-mcp-tab-cli"
+                    aria-controls="agent-mcp-panel-cli"
+                    aria-selected={agentSubTab === 'cli'}
+                    className={`agent-mcp-subtab-button ${agentSubTab === 'cli' ? 'active' : ''}`}
+                    role="tab"
+                    type="button"
+                    onClick={() => setAgentSubTab('cli')}
+                  >
+                    {t.agentMcpTabCli}
+                  </button>
                 </div>
 
-                {mcpAgentSetup ? (
-                  <div className="agent-mcp-direct-cli-card">
-                    <div>
-                      <strong>{t.agentMcpDirectCliTitle}</strong>
-                      <p>{t.agentMcpDirectCliDescription}</p>
+                {agentSubTab === 'mcp' ? (
+                  <div
+                    id="agent-mcp-panel-mcp"
+                    className="agent-mcp-tabpanel"
+                    role="tabpanel"
+                    aria-labelledby="agent-mcp-tab-mcp"
+                  >
+                    <div className="agent-mcp-runtime-card">
+                      <span className="agent-mcp-runtime-icon">
+                        <AppIcon name="terminal-file" size={17} strokeWidth={2} />
+                      </span>
+                      <div>
+                        <strong>{t.agentMcpRuntimeTitle}</strong>
+                        <p>{t.agentMcpRuntimeDescription}</p>
+                      </div>
                     </div>
-                    <div className="agent-mcp-direct-cli-commands">
-                      {[
-                        {
-                          label: t.agentMcpDirectCliExec,
-                          command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'exec')
-                        },
-                        {
-                          label: t.agentMcpDirectCliAlias,
-                          command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'cli exec')
-                        }
-                      ].map((item) => (
-                        <div key={item.label} className="agent-mcp-direct-cli-command">
-                          <small>{item.label}</small>
+
+                    <div className="agent-mcp-form">
+                      <label>
+                        <span>{t.agentMcpConnectionScope}</span>
+                        <DropdownSelect
+                          className="agent-mcp-select"
+                          disabled={!desktopApi || mcpAgentOperation !== null}
+                          options={[
+                            { value: 'all-saved-connections', label: t.agentMcpScopeAll },
+                            { value: 'active-session', label: t.agentMcpScopeActive },
+                            {
+                              value: 'default-connection',
+                              label: t.agentMcpScopeDefault,
+                              disabled: !mcpAgentProfiles.length
+                            }
+                          ]}
+                          value={mcpAgentPreferences.connectionScope}
+                          onChange={(value) => {
+                            saveMcpAgentPreferences({
+                              connectionScope: value as McpAgentPreferences['connectionScope'],
+                              ...(value === 'default-connection' && !mcpAgentPreferences.defaultProfileId
+                                ? { defaultProfileId: mcpAgentProfiles[0]?.id }
+                                : {})
+                            })
+                          }}
+                        />
+                        <small>
+                          {mcpAgentPreferences.connectionScope === 'all-saved-connections'
+                            ? t.agentMcpScopeAllHint
+                            : mcpAgentPreferences.connectionScope === 'active-session'
+                              ? t.agentMcpScopeActiveHint
+                              : t.agentMcpScopeDefaultHint}
+                        </small>
+                      </label>
+
+                      {mcpAgentPreferences.connectionScope === 'default-connection' ? (
+                        <label>
+                          <span>{t.agentMcpDefaultConnection}</span>
+                          <DropdownSelect
+                            className="agent-mcp-select"
+                            disabled={!desktopApi || mcpAgentOperation !== null || !mcpAgentProfiles.length}
+                            options={mcpAgentProfiles.map((profile) => ({
+                              value: profile.id,
+                              label: `${profile.name || profile.host}:${profile.port}`
+                            }))}
+                            placeholder={t.agentMcpDefaultConnectionPlaceholder}
+                            value={mcpAgentPreferences.defaultProfileId ?? ''}
+                            onChange={(value) => saveMcpAgentPreferences({ defaultProfileId: value })}
+                          />
+                          {!mcpAgentProfiles.length ? <small>{t.agentMcpNoProfiles}</small> : null}
+                        </label>
+                      ) : null}
+
+                      <label>
+                        <span>{t.agentMcpOperationPolicy}</span>
+                        <DropdownSelect
+                          className="agent-mcp-select"
+                          disabled={!desktopApi || mcpAgentOperation !== null}
+                          options={[
+                            { value: 'read-only', label: t.agentMcpReadOnly },
+                            { value: 'approved-operations', label: t.agentMcpApprovedOperations }
+                          ]}
+                          value={mcpAgentPreferences.operationPolicy}
+                          onChange={(value) =>
+                            saveMcpAgentPreferences({
+                              operationPolicy: value as McpAgentPreferences['operationPolicy']
+                            })
+                          }
+                        />
+                        <small>
+                          {mcpAgentPreferences.operationPolicy === 'read-only'
+                            ? t.agentMcpReadOnlyHint
+                            : t.agentMcpApprovedOperationsHint}
+                        </small>
+                      </label>
+                    </div>
+
+                    <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
+                      <h4>{t.agentMcpClients}</h4>
+                      {mcpAgentSetup?.clients.map((client) => (
+                        <article key={client.id} className="agent-mcp-client-card">
+                          <div className="agent-mcp-client-heading">
+                            <div>
+                              <strong>{client.label}</strong>
+                              <small>
+                                {client.available ? t.agentMcpClientAvailable : t.agentMcpClientUnavailable}
+                              </small>
+                            </div>
+                            <span className={`agent-mcp-client-status ${client.available ? 'is-available' : ''}`}>
+                              {client.command}
+                            </span>
+                          </div>
                           <div className="agent-mcp-registration">
-                            <code>{item.command}</code>
+                            <code>{client.registrationCommand}</code>
                             <button
-                              aria-label={t.agentMcpDirectCliCopy}
+                              aria-label={t.agentMcpRegistration}
                               className="copy-icon-button agent-mcp-copy-button"
                               disabled={!desktopApi}
-                              title={t.agentMcpDirectCliCopy}
+                              title={t.agentMcpRegistration}
                               type="button"
-                              onClick={() => copyMcpAgentCommand(item.command, t.agentMcpDirectCliCopied)}
+                              onClick={() => copyMcpAgentRegistrationCommand(client.registrationCommand)}
                             >
                               <AppIcon name="copy" size={14} strokeWidth={2} />
                             </button>
                           </div>
-                        </div>
+                          <div className="agent-mcp-client-actions">
+                            <small className="agent-mcp-registration-hint">{t.agentMcpRegistrationDescription}</small>
+                            <button
+                              className="settings-secondary-button agent-mcp-launch-button"
+                              disabled={!client.available || !onLaunchLocalAgent}
+                              title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
+                              type="button"
+                              onClick={() => launchMcpAgentInLocalTerminal(client)}
+                            >
+                              <AppIcon name="terminal-file" size={14} strokeWidth={2} />
+                              {t.agentMcpLaunch}
+                            </button>
+                          </div>
+                        </article>
                       ))}
                     </div>
+
+                    <div className="agent-mcp-keep-open">
+                      <AppIcon name="server" size={15} />
+                      <div>
+                        <strong>{t.agentMcpKeepOpenTitle}</strong>
+                        <p>{t.agentMcpKeepOpenDescription}</p>
+                      </div>
+                    </div>
+                    {mcpAgentMessage ? <p className="agent-mcp-operation-message">{mcpAgentMessage}</p> : null}
                   </div>
-                ) : null}
-
-                <div className="agent-mcp-form">
-                  <label>
-                    <span>{t.agentMcpConnectionScope}</span>
-                    <DropdownSelect
-                      className="agent-mcp-select"
-                      disabled={!desktopApi || mcpAgentOperation !== null}
-                      options={[
-                        { value: 'all-saved-connections', label: t.agentMcpScopeAll },
-                        { value: 'active-session', label: t.agentMcpScopeActive },
-                        {
-                          value: 'default-connection',
-                          label: t.agentMcpScopeDefault,
-                          disabled: !mcpAgentProfiles.length
-                        }
-                      ]}
-                      value={mcpAgentPreferences.connectionScope}
-                      onChange={(value) => {
-                        saveMcpAgentPreferences({
-                          connectionScope: value as McpAgentPreferences['connectionScope'],
-                          ...(value === 'default-connection' && !mcpAgentPreferences.defaultProfileId
-                            ? { defaultProfileId: mcpAgentProfiles[0]?.id }
-                            : {})
-                        })
-                      }}
-                    />
-                    <small>
-                      {mcpAgentPreferences.connectionScope === 'all-saved-connections'
-                        ? t.agentMcpScopeAllHint
-                        : mcpAgentPreferences.connectionScope === 'active-session'
-                          ? t.agentMcpScopeActiveHint
-                          : t.agentMcpScopeDefaultHint}
-                    </small>
-                  </label>
-
-                  {mcpAgentPreferences.connectionScope === 'default-connection' ? (
-                    <label>
-                      <span>{t.agentMcpDefaultConnection}</span>
-                      <DropdownSelect
-                        className="agent-mcp-select"
-                        disabled={!desktopApi || mcpAgentOperation !== null || !mcpAgentProfiles.length}
-                        options={mcpAgentProfiles.map((profile) => ({
-                          value: profile.id,
-                          label: `${profile.name || profile.host}:${profile.port}`
-                        }))}
-                        placeholder={t.agentMcpDefaultConnectionPlaceholder}
-                        value={mcpAgentPreferences.defaultProfileId ?? ''}
-                        onChange={(value) => saveMcpAgentPreferences({ defaultProfileId: value })}
-                      />
-                      {!mcpAgentProfiles.length ? <small>{t.agentMcpNoProfiles}</small> : null}
-                    </label>
-                  ) : null}
-
-                  <label>
-                    <span>{t.agentMcpOperationPolicy}</span>
-                    <DropdownSelect
-                      className="agent-mcp-select"
-                      disabled={!desktopApi || mcpAgentOperation !== null}
-                      options={[
-                        { value: 'read-only', label: t.agentMcpReadOnly },
-                        { value: 'approved-operations', label: t.agentMcpApprovedOperations }
-                      ]}
-                      value={mcpAgentPreferences.operationPolicy}
-                      onChange={(value) =>
-                        saveMcpAgentPreferences({
-                          operationPolicy: value as McpAgentPreferences['operationPolicy']
-                        })
-                      }
-                    />
-                    <small>
-                      {mcpAgentPreferences.operationPolicy === 'read-only'
-                        ? t.agentMcpReadOnlyHint
-                        : t.agentMcpApprovedOperationsHint}
-                    </small>
-                  </label>
-                </div>
-
-                <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
-                  <h4>{t.agentMcpClients}</h4>
-                  {mcpAgentSetup?.clients.map((client) => (
-                    <article key={client.id} className="agent-mcp-client-card">
-                      <div className="agent-mcp-client-heading">
+                ) : (
+                  <div
+                    id="agent-mcp-panel-cli"
+                    className="agent-mcp-tabpanel"
+                    role="tabpanel"
+                    aria-labelledby="agent-mcp-tab-cli"
+                  >
+                    {mcpAgentSetup ? (
+                      <div className="agent-mcp-direct-cli-card">
                         <div>
-                          <strong>{client.label}</strong>
-                          <small>{client.available ? t.agentMcpClientAvailable : t.agentMcpClientUnavailable}</small>
+                          <strong>{t.agentMcpDirectCliTitle}</strong>
+                          <p>{t.agentMcpDirectCliDescription}</p>
                         </div>
-                        <span className={`agent-mcp-client-status ${client.available ? 'is-available' : ''}`}>
-                          {client.command}
-                        </span>
+                        <div className="agent-mcp-direct-cli-commands">
+                          {[
+                            {
+                              label: t.agentMcpDirectCliExec,
+                              command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'exec')
+                            },
+                            {
+                              label: t.agentMcpDirectCliAlias,
+                              command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'cli exec')
+                            }
+                          ].map((item) => (
+                            <div key={item.label} className="agent-mcp-direct-cli-command">
+                              <small>{item.label}</small>
+                              <div className="agent-mcp-registration">
+                                <code>{item.command}</code>
+                                <button
+                                  aria-label={t.agentMcpDirectCliCopy}
+                                  className="copy-icon-button agent-mcp-copy-button"
+                                  disabled={!desktopApi}
+                                  title={t.agentMcpDirectCliCopy}
+                                  type="button"
+                                  onClick={() => copyMcpAgentCommand(item.command, t.agentMcpDirectCliCopied)}
+                                >
+                                  <AppIcon name="copy" size={14} strokeWidth={2} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="agent-mcp-registration">
-                        <code>{client.registrationCommand}</code>
-                        <button
-                          aria-label={t.agentMcpRegistration}
-                          className="copy-icon-button agent-mcp-copy-button"
-                          disabled={!desktopApi}
-                          title={t.agentMcpRegistration}
-                          type="button"
-                          onClick={() => copyMcpAgentRegistrationCommand(client.registrationCommand)}
-                        >
-                          <AppIcon name="copy" size={14} strokeWidth={2} />
-                        </button>
-                      </div>
-                      <div className="agent-mcp-client-actions">
-                        <small className="agent-mcp-registration-hint">{t.agentMcpRegistrationDescription}</small>
-                        <button
-                          className="settings-secondary-button agent-mcp-launch-button"
-                          disabled={!client.available || !onLaunchLocalAgent}
-                          title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
-                          type="button"
-                          onClick={() => launchMcpAgentInLocalTerminal(client)}
-                        >
-                          <AppIcon name="terminal-file" size={14} strokeWidth={2} />
-                          {t.agentMcpLaunch}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-
-                <div className="agent-mcp-keep-open">
-                  <AppIcon name="server" size={15} />
-                  <div>
-                    <strong>{t.agentMcpKeepOpenTitle}</strong>
-                    <p>{t.agentMcpKeepOpenDescription}</p>
+                    ) : null}
+                    {mcpAgentMessage ? <p className="agent-mcp-operation-message">{mcpAgentMessage}</p> : null}
                   </div>
-                </div>
-                {mcpAgentMessage ? <p className="agent-mcp-operation-message">{mcpAgentMessage}</p> : null}
+                )}
               </section>
             </div>
           ) : null}

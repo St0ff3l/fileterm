@@ -89,10 +89,10 @@ const zhCN = {
   aiCopilotModeSemi: '协作',
   aiCopilotModeFull: '托管',
   aiCopilotModePureDescription: '只进行普通对话，不读取终端，也不执行命令。',
-  aiCopilotModeSemiDescription: '每次工具调用都先询问你，再决定是否执行。',
+  aiCopilotModeSemiDescription: '危险命令限制开启时会先拦截；其余工具调用逐次确认。',
   aiCopilotModeFullDescription: '自动执行通过检查的工具调用，可随时关闭危险命令限制。',
   aiCopilotModePureHint: '仅进行普通对话，不读取终端或执行远端命令。',
-  aiCopilotModeSemiHint: '需要终端上下文，每次工具调用都要经过审核。',
+  aiCopilotModeSemiHint: '需要终端上下文；命令先过危险限制，再逐次确认。',
   aiCopilotModeFullHint: '自动执行已通过检查的调用；可切换危险限制。',
   aiCopilotModeFullTitle: '启用托管模式？',
   aiCopilotModeFullWarning:
@@ -104,7 +104,7 @@ const zhCN = {
   aiCopilotDangerousCommandRestrictionsOn: '已开启',
   aiCopilotDangerousCommandRestrictionsOff: '已关闭',
   aiCopilotDangerousCommandRestrictionsDescription:
-    '拦截 rm -rf /、mkfs、reboot 等危险命令，并限制未确认的不可逆操作。',
+    '拦截 rm -rf /、mkfs、reboot 等危险命令，并限制不在白名单中的破坏性或提权命令；协作模式仍需逐次确认。',
   aiCopilotToolActivity: 'Copilot 工具调用进度',
   aiCopilotToolPending: '等待工具执行',
   aiCopilotToolWaitingForInput: '等待前台输入',
@@ -161,13 +161,16 @@ const zhCN = {
   aiSettings: 'AI',
   agentMcpSettings: 'Agent / MCP',
   agentMcpDescription:
-    '为 Claude Code、Codex CLI 等本机 Agent 配置 FileTerm MCP。不会导出连接凭据，也不会自动修改任何 Agent 配置文件。',
+    '配置 Agent 通过 MCP 或 FileTerm CLI 使用当前应用。不会导出连接凭据，也不会自动修改任何 Agent 配置文件。',
+  agentMcpSubTabs: 'Agent 接入方式',
+  agentMcpTabMcp: 'MCP',
+  agentMcpTabCli: 'CLI',
   agentMcpDesktopOnly: 'Agent / MCP 仅可在桌面应用中配置。',
   agentMcpRuntimeTitle: 'FileTerm MCP 本机桥接',
   agentMcpRuntimeDescription: 'Agent 通过本机回环连接已运行的 FileTerm；连接凭据和 SSH 会话始终留在应用内。',
   agentMcpDirectCliTitle: '直接调用 FileTerm CLI',
   agentMcpDirectCliDescription:
-    '不接入 MCP 时，可直接执行一条远程命令。将 TAB_ID 替换为已打开的 SSH 标签页 ID；命令使用独立 exec 通道，不写入可见终端。',
+    '无需接入 MCP 时，可直接执行远程命令。将 TAB_ID 替换为已打开的 SSH 标签页 ID；FileTerm 需要保持运行，命令使用独立 exec 通道，不写入可见终端。',
   agentMcpDirectCliExec: 'fileterm exec',
   agentMcpDirectCliAlias: 'fileterm cli exec（等价写法）',
   agentMcpDirectCliCopy: '复制 CLI 命令',
@@ -1182,11 +1185,11 @@ const enUS: typeof zhCN = {
   aiCopilotModeSemi: 'Collaborate',
   aiCopilotModeFull: 'Autopilot',
   aiCopilotModePureDescription: 'Chat only; terminal output is not read and commands are not executed.',
-  aiCopilotModeSemiDescription: 'Ask before every tool call, then choose whether to run it.',
+  aiCopilotModeSemiDescription: 'Dangerous commands are blocked when restricted; other tool calls still need approval.',
   aiCopilotModeFullDescription: 'Run checked tool calls automatically; dangerous-command restrictions are optional.',
   aiCopilotModePureHint:
     'Ordinary conversation only; terminal output is not read and remote commands are not executed.',
-  aiCopilotModeSemiHint: 'Terminal context is required; every tool call is reviewed.',
+  aiCopilotModeSemiHint: 'Terminal context is required; commands pass the dangerous-command check before approval.',
   aiCopilotModeFullHint: 'Run checked calls automatically; dangerous limits are toggleable.',
   aiCopilotModeFullTitle: 'Enable Autopilot mode?',
   aiCopilotModeFullWarning:
@@ -1199,7 +1202,7 @@ const enUS: typeof zhCN = {
   aiCopilotDangerousCommandRestrictionsOn: 'On',
   aiCopilotDangerousCommandRestrictionsOff: 'Off',
   aiCopilotDangerousCommandRestrictionsDescription:
-    'Blocks rm -rf /, mkfs, reboot and other dangerous commands, plus unconfirmed irreversible operations.',
+    'Blocks rm -rf /, mkfs, reboot and destructive or privileged commands outside the whitelist; collaboration still asks for approval.',
   aiCopilotToolActivity: 'Copilot tool activity',
   aiCopilotToolPending: 'Waiting for tool execution',
   aiCopilotToolWaitingForInput: 'Waiting for foreground input',
@@ -1258,14 +1261,17 @@ const enUS: typeof zhCN = {
   aiSettings: 'AI',
   agentMcpSettings: 'Agent / MCP',
   agentMcpDescription:
-    'Configure FileTerm MCP for local Agents such as Claude Code and Codex CLI. Credentials are never exported and Agent config files are never changed automatically.',
+    'Configure how Agents use the current app through MCP or the FileTerm CLI. Credentials are never exported and Agent config files are never changed automatically.',
+  agentMcpSubTabs: 'Agent connection method',
+  agentMcpTabMcp: 'MCP',
+  agentMcpTabCli: 'CLI',
   agentMcpDesktopOnly: 'Agent / MCP can only be configured in the desktop app.',
   agentMcpRuntimeTitle: 'FileTerm MCP local bridge',
   agentMcpRuntimeDescription:
     'Agents connect to the running FileTerm app over local loopback. Credentials and SSH sessions always remain in the app.',
   agentMcpDirectCliTitle: 'Call the FileTerm CLI directly',
   agentMcpDirectCliDescription:
-    'Use this without MCP to run one remote command directly. Replace TAB_ID with an open SSH tab ID; the command uses an isolated exec channel and does not write to the visible terminal.',
+    'Use this without MCP to run a remote command directly. Replace TAB_ID with an open SSH tab ID; FileTerm must keep running, and the command uses an isolated exec channel without writing to the visible terminal.',
   agentMcpDirectCliExec: 'fileterm exec',
   agentMcpDirectCliAlias: 'fileterm cli exec (equivalent)',
   agentMcpDirectCliCopy: 'Copy CLI command',

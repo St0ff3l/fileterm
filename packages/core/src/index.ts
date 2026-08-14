@@ -1377,6 +1377,7 @@ export interface AiChatRequest {
 /** Per-request stream events; never emitted through a global application event. */
 export type AiStreamEvent =
   | { type: 'started'; requestId: string; messageId: string }
+  | { type: 'assistant-message-started'; messageId: string }
   | { type: 'text-delta'; text: string }
   | { type: 'tool-call'; proposal: AiToolCallProposal }
   | { type: 'tool-result'; result: AiToolCallResult }

@@ -2838,6 +2838,13 @@
   gap: 18px;
 }
 
+.agent-mcp-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
 .agent-mcp-runtime-card,
 .agent-mcp-keep-open {
   display: flex;

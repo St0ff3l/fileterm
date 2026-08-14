@@ -58,17 +58,34 @@ function AiCopilotToolActivity({
   activity,
   approval,
   isResolvingApproval = false,
-  onResolveApproval
+  onResolveApproval,
+  onWriteTerminalInput
 }: {
   activity: AiToolActivity
   approval?: ActionApprovalRequest
   isResolvingApproval?: boolean
   onResolveApproval?: (requestId: string, approved: boolean, riskAcknowledged?: boolean) => void
+  onWriteTerminalInput?: (activity: AiToolActivity) => void
 }) {
   const outputScrollRef = useRef<HTMLPreElement>(null)
   const [riskAcknowledged, setRiskAcknowledged] = useState(false)
   const result = activity.result
   const status = result?.status ?? 'pending'
+  const canWriteTerminalInput = Boolean(onWriteTerminalInput && !/[\r\n]/.test(activity.proposal.command))
+  const writeTerminalInputButton =
+    onWriteTerminalInput && !result ? (
+      <button
+        aria-label={t.aiCopilotWriteTerminalInput}
+        className="ai-copilot-tool-write-button"
+        disabled={!canWriteTerminalInput}
+        title={canWriteTerminalInput ? t.aiCopilotWriteTerminalInputHint : t.aiCopilotMultilinePasteUnavailable}
+        type="button"
+        onClick={() => onWriteTerminalInput(activity)}
+      >
+        <AppIcon name="terminal-file" size={13} />
+        {t.aiCopilotWriteTerminalInput}
+      </button>
+    ) : null
   const statusLabel = result
     ? status === 'executed'
       ? t.aiCopilotToolExecuted
@@ -125,6 +142,7 @@ function AiCopilotToolActivity({
               <AppIcon name="close" size={13} />
               {t.aiCopilotToolReject}
             </button>
+            {writeTerminalInputButton}
             <button
               disabled={
                 isResolvingApproval || (approval.requiresRiskAcknowledgement && !riskAcknowledged) || !onResolveApproval
@@ -137,6 +155,8 @@ function AiCopilotToolActivity({
             </button>
           </footer>
         </div>
+      ) : writeTerminalInputButton ? (
+        <footer className="ai-copilot-tool-result-actions">{writeTerminalInputButton}</footer>
       ) : null}
     </section>
   )
@@ -252,10 +272,18 @@ export function AiCopilotPanel({
 
   useEffect(() => {
     const viewport = messageViewportRef.current
-    if (viewport) {
-      viewport.scrollTop = viewport.scrollHeight
-    }
-  }, [conversation?.messages, isStreaming])
+    if (!viewport) return
+
+    // Text and tool results arrive in separate render passes. Defer the final
+    // scroll until the new message/card has been laid out so the completed
+    // summary is visible instead of leaving the viewport on the old bubble.
+    const frame = window.requestAnimationFrame(() => {
+      if (messageViewportRef.current === viewport) {
+        viewport.scrollTop = viewport.scrollHeight
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [conversation?.messages, isStreaming, toolActivities])
 
   useEffect(() => {
     setIsRenamingConversation(false)
@@ -270,6 +298,7 @@ export function AiCopilotPanel({
 
   const canChat = Boolean(currentProvider)
   const copilotMode: AiCopilotMode = modeState?.mode ?? 'pure-conversation'
+  const showsDangerousCommandRestrictions = copilotMode !== 'pure-conversation'
   const requiresTerminalContext = copilotMode !== 'pure-conversation' || referenceTerminal
   const canRetry = Boolean(errorMessage && conversation?.messages.at(-1)?.role === 'user')
 
@@ -368,6 +397,26 @@ export function AiCopilotPanel({
   const toggleDangerousCommandRestrictions = () => {
     if (isStreaming || !modeState) return
     void setDangerousCommandRestrictions(!dangerousCommandRestrictionsEnabled)
+  }
+
+  const writeCommandToTerminalInput = async (activity: AiToolActivity) => {
+    const targetTabId = activity.proposal.target.tabId
+    if (
+      !window.fileterm ||
+      !activeTab ||
+      activeTab.id !== targetTabId ||
+      !isTerminalTarget ||
+      /[\r\n]/.test(activity.proposal.command)
+    ) {
+      setCommandActionMessage(t.aiCopilotCommandWriteUnavailable)
+      return
+    }
+    try {
+      await window.fileterm.writeTerminal(targetTabId, activity.proposal.command)
+      setCommandActionMessage(t.aiCopilotTerminalInputWritten)
+    } catch {
+      setCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+    }
   }
 
   const saveConversationTitle = async () => {
@@ -727,33 +776,27 @@ export function AiCopilotPanel({
                         <p className="ai-copilot-message-plain">{message.content}</p>
                       )}
                       {message.toolActivities?.map((activity) => (
-                        <AiCopilotToolActivity key={activity.proposal.id} activity={activity} />
+                        <AiCopilotToolActivity
+                          key={activity.proposal.id}
+                          activity={activity}
+                          approval={
+                            activity.proposal.approvalRequestId
+                              ? toolApprovalRequests.find(
+                                  (request) => request.requestId === activity.proposal.approvalRequestId
+                                )
+                              : undefined
+                          }
+                          isResolvingApproval={Boolean(
+                            activity.proposal.approvalRequestId &&
+                            resolvingToolApprovalIds.has(activity.proposal.approvalRequestId)
+                          )}
+                          onResolveApproval={resolveToolApproval}
+                          onWriteTerminalInput={writeCommandToTerminalInput}
+                        />
                       ))}
                     </article>
                   ))
                 )}
-                {toolActivities.length > 0 ? (
-                  <div className="ai-copilot-tool-activities" aria-label={t.aiCopilotToolActivity}>
-                    {toolActivities.map((activity) => (
-                      <AiCopilotToolActivity
-                        key={activity.proposal.id}
-                        activity={activity}
-                        approval={
-                          activity.proposal.approvalRequestId
-                            ? toolApprovalRequests.find(
-                                (request) => request.requestId === activity.proposal.approvalRequestId
-                              )
-                            : undefined
-                        }
-                        isResolvingApproval={Boolean(
-                          activity.proposal.approvalRequestId &&
-                          resolvingToolApprovalIds.has(activity.proposal.approvalRequestId)
-                        )}
-                        onResolveApproval={resolveToolApproval}
-                      />
-                    ))}
-                  </div>
-                ) : null}
                 {isStreaming ? (
                   <div className="ai-copilot-streaming-indicator">
                     <span aria-hidden="true" className="material-symbols-outlined">
@@ -970,10 +1013,10 @@ export function AiCopilotPanel({
       ) : null}
       {!isConversationListOpen ? (
         <section
-          aria-label={copilotMode === 'fully-automatic' ? t.aiCopilotDangerousCommandRestrictions : undefined}
+          aria-label={showsDangerousCommandRestrictions ? t.aiCopilotDangerousCommandRestrictions : undefined}
           className="ai-copilot-dangerous-command-dock"
         >
-          {copilotMode === 'fully-automatic' ? (
+          {showsDangerousCommandRestrictions ? (
             <>
               <span className="ai-copilot-dangerous-command-dock-hint">
                 {t.aiCopilotDangerousCommandRestrictionsHint}

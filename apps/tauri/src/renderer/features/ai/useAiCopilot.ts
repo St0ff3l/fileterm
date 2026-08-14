@@ -305,6 +305,10 @@ export function useAiCopilot() {
         clearToolApprovalState()
         return
       }
+      if (event.type === 'assistant-message-started') {
+        activeAssistantMessageIdRef.current = event.messageId
+        return
+      }
       if (event.type === 'text-delta') {
         const assistantMessageId = activeAssistantMessageIdRef.current
         if (!assistantMessageId) return
@@ -357,6 +361,43 @@ export function useAiCopilot() {
           if (existing) return current
           return [...current, { proposal: event.proposal }]
         })
+        const assistantMessageId = activeAssistantMessageIdRef.current
+        if (assistantMessageId) {
+          setConversation((current) => {
+            if (!current || current.id !== conversationId) return current
+            const timestamp = String(Date.now())
+            const messageIndex = current.messages.findIndex((message) => message.id === assistantMessageId)
+            if (messageIndex < 0) {
+              const next = {
+                ...current,
+                messages: [
+                  ...current.messages,
+                  {
+                    id: assistantMessageId,
+                    role: 'assistant' as const,
+                    content: '',
+                    createdAt: timestamp,
+                    toolActivities: [{ proposal: event.proposal }]
+                  }
+                ],
+                messageCount: current.messages.length + 1,
+                updatedAt: timestamp
+              }
+              conversationRef.current = next
+              return next
+            }
+            const message = current.messages[messageIndex]
+            if (message.toolActivities?.some((activity) => activity.proposal.id === event.proposal.id)) return current
+            const messages = current.messages.map((item) =>
+              item.id === assistantMessageId
+                ? { ...item, toolActivities: [...(item.toolActivities ?? []), { proposal: event.proposal }] }
+                : item
+            )
+            const next = { ...current, messages, updatedAt: timestamp }
+            conversationRef.current = next
+            return next
+          })
+        }
         return
       }
       if (event.type === 'tool-result') {
@@ -365,6 +406,26 @@ export function useAiCopilot() {
             item.proposal.id === event.result.proposalId ? { ...item, result: event.result } : item
           )
         )
+        setConversation((current) => {
+          if (!current || current.id !== conversationId) return current
+          let changed = false
+          const messages = current.messages.map((message) => {
+            if (!message.toolActivities?.some((activity) => activity.proposal.id === event.result.proposalId)) {
+              return message
+            }
+            changed = true
+            return {
+              ...message,
+              toolActivities: message.toolActivities.map((activity) =>
+                activity.proposal.id === event.result.proposalId ? { ...activity, result: event.result } : activity
+              )
+            }
+          })
+          if (!changed) return current
+          const next = { ...current, messages, updatedAt: String(Date.now()) }
+          conversationRef.current = next
+          return next
+        })
         void window.fileterm
           ?.getAiCopilotModeState()
           .then((nextModeState) => {
