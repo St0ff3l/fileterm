@@ -1122,23 +1122,6 @@
   color: var(--text-muted);
 }
 
-.ai-copilot-message-context {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 3px;
-  color: var(--accent-highlight);
-  font-size: 9px;
-}
-
-.ai-copilot-message.is-user .ai-copilot-message-context {
-  justify-self: end;
-}
-
-.ai-copilot-message-context .material-symbols-outlined {
-  font-size: 12px;
-}
-
 .ai-copilot-command-card {
   display: grid;
   min-width: 0;

@@ -124,7 +124,6 @@ const zhCN = {
   aiCopilotUsage: 'Token 用量（输入 / 输出）',
   aiCopilotContextPreview: '预览上下文',
   aiCopilotContextMetadata: '会话元数据',
-  aiCopilotContextRecentTerminal: '最近终端输出',
   aiCopilotContextPreviewing: '正在生成本地预览…',
   aiCopilotContextPreviewReady: '已确认，下一条消息附带',
   aiCopilotContextPreviewHint: '仅在你发送下一条消息时上传；预览 5 分钟后失效，终端变化也会失效。',
@@ -1222,7 +1221,6 @@ const enUS: typeof zhCN = {
   aiCopilotUsage: 'Token usage (input / output)',
   aiCopilotContextPreview: 'Preview context',
   aiCopilotContextMetadata: 'Session metadata',
-  aiCopilotContextRecentTerminal: 'Recent terminal output',
   aiCopilotContextPreviewing: 'Building local preview…',
   aiCopilotContextPreviewReady: 'Approved for the next message',
   aiCopilotContextPreviewHint:

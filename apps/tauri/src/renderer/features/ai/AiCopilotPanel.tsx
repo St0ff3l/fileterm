@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type {
-  AiContextMode,
   AiCopilotMode,
   AiCommandRisk,
   AiCommandSuggestion,
@@ -35,10 +34,6 @@ function commandRiskLabel(risk: AiCommandRisk) {
     default:
       return t.aiCopilotRiskUnknown
   }
-}
-
-function contextModeLabel(mode: AiContextMode) {
-  return mode === 'L0' || mode === 'metadata' ? t.aiCopilotContextMetadata : t.aiCopilotContextRecentTerminal
 }
 
 function copilotModeDescription(mode: AiCopilotMode) {
@@ -258,6 +253,7 @@ export function AiCopilotPanel({
   const [isRenamingConversation, setIsRenamingConversation] = useState(false)
   const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
+  const composerCompositionRef = useRef(false)
   const panelRef = useRef<HTMLElement>(null)
   const messageViewportRef = useRef<HTMLDivElement>(null)
 
@@ -545,7 +541,18 @@ export function AiCopilotPanel({
   }
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.shiftKey) return
+    // Some macOS input methods report `isComposing` as false on the Enter
+    // keydown that commits a candidate. keyCode 229 and the explicit
+    // composition ref cover both browser event orderings.
+    if (
+      event.key !== 'Enter' ||
+      event.nativeEvent.isComposing ||
+      event.keyCode === 229 ||
+      composerCompositionRef.current ||
+      event.shiftKey
+    ) {
+      return
+    }
     event.preventDefault()
     void send()
   }
@@ -926,14 +933,6 @@ export function AiCopilotPanel({
                       ) : (
                         <p className="ai-copilot-message-plain">{message.content}</p>
                       )}
-                      {message.context ? (
-                        <span className="ai-copilot-message-context">
-                          <span aria-hidden="true" className="material-symbols-outlined">
-                            verified_user
-                          </span>
-                          {contextModeLabel(message.context.mode)}
-                        </span>
-                      ) : null}
                       {message.commands?.map((suggestion) => {
                         const commandTargetChanged = targetHasChanged({
                           target: suggestion.target,
@@ -1123,6 +1122,15 @@ export function AiCopilotPanel({
                 rows={3}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
+                onCompositionEnd={() => {
+                  // Keep the guard active through the IME commit keydown.
+                  window.setTimeout(() => {
+                    composerCompositionRef.current = false
+                  }, 0)
+                }}
+                onCompositionStart={() => {
+                  composerCompositionRef.current = true
+                }}
                 onKeyDown={onComposerKeyDown}
               />
               <div className="ai-copilot-composer-toolbar">
