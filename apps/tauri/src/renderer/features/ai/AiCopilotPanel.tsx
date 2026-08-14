@@ -62,28 +62,37 @@ function AiCopilotToolActivity({
   approval,
   isResolvingApproval = false,
   onResolveApproval,
-  onWriteTerminalInput
+  onExecuteTerminalCommand
 }: {
   activity: AiToolActivity
   approval?: ActionApprovalRequest
   isResolvingApproval?: boolean
   onResolveApproval?: (requestId: string, approved: boolean, riskAcknowledged?: boolean) => void
-  onWriteTerminalInput?: (activity: AiToolActivity) => void
+  onExecuteTerminalCommand?: (activity: AiToolActivity) => Promise<void>
 }) {
   const outputScrollRef = useRef<HTMLPreElement>(null)
   const [riskAcknowledged, setRiskAcknowledged] = useState(false)
+  const [isExecutingTerminalCommand, setIsExecutingTerminalCommand] = useState(false)
   const result = activity.result
   const status = result?.status ?? 'pending'
-  const canWriteTerminalInput = Boolean(onWriteTerminalInput && !/[\r\n]/.test(activity.proposal.command))
-  const writeTerminalInputButton =
-    onWriteTerminalInput && !result ? (
+  const canExecuteTerminalCommand = Boolean(
+    onExecuteTerminalCommand && !/[\r\n]/.test(activity.proposal.command) && !isExecutingTerminalCommand
+  )
+  const executeTerminalCommandButton =
+    onExecuteTerminalCommand && !result ? (
       <button
         aria-label={t.aiCopilotWriteTerminalInput}
         className="ai-copilot-tool-write-button"
-        disabled={!canWriteTerminalInput}
-        title={canWriteTerminalInput ? t.aiCopilotWriteTerminalInputHint : t.aiCopilotMultilinePasteUnavailable}
+        disabled={!canExecuteTerminalCommand || isResolvingApproval}
+        title={canExecuteTerminalCommand ? t.aiCopilotWriteTerminalInputHint : t.aiCopilotMultilinePasteUnavailable}
         type="button"
-        onClick={() => onWriteTerminalInput(activity)}
+        onClick={() => {
+          if (!onExecuteTerminalCommand || !canExecuteTerminalCommand) return
+          setIsExecutingTerminalCommand(true)
+          void onExecuteTerminalCommand(activity)
+            .catch(() => undefined)
+            .finally(() => setIsExecutingTerminalCommand(false))
+        }}
       >
         <AppIcon name="terminal-file" size={13} />
         {t.aiCopilotWriteTerminalInput}
@@ -129,7 +138,7 @@ function AiCopilotToolActivity({
             <label className="ai-copilot-tool-risk-ack">
               <input
                 checked={riskAcknowledged}
-                disabled={isResolvingApproval}
+                disabled={isResolvingApproval || isExecutingTerminalCommand}
                 type="checkbox"
                 onChange={(event) => setRiskAcknowledged(event.currentTarget.checked)}
               />
@@ -138,17 +147,20 @@ function AiCopilotToolActivity({
           ) : null}
           <footer className="ai-copilot-tool-approval-actions">
             <button
-              disabled={isResolvingApproval}
+              disabled={isResolvingApproval || isExecutingTerminalCommand}
               type="button"
               onClick={() => onResolveApproval?.(approval.requestId, false)}
             >
               <AppIcon name="close" size={13} />
               {t.aiCopilotToolReject}
             </button>
-            {writeTerminalInputButton}
+            {executeTerminalCommandButton}
             <button
               disabled={
-                isResolvingApproval || (approval.requiresRiskAcknowledgement && !riskAcknowledged) || !onResolveApproval
+                isResolvingApproval ||
+                isExecutingTerminalCommand ||
+                (approval.requiresRiskAcknowledgement && !riskAcknowledged) ||
+                !onResolveApproval
               }
               type="button"
               onClick={() => onResolveApproval?.(approval.requestId, true, riskAcknowledged)}
@@ -158,8 +170,8 @@ function AiCopilotToolActivity({
             </button>
           </footer>
         </div>
-      ) : writeTerminalInputButton ? (
-        <footer className="ai-copilot-tool-result-actions">{writeTerminalInputButton}</footer>
+      ) : executeTerminalCommandButton ? (
+        <footer className="ai-copilot-tool-result-actions">{executeTerminalCommandButton}</footer>
       ) : null}
     </section>
   )
@@ -422,7 +434,7 @@ export function AiCopilotPanel({
     void setDangerousCommandRestrictions(!dangerousCommandRestrictionsEnabled)
   }
 
-  const writeCommandToTerminalInput = async (activity: AiToolActivity) => {
+  const executeCommandInTerminal = (activity: AiToolActivity): Promise<void> => {
     const targetTabId = activity.proposal.target.tabId
     if (
       !window.fileterm ||
@@ -433,17 +445,33 @@ export function AiCopilotPanel({
       /[\r\n]/.test(activity.proposal.command)
     ) {
       showCommandActionMessage(t.aiCopilotCommandWriteUnavailable)
-      return
+      return Promise.reject(new Error(t.aiCopilotCommandWriteUnavailable))
     }
-    try {
+
+    return new Promise<void>((resolve, reject) => {
       dispatchAppEvent(APP_EVENT.aiInsertTerminalCommand, {
         tabId: targetTabId,
-        command: activity.proposal.command
+        command: activity.proposal.command,
+        execute: true,
+        onComplete: () => {
+          const approvalRequestId = activity.proposal.approvalRequestId
+          const skipApproval = approvalRequestId ? resolveToolApproval(approvalRequestId, false) : Promise.resolve()
+          void skipApproval
+            .then(() => {
+              showCommandActionMessage(t.aiCopilotTerminalInputWritten)
+              resolve()
+            })
+            .catch((error) => {
+              showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+              reject(error)
+            })
+        },
+        onError: () => {
+          showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+          reject(new Error(t.aiCopilotTerminalInputWriteFailed))
+        }
       })
-      showCommandActionMessage(t.aiCopilotTerminalInputWritten)
-    } catch {
-      showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
-    }
+    })
   }
 
   const saveConversationTitle = async () => {
@@ -823,7 +851,7 @@ export function AiCopilotPanel({
                             resolvingToolApprovalIds.has(activity.proposal.approvalRequestId)
                           )}
                           onResolveApproval={resolveToolApproval}
-                          onWriteTerminalInput={writeCommandToTerminalInput}
+                          onExecuteTerminalCommand={executeCommandInTerminal}
                         />
                       ))}
                     </article>

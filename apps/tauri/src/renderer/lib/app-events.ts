@@ -29,7 +29,7 @@ export const APP_EVENT = {
   terminalFind: 'fileterm:terminal-find',
   /** 请求最后聚焦的终端调整字号。 */
   terminalZoom: 'fileterm:terminal-zoom',
-  /** 已由 Rust 验证过的 AI 命令写入输入框；绝不发送 PTY、绝不附加回车。 */
+  /** AI 命令交给当前 TerminalDock；默认仅填入，execute=true 时走现有发送流程。 */
   aiInsertTerminalCommand: 'fileterm:ai-insert-terminal-command'
 } as const
 
@@ -49,7 +49,13 @@ export interface AppEventDetailMap {
   [APP_EVENT.terminalPaste]: never
   [APP_EVENT.terminalFind]: never
   [APP_EVENT.terminalZoom]: TerminalZoomOperation
-  [APP_EVENT.aiInsertTerminalCommand]: { tabId: string; command: string }
+  [APP_EVENT.aiInsertTerminalCommand]: {
+    tabId: string
+    command: string
+    execute?: boolean
+    onComplete?: () => void
+    onError?: () => void
+  }
 }
 
 /** 派发一个类型化的应用事件。`detail` 为 `never` 的事件不需要传第二参。 */
