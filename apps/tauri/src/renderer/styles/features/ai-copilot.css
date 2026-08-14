@@ -1363,9 +1363,9 @@
   min-width: 0;
   gap: 6px;
   padding: 9px;
-  border: 1px solid color-mix(in srgb, var(--accent-highlight) 30%, var(--border-light));
+  border: 1px solid var(--border-light);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--accent-tint-weak) 42%, var(--bg-elevated));
+  background: color-mix(in srgb, var(--bg-elevated) 86%, var(--surface-inset));
 }
 
 .ai-copilot-tool-activity.is-rejected,
@@ -1394,6 +1394,45 @@
 
 .ai-copilot-tool-activity p.is-warning {
   color: var(--warning, #c78a1b);
+}
+
+.ai-copilot-tool-approval {
+  display: grid;
+  gap: 6px;
+  padding-top: 1px;
+}
+
+.ai-copilot-tool-approval > small {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-copilot-tool-risk-ack {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.ai-copilot-tool-risk-ack input {
+  flex: none;
+  accent-color: var(--focus-outline);
+  margin: 1px 0 0;
+}
+
+.ai-copilot-tool-approval-actions {
+  justify-content: flex-end;
+}
+
+.ai-copilot-tool-approval-actions button:last-child {
+  border-color: color-mix(in srgb, var(--focus-outline) 60%, var(--border-light));
+  color: var(--text-main);
 }
 
 .ai-copilot-tool-output-wrap {

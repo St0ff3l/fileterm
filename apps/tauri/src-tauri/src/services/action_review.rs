@@ -116,9 +116,7 @@ impl ActionApprovalDecision {
             (ActionApprovalSource::AiCopilot, Self::Rejected) => {
                 "Copilot tool call was rejected by the user"
             }
-            (ActionApprovalSource::AiCopilot, Self::Dismissed) => {
-                "Copilot approval dialog was closed"
-            }
+            (ActionApprovalSource::AiCopilot, Self::Dismissed) => "Copilot approval was dismissed",
             (ActionApprovalSource::AiCopilot, Self::TimedOut) => {
                 "Copilot approval timed out; the command was not started"
             }
@@ -136,8 +134,21 @@ pub async fn request_action_approval(
     operation: impl Into<String>,
     details: ActionApprovalDetails,
 ) -> Result<ActionApprovalDecision, AppError> {
-    let operation = operation.into();
     let request_id = format!("action-approval-{}", uuid::Uuid::new_v4());
+    request_action_approval_with_id(app, request_id, source, operation, details).await
+}
+
+/// Queue a one-time visible approval using a caller-supplied ID. Copilot uses
+/// this to correlate the backend approval gate with the inline command card
+/// that represents the same tool call in its conversation.
+pub async fn request_action_approval_with_id(
+    app: &AppHandle,
+    request_id: String,
+    source: ActionApprovalSource,
+    operation: impl Into<String>,
+    details: ActionApprovalDetails,
+) -> Result<ActionApprovalDecision, AppError> {
+    let operation = operation.into();
     let (sender, receiver) = oneshot::channel();
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     state
@@ -164,7 +175,7 @@ pub async fn request_action_approval(
             .await
             .remove(&request_id);
         return Err(AppError::Command(format!(
-            "Unable to show action approval dialog: {error}"
+            "Unable to publish action approval request: {error}"
         )));
     }
 

@@ -8,6 +8,7 @@ import type {
   AiContextAttachment,
   AiContextPreview,
   AiMessage,
+  ActionApprovalRequest,
   AiToolCallProposal,
   AiToolCallResult,
   AiProviderSummary,
@@ -89,6 +90,8 @@ export function useAiCopilot() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null)
   const [toolActivities, setToolActivities] = useState<AiToolActivity[]>([])
+  const [toolApprovalRequests, setToolApprovalRequests] = useState<ActionApprovalRequest[]>([])
+  const [resolvingToolApprovalIds, setResolvingToolApprovalIds] = useState<Set<string>>(() => new Set())
   const [contextPreview, setContextPreview] = useState<AiContextPreview | null>(null)
   const [isContextPreviewing, setIsContextPreviewing] = useState(false)
   const [modeState, setModeState] = useState<AiCopilotModeState | null>(null)
@@ -102,6 +105,8 @@ export function useAiCopilot() {
   const unmountedRef = useRef(false)
   const modeStateRef = useRef<AiCopilotModeState | null>(null)
   const mountedRef = useRef(true)
+  const toolApprovalRequestsRef = useRef<ActionApprovalRequest[]>([])
+  const resolvingToolApprovalIdsRef = useRef(new Set<string>())
 
   const applyConversation = useCallback((next: AiConversation | null) => {
     conversationRef.current = next
@@ -229,6 +234,40 @@ export function useAiCopilot() {
     }
   }, [])
 
+  useEffect(() => {
+    toolApprovalRequestsRef.current = toolApprovalRequests
+  }, [toolApprovalRequests])
+
+  useEffect(() => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) return
+
+    const dispose = desktopApi.onActionApprovalRequest((request) => {
+      if (!mountedRef.current || request.source !== 'ai-copilot') return
+      setToolApprovalRequests((current) => {
+        if (current.some((item) => item.requestId === request.requestId)) return current
+        const next = [...current, request]
+        toolApprovalRequestsRef.current = next
+        return next
+      })
+    })
+
+    return () => {
+      dispose()
+      for (const request of toolApprovalRequestsRef.current) {
+        void desktopApi.resolveActionApproval(request.requestId, false).catch(() => undefined)
+      }
+      toolApprovalRequestsRef.current = []
+    }
+  }, [])
+
+  const clearToolApprovalState = useCallback(() => {
+    toolApprovalRequestsRef.current = []
+    setToolApprovalRequests([])
+    resolvingToolApprovalIdsRef.current.clear()
+    setResolvingToolApprovalIds(new Set())
+  }, [])
+
   const createConversation = useCallback(
     async (providerId: string) => {
       const desktopApi = window.fileterm
@@ -269,6 +308,7 @@ export function useAiCopilot() {
       if (event.type === 'started') {
         activeAssistantMessageIdRef.current = event.messageId
         setToolActivities([])
+        clearToolApprovalState()
         return
       }
       if (event.type === 'text-delta') {
@@ -319,6 +359,7 @@ export function useAiCopilot() {
         setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
+        clearToolApprovalState()
         return
       }
       if (event.type === 'tool-call') {
@@ -350,6 +391,7 @@ export function useAiCopilot() {
       requestCompletedRef.current = true
       setActiveRequestId(null)
       setIsStreaming(false)
+      clearToolApprovalState()
       // A user stop (or a surface teardown) is a successful cancellation
       // path, not a retryable Provider error. Restore the persisted local
       // conversation so any partial assistant delta disappears, while
@@ -357,7 +399,7 @@ export function useAiCopilot() {
       setErrorMessage(event.code === 'AI_REQUEST_CANCELLED' ? null : event.message)
       void restoreConversation(conversationId)
     },
-    [applyConversation, restoreConversation]
+    [applyConversation, clearToolApprovalState, restoreConversation]
   )
 
   const startRequest = useCallback(
@@ -462,6 +504,7 @@ export function useAiCopilot() {
       setErrorMessage(null)
       setUsage(null)
       setToolActivities([])
+      clearToolApprovalState()
       setIsStreaming(true)
 
       let target = conversationRef.current
@@ -547,7 +590,15 @@ export function useAiCopilot() {
         return false
       }
     },
-    [applyConversation, autoSummarizeConversationTitle, contextPreview, createConversation, isStreaming, startRequest]
+    [
+      applyConversation,
+      autoSummarizeConversationTitle,
+      clearToolApprovalState,
+      contextPreview,
+      createConversation,
+      isStreaming,
+      startRequest
+    ]
   )
 
   const createContextPreview = useCallback(
@@ -592,6 +643,7 @@ export function useAiCopilot() {
       setErrorMessage(null)
       setUsage(null)
       setToolActivities([])
+      clearToolApprovalState()
       setContextPreview(null)
       setIsStreaming(true)
       try {
@@ -623,7 +675,7 @@ export function useAiCopilot() {
         return false
       }
     },
-    [isStreaming, startRequest]
+    [clearToolApprovalState, isStreaming, startRequest]
   )
 
   const setCopilotMode = useCallback(
@@ -679,6 +731,23 @@ export function useAiCopilot() {
       }
     }
   }, [activeRequestId])
+
+  const resolveToolApproval = useCallback(async (requestId: string, approved: boolean, riskAcknowledged = false) => {
+    const desktopApi = window.fileterm
+    const request = toolApprovalRequestsRef.current.find((item) => item.requestId === requestId)
+    if (!desktopApi || !request || resolvingToolApprovalIdsRef.current.has(requestId)) return
+    if (approved && request.requiresRiskAcknowledgement && !riskAcknowledged) return
+
+    resolvingToolApprovalIdsRef.current.add(requestId)
+    setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+    try {
+      await desktopApi.resolveActionApproval(requestId, approved)
+    } catch (error) {
+      resolvingToolApprovalIdsRef.current.delete(requestId)
+      setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+    }
+  }, [])
 
   const renameConversation = useCallback(
     async (conversationId: string, title: string) => {
@@ -782,6 +851,8 @@ export function useAiCopilot() {
     errorMessage,
     usage,
     toolActivities,
+    toolApprovalRequests,
+    resolvingToolApprovalIds,
     contextPreview,
     isContextPreviewing,
     modeState,
@@ -799,6 +870,7 @@ export function useAiCopilot() {
     setCopilotMode,
     setContextAttach,
     setDangerousCommandRestrictions,
+    resolveToolApproval,
     retry,
     stop
   }

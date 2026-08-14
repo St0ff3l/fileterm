@@ -1429,6 +1429,8 @@ export interface AiToolCallProposal {
   risk: AiCommandRisk
   target: AiContextTarget
   explanation?: string
+  /** Links a semi-automatic tool call to its inline approval card. */
+  approvalRequestId?: string
 }
 
 export interface AiToolCallResult {

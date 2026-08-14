@@ -573,6 +573,8 @@ pub struct AiToolCallProposal {
     pub target: AiContextTarget,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub approval_request_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -3684,6 +3686,11 @@ async fn execute_copilot_tool_call(
             Some("Copilot 工具调用缺少已确认的 L2 目标".to_string()),
         ));
     };
+    let approval_request_id = if prepared.copilot_mode == AiCopilotMode::SemiAutomatic {
+        Some(format!("action-approval-{}", uuid::Uuid::new_v4()))
+    } else {
+        None
+    };
     let proposal = AiToolCallProposal {
         id: call.id.clone(),
         tool_name: call.name.clone(),
@@ -3691,6 +3698,7 @@ async fn execute_copilot_tool_call(
         risk: classify_command_risk(&command),
         target: context_attachment.target.clone(),
         explanation,
+        approval_request_id: approval_request_id.clone(),
     };
     emit_stream_event(
         channel,
@@ -3747,13 +3755,17 @@ async fn execute_copilot_tool_call(
             proposal.risk,
             AiCommandRisk::Destructive | AiCommandRisk::Privileged
         );
-        let decision = match crate::services::action_review::request_action_approval(
+        let decision = match crate::services::action_review::request_action_approval_with_id(
             app,
+            approval_request_id
+                .clone()
+                .expect("semi-automatic Copilot calls always have an approval request ID"),
             crate::services::action_review::ActionApprovalSource::AiCopilot,
             "ai_copilot_execute_remote_command",
             crate::services::action_review::ActionApprovalDetails {
-                title: "Copilot 工具调用需要确认".to_string(),
-                summary: "Copilot 请求在当前 SSH 目标通过独立 exec 通道执行一条命令。该命令不会写入可见终端。".to_string(),
+                title: "确认执行 Copilot 命令".to_string(),
+                summary: "命令会在独立 SSH 通道执行，结果返回到当前对话，不会写入可见终端。"
+                    .to_string(),
                 target: Some(review_target_label(&proposal.target)),
                 details: Some(format!(
                     "工作目录：{}\n风险：{}\n超时：{} 秒\n命令：\n{}",

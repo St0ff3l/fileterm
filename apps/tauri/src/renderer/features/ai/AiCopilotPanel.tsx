@@ -6,6 +6,7 @@ import type {
   AiCommandSuggestion,
   AiContextTarget,
   AiReviewOutcome,
+  ActionApprovalRequest,
   ConnectionProfile,
   SessionSnapshot,
   WorkspaceTab
@@ -100,8 +101,19 @@ function AiCopilotReviewOutput({ output }: { output: string }) {
   )
 }
 
-function AiCopilotToolActivity({ activity }: { activity: AiToolActivity }) {
+function AiCopilotToolActivity({
+  activity,
+  approval,
+  isResolvingApproval = false,
+  onResolveApproval
+}: {
+  activity: AiToolActivity
+  approval?: ActionApprovalRequest
+  isResolvingApproval?: boolean
+  onResolveApproval?: (requestId: string, approved: boolean, riskAcknowledged?: boolean) => void
+}) {
   const outputScrollRef = useRef<HTMLPreElement>(null)
+  const [riskAcknowledged, setRiskAcknowledged] = useState(false)
   const result = activity.result
   const status = result?.status ?? 'pending'
   const statusLabel = result
@@ -110,9 +122,11 @@ function AiCopilotToolActivity({ activity }: { activity: AiToolActivity }) {
       : status === 'rejected' || status === 'auto-blocked'
         ? t.aiCopilotToolRejected
         : t.aiCopilotToolFailed
-    : t.aiCopilotToolPending
+    : approval
+      ? t.aiCopilotToolApprovalPending
+      : t.aiCopilotToolPending
   return (
-    <section className={`ai-copilot-tool-activity is-${status}`}>
+    <section className={`ai-copilot-command-card ai-copilot-tool-activity is-${status}`}>
       <header>
         <span>{statusLabel}</span>
         <span className={`ai-copilot-command-risk is-${activity.proposal.risk}`}>
@@ -131,6 +145,42 @@ function AiCopilotToolActivity({ activity }: { activity: AiToolActivity }) {
             {result.stdout}
           </pre>
           <VerticalScrollbar ariaLabel={t.aiCopilotToolActivity} scrollRef={outputScrollRef} />
+        </div>
+      ) : null}
+      {approval && !result ? (
+        <div className="ai-copilot-tool-approval">
+          {approval.target ? <small>{`${t.aiCopilotToolApprovalTarget}：${approval.target}`}</small> : null}
+          {approval.requiresRiskAcknowledgement ? (
+            <label className="ai-copilot-tool-risk-ack">
+              <input
+                checked={riskAcknowledged}
+                disabled={isResolvingApproval}
+                type="checkbox"
+                onChange={(event) => setRiskAcknowledged(event.currentTarget.checked)}
+              />
+              <span>{t.aiCopilotToolApprovalRisk}</span>
+            </label>
+          ) : null}
+          <footer className="ai-copilot-tool-approval-actions">
+            <button
+              disabled={isResolvingApproval}
+              type="button"
+              onClick={() => onResolveApproval?.(approval.requestId, false)}
+            >
+              <AppIcon name="close" size={13} />
+              {t.aiCopilotToolReject}
+            </button>
+            <button
+              disabled={
+                isResolvingApproval || (approval.requiresRiskAcknowledgement && !riskAcknowledged) || !onResolveApproval
+              }
+              type="button"
+              onClick={() => onResolveApproval?.(approval.requestId, true, riskAcknowledged)}
+            >
+              <AppIcon name="check" size={13} />
+              {t.aiCopilotToolApprove}
+            </button>
+          </footer>
         </div>
       ) : null}
     </section>
@@ -260,6 +310,8 @@ export function AiCopilotPanel({
     errorMessage,
     usage,
     toolActivities,
+    toolApprovalRequests,
+    resolvingToolApprovalIds,
     isContextPreviewing,
     modeState,
     selectProvider,
@@ -274,6 +326,7 @@ export function AiCopilotPanel({
     setCopilotMode,
     setContextAttach,
     setDangerousCommandRestrictions,
+    resolveToolApproval,
     retry,
     stop
   } = useAiCopilot()
@@ -962,7 +1015,22 @@ export function AiCopilotPanel({
                 {toolActivities.length > 0 ? (
                   <div className="ai-copilot-tool-activities" aria-label={t.aiCopilotToolActivity}>
                     {toolActivities.map((activity) => (
-                      <AiCopilotToolActivity key={activity.proposal.id} activity={activity} />
+                      <AiCopilotToolActivity
+                        key={activity.proposal.id}
+                        activity={activity}
+                        approval={
+                          activity.proposal.approvalRequestId
+                            ? toolApprovalRequests.find(
+                                (request) => request.requestId === activity.proposal.approvalRequestId
+                              )
+                            : undefined
+                        }
+                        isResolvingApproval={Boolean(
+                          activity.proposal.approvalRequestId &&
+                          resolvingToolApprovalIds.has(activity.proposal.approvalRequestId)
+                        )}
+                        onResolveApproval={resolveToolApproval}
+                      />
                     ))}
                   </div>
                 ) : null}

@@ -236,6 +236,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     }
 
     return desktopApi.onActionApprovalRequest((request) => {
+      // Copilot renders its approval inline beside the streamed tool call.
+      // Keep the global dialog for MCP and legacy AI Review approvals only.
+      if (request.source === 'ai-copilot') {
+        return
+      }
       setActionApprovalRequests((current) => {
         if (current.some((item) => item.requestId === request.requestId)) {
           return current
