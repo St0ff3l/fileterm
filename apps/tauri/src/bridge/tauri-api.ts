@@ -24,7 +24,6 @@ import type {
   TransferTask,
   SessionMetricsUpdate,
   SshInteractionRequest,
-  RemoteExecInteractionRequest,
   RemoteExecCredentials,
   SudoPasswordRequest,
   BackupPasswordRequest,
@@ -44,9 +43,6 @@ import type {
   AiProviderSummary,
   AiProviderTestResult,
   AiChatRequest,
-  AiCommandInsertInput,
-  AiCommandInsertResult,
-  AiReviewExecution,
   AiConversation,
   AiConversationSummary,
   AiContextPreview,
@@ -56,7 +52,6 @@ import type {
   CreateAiContextPreviewInput,
   RenameAiConversationInput,
   RetryAiChatInput,
-  RunAiReviewInput,
   SaveAiProviderInput,
   SetAiContextAttachInput,
   SetAiCopilotModeInput,
@@ -413,8 +408,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     retryAiChat: (input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
       invokeAiChat('app_retry_ai_chat', input, onEvent),
     cancelAiChat: (requestId: string) => invoke<void>('app_cancel_ai_chat', { requestId }),
-    insertAiCommand: (input: AiCommandInsertInput) => invoke<AiCommandInsertResult>('app_insert_ai_command', { input }),
-    runAiReview: (input: RunAiReviewInput) => invoke<AiReviewExecution>('app_run_ai_review', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),
@@ -630,28 +623,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         saveSudoPassword: credentials?.saveSudoPassword ?? null,
         saveSuPassword: credentials?.saveSuPassword ?? null
       }),
-    executeInteractiveRemoteCommand: (
-      tabId: string,
-      expectedSessionRevision: string,
-      command: string,
-      cwd?: string,
-      timeoutMs?: number
-    ) =>
-      invoke<{
-        output: string
-        exitCode: number | null
-        timedOut: boolean
-        outputTruncated: boolean
-        inputRequired: boolean
-        inputKind?: 'secret' | 'text'
-        interactionCount?: number
-      }>('app_execute_interactive_remote_command', {
-        tabId,
-        expectedSessionRevision,
-        command,
-        cwd: cwd ?? null,
-        timeoutMs: timeoutMs ?? null
-      }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
@@ -696,14 +667,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>
       invoke<void>('app_resolve_ssh_interaction', { requestId, response }),
-    resolveRemoteExecInteraction: (requestId: string, cancelled: boolean, value?: string) =>
-      invoke<void>('app_resolve_remote_exec_interaction', {
-        requestId,
-        cancelled,
-        value: cancelled ? null : (value ?? null)
-      }),
-    setRemoteExecInteractionRendererReady: (registrationId: string, ready: boolean) =>
-      invoke<void>('app_set_remote_exec_interaction_renderer_ready', { registrationId, ready }),
     resolveSudoPasswordPrompt: (requestId: string, cancelled: boolean, value?: string, save?: boolean) =>
       invoke<void>('app_resolve_sudo_password_prompt', {
         requestId,
@@ -750,8 +713,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
-    onRemoteExecInteraction: (listener: (request: RemoteExecInteractionRequest) => void) =>
-      subscribeReady('remote-exec:interaction-request', listener),
     onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>
       subscribeReady('sudo:password-request', listener),
     onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>

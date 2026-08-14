@@ -219,12 +219,12 @@ platform probe
 - 每个 SSH controller 的首次用户上报是登录身份；后续终端用户变化会单向驱动文件访问身份，并在切换成功后按最新 cwd 重新跟随。
 - 文件区手动切换 user/root 只改变独立的 SFTP/exec 文件通道，不向交互终端写命令；相同 shell 用户的重复 prompt 不会覆盖手动选择。
 - 终端与文件通道不是同一远端进程。文件区进入特权身份会通过独立 exec channel 重建与终端一致的 sudo 或 su 策略；优先复用终端输入期间已捕获的授权，也支持远端免密 sudo / su。
-- 普通远程 exec 的 `sudo` / `su` 前缀由 Rust 在独立 exec channel 中处理：sudo 使用 `-S` 通过 stdin 发送凭据，su 使用任务专属 PTY；密码不进入命令文本、可见终端、日志或 Copilot 上下文。凭据优先使用一次性受信输入、加密 profile，缺失时由主窗口本地安全 prompt 处理；全自动 Copilot 禁止弹 prompt，直接返回 `*_PASSWORD_NEEDED`。
+- 普通远程 exec 的 `sudo` / `su` 前缀由 Rust 在独立 exec channel 中处理：sudo 使用 `-S` 通过 stdin 发送凭据，su 只在该独立 exec channel 上设置受控 PTY 标志；密码不进入命令文本、可见终端、日志或 tool result。凭据优先使用用户明确的一次性参数、加密 profile，缺失时仅在主窗口可见且未最小化时展示本地安全 prompt；窗口隐藏、最小化或 renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，由 Agent 向用户询问补充。MFA/验证码/确认/REPL 等 generic input 仍返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`。
 - 特权上传的字节流仍走登录用户可写的随机 /tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY。
 
 ## 4.5 MCP / CLI 外部 Agent 桥接边界
 
-FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；`ActionApprovalSource` 分为 `Mcp`、`AiReview` 与 `AiCopilot`。
+FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；`ActionApprovalSource` 只有 `Mcp` 与 `AiCopilot`。
 
 ```txt
 外部 Agent                        shell 脚本
@@ -251,19 +251,17 @@ fileterm mcp                    fileterm <cmd>
 ```
 
 - 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（约 2220 行，手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
-- 同一份桌面可执行文件同时承担 GUI、MCP server、CLI 三种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；由共享 `is_cli_command` 维护的子命令白名单（包括 `interactive-exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增 CLI 子命令必须同时更新共享白名单、`run_cli` 路由和对应的精确 `--help` 输出，避免把非 GUI 命令误启动成桌面窗口。
+- 同一份桌面可执行文件同时承担 GUI、MCP server、CLI 三种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；由共享 `is_cli_command` 维护的子命令白名单（包括 `exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增 CLI 子命令必须同时更新共享白名单、`run_cli` 路由和对应的精确 `--help` 输出，避免把非 GUI 命令误启动成桌面窗口。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
 - `mcp-runtime.json` 路径在三平台：macOS `$HOME/Library/Application Support/com.fileterm.desktop/`、Windows `%APPDATA%\com.fileterm.desktop\`、Linux `$XDG_DATA_HOME/com.fileterm.desktop/` 或 `$HOME/.local/share/com.fileterm.desktop/`。CLI 端用 `#[cfg(target_os)]` 硬编码读取，依赖 `tauri.conf.json` 的 identifier 保持 `com.fileterm.desktop` 不变；可用 `FILETERM_MCP_RUNTIME_FILE` 环境变量覆盖。
 - 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，未实现 `resources/*` / `prompts/*` / `logging/*` / `notifications/progress`。
 - 暴露 35 个 `fileterm_*` 工具，覆盖连接管理、会话状态、远程命令执行、远程文件操作、传输调度、SSH 隧道；tool annotations 标注 `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`。普通 `fileterm_execute_remote_command` 始终走独立、非交互 SSH exec channel，不污染可见 PTY；FTP / Telnet / Serial 不伪装支持远程 exec。
-- `fileterm_execute_remote_command` 可接收受信调用方明确提供的一次性 sudo/su 参数或复用加密 profile；`SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED` 只提示通过连接管理器配置凭据，不引导 Agent 在聊天中索取、复述或保存密码。主窗口可见时的缺失凭据由 FileTerm 本地 prompt 处理，CLI/MCP 和 Copilot 的模型上下文永远不接收 prompt secret。
-- `fileterm_execute_interactive_remote_command` 是明确选择的受限例外：它只复用当前已认证 SSH `Handle` 创建任务专属的临时 PTY channel，不新建后台登录连接，也绝不写入可见终端。任务创建前主 renderer 必须已经确认订阅安全输入事件；否则直接返回 `INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE`，不会启动后台 PTY。远端确实等待密码、MFA 或确认文本时，renderer 才显示 FileTerm 本地安全输入框，回答只回送同一任务，永不进入 MCP/CLI 参数、Agent 聊天、可见终端、日志、workspace snapshot 或结果文本；任务完成前会按内存 redaction 集清理可能的回显。
-- 每次交互任务写入轮转上限 2 MiB 的本地 `interactive-remote-exec-audit.jsonl`：Unix 每次写入都会强制 `0600`，Windows 依赖 per-user application-data 目录 ACL。记录仅含来源（MCP / CLI / desktop）、公开主机/用户/实际工作目录、命令程序摘要与 SHA-256 标识、开始/请求输入/结束状态、交互轮数和退出元数据；不保存命令全文、远端 prompt、用户输入或任何输出。审计建立失败时不启动任务，结束记录失败只写无敏感信息的本地 warning，避免调用者重试已运行命令。
+- `fileterm_execute_remote_command` 使用独立、非交互 SSH exec channel；sudo/su 可接收用户明确的一次性参数或复用加密 profile。主窗口可见且未最小化时，缺少凭据会进入本地安全 prompt；否则返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，Agent 可以询问用户后用一次性字段重试。密码不进入命令文本或 tool result。普通命令遇到 MFA、确认、安装器或 REPL 输入时返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，用户必须在可见 SSH tab 完成。
 - Agent / MCP 设置存于 `UiPreferences.mcpAgent`，只含非敏感策略：连接范围（全部已保存连接 / 当前活动会话 / 默认连接）与操作策略（仅只读 / 经确认操作）。该策略在桌面 bridge 的 action route 前执行；连接列表、会话上下文、传输列表与等待传输也必须按范围过滤，不能只依赖 renderer 隐藏。设置页仅检测 `PATH` 并生成 Claude Code / Codex CLI 的可复制注册命令，不执行客户端、不自动写配置文件。
 - 设置页还可以按用户点击创建新的本地 PTY tab 并写入固定的 `claude` 或 `codex` 启动命令；它不是后台 Agent 进程或隐藏终端代理。密码、MFA、登录确认和 TUI 输入只会出现在这个可见的本地终端，MCP 不能触发或向该 terminal 注入任意连续键盘输入。Agent tab 使用可选、受 Rust 校验的本地 terminal title，renderer 只对枚举的受信任 client id 选择启动命令。本地 terminal 允许复用统一 pane tree 拆分，但同一树只含 local pane；每一个 pane 都启动独立 PTY/runtime、输入通道和取消令牌，不能与 SSH pane 混合或共享 shell 状态。
 - 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 超时 5s、client 超时 130s（设计上大于审批 + bridge 之和，保证审批超时不触发 client 读超时）。
 - **MCP 与 CLI 的关键差异**：MCP `tools/call` 的写操作必须经桌面审批对话框（外部 Agent 调用，需要二次确认）；CLI 是用户显式启动，视为已授权，不重复弹审批。两者共用同一份 action 路由和 bridge 实现。
-- **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。纯对话请求不携带 Provider tools；半自动 / 全自动使用 Rust-owned 的 `tool-call -> approval/guardrail -> isolated exec -> tool-result` 循环，工具调用绑定 L2、leaf/root、CWD/user 和 `sessionRevision`。详见 `docs/plans/active/ai-copilot-modes.md`。
+- **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。纯对话请求不携带 Provider tools；半自动 / 全自动使用 Rust-owned 的 `tool-call -> approval/guardrail -> isolated exec -> tool-result` 循环，工具调用绑定 L2、leaf/root、CWD/user 和 `sessionRevision`。详见 `docs/plans/completed/ai-copilot-modes.md`。
 - 当前完成度：核心代码已构建、已注册，且覆盖协议、交互提示识别、脱敏与审计纯函数测试；真实 Claude Code / Codex CLI 端到端及 macOS / Windows / Linux 的打包产物手工验收仍待完成。
 
 ## 5. 当前仓库结构

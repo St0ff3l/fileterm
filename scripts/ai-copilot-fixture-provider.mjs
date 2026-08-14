@@ -93,38 +93,10 @@ function latestUserMessage(messages) {
   return ''
 }
 
-function isCommandProposal(messages, hasTools) {
-  // A tool-enabled Copilot turn owns the new mode contract even if an old
-  // command-card instruction is accidentally left in a compatibility caller.
-  if (hasTools) return false
-  return (
-    Array.isArray(messages) &&
-    messages.some((message) => {
-      return (
-        message?.role === 'system' &&
-        typeof message.content === 'string' &&
-        message.content.includes('Return exactly one JSON object')
-      )
-    })
-  )
-}
-
-function requestedMode(prompt, commandProposal, hasTools) {
+function requestedMode(prompt, hasTools) {
   if (/fixture:tool-sudo\b/i.test(prompt)) return 'tool-sudo'
-  if (commandProposal && /fixture:multiline\b/i.test(prompt)) {
-    return 'multiline-command'
-  }
-  if (commandProposal) {
-    // Command-proposal mode is selected by the request envelope, not by a
-    // magic phrase in the user message. This lets QA cover the real flow
-    // where a user first asks for an explanation and then sends "重新来".
-    return 'command'
-  }
   if (/fixture:tool-compat\b/i.test(prompt)) return hasTools ? 'tool' : 'normal'
   if (/fixture:tool\b/i.test(prompt)) return 'tool'
-  if (/fixture:(command|multiline)\b/i.test(prompt)) {
-    return /fixture:multiline\b/i.test(prompt) ? 'multiline-command' : 'command'
-  }
   if (/fixture:fail-once\b/i.test(prompt)) return 'fail-once'
   if (/fixture:disconnect-once\b/i.test(prompt)) return 'disconnect-once'
   if (/fixture:markdown\b/i.test(prompt)) return 'markdown'
@@ -135,30 +107,6 @@ function requestedMode(prompt, commandProposal, hasTools) {
 function responseText(mode) {
   if (mode === 'tool-final') {
     return 'Fixture tool loop completed. The Rust-owned remote command result was returned to the provider.'
-  }
-  if (mode === 'command') {
-    return JSON.stringify({
-      answer: 'Fixture prepared a read-only command card. Review it before using it.',
-      commands: [
-        {
-          command: 'pwd',
-          explanation: 'Prints the current working directory without changing the remote host.',
-          risk: 'read-only'
-        }
-      ]
-    })
-  }
-  if (mode === 'multiline-command') {
-    return JSON.stringify({
-      answer: 'Fixture prepared a multi-line command card. It must remain unavailable for one-click terminal input.',
-      commands: [
-        {
-          command: "printf '%s\\n' fixture-one\nprintf '%s\\n' fixture-two",
-          explanation: 'A deterministic multi-line fixture command.',
-          risk: 'read-only'
-        }
-      ]
-    })
   }
   if (mode === 'slow') {
     return Array.from({ length: 40 }, (_, index) => `fixture-stream-${index + 1} `).join('')
@@ -312,15 +260,13 @@ function handleCompletion(request, response, payload) {
   const model = typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : 'fileterm-fixture'
   const prompt = latestUserMessage(payload?.messages)
   const hasTools = Array.isArray(payload?.tools) && payload.tools.length > 0
-  const commandProposal = isCommandProposal(payload?.messages, hasTools)
-  const requested = requestedMode(prompt, commandProposal, hasTools)
+  const requested = requestedMode(prompt, hasTools)
   const hasToolResult = Array.isArray(payload?.messages) && payload.messages.some((message) => message?.role === 'tool')
   const mode = (requested === 'tool' || requested === 'tool-sudo') && hasToolResult ? 'tool-final' : requested
   const onceKey = oneTimeKey(mode, prompt)
   const firstAttempt = !completedOneTimeModes.has(onceKey)
 
   log('fixture-request', {
-    commandProposal,
     mode,
     promptLength: prompt.length,
     stream: Boolean(payload?.stream)

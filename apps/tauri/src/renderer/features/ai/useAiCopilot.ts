@@ -9,8 +9,7 @@ import type {
   AiContextPreview,
   AiMessage,
   ActionApprovalRequest,
-  AiToolCallProposal,
-  AiToolCallResult,
+  AiToolActivity,
   AiProviderSummary,
   AiStreamEvent,
   CreateAiContextPreviewInput
@@ -25,11 +24,6 @@ type SendMessageOptions = {
 type RetryMessageOptions = {
   contextSnapshotId?: string
   mode?: AiCopilotMode
-}
-
-export type AiToolActivity = {
-  proposal: AiToolCallProposal
-  result?: AiToolCallResult
 }
 
 function toMessage(error: unknown) {
@@ -332,12 +326,6 @@ export function useAiCopilot() {
         })
         return
       }
-      if (event.type === 'command') {
-        // Command cards are only made visible from the completed, persisted
-        // conversation. This event is still useful as a typed transport
-        // boundary, but never turns partial model output into a trusted card.
-        return
-      }
       if (event.type === 'usage') {
         setUsage({ inputTokens: event.inputTokens, outputTokens: event.outputTokens })
         return
@@ -359,6 +347,7 @@ export function useAiCopilot() {
         setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
+        setToolActivities([])
         clearToolApprovalState()
         return
       }
@@ -801,30 +790,6 @@ export function useAiCopilot() {
     [applyConversation, isStreaming]
   )
 
-  const runReview = useCallback(
-    async (commandId: string) => {
-      const desktopApi = window.fileterm
-      if (!desktopApi || isStreaming) return null
-      setErrorMessage(null)
-      try {
-        const result = await desktopApi.runAiReview({ commandId })
-        if (mountedRef.current) {
-          if (conversationRef.current?.id === result.conversation.id) {
-            applyConversation(result.conversation)
-          }
-          setConversations((current) => replaceConversationSummary(current, result.conversation))
-        }
-        return result
-      } catch (error) {
-        if (mountedRef.current) {
-          setErrorMessage(toMessage(error))
-        }
-        return null
-      }
-    },
-    [applyConversation, isStreaming]
-  )
-
   const newChat = useCallback(() => {
     if (isStreaming) return
     activeAssistantMessageIdRef.current = null
@@ -866,7 +831,6 @@ export function useAiCopilot() {
     createContextPreview,
     clearContextPreview,
     sendMessage,
-    runReview,
     setCopilotMode,
     setContextAttach,
     setDangerousCommandRestrictions,

@@ -16,7 +16,7 @@ export type UseSudoPasswordPromptResult = {
 
 /**
  * Owns the main-window-only sudo/su password queue. It deliberately does not
- * share the terminal or generic interactive-exec input routes.
+ * share the visible terminal or generic background-exec input routes.
  */
 export function useSudoPasswordPrompt({
   desktopApi,

@@ -89,11 +89,7 @@ async function runSmoke(binaryPath) {
     const tools = toolsList.result?.tools
     assert(Array.isArray(tools), 'tools/list did not return a tool array')
     const byName = new Map(tools.map((tool) => [tool.name, tool]))
-    const requiredTools = [
-      'fileterm_list_connections',
-      'fileterm_execute_remote_command',
-      'fileterm_execute_interactive_remote_command'
-    ]
+    const requiredTools = ['fileterm_list_connections', 'fileterm_execute_remote_command']
     for (const name of requiredTools) {
       assert(byName.has(name), `tools/list is missing ${name}`)
     }
@@ -113,14 +109,9 @@ async function runSmoke(binaryPath) {
       assert(!Object.hasOwn(remoteProperties, forbidden), `remote exec exposes forbidden ${forbidden}`)
     }
 
-    const interactiveTool = byName.get('fileterm_execute_interactive_remote_command')
-    const interactiveProperties = interactiveTool.inputSchema?.properties ?? {}
-    for (const forbidden of ['stdin', 'password', 'sudo_password', 'su_password', 'answers']) {
-      assert(!Object.hasOwn(interactiveProperties, forbidden), `interactive exec exposes forbidden ${forbidden}`)
-    }
     assert(
-      /安全|secret|password/i.test(interactiveTool.description ?? ''),
-      'interactive exec description does not describe local secure input'
+      /REMOTE_INTERACTIVE_INPUT_REQUIRED/i.test(byName.get('fileterm_execute_remote_command').description ?? ''),
+      'remote exec description does not describe the fail-closed interactive-input result'
     )
 
     child.stdin.end()

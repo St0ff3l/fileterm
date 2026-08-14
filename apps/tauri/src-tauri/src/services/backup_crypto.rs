@@ -27,10 +27,6 @@ const KEY_BYTES: usize = 32;
 const SALT_BYTES: usize = 16;
 const NONCE_BYTES: usize = 12;
 const TAG_BYTES: usize = 16;
-// Remote exec interaction keeps its existing minimum-length policy. Backup
-// passwords have a separate policy because they are explicitly confirmed in
-// the backup dialog before being submitted.
-pub(crate) const MIN_PASSWORD_CHARS: usize = 12;
 pub(crate) const MIN_BACKUP_PASSWORD_CHARS: usize = 8;
 const MAX_PASSWORD_BYTES: usize = 8 * 1024;
 

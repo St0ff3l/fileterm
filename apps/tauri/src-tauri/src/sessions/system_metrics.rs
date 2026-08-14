@@ -28,8 +28,8 @@ const EXEC_COMMAND_OUTPUT_CAP: usize = 256 * 1024;
 
 /// Bounded output collected from a dedicated SSH exec channel. The legacy
 /// tuple helpers below intentionally keep their stable shape, while callers
-/// that surface output to users (AI Review Mode) can expose the truncation
-/// bit instead of pretending the remote command produced a complete result.
+/// that surface output to users can expose the truncation bit instead of
+/// pretending the remote command produced a complete result.
 #[derive(Clone, Debug)]
 pub struct ExecCommandResult {
     pub output: String,

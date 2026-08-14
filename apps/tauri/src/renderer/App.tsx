@@ -67,7 +67,6 @@ import { useWorkspaceTabs } from './hooks/useWorkspaceTabs'
 import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
-import { useRemoteExecInteractions } from './hooks/useRemoteExecInteractions'
 import { useBackupPasswordInteractions } from './hooks/useBackupPasswordInteractions'
 import { useSudoPasswordPrompt } from './hooks/useSudoPasswordPrompt'
 import { useFileEditor } from './hooks/useFileEditor'
@@ -237,7 +236,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
     return desktopApi.onActionApprovalRequest((request) => {
       // Copilot renders its approval inline beside the streamed tool call.
-      // Keep the global dialog for MCP and legacy AI Review approvals only.
+      // Keep the global dialog for MCP and Copilot tool approvals only.
       if (request.source === 'ai-copilot') {
         return
       }
@@ -789,17 +788,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     acceptHostAndSave
   } = useSshInteractions({
     desktopApi,
-    onError: (scope, err) => reportError(setError, scope, err)
-  })
-
-  const {
-    request: remoteExecInteractionRequest,
-    errorMessage: remoteExecInteractionError,
-    isResolving: isRemoteExecInteractionResolving,
-    cancel: cancelRemoteExecInteraction,
-    submit: submitRemoteExecInteraction
-  } = useRemoteExecInteractions({
-    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
     onError: (scope, err) => reportError(setError, scope, err)
   })
 
@@ -1705,7 +1693,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             </div>
             {shouldShowAiCopilot ? (
               <AiCopilotPanel
-                activeProfile={activeProfile}
                 activeSession={aiCopilotTargetSession}
                 activeTab={aiCopilotTargetTab ?? null}
                 rootTab={activeTab ?? null}
@@ -1973,21 +1960,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 },
                 onSubmit: (answers) => {
                   void submitKeyboardInteractive(answers)
-                }
-              }
-            : null
-        }
-        remoteExecInteraction={
-          remoteExecInteractionRequest
-            ? {
-                request: remoteExecInteractionRequest,
-                errorMessage: remoteExecInteractionError,
-                isSubmitting: isRemoteExecInteractionResolving,
-                onCancel: () => {
-                  void cancelRemoteExecInteraction()
-                },
-                onSubmit: (value) => {
-                  void submitRemoteExecInteraction(value)
                 }
               }
             : null

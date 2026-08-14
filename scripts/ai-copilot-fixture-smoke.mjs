@@ -98,22 +98,6 @@ child.stderr.on('data', (chunk) => {
 try {
   await waitForHealth(baseUrl, child)
 
-  const commandMessages = [
-    {
-      content:
-        'You are a normal assistant. The current request is command-proposal mode. Return exactly one JSON object and nothing else.',
-      role: 'system'
-    },
-    { content: '先解释如何查看 Docker 占用。', role: 'user' },
-    { content: '可以，先检查这些信息。', role: 'assistant' },
-    { content: '重新来', role: 'user' }
-  ]
-  const commandResult = await sendChat(baseUrl, commandMessages)
-  assert.equal(commandResult.response.status, 200, '命令卡 fixture 请求失败')
-  const commandProposal = JSON.parse(commandResult.body)
-  assert(Array.isArray(commandProposal.commands), '命令卡响应没有 commands 数组')
-  assert.equal(commandProposal.commands[0]?.command, 'pwd', '短句重新来没有生成命令卡')
-
   const retryMessages = [{ content: 'fixture:fail-once', role: 'user' }]
   const failed = await sendChat(baseUrl, retryMessages, false)
   assert.equal(failed.response.status, 503, 'fail-once fixture 没有模拟首个失败')
@@ -122,11 +106,7 @@ try {
   assert.match(recovered.body, /Fixture response received/)
 
   const toolMessages = [
-    {
-      content:
-        'Compatibility text only. The old command-proposal caller once required: Return exactly one JSON object and nothing else.',
-      role: 'system'
-    },
+    { content: 'The current request uses the FileTerm tool contract.', role: 'system' },
     { content: 'fixture:tool-compat', role: 'user' }
   ]
   const toolCallResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
@@ -145,7 +125,7 @@ try {
   const toolCallBody = await toolCallResponse.text()
   assert.equal(toolCallResponse.status, 200, 'tool-call fixture 请求失败')
   assert.match(toolCallBody, /fileterm_execute_remote_command/, 'tool-call fixture 没有返回 FileTerm tool')
-  assert.doesNotMatch(toolCallBody, /commands/, '带工具目录的新模式不应退回命令卡 envelope')
+  assert.doesNotMatch(toolCallBody, /commands/, 'tool-call 请求不应退回旧命令卡 envelope')
 
   const toolResult = await sendChat(
     baseUrl,
@@ -186,7 +166,7 @@ try {
   assert.equal(sudoToolResponse.status, 200, 'sudo tool-call fixture 请求失败')
   assert.match(sudoToolBody, /sudo id -u/, 'sudo tool-call fixture 没有返回提权命令')
 
-  console.log('AI Copilot fixture smoke passed: command mode, retry recovery, tool-call loop, and sudo tool contract')
+  console.log('AI Copilot fixture smoke passed: retry recovery, tool-call loop, and sudo tool contract')
 } catch (error) {
   const detail = stderr.trim()
   throw new Error(

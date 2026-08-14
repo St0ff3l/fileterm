@@ -14,9 +14,8 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
 /// Returns whether the first process argument belongs to the non-GUI CLI.
 ///
 /// Keep this dispatch list in the library so the binary entrypoint and its
-/// tests share the same contract. In particular, commands that must work
-/// without initializing a desktop window (such as `interactive-exec --help`)
-/// must be recognized before `run()` starts Tauri.
+/// tests share the same contract. CLI commands must be recognized before
+/// `run()` starts Tauri.
 pub fn is_cli_command(argument: Option<&str>) -> bool {
     matches!(
         argument,
@@ -40,7 +39,6 @@ pub fn is_cli_command(argument: Option<&str>) -> bool {
                 | "close"
                 | "exec"
                 | "execute"
-                | "interactive-exec"
                 | "command-template"
                 | "write"
                 | "mkdir"
@@ -1974,8 +1972,6 @@ pub fn run() {
             crate::commands::app_start_ai_chat,
             crate::commands::app_retry_ai_chat,
             crate::commands::app_cancel_ai_chat,
-            crate::commands::app_insert_ai_command,
-            crate::commands::app_run_ai_review,
             crate::commands::app_get_ui_state_item,
             crate::commands::app_set_ui_state_item,
             crate::commands::app_remove_ui_state_item,
@@ -2027,7 +2023,6 @@ pub fn run() {
             crate::commands::app_open_remote_path,
             crate::commands::app_set_follow_shell_cwd,
             crate::commands::app_execute_remote_command,
-            crate::commands::app_execute_interactive_remote_command,
             crate::commands::app_read_remote_file,
             crate::commands::app_write_remote_file,
             crate::commands::app_create_remote_directory,
@@ -2048,8 +2043,6 @@ pub fn run() {
             crate::commands::app_discard_transfer,
             crate::commands::app_clear_transfers,
             crate::commands::app_resolve_ssh_interaction,
-            crate::commands::app_resolve_remote_exec_interaction,
-            crate::commands::app_set_remote_exec_interaction_renderer_ready,
             crate::commands::app_resolve_sudo_password_prompt,
             crate::commands::app_set_sudo_password_renderer_ready,
             crate::commands::app_resolve_backup_password,
@@ -2290,8 +2283,8 @@ mod tests {
     }
 
     #[test]
-    fn cli_dispatch_includes_interactive_exec_without_starting_tauri() {
-        assert!(super::is_cli_command(Some("interactive-exec")));
+    fn cli_dispatch_includes_exec_without_starting_tauri() {
+        assert!(super::is_cli_command(Some("exec")));
         assert!(super::is_cli_command(Some("wait-transfer")));
         assert!(super::is_cli_command(Some("cli")));
         assert!(!super::is_cli_command(Some("mcp")));

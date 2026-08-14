@@ -33,7 +33,6 @@ const zhCN = {
   aiCopilotContextUnavailable: '当前终端不可用，未发送消息',
   aiCopilotContextPrototypeHint: '预览版不会读取或上传任何终端内容。',
   aiCopilotWelcome: '我是 FileTerm Copilot。描述你想完成的操作，我会帮你整理成可检查、可复制的命令。',
-  aiCopilotPrototypeResponse: '下面是一张命令卡片预览。当前版本只支持复制或写入终端输入区，不会执行命令。',
   aiCopilotPrototypeAnswer:
     '这是界面原型：尚未读取终端，也没有调用模型。接入后我会结合当前标签页的已授权上下文给出命令建议。',
   aiCopilotNoModel: '界面预览 · 模型尚未接入',
@@ -132,7 +131,6 @@ const zhCN = {
   aiCopilotContextRedactions: '已脱敏 {count} 处',
   aiCopilotContextTruncated: '已截取最近可读内容',
   aiCopilotContextTargetChanged: '终端目标已变化',
-  aiCopilotContextTargetChangedHint: '当前预览或命令卡已绑定旧目标；请重新预览或重新生成。',
   aiCopilotCommandWriteUnavailable: '当前命令只能复制，不能写入输入框。',
   aiCopilotReviewCommand: '审核并运行',
   aiCopilotReviewCommandHint: '仅通过独立 SSH exec 通道运行一次；仍需在确认框中批准，不会向交互终端写入或自动回车。',
@@ -466,13 +464,6 @@ const zhCN = {
   sshAuthPromptUsername: '登录用户',
   sshAuthPromptFillRequired: '请输入用户名和密码。',
   sshAuthPromptConfirm: '继续连接',
-  remoteExecInteractionTitle: '远程命令需要输入',
-  remoteExecInteractionDescription: '该命令在独立 SSH 通道中等待输入，不会影响当前终端。',
-  remoteExecInteractionTarget: '执行目标',
-  remoteExecInteractionCommand: '远程命令',
-  remoteExecInteractionPromptFallback: '远程命令正在等待输入',
-  remoteExecInteractionPrivacy: '输入只会发送给这一次远程命令，不会写入终端、聊天记录或发送给 Agent。',
-  remoteExecInteractionSend: '发送到远程命令',
   sudoPasswordTitle: '输入 sudo 密码',
   suPasswordTitle: '输入 su 密码',
   sudoPasswordDescription: '提权命令将在独立 SSH 通道中执行，不会影响当前终端。密码不会发送给 Agent 或写入命令文本。',
@@ -1124,8 +1115,6 @@ const enUS: typeof zhCN = {
   aiCopilotContextPrototypeHint: 'The preview does not read or upload any terminal content.',
   aiCopilotWelcome:
     'I am FileTerm Copilot. Describe what you need to do and I will turn it into commands you can inspect and copy.',
-  aiCopilotPrototypeResponse:
-    'Here is a command card preview. This version can only copy or write to the terminal input; it never executes a command.',
   aiCopilotPrototypeAnswer:
     'This is a UI prototype: it does not read your terminal or call a model yet. When connected, it will use the authorized context from the current tab to suggest commands.',
   aiCopilotNoModel: 'UI preview · model not connected',
@@ -1230,8 +1219,6 @@ const enUS: typeof zhCN = {
   aiCopilotContextRedactions: '{count} redactions applied',
   aiCopilotContextTruncated: 'Recent readable content was truncated',
   aiCopilotContextTargetChanged: 'Terminal target changed',
-  aiCopilotContextTargetChangedHint:
-    'This preview or command card is bound to the previous target. Preview again or generate a new command.',
   aiCopilotCommandWriteUnavailable: 'This command can only be copied, not written to the terminal input.',
   aiCopilotReviewCommand: 'Review & run',
   aiCopilotReviewCommandHint:
@@ -1578,15 +1565,6 @@ const enUS: typeof zhCN = {
   sshAuthPromptUsername: 'Login User',
   sshAuthPromptFillRequired: 'Enter both username and password.',
   sshAuthPromptConfirm: 'Continue',
-  remoteExecInteractionTitle: 'Remote command needs input',
-  remoteExecInteractionDescription:
-    'This command is waiting in an isolated SSH channel and will not affect the visible terminal.',
-  remoteExecInteractionTarget: 'Target',
-  remoteExecInteractionCommand: 'Remote command',
-  remoteExecInteractionPromptFallback: 'The remote command is waiting for input',
-  remoteExecInteractionPrivacy:
-    'This value is sent only to this remote command. It is not added to the terminal, chat history, or returned to the agent.',
-  remoteExecInteractionSend: 'Send to remote command',
   sudoPasswordTitle: 'Enter sudo password',
   suPasswordTitle: 'Enter su password',
   sudoPasswordDescription:

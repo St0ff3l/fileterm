@@ -9,7 +9,6 @@ use crate::services::action_review::{
     request_action_approval, ActionApprovalDecision, ActionApprovalDetails, ActionApprovalSource,
     ACTION_APPROVAL_TIMEOUT,
 };
-use crate::services::interactive_exec_audit::InteractiveRemoteExecAuditSource;
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -36,7 +35,6 @@ const MCP_PROTOCOL_VERSION: u32 = 1;
 const MCP_JSONRPC_PROTOCOL_VERSION: &str = "2025-06-18";
 const MCP_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(130);
-const MCP_INTERACTIVE_EXEC_TIMEOUT: Duration = Duration::from_secs(32 * 60);
 const MCP_TRANSFER_WAIT_TIMEOUT: Duration = Duration::from_secs(125);
 const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
@@ -300,12 +298,7 @@ async fn handle_runtime_connection(
 }
 
 fn bridge_request_timeout(request: &BridgeRequest) -> Duration {
-    if request.action == "execute_interactive_remote_command" {
-        // Visible approval + a task-local UI input prompt can legitimately
-        // outlive the ordinary MCP round trip. This is still bounded, and no
-        // other action inherits the longer timeout.
-        MCP_INTERACTIVE_EXEC_TIMEOUT
-    } else if request.action == "wait_for_transfer" {
+    if request.action == "wait_for_transfer" {
         // This is a read-only, bounded observation call. Keep its bridge
         // timeout slightly above the public 120-second wait ceiling so the
         // stdio client receives the final task snapshot instead of a socket
@@ -394,11 +387,6 @@ async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Res
         request_mcp_approval(app, &request.action, &request.params).await?;
     }
 
-    let interactive_audit_source = if request.requires_approval {
-        InteractiveRemoteExecAuditSource::Mcp
-    } else {
-        InteractiveRemoteExecAuditSource::Cli
-    };
     match request.action.as_str() {
         "list_connections" => list_connections(app, &request.params).await,
         "get_session_context" => get_session_context(app, &request.params).await,
@@ -414,9 +402,6 @@ async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Res
         "disconnect_session" => disconnect_session(app, &request.params).await,
         "close_session" => close_session(app, &request.params).await,
         "execute_remote_command" => execute_remote_command(app, &request.params).await,
-        "execute_interactive_remote_command" => {
-            execute_interactive_remote_command(app, &request.params, interactive_audit_source).await
-        }
         "execute_command_template" => execute_command_template(app, &request.params).await,
         "write_remote_file" => write_remote_file(app, &request.params).await,
         "create_remote_directory" => create_remote_directory(app, &request.params).await,
@@ -664,7 +649,6 @@ fn action_requires_approval(action: &str) -> bool {
             | "disconnect_session"
             | "close_session"
             | "execute_remote_command"
-            | "execute_interactive_remote_command"
             | "execute_command_template"
             | "write_remote_file"
             | "create_remote_directory"
@@ -748,7 +732,7 @@ async fn approval_details(
         _ => tab_id.clone(),
     };
     let details = match action {
-        "execute_remote_command" | "execute_interactive_remote_command" => Some(truncate_text(
+        "execute_remote_command" => Some(truncate_text(
             &required_text(params, "command", 64 * 1024)?,
             4 * 1024,
         )),
@@ -841,7 +825,6 @@ async fn approval_details(
         "disconnect_session" => "断开 FileTerm 会话".to_string(),
         "close_session" => "关闭 FileTerm 标签页".to_string(),
         "execute_remote_command" => "在远程 SSH 主机执行命令".to_string(),
-        "execute_interactive_remote_command" => "在远程 SSH 主机执行可交互命令".to_string(),
         "execute_command_template" => "执行 FileTerm 命令模板".to_string(),
         "write_remote_file" => "写入远程文件".to_string(),
         "create_remote_directory" => "创建远程目录".to_string(),
@@ -1198,32 +1181,6 @@ async fn execute_remote_command(app: &AppHandle, params: &Value) -> Result<Value
         su_password,
         Some(save_sudo_password),
         Some(save_su_password),
-    )
-    .await
-    .map(|result| json!({ "tabId": tab_id, "result": result }))
-    .map_err(public_app_error)
-}
-
-async fn execute_interactive_remote_command(
-    app: &AppHandle,
-    params: &Value,
-    audit_source: InteractiveRemoteExecAuditSource,
-) -> Result<Value, String> {
-    let tab_id = required_string(params, "tab_id", 256)?;
-    let expected_session_revision = required_string(params, "expected_session_revision", 64)?;
-    let command = required_text(params, "command", 64 * 1024)?;
-    let cwd = optional_string(params, "cwd", 4_096)?;
-    let timeout_ms = optional_u64(params, "timeout_ms")?;
-    crate::services::action_review::execute_interactive_remote_command_from_source(
-        app,
-        crate::services::action_review::InteractiveRemoteExecRequest {
-            tab_id: tab_id.clone(),
-            expected_session_revision,
-            command,
-            cwd,
-            timeout_ms,
-        },
-        audit_source,
     )
     .await
     .map(|result| json!({ "tabId": tab_id, "result": result }))
@@ -1987,18 +1944,6 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             ],
             &["tab-id", "command"],
         ),
-        "interactive-exec" => cli_action(
-            "execute_interactive_remote_command",
-            options,
-            &[
-                "tab-id",
-                "expected-session-revision",
-                "command",
-                "cwd",
-                "timeout-ms",
-            ],
-            &["tab-id", "expected-session-revision", "command"],
-        ),
         "command-template" => cli_action(
             "execute_command_template",
             options,
@@ -2272,7 +2217,7 @@ fn print_cli_result(result: Value) -> Result<(), String> {
 
 fn print_cli_help() {
     println!(
-        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm interactive-exec --tab-id TAB_ID --expected-session-revision REVISION --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` remains non-interactive and preserves safely collected partial output when it times out. `interactive-exec` uses a temporary PTY on the current SSH transport; FileTerm asks the local user for password, MFA, or confirmation input and never reads it from CLI stdin. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
+        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses an independent non-interactive SSH channel and never writes the visible terminal transcript. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -2286,7 +2231,6 @@ fn print_cli_command_help(command: &str) {
         ),
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
         "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD --save-sudo-password true] [--su-password PASSWORD --save-su-password true]"),
-        "execute_interactive_remote_command" => println!("Usage: fileterm interactive-exec --tab-id TAB_ID --expected-session-revision REVISION --command COMMAND [--cwd PATH] [--timeout-ms N]"),
         "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
         "write_remote_file" => println!("Usage: fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT [--encoding utf-8]"),
         "upload_file" => println!("Usage: fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH [--target-name NAME]"),
@@ -2327,7 +2271,7 @@ fn initialize_result(_params: &Value) -> Result<Value, String> {
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
         "capabilities": { "tools": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded commands; saved sudo/su credentials are consumed through SSH stdin without entering command text. The optional privileged password fields are reserved for an already-authorized local caller and must never be populated from model conversation. Never ask for, repeat, log, or persist a secret from agent chat. For MFA, Y/N confirmation, installers, passwd, ssh authentication, or another generic interactive program, use fileterm_execute_interactive_remote_command directly after refreshing session context. Do not tell the user to type in FileTerm's visible terminal: that terminal is a different channel. FileTerm—not the agent chat and not the visible terminal—will show its own task-local secure prompt and send the answer only to the waiting command; the answer is never returned to you. 中文规则：遇到需要输入的远程命令，必须让 FileTerm 弹出安全输入框；由 FileTerm 向用户索取输入，不要让用户在终端或聊天里输入密码、验证码或确认值。"
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded non-interactive commands; saved sudo/su credentials are consumed through SSH stdin without entering command text. If no saved credential or local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：普通后台 exec 不接管通用交互输入；sudo/su 可使用用户明确提供的一次性密码、加密 profile 或 FileTerm 主窗口安全输入；危险密码不要写入命令文本或工具结果。"
     }))
 }
 
@@ -2379,13 +2323,6 @@ fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> 
             "su_password",
             "save_sudo_password",
             "save_su_password",
-        ],
-        "fileterm_execute_interactive_remote_command" => &[
-            "tab_id",
-            "expected_session_revision",
-            "command",
-            "cwd",
-            "timeout_ms",
         ],
         "fileterm_execute_command_template" => &["tab_id", "command_id", "args", "options"],
         "fileterm_write_remote_file" => &["tab_id", "path", "content", "encoding"],
@@ -2457,13 +2394,7 @@ fn mcp_error_code(error: &str) -> &'static str {
     for code in [
         MCP_POLICY_READ_ONLY,
         MCP_SCOPE_DENIED,
-        "INTERACTIVE_REMOTE_EXEC_UNAVAILABLE",
-        "INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED",
-        "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE",
-        "INTERACTIVE_REMOTE_EXEC_USER_CANCELLED",
-        "INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT",
-        "INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS",
-        "INTERACTIVE_REMOTE_EXEC_BUSY",
+        "REMOTE_INTERACTIVE_INPUT_REQUIRED",
         MCP_TRANSFER_NOT_FOUND,
     ] {
         if upper.contains(code) {
@@ -2494,11 +2425,7 @@ fn mcp_error_is_retryable(code: &str) -> bool {
             | "FILETERM_BRIDGE_BUSY"
             | "FILETERM_REQUEST_TIMEOUT"
             | "FILETERM_SESSION_DISCONNECTED"
-            | "INTERACTIVE_REMOTE_EXEC_UNAVAILABLE"
-            | "INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED"
-            | "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE"
-            | "INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT"
-            | "INTERACTIVE_REMOTE_EXEC_BUSY"
+            | "REMOTE_INTERACTIVE_INPUT_REQUIRED"
     )
 }
 
@@ -2540,23 +2467,16 @@ fn tool_definitions() -> Vec<Value> {
         tool_definition("fileterm_reconnect_session", "Reconnect a FileTerm session", "Reconnect an existing session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, false, true),
         tool_definition("fileterm_disconnect_session", "Disconnect a FileTerm session", "Disconnect an open session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_close_session", "Close a FileTerm session", "Close a workspace tab after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, true, true, false),
-        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel; the visible terminal is not hijacked. Ordinary commands remain non-interactive. A command whose first token is sudo or su may use a saved profile credential through SSH stdin without exposing it to the command text. Optional sudo_password/su_password values are one-shot inputs for a trusted caller only: never ask for, repeat, log, persist, or place them in agent chat; save_* is honored only together with an explicitly supplied value. If no safe credential is available, FileTerm returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED. If a normal command reports inputRequired=true, inputKind is only a redacted routing hint; use fileterm_execute_interactive_remote_command for MFA, confirmation, or other generic interactive programs.", json!({
+        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel; the visible terminal is not hijacked. Ordinary commands remain non-interactive. A command whose first token is sudo or su may use a saved profile credential through SSH stdin without exposing it to the command text. If no safe credential is available, the Agent may ask the user for the matching sudo_password or su_password and retry with that explicit one-shot value; save_* is honored only together with an explicitly supplied value. If no credential is provided, FileTerm returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED. If a normal command reports inputRequired=true, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish the operation in the visible SSH terminal and retry.", json!({
             "tab_id": { "type": "string" },
             "command": { "type": "string" },
             "cwd": { "type": "string" },
             "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 120000 },
-            "sudo_password": { "type": "string", "description": "One-shot trusted-caller input only. Never ask the user for this in agent chat or repeat it." },
-            "su_password": { "type": "string", "description": "One-shot trusted-caller input only. Never ask the user for this in agent chat or repeat it." },
+            "sudo_password": { "type": "string", "description": "One-shot sudo password explicitly provided by the user after SUDO_PASSWORD_NEEDED." },
+            "su_password": { "type": "string", "description": "One-shot su password explicitly provided by the user after SU_PASSWORD_NEEDED." },
             "save_sudo_password": { "type": "boolean", "description": "Persist the explicitly supplied sudo_password in the encrypted profile store after a non-authentication-failure run." },
             "save_su_password": { "type": "boolean", "description": "Persist the explicitly supplied su_password in the encrypted profile store after a non-authentication-failure run." }
         }), &["tab_id", "command"], false, false, false, true),
-        tool_definition("fileterm_execute_interactive_remote_command", "Execute an interactive remote command", "Run a command on an existing SSH transport using an isolated temporary PTY. Use this tool directly for commands expected to request a password, MFA code, confirmation, or other stdin response. FileTerm prompts the user in a task-local dialog and sends the answer to this exact command; never tell the user to type into the visible terminal or agent chat. The answer is not returned to the agent. 中文：密码、MFA、确认输入均由 FileTerm 安全弹窗采集，Agent 只等待最终结果。", json!({
-            "tab_id": { "type": "string" },
-            "expected_session_revision": { "type": "string", "description": "sessionRevision from fileterm_get_session_context; refresh context before calling" },
-            "command": { "type": "string" },
-            "cwd": { "type": "string" },
-            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": 600000 }
-        }), &["tab_id", "expected_session_revision", "command"], false, false, false, true),
         tool_definition("fileterm_execute_command_template", "Execute a command template", "Execute a saved FileTerm command template with optional positional arguments after approval.", json!({
             "tab_id": { "type": "string" },
             "command_id": { "type": "string" },
@@ -2622,7 +2542,7 @@ fn tool_definition(
 
 fn tool_output_schema(name: &str) -> Value {
     match name {
-        "fileterm_execute_remote_command" | "fileterm_execute_interactive_remote_command" => {
+        "fileterm_execute_remote_command" => {
             json!({
                 "type": "object",
                 "properties": {
@@ -2635,8 +2555,7 @@ fn tool_output_schema(name: &str) -> Value {
                             "timedOut": { "type": "boolean" },
                             "outputTruncated": { "type": "boolean" },
                             "inputRequired": { "type": "boolean" },
-                            "inputKind": { "type": "string", "enum": ["secret", "text"] },
-                            "interactionCount": { "type": "integer", "minimum": 0, "maximum": 3 }
+                            "inputKind": { "type": "string", "enum": ["secret", "text"] }
                         },
                         "required": ["output", "exitCode", "timedOut", "outputTruncated", "inputRequired"],
                         "additionalProperties": false
@@ -2717,11 +2636,7 @@ fn call_desktop_bridge(request: BridgeRequest) -> Result<Value, String> {
         return Err("FileTerm MCP rejected a non-local runtime address.".to_string());
     }
 
-    let request_timeout = if request.action == "execute_interactive_remote_command" {
-        MCP_INTERACTIVE_EXEC_TIMEOUT
-    } else {
-        MCP_CLIENT_TIMEOUT
-    };
+    let request_timeout = MCP_CLIENT_TIMEOUT;
     let mut stream = StdTcpStream::connect_timeout(&address, MCP_BRIDGE_TIMEOUT).map_err(|_| {
         "FileTerm desktop app is unavailable. Open or restart FileTerm, then retry this MCP tool.".to_string()
     })?;
@@ -2832,19 +2747,6 @@ mod tests {
             .unwrap();
         assert_eq!(write_tool["annotations"]["readOnlyHint"], false);
         assert_eq!(write_tool["annotations"]["destructiveHint"], true);
-        let interactive_tool = tool_definitions()
-            .into_iter()
-            .find(|tool| tool["name"] == "fileterm_execute_interactive_remote_command")
-            .unwrap();
-        assert_eq!(interactive_tool["annotations"]["readOnlyHint"], false);
-        assert_eq!(
-            interactive_tool["inputSchema"]["required"],
-            json!(["tab_id", "expected_session_revision", "command"])
-        );
-        assert!(interactive_tool["description"]
-            .as_str()
-            .unwrap()
-            .contains("never tell the user to type into the visible terminal or agent chat"));
         let remote_tool = tool_definitions()
             .into_iter()
             .find(|tool| tool["name"] == "fileterm_execute_remote_command")
@@ -2852,7 +2754,7 @@ mod tests {
         assert!(remote_tool["description"]
             .as_str()
             .unwrap()
-            .contains("inputRequired=true"));
+            .contains("REMOTE_INTERACTIVE_INPUT_REQUIRED"));
         assert!(
             remote_tool["outputSchema"]["properties"]["result"]["required"]
                 .as_array()
@@ -2919,16 +2821,13 @@ mod tests {
     }
 
     #[test]
-    fn initialize_instructions_require_local_secure_input_for_interactive_exec() {
+    fn initialize_instructions_describe_credential_and_generic_input_paths() {
         let result = initialize_result(&json!({})).expect("initialize result should be valid");
         let instructions = result["instructions"].as_str().unwrap();
-        assert!(instructions.contains("fileterm_execute_interactive_remote_command"));
-        assert!(instructions.contains("visible terminal"));
-        assert!(instructions.contains("agent chat"));
-        assert!(instructions.contains("different channel"));
-        assert!(instructions.contains("FileTerm—not the agent chat and not the visible terminal"));
-        assert!(instructions.contains("必须让 FileTerm 弹出安全输入框"));
-        assert!(instructions.contains("由 FileTerm 向用户索取输入"));
+        assert!(instructions.contains("REMOTE_INTERACTIVE_INPUT_REQUIRED"));
+        assert!(instructions.contains("visible SSH terminal"));
+        assert!(instructions.contains("ask the user"));
+        assert!(instructions.contains("sudo/su"));
     }
 
     #[test]
@@ -2948,19 +2847,10 @@ mod tests {
         );
         assert!(validate_tool_arguments("fileterm_get_session_context", &json!("bad")).is_err());
         assert!(validate_tool_arguments(
-            "fileterm_execute_interactive_remote_command",
-            &json!({ "stdin": "never allowed" })
+            "fileterm_execute_unsupported_legacy_tool",
+            &json!({ "command": "sudo id" })
         )
         .is_err());
-        assert!(validate_tool_arguments(
-            "fileterm_execute_interactive_remote_command",
-            &json!({
-                "tab_id": "tab-1",
-                "expected_session_revision": "3",
-                "command": "sudo id"
-            })
-        )
-        .is_ok());
         assert!(validate_tool_arguments(
             "fileterm_wait_for_transfer",
             &json!({
@@ -2974,11 +2864,12 @@ mod tests {
     #[test]
     fn tool_errors_include_stable_codes_and_retry_semantics() {
         let unavailable = tool_error_result(
-            "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE: main window is not ready".to_string(),
+            "REMOTE_INTERACTIVE_INPUT_REQUIRED: finish the operation in the visible SSH terminal"
+                .to_string(),
         );
         assert_eq!(
             unavailable["structuredContent"]["error"]["code"],
-            "INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE"
+            "REMOTE_INTERACTIVE_INPUT_REQUIRED"
         );
         assert_eq!(unavailable["structuredContent"]["error"]["retryable"], true);
 

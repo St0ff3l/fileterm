@@ -1,7 +1,7 @@
 # 本机凭据字段加密
 
 状态：进行中（字段加密、旧数据迁移、全量质量门禁与 macOS release 构建已通过；待 Windows / Linux 打包环境验收）
-关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
+关联：[AI Copilot 功能集成计划](../completed/ai-copilot-integration.md)、[MCP / CLI interactive-exec 关闭记录](../completed/mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 1. 结论
 

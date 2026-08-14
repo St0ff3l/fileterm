@@ -963,24 +963,6 @@ pub fn app_cancel_ai_chat(request_id: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn app_insert_ai_command(
-    app: AppHandle,
-    window: WebviewWindow,
-    input: crate::services::ai::AiCommandInsertInput,
-) -> Result<crate::services::ai::AiCommandInsertResult, AppError> {
-    crate::services::ai::insert_ai_command(&app, &window, input).await
-}
-
-#[tauri::command]
-pub async fn app_run_ai_review(
-    app: AppHandle,
-    window: WebviewWindow,
-    input: crate::services::ai::RunAiReviewInput,
-) -> Result<crate::services::ai::AiReviewExecution, AppError> {
-    crate::services::ai::run_ai_review(&app, &window, input).await
-}
-
-#[tauri::command]
 pub fn app_get_ui_state_item(app: AppHandle, key: String) -> Result<Option<String>, AppError> {
     Ok(read_ui_state(&app)?
         .get(&key)
@@ -1798,32 +1780,6 @@ pub async fn app_execute_remote_command(
     serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
 }
 
-/// Start an explicitly interaction-capable remote exec task. The task has a
-/// temporary SSH PTY of its own; it never writes to `terminal_inputs` or the
-/// visible terminal channel.
-#[tauri::command]
-pub async fn app_execute_interactive_remote_command(
-    app: AppHandle,
-    tab_id: String,
-    expected_session_revision: String,
-    command: String,
-    cwd: Option<String>,
-    timeout_ms: Option<u64>,
-) -> Result<serde_json::Value, AppError> {
-    let result = crate::services::action_review::execute_interactive_remote_command(
-        &app,
-        crate::services::action_review::InteractiveRemoteExecRequest {
-            tab_id,
-            expected_session_revision,
-            command,
-            cwd,
-            timeout_ms,
-        },
-    )
-    .await?;
-    serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
-}
-
 fn create_tab_layout(profile_type: &str) -> String {
     match profile_type {
         "ssh" => "terminal-file".to_string(),
@@ -1869,27 +1825,6 @@ async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState,
         .await
         .remove(tab_id);
     state.terminal_inputs.write().await.remove(tab_id);
-    // Drop any prompt-specific sender for this tab. The isolated exec task
-    // then fails closed instead of carrying a password/MFA prompt across a
-    // disconnect, reconnection, or tab replacement.
-    let cancelled_remote_exec_interactions = {
-        let mut interactions = state.pending_remote_exec_interactions.write().await;
-        let request_ids = interactions
-            .iter()
-            .filter(|(_, pending)| pending.tab_id == tab_id)
-            .map(|(request_id, _)| request_id.clone())
-            .collect::<Vec<_>>();
-        request_ids
-            .into_iter()
-            .filter_map(|request_id| interactions.remove(&request_id))
-            .collect::<Vec<_>>()
-    };
-    drop(cancelled_remote_exec_interactions);
-    state
-        .active_interactive_remote_execs
-        .lock()
-        .await
-        .remove(tab_id);
     let sender = state.workers.write().await.remove(tab_id);
     if let Some(sender) = sender {
         // 超时即放弃：worker 主循环卡死时 channel 已满，send 不进去；
@@ -1951,11 +1886,7 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     }
     state.local_terminal_launches.write().await.clear();
     state.terminal_inputs.write().await.clear();
-    // Cancelling all senders causes awaiting task-local dialogs to end
-    // immediately during app shutdown rather than surviving until timeout.
-    state.pending_remote_exec_interactions.write().await.clear();
     state.pending_backup_passwords.write().await.clear();
-    state.active_interactive_remote_execs.lock().await.clear();
     let senders = state
         .workers
         .write()
@@ -3867,71 +3798,6 @@ pub async fn app_resolve_ssh_interaction(
     Ok(())
 }
 
-/// Return a one-line answer to a temporary interactive exec PTY. This IPC is
-/// intentionally separate from `app_write_terminal`: no external agent can
-/// route a password, MFA code or confirmation into the visible terminal.
-#[tauri::command]
-pub async fn app_resolve_remote_exec_interaction(
-    app: AppHandle,
-    request_id: String,
-    cancelled: bool,
-    value: Option<String>,
-) -> Result<(), AppError> {
-    let request_id = request_id.trim();
-    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
-        return Err(AppError::Command(
-            "Invalid remote exec interaction request".to_string(),
-        ));
-    }
-    let value = if cancelled {
-        None
-    } else {
-        let value = value.ok_or_else(|| {
-            AppError::Command("Interactive remote exec response is required".to_string())
-        })?;
-        if value.chars().count() < crate::services::backup_crypto::MIN_PASSWORD_CHARS
-            || value.is_empty()
-            || value.len() > 8 * 1024
-            || value
-                .chars()
-                .any(|character| matches!(character, '\0' | '\r' | '\n' | '\u{1b}'))
-        {
-            return Err(AppError::Command(
-                "Interactive remote exec response must be one non-empty line".to_string(),
-            ));
-        }
-        Some(value)
-    };
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let pending = {
-        let mut interactions = state.pending_remote_exec_interactions.write().await;
-        interactions.remove(request_id)
-    };
-    if let Some(pending) = pending {
-        // The renderer may have had the dialog open while the same tab was
-        // reconnected, changed user, or followed a new CWD. Treat that as a
-        // cancellation before the value reaches the old task channel.
-        let current_revision = state.ai_session_revision(&pending.tab_id).await.to_string();
-        let session_is_still_connected = state
-            .sessions
-            .read()
-            .await
-            .get(&pending.tab_id)
-            .is_some_and(|session| session.connected);
-        let target_is_current =
-            session_is_still_connected && current_revision == pending.expected_session_revision;
-        // The value travels only to the task-local one-shot channel. Do not
-        // log it or retain it in state after this function returns.
-        let _ = pending
-            .sender
-            .send(crate::services::workspace::RemoteExecInteractionResponse {
-                cancelled: cancelled || !target_is_current,
-                value: target_is_current.then_some(value).flatten(),
-            });
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn app_resolve_backup_password(
     app: AppHandle,
@@ -4075,34 +3941,6 @@ pub async fn app_set_backup_password_renderer_ready(
     }
     app.state::<crate::services::workspace::WorkspaceState>()
         .set_backup_password_renderer_ready(registration_id, ready)
-        .await;
-    Ok(())
-}
-
-/// The main workspace registers its task-local secure-input listener only
-/// after Tauri confirms the event subscription. Without that listener an
-/// interactive exec must fail closed: a backend task cannot ask users to type
-/// passwords into either an Agent chat or the visible terminal.
-#[tauri::command]
-pub async fn app_set_remote_exec_interaction_renderer_ready(
-    app: AppHandle,
-    window: WebviewWindow,
-    registration_id: String,
-    ready: bool,
-) -> Result<(), AppError> {
-    if window.label() != "main" {
-        return Err(AppError::Window(
-            "Only the FileTerm main window may receive secure remote-exec input".to_string(),
-        ));
-    }
-    let registration_id = registration_id.trim();
-    if registration_id.is_empty() || registration_id.len() > 200 {
-        return Err(AppError::Command(
-            "Invalid secure remote-exec renderer registration".to_string(),
-        ));
-    }
-    app.state::<crate::services::workspace::WorkspaceState>()
-        .set_remote_exec_interaction_renderer_ready(registration_id, ready)
         .await;
     Ok(())
 }
