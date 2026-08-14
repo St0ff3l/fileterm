@@ -1772,22 +1772,27 @@
   display: flex;
   flex: 0 0 auto;
   height: 24px;
+  min-height: 24px;
+  max-height: 24px;
   min-width: 0;
   align-items: center;
   gap: 6px;
   box-sizing: border-box;
-  padding: 0 10px;
+  padding: 0 8px;
   border-top: 1px solid var(--border-light);
+  border-bottom-right-radius: var(--window-corner-radius);
   background: var(--bg-main);
+  overflow: hidden;
 }
 
 .ai-copilot-dangerous-command-dock-hint {
   flex: 1 1 auto;
   min-width: 0;
+  height: 23px;
   overflow: hidden;
   color: var(--text-soft);
   font-size: 9px;
-  line-height: 1.35;
+  line-height: 23px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1795,11 +1800,11 @@
 .ai-copilot-mode-select.dropdown-select-trigger,
 .ai-copilot-mode-select.ft-select-shell {
   display: flex;
-  flex: 0 0 72px;
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
-  gap: 4px;
+  flex: 0 1 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 84px;
+  gap: 2px;
 }
 
 .ai-copilot-mode-select.dropdown-select-trigger,
@@ -1845,6 +1850,7 @@
   min-width: 0;
   align-items: center;
   gap: 3px;
+  white-space: nowrap;
 }
 
 .ai-copilot-mode-value > span {
@@ -1853,18 +1859,39 @@
   white-space: nowrap;
 }
 
+.ai-copilot-mode-value-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
 .ai-copilot-mode-menu {
-  width: min(240px, calc(100vw - 16px));
-  min-width: min(240px, calc(100vw - 16px)) !important;
+  width: min(250px, calc(100vw - 16px));
+  min-width: min(250px, calc(100vw - 16px)) !important;
   max-width: calc(100vw - 16px);
-  padding: 3px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgb(30, 32, 36) !important;
 }
 
 .ai-copilot-mode-menu button.has-custom-content {
   height: auto;
-  min-height: 36px;
-  padding: 4px 6px;
-  gap: 4px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  gap: 6px;
+  transition: background 0.12s ease;
+}
+
+.ai-copilot-mode-menu button.has-custom-content:hover:not(:disabled) {
+  background: var(--selection-bg);
+}
+
+.ai-copilot-mode-menu button.has-custom-content.is-selected {
+  background: var(--surface-inset);
 }
 
 .ai-copilot-mode-option {
@@ -1877,24 +1904,29 @@
 .ai-copilot-mode-option-copy {
   display: grid;
   min-width: 0;
-  gap: 1px;
+  gap: 2px;
 }
 
 .ai-copilot-mode-option-copy strong {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   color: var(--text-main);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.25;
 }
 
+.ai-copilot-mode-option-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
 .ai-copilot-mode-option-copy small {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 400;
-  line-height: 1.2;
+  line-height: 1.25;
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -1904,6 +1936,7 @@
   width: 14px;
   height: 14px;
   flex: 0 0 14px;
+  margin-left: auto;
   align-items: center;
   justify-content: center;
   color: var(--focus-outline);
@@ -1913,18 +1946,20 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
-  height: 22px;
+  height: 17px;
   padding: 0 5px;
   border: 1px solid var(--border-light);
-  border-radius: 7px;
+  border-radius: 4px;
   color: var(--text-muted);
   background: var(--surface-inset);
   font: inherit;
   font-size: 9px;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .ai-copilot-dangerous-command-toggle:hover:not(:disabled) {
@@ -2035,16 +2070,18 @@
 .ai-copilot-composer-select.ai-copilot-mode-select.dropdown-select-trigger,
 .ai-copilot-composer-select.ai-copilot-mode-select.ft-select-shell {
   display: flex;
-  flex: 0 0 72px;
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
+  align-items: center;
+  flex: 0 1 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 84px;
   height: 27px;
   min-height: 27px;
   padding: 0 4px;
   border: 1px solid transparent;
   border-radius: 6px;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 2px;
   color: var(--text-main);
   background: transparent;
   font-size: 9px;
@@ -2064,6 +2101,10 @@
 .ai-copilot-composer-select.ai-copilot-mode-select .dropdown-select-arrow {
   display: block;
   flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  min-width: 9px;
+  opacity: 0.7;
 }
 
 .ai-copilot-composer-select.ai-copilot-mode-select.dropdown-select-trigger:hover:not(:disabled),
@@ -2086,6 +2127,8 @@
 }
 
 .ai-copilot-composer-select .dropdown-select-value {
+  display: inline-flex;
+  align-items: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3055,10 +3098,10 @@
 
   .ai-copilot-composer-select.ai-copilot-mode-select.dropdown-select-trigger,
   .ai-copilot-composer-select.ai-copilot-mode-select.ft-select-shell {
-    flex-basis: 68px;
-    width: 68px;
-    min-width: 68px;
-    max-width: 68px;
+    flex-basis: auto;
+    width: max-content;
+    min-width: 0;
+    max-width: 84px;
   }
 }
 

@@ -14,7 +14,7 @@ import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
-import { AppIcon } from '../common/AppIcon'
+import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
@@ -48,6 +48,17 @@ function copilotModeDescription(mode: AiCopilotMode) {
       return t.aiCopilotModeSemiDescription
     case 'fully-automatic':
       return t.aiCopilotModeFullDescription
+  }
+}
+
+function copilotModeIconName(mode: AiCopilotMode): AppIconName {
+  switch (mode) {
+    case 'pure-conversation':
+      return 'message'
+    case 'semi-automatic':
+      return 'shield'
+    case 'fully-automatic':
+      return 'flash'
   }
 }
 
@@ -1093,7 +1104,12 @@ export function AiCopilotPanel({
                                 <span className="ai-copilot-mode-option">
                                   <span className="ai-copilot-mode-option-copy">
                                     <strong>
-                                      {option.label}
+                                      <AppIcon
+                                        className="ai-copilot-mode-option-icon"
+                                        name={copilotModeIconName(optionMode)}
+                                        size={12}
+                                      />
+                                      <span>{option.label}</span>
                                       {selected ? (
                                         <AppIcon className="ai-copilot-mode-option-check" name="check" size={13} />
                                       ) : null}
@@ -1104,8 +1120,14 @@ export function AiCopilotPanel({
                               )
                             }}
                             renderValue={(option) => {
+                              const optionMode = option.value as AiCopilotMode
                               return (
                                 <span className="ai-copilot-mode-value">
+                                  <AppIcon
+                                    className="ai-copilot-mode-value-icon"
+                                    name={copilotModeIconName(optionMode)}
+                                    size={10}
+                                  />
                                   <span>{option.label}</span>
                                 </span>
                               )
@@ -1140,9 +1162,7 @@ export function AiCopilotPanel({
                       type="button"
                       onClick={() => void send()}
                     >
-                      <span aria-hidden="true" className="material-symbols-outlined">
-                        arrow_upward
-                      </span>
+                      <AppIcon name="arrow-up" size={16} />
                     </button>
                   )}
                 </div>
@@ -1177,7 +1197,7 @@ export function AiCopilotPanel({
                 type="button"
                 onClick={toggleDangerousCommandRestrictions}
               >
-                <AppIcon name={dangerousCommandRestrictionsEnabled ? 'shield-check' : 'shield'} size={14} />
+                <AppIcon name={dangerousCommandRestrictionsEnabled ? 'shield-check' : 'shield'} size={12} />
                 <span>{t.aiCopilotDangerousCommandRestrictions}</span>
                 <strong>
                   {dangerousCommandRestrictionsEnabled
