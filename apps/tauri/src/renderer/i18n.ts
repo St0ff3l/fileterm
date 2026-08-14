@@ -165,6 +165,13 @@ const zhCN = {
   agentMcpDesktopOnly: 'Agent / MCP 仅可在桌面应用中配置。',
   agentMcpRuntimeTitle: 'FileTerm MCP 本机桥接',
   agentMcpRuntimeDescription: 'Agent 通过本机回环连接已运行的 FileTerm；连接凭据和 SSH 会话始终留在应用内。',
+  agentMcpDirectCliTitle: '直接调用 FileTerm CLI',
+  agentMcpDirectCliDescription:
+    '不接入 MCP 时，可直接执行一条远程命令。将 TAB_ID 替换为已打开的 SSH 标签页 ID；命令使用独立 exec 通道，不写入可见终端。',
+  agentMcpDirectCliExec: 'fileterm exec',
+  agentMcpDirectCliAlias: 'fileterm cli exec（等价写法）',
+  agentMcpDirectCliCopy: '复制 CLI 命令',
+  agentMcpDirectCliCopied: 'CLI 命令已复制',
   agentMcpClients: '本机客户端',
   agentMcpClientAvailable: '已在 PATH 中发现',
   agentMcpClientUnavailable: '未在 PATH 中发现',
@@ -1256,6 +1263,13 @@ const enUS: typeof zhCN = {
   agentMcpRuntimeTitle: 'FileTerm MCP local bridge',
   agentMcpRuntimeDescription:
     'Agents connect to the running FileTerm app over local loopback. Credentials and SSH sessions always remain in the app.',
+  agentMcpDirectCliTitle: 'Call the FileTerm CLI directly',
+  agentMcpDirectCliDescription:
+    'Use this without MCP to run one remote command directly. Replace TAB_ID with an open SSH tab ID; the command uses an isolated exec channel and does not write to the visible terminal.',
+  agentMcpDirectCliExec: 'fileterm exec',
+  agentMcpDirectCliAlias: 'fileterm cli exec (equivalent)',
+  agentMcpDirectCliCopy: 'Copy CLI command',
+  agentMcpDirectCliCopied: 'CLI command copied',
   agentMcpClients: 'Local clients',
   agentMcpClientAvailable: 'Found in PATH',
   agentMcpClientUnavailable: 'Not found in PATH',

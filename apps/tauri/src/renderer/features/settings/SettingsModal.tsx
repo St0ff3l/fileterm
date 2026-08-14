@@ -32,6 +32,10 @@ function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSect
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
 }
 
+function buildDirectCliCommand(filetermCommand: string, subcommand: string) {
+  return [`${filetermCommand} ${subcommand} \\`, '  --tab-id TAB_ID \\', '  --command "docker ps"'].join('\n')
+}
+
 const DEFAULT_MODELS_BY_KIND: Record<AiProviderKind, string[]> = {
   'openai-compatible-chat': ['deepseek-v4-flash', 'deepseek-v4-pro', 'gpt-5.6-sol', 'kimi-k3', 'qwen-max'],
   'openai-responses': ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.5-pro', 'o3', 'o4-mini'],
@@ -838,13 +842,17 @@ export function SettingsModal({
       .finally(() => setMcpAgentOperation(null))
   }
 
-  const copyMcpAgentRegistrationCommand = (command: string) => {
+  const copyMcpAgentCommand = (command: string, successMessage: string) => {
     if (!desktopApi || !command) return
     setMcpAgentMessage(null)
     void desktopApi
       .writeClipboardText(command)
-      .then(() => setMcpAgentMessage(t.agentMcpCommandCopied))
+      .then(() => setMcpAgentMessage(successMessage))
       .catch((error: unknown) => setMcpAgentMessage(error instanceof Error ? error.message : String(error)))
+  }
+
+  const copyMcpAgentRegistrationCommand = (command: string) => {
+    copyMcpAgentCommand(command, t.agentMcpCommandCopied)
   }
 
   const launchMcpAgentInLocalTerminal = (client: McpAgentClientStatus) => {
@@ -1571,6 +1579,44 @@ export function SettingsModal({
                     <p>{t.agentMcpRuntimeDescription}</p>
                   </div>
                 </div>
+
+                {mcpAgentSetup ? (
+                  <div className="agent-mcp-direct-cli-card">
+                    <div>
+                      <strong>{t.agentMcpDirectCliTitle}</strong>
+                      <p>{t.agentMcpDirectCliDescription}</p>
+                    </div>
+                    <div className="agent-mcp-direct-cli-commands">
+                      {[
+                        {
+                          label: t.agentMcpDirectCliExec,
+                          command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'exec')
+                        },
+                        {
+                          label: t.agentMcpDirectCliAlias,
+                          command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'cli exec')
+                        }
+                      ].map((item) => (
+                        <div key={item.label} className="agent-mcp-direct-cli-command">
+                          <small>{item.label}</small>
+                          <div className="agent-mcp-registration">
+                            <code>{item.command}</code>
+                            <button
+                              aria-label={t.agentMcpDirectCliCopy}
+                              className="copy-icon-button agent-mcp-copy-button"
+                              disabled={!desktopApi}
+                              title={t.agentMcpDirectCliCopy}
+                              type="button"
+                              onClick={() => copyMcpAgentCommand(item.command, t.agentMcpDirectCliCopied)}
+                            >
+                              <AppIcon name="copy" size={14} strokeWidth={2} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="agent-mcp-form">
                   <label>

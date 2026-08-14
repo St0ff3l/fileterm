@@ -2873,7 +2873,8 @@
 }
 
 .agent-mcp-runtime-card p,
-.agent-mcp-keep-open p {
+.agent-mcp-keep-open p,
+.agent-mcp-direct-cli-card p {
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 11px;
@@ -2882,6 +2883,55 @@
 
 .agent-mcp-keep-open {
   padding: 10px 12px;
+}
+
+.agent-mcp-direct-cli-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.agent-mcp-direct-cli-card > div:first-child {
+  min-width: 0;
+}
+
+.agent-mcp-direct-cli-card strong {
+  display: block;
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+.agent-mcp-direct-cli-commands {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-mcp-direct-cli-command {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.agent-mcp-direct-cli-command > small {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.agent-mcp-direct-cli-command .agent-mcp-registration {
+  align-items: stretch;
+}
+
+.agent-mcp-direct-cli-command .agent-mcp-registration code {
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.agent-mcp-direct-cli-command .agent-mcp-copy-button {
+  align-self: center;
 }
 
 .agent-mcp-keep-open > .app-icon {
