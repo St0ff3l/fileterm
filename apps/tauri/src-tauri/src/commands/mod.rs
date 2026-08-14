@@ -921,25 +921,11 @@ pub fn app_set_ai_context_attach(
 }
 
 #[tauri::command]
-pub fn app_get_ai_auto_mode_thresholds(
+pub fn app_set_ai_dangerous_command_restrictions(
     window: WebviewWindow,
-) -> Result<crate::services::ai::AiAutoModeThresholds, AppError> {
-    crate::services::ai::get_auto_mode_thresholds(&window)
-}
-
-#[tauri::command]
-pub fn app_set_ai_auto_mode_thresholds(
-    window: WebviewWindow,
-    input: crate::services::ai::SetAiAutoModeThresholdsInput,
+    input: crate::services::ai::SetAiDangerousCommandRestrictionsInput,
 ) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
-    crate::services::ai::set_auto_mode_thresholds(&window, input)
-}
-
-#[tauri::command]
-pub fn app_reset_ai_auto_mode_session_counts(
-    window: WebviewWindow,
-) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
-    crate::services::ai::reset_auto_mode_session_counts(&window)
+    crate::services::ai::set_dangerous_command_restrictions(&window, input)
 }
 
 #[tauri::command]

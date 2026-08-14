@@ -14,6 +14,7 @@ import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
+import { AppIcon } from '../common/AppIcon'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
@@ -37,6 +38,17 @@ function commandRiskLabel(risk: AiCommandRisk) {
 
 function contextModeLabel(mode: AiContextMode) {
   return mode === 'L0' || mode === 'metadata' ? t.aiCopilotContextMetadata : t.aiCopilotContextRecentTerminal
+}
+
+function copilotModeDescription(mode: AiCopilotMode) {
+  switch (mode) {
+    case 'pure-conversation':
+      return t.aiCopilotModePureDescription
+    case 'semi-automatic':
+      return t.aiCopilotModeSemiDescription
+    case 'fully-automatic':
+      return t.aiCopilotModeFullDescription
+  }
 }
 
 function reviewOutcomeLabel(outcome: AiReviewOutcome) {
@@ -175,8 +187,6 @@ export function AiCopilotPanel({
   const [referenceTerminal, setReferenceTerminal] = useState(false)
   const [isAutoModeConfirmOpen, setIsAutoModeConfirmOpen] = useState(false)
   const [isAutoModeConfirming, setIsAutoModeConfirming] = useState(false)
-  const [isAutoModeResetOpen, setIsAutoModeResetOpen] = useState(false)
-  const [isAutoModeResetting, setIsAutoModeResetting] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
   const [writingCommandIds, setWritingCommandIds] = useState<Set<string>>(() => new Set())
   const writingCommandIdsRef = useRef<Set<string>>(new Set())
@@ -252,7 +262,7 @@ export function AiCopilotPanel({
     runReview,
     setCopilotMode,
     setContextAttach,
-    resetAutoModeSessionCounts,
+    setDangerousCommandRestrictions,
     retry,
     stop
   } = useAiCopilot()
@@ -376,11 +386,11 @@ export function AiCopilotPanel({
     if (next) setIsAutoModeConfirmOpen(false)
   }
 
-  const confirmAutoModeReset = async () => {
-    setIsAutoModeResetting(true)
-    const next = await resetAutoModeSessionCounts()
-    setIsAutoModeResetting(false)
-    if (next) setIsAutoModeResetOpen(false)
+  const dangerousCommandRestrictionsEnabled = modeState?.autoModeGuardrails.dangerousCommandRestrictionsEnabled ?? true
+
+  const toggleDangerousCommandRestrictions = () => {
+    if (isStreaming || !modeState) return
+    void setDangerousCommandRestrictions(!dangerousCommandRestrictionsEnabled)
   }
 
   const saveConversationTitle = async () => {
@@ -530,56 +540,6 @@ export function AiCopilotPanel({
           <CloseButton aria-label={t.closeAiCopilot} onClick={onClose} size="compact" />
         </div>
       </header>
-
-      {canChat ? (
-        <section className="ai-copilot-mode-dock" aria-label={t.aiCopilotModeLabel}>
-          <div className="ai-copilot-mode-selector" role="radiogroup" aria-label={t.aiCopilotModeLabel}>
-            {(
-              [
-                ['pure-conversation', t.aiCopilotModePure],
-                ['semi-automatic', t.aiCopilotModeSemi],
-                ['fully-automatic', t.aiCopilotModeFull]
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                aria-checked={copilotMode === value}
-                className={copilotMode === value ? 'is-active' : ''}
-                disabled={isStreaming}
-                role="radio"
-                title={value === 'fully-automatic' ? t.aiCopilotModeFullHint : undefined}
-                type="button"
-                onClick={() => selectCopilotMode(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <span className="ai-copilot-mode-hint">
-            {copilotMode === 'fully-automatic'
-              ? t.aiCopilotModeFullHint
-              : copilotMode === 'semi-automatic'
-                ? t.aiCopilotModeSemiHint
-                : t.aiCopilotModePureHint}
-          </span>
-          {copilotMode === 'fully-automatic' && modeState ? (
-            <span className="ai-copilot-mode-guardrails">
-              {modeState.autoModeGuardrails.sessionToolCallCount}/
-              {modeState.autoModeGuardrails.thresholds.maxToolCallsPerSession}
-              <button
-                aria-label={t.aiCopilotAutoModeResetTitle}
-                className="ai-copilot-mode-reset-button"
-                disabled={isStreaming}
-                title={t.aiCopilotAutoModeReset}
-                type="button"
-                onClick={() => setIsAutoModeResetOpen(true)}
-              >
-                {t.aiCopilotAutoModeReset}
-              </button>
-            </span>
-          ) : null}
-        </section>
-      ) : null}
 
       <div
         className={`ai-copilot-content ${canChat ? 'has-chat' : ''} ${isConversationListOpen ? 'is-conversation-list' : ''}`}
@@ -1110,6 +1070,49 @@ export function AiCopilotPanel({
                             value={selectedModel ?? currentProvider.model}
                             onChange={(value) => selectModel(value || null)}
                           />
+                          <span
+                            aria-hidden="true"
+                            className="ai-copilot-composer-model-divider ai-copilot-mode-divider"
+                          />
+                          <DropdownSelect
+                            ariaLabel={t.aiCopilotModeLabel}
+                            className="ai-copilot-composer-select ai-copilot-mode-select"
+                            disabled={isStreaming}
+                            forceCustomMenu
+                            menuClassName="ai-copilot-mode-menu"
+                            menuPlacement="above"
+                            menuWidth="auto"
+                            options={[
+                              { value: 'pure-conversation', label: t.aiCopilotModePure },
+                              { value: 'semi-automatic', label: t.aiCopilotModeSemi },
+                              { value: 'fully-automatic', label: t.aiCopilotModeFull }
+                            ]}
+                            renderOption={(option, selected) => {
+                              const optionMode = option.value as AiCopilotMode
+                              return (
+                                <span className="ai-copilot-mode-option">
+                                  <span className="ai-copilot-mode-option-copy">
+                                    <strong>
+                                      {option.label}
+                                      {selected ? (
+                                        <AppIcon className="ai-copilot-mode-option-check" name="check" size={13} />
+                                      ) : null}
+                                    </strong>
+                                    <small>{copilotModeDescription(optionMode)}</small>
+                                  </span>
+                                </span>
+                              )
+                            }}
+                            renderValue={(option) => {
+                              return (
+                                <span className="ai-copilot-mode-value">
+                                  <span>{option.label}</span>
+                                </span>
+                              )
+                            }}
+                            value={copilotMode}
+                            onChange={(value) => selectCopilotMode(value as AiCopilotMode)}
+                          />
                         </>
                       ) : null}
                     </div>
@@ -1148,6 +1151,44 @@ export function AiCopilotPanel({
           </div>
         </footer>
       ) : null}
+      {!isConversationListOpen ? (
+        <section
+          aria-label={copilotMode === 'fully-automatic' ? t.aiCopilotDangerousCommandRestrictions : undefined}
+          className="ai-copilot-dangerous-command-dock"
+        >
+          {copilotMode === 'fully-automatic' ? (
+            <>
+              <span className="ai-copilot-dangerous-command-dock-hint">
+                {t.aiCopilotDangerousCommandRestrictionsHint}
+              </span>
+              <button
+                aria-checked={dangerousCommandRestrictionsEnabled}
+                aria-label={`${t.aiCopilotDangerousCommandRestrictions} · ${
+                  dangerousCommandRestrictionsEnabled
+                    ? t.aiCopilotDangerousCommandRestrictionsOn
+                    : t.aiCopilotDangerousCommandRestrictionsOff
+                }`}
+                className={`ai-copilot-dangerous-command-toggle ${
+                  dangerousCommandRestrictionsEnabled ? 'is-enabled' : 'is-disabled'
+                }`}
+                disabled={isStreaming || !modeState}
+                role="switch"
+                title={t.aiCopilotDangerousCommandRestrictionsDescription}
+                type="button"
+                onClick={toggleDangerousCommandRestrictions}
+              >
+                <AppIcon name={dangerousCommandRestrictionsEnabled ? 'shield-check' : 'shield'} size={14} />
+                <span>{t.aiCopilotDangerousCommandRestrictions}</span>
+                <strong>
+                  {dangerousCommandRestrictionsEnabled
+                    ? t.aiCopilotDangerousCommandRestrictionsOn
+                    : t.aiCopilotDangerousCommandRestrictionsOff}
+                </strong>
+              </button>
+            </>
+          ) : null}
+        </section>
+      ) : null}
       {isAutoModeConfirmOpen ? (
         <ConfirmActionDialog
           confirmLabel={t.aiCopilotModeFullConfirm}
@@ -1159,19 +1200,6 @@ export function AiCopilotPanel({
           }}
           onConfirm={() => void confirmFullyAutomaticMode()}
           title={t.aiCopilotModeFullTitle}
-        />
-      ) : null}
-      {isAutoModeResetOpen ? (
-        <ConfirmActionDialog
-          confirmLabel={t.aiCopilotAutoModeResetConfirm}
-          confirmVariant="danger"
-          description={t.aiCopilotAutoModeResetDescription}
-          isSubmitting={isAutoModeResetting}
-          onClose={() => {
-            if (!isAutoModeResetting) setIsAutoModeResetOpen(false)
-          }}
-          onConfirm={() => void confirmAutoModeReset()}
-          title={t.aiCopilotAutoModeResetTitle}
         />
       ) : null}
     </aside>

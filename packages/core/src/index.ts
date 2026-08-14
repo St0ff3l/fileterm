@@ -1202,31 +1202,8 @@ export type AiContextLevel = 'L0' | 'L2'
  */
 export type AiContextMode = AiContextLevel | 'metadata' | 'recent-terminal'
 
-export interface AiAutoModeThresholds {
-  maxToolCallsPerSession: number
-  maxDestructiveCallsPerSession: number
-  maxPrivilegedCallsPerSession: number
-  maxTotalExecDurationSecs: number
-}
-
-/**
- * Renderer-facing safety floor for full-auto guardrails. Rust remains the
- * authority and rejects values below this floor; the shared constant keeps
- * advanced settings aligned with the documented defaults.
- */
-export const DEFAULT_AI_AUTO_MODE_THRESHOLDS: Readonly<AiAutoModeThresholds> = {
-  maxToolCallsPerSession: 20,
-  maxDestructiveCallsPerSession: 5,
-  maxPrivilegedCallsPerSession: 3,
-  maxTotalExecDurationSecs: 600
-}
-
 export interface AiAutoModeGuardrailState {
-  sessionToolCallCount: number
-  sessionDestructiveCount: number
-  sessionPrivilegedCount: number
-  sessionTotalExecDurationSecs: number
-  thresholds: AiAutoModeThresholds
+  dangerousCommandRestrictionsEnabled: boolean
 }
 
 export interface AiCopilotModeState {
@@ -1246,8 +1223,8 @@ export interface SetAiContextAttachInput {
   attachTerminalContext: boolean
 }
 
-export interface SetAiAutoModeThresholdsInput {
-  thresholds: AiAutoModeThresholds
+export interface SetAiDangerousCommandRestrictionsInput {
+  enabled: boolean
 }
 
 /** A target identity that a one-time context snapshot is bound to. */
@@ -1498,13 +1475,8 @@ export type AiErrorCode =
   | 'AI_MODE_CONFIRMATION_REQUIRED'
   | 'AI_MODE_CHANGED'
   | 'AI_CONTEXT_LOCKED'
-  | 'AI_AUTO_MODE_UNAVAILABLE'
-  | 'AI_AUTO_MODE_INVALID_THRESHOLDS'
   | 'AI_AUTO_MODE_BLOCKED_COMMAND'
   | 'AI_AUTO_MODE_IRREVERSIBLE_NOT_WHITELISTED'
-  | 'AI_AUTO_MODE_SESSION_LIMIT_REACHED'
-  | 'AI_AUTO_MODE_RISK_LIMIT_REACHED'
-  | 'AI_AUTO_MODE_DURATION_LIMIT_REACHED'
   | 'AI_AUTO_MODE_TARGET_CHANGED'
   | 'AI_TOOL_CALL_REJECTED'
   | 'AI_TOOL_CALL_INVALID'
@@ -1551,9 +1523,7 @@ export interface FileTermDesktopApi {
   getAiCopilotModeState(): Promise<AiCopilotModeState>
   setAiCopilotMode(input: SetAiCopilotModeInput): Promise<AiCopilotModeState>
   setAiContextAttach(input: SetAiContextAttachInput): Promise<AiCopilotModeState>
-  getAiAutoModeThresholds(): Promise<AiAutoModeThresholds>
-  setAiAutoModeThresholds(input: SetAiAutoModeThresholdsInput): Promise<AiCopilotModeState>
-  resetAiAutoModeSessionCounts(): Promise<AiCopilotModeState>
+  setAiDangerousCommandRestrictions(input: SetAiDangerousCommandRestrictionsInput): Promise<AiCopilotModeState>
   createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
   startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>

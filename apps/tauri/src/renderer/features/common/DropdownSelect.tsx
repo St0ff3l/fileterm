@@ -5,7 +5,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode
 } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from './AppIcon'
@@ -17,7 +18,8 @@ export type DropdownOption = {
 }
 
 // macOS 原生下拉框视觉已经足够好，且与系统语义一致；Windows / Linux 原生
-// select 样式与主题脱节，因此仅在这两个平台走自绘 DropdownSelect。
+// select 样式与主题脱节，因此仅在这两个平台走自绘 DropdownSelect。需要富内容
+// 菜单的调用方可显式 forceCustomMenu，保证三端显示同一套菜单。
 const useNativeSelect = () => window.fileterm?.platform === 'darwin'
 
 export function DropdownSelect({
@@ -29,8 +31,14 @@ export function DropdownSelect({
   disabled,
   autoFocus,
   menuWidth = 'trigger',
+  menuPlacement = 'below',
   align = 'auto',
-  onKeyDown
+  onKeyDown,
+  ariaLabel,
+  renderOption,
+  renderValue,
+  menuClassName,
+  forceCustomMenu = false
 }: {
   value: string
   options: DropdownOption[]
@@ -40,10 +48,16 @@ export function DropdownSelect({
   disabled?: boolean
   autoFocus?: boolean
   menuWidth?: 'trigger' | 'auto'
+  menuPlacement?: 'above' | 'below' | 'auto'
   align?: 'left' | 'right' | 'auto'
   onKeyDown?: (event: ReactKeyboardEvent<HTMLElement>) => void
+  ariaLabel?: string
+  renderOption?: (option: DropdownOption, selected: boolean) => ReactNode
+  renderValue?: (option: DropdownOption) => ReactNode
+  menuClassName?: string
+  forceCustomMenu?: boolean
 }) {
-  const nativeSelect = useNativeSelect()
+  const nativeSelect = useNativeSelect() && !forceCustomMenu
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const selectRef = useRef<HTMLSelectElement>(null)
@@ -139,7 +153,12 @@ export function DropdownSelect({
     const rect = trigger.getBoundingClientRect()
     const menuRect = menu.getBoundingClientRect()
     const viewportMargin = 8
-    const top = rect.bottom + 4
+    const belowTop = rect.bottom + 4
+    const aboveTop = rect.top - menuRect.height - 4
+    const shouldPlaceAbove =
+      menuPlacement === 'above' ||
+      (menuPlacement === 'auto' && belowTop + menuRect.height > window.innerHeight - viewportMargin)
+    const top = shouldPlaceAbove ? aboveTop : belowTop
     const minWidth = menuWidth === 'trigger' ? rect.width : menuRect.width
     const shouldAlignRight =
       align === 'right' || (align === 'auto' && rect.left + menuRect.width > window.innerWidth - viewportMargin)
@@ -149,7 +168,7 @@ export function DropdownSelect({
       setResolvedStyle({
         right: Math.max(viewportMargin, window.innerWidth - rect.right),
         left: 'auto',
-        top: Math.min(maxTop, top),
+        top: Math.min(maxTop, Math.max(viewportMargin, top)),
         minWidth
       })
     } else {
@@ -157,11 +176,11 @@ export function DropdownSelect({
       setResolvedStyle({
         left: Math.min(maxLeft, Math.max(viewportMargin, rect.left)),
         right: 'auto',
-        top: Math.min(maxTop, top),
+        top: Math.min(maxTop, Math.max(viewportMargin, top)),
         minWidth
       })
     }
-  }, [open, options, menuWidth, align])
+  }, [open, options, menuWidth, menuPlacement, align])
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue)
@@ -174,6 +193,7 @@ export function DropdownSelect({
         <select
           ref={selectRef}
           autoFocus={autoFocus}
+          aria-label={ariaLabel}
           disabled={disabled}
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -193,7 +213,7 @@ export function DropdownSelect({
   const menuElement = (
     <div
       ref={menuRef}
-      className="context-menu dropdown-select-menu"
+      className={`context-menu dropdown-select-menu ${menuClassName ?? ''}`.trim()}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         if (event.key === 'ArrowDown') {
@@ -221,16 +241,22 @@ export function DropdownSelect({
       {options.map((option) => (
         <button
           key={option.value}
-          className={option.value === value ? 'is-selected' : ''}
+          className={`${option.value === value ? 'is-selected' : ''} ${renderOption ? 'has-custom-content' : ''}`.trim()}
           disabled={option.disabled}
           onClick={() => handleSelect(option.value)}
           role="menuitem"
           type="button"
         >
-          <span className="dropdown-select-check-slot">
-            {option.value === value ? <AppIcon className="dropdown-select-check" name="check" size={14} /> : null}
-          </span>
-          <span className="dropdown-select-label">{option.label}</span>
+          {renderOption ? (
+            renderOption(option, option.value === value)
+          ) : (
+            <>
+              <span className="dropdown-select-check-slot">
+                {option.value === value ? <AppIcon className="dropdown-select-check" name="check" size={14} /> : null}
+              </span>
+              <span className="dropdown-select-label">{option.label}</span>
+            </>
+          )}
         </button>
       ))}
     </div>
@@ -242,12 +268,17 @@ export function DropdownSelect({
         ref={triggerRef}
         type="button"
         autoFocus={autoFocus}
+        aria-label={ariaLabel}
         className={`dropdown-select-trigger ${className ?? ''}`.trim()}
         disabled={disabled}
+        aria-expanded={open}
+        aria-haspopup="menu"
         onClick={toggleMenu}
         onKeyDown={onKeyDown}
       >
-        <span className="dropdown-select-value">{selectedLabel}</span>
+        <span className="dropdown-select-value">
+          {selectedOption && renderValue ? renderValue(selectedOption) : selectedLabel}
+        </span>
         <AppIcon className="dropdown-select-arrow" name="chevron-down" size={arrowSize} />
       </button>
       {open && typeof document !== 'undefined' ? createPortal(menuElement, document.body) : null}

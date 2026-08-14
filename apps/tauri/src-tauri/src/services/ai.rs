@@ -105,10 +105,9 @@ struct AiContextRegistry {
 static AI_CONTEXT_REGISTRY: LazyLock<Mutex<AiContextRegistry>> =
     LazyLock::new(|| Mutex::new(AiContextRegistry::default()));
 
-/// Copilot mode and automatic-execution counters are process-local. They are
+/// Copilot mode and automatic-execution policy are process-local. They are
 /// intentionally not persisted with conversations or workspace snapshots: a
-/// restart must reset any automatic execution budget and require the user to
-/// opt into the mode again.
+/// restart must require the user to opt into full-auto again.
 static AI_MODE_REGISTRY: LazyLock<Mutex<HashMap<String, StoredAiModeState>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -262,21 +261,8 @@ impl AiCopilotMode {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AiAutoModeThresholds {
-    pub max_tool_calls_per_session: u32,
-    pub max_destructive_calls_per_session: u32,
-    pub max_privileged_calls_per_session: u32,
-    pub max_total_exec_duration_secs: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AiAutoModeGuardrailState {
-    pub session_tool_call_count: u32,
-    pub session_destructive_count: u32,
-    pub session_privileged_count: u32,
-    pub session_total_exec_duration_secs: u64,
-    pub thresholds: AiAutoModeThresholds,
+    pub dangerous_command_restrictions_enabled: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -303,8 +289,8 @@ pub struct SetAiContextAttachInput {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SetAiAutoModeThresholdsInput {
-    pub thresholds: AiAutoModeThresholds,
+pub struct SetAiDangerousCommandRestrictionsInput {
+    pub enabled: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -735,8 +721,7 @@ struct StoredAiModeState {
     // the user's L0/L2 choice instead of leaking the forced L2 state.
     pure_context_preference: bool,
     session_generation: u64,
-    counters: crate::services::ai_guardrails::AutoModeCounters,
-    thresholds: AiAutoModeThresholds,
+    dangerous_command_restrictions_enabled: bool,
 }
 
 fn default_schema_version() -> u32 {
@@ -752,8 +737,7 @@ fn default_ai_mode_state() -> StoredAiModeState {
         mode: AiCopilotMode::PureConversation,
         pure_context_preference: false,
         session_generation: 0,
-        counters: crate::services::ai_guardrails::AutoModeCounters::default(),
-        thresholds: crate::services::ai_guardrails::default_thresholds(),
+        dangerous_command_restrictions_enabled: true,
     }
 }
 
@@ -781,11 +765,7 @@ fn public_mode_state(state: &StoredAiModeState) -> AiCopilotModeState {
         mode: state.mode,
         attach_terminal_context: effective_context_attachment(state),
         auto_mode_guardrails: AiAutoModeGuardrailState {
-            session_tool_call_count: state.counters.tool_calls,
-            session_destructive_count: state.counters.destructive_calls,
-            session_privileged_count: state.counters.privileged_calls,
-            session_total_exec_duration_secs: state.counters.total_exec_duration_secs,
-            thresholds: state.thresholds.clone(),
+            dangerous_command_restrictions_enabled: state.dangerous_command_restrictions_enabled,
         },
     }
 }
@@ -815,9 +795,8 @@ pub fn set_copilot_mode(
     state.mode = input.mode;
     if mode_changed {
         // The registry is process-local, so a restart also requires a new
-        // full-auto opt-in. Switching modes starts a fresh budget.
+        // full-auto opt-in.
         state.session_generation = state.session_generation.wrapping_add(1);
-        state.counters = crate::services::ai_guardrails::AutoModeCounters::default();
     }
     Ok(public_mode_state(state))
 }
@@ -840,34 +819,15 @@ pub fn set_context_attach(
     Ok(public_mode_state(state))
 }
 
-pub fn get_auto_mode_thresholds(window: &WebviewWindow) -> Result<AiAutoModeThresholds, AppError> {
-    Ok(mode_state_for_window(window.label())?.thresholds)
-}
-
-pub fn set_auto_mode_thresholds(
+pub fn set_dangerous_command_restrictions(
     window: &WebviewWindow,
-    input: SetAiAutoModeThresholdsInput,
-) -> Result<AiCopilotModeState, AppError> {
-    crate::services::ai_guardrails::validate_thresholds(&input.thresholds)
-        .map_err(|reason| ai_error("AI_AUTO_MODE_INVALID_THRESHOLDS", reason))?;
-
-    let mut registry = mode_registry_lock()?;
-    let state = registry
-        .entry(window.label().to_string())
-        .or_insert_with(default_ai_mode_state);
-    state.thresholds = input.thresholds;
-    Ok(public_mode_state(state))
-}
-
-pub fn reset_auto_mode_session_counts(
-    window: &WebviewWindow,
+    input: SetAiDangerousCommandRestrictionsInput,
 ) -> Result<AiCopilotModeState, AppError> {
     let mut registry = mode_registry_lock()?;
     let state = registry
         .entry(window.label().to_string())
         .or_insert_with(default_ai_mode_state);
-    state.session_generation = state.session_generation.wrapping_add(1);
-    state.counters = crate::services::ai_guardrails::AutoModeCounters::default();
+    state.dangerous_command_restrictions_enabled = input.enabled;
     Ok(public_mode_state(state))
 }
 
@@ -3859,18 +3819,16 @@ async fn execute_copilot_tool_call(
         return Err(request_cancelled_error());
     }
 
-    // Reserve the full-auto count while holding the authoritative mode-state
-    // lock. The earlier mode check is intentionally repeated here because a
-    // semi/full mode switch may have happened while the approval dialog was
-    // open. Reserving before the SSH await closes the concurrent-budget race:
-    // two requests cannot both consume the same last slot.
+    // Re-read the policy while holding the authoritative mode-state lock. The
+    // earlier mode check is intentionally repeated here because a semi/full
+    // mode switch may have happened while the approval dialog was open.
     if prepared.copilot_mode == AiCopilotMode::FullyAutomatic {
         let current_revision = state
             .ai_session_revision(&proposal.target.tab_id)
             .await
             .to_string();
-        let mut registry = mode_registry_lock()?;
-        let Some(latest_state) = registry.get_mut(source_window_label) else {
+        let registry = mode_registry_lock()?;
+        let Some(latest_state) = registry.get(source_window_label) else {
             return Ok(copilot_tool_result(
                 &proposal.id,
                 "auto-blocked",
@@ -3891,8 +3849,7 @@ async fn execute_copilot_tool_call(
         if let Err(error) = crate::services::ai_guardrails::authorize_command(
             &proposal.command,
             proposal.risk,
-            &latest_state.counters,
-            &latest_state.thresholds,
+            latest_state.dangerous_command_restrictions_enabled,
             Some(&proposal.target.session_revision),
             Some(&current_revision),
         ) {
@@ -3902,10 +3859,6 @@ async fn execute_copilot_tool_call(
                 Some(format!("{}: {}", error.code, error.reason)),
             ));
         }
-        crate::services::ai_guardrails::reserve_execution(
-            &mut latest_state.counters,
-            proposal.risk,
-        );
     }
 
     let started_at = Instant::now();
@@ -3926,19 +3879,6 @@ async fn execute_copilot_tool_call(
     )
     .await;
     let duration = started_at.elapsed();
-    if prepared.copilot_mode == AiCopilotMode::FullyAutomatic {
-        let mut registry = mode_registry_lock()?;
-        if let Some(state) = registry.get_mut(source_window_label) {
-            if state.mode == prepared.copilot_mode
-                && state.session_generation == prepared.copilot_session_generation
-            {
-                crate::services::ai_guardrails::record_execution_duration(
-                    &mut state.counters,
-                    duration,
-                );
-            }
-        }
-    }
     let duration_ms = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
     let (loop_result, tool_result) = match execution {
         Ok(execution) => {
@@ -6711,9 +6651,10 @@ mod tests {
         let default_state = public_mode_state(&default_ai_mode_state());
         assert_eq!(default_state.mode, AiCopilotMode::PureConversation);
         assert!(!default_state.attach_terminal_context);
-        assert_eq!(
-            default_state.auto_mode_guardrails.session_tool_call_count,
-            0
+        assert!(
+            default_state
+                .auto_mode_guardrails
+                .dangerous_command_restrictions_enabled
         );
 
         let pure_state = default_ai_mode_state();

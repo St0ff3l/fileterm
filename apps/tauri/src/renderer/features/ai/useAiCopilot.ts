@@ -101,7 +101,6 @@ export function useAiCopilot() {
   const requestCompletedRef = useRef(false)
   const unmountedRef = useRef(false)
   const modeStateRef = useRef<AiCopilotModeState | null>(null)
-  const modeResetPromiseRef = useRef<Promise<AiCopilotModeState | null> | null>(null)
   const mountedRef = useRef(true)
 
   const applyConversation = useCallback((next: AiConversation | null) => {
@@ -209,11 +208,9 @@ export function useAiCopilot() {
     void refresh()
     const reload = () => void refresh()
     window.addEventListener('fileterm:ai-providers-changed', reload)
-    window.addEventListener('fileterm:ai-auto-mode-thresholds-changed', reload)
     return () => {
       mountedRef.current = false
       window.removeEventListener('fileterm:ai-providers-changed', reload)
-      window.removeEventListener('fileterm:ai-auto-mode-thresholds-changed', reload)
     }
   }, [refresh])
 
@@ -425,11 +422,11 @@ export function useAiCopilot() {
     []
   )
 
-  const resetAutoModeSessionCounts = useCallback(async () => {
+  const setDangerousCommandRestrictions = useCallback(async (enabled: boolean) => {
     const desktopApi = window.fileterm
     if (!desktopApi) return null
     try {
-      const next = await desktopApi.resetAiAutoModeSessionCounts()
+      const next = await desktopApi.setAiDangerousCommandRestrictions({ enabled })
       if (mountedRef.current) {
         modeStateRef.current = next
         setModeState(next)
@@ -448,16 +445,6 @@ export function useAiCopilot() {
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !content || !providerId || isStreaming) return false
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
-      const pendingModeReset = modeResetPromiseRef.current
-      if (pendingModeReset) {
-        const resetState = await pendingModeReset
-        if (!resetState) return false
-      }
-      const needsNewConversation = !conversationRef.current
-      if (needsNewConversation && !pendingModeReset) {
-        const resetState = await resetAutoModeSessionCounts()
-        if (!resetState) return false
-      }
       const preview =
         options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
           ? options.contextPreview
@@ -560,15 +547,7 @@ export function useAiCopilot() {
         return false
       }
     },
-    [
-      applyConversation,
-      autoSummarizeConversationTitle,
-      contextPreview,
-      createConversation,
-      isStreaming,
-      resetAutoModeSessionCounts,
-      startRequest
-    ]
+    [applyConversation, autoSummarizeConversationTitle, contextPreview, createConversation, isStreaming, startRequest]
   )
 
   const createContextPreview = useCallback(
@@ -783,21 +762,8 @@ export function useAiCopilot() {
     setErrorMessage(null)
     setUsage(null)
     setToolActivities([])
-    // Guardrail counters belong to the active Copilot conversation window,
-    // not to the historical conversation being left behind. Starting a new
-    // chat therefore gets a fresh automatic-execution budget in Rust.
-    const resetPromise = resetAutoModeSessionCounts()
-    modeResetPromiseRef.current = resetPromise
-    void resetPromise.then(
-      () => {
-        if (modeResetPromiseRef.current === resetPromise) modeResetPromiseRef.current = null
-      },
-      () => {
-        if (modeResetPromiseRef.current === resetPromise) modeResetPromiseRef.current = null
-      }
-    )
     applyConversation(null)
-  }, [applyConversation, isStreaming, resetAutoModeSessionCounts])
+  }, [applyConversation, isStreaming])
 
   const currentProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
   // Effective model: user-selected override > provider's default model
@@ -832,7 +798,7 @@ export function useAiCopilot() {
     runReview,
     setCopilotMode,
     setContextAttach,
-    resetAutoModeSessionCounts,
+    setDangerousCommandRestrictions,
     retry,
     stop
   }

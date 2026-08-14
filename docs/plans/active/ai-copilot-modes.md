@@ -1,6 +1,6 @@
 # AI Copilot 三模式与上下文级别简化计划
 
-状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 和全自动护栏高级设置已落地；三类 Provider 的本机 loopback 工具契约测试、旧命令卡协议隔离测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 已通过 MCP interactive-exec 真实客户端回归，待内置真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
+状态：进行中（核心工具循环、审批、护栏、安全凭据衔接、三模式 UI 已落地；全自动累计次数/时长上限已移除，危险命令限制改为全自动模式内可切换开关；三类 Provider 的本机 loopback 工具契约测试、旧命令卡协议隔离测试、macOS arm64 app/DMG 与 disposable SSH 的 sudo/su 回归已通过，Claude Code / Codex CLI 已通过 MCP interactive-exec 真实客户端回归，待内置真实 Provider / 远端生产环境 / Windows/Linux 打包回归）
 关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[简化远程 exec 与 sudo 凭据自动化](./simplify-exec-sudo-credentials.md)、[MCP / CLI 安全交互式远程执行计划](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 0. 审查结论与实施修正
@@ -9,13 +9,20 @@
 
 - **先兼容、后删除**。旧的 `metadata` 输入迁移为新的 L2 语义，旧会话缺少 mode 时按纯对话处理；在所有调用方和 fixture 完成迁移前，不直接删除旧 enum 值或 `app_run_ai_review`。
 - **Review Mode 先映射为半自动**。只有新的工具调用、逐次审批、目标绑定和结果回传链路全部可用后，才移除旧入口；不能仅改 UI 文案就声称半自动已完成。
-- **全自动需要真实工具循环**。类型、模式选择器和护栏状态不足以构成全自动。Provider 的工具调用解析、Rust 侧 schema 校验、sessionRevision 绑定、黑名单/阈值 fail-closed、执行结果回传和会话计数必须一起落地，缺一项就不得执行。
+- **全自动需要真实工具循环**。类型、模式选择器和护栏状态不足以构成全自动。Provider 的工具调用解析、Rust 侧 schema 校验、sessionRevision 绑定、危险命令限制、执行结果回传和循环边界必须一起落地，缺一项就不得执行。
 - **Copilot 永不接收提权密码**。半自动/全自动只能使用 profile 加密存储或安全本地输入；不得让模型在聊天里索取、转发、回显或持久化 `sudo_password` / `su_password`。
 - **保留通用 interactive exec**。Copilot 的普通命令执行与 MFA/验证码等交互式程序是不同能力；新 sudo/su stdin 分支稳定前，不删除 MCP/CLI 的安全交互式工具。
 
-当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。macOS arm64 app/DMG 已完成本机验收，并补齐了唯一 bundle id QA app 的 loopback Provider、三模式工具循环、disposable SSH、sudo 安全输入和 su PTY 密码回归；Claude Code / Codex CLI 也已通过 MCP interactive-exec 真实调用，验证任务级安全输入和脱敏结果；内置真实 Provider、远端生产环境和 Windows/Linux 打包回归仍待验收。
+当前分支已完成核心实现：核心类型、Rust 侧模式状态、L0/L2 约束、三类 Provider 的工具 schema / 流式解析、Rust-owned 工具循环、半自动逐次审批、全自动护栏、结果回传、sessionRevision 绑定、本地 sudo/su 安全输入和工具活动 UI 已经接通。三模式选择器现在是 Copilot 新回合的唯一模式入口，直接替换旧的“普通对话 / 生成命令卡”切换；旧 `responseMode=command-proposal`、`app_run_ai_review` 与通用 interactive exec 仍保留为兼容入口和 MFA/验证码等交互式能力，历史命令卡继续可读取。全自动不再累计工具调用、风险调用或执行时长；危险命令限制默认开启，用户可在全自动模式下关闭该限制。macOS arm64 app/DMG 已完成本机验收，并补齐了唯一 bundle id QA app 的 loopback Provider、三模式工具循环、disposable SSH、sudo 安全输入和 su PTY 密码回归；Claude Code / Codex CLI 也已通过 MCP interactive-exec 真实调用，验证任务级安全输入和脱敏结果；内置真实 Provider、远端生产环境和 Windows/Linux 打包回归仍待验收。
 
-本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动护栏预算预占和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH、任务专属 sudo prompt 和 CLI su PTY 密码回归；Claude Code 与 Codex CLI 已通过临时 MCP 配置实际调用打包 binary 的 interactive-exec，均完成一次任务级安全输入并只获得脱敏结果；这验证了外部 MCP 客户端到 FileTerm 交互任务的链路，但不等同于内置真实 Provider 对话、三端桌面手工验收或远端生产环境回归。
+本地回归补充：三类 Provider 的 loopback 请求/响应契约、严格工具 schema、SSE tool-call 解析、usage 回传、全自动危险命令限制开关和模式会话代数隔离测试均已通过；macOS QA bundle 已用 loopback fixture 实际跑通纯对话、半自动/全自动 tool loop、disposable SSH、任务专属 sudo prompt 和 CLI su PTY 密码回归；Claude Code 与 Codex CLI 已通过临时 MCP 配置实际调用打包 binary 的 interactive-exec，均完成一次任务级安全输入并只获得脱敏结果；这验证了外部 MCP 客户端到 FileTerm 交互任务的链路，但不等同于内置真实 Provider 对话、三端桌面手工验收或远端生产环境回归。
+
+### 2026-08-14 全自动策略修订
+
+- 保留三种能力模式，界面名称简化为“对话 / 协作 / 托管”，不新增第四种“完全不管”模式；文档后续的“纯对话 / 半自动 / 全自动”仍用于描述对应执行语义。
+- 普通全自动不展示、不维护 `0/20`，也不限制每会话累计工具调用、风险调用或执行时长；Provider 工具循环仍保留每轮最多 8 轮的防死循环边界。
+- 全自动新增“危险命令限制”开关，默认开启。开启时拦截 `rm -rf /`、`mkfs`、`reboot` 等危险命令，并要求 destructive / privileged 命令命中白名单；关闭时跳过这两类命令限制，但仍校验空命令、目标会话版本和当前会话绑定。
+- 阈值设置页、累计计数展示、重置计数动作及对应 IPC 已移除；危险命令限制开关仅在全自动模式的紧凑策略栏中出现。
 
 ## 1. 结论
 
@@ -23,7 +30,7 @@
 
 - **纯对话模式（Pure Conversation）**：默认 L0，可由用户主动开启 L2；模型只进行普通对话，不获得工具调用能力，也不发起任何远端执行。
 - **半自动模式（Semi-Automatic）**：强制 L2；模型可发起工具调用，每次执行必须经用户**逐次审批**后才走独立 SSH exec channel。
-- **全自动模式（Fully Automatic）**：强制 L2；模型可发起工具调用，**无需逐次审批**直接走独立 SSH exec channel，但受危险命令黑名单、操作阈值、不可逆动作白名单和会话级累计上限约束。
+- **全自动模式（Fully Automatic）**：强制 L2；模型可发起工具调用，**无需逐次审批**直接走独立 SSH exec channel。危险命令限制默认开启，并可在全自动模式内关闭；目标会话绑定始终有效，不设置会话级累计次数或时长上限。
 
 关键决策：
 
@@ -31,7 +38,7 @@
 2. **半自动和全自动模式强制 L2**。模型若看不到终端 transcript，就无法在执行链里做正确判断；允许 L0 + 自动执行等于让 Agent 盲操作远端主机，违背 [ai-copilot-integration.md](./ai-copilot-integration.md) 的"保守助手"定位。
 3. **纯对话模式 L2 改为可开关**。用户在排障、解释、学习场景下可能希望临时让模型看到终端输出，但不应被强制。开关默认关闭，开启后每条消息自动刷新一次性快照（沿用现有 `app_create_ai_context_preview` 行为）。
 4. **L3 Review Mode 不再单列**。它的能力被半自动模式完全吸收：半自动模式的每次工具调用都走 `ActionReviewService` 的一次性审批 + 独立 SSH exec，等价于原 L3 的语义但不再作为一种"上下文级别"。
-5. **全自动模式的护栏不是可选的**。模式切换到全自动时，护栏（黑名单、阈值、白名单）默认全部启用；用户不能在 UI 上关闭单条护栏，只能整体降级回半自动。
+5. **全自动模式的目标绑定不是可选的**。模式切换到全自动时，危险命令限制默认启用；用户可以在全自动模式内切换危险命令限制，空命令与 `sessionRevision` 目标校验不受开关影响。
 
 ### 1.1 参考 Catty Agent 的实现边界
 
@@ -53,10 +60,11 @@
 
 UI 约束：
 
-- 模式选择器位于 Copilot 面板顶部，三选一单选按钮组。
+- 模式选择器位于 Copilot composer 的模型选择器右侧，使用统一 `DropdownSelect` 的紧凑触发器和从按钮上方弹出的、带标题 / 说明 / 行尾选中勾的纯文字自绘菜单。
 - 三模式选择器是新回合的唯一运行模式入口，直接替换旧的“普通对话 / 生成命令卡”底部切换；新 UI 不再同时展示 `responseMode` 选择器。
-- 上下文开关仅在纯对话模式下可交互；半自动 / 全自动模式下开关被**禁用并置灰**，旁边提示"该模式强制附带完整终端上下文"。
+- 上下文开关仅在纯对话模式下可交互；半自动 / 全自动模式下开关不可交互但保持当前 UI 的中性可读样式，旁边提示"该模式强制附带完整终端上下文"。
 - 全自动模式首次启用时弹 `<ConfirmActionDialog>` 警告："全自动模式允许 AI 不经审批直接在远端主机执行命令。请确认你信任当前 Provider 与目标主机。"
+- Copilot 对话页始终保留底部紧凑策略栏；仅全自动模式在其中显示“危险命令限制”开关，旁边简要说明 `rm -rf /`、`mkfs`、`reboot` 等示例，开启时使用危险模式 + 不可逆/提权白名单，关闭时只跳过这两类命令限制。
 
 ## 3. 上下文级别定义（简化后）
 
@@ -140,9 +148,9 @@ Rust 强制 L2：自动生成 transcript 快照 + 元数据
 Provider 流式回答 + 工具调用提案
   ↓
 护栏检查（每次调用前）：
-  ├─ 黑名单命中 → 拒绝执行，结果回传给模型并附带拒绝原因
-  ├─ 阈值触发（如本会话累计 N 次执行） → 暂停自动执行，提示用户切回半自动
-  ├─ 不可逆动作未在白名单 → 拒绝执行，提示用户切回半自动或手动审批
+  ├─ sessionRevision / 目标变化 → 拒绝执行，结果回传给模型并附带拒绝原因
+  ├─ 危险命令限制开启且命中危险模式 → 拒绝执行
+  ├─ 危险命令限制开启且不可逆动作未在白名单 → 拒绝执行
   └─ 全部通过 → 独立 SSH exec channel 直接执行（不弹审批）
   ↓
 执行结果（脱敏、截断、退出码）→ 模型
@@ -153,9 +161,9 @@ Provider 流式回答 + 工具调用提案
 约束：
 
 - **不弹审批弹窗**；用户授权由模式切换时的 `<ConfirmActionDialog>` 一次性给出。
-- 护栏不可在 UI 上单独关闭；用户只能整体降级回半自动。
+- 危险命令限制默认开启，用户可在全自动模式的底部策略栏关闭；目标绑定和空命令校验不受开关影响。
 - 执行结果仍走独立 SSH exec channel，不劫持交互式 PTY，不写入可见终端 transcript。
-- 会话级累计上限：默认 20 次工具调用 / 会话，达到上限后自动暂停并提示用户切回半自动或新建会话。
+- 不设置全自动会话级工具调用、风险调用或执行时长累计上限；仅保留 Rust 工具循环每轮最多 8 轮的防死循环边界。
 - 超时、断线、sudo 密码错误等异常**不自动重试**；直接把错误回传给模型，由模型决定是否在聊天里向用户说明。
 
 ## 5. 全自动模式护栏
@@ -255,26 +263,12 @@ const IRREVERSIBLE_WHITELIST: &[&str] = &[
 - 命中白名单 → 允许自动执行。
 - 未命中 → 返回 `AUTO_MODE_IRREVERSIBLE_NOT_WHITELISTED` 错误，提示模型建议用户切回半自动。
 
-### 5.3 操作阈值
+### 5.3 危险命令限制开关
 
-会话级累计约束：
-
-```rust
-struct AutoModeThresholds {
-    max_tool_calls_per_session: usize,       // 默认 20
-    max_destructive_calls_per_session: usize, // 默认 5
-    max_privileged_calls_per_session: usize,  // 默认 3
-    max_total_exec_duration_secs: u64,        // 默认 600（10 分钟）
-}
-```
-
-触发后：
-
-- `max_tool_calls_per_session`：暂停自动执行，返回 `AUTO_MODE_SESSION_LIMIT_REACHED`，提示用户切回半自动或新建会话。
-- `max_destructive_calls_per_session` / `max_privileged_calls_per_session`：暂停自动执行，返回 `AUTO_MODE_RISK_LIMIT_REACHED`，提示用户切回半自动。
-- `max_total_exec_duration_secs`：暂停自动执行，返回 `AUTO_MODE_DURATION_LIMIT_REACHED`。
-
-默认值由 Rust 托管，设置页高级区域允许提高这些上限；每次保存仍由 Rust 校验，禁止低于默认安全下限。
+- 状态只存在于当前 FileTerm 进程的 Copilot 模式状态中，默认 `true`，重启后恢复开启。
+- 开启时运行危险命令模式匹配，并要求 `destructive` / `privileged` 命令命中 Rust 白名单。
+- 关闭时跳过危险模式匹配和不可逆/提权白名单判定，不影响空命令拒绝、`sessionRevision` 校验、当前 tab/root 目标绑定和远程执行超时。
+- 开关只在全自动模式显示；半自动仍逐次审批，纯对话不产生工具调用。
 
 ### 5.4 目标绑定与 sessionRevision
 
@@ -313,21 +307,10 @@ interface AiCopilotModeState {
   mode: AiCopilotMode
   // 仅 pure-conversation 模式下可调；其他模式下锁定为 true
   attachTerminalContext: boolean
-  // 全自动模式护栏状态（只读，由 Rust 派生）
+  // 全自动模式危险命令限制状态（默认开启，由 Rust 派生）
   autoModeGuardrails: {
-    sessionToolCallCount: number
-    sessionDestructiveCount: number
-    sessionPrivilegedCount: number
-    sessionTotalExecDurationSecs: number
-    thresholds: AiAutoModeThresholds
+    dangerousCommandRestrictionsEnabled: boolean
   }
-}
-
-interface AiAutoModeThresholds {
-  maxToolCallsPerSession: number
-  maxDestructiveCallsPerSession: number
-  maxPrivilegedCallsPerSession: number
-  maxTotalExecDurationSecs: number
 }
 
 // 工具调用提案（半自动 / 全自动模式用）
@@ -388,9 +371,6 @@ type AiErrorCode =
   | ...  // 现有错误码
   | 'AI_AUTO_MODE_BLOCKED_COMMAND'           // 黑名单命中
   | 'AI_AUTO_MODE_IRREVERSIBLE_NOT_WHITELISTED'
-  | 'AI_AUTO_MODE_SESSION_LIMIT_REACHED'
-  | 'AI_AUTO_MODE_RISK_LIMIT_REACHED'
-  | 'AI_AUTO_MODE_DURATION_LIMIT_REACHED'
   | 'AI_AUTO_MODE_TARGET_CHANGED'
   | 'AI_TOOL_CALL_REJECTED'                  // 半自动用户拒绝
 ```
@@ -404,14 +384,14 @@ type AiErrorCode =
 
 ### `packages/core`
 
-- 新增 `AiCopilotMode` / `AiContextLevel` / `AiCopilotModeState` / `AiAutoModeThresholds` / `AiToolCallProposal` / `AiToolCallResult` 类型。
+- 新增 `AiCopilotMode` / `AiContextLevel` / `AiCopilotModeState` / `AiToolCallProposal` / `AiToolCallResult` 类型，以及危险命令限制开关输入类型。
 - 修改 `StartAiChatInput` / `CreateAiContextPreviewInput` / `AiStreamEvent` / `AiErrorCode`。
 - 在迁移层归一化 L1 字段和 L3 独立类型；不在第一阶段物理删除旧字段，避免旧会话和旧 renderer 失效。
 
 ### `apps/tauri/src-tauri/src/services/ai.rs` / `ai_guardrails.rs`
 
-- `ai.rs`：增加 process-local mode 状态、L2 强制校验、旧上下文别名归一化、OpenAI Chat / Responses / Anthropic 三套工具 schema 与流式解析，以及带上限的 Rust-owned 工具循环。
-- `ai_guardrails.rs`：黑名单 / 白名单 / 阈值累计 / sessionRevision 校验，已接入全自动执行前检查和执行后计数。
+- `ai.rs`：增加 process-local mode 状态、L2 强制校验、旧上下文别名归一化、OpenAI Chat / Responses / Anthropic 三套工具 schema 与流式解析，以及有单轮循环边界的 Rust-owned 工具循环。
+- `ai_guardrails.rs`：危险命令模式 / 不可逆白名单 / sessionRevision 校验，已接入全自动执行前检查；危险命令限制由全自动模式开关控制。
 - `action_review.rs`：继续作为一次性审批 + 独立 SSH exec 后端；半自动 Copilot 与旧 Review 共用，并保留通用 interactive exec。
 
 ### `apps/tauri/src-tauri/src/commands/mod.rs`
@@ -419,8 +399,7 @@ type AiErrorCode =
 - `app_get_ai_copilot_mode_state`：返回当前模式 + 上下文开关 + 护栏状态。
 - `app_set_ai_copilot_mode`：切换模式；切到全自动先要求用户确认，确认后允许进入真实工具循环，具体执行仍受 Rust 护栏约束。
 - `app_set_ai_context_attach`：仅 pure-conversation 模式下可调；其他模式返回 `ContextLockedByMode` 错误。
-- `app_get_ai_auto_mode_thresholds` / `app_set_ai_auto_mode_thresholds`：已接入设置页高级设置；阈值按当前 FileTerm 窗口生效，Rust 拒绝低于默认安全下限的值。
-- `app_reset_ai_auto_mode_session_counts`：手动重置会话级累计（用户主动操作）。
+- `app_set_ai_dangerous_command_restrictions`：只由全自动模式 UI 调用，切换危险命令模式和不可逆/提权白名单检查。
 - 现有 `app_start_ai_chat` / `app_create_ai_context_preview` / `app_run_ai_review` 按 §7 类型变更调整。
 
 ### `apps/tauri/src/bridge/tauri-api.ts`
@@ -431,15 +410,15 @@ type AiErrorCode =
 
 ### Renderer
 
-- `features/ai/AiCopilotPanel.tsx`：三模式选择器、上下文锁定提示、全自动确认、护栏状态和工具活动 / 输出展示；不再渲染普通对话 / 命令卡二选一入口。
-- `features/ai/useAiCopilot.ts`：接通 mode 状态、上下文开关锁定逻辑、工具调用和工具结果事件，并在新消息 / 重试 / 新会话时清理活动状态。
+- `features/ai/AiCopilotPanel.tsx`：三模式下拉选择器、上下文锁定提示、全自动确认、危险命令限制开关和工具活动 / 输出展示；不再渲染普通对话 / 命令卡二选一入口。
+- `features/ai/useAiCopilot.ts`：接通 mode 状态、上下文开关锁定逻辑、危险命令限制开关、工具调用和工具结果事件。
 - 审批复用现有 `ActionReviewDialog`；工具活动卡和有界输出直接收敛在 Copilot 面板，不新增绕过通用组件的执行 UI。
-- 设置页高级设置区增加全自动模式阈值配置（默认折叠），保存走 Rust 校验后的 mode state；Copilot 面板提供带二次确认的会话累计重置。
+- 设置页不再提供全自动累计阈值或重置计数；危险命令限制只在 Copilot 面板底部策略栏的全自动状态中切换。
 
 ### UI 公用组件边界
 
 - 模式选择器必须使用项目内统一组件，禁止直写 `<select>`。
-- 上下文开关的禁用置灰态必须配合 `--focus-outline` 等色彩 token，不直写硬编码颜色。
+- 上下文开关的不可交互态必须保持中性可读，并配合 `--focus-outline` 等色彩 token，不直写硬编码颜色。
 - 审批弹窗、结果卡、护栏指示器全部复用 `<ConfirmActionDialog>` / `<AppIcon>` / `<VerticalScrollbar>` 等公用组件，遵循 [AGENTS.md](../../../AGENTS.md) §3 UI 边界。
 
 ## 9. 分阶段实施与当前进度
@@ -463,15 +442,15 @@ type AiErrorCode =
 - `AiStreamEvent` 发 `tool-call` / `tool-result` 事件给 renderer，结果回传 Provider 继续下一轮。
 - 全自动模式下护栏通过后直接执行；护栏未通过返回稳定状态和原因，不自动重试。
 - sudo / su 包装复用加密 profile、可信本地输入和全自动 fail-closed 凭据策略。
-- 新建 Copilot 对话会通过 Rust command 重置当前窗口的自动执行累计，并在下一条消息发送前等待重置完成，避免旧对话预算泄漏到新对话。
+- 新建 Copilot 对话不会重置任何累计预算；全自动模式不维护会话累计计数，模式代数仍用于阻断过期工具调用。
 - 已覆盖 schema、三 Provider history、流式 tool-call 重组、工具参数安全校验和三类 Provider 的 loopback 请求/响应契约；真实 Provider 端到端仍待执行。
 - 新增 `effective_copilot_response_mode` 契约：半自动 / 全自动即使收到兼容期的 `command-proposal` 也强制归一为普通对话，只有纯对话保留旧命令卡解析入口；新 renderer 不再发送 `responseMode`。
 
 ### 阶段三：审批与结果 UI（实现完成，macOS arm64 打包与外部 MCP interactive-exec 通过，待真实 Provider / 跨平台回归）
 
 - `AiCopilotPanel.tsx` 展示工具调用状态、执行结果、失败原因和截断输出；纯对话不携带 Provider tools。
-- pure-conversation 可交互，半自动 / 全自动上下文开关禁用并置灰；全自动启用仍弹 `<ConfirmActionDialog>` 警告。
-- 全自动护栏阈值可在设置页默认折叠的高级区域调整；Rust 强制默认安全下限，Copilot 面板可带确认重置当前窗口的会话累计。
+- pure-conversation 可交互，半自动 / 全自动上下文开关不可交互但保持中性可读；全自动启用仍弹 `<ConfirmActionDialog>` 警告。
+- 全自动模式栏提供纯文字的标题 / 说明 / 选中勾模式下拉菜单，并提供默认开启的危险命令限制开关；不显示 `0/20` 或累计计数。
 - 半自动 destructive / privileged 执行要求风险确认；全自动不弹逐次审批，只允许 Rust 护栏放行。
 - 复用 `<DropdownSelect>` / `<AppIcon>` / `<VerticalScrollbar>` / `--focus-outline` 等项目边界。
 - 已通过前端 typecheck、lint、Prettier；macOS arm64 app/DMG 与 Claude Code / Codex CLI 的 MCP interactive-exec 真实调用已通过，内置真实 Provider 交互和 Windows/Linux 打包仍待验证。
@@ -498,7 +477,7 @@ type AiErrorCode =
 - L2 强制：semi-automatic / fully-automatic 模式下 `app_set_ai_context_attach(false)` 返回 `ContextLockedByMode`。
 - 黑名单匹配：`rm -rf /` / `mkfs` / `shutdown` 等命中；`rm -rf /tmp/foo` 不命中（因为不是前缀完全匹配 `/`）。
 - 白名单匹配：`rm /tmp/foo` 命中白名单；`rm -rf /` 已被黑名单先拦截。
-- 阈值累计：20 次工具调用后触发 `AUTO_MODE_SESSION_LIMIT_REACHED`；5 次 destructive 后触发 `AUTO_MODE_RISK_LIMIT_REACHED`。
+- 危险命令限制开关：开启时拦截危险模式并检查不可逆/提权白名单；关闭时只跳过这两类命令限制，目标绑定仍有效。
 - sessionRevision 变化：tab 关闭 / CWD 变化后返回 `AUTO_MODE_TARGET_CHANGED`。
 - 半自动审批：用户拒绝 / 超时 / 关闭弹窗均不执行；批准后执行结果正确回传。
 - 全自动执行：护栏通过后直接执行，无审批弹窗。
@@ -517,8 +496,8 @@ type AiErrorCode =
 ### 10.2 手工验证
 
 - 纯对话模式：L0 默认、L2 开关可切换、只显示普通对话，不携带 Provider tools、不发起执行。
-- 半自动模式：L2 强制、上下文开关置灰、每次工具调用弹审批弹窗、destructive 红色高亮 + 二次确认、拒绝 / 超时不执行。
-- 全自动模式：L2 强制、首次启用弹警告、护栏通过直接执行、护栏命中返回错误码、阈值触发暂停。
+- 半自动模式：L2 强制、上下文开关不可交互但保持中性可读、每次工具调用弹审批弹窗、destructive 红色高亮 + 二次确认、拒绝 / 超时不执行。
+- 全自动模式：L2 强制、首次启用弹警告、危险命令限制可切换、护栏通过直接执行、护栏命中返回错误码。
 - 模式切换：纯对话 → 半自动 → 全自动 → 半自动 → 纯对话，状态正确转换，上下文开关按模式禁用 / 启用。
 - sudo 衔接：全自动模式下预存密码无人值守跑通；未预存时返回 `SUDO_PASSWORD_NEEDED`，不引导聊天索取密码。
 - 跨设备迁移：旧 `ai-conversations.json` 在新设备读取，无 `mode` 字段按 `pure-conversation` 处理。
@@ -540,7 +519,7 @@ type AiErrorCode =
 | 纯对话模式 L2（用户主动开） | 模型看到一次性 transcript 快照（已脱敏、截断）；不持续同步                    |
 | 半自动模式 L2               | 每次发送自动生成快照；每次执行必须用户审批；destructive / privileged 二次确认 |
 | 全自动模式 L2               | 每次发送自动生成快照；护栏未命中时直接执行；护栏命中返回错误码                |
-| 全自动模式被提示注入攻击    | 黑名单拦截 `rm -rf /` 等；阈值限制单会话最大破坏；不可逆动作白名单限制范围    |
+| 全自动模式被提示注入攻击    | 默认开启危险命令限制，拦截 `rm -rf /` 等；不可逆动作白名单限制范围            |
 | 全自动模式密码泄露          | sudo 密码首选 profile 加密存储，不进 LLM 上下文；未预存时 fail-closed         |
 | 半自动模式误批准            | destructive / privileged 红色高亮 + 二次确认降低误操作概率                    |
 | 模式被用户误切到全自动      | 首次切换弹 `<ConfirmActionDialog>` 警告                                       |
@@ -548,30 +527,29 @@ type AiErrorCode =
 
 ## 12. 与同行做法对比
 
-| 同行                   | 模式分级                   | 上下文级别      | 自动执行                | 护栏                                     |
-| ---------------------- | -------------------------- | --------------- | ----------------------- | ---------------------------------------- |
-| Claude Code (Composer) | 默认对话 + 可选 Agent 模式 | 全量上下文      | Agent 模式下自动        | 危险命令确认 + 工作目录限制              |
-| Codex CLI              | 默认对话 + 可选 full-auto  | 全量上下文      | full-auto 下自动        | 沙箱 + 命令审批                          |
-| OpenCode               | 默认对话 + 可选 Agent      | 全量上下文      | Agent 下自动            | 工作目录限制 + 命令黑名单                |
-| Cline                  | 默认对话 + Auto Pilot      | 全量上下文      | Auto Pilot 下自动       | 命令黑名单 + 自动批准开关                |
-| Roo Code               | 默认对话 + Auto            | 全量上下文      | Auto 下自动             | 命令黑名单 + 工作目录限制                |
-| FileTerm（本计划）     | 纯对话 / 半自动 / 全自动   | L0 / L2（简化） | 半自动审批 / 全自动护栏 | 黑名单 + 白名单 + 阈值 + sessionRevision |
+| 同行                   | 模式分级                   | 上下文级别      | 自动执行                | 护栏                                    |
+| ---------------------- | -------------------------- | --------------- | ----------------------- | --------------------------------------- |
+| Claude Code (Composer) | 默认对话 + 可选 Agent 模式 | 全量上下文      | Agent 模式下自动        | 危险命令确认 + 工作目录限制             |
+| Codex CLI              | 默认对话 + 可选 full-auto  | 全量上下文      | full-auto 下自动        | 沙箱 + 命令审批                         |
+| OpenCode               | 默认对话 + 可选 Agent      | 全量上下文      | Agent 下自动            | 工作目录限制 + 命令黑名单               |
+| Cline                  | 默认对话 + Auto Pilot      | 全量上下文      | Auto Pilot 下自动       | 命令黑名单 + 自动批准开关               |
+| Roo Code               | 默认对话 + Auto            | 全量上下文      | Auto 下自动             | 命令黑名单 + 工作目录限制               |
+| FileTerm（本计划）     | 纯对话 / 半自动 / 全自动   | L0 / L2（简化） | 半自动审批 / 全自动护栏 | 可切换黑名单 + 白名单 + sessionRevision |
 
-本计划落地后，FileTerm 在模式分级上与 Claude Code / Codex CLI 等同行对齐，在上下文级别上比同行更**简洁**（仅 L0/L2 两档，无中间态），在全自动模式护栏上比同行更**严格**（不可逆动作白名单 + 阈值累计，而非单纯黑名单）。
+本计划落地后，FileTerm 在模式分级上与 Claude Code / Codex CLI 等同行对齐，在上下文级别上比同行更**简洁**（仅 L0/L2 两档，无中间态），在全自动模式下保留目标绑定，并提供默认开启、可明确关闭的危险命令限制。
 
 ## 13. 风险与缓解
 
 | 风险                                     | 缓解                                                                                                  |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 全自动模式被提示注入攻击执行危险命令     | 黑名单 + 白名单 + 阈值三重护栏；不可逆动作未在白名单一律拒绝                                          |
+| 全自动模式被提示注入攻击执行危险命令     | 默认开启黑名单 + 白名单；不可逆动作未在白名单一律拒绝，用户明确关闭后才跳过这两类限制                 |
 | 用户误切全自动模式                       | 首次切换弹 `<ConfirmActionDialog>` 警告                                                               |
 | 半自动模式审批疲劳（用户无脑点批准）     | destructive / privileged 红色高亮 + 二次确认复选框                                                    |
 | 全自动模式 sudo 密码未预存导致卡住       | profile 无凭据时 fail-closed 返回 `SUDO_PASSWORD_NEEDED`，不让模型索取 secret                         |
 | L1 移除影响已有用户                      | L1 在当前版本尚未广泛使用（Phase 3 刚落地）；迁移成本可控                                             |
 | 旧会话无 mode 字段                       | 按 `pure-conversation` 处理，不强制迁移                                                               |
 | 工具调用提案模型不支持 structured output | 降级为严格 JSON envelope，沿用 [ai-copilot-integration.md](./ai-copilot-integration.md) §7 的降级路径 |
-| 全自动模式阈值默认值过严                 | 阈值在设置页可调（高级设置区），下限不低于默认值                                                      |
-| 全自动模式阈值默认值过松                 | 默认值保守（20 次工具调用 / 5 次 destructive / 3 次 privileged / 10 分钟总执行时长）                  |
+| 全自动模式危险命令限制关闭后风险扩大     | 开关仅显示在全自动模式栏，默认开启；目标绑定、空命令校验和单轮循环边界仍保留                          |
 
 ## 14. 当前阶段不做的事
 
@@ -582,7 +560,7 @@ type AiErrorCode =
 - 不动 [simplify-exec-sudo-credentials.md](./simplify-exec-sudo-credentials.md) 的三层密码源实现（本计划只衔接，不重写）。
 - 不做无界或 UI 模拟的自动循环；Provider-owned 多步工具循环仅限 Rust 侧最多 8 轮，每个半自动调用逐次审批、每个全自动调用逐次过护栏。
 - 不做"批量批准"或"会话级永久授权"（违背保守助手定位）。
-- 不做跨会话的护栏状态持久化（护栏累计按会话计，新建会话自动重置）。
+- 不做跨会话的危险命令限制状态持久化（当前进程重启后默认恢复开启）。
 - 不做 L1 级别保留（明确移除，不提供兼容开关）。
 - 不做全自动模式下的远端文件修改 / 传输自动执行（首版只开放 SSH exec 工具调用）。
 
@@ -593,11 +571,11 @@ type AiErrorCode =
 3. ✅ 半自动 / 全自动模式强制 L2，不允许 L0
 4. ✅ 纯对话模式 L2 可开关（默认关闭）
 5. ✅ L3 Review Mode 作为独立级别移除，能力合并进半自动模式
-6. ✅ 全自动模式护栏：黑名单 + 白名单 + 阈值 + sessionRevision
-7. ✅ 护栏不可在 UI 上单独关闭，只能整体降级回半自动
+6. ✅ 全自动模式护栏：危险命令限制 + sessionRevision，无会话累计上限
+7. ✅ 危险命令限制默认开启，可在全自动模式栏明确关闭；目标绑定不可关闭
 8. ✅ 全自动模式首次启用弹 `<ConfirmActionDialog>` 警告
 9. ✅ 半自动模式 destructive / privileged 红色高亮 + 二次确认
 10. ✅ 全自动模式 sudo 密码首选 profile 加密存储；未预存时 fail-closed，不进入 Copilot 聊天
-11. ✅ 阈值默认保守（20 / 5 / 3 / 600s），高级设置可调，下限不低于默认
+11. ✅ 移除 `0/20`、会话累计次数/风险/时长上限及设置页阈值配置
 12. ✅ 不做无界工具循环、批量批准、会话级永久授权（工具循环最多 8 轮）
 13. ✅ 不做远端文件修改 / 传输自动执行（首版只开放 SSH exec）
