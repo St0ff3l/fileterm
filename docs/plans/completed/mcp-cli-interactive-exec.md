@@ -22,7 +22,7 @@ sudo/su 不需要 generic interactive-exec，统一使用普通 exec 的三层�
 2. profile 加密存储；
 3. FileTerm 主窗口安全输入，可选保存到连接管理器。
 
-Copilot/MCP 可以在主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，再向用户询问并用一次性字段重试；主窗口可用时 FileTerm 会自动恢复、聚焦并展示安全输入，Copilot 工具活动显示等待前台输入。用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`，不自动重试。MFA、验证码、确认和 REPL 则由用户在可见 SSH tab 完成。
+Copilot/MCP 可以在主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，再向用户询问并用一次性字段重试；主窗口可用时 FileTerm 会自动恢复、聚焦并展示安全输入，Copilot 对话区和工具活动显示等待前台输入。用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`，不自动重试。MFA、验证码、确认和 REPL 则由用户在可见 SSH tab 完成。
 
 ## 关闭记录
 

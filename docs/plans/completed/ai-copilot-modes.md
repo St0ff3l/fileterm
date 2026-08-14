@@ -33,7 +33,7 @@ sudo/su 的入口统一为：
 3. FileTerm 主窗口安全输入，可选保存到连接管理器；
 4. 如果 Agent 没有可用值，可以向用户询问 sudo/su 密码，随后以一次性字段重试。
 
-半自动和全自动都可以使用本地安全输入；缺少凭据时 FileTerm 会恢复、解除最小化并聚焦主窗口，Copilot 工具活动显示等待前台输入，工具回合保持等待。只有主窗口/renderer 不可用时，才把 `*_PASSWORD_NEEDED` 交回 Agent 询问用户；用户取消或超时交回对应的 `*_PASSWORD_CANCELLED`，不自动重试。
+半自动和全自动都可以使用本地安全输入；缺少凭据时 FileTerm 会恢复、解除最小化并聚焦主窗口，Copilot 对话区显示等待前台输入的说明，工具活动同步显示状态，工具回合保持等待。只有主窗口/renderer 不可用时，才把 `*_PASSWORD_NEEDED` 交回 Agent 询问用户；用户取消或超时交回对应的 `*_PASSWORD_CANCELLED`，不自动重试。
 
 密码不写入 command 文本或 tool result。通用 MFA/验证码/REPL 不通过聊天值回填普通 exec。
 

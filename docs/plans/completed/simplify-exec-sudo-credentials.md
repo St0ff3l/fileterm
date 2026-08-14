@@ -21,7 +21,7 @@ FileTerm 只保留两类执行通道：
 2. profile 中的加密 `ftsec:v1:` secret；
 3. FileTerm 主窗口安全输入，可选“保存到连接管理器”；缺少凭据时自动恢复、解除最小化并聚焦主窗口后展示。
 
-Copilot 工具活动会显示等待前台输入，工具回合保持等待，直到用户完成安全输入；主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。Copilot 和 MCP 可以在 `*_PASSWORD_NEEDED` 后询问 sudo/su 密码，并把用户明确提供的值作为单次字段重试；取消结果不自动重试。`save_*` 只有和显式密码同时出现才生效。密码通过 SSH stdin 发送，不进入命令文本、结果或日志。
+Copilot 对话区和工具活动会显示等待前台输入，工具回合保持等待，直到用户完成安全输入；主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。Copilot 和 MCP 可以在 `*_PASSWORD_NEEDED` 后询问 sudo/su 密码，并把用户明确提供的值作为单次字段重试；取消结果不自动重试。`save_*` 只有和显式密码同时出现才生效。密码通过 SSH stdin 发送，不进入命令文本、结果或日志。
 
 通用 MFA、验证码、安装器提示、确认回答和 REPL 不属于 sudo/su 三层凭据，必须在可见 SSH tab 完成。
 

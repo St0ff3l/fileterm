@@ -3454,6 +3454,13 @@ async fn execute_copilot_tool_call(
     let waiting_proposal_id = proposal.id.clone();
     let privileged_prompt_notice: crate::services::action_review::PrivilegedPromptNotice = Arc::new(
         move |needed_code: &str| {
+            let notice = "\n\nFileTerm 已将主窗口置于前台，请在前台安全输入框中完成输入；当前工具调用会等待输入完成后继续执行。\n\n";
+            let _ = emit_stream_event(
+                &waiting_channel,
+                AiStreamEvent::TextDelta {
+                    text: notice.to_string(),
+                },
+            );
             let result = AiToolCallResult {
                 proposal_id: waiting_proposal_id.clone(),
                 status: "input-required".to_string(),
