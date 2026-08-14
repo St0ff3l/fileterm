@@ -6,6 +6,7 @@
 //! primitives here prevents either surface from silently gaining a shortcut
 //! around user confirmation or the visible terminal.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -36,6 +37,10 @@ pub const SU_AUTH_FAILURE: &str = "SU_AUTH_FAILURE";
 /// that operation in the visible SSH terminal and retry the non-interactive
 /// command afterwards.
 pub const REMOTE_INTERACTIVE_INPUT_REQUIRED: &str = "REMOTE_INTERACTIVE_INPUT_REQUIRED";
+
+/// Optional Copilot-only progress callback fired after FileTerm has restored
+/// the main window and before the local sudo/su prompt starts waiting.
+pub type PrivilegedPromptNotice = Arc<dyn Fn(&str) + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -204,7 +209,7 @@ pub async fn resolve_action_approval(
     Ok(())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RemoteExecRequest {
     pub tab_id: String,
     pub command: String,
@@ -221,9 +226,11 @@ pub struct RemoteExecRequest {
     pub save_sudo_password: bool,
     pub save_su_password: bool,
     /// Whether a missing privileged credential may be resolved through the
-    /// local FileTerm password prompt. Copilot full-auto keeps this false so
-    /// an unattended tool call fails closed with `*_PASSWORD_NEEDED`.
+    /// local FileTerm password prompt.
     pub allow_local_privileged_prompt: bool,
+    /// Optional progress hook used by Copilot to show that the tool call is
+    /// waiting for the user in the foreground FileTerm window.
+    pub privileged_prompt_notice: Option<PrivilegedPromptNotice>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -340,6 +347,7 @@ pub async fn execute_remote_command(
                 shell_user.as_deref(),
                 cwd.as_deref(),
                 &command,
+                request.privileged_prompt_notice.clone(),
             )
             .await?;
             ensure_expected_session_revision(
@@ -443,14 +451,16 @@ async fn request_sudo_password_prompt(
     shell_user: Option<&str>,
     cwd: Option<&str>,
     command: &str,
+    privileged_prompt_notice: Option<PrivilegedPromptNotice>,
 ) -> Result<(String, bool), AppError> {
     let needed_code = match kind {
         PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
         PrivilegedCommandKind::Su => SU_PASSWORD_NEEDED,
     };
-    if !state.has_sudo_password_renderer().await || !main_window_can_receive_prompt(app) {
+    if !state.has_sudo_password_renderer().await || !main_window_exists(app) {
         return Err(AppError::Command(needed_code.to_string()));
     }
+    crate::show_main_window(app);
     let current_session_revision = state.ai_session_revision(tab_id).await.to_string();
     let expected_session_revision = expected_session_revision
         .map(str::trim)
@@ -470,6 +480,9 @@ async fn request_sudo_password_prompt(
     {
         return Err(AppError::Command(needed_code.to_string()));
     }
+    if let Some(notice) = privileged_prompt_notice {
+        notice(needed_code);
+    }
     let payload = serde_json::json!({
         "requestId": request_id,
         "tabId": tab_id,
@@ -488,9 +501,12 @@ async fn request_sudo_password_prompt(
             .write()
             .await
             .remove(&request_id);
-        return Err(AppError::Command(format!(
-            "Unable to show privileged password prompt: {error}"
-        )));
+        crate::services::logging::warn(
+            app,
+            "security",
+            format!("privileged password prompt delivery failed: {error}"),
+        );
+        return Err(AppError::Command(needed_code.to_string()));
     }
 
     let response = match timeout(Duration::from_secs(120), receiver).await {
@@ -532,10 +548,8 @@ async fn request_sudo_password_prompt(
     Ok((password, response.save))
 }
 
-fn main_window_can_receive_prompt(app: &AppHandle) -> bool {
-    app.get_webview_window("main").is_some_and(|window| {
-        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
-    })
+fn main_window_exists(app: &AppHandle) -> bool {
+    app.get_webview_window("main").is_some()
 }
 
 fn privileged_command_kind(command: &str) -> Option<PrivilegedCommandKind> {

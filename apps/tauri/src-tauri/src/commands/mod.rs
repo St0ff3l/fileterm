@@ -1774,6 +1774,7 @@ pub async fn app_execute_remote_command(
             save_sudo_password: save_sudo_password.unwrap_or(false),
             save_su_password: save_su_password.unwrap_or(false),
             allow_local_privileged_prompt: true,
+            privileged_prompt_notice: None,
         },
     )
     .await?;

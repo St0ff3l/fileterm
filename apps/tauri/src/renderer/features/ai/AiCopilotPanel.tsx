@@ -72,9 +72,11 @@ function AiCopilotToolActivity({
   const statusLabel = result
     ? status === 'executed'
       ? t.aiCopilotToolExecuted
-      : status === 'rejected' || status === 'auto-blocked'
-        ? t.aiCopilotToolRejected
-        : t.aiCopilotToolFailed
+      : status === 'input-required'
+        ? t.aiCopilotToolWaitingForInput
+        : status === 'rejected' || status === 'auto-blocked'
+          ? t.aiCopilotToolRejected
+          : t.aiCopilotToolFailed
     : approval
       ? t.aiCopilotToolApprovalPending
       : t.aiCopilotToolPending
