@@ -55,6 +55,8 @@ export const defaultForm: CreateProfileInput = {
   securityMode: 'none',
   proxy: { type: 'none', host: '', port: 1080, username: '' },
   proxyPassword: '',
+  sudoPassword: '',
+  suPassword: '',
   forwards: [],
   devicePath: '',
   baudRate: 115200,
@@ -140,6 +142,8 @@ export function profileToForm(
         ? (profile.proxy ?? { type: 'none', host: '', port: 1080 })
         : { type: 'none', host: '', port: 1080 },
     proxyPassword: profile.type === 'ssh' || profile.type === 'telnet' ? (profile.proxy?.password ?? '') : '',
+    sudoPassword: '',
+    suPassword: '',
     jumpProfileId: profile.type === 'ssh' ? profile.jumpProfileId : undefined,
     forwards: profile.type === 'ssh' ? (profile.forwards ?? []) : [],
     disableShellIntegration: profile.type === 'ssh' ? profile.disableShellIntegration : false,

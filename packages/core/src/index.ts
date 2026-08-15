@@ -89,6 +89,10 @@ export interface BaseProfile extends BaseEntity {
   lastUsedAt?: number
   /** Non-secret indicator for redacted desktop snapshots. */
   hasSavedPassword?: boolean
+  /** Non-secret indicator for a saved privileged-command password. */
+  hasSavedSudoPassword?: boolean
+  /** Non-secret indicator for a saved `su` password. */
+  hasSavedSuPassword?: boolean
 }
 
 export type NetworkProfile = BaseProfile
@@ -746,11 +750,15 @@ export interface WebDavSyncConfig {
   lastEtag?: string
 }
 
+export type BackupUploadMode = 'overwrite-cloud' | 'merge-cloud'
+export type BackupDownloadMode = 'overwrite-local' | 'merge-local'
+
 export interface WebDavSyncResult {
   action: 'test' | 'upload' | 'download'
   message: string
   imported?: number
   updated?: number
+  replaced?: number
   skipped?: number
   legacyPlaintext?: boolean
 }
@@ -783,6 +791,7 @@ export interface S3BackupResult {
   message: string
   imported?: number
   updated?: number
+  replaced?: number
   skipped?: number
   legacyPlaintext?: boolean
 }
@@ -828,7 +837,7 @@ export interface CreateProfileInput {
   group: string
   remotePath: string
   note?: string
-  password?: string
+  password?: string | null
   /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
   useEmptyPassword?: boolean
   privateKeyId?: string
@@ -851,6 +860,10 @@ export interface CreateProfileInput {
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
+  /** Transient only; persisted by Rust in profile-secrets.json. */
+  sudoPassword?: string | null
+  /** Transient only; persisted by Rust in profile-secrets.json. */
+  suPassword?: string | null
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
   devicePath?: string
@@ -927,22 +940,24 @@ export type SshInteractionRequest =
   | SshKeyPassphrasePromptRequest
   | SshKeyboardInteractiveRequest
 
-/**
- * A task-local prompt from an isolated SSH exec PTY. This is not a terminal
- * input request: the response goes only to the one MCP/CLI task that raised
- * it and is never added to the terminal transcript or returned to the agent.
- */
-export interface RemoteExecInteractionRequest {
+/** One-shot privileged-command input. Values must never be persisted or sent
+ * to an AI provider; the desktop bridge forwards them only to Rust. */
+export interface RemoteExecCredentials {
+  sudoPassword?: string
+  suPassword?: string
+  saveSudoPassword?: boolean
+  saveSuPassword?: boolean
+}
+
+/** One-time local prompt for a privileged command when no saved credential exists. */
+export interface SudoPasswordRequest {
   requestId: string
   tabId: string
-  command: string
+  kind: 'sudo' | 'su'
   host: string
   shellUser?: string
   cwd?: string
-  prompt: string
-  attempt: number
-  maxAttempts: number
-  inputKind: 'secret' | 'text'
+  command: string
 }
 
 export type BackupPasswordOperation = 'upload' | 'download'
@@ -954,9 +969,9 @@ export interface BackupPasswordRequest {
   provider: 'WebDAV' | 'S3'
 }
 
-export type ActionApprovalSource = 'mcp' | 'ai-review'
+export type ActionApprovalSource = 'mcp' | 'ai-copilot'
 
-/** One-time in-app approval shared by MCP and AI Review Mode. */
+/** One-time in-app approval shared by MCP and Copilot tool calls. */
 export interface ActionApprovalRequest {
   requestId: string
   source: ActionApprovalSource
@@ -966,6 +981,8 @@ export interface ActionApprovalRequest {
   target?: string
   details?: string
   destructive: boolean
+  /** Requires an explicit risk acknowledgement before the final approval. */
+  requiresRiskAcknowledgement?: boolean
 }
 
 /** @deprecated Use ActionApprovalRequest. */
@@ -1101,6 +1118,8 @@ export interface RemoteFileAccessOptions {
   rootAccessMethod?: 'sudo' | 'su'
   sudoUser?: string
   sudoPassword?: string
+  /** Ask the backend to select the matching saved sudo/su credential. */
+  useSavedPassword?: boolean
 }
 
 export type AiProviderKind = 'openai-compatible-chat' | 'openai-responses' | 'anthropic-messages'
@@ -1156,8 +1175,42 @@ export interface AiProviderTestResult {
   message: string
 }
 
-/** Per-request context modes. Neither mode becomes a provider-wide default. */
-export type AiContextMode = 'metadata' | 'recent-terminal'
+/** The user-visible Copilot execution mode. */
+export type AiCopilotMode = 'pure-conversation' | 'semi-automatic' | 'fully-automatic'
+
+/** The only context levels exposed by the new Copilot contract. */
+export type AiContextLevel = 'L0' | 'L2'
+
+/**
+ * Context values accepted while old conversations and renderers migrate.
+ * Rust normalizes `metadata` to L2 instead of preserving the old L1 meaning.
+ */
+export type AiContextMode = AiContextLevel | 'metadata' | 'recent-terminal'
+
+export interface AiAutoModeGuardrailState {
+  dangerousCommandRestrictionsEnabled: boolean
+}
+
+export interface AiCopilotModeState {
+  mode: AiCopilotMode
+  /** Only pure-conversation mode can change this flag. */
+  attachTerminalContext: boolean
+  autoModeGuardrails: AiAutoModeGuardrailState
+}
+
+export interface SetAiCopilotModeInput {
+  mode: AiCopilotMode
+  /** Required only when entering fully-automatic mode. */
+  confirmed?: boolean
+}
+
+export interface SetAiContextAttachInput {
+  attachTerminalContext: boolean
+}
+
+export interface SetAiDangerousCommandRestrictionsInput {
+  enabled: boolean
+}
 
 /** A target identity that a one-time context snapshot is bound to. */
 export interface AiContextTarget {
@@ -1199,56 +1252,61 @@ export interface AiContextAttachment {
 
 export type AiCommandRisk = 'read-only' | 'mutating' | 'destructive' | 'privileged' | 'unknown'
 
-export type AiReviewOutcome =
-  | 'completed'
+export type AiToolCallStatus =
+  | 'approved'
   | 'rejected'
-  | 'approval-dismissed'
-  | 'approval-timed-out'
-  | 'target-changed'
-  | 'command-timed-out'
+  | 'auto-blocked'
+  | 'executed'
+  | 'executed-in-terminal'
   | 'failed'
+  | 'timeout'
+  | 'target-changed'
+  | 'input-required'
+  | 'invalid'
 
-/** Local audit metadata for a single user-approved SSH exec invocation. */
-export interface AiReviewRecord {
-  id: string
-  commandId: string
-  command: string
-  risk: AiCommandRisk
-  target: AiContextTarget
-  timeoutMs: number
-  requestedAt: string
-  approvedAt?: string
-  completedAt: string
-  outcome: AiReviewOutcome
+/** A persisted Copilot tool result, including migrated command/review history. */
+export interface AiToolCallResult {
+  proposalId: string
+  status: AiToolCallStatus
   exitCode?: number
-  timedOut: boolean
-  outputTruncated: boolean
-  output?: string
-  error?: string
+  stdout?: string
+  stderr?: string
+  durationMs?: number
+  reason?: string
+  recordId?: string
+  requestedAt?: string
+  approvedAt?: string
+  completedAt?: string
+  timeoutMs?: number
+  outputTruncated?: boolean
 }
 
-/** A structured, locally validated command proposal; it is never an execution request. */
-export interface AiCommandSuggestion {
+export interface AiToolCallProposal {
   id: string
+  toolName: 'fileterm_execute_remote_command'
   command: string
-  explanation?: string
   risk: AiCommandRisk
-  multiline: boolean
   target: AiContextTarget
+  explanation?: string
+  /** Links a semi-automatic tool call to its inline approval card. */
+  approvalRequestId?: string
+}
+
+export interface AiToolActivity {
+  proposal: AiToolCallProposal
+  result?: AiToolCallResult
 }
 
 /** A message stored locally for an AI Copilot conversation. */
 export interface AiMessage {
   id: string
-  role: 'user' | 'assistant' | 'review'
+  role: 'user' | 'assistant'
   content: string
   createdAt: string
-  /** Present only for an explicitly approved L1/L2 user turn; never contains raw transcript text. */
+  /** Present only for an explicitly approved L2 user turn; never contains raw transcript text. */
   context?: AiContextAttachment
-  /** Present only after a strict JSON command-proposal response validates locally. */
-  commands?: AiCommandSuggestion[]
-  /** Present only for one-time AI Review Mode audit messages. */
-  review?: AiReviewRecord
+  /** Persisted tool proposals/results rendered inline with the assistant turn. */
+  toolActivities?: AiToolActivity[]
 }
 
 /** Lightweight metadata used by the Copilot conversation switcher. */
@@ -1287,10 +1345,8 @@ export interface CreateAiContextPreviewInput {
   /** Optional renderer hint. Rust resolves and validates the actual root relation. */
   rootTabId?: string
   providerId: string
-  mode: AiContextMode
+  mode: AiContextLevel
 }
-
-export type AiChatResponseMode = 'chat' | 'command-proposal'
 
 /**
  * A context ID can only refer to a Rust-owned, reviewed one-time snapshot.
@@ -1302,7 +1358,8 @@ export interface StartAiChatInput {
   modelOverride?: string
   userMessage: string
   contextSnapshotId?: string
-  responseMode?: AiChatResponseMode
+  /** Optional for callers that need to pin the active mode. */
+  mode?: AiCopilotMode
 }
 
 /** Retries the latest user turn without duplicating it in local history. */
@@ -1311,7 +1368,7 @@ export interface RetryAiChatInput {
   providerId: string
   modelOverride?: string
   contextSnapshotId?: string
-  responseMode?: AiChatResponseMode
+  mode?: AiCopilotMode
 }
 
 export interface AiChatRequest {
@@ -1321,30 +1378,13 @@ export interface AiChatRequest {
   assistantMessageId: string
 }
 
-export interface AiCommandInsertInput {
-  commandId: string
-}
-
-/** Rust approved the target-bound command for a UI-only terminal input handoff. */
-export interface AiCommandInsertResult {
-  tabId: string
-  command: string
-}
-
-export interface RunAiReviewInput {
-  commandId: string
-}
-
-export interface AiReviewExecution {
-  conversation: AiConversation
-  review: AiReviewRecord
-}
-
 /** Per-request stream events; never emitted through a global application event. */
 export type AiStreamEvent =
   | { type: 'started'; requestId: string; messageId: string }
+  | { type: 'assistant-message-started'; messageId: string }
   | { type: 'text-delta'; text: string }
-  | { type: 'command'; command: AiCommandSuggestion }
+  | { type: 'tool-call'; proposal: AiToolCallProposal }
+  | { type: 'tool-result'; result: AiToolCallResult }
   | { type: 'usage'; inputTokens?: number; outputTokens?: number }
   | { type: 'completed'; conversation: AiConversation; finishReason?: string }
   | { type: 'error'; code: AiErrorCode; message: string; retryable: boolean }
@@ -1369,6 +1409,15 @@ export type AiErrorCode =
   | 'AI_COMMAND_UNSAFE_INPUT'
   | 'AI_REVIEW_IN_PROGRESS'
   | 'AI_REVIEW_UNAVAILABLE'
+  | 'AI_MODE_CONFIRMATION_REQUIRED'
+  | 'AI_MODE_CHANGED'
+  | 'AI_CONTEXT_LOCKED'
+  | 'AI_AUTO_MODE_BLOCKED_COMMAND'
+  | 'AI_AUTO_MODE_IRREVERSIBLE_NOT_WHITELISTED'
+  | 'AI_AUTO_MODE_TARGET_CHANGED'
+  | 'AI_TOOL_CALL_REJECTED'
+  | 'AI_TOOL_CALL_INVALID'
+  | 'AI_TOOL_LOOP_LIMIT'
   | 'AI_CONVERSATION_LIMIT'
   | 'AI_CONVERSATION_NOT_FOUND'
   | 'AI_CONVERSATION_INVALID_INPUT'
@@ -1408,12 +1457,14 @@ export interface FileTermDesktopApi {
   renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
   summarizeAiConversationTitle(input: SummarizeAiConversationTitleInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
+  getAiCopilotModeState(): Promise<AiCopilotModeState>
+  setAiCopilotMode(input: SetAiCopilotModeInput): Promise<AiCopilotModeState>
+  setAiContextAttach(input: SetAiContextAttachInput): Promise<AiCopilotModeState>
+  setAiDangerousCommandRestrictions(input: SetAiDangerousCommandRestrictionsInput): Promise<AiCopilotModeState>
   createAiContextPreview(input: CreateAiContextPreviewInput): Promise<AiContextPreview>
   startAiChat(input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   retryAiChat(input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void): Promise<AiChatRequest>
   cancelAiChat(requestId: string): Promise<void>
-  insertAiCommand(input: AiCommandInsertInput): Promise<AiCommandInsertResult>
-  runAiReview(input: RunAiReviewInput): Promise<AiReviewExecution>
   getUiStateItem(key: string): Promise<string | null>
   setUiStateItem(key: string, value: string): Promise<void>
   removeUiStateItem(key: string): Promise<void>
@@ -1464,13 +1515,13 @@ export interface FileTermDesktopApi {
   getWebDavSyncConfig(): Promise<WebDavSyncConfig>
   saveWebDavSyncConfig(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig>
   testWebDavSync(): Promise<WebDavSyncResult>
-  uploadWebDavSync(): Promise<WebDavSyncResult>
-  downloadWebDavSync(): Promise<WebDavSyncResult>
+  uploadWebDavSync(mode: BackupUploadMode): Promise<WebDavSyncResult>
+  downloadWebDavSync(mode: BackupDownloadMode): Promise<WebDavSyncResult>
   getS3BackupConfig(): Promise<S3BackupConfig>
   saveS3BackupConfig(input: S3BackupConfigInput): Promise<S3BackupConfig>
   testS3Backup(): Promise<S3BackupResult>
-  uploadS3Backup(): Promise<S3BackupResult>
-  downloadS3Backup(): Promise<S3BackupResult>
+  uploadS3Backup(mode: BackupUploadMode): Promise<S3BackupResult>
+  downloadS3Backup(mode: BackupDownloadMode): Promise<S3BackupResult>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>
   updateFolder(folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot>
   deleteFolder(folderId: string): Promise<WorkspaceSnapshot>
@@ -1492,7 +1543,8 @@ export interface FileTermDesktopApi {
     tabId: string,
     command: string,
     cwd?: string,
-    timeoutMs?: number
+    timeoutMs?: number,
+    credentials?: RemoteExecCredentials
   ): Promise<{
     output: string
     exitCode: number | null
@@ -1502,22 +1554,6 @@ export interface FileTermDesktopApi {
     inputRequired: boolean
     /** A bounded routing hint; the input itself is never returned. */
     inputKind?: 'secret' | 'text'
-  }>
-  executeInteractiveRemoteCommand(
-    tabId: string,
-    expectedSessionRevision: string,
-    command: string,
-    cwd?: string,
-    timeoutMs?: number
-  ): Promise<{
-    output: string
-    exitCode: number | null
-    timedOut: boolean
-    outputTruncated: boolean
-    inputRequired: boolean
-    inputKind?: 'secret' | 'text'
-    /** Number of local secure-input rounds; answers themselves never leave FileTerm. */
-    interactionCount?: number
   }>
   getTerminalCommandHistory(profileId: string): Promise<TerminalCommandHistoryEntry[]>
   setTerminalCommandHistory(profileId: string, entries: TerminalCommandHistoryEntry[]): Promise<void>
@@ -1604,11 +1640,13 @@ export interface FileTermDesktopApi {
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
   deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
-  resolveRemoteExecInteraction(requestId: string, cancelled: boolean, value?: string): Promise<void>
-  setRemoteExecInteractionRendererReady(registrationId: string, ready: boolean): Promise<void>
+  resolveSudoPasswordPrompt(requestId: string, cancelled: boolean, value?: string, save?: boolean): Promise<void>
+  setSudoPasswordPromptRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
+  /** Hand a pending Copilot command to the already-visible terminal. */
+  resolveAiTerminalHandoff(requestId: string): Promise<void>
   /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
@@ -1622,8 +1660,7 @@ export interface FileTermDesktopApi {
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
-  /** Resolves only after the main renderer has registered its secure-input listener. */
-  onRemoteExecInteraction(listener: (request: RemoteExecInteractionRequest) => void): Promise<() => void>
+  onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>
   /** Resolves only after the main renderer has registered the password prompt listener. */
   onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>
   onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void

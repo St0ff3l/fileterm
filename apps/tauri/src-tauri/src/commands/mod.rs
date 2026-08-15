@@ -898,6 +898,37 @@ pub fn app_delete_ai_conversation(app: AppHandle, conversation_id: String) -> Re
 }
 
 #[tauri::command]
+pub fn app_get_ai_copilot_mode_state(
+    window: WebviewWindow,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::get_copilot_mode_state(&window)
+}
+
+#[tauri::command]
+pub fn app_set_ai_copilot_mode(
+    window: WebviewWindow,
+    input: crate::services::ai::SetAiCopilotModeInput,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::set_copilot_mode(&window, input)
+}
+
+#[tauri::command]
+pub fn app_set_ai_context_attach(
+    window: WebviewWindow,
+    input: crate::services::ai::SetAiContextAttachInput,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::set_context_attach(&window, input)
+}
+
+#[tauri::command]
+pub fn app_set_ai_dangerous_command_restrictions(
+    window: WebviewWindow,
+    input: crate::services::ai::SetAiDangerousCommandRestrictionsInput,
+) -> Result<crate::services::ai::AiCopilotModeState, AppError> {
+    crate::services::ai::set_dangerous_command_restrictions(&window, input)
+}
+
+#[tauri::command]
 pub async fn app_create_ai_context_preview(
     app: AppHandle,
     window: WebviewWindow,
@@ -929,24 +960,6 @@ pub async fn app_retry_ai_chat(
 #[tauri::command]
 pub fn app_cancel_ai_chat(request_id: String) -> Result<(), AppError> {
     crate::services::ai::cancel_chat(&request_id)
-}
-
-#[tauri::command]
-pub async fn app_insert_ai_command(
-    app: AppHandle,
-    window: WebviewWindow,
-    input: crate::services::ai::AiCommandInsertInput,
-) -> Result<crate::services::ai::AiCommandInsertResult, AppError> {
-    crate::services::ai::insert_ai_command(&app, &window, input).await
-}
-
-#[tauri::command]
-pub async fn app_run_ai_review(
-    app: AppHandle,
-    window: WebviewWindow,
-    input: crate::services::ai::RunAiReviewInput,
-) -> Result<crate::services::ai::AiReviewExecution, AppError> {
-    crate::services::ai::run_ai_review(&app, &window, input).await
 }
 
 #[tauri::command]
@@ -1286,17 +1299,23 @@ pub async fn app_test_webdav_sync(app: AppHandle) -> Result<serde_json::Value, A
 }
 
 #[tauri::command]
-pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    crate::services::webdav::upload(&app).await
+pub async fn app_upload_webdav_sync(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::upload(&app, mode.as_deref()).await
 }
 
 #[tauri::command]
-pub async fn app_download_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
+pub async fn app_download_webdav_sync(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
-    let result = crate::services::webdav::download(&app).await?;
+    let result = crate::services::webdav::download(&app, mode.as_deref()).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
-    if changed > 0 {
+    if changed > 0 || result.get("mode").and_then(Value::as_str) == Some("overwrite-local") {
         if let Ok(snapshot) = get_workspace_snapshot_unlocked(app.clone()).await {
             let _ = app.emit("workspace:snapshot", snapshot);
         }
@@ -1323,17 +1342,23 @@ pub async fn app_test_s3_backup(app: AppHandle) -> Result<serde_json::Value, App
 }
 
 #[tauri::command]
-pub async fn app_upload_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    crate::services::s3_backup::upload(&app).await
+pub async fn app_upload_s3_backup(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::upload(&app, mode.as_deref()).await
 }
 
 #[tauri::command]
-pub async fn app_download_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+pub async fn app_download_s3_backup(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
-    let result = crate::services::s3_backup::download(&app).await?;
+    let result = crate::services::s3_backup::download(&app, mode.as_deref()).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
-    if changed > 0 {
+    if changed > 0 || result.get("mode").and_then(Value::as_str) == Some("overwrite-local") {
         if let Ok(snapshot) = get_workspace_snapshot_unlocked(app.clone()).await {
             let _ = app.emit("workspace:snapshot", snapshot);
         }
@@ -1736,12 +1761,17 @@ pub(crate) async fn mcp_list_remote_directory(
 /// separate from the interactive terminal so an external CLI/MCP caller
 /// receives deterministic output without stealing the user's PTY input.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn app_execute_remote_command(
     app: AppHandle,
     tab_id: String,
     command: String,
     cwd: Option<String>,
     timeout_ms: Option<u64>,
+    sudo_password: Option<String>,
+    su_password: Option<String>,
+    save_sudo_password: Option<bool>,
+    save_su_password: Option<bool>,
 ) -> Result<serde_json::Value, AppError> {
     let result = crate::services::action_review::execute_remote_command(
         &app,
@@ -1750,32 +1780,13 @@ pub async fn app_execute_remote_command(
             command,
             cwd,
             timeout_ms,
-        },
-    )
-    .await?;
-    serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
-}
-
-/// Start an explicitly interaction-capable remote exec task. The task has a
-/// temporary SSH PTY of its own; it never writes to `terminal_inputs` or the
-/// visible terminal channel.
-#[tauri::command]
-pub async fn app_execute_interactive_remote_command(
-    app: AppHandle,
-    tab_id: String,
-    expected_session_revision: String,
-    command: String,
-    cwd: Option<String>,
-    timeout_ms: Option<u64>,
-) -> Result<serde_json::Value, AppError> {
-    let result = crate::services::action_review::execute_interactive_remote_command(
-        &app,
-        crate::services::action_review::InteractiveRemoteExecRequest {
-            tab_id,
-            expected_session_revision,
-            command,
-            cwd,
-            timeout_ms,
+            expected_session_revision: None,
+            sudo_password,
+            su_password,
+            save_sudo_password: save_sudo_password.unwrap_or(false),
+            save_su_password: save_su_password.unwrap_or(false),
+            allow_local_privileged_prompt: true,
+            privileged_prompt_notice: None,
         },
     )
     .await?;
@@ -1827,27 +1838,6 @@ async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState,
         .await
         .remove(tab_id);
     state.terminal_inputs.write().await.remove(tab_id);
-    // Drop any prompt-specific sender for this tab. The isolated exec task
-    // then fails closed instead of carrying a password/MFA prompt across a
-    // disconnect, reconnection, or tab replacement.
-    let cancelled_remote_exec_interactions = {
-        let mut interactions = state.pending_remote_exec_interactions.write().await;
-        let request_ids = interactions
-            .iter()
-            .filter(|(_, pending)| pending.tab_id == tab_id)
-            .map(|(request_id, _)| request_id.clone())
-            .collect::<Vec<_>>();
-        request_ids
-            .into_iter()
-            .filter_map(|request_id| interactions.remove(&request_id))
-            .collect::<Vec<_>>()
-    };
-    drop(cancelled_remote_exec_interactions);
-    state
-        .active_interactive_remote_execs
-        .lock()
-        .await
-        .remove(tab_id);
     let sender = state.workers.write().await.remove(tab_id);
     if let Some(sender) = sender {
         // 超时即放弃：worker 主循环卡死时 channel 已满，send 不进去；
@@ -1909,11 +1899,7 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
     }
     state.local_terminal_launches.write().await.clear();
     state.terminal_inputs.write().await.clear();
-    // Cancelling all senders causes awaiting task-local dialogs to end
-    // immediately during app shutdown rather than surviving until timeout.
-    state.pending_remote_exec_interactions.write().await.clear();
     state.pending_backup_passwords.write().await.clear();
-    state.active_interactive_remote_execs.lock().await.clear();
     let senders = state
         .workers
         .write()
@@ -3595,11 +3581,17 @@ pub async fn app_set_remote_file_access_mode(
         .and_then(|o| o.get("rootAccessMethod"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+    let use_saved_password = options
+        .as_ref()
+        .and_then(|o| o.get("useSavedPassword"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::SetRemoteFileAccessMode {
         mode,
         root_access_method,
         sudo_user,
         sudo_password,
+        use_saved_password,
         respond_to: tx,
     })
     .await?;
@@ -3825,71 +3817,6 @@ pub async fn app_resolve_ssh_interaction(
     Ok(())
 }
 
-/// Return a one-line answer to a temporary interactive exec PTY. This IPC is
-/// intentionally separate from `app_write_terminal`: no external agent can
-/// route a password, MFA code or confirmation into the visible terminal.
-#[tauri::command]
-pub async fn app_resolve_remote_exec_interaction(
-    app: AppHandle,
-    request_id: String,
-    cancelled: bool,
-    value: Option<String>,
-) -> Result<(), AppError> {
-    let request_id = request_id.trim();
-    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
-        return Err(AppError::Command(
-            "Invalid remote exec interaction request".to_string(),
-        ));
-    }
-    let value = if cancelled {
-        None
-    } else {
-        let value = value.ok_or_else(|| {
-            AppError::Command("Interactive remote exec response is required".to_string())
-        })?;
-        if value.chars().count() < crate::services::backup_crypto::MIN_PASSWORD_CHARS
-            || value.is_empty()
-            || value.len() > 8 * 1024
-            || value
-                .chars()
-                .any(|character| matches!(character, '\0' | '\r' | '\n' | '\u{1b}'))
-        {
-            return Err(AppError::Command(
-                "Interactive remote exec response must be one non-empty line".to_string(),
-            ));
-        }
-        Some(value)
-    };
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let pending = {
-        let mut interactions = state.pending_remote_exec_interactions.write().await;
-        interactions.remove(request_id)
-    };
-    if let Some(pending) = pending {
-        // The renderer may have had the dialog open while the same tab was
-        // reconnected, changed user, or followed a new CWD. Treat that as a
-        // cancellation before the value reaches the old task channel.
-        let current_revision = state.ai_session_revision(&pending.tab_id).await.to_string();
-        let session_is_still_connected = state
-            .sessions
-            .read()
-            .await
-            .get(&pending.tab_id)
-            .is_some_and(|session| session.connected);
-        let target_is_current =
-            session_is_still_connected && current_revision == pending.expected_session_revision;
-        // The value travels only to the task-local one-shot channel. Do not
-        // log it or retain it in state after this function returns.
-        let _ = pending
-            .sender
-            .send(crate::services::workspace::RemoteExecInteractionResponse {
-                cancelled: cancelled || !target_is_current,
-                value: target_is_current.then_some(value).flatten(),
-            });
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn app_resolve_backup_password(
     app: AppHandle,
@@ -3932,6 +3859,87 @@ pub async fn app_resolve_backup_password(
     Ok(())
 }
 
+/// Resolve a one-time sudo/su password prompt. The value is accepted only by
+/// the main renderer and is forwarded to the waiting exec task through a
+/// single-use channel; it never enters terminal input, chat history, or logs.
+#[tauri::command]
+pub async fn app_resolve_sudo_password_prompt(
+    app: AppHandle,
+    request_id: String,
+    cancelled: bool,
+    value: Option<String>,
+    save: Option<bool>,
+) -> Result<(), AppError> {
+    let request_id = request_id.trim();
+    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            "Invalid privileged password request".to_string(),
+        ));
+    }
+    let value = if cancelled {
+        None
+    } else {
+        let value = value.ok_or_else(|| {
+            AppError::Command("Privileged command password is required".to_string())
+        })?;
+        if value.is_empty() || value.len() > 4 * 1024 || value.chars().any(char::is_control) {
+            return Err(AppError::Command(
+                "Privileged command password is invalid".to_string(),
+            ));
+        }
+        Some(value)
+    };
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let pending = state
+        .pending_sudo_passwords
+        .write()
+        .await
+        .remove(request_id);
+    if let Some(pending) = pending {
+        let current_revision = state.ai_session_revision(&pending.tab_id).await.to_string();
+        let session_is_still_connected = state
+            .sessions
+            .read()
+            .await
+            .get(&pending.tab_id)
+            .is_some_and(|session| session.connected);
+        let target_is_current =
+            session_is_still_connected && current_revision == pending.expected_session_revision;
+        let _ = pending
+            .sender
+            .send(crate::services::workspace::SudoPasswordResponse {
+                cancelled: cancelled || !target_is_current,
+                value: target_is_current.then_some(value).flatten(),
+                save: target_is_current && !cancelled && save.unwrap_or(false),
+            });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn app_set_sudo_password_renderer_ready(
+    app: AppHandle,
+    window: WebviewWindow,
+    registration_id: String,
+    ready: bool,
+) -> Result<(), AppError> {
+    if window.label() != "main" {
+        return Err(AppError::Window(
+            "Only the FileTerm main window may receive privileged password input".to_string(),
+        ));
+    }
+    let registration_id = registration_id.trim();
+    if registration_id.is_empty() || registration_id.len() > 200 {
+        return Err(AppError::Command(
+            "Invalid privileged password renderer registration".to_string(),
+        ));
+    }
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .set_sudo_password_renderer_ready(registration_id, ready)
+        .await;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn app_set_backup_password_renderer_ready(
     app: AppHandle,
@@ -3956,34 +3964,6 @@ pub async fn app_set_backup_password_renderer_ready(
     Ok(())
 }
 
-/// The main workspace registers its task-local secure-input listener only
-/// after Tauri confirms the event subscription. Without that listener an
-/// interactive exec must fail closed: a backend task cannot ask users to type
-/// passwords into either an Agent chat or the visible terminal.
-#[tauri::command]
-pub async fn app_set_remote_exec_interaction_renderer_ready(
-    app: AppHandle,
-    window: WebviewWindow,
-    registration_id: String,
-    ready: bool,
-) -> Result<(), AppError> {
-    if window.label() != "main" {
-        return Err(AppError::Window(
-            "Only the FileTerm main window may receive secure remote-exec input".to_string(),
-        ));
-    }
-    let registration_id = registration_id.trim();
-    if registration_id.is_empty() || registration_id.len() > 200 {
-        return Err(AppError::Command(
-            "Invalid secure remote-exec renderer registration".to_string(),
-        ));
-    }
-    app.state::<crate::services::workspace::WorkspaceState>()
-        .set_remote_exec_interaction_renderer_ready(registration_id, ready)
-        .await;
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn app_resolve_mcp_approval(
     app: AppHandle,
@@ -4000,6 +3980,14 @@ pub async fn app_resolve_action_approval(
     approved: bool,
 ) -> Result<(), AppError> {
     crate::services::action_review::resolve_action_approval(&app, &request_id, approved).await
+}
+
+#[tauri::command]
+pub async fn app_resolve_ai_terminal_handoff(
+    app: AppHandle,
+    request_id: String,
+) -> Result<(), AppError> {
+    crate::services::action_review::resolve_action_approval_as_terminal(&app, &request_id).await
 }
 
 // ==========================================

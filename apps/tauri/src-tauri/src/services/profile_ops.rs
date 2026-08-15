@@ -105,31 +105,61 @@ pub fn read_and_heal_profiles(app: &AppHandle) -> Result<(Vec<Value>, Vec<Value>
     let mut profiles = read_json_array(app, "profiles.json")?;
     let mut secret_shape_dirty = false;
     for profile in &mut profiles {
+        let had_public_secret_fields = profile_contains_secret_fields(profile);
         if profile
             .as_object_mut()
             .is_some_and(|profile| normalize_profile_secret_input(profile, None))
         {
             secret_shape_dirty = true;
         }
+        secret_shape_dirty |= had_public_secret_fields;
     }
+    hydrate_profile_secrets(&secrets_path, &mut profiles)?;
     let folders = read_and_heal_connection_folders(app)?;
     let dirty = secret_shape_dirty || heal_profiles(&mut profiles, &folders);
+    reconcile_profile_secrets(app, &profiles)?;
     if dirty {
         // Strip secrets before writing back. Secrets live in
         // profile-secrets.json; profiles.json should never contain them.
         let stripped: Vec<Value> = profiles.iter().map(strip_secret_fields).collect();
         write_json_array(app, "profiles.json", &stripped)?;
     }
-    reconcile_profile_secrets(app, &profiles)?;
     Ok((profiles, folders))
+}
+
+fn profile_contains_secret_fields(profile: &Value) -> bool {
+    [
+        "password",
+        "passphrase",
+        "privateKeyPath",
+        "proxyPassword",
+        "sudoPassword",
+        "suPassword",
+    ]
+    .iter()
+    .any(|field| profile.get(*field).is_some_and(|value| !value.is_null()))
+        || profile
+            .get("proxy")
+            .and_then(Value::as_object)
+            .is_some_and(|proxy| proxy.get("password").is_some_and(|value| !value.is_null()))
 }
 
 fn strip_secret_fields(profile: &Value) -> Value {
     let mut clone = profile.clone();
     if let Some(obj) = clone.as_object_mut() {
-        for key in ["password", "passphrase", "privateKeyPath", "proxyPassword"] {
+        for key in [
+            "password",
+            "passphrase",
+            "privateKeyPath",
+            "proxyPassword",
+            "sudoPassword",
+            "suPassword",
+        ] {
             obj.remove(key);
         }
+        // The old UI exposed a login-password reuse switch for sudo. Keep
+        // legacy profiles loadable, but stop surfacing the retired setting.
+        obj.remove("sudoSameAsLogin");
         if let Some(proxy) = obj.get_mut("proxy").and_then(|v| v.as_object_mut()) {
             proxy.remove("password");
         }
@@ -150,11 +180,27 @@ pub fn strip_secret_fields_public(profile: &Value) -> Value {
             .get("password")
             .and_then(Value::as_str)
             .is_some_and(|password| !password.is_empty());
+    let has_saved_sudo_password = profile
+        .get("sudoPassword")
+        .and_then(Value::as_str)
+        .is_some_and(|password| !password.is_empty());
+    let has_saved_su_password = profile
+        .get("suPassword")
+        .and_then(Value::as_str)
+        .is_some_and(|password| !password.is_empty());
     let mut public = strip_secret_fields(profile);
     if let Some(object) = public.as_object_mut() {
         object.insert(
             "hasSavedPassword".to_string(),
             Value::Bool(has_saved_password),
+        );
+        object.insert(
+            "hasSavedSudoPassword".to_string(),
+            Value::Bool(has_saved_sudo_password),
+        );
+        object.insert(
+            "hasSavedSuPassword".to_string(),
+            Value::Bool(has_saved_su_password),
         );
     }
     public
@@ -177,7 +223,13 @@ fn normalize_profile_secret_input(
         .get("useEmptyPassword")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    for key in ["password", "passphrase", "privateKeyPath"] {
+    for key in [
+        "password",
+        "passphrase",
+        "privateKeyPath",
+        "sudoPassword",
+        "suPassword",
+    ] {
         if key == "password" && use_empty_password {
             if profile.remove(key).is_some() {
                 changed = true;
@@ -438,6 +490,51 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
     Ok(profile_value)
 }
 
+/// Replace the complete local connection list with already-validated backup
+/// profiles. The remote bundle does not carry local ids or ordering metadata,
+/// so those fields are rebuilt here while the local encrypted secret store is
+/// persisted atomically with the public profile list.
+pub fn replace_profiles(app: &AppHandle, inputs: Vec<Value>) -> Result<(), AppError> {
+    let (_, folders) = read_and_heal_profiles(app)?;
+    let mut profiles = Vec::with_capacity(inputs.len());
+    let now = chrono_now_ms();
+
+    for (index, input) in inputs.into_iter().enumerate() {
+        let group = input
+            .get("group")
+            .and_then(Value::as_str)
+            .unwrap_or(DEFAULT_GROUP)
+            .to_string();
+        let matching_folder = folders
+            .iter()
+            .find(|folder| folder.get("name").and_then(Value::as_str) == Some(group.as_str()));
+        let parent_id = matching_folder
+            .and_then(|folder| folder.get("id").and_then(Value::as_str))
+            .map(|id| Value::String(id.to_string()))
+            .unwrap_or(Value::Null);
+        let mut profile = ensure_object(&input);
+        normalize_profile_secret_input(&mut profile, None);
+        let profile_id = profile
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| new_id("profile"));
+        profile.insert("id".to_string(), Value::String(profile_id));
+        profile.insert("group".to_string(), Value::String(group));
+        profile.insert("parentId".to_string(), parent_id);
+        if profile.get("order").and_then(Value::as_i64).is_none() {
+            profile.insert(
+                "order".to_string(),
+                Value::Number(now.saturating_add(index as i64).into()),
+            );
+        }
+        profiles.push(Value::Object(profile));
+    }
+
+    persist_profiles(app, &profiles)
+}
+
 /// Update an existing profile.
 pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result<Value, AppError> {
     let (mut profiles, folders) = read_and_heal_profiles(app)?;
@@ -477,6 +574,167 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
 
     persist_profiles(app, &profiles)?;
     Ok(profile_value)
+}
+
+/// Read a secret only for an internal Rust execution path. Callers must never
+/// forward the returned value to a renderer, snapshot, log, or agent.
+fn read_profile_secret(
+    app: &AppHandle,
+    profile_id: &str,
+    field: &str,
+) -> Result<Option<String>, AppError> {
+    let path = workspace_file(app, "profile-secrets.json")?;
+    if path.exists() {
+        lock_down_secret_file(&path)?;
+    }
+    let profiles = read_json_array(app, "profiles.json")?;
+    if !profiles
+        .iter()
+        .any(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
+    {
+        return Err(AppError::Storage("Profile not found".to_string()));
+    }
+    let Some(mut store) = read_profile_secret_store(&path)? else {
+        return Ok(None);
+    };
+    let Some(stored_value) =
+        current_profile_secret(Some(&store), profile_id, field).and_then(Value::as_str)
+    else {
+        return Ok(None);
+    };
+    let storage_root = profile_secret_storage_root(&path)?;
+    let scope = format!("profile/{profile_id}/{field}");
+    let (value, should_migrate) =
+        crate::services::secret_crypto::decrypt_or_migrate(storage_root, &scope, stored_value)?;
+    if should_migrate {
+        let encrypted = crate::services::secret_crypto::encrypt(storage_root, &scope, &value)?;
+        if let Some(secret) = store
+            .get_mut("profiles")
+            .and_then(Value::as_object_mut)
+            .and_then(|profiles| profiles.get_mut(profile_id))
+            .and_then(Value::as_object_mut)
+            .and_then(|profile| profile.get_mut(field))
+            .and_then(Value::as_object_mut)
+        {
+            secret.insert(
+                "storage".to_string(),
+                Value::String(crate::services::secret_crypto::ENCRYPTED_STORAGE.to_string()),
+            );
+            secret.insert("value".to_string(), Value::String(encrypted));
+            let content = serde_json::to_vec_pretty(&store)
+                .map_err(|error| AppError::Serialization(error.to_string()))?;
+            write_secure_secret_file(&path, &content)?;
+        }
+    }
+    Ok(Some(value))
+}
+
+fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Result<(), AppError> {
+    let Some(store) = read_profile_secret_store(path)? else {
+        return Ok(());
+    };
+    let storage_root = profile_secret_storage_root(path)?;
+    for profile in profiles {
+        let Some(profile_id) = profile.get("id").and_then(Value::as_str).map(str::to_owned) else {
+            continue;
+        };
+        let Some(profile_object) = profile.as_object_mut() else {
+            continue;
+        };
+        for field in [
+            "password",
+            "passphrase",
+            "privateKeyPath",
+            "sudoPassword",
+            "suPassword",
+        ] {
+            let Some(stored_value) =
+                current_profile_secret(Some(&store), &profile_id, field).and_then(Value::as_str)
+            else {
+                continue;
+            };
+            let scope = format!("profile/{profile_id}/{field}");
+            let (value, _) = crate::services::secret_crypto::decrypt_or_migrate(
+                storage_root,
+                &scope,
+                stored_value,
+            )?;
+            profile_object.insert(field.to_string(), Value::String(value));
+        }
+        if let Some(stored_value) =
+            current_profile_secret(Some(&store), &profile_id, "proxyPassword")
+                .and_then(Value::as_str)
+        {
+            let scope = format!("profile/{profile_id}/proxyPassword");
+            let (value, _) = crate::services::secret_crypto::decrypt_or_migrate(
+                storage_root,
+                &scope,
+                stored_value,
+            )?;
+            if let Some(proxy) = profile_object
+                .entry("proxy")
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+            {
+                proxy.insert("password".to_string(), Value::String(value));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn read_sudo_password(app: &AppHandle, profile_id: &str) -> Result<Option<String>, AppError> {
+    read_profile_secret(app, profile_id, "sudoPassword")
+}
+
+pub fn read_su_password(app: &AppHandle, profile_id: &str) -> Result<Option<String>, AppError> {
+    read_profile_secret(app, profile_id, "suPassword")
+}
+
+fn set_profile_secret(
+    app: &AppHandle,
+    profile_id: &str,
+    field: &str,
+    value: Option<&str>,
+) -> Result<(), AppError> {
+    if !matches!(field, "sudoPassword" | "suPassword") {
+        return Err(AppError::Command(
+            "Unsupported privileged profile secret".to_string(),
+        ));
+    }
+    let (mut profiles, _) = read_and_heal_profiles(app)?;
+    let profile = profiles
+        .iter_mut()
+        .find(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+    let object = profile
+        .as_object_mut()
+        .ok_or_else(|| AppError::Storage("Profile shape is invalid".to_string()))?;
+    match value.filter(|value| !value.is_empty()) {
+        Some(value) => {
+            object.insert(field.to_string(), Value::String(value.to_string()));
+        }
+        None => {
+            object.remove(field);
+        }
+    }
+    persist_profiles(app, &profiles)
+}
+
+pub fn set_sudo_password(
+    app: &AppHandle,
+    profile_id: &str,
+    value: Option<&str>,
+) -> Result<(), AppError> {
+    set_profile_secret(app, profile_id, "sudoPassword", value)
+}
+
+pub fn set_su_password(
+    app: &AppHandle,
+    profile_id: &str,
+    value: Option<&str>,
+) -> Result<(), AppError> {
+    set_profile_secret(app, profile_id, "suPassword", value)
 }
 
 /// Delete a profile by id.
@@ -993,7 +1251,13 @@ fn build_profile_secrets(
             None => continue,
         };
         let mut entry = Map::new();
-        for key in ["password", "passphrase", "privateKeyPath"] {
+        for key in [
+            "password",
+            "passphrase",
+            "privateKeyPath",
+            "sudoPassword",
+            "suPassword",
+        ] {
             if let Some(value) = profile.get(key).and_then(Value::as_str) {
                 entry.insert(
                     key.to_string(),
@@ -1334,6 +1598,8 @@ mod tests {
         let profiles = vec![serde_json::json!({
             "id": "profile-current",
             "password": "plain-text-password",
+            "sudoPassword": "plain-text-sudo-password",
+            "suPassword": "plain-text-su-password",
             "proxy": { "password": "plain-text-proxy-password" }
         })];
         let secrets = build_profile_secrets(&path, &profiles, None).unwrap();
@@ -1350,6 +1616,54 @@ mod tests {
             stored["profile-current"]["password"]["value"].as_str(),
             Some("plain-text-password")
         );
+        assert_eq!(
+            stored["profile-current"]["sudoPassword"]["storage"].as_str(),
+            Some(crate::services::secret_crypto::ENCRYPTED_STORAGE)
+        );
+        assert_eq!(
+            stored["profile-current"]["suPassword"]["storage"].as_str(),
+            Some(crate::services::secret_crypto::ENCRYPTED_STORAGE)
+        );
+
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn hydrates_encrypted_profile_secrets_only_into_internal_profile_values() {
+        let directory =
+            std::env::temp_dir().join(format!("fileterm-profile-hydrate-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("profile-secrets.json");
+        let source = vec![json!({
+            "id": "profile-current",
+            "password": "login-password",
+            "sudoPassword": "sudo-password",
+            "suPassword": "su-password",
+            "proxy": { "password": "proxy-password" }
+        })];
+        let stored = build_profile_secrets(&path, &source, None).unwrap();
+        write_secure_secret_file(
+            &path,
+            &serde_json::to_vec_pretty(&stored).expect("secret store should serialize"),
+        )
+        .unwrap();
+
+        let mut public_profiles = vec![json!({
+            "id": "profile-current",
+            "name": "Server",
+            "proxy": { "type": "http" }
+        })];
+        hydrate_profile_secrets(&path, &mut public_profiles).unwrap();
+
+        assert_eq!(public_profiles[0]["password"], "login-password");
+        assert_eq!(public_profiles[0]["sudoPassword"], "sudo-password");
+        assert_eq!(public_profiles[0]["suPassword"], "su-password");
+        assert_eq!(public_profiles[0]["proxy"]["password"], "proxy-password");
+        let public = strip_secret_fields_public(&public_profiles[0]);
+        assert!(!public.as_object().unwrap().contains_key("password"));
+        assert!(!public.as_object().unwrap().contains_key("sudoPassword"));
+        assert_eq!(public["hasSavedSudoPassword"], true);
+        assert_eq!(public["hasSavedSuPassword"], true);
 
         std::fs::remove_dir_all(directory).unwrap();
     }
@@ -1361,6 +1675,8 @@ mod tests {
             "password": "stored-password",
             "passphrase": "stored-passphrase",
             "privateKeyPath": "/keys/id_ed25519",
+            "sudoPassword": "stored-sudo-password",
+            "suPassword": "stored-su-password",
             "proxy": {
                 "type": "http",
                 "host": "proxy.example.com",
@@ -1373,6 +1689,8 @@ mod tests {
             "password": "",
             "passphrase": "",
             "privateKeyPath": "",
+            "sudoPassword": "",
+            "suPassword": "",
             "proxyPassword": "",
             "proxy": {
                 "type": "http",
@@ -1388,6 +1706,8 @@ mod tests {
         assert_eq!(edit["password"], "stored-password");
         assert_eq!(edit["passphrase"], "stored-passphrase");
         assert_eq!(edit["privateKeyPath"], "/keys/id_ed25519");
+        assert_eq!(edit["sudoPassword"], "stored-sudo-password");
+        assert_eq!(edit["suPassword"], "stored-su-password");
         assert_eq!(edit["proxy"]["password"], "stored-proxy-password");
         assert!(!edit.contains_key("proxyPassword"));
 
@@ -1398,6 +1718,8 @@ mod tests {
         assert!(public.get("proxyPassword").is_none());
         assert!(public["proxy"].get("password").is_none());
         assert_eq!(public["hasSavedPassword"], true);
+        assert_eq!(public["hasSavedSudoPassword"], true);
+        assert_eq!(public["hasSavedSuPassword"], true);
     }
 
     #[test]

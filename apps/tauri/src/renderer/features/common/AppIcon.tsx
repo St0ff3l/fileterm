@@ -16,6 +16,7 @@ export type AppIconName =
   | 'presentation'
   | 'config-file'
   | 'database'
+  | 'cloud'
   | 'font-file'
   | 'package'
   | 'terminal-file'
@@ -33,6 +34,10 @@ export type AppIconName =
   | 'flash'
   | 'copy'
   | 'paste'
+  | 'message'
+  | 'eye'
+  | 'shield'
+  | 'shield-check'
   | 'chevron-up'
   | 'chevron-down'
   | 'chevron-right'
@@ -191,6 +196,9 @@ export function AppIcon({
           />
         </>
       ) : null}
+      {name === 'cloud' ? (
+        <path {...commonProps} d="M4.5 12.5h7a3 3 0 0 0 .7-5.9 4 4 0 0 0-7.4-1.2 3 3 0 0 0-.3 7.1Z" />
+      ) : null}
       {name === 'font-file' ? (
         <>
           <path {...commonProps} d="M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z" />
@@ -314,6 +322,22 @@ export function AppIcon({
           <path d="M768 348h-28v-28c0-90.44-73.56-164-164-164h-2.72c-14.48-37.4-50.8-64-93.28-64H352c-42.44 0-78.8 26.6-93.28 64H256c-90.44 0-164 73.56-164 164v448c0 90.44 73.56 164 164 164h368c1.72 0 3.44-0.16 5.08-0.4 3.6 0.24 7.24 0.4 10.92 0.4h128c90.44 0 164-73.56 164-164v-256c0-90.44-73.56-164-164-164zM352 164h128c15.44 0 28 12.56 28 28s-12.56 28-28 28H352c-15.44 0-28-12.56-28-28s12.56-28 28-28z m152.32 696H256c-50.72 0-92-41.28-92-92V320c0-50.72 41.28-92 92-92h2.72C273.2 265.4 309.52 292 352 292h128c42.44 0 78.8-26.6 93.28-64h2.72c50.72 0 92 41.28 92 92v28h-28c-90.44 0-164 73.56-164 164v256c0 34.08 10.44 65.76 28.32 92zM860 768c0 50.72-41.28 92-92 92h-128c-50.72 0-92-41.28-92-92v-256c0-50.72 41.28-92 92-92h128c50.72 0 92 41.28 92 92v256z" />
         </g>
       ) : null}
+      {name === 'message' ? (
+        <path
+          {...commonProps}
+          d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H8l-3.5 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z"
+        />
+      ) : null}
+      {name === 'eye' ? (
+        <>
+          <path {...commonProps} d="M1.8 8s2.1-3.5 6.2-3.5S14.2 8 14.2 8 12.1 11.5 8 11.5 1.8 8 1.8 8Z" />
+          <circle {...commonProps} cx="8" cy="8" r="1.7" />
+        </>
+      ) : null}
+      {name === 'shield' || name === 'shield-check' ? (
+        <path {...commonProps} d="M8 1.9 13 3.8v3.5c0 3.1-2 5.7-5 6.8-3-1.1-5-3.7-5-6.8V3.8L8 1.9Z" />
+      ) : null}
+      {name === 'shield-check' ? <path {...commonProps} d="m5.2 8 1.7 1.7 3.8-3.8" /> : null}
       {name === 'chevron-up' ? <path {...commonProps} d="m3.5 10 4.5-4.5 4.5 4.5" /> : null}
       {name === 'chevron-down' ? <path {...commonProps} d="m3.5 6 4.5 4.5 4.5-4.5" /> : null}
       {name === 'chevron-right' ? <path {...commonProps} d="m6 3.5 4.5 4.5L6 12.5" /> : null}

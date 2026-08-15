@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import type { TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
+import type { CommandExecutionOptions, TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
 import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -52,7 +52,12 @@ export function TerminalDock({
   sendScope: SendScope
   selectedTabIds: string[]
   sendTargets: SessionSendTarget[]
-  onSendCommand(command: string): Promise<void>
+  onSendCommand(
+    command: string,
+    options?: CommandExecutionOptions,
+    scope?: SendScope,
+    selectedTabIds?: string[]
+  ): Promise<void>
   onSendScopeChange(scope: SendScope, rememberSelection: boolean): void
   onSelectedTabIdsChange(tabIds: string[], rememberSelection: boolean): void
   onReconnect?(): void | Promise<void>
@@ -69,19 +74,6 @@ export function TerminalDock({
   const focusTerminal = useCallback(() => {
     dispatchAppEvent(APP_EVENT.focusTerminal, activeTab.id)
   }, [activeTab.id])
-
-  useEffect(() => {
-    return onAppEvent(APP_EVENT.aiInsertTerminalCommand, ({ tabId, command }) => {
-      if (tabId !== activeTab.id || activeTab.sessionType !== 'ssh') {
-        return
-      }
-      // This is intentionally only a controlled-textarea handoff. It does
-      // not call onSendCommand, add a carriage return, or write to the PTY.
-      setCommand(command)
-      setPanel(null)
-      window.requestAnimationFrame(() => inputRef.current?.focus())
-    })
-  }, [activeTab.id, activeTab.sessionType])
 
   useEffect(() => {
     return () => {
@@ -346,13 +338,17 @@ export function TerminalDock({
   const canSend = connected && activeTab.sessionType === 'ssh' && command.trim().length > 0
   const activeTargetSummary = summarizeSendTarget(sendScope, selectedTabIds, sendTargets, t.commandSendCurrent)
 
-  const sendCommand = async (nextCommand: string) => {
+  const sendCommand = async (nextCommand: string, scopeOverride?: SendScope): Promise<boolean> => {
     const trimmed = nextCommand.trim()
     if (!trimmed || activeTab.sessionType !== 'ssh' || !connected) {
-      return
+      return false
     }
 
-    await onSendCommand(trimmed)
+    if (scopeOverride) {
+      await onSendCommand(trimmed, undefined, scopeOverride, [])
+    } else {
+      await onSendCommand(trimmed)
+    }
 
     const now = Date.now()
     setHistory((prev) => {
@@ -368,7 +364,41 @@ export function TerminalDock({
 
     setPanel(null)
     window.requestAnimationFrame(() => inputRef.current?.focus())
+    return true
   }
+
+  useEffect(() => {
+    return onAppEvent(
+      APP_EVENT.aiInsertTerminalCommand,
+      ({ tabId, command: nextCommand, execute, onComplete, onError }) => {
+        if (tabId !== activeTab.id || activeTab.sessionType !== 'ssh') {
+          return
+        }
+
+        setPanel(null)
+        if (!execute) {
+          setCommand(nextCommand)
+          window.requestAnimationFrame(() => inputRef.current?.focus())
+          onComplete?.()
+          return
+        }
+
+        // Copilot must use the same send path as a user pressing Enter: this
+        // records history, applies the current target scope, and writes the
+        // carriage return through the existing terminal command boundary.
+        setCommand(nextCommand)
+        void sendCommand(nextCommand, 'current')
+          .then((sent) => {
+            if (sent) {
+              onComplete?.()
+            } else {
+              onError?.()
+            }
+          })
+          .catch(() => onError?.())
+      }
+    )
+  }, [activeTab.id, activeTab.sessionType, sendCommand])
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {

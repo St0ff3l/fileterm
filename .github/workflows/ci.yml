@@ -77,16 +77,13 @@ jobs:
 
       - name: Install Windows native build dependencies
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install nasm --no-progress --yes
-          $nasmDir = Join-Path $env:ProgramFiles 'NASM'
-          $nasmExe = Join-Path $nasmDir 'nasm.exe'
-          if (-not (Test-Path $nasmExe)) {
-            throw "NASM was installed but $nasmExe was not found"
-          }
-          $nasmDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          & $nasmExe -v
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: 2.16.01
+
+      - name: Verify NASM
+        if: runner.os == 'Windows'
+        run: nasm -v
 
       - name: Install Linux Tauri link dependencies
         if: runner.os == 'Linux'
@@ -98,10 +95,26 @@ jobs:
         working-directory: apps/tauri/src-tauri
         run: cargo check --locked --all-targets
 
-      - name: Verify non-GUI interactive CLI dispatch
+      - name: Exercise AI Copilot and secure exec contracts
+        # These tests use loopback protocol fixtures and pure mode/guardrail,
+        # profile-secret, action-review, and PTY prompt state; they do not
+        # require a real Provider, SSH target, or GUI.
+        # The Windows hosted runner can compile the Tauri test harness but
+        # cannot launch it reliably (STATUS_ENTRYPOINT_NOT_FOUND). Windows
+        # still compiles all targets above and runs the no-desktop fixtures
+        # below.
+        if: runner.os != 'Windows'
         working-directory: apps/tauri/src-tauri
         run: |
-          cargo run --locked -- interactive-exec --help
+          cargo test services::ai::tests --locked -- --test-threads=1
+          cargo test services::ai_guardrails::tests --locked -- --test-threads=1
+          cargo test services::action_review::tests --locked -- --test-threads=1
+          cargo test services::profile_ops::tests --locked -- --test-threads=1
+          cargo test sessions::system_metrics::tests --locked -- --test-threads=1
+
+      - name: Verify non-GUI CLI dispatch
+        working-directory: apps/tauri/src-tauri
+        run: |
           cargo run --locked -- wait-transfer --help
           cargo run --locked -- mcp --help
 
@@ -164,16 +177,13 @@ jobs:
 
       - name: Install Windows native build dependencies
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install nasm --no-progress --yes
-          $nasmDir = Join-Path $env:ProgramFiles 'NASM'
-          $nasmExe = Join-Path $nasmDir 'nasm.exe'
-          if (-not (Test-Path $nasmExe)) {
-            throw "NASM was installed but $nasmExe was not found"
-          }
-          $nasmDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          & $nasmExe -v
+        uses: ilammy/setup-nasm@v1
+        with:
+          version: 2.16.01
+
+      - name: Verify NASM
+        if: runner.os == 'Windows'
+        run: nasm -v
 
       - name: Install Linux Tauri package dependencies
         if: runner.os == 'Linux'
@@ -224,7 +234,7 @@ jobs:
           test -d "$bundle_root/macos/FileTerm.app"
           test -n "$(find "$bundle_root/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm" mcp --help
-          "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm" interactive-exec --help
+          node ./scripts/mcp-stdio-smoke.mjs "$bundle_root/macos/FileTerm.app/Contents/MacOS/fileterm"
 
       - name: Verify Windows package
         if: matrix.platform == 'windows'
@@ -239,7 +249,7 @@ jobs:
           $binary = 'apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/fileterm.exe'
           if (-not (Test-Path -LiteralPath $binary)) { throw 'Release Windows CLI binary was not generated.' }
           & $binary mcp --help
-          & $binary interactive-exec --help
+          node ./scripts/mcp-stdio-smoke.mjs $binary
 
       - name: Verify Linux package
         if: matrix.platform == 'linux'
@@ -255,7 +265,7 @@ jobs:
           binary="apps/tauri/src-tauri/target/${{ matrix.rust_target }}/release/fileterm"
           test -x "$binary"
           "$binary" mcp --help
-          "$binary" interactive-exec --help
+          node ./scripts/mcp-stdio-smoke.mjs "$binary"
 
   tauri-serial-virtual:
     name: Tauri virtual serial (ubuntu-latest)

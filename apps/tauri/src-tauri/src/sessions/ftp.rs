@@ -308,9 +308,6 @@ async fn run_ftp_worker(
             Some(WorkerCmd::ExecuteRemoteCommand { respond_to, .. }) => {
                 let _ = respond_to.send(Err("FTP 不支持远程命令执行".to_string()));
             }
-            Some(WorkerCmd::ExecuteInteractiveRemoteCommand { respond_to, .. }) => {
-                let _ = respond_to.send(Err("FTP 不支持交互式远程命令执行".to_string()));
-            }
             Some(WorkerCmd::ListSshTunnels { respond_to })
             | Some(WorkerCmd::CreateSshTunnel { respond_to, .. })
             | Some(WorkerCmd::StartSshTunnel { respond_to, .. })

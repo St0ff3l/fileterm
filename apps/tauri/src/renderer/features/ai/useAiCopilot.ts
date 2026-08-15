@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
-  AiChatResponseMode,
+  AiCopilotMode,
+  AiCopilotModeState,
   AiChatRequest,
   AiConversation,
   AiConversationSummary,
   AiContextAttachment,
   AiContextPreview,
   AiMessage,
+  ActionApprovalRequest,
+  AiToolActivity,
   AiProviderSummary,
   AiStreamEvent,
   CreateAiContextPreviewInput
@@ -15,12 +18,12 @@ import type {
 type SendMessageOptions = {
   contextSnapshotId?: string
   contextPreview?: AiContextPreview
-  responseMode?: AiChatResponseMode
+  mode?: AiCopilotMode
 }
 
 type RetryMessageOptions = {
   contextSnapshotId?: string
-  responseMode?: AiChatResponseMode
+  mode?: AiCopilotMode
 }
 
 function toMessage(error: unknown) {
@@ -80,8 +83,12 @@ export function useAiCopilot() {
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null)
+  const [toolActivities, setToolActivities] = useState<AiToolActivity[]>([])
+  const [toolApprovalRequests, setToolApprovalRequests] = useState<ActionApprovalRequest[]>([])
+  const [resolvingToolApprovalIds, setResolvingToolApprovalIds] = useState<Set<string>>(() => new Set())
   const [contextPreview, setContextPreview] = useState<AiContextPreview | null>(null)
   const [isContextPreviewing, setIsContextPreviewing] = useState(false)
+  const [modeState, setModeState] = useState<AiCopilotModeState | null>(null)
   const conversationRef = useRef<AiConversation | null>(null)
   const selectedProviderIdRef = useRef<string | null>(null)
   const selectedModelRef = useRef<string | null>(null)
@@ -90,8 +97,10 @@ export function useAiCopilot() {
   const activeRequestIdRef = useRef<string | null>(null)
   const requestCompletedRef = useRef(false)
   const unmountedRef = useRef(false)
-  const activeResponseModeRef = useRef<AiChatResponseMode>('chat')
+  const modeStateRef = useRef<AiCopilotModeState | null>(null)
   const mountedRef = useRef(true)
+  const toolApprovalRequestsRef = useRef<ActionApprovalRequest[]>([])
+  const resolvingToolApprovalIdsRef = useRef(new Set<string>())
 
   const applyConversation = useCallback((next: AiConversation | null) => {
     conversationRef.current = next
@@ -146,11 +155,14 @@ export function useAiCopilot() {
       return
     }
     try {
-      const [nextProviders, nextConversations] = await Promise.all([
+      const [nextProviders, nextConversations, nextModeState] = await Promise.all([
         desktopApi.listAiProviders(),
-        desktopApi.listAiConversations()
+        desktopApi.listAiConversations(),
+        desktopApi.getAiCopilotModeState()
       ])
       if (!mountedRef.current) return
+      modeStateRef.current = nextModeState
+      setModeState(nextModeState)
       const availableProviders = nextProviders.filter(isChatProvider)
       setProviders(availableProviders)
       setConversations(sortConversations(nextConversations))
@@ -216,6 +228,40 @@ export function useAiCopilot() {
     }
   }, [])
 
+  useEffect(() => {
+    toolApprovalRequestsRef.current = toolApprovalRequests
+  }, [toolApprovalRequests])
+
+  useEffect(() => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) return
+
+    const dispose = desktopApi.onActionApprovalRequest((request) => {
+      if (!mountedRef.current || request.source !== 'ai-copilot') return
+      setToolApprovalRequests((current) => {
+        if (current.some((item) => item.requestId === request.requestId)) return current
+        const next = [...current, request]
+        toolApprovalRequestsRef.current = next
+        return next
+      })
+    })
+
+    return () => {
+      dispose()
+      for (const request of toolApprovalRequestsRef.current) {
+        void desktopApi.resolveActionApproval(request.requestId, false).catch(() => undefined)
+      }
+      toolApprovalRequestsRef.current = []
+    }
+  }, [])
+
+  const clearToolApprovalState = useCallback(() => {
+    toolApprovalRequestsRef.current = []
+    setToolApprovalRequests([])
+    resolvingToolApprovalIdsRef.current.clear()
+    setResolvingToolApprovalIds(new Set())
+  }, [])
+
   const createConversation = useCallback(
     async (providerId: string) => {
       const desktopApi = window.fileterm
@@ -255,12 +301,15 @@ export function useAiCopilot() {
       if (!mountedRef.current || activeConversationIdRef.current !== conversationId) return
       if (event.type === 'started') {
         activeAssistantMessageIdRef.current = event.messageId
+        setToolActivities([])
+        clearToolApprovalState()
+        return
+      }
+      if (event.type === 'assistant-message-started') {
+        activeAssistantMessageIdRef.current = event.messageId
         return
       }
       if (event.type === 'text-delta') {
-        if (activeResponseModeRef.current === 'command-proposal') {
-          return
-        }
         const assistantMessageId = activeAssistantMessageIdRef.current
         if (!assistantMessageId) return
         setConversation((current) => {
@@ -279,12 +328,6 @@ export function useAiCopilot() {
           conversationRef.current = next
           return next
         })
-        return
-      }
-      if (event.type === 'command') {
-        // Command cards are only made visible from the completed, persisted
-        // conversation. This event is still useful as a typed transport
-        // boundary, but never turns partial model output into a trusted card.
         return
       }
       if (event.type === 'usage') {
@@ -308,15 +351,97 @@ export function useAiCopilot() {
         setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
-        activeResponseModeRef.current = 'chat'
+        setToolActivities([])
+        clearToolApprovalState()
+        return
+      }
+      if (event.type === 'tool-call') {
+        setToolActivities((current) => {
+          const existing = current.find((item) => item.proposal.id === event.proposal.id)
+          if (existing) return current
+          return [...current, { proposal: event.proposal }]
+        })
+        const assistantMessageId = activeAssistantMessageIdRef.current
+        if (assistantMessageId) {
+          setConversation((current) => {
+            if (!current || current.id !== conversationId) return current
+            const timestamp = String(Date.now())
+            const messageIndex = current.messages.findIndex((message) => message.id === assistantMessageId)
+            if (messageIndex < 0) {
+              const next = {
+                ...current,
+                messages: [
+                  ...current.messages,
+                  {
+                    id: assistantMessageId,
+                    role: 'assistant' as const,
+                    content: '',
+                    createdAt: timestamp,
+                    toolActivities: [{ proposal: event.proposal }]
+                  }
+                ],
+                messageCount: current.messages.length + 1,
+                updatedAt: timestamp
+              }
+              conversationRef.current = next
+              return next
+            }
+            const message = current.messages[messageIndex]
+            if (message.toolActivities?.some((activity) => activity.proposal.id === event.proposal.id)) return current
+            const messages = current.messages.map((item) =>
+              item.id === assistantMessageId
+                ? { ...item, toolActivities: [...(item.toolActivities ?? []), { proposal: event.proposal }] }
+                : item
+            )
+            const next = { ...current, messages, updatedAt: timestamp }
+            conversationRef.current = next
+            return next
+          })
+        }
+        return
+      }
+      if (event.type === 'tool-result') {
+        setToolActivities((current) =>
+          current.map((item) =>
+            item.proposal.id === event.result.proposalId ? { ...item, result: event.result } : item
+          )
+        )
+        setConversation((current) => {
+          if (!current || current.id !== conversationId) return current
+          let changed = false
+          const messages = current.messages.map((message) => {
+            if (!message.toolActivities?.some((activity) => activity.proposal.id === event.result.proposalId)) {
+              return message
+            }
+            changed = true
+            return {
+              ...message,
+              toolActivities: message.toolActivities.map((activity) =>
+                activity.proposal.id === event.result.proposalId ? { ...activity, result: event.result } : activity
+              )
+            }
+          })
+          if (!changed) return current
+          const next = { ...current, messages, updatedAt: String(Date.now()) }
+          conversationRef.current = next
+          return next
+        })
+        void window.fileterm
+          ?.getAiCopilotModeState()
+          .then((nextModeState) => {
+            if (!mountedRef.current || activeConversationIdRef.current !== conversationId) return
+            modeStateRef.current = nextModeState
+            setModeState(nextModeState)
+          })
+          .catch(() => undefined)
         return
       }
       activeAssistantMessageIdRef.current = null
       activeRequestIdRef.current = null
       requestCompletedRef.current = true
-      activeResponseModeRef.current = 'chat'
       setActiveRequestId(null)
       setIsStreaming(false)
+      clearToolApprovalState()
       // A user stop (or a surface teardown) is a successful cancellation
       // path, not a retryable Provider error. Restore the persisted local
       // conversation so any partial assistant delta disappears, while
@@ -324,7 +449,7 @@ export function useAiCopilot() {
       setErrorMessage(event.code === 'AI_REQUEST_CANCELLED' ? null : event.message)
       void restoreConversation(conversationId)
     },
-    [applyConversation, restoreConversation]
+    [applyConversation, clearToolApprovalState, restoreConversation]
   )
 
   const startRequest = useCallback(
@@ -389,13 +514,29 @@ export function useAiCopilot() {
     []
   )
 
+  const setDangerousCommandRestrictions = useCallback(async (enabled: boolean) => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) return null
+    try {
+      const next = await desktopApi.setAiDangerousCommandRestrictions({ enabled })
+      if (mountedRef.current) {
+        modeStateRef.current = next
+        setModeState(next)
+      }
+      return next
+    } catch (error) {
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+      return null
+    }
+  }, [])
+
   const sendMessage = useCallback(
     async (value: string, options: SendMessageOptions = {}) => {
       const desktopApi = window.fileterm
       const content = value.trim()
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !content || !providerId || isStreaming) return false
-      const responseMode = options.responseMode ?? 'chat'
+      const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       const preview =
         options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
           ? options.contextPreview
@@ -412,8 +553,9 @@ export function useAiCopilot() {
         : undefined
       setErrorMessage(null)
       setUsage(null)
+      setToolActivities([])
+      clearToolApprovalState()
       setIsStreaming(true)
-      activeResponseModeRef.current = responseMode
 
       let target = conversationRef.current
       try {
@@ -449,7 +591,7 @@ export function useAiCopilot() {
                 modelOverride,
                 userMessage: content,
                 contextSnapshotId: options.contextSnapshotId,
-                responseMode
+                mode
               },
               onEvent
             ),
@@ -491,7 +633,6 @@ export function useAiCopilot() {
           activeRequestIdRef.current = null
           requestCompletedRef.current = true
           setActiveRequestId(null)
-          activeResponseModeRef.current = 'chat'
           if (options.contextSnapshotId) {
             setContextPreview((current) => (current?.snapshotId === options.contextSnapshotId ? null : current))
           }
@@ -499,7 +640,15 @@ export function useAiCopilot() {
         return false
       }
     },
-    [applyConversation, autoSummarizeConversationTitle, contextPreview, createConversation, isStreaming, startRequest]
+    [
+      applyConversation,
+      autoSummarizeConversationTitle,
+      clearToolApprovalState,
+      contextPreview,
+      createConversation,
+      isStreaming,
+      startRequest
+    ]
   )
 
   const createContextPreview = useCallback(
@@ -540,12 +689,13 @@ export function useAiCopilot() {
       const currentConversation = conversationRef.current
       const providerId = selectedProviderIdRef.current
       if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
-      const responseMode = options.responseMode ?? 'chat'
+      const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       setErrorMessage(null)
       setUsage(null)
+      setToolActivities([])
+      clearToolApprovalState()
       setContextPreview(null)
       setIsStreaming(true)
-      activeResponseModeRef.current = responseMode
       try {
         const modelOverride = selectedModelRef.current || undefined
         await startRequest(
@@ -556,7 +706,7 @@ export function useAiCopilot() {
                 providerId: requestProviderId,
                 modelOverride,
                 contextSnapshotId: options.contextSnapshotId,
-                responseMode
+                mode
               },
               onEvent
             ),
@@ -571,12 +721,53 @@ export function useAiCopilot() {
           activeRequestIdRef.current = null
           requestCompletedRef.current = true
           setActiveRequestId(null)
-          activeResponseModeRef.current = 'chat'
         }
         return false
       }
     },
-    [isStreaming, startRequest]
+    [clearToolApprovalState, isStreaming, startRequest]
+  )
+
+  const setCopilotMode = useCallback(
+    async (mode: AiCopilotMode, confirmed = false) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return null
+      setErrorMessage(null)
+      try {
+        const next = await desktopApi.setAiCopilotMode({ mode, confirmed })
+        if (mountedRef.current) {
+          modeStateRef.current = next
+          setModeState(next)
+          setContextPreview(null)
+        }
+        return next
+      } catch (error) {
+        if (mountedRef.current) setErrorMessage(toMessage(error))
+        return null
+      }
+    },
+    [isStreaming]
+  )
+
+  const setContextAttach = useCallback(
+    async (attachTerminalContext: boolean) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming) return null
+      setErrorMessage(null)
+      try {
+        const next = await desktopApi.setAiContextAttach({ attachTerminalContext })
+        if (mountedRef.current) {
+          modeStateRef.current = next
+          setModeState(next)
+          setContextPreview(null)
+        }
+        return next
+      } catch (error) {
+        if (mountedRef.current) setErrorMessage(toMessage(error))
+        return null
+      }
+    },
+    [isStreaming]
   )
 
   const stop = useCallback(async () => {
@@ -590,6 +781,39 @@ export function useAiCopilot() {
       }
     }
   }, [activeRequestId])
+
+  const resolveToolApproval = useCallback(async (requestId: string, approved: boolean, riskAcknowledged = false) => {
+    const desktopApi = window.fileterm
+    const request = toolApprovalRequestsRef.current.find((item) => item.requestId === requestId)
+    if (!desktopApi || !request || resolvingToolApprovalIdsRef.current.has(requestId)) return
+    if (approved && request.requiresRiskAcknowledgement && !riskAcknowledged) return
+
+    resolvingToolApprovalIdsRef.current.add(requestId)
+    setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+    try {
+      await desktopApi.resolveActionApproval(requestId, approved)
+    } catch (error) {
+      resolvingToolApprovalIdsRef.current.delete(requestId)
+      setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+    }
+  }, [])
+
+  const resolveToolApprovalAsTerminal = useCallback(async (requestId: string) => {
+    const desktopApi = window.fileterm
+    const request = toolApprovalRequestsRef.current.find((item) => item.requestId === requestId)
+    if (!desktopApi || !request || resolvingToolApprovalIdsRef.current.has(requestId)) return
+
+    resolvingToolApprovalIdsRef.current.add(requestId)
+    setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+    try {
+      await desktopApi.resolveAiTerminalHandoff(requestId)
+    } catch (error) {
+      resolvingToolApprovalIdsRef.current.delete(requestId)
+      setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
+      if (mountedRef.current) setErrorMessage(toMessage(error))
+    }
+  }, [])
 
   const renameConversation = useCallback(
     async (conversationId: string, title: string) => {
@@ -643,35 +867,12 @@ export function useAiCopilot() {
     [applyConversation, isStreaming]
   )
 
-  const runReview = useCallback(
-    async (commandId: string) => {
-      const desktopApi = window.fileterm
-      if (!desktopApi || isStreaming) return null
-      setErrorMessage(null)
-      try {
-        const result = await desktopApi.runAiReview({ commandId })
-        if (mountedRef.current) {
-          if (conversationRef.current?.id === result.conversation.id) {
-            applyConversation(result.conversation)
-          }
-          setConversations((current) => replaceConversationSummary(current, result.conversation))
-        }
-        return result
-      } catch (error) {
-        if (mountedRef.current) {
-          setErrorMessage(toMessage(error))
-        }
-        return null
-      }
-    },
-    [applyConversation, isStreaming]
-  )
-
   const newChat = useCallback(() => {
     if (isStreaming) return
     activeAssistantMessageIdRef.current = null
     setErrorMessage(null)
     setUsage(null)
+    setToolActivities([])
     applyConversation(null)
   }, [applyConversation, isStreaming])
 
@@ -691,8 +892,12 @@ export function useAiCopilot() {
     isStreaming,
     errorMessage,
     usage,
+    toolActivities,
+    toolApprovalRequests,
+    resolvingToolApprovalIds,
     contextPreview,
     isContextPreviewing,
+    modeState,
     selectProvider,
     selectModel,
     loadConversation,
@@ -703,7 +908,11 @@ export function useAiCopilot() {
     createContextPreview,
     clearContextPreview,
     sendMessage,
-    runReview,
+    setCopilotMode,
+    setContextAttach,
+    setDangerousCommandRestrictions,
+    resolveToolApproval,
+    resolveToolApprovalAsTerminal,
     retry,
     stop
   }

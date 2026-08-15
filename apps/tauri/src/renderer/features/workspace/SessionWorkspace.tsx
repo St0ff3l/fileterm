@@ -146,7 +146,12 @@ export function SessionWorkspace({
     scope: SendScope,
     selectedTabIds: string[]
   ): void
-  onSendTerminalCommand(command: string): Promise<void>
+  onSendTerminalCommand(
+    command: string,
+    options?: CommandExecutionOptions,
+    scope?: SendScope,
+    selectedTabIds?: string[]
+  ): Promise<void>
   onSaveTemporaryCommand(command: string, appendCarriageReturn: boolean): Promise<boolean> | boolean | void
   onUpdateCommand(commandId: string, input: CommandTemplateInput): Promise<boolean> | boolean | void
   onTerminalDockSendScopeChange(scope: SendScope, rememberSelection: boolean): void

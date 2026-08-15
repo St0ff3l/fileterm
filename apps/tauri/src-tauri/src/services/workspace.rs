@@ -393,23 +393,6 @@ pub struct ConnectionImportPlanEntry {
     pub input: Option<serde_json::Value>,
 }
 
-/// A single renderer-owned answer for an interactive command that is running
-/// on a temporary SSH exec PTY. It is intentionally separate from SSH login
-/// interactions and from the visible terminal input queue.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteExecInteractionResponse {
-    pub cancelled: bool,
-    pub value: Option<String>,
-}
-
-pub struct PendingRemoteExecInteraction {
-    pub tab_id: String,
-    pub expected_session_revision: String,
-    pub execution_id: String,
-    pub sender: oneshot::Sender<RemoteExecInteractionResponse>,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupPasswordResponse {
@@ -419,6 +402,20 @@ pub struct BackupPasswordResponse {
 
 pub struct PendingBackupPassword {
     pub sender: oneshot::Sender<BackupPasswordResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SudoPasswordResponse {
+    pub cancelled: bool,
+    pub value: Option<String>,
+    pub save: bool,
+}
+
+pub struct PendingSudoPassword {
+    pub tab_id: String,
+    pub expected_session_revision: String,
+    pub sender: oneshot::Sender<SudoPasswordResponse>,
 }
 
 pub struct WorkspaceState {
@@ -453,33 +450,27 @@ pub struct WorkspaceState {
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions: Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
-    /// Temporary answers for interactive remote exec tasks. Values are never
-    /// logged, persisted, added to transcripts, or sent through MCP.
-    pub pending_remote_exec_interactions:
-        Arc<RwLock<HashMap<String, PendingRemoteExecInteraction>>>,
-    /// Registration id for the main workspace renderer that has finished
-    /// subscribing to the task-local secure-input event. Interactive remote
-    /// commands fail closed while it is absent instead of waiting for an
-    /// event that no visible FileTerm UI can receive.
-    ///
-    /// The id prevents a React Strict Mode / hot-reload cleanup from clearing
-    /// readiness that has already been re-established by the next renderer
-    /// instance.
-    pub remote_exec_interaction_renderer_registration: Arc<RwLock<Option<String>>>,
     /// One-time password prompts for cross-device remote backup encryption.
     /// These are intentionally separate from terminal and remote-exec input.
     pub pending_backup_passwords: Arc<RwLock<HashMap<String, PendingBackupPassword>>>,
     pub backup_password_renderer_registration: Arc<RwLock<Option<String>>>,
-    /// At most one interactive command may await input for a tab. The value
-    /// identifies its task, so cleanup from a cancelled old worker cannot
-    /// unlock a newer task that reuses the same tab id after reconnect.
-    /// Ordinary independent exec calls remain concurrent and do not use it.
-    pub active_interactive_remote_execs: Arc<Mutex<HashMap<String, String>>>,
-    /// Pending one-time action approvals. MCP and AI Review Mode share this
+    /// One-time sudo/su prompts for the normal isolated exec channel. These
+    /// values are never routed through terminal input or an Agent context.
+    pub pending_sudo_passwords: Arc<RwLock<HashMap<String, PendingSudoPassword>>>,
+    pub sudo_password_renderer_registration: Arc<RwLock<Option<String>>>,
+    /// Pending one-time action approvals. MCP and Copilot share this
     /// queue; the renderer resolves each request through
-    /// `app_resolve_action_approval`. Dropping or timing out a request denies
-    /// it, so there is no durable approval state.
-    pub pending_action_approvals: Arc<RwLock<HashMap<String, oneshot::Sender<bool>>>>,
+    /// `app_resolve_action_approval` or the Copilot terminal-handoff command.
+    /// Dropping or timing out a request denies it, so there is no durable
+    /// approval state.
+    pub pending_action_approvals: Arc<
+        RwLock<
+            HashMap<
+                String,
+                oneshot::Sender<crate::services::action_review::ActionApprovalDecision>,
+            >,
+        >,
+    >,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A
@@ -543,11 +534,10 @@ impl Default for WorkspaceState {
             local_terminal_runtime_gates: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_launches: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
-            pending_remote_exec_interactions: Arc::new(RwLock::new(HashMap::new())),
-            remote_exec_interaction_renderer_registration: Arc::new(RwLock::new(None)),
             pending_backup_passwords: Arc::new(RwLock::new(HashMap::new())),
             backup_password_renderer_registration: Arc::new(RwLock::new(None)),
-            active_interactive_remote_execs: Arc::new(Mutex::new(HashMap::new())),
+            pending_sudo_passwords: Arc::new(RwLock::new(HashMap::new())),
+            sudo_password_renderer_registration: Arc::new(RwLock::new(None)),
             pending_action_approvals: Arc::new(RwLock::new(HashMap::new())),
             remote_forwards: Arc::new(RwLock::new(HashMap::new())),
             transfers: Arc::new(RwLock::new(Vec::new())),
@@ -605,22 +595,12 @@ impl WorkspaceState {
         true
     }
 
-    /// Mark one main-workspace renderer's secure-input route available or
-    /// unavailable. Only the matching registration can withdraw readiness,
-    /// so stale React cleanup cannot turn off a newer listener.
-    pub async fn set_remote_exec_interaction_renderer_ready(
-        &self,
-        registration_id: &str,
-        ready: bool,
-    ) {
+    pub async fn set_sudo_password_renderer_ready(&self, registration_id: &str, ready: bool) {
         let registration_id = registration_id.trim();
         if registration_id.is_empty() || registration_id.len() > 200 {
             return;
         }
-        let mut active = self
-            .remote_exec_interaction_renderer_registration
-            .write()
-            .await;
+        let mut active = self.sudo_password_renderer_registration.write().await;
         if ready {
             *active = Some(registration_id.to_string());
             return;
@@ -629,41 +609,31 @@ impl WorkspaceState {
             return;
         }
         *active = None;
-        // Hold the lifecycle write lock until task senders are dropped. A
-        // concurrent task either observes an active renderer and is inserted
-        // before this clear, or observes no renderer and never starts waiting.
-        self.pending_remote_exec_interactions.write().await.clear();
+        self.pending_sudo_passwords.write().await.clear();
     }
 
-    /// Atomically establish that a secure prompt can be delivered to the
-    /// currently registered renderer before the SSH task waits for an answer.
-    /// The lifecycle read lock deliberately spans the pending-map insertion
-    /// to close the renderer-unmount race.
-    pub async fn insert_pending_remote_exec_interaction(
+    pub async fn insert_pending_sudo_password(
         &self,
         request_id: String,
-        pending: PendingRemoteExecInteraction,
+        pending: PendingSudoPassword,
     ) -> bool {
-        let active = self
-            .remote_exec_interaction_renderer_registration
-            .read()
-            .await;
+        // Keep the registration write lock across the readiness check and
+        // pending-map insertion. Renderer teardown takes the same lock before
+        // clearing pending senders, so a prompt can never be inserted after
+        // readiness has been withdrawn.
+        let active = self.sudo_password_renderer_registration.write().await;
         if active.is_none() {
             return false;
         }
-        self.pending_remote_exec_interactions
+        self.pending_sudo_passwords
             .write()
             .await
             .insert(request_id, pending);
         true
     }
 
-    /// Whether the main workspace currently has a confirmed listener for
-    /// task-local secure interactive-exec prompts. This is checked before an
-    /// interactive task starts so a background SSH PTY can never wait for an
-    /// answer that FileTerm cannot collect locally.
-    pub async fn has_remote_exec_interaction_renderer(&self) -> bool {
-        self.remote_exec_interaction_renderer_registration
+    pub async fn has_sudo_password_renderer(&self) -> bool {
+        self.sudo_password_renderer_registration
             .read()
             .await
             .is_some()
@@ -732,12 +702,10 @@ impl WorkspaceState {
 mod tests {
     use super::{
         initial_remote_path_for_profile, reconnect_mode_for_profile, ConnectionCapabilities,
-        PaneNode, PendingRemoteExecInteraction, SplitDirection, TransferRunHandle, WorkspaceState,
-        WorkspaceTabStatus,
+        PaneNode, SplitDirection, TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
     };
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
-    use tokio::sync::oneshot;
 
     #[test]
     fn ssh_is_the_only_session_type_with_tunnel_capability() {
@@ -862,55 +830,6 @@ mod tests {
         assert_eq!(state.ai_session_revision("tab-target").await, 1);
 
         assert_eq!(state.touch_ai_session_revision("tab-target").await, 2);
-    }
-
-    #[tokio::test]
-    async fn unavailable_secure_input_renderer_drops_pending_task_answers() {
-        let state = WorkspaceState::default();
-        let (sender, receiver) = oneshot::channel();
-        state.pending_remote_exec_interactions.write().await.insert(
-            "remote-exec-input-test".to_string(),
-            PendingRemoteExecInteraction {
-                tab_id: "tab-test".to_string(),
-                expected_session_revision: "1".to_string(),
-                execution_id: "execution-test".to_string(),
-                sender,
-            },
-        );
-
-        state
-            .set_remote_exec_interaction_renderer_ready("renderer-current", true)
-            .await;
-        assert!(
-            state
-                .insert_pending_remote_exec_interaction(
-                    "remote-exec-input-second".to_string(),
-                    PendingRemoteExecInteraction {
-                        tab_id: "tab-test".to_string(),
-                        expected_session_revision: "1".to_string(),
-                        execution_id: "execution-second".to_string(),
-                        sender: oneshot::channel().0,
-                    },
-                )
-                .await
-        );
-
-        // A stale Strict Mode cleanup must not unregister the renderer that
-        // has already replaced it.
-        state
-            .set_remote_exec_interaction_renderer_ready("renderer-stale", false)
-            .await;
-        assert_eq!(state.pending_remote_exec_interactions.read().await.len(), 2);
-
-        state
-            .set_remote_exec_interaction_renderer_ready("renderer-current", false)
-            .await;
-        assert!(state
-            .pending_remote_exec_interactions
-            .read()
-            .await
-            .is_empty());
-        assert!(receiver.await.is_err());
     }
 
     #[test]

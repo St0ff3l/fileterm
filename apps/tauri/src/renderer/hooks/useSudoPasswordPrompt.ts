@@ -1,33 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FileTermDesktopApi, RemoteExecInteractionRequest } from '@fileterm/core'
+import type { FileTermDesktopApi, SudoPasswordRequest } from '@fileterm/core'
 
-export type UseRemoteExecInteractionsOptions = {
+export type UseSudoPasswordPromptOptions = {
   desktopApi?: FileTermDesktopApi
   onError(scope: string, error: unknown): void
 }
 
-export type UseRemoteExecInteractionsResult = {
-  request: RemoteExecInteractionRequest | null
+export type UseSudoPasswordPromptResult = {
+  request: SudoPasswordRequest | null
   errorMessage: string | null
   isResolving: boolean
   cancel(): Promise<void>
-  submit(value: string): Promise<void>
+  submit(value: string, save: boolean): Promise<void>
 }
 
 /**
- * Renderer queue for task-local remote exec prompts. Unlike SSH login
- * interactions, these answers are never persisted and never touch the visible
- * terminal input route.
+ * Owns the main-window-only sudo/su password queue. It deliberately does not
+ * share the visible terminal or generic background-exec input routes.
  */
-export function useRemoteExecInteractions({
+export function useSudoPasswordPrompt({
   desktopApi,
   onError
-}: UseRemoteExecInteractionsOptions): UseRemoteExecInteractionsResult {
-  const [requests, setRequests] = useState<RemoteExecInteractionRequest[]>([])
+}: UseSudoPasswordPromptOptions): UseSudoPasswordPromptResult {
+  const [requests, setRequests] = useState<SudoPasswordRequest[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null)
   const resolvingRequestIdsRef = useRef(new Set<string>())
-  const pendingRequestsRef = useRef<RemoteExecInteractionRequest[]>([])
+  const pendingRequestsRef = useRef<SudoPasswordRequest[]>([])
   const onErrorRef = useRef(onError)
 
   useEffect(() => {
@@ -40,14 +39,11 @@ export function useRemoteExecInteractions({
 
   useEffect(() => {
     if (!desktopApi) return
-    // A new id per listener lifetime means a stale Strict Mode / HMR cleanup
-    // can never withdraw readiness established by the listener that replaced
-    // it. This runs in an effect, not during render.
-    const registrationId = `remote-exec-renderer-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
+    const registrationId = `sudo-password-renderer-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
     let disposed = false
     let unsubscribe: (() => void) | undefined
     void desktopApi
-      .onRemoteExecInteraction((nextRequest) => {
+      .onSudoPasswordPrompt((nextRequest) => {
         setRequests((current) => {
           const index = current.findIndex((item) => item.requestId === nextRequest.requestId)
           if (index === -1) return [...current, nextRequest]
@@ -63,46 +59,41 @@ export function useRemoteExecInteractions({
           return
         }
         unsubscribe = nextUnsubscribe
-        await desktopApi.setRemoteExecInteractionRendererReady(registrationId, true)
+        await desktopApi.setSudoPasswordPromptRendererReady(registrationId, true)
       })
       .catch((error) => {
         if (!disposed) {
-          onErrorRef.current('启用远程命令安全输入', error)
+          onErrorRef.current('启用 sudo/su 密码输入', error)
           setErrorMessage(error instanceof Error ? error.message : String(error))
         }
       })
     return () => {
       disposed = true
       unsubscribe?.()
-      // Best effort during window teardown. The backend drops pending task
-      // senders immediately, so a secret prompt can never outlive this UI.
-      void desktopApi.setRemoteExecInteractionRendererReady(registrationId, false).catch(() => undefined)
+      void desktopApi.setSudoPasswordPromptRendererReady(registrationId, false).catch(() => undefined)
     }
   }, [desktopApi])
 
   useEffect(() => {
     if (!desktopApi) return
     return () => {
-      // This hook owns the only renderer route for these task-local prompts.
-      // Fail closed if the workspace unmounts; values must never be retained
-      // or redirected into the visible terminal.
       for (const request of pendingRequestsRef.current) {
-        void desktopApi.resolveRemoteExecInteraction(request.requestId, true).catch(() => undefined)
+        void desktopApi.resolveSudoPasswordPrompt(request.requestId, true).catch(() => undefined)
       }
     }
   }, [desktopApi])
 
   const resolve = useCallback(
-    async (requestId: string, cancelled: boolean, value?: string) => {
+    async (requestId: string, cancelled: boolean, value?: string, save = false) => {
       if (!desktopApi || resolvingRequestIdsRef.current.has(requestId)) return
       resolvingRequestIdsRef.current.add(requestId)
       setResolvingRequestId(requestId)
       try {
-        await desktopApi.resolveRemoteExecInteraction(requestId, cancelled, value)
+        await desktopApi.resolveSudoPasswordPrompt(requestId, cancelled, value, save)
         setRequests((current) => current.filter((item) => item.requestId !== requestId))
         setErrorMessage(null)
       } catch (error) {
-        onError('响应远程命令交互', error)
+        onError('响应 sudo/su 密码输入', error)
         setErrorMessage(error instanceof Error ? error.message : String(error))
       } finally {
         resolvingRequestIdsRef.current.delete(requestId)
@@ -117,8 +108,8 @@ export function useRemoteExecInteractions({
     if (request) await resolve(request.requestId, true)
   }, [request, resolve])
   const submit = useCallback(
-    async (value: string) => {
-      if (request) await resolve(request.requestId, false, value)
+    async (value: string, save: boolean) => {
+      if (request) await resolve(request.requestId, false, value, save)
     },
     [request, resolve]
   )

@@ -887,6 +887,18 @@ pub fn read_json_array(app: &AppHandle, name: &str) -> Result<Vec<Value>, AppErr
                                     );
                                 }
                             }
+                            for field in ["sudoPassword", "suPassword"] {
+                                let (password, password_migrated) = profile_secret_value(
+                                    storage_root,
+                                    &profile_id,
+                                    field,
+                                    profile_secrets,
+                                )?;
+                                migrated |= password_migrated;
+                                if let Some(password) = password {
+                                    profile_obj.insert(field.to_string(), Value::String(password));
+                                }
+                            }
                         }
                     }
                 }

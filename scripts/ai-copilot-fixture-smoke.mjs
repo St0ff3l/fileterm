@@ -64,14 +64,14 @@ async function readSseText(response) {
   return text
 }
 
-async function sendChat(url, messages, stream = true) {
+async function sendChat(url, messages, stream = true, extra = {}) {
   const response = await fetch(`${url}/v1/chat/completions`, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     method: 'POST',
-    body: JSON.stringify({ messages, model: 'fileterm-fixture', stream })
+    body: JSON.stringify({ messages, model: 'fileterm-fixture', stream, ...extra })
   })
   const body = stream && response.ok ? await readSseText(response) : await response.text()
   return { body, response }
@@ -98,22 +98,6 @@ child.stderr.on('data', (chunk) => {
 try {
   await waitForHealth(baseUrl, child)
 
-  const commandMessages = [
-    {
-      content:
-        'You are a normal assistant. The current request is command-proposal mode. Return exactly one JSON object and nothing else.',
-      role: 'system'
-    },
-    { content: '先解释如何查看 Docker 占用。', role: 'user' },
-    { content: '可以，先检查这些信息。', role: 'assistant' },
-    { content: '重新来', role: 'user' }
-  ]
-  const commandResult = await sendChat(baseUrl, commandMessages)
-  assert.equal(commandResult.response.status, 200, '命令卡 fixture 请求失败')
-  const commandProposal = JSON.parse(commandResult.body)
-  assert(Array.isArray(commandProposal.commands), '命令卡响应没有 commands 数组')
-  assert.equal(commandProposal.commands[0]?.command, 'pwd', '短句重新来没有生成命令卡')
-
   const retryMessages = [{ content: 'fixture:fail-once', role: 'user' }]
   const failed = await sendChat(baseUrl, retryMessages, false)
   assert.equal(failed.response.status, 503, 'fail-once fixture 没有模拟首个失败')
@@ -121,7 +105,68 @@ try {
   assert.equal(recovered.response.status, 200, '重试请求没有恢复')
   assert.match(recovered.body, /Fixture response received/)
 
-  console.log('AI Copilot fixture smoke passed: command mode regeneration + retry recovery')
+  const toolMessages = [
+    { content: 'The current request uses the FileTerm tool contract.', role: 'system' },
+    { content: 'fixture:tool-compat', role: 'user' }
+  ]
+  const toolCallResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    method: 'POST',
+    body: JSON.stringify({
+      messages: toolMessages,
+      model: 'fileterm-fixture',
+      stream: true,
+      tools: [{ type: 'function' }]
+    })
+  })
+  const toolCallBody = await toolCallResponse.text()
+  assert.equal(toolCallResponse.status, 200, 'tool-call fixture 请求失败')
+  assert.match(toolCallBody, /fileterm_execute_remote_command/, 'tool-call fixture 没有返回 FileTerm tool')
+  assert.doesNotMatch(toolCallBody, /commands/, 'tool-call 请求不应退回旧命令卡 envelope')
+
+  const toolResult = await sendChat(
+    baseUrl,
+    [
+      ...toolMessages,
+      {
+        content: null,
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call-fileterm-fixture',
+            type: 'function',
+            function: { name: 'fileterm_execute_remote_command', arguments: '{"command":"id -u"}' }
+          }
+        ]
+      },
+      { content: '0\\n', role: 'tool', tool_call_id: 'call-fileterm-fixture' }
+    ],
+    true,
+    { tools: [{ type: 'function' }] }
+  )
+  assert.equal(toolResult.response.status, 200, 'tool-call fixture 二次请求失败')
+  assert.match(toolResult.body, /Fixture tool loop completed/, 'tool-call fixture 没有消费 tool result')
+
+  const sudoToolResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    method: 'POST',
+    body: JSON.stringify({
+      messages: [{ content: 'fixture:tool-sudo', role: 'user' }],
+      model: 'fileterm-fixture',
+      stream: true
+    })
+  })
+  const sudoToolBody = await sudoToolResponse.text()
+  assert.equal(sudoToolResponse.status, 200, 'sudo tool-call fixture 请求失败')
+  assert.match(sudoToolBody, /sudo id -u/, 'sudo tool-call fixture 没有返回提权命令')
+
+  console.log('AI Copilot fixture smoke passed: retry recovery, tool-call loop, and sudo tool contract')
 } catch (error) {
   const detail = stderr.trim()
   throw new Error(

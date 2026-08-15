@@ -67,8 +67,8 @@ import { useWorkspaceTabs } from './hooks/useWorkspaceTabs'
 import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
-import { useRemoteExecInteractions } from './hooks/useRemoteExecInteractions'
 import { useBackupPasswordInteractions } from './hooks/useBackupPasswordInteractions'
+import { useSudoPasswordPrompt } from './hooks/useSudoPasswordPrompt'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
 import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
@@ -179,6 +179,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [connectionImportPlan, setConnectionImportPlan] = useState<ConnectionImportPlan | null>(null)
   const [actionApprovalRequests, setActionApprovalRequests] = useState<ActionApprovalRequest[]>([])
   const [resolvingActionApprovalId, setResolvingActionApprovalId] = useState<string | null>(null)
+  const [riskAcknowledgedRequestId, setRiskAcknowledgedRequestId] = useState<string | null>(null)
   const resolvingActionApprovalIdsRef = useRef(new Set<string>())
 
   const [sidebarWidth, setSidebarWidth] = useState(214)
@@ -234,6 +235,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     }
 
     return desktopApi.onActionApprovalRequest((request) => {
+      // Copilot renders its approval inline beside the streamed tool call.
+      // Keep the global dialog for MCP and Copilot tool approvals only.
+      if (request.source === 'ai-copilot') {
+        return
+      }
       setActionApprovalRequests((current) => {
         if (current.some((item) => item.requestId === request.requestId)) {
           return current
@@ -243,10 +249,18 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     })
   }, [desktopApi, isMainWorkspaceWindow])
 
+  useEffect(() => {
+    const requestId = actionApprovalRequests[0]?.requestId ?? null
+    setRiskAcknowledgedRequestId((current) => (current === requestId ? current : null))
+  }, [actionApprovalRequests])
+
   const resolveActionApproval = useCallback(
     async (approved: boolean) => {
       const request = actionApprovalRequests[0]
       if (!desktopApi || !request || resolvingActionApprovalIdsRef.current.has(request.requestId)) {
+        return
+      }
+      if (approved && request.requiresRiskAcknowledgement && riskAcknowledgedRequestId !== request.requestId) {
         return
       }
 
@@ -262,7 +276,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         setResolvingActionApprovalId((current) => (current === request.requestId ? null : current))
       }
     },
-    [actionApprovalRequests, desktopApi]
+    [actionApprovalRequests, desktopApi, riskAcknowledgedRequestId]
   )
 
   // 1. IPC Synchronization Hook
@@ -778,23 +792,23 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   })
 
   const {
-    request: remoteExecInteractionRequest,
-    errorMessage: remoteExecInteractionError,
-    isResolving: isRemoteExecInteractionResolving,
-    cancel: cancelRemoteExecInteraction,
-    submit: submitRemoteExecInteraction
-  } = useRemoteExecInteractions({
-    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
-    onError: (scope, err) => reportError(setError, scope, err)
-  })
-
-  const {
     request: backupPasswordRequest,
     errorMessage: backupPasswordError,
     isResolving: isBackupPasswordResolving,
     cancel: cancelBackupPassword,
     submit: submitBackupPassword
   } = useBackupPasswordInteractions({
+    desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
+    onError: (scope, err) => reportError(setError, scope, err)
+  })
+
+  const {
+    request: sudoPasswordRequest,
+    errorMessage: sudoPasswordError,
+    isResolving: isSudoPasswordResolving,
+    cancel: cancelSudoPassword,
+    submit: submitSudoPassword
+  } = useSudoPasswordPrompt({
     desktopApi: isMainWorkspaceWindow ? desktopApi : undefined,
     onError: (scope, err) => reportError(setError, scope, err)
   })
@@ -1260,6 +1274,16 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                   ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedPassword === true
                   : false
               }
+              hasSavedSudoPassword={
+                editingProfileId
+                  ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedSudoPassword === true
+                  : false
+              }
+              hasSavedSuPassword={
+                editingProfileId
+                  ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedSuPassword === true
+                  : false
+              }
               isSubmitting={isBusy}
               setForm={updateForm}
               onClearHostFingerprint={() => {
@@ -1669,7 +1693,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             </div>
             {shouldShowAiCopilot ? (
               <AiCopilotPanel
-                activeProfile={activeProfile}
                 activeSession={aiCopilotTargetSession}
                 activeTab={aiCopilotTargetTab ?? null}
                 rootTab={activeTab ?? null}
@@ -1815,9 +1838,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         rootAccess={
           rootAccessDialog
             ? {
+                defaultRootAccessMethod: rootAccessDialog.rootAccessMethod,
                 defaultSshUser: rootAccessDialog.sshUser,
                 defaultSudoUser: rootAccessDialog.sudoUser,
                 errorMessage: rootAccessDialogError,
+                hasSavedSudoPassword: rootAccessDialog.hasSavedSudoPassword,
+                hasSavedSuPassword: rootAccessDialog.hasSavedSuPassword,
                 isSubmitting: isRootAccessSubmitting,
                 onClose: dismissRootAccessDialog,
                 onSubmit: handleConfirmRootAccess
@@ -1879,6 +1905,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                     ? t.closeShortcutActiveDescription
                     : t.closeShortcutLastActiveDescription
                 ).replace('{name}', shortcutCloseConfirm.title),
+                initialFocus: 'dialog' as const,
                 isSubmitting: isBusy,
                 onClose: dismissShortcutCloseConfirm,
                 onConfirm: () => {
@@ -1941,21 +1968,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               }
             : null
         }
-        remoteExecInteraction={
-          remoteExecInteractionRequest
-            ? {
-                request: remoteExecInteractionRequest,
-                errorMessage: remoteExecInteractionError,
-                isSubmitting: isRemoteExecInteractionResolving,
-                onCancel: () => {
-                  void cancelRemoteExecInteraction()
-                },
-                onSubmit: (value) => {
-                  void submitRemoteExecInteraction(value)
-                }
-              }
-            : null
-        }
         backupPassword={
           backupPasswordRequest
             ? {
@@ -1967,6 +1979,21 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 },
                 onSubmit: (value) => {
                   void submitBackupPassword(value)
+                }
+              }
+            : null
+        }
+        sudoPasswordPrompt={
+          sudoPasswordRequest
+            ? {
+                request: sudoPasswordRequest,
+                errorMessage: sudoPasswordError,
+                isSubmitting: isSudoPasswordResolving,
+                onCancel: () => {
+                  void cancelSudoPassword()
+                },
+                onSubmit: (value, save) => {
+                  void submitSudoPassword(value, save)
                 }
               }
             : null
@@ -2002,8 +2029,25 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               <p>{actionApprovalRequests[0].summary}</p>
               {actionApprovalRequests[0].target ? <p>目标：{actionApprovalRequests[0].target}</p> : null}
               {actionApprovalRequests[0].details ? <pre>{actionApprovalRequests[0].details}</pre> : null}
+              {actionApprovalRequests[0].requiresRiskAcknowledgement ? (
+                <label className="confirm-action-dialog__warning">
+                  <input
+                    checked={riskAcknowledgedRequestId === actionApprovalRequests[0].requestId}
+                    disabled={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
+                    onChange={(event) =>
+                      setRiskAcknowledgedRequestId(event.target.checked ? actionApprovalRequests[0].requestId : null)
+                    }
+                    type="checkbox"
+                  />
+                  <span>{t.actionApprovalRiskAcknowledgement}</span>
+                </label>
+              ) : null}
             </div>
           }
+          confirmDisabled={Boolean(
+            actionApprovalRequests[0].requiresRiskAcknowledgement &&
+            riskAcknowledgedRequestId !== actionApprovalRequests[0].requestId
+          )}
           isSubmitting={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
           onClose={() => {
             void resolveActionApproval(false)

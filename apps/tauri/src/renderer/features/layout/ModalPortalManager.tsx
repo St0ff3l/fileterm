@@ -7,8 +7,8 @@ import { SshCredentialsModal } from '../connections/SshCredentialsModal'
 import { SshHostVerificationModal } from '../connections/SshHostVerificationModal'
 import { SshKeyboardInteractiveModal } from '../connections/SshKeyboardInteractiveModal'
 import { SshKeyPassphraseModal } from '../connections/SshKeyPassphraseModal'
-import { RemoteExecInteractionModal } from '../connections/RemoteExecInteractionModal'
 import { BackupPasswordModal } from '../connections/BackupPasswordModal'
+import { SudoPasswordPromptModal } from '../connections/SudoPasswordPromptModal'
 import { FileActionModal } from '../files/FileActionModal'
 import { FilePermissionModal } from '../files/FilePermissionModal'
 import { RootAccessModal } from '../files/RootAccessModal'
@@ -38,8 +38,8 @@ export type SshCredentialsModalBinding = ModalBinding<typeof SshCredentialsModal
 export type SshHostVerificationModalBinding = ModalBinding<typeof SshHostVerificationModal>
 export type SshKeyboardInteractiveModalBinding = ModalBinding<typeof SshKeyboardInteractiveModal>
 export type SshKeyPassphraseModalBinding = ModalBinding<typeof SshKeyPassphraseModal>
-export type RemoteExecInteractionModalBinding = ModalBinding<typeof RemoteExecInteractionModal>
 export type BackupPasswordModalBinding = ModalBinding<typeof BackupPasswordModal>
+export type SudoPasswordPromptModalBinding = ModalBinding<typeof SudoPasswordPromptModal>
 export type ConfirmActionDialogBinding = ModalBinding<typeof ConfirmActionDialog>
 export type FileEditorModalBinding = NonStandaloneModalBinding<typeof FileEditorModal>
 export type TabContextMenuBinding = ModalBinding<typeof TabContextMenu>
@@ -72,8 +72,8 @@ export interface ModalPortalManagerProps {
   sshHostVerification: SshHostVerificationModalBinding
   sshKeyboardInteractive: SshKeyboardInteractiveModalBinding
   sshKeyPassphrase: SshKeyPassphraseModalBinding
-  remoteExecInteraction: RemoteExecInteractionModalBinding
   backupPassword: BackupPasswordModalBinding
+  sudoPasswordPrompt: SudoPasswordPromptModalBinding
   tabContextMenu?: TabContextMenuBinding
   windowCloseConfirm: ConfirmActionDialogBinding
 }
@@ -95,8 +95,8 @@ export function ModalPortalManager({
   sshHostVerification,
   sshKeyboardInteractive,
   sshKeyPassphrase,
-  remoteExecInteraction,
   backupPassword,
+  sudoPasswordPrompt,
   tabContextMenu,
   windowCloseConfirm
 }: ModalPortalManagerProps) {
@@ -125,8 +125,8 @@ export function ModalPortalManager({
       {sshHostVerification ? <SshHostVerificationModal {...sshHostVerification} /> : null}
       {sshKeyboardInteractive ? <SshKeyboardInteractiveModal {...sshKeyboardInteractive} /> : null}
       {sshKeyPassphrase ? <SshKeyPassphraseModal {...sshKeyPassphrase} /> : null}
-      {remoteExecInteraction ? <RemoteExecInteractionModal {...remoteExecInteraction} /> : null}
       {backupPassword ? <BackupPasswordModal {...backupPassword} /> : null}
+      {sudoPasswordPrompt ? <SudoPasswordPromptModal {...sudoPasswordPrompt} /> : null}
       {shortcutCloseConfirm ? <ConfirmActionDialog {...shortcutCloseConfirm} /> : null}
       {windowCloseConfirm ? <ConfirmActionDialog {...windowCloseConfirm} /> : null}
     </>

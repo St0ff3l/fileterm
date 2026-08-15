@@ -1134,7 +1134,7 @@
 :root[data-theme='default-dark'] .context-menu,
 :root[data-theme='default'] .context-menu {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(30, 32, 37, 0.96);
+  background: rgb(30, 32, 36);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
   color: #eef3fa;
 }

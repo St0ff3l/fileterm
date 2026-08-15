@@ -1526,6 +1526,63 @@ fn root_access_method_for_shell_user(
         .unwrap_or(RootFileAccessMethod::Sudo)
 }
 
+fn root_password_for_method(
+    method: RootFileAccessMethod,
+    sudo_password: &Option<String>,
+    su_password: &Option<String>,
+) -> Option<String> {
+    match method {
+        RootFileAccessMethod::Sudo => sudo_password.clone(),
+        RootFileAccessMethod::Su => su_password.clone(),
+    }
+}
+
+fn cache_root_password_for_auth(
+    auth: Option<&PendingRootAccessAuth>,
+    root_password: &Option<String>,
+    sudo_password: &mut Option<String>,
+    su_password: &mut Option<String>,
+) {
+    let Some(auth) = auth else {
+        return;
+    };
+    let Some(password) = root_password.clone() else {
+        return;
+    };
+    match auth.method {
+        RootFileAccessMethod::Sudo => *sudo_password = Some(password),
+        RootFileAccessMethod::Su => *su_password = Some(password),
+    }
+}
+
+/// Fill an interactive sudo/su prompt from the separately saved profile
+/// secret. The write happens only after the PTY has emitted a matching
+/// password prompt; no password is sent pre-emptively or written to the
+/// terminal transcript.
+async fn autofill_root_access_password(
+    shell_writer: &SshShellWriteHalf,
+    awaiting_auth: &mut Option<PendingRootAccessAuth>,
+    pending_password: &mut String,
+    root_password: &mut Option<String>,
+    sudo_password: &Option<String>,
+    su_password: &Option<String>,
+) -> Result<bool, String> {
+    let Some(auth) = awaiting_auth.clone() else {
+        return Ok(false);
+    };
+    if !auth.interactive_shell {
+        return Ok(false);
+    }
+    let Some(password) = root_password_for_method(auth.method, sudo_password, su_password) else {
+        return Ok(false);
+    };
+    write_shell_data(shell_writer, format!("{password}\r").into_bytes()).await?;
+    *root_password = Some(password);
+    pending_password.clear();
+    *awaiting_auth = None;
+    Ok(true)
+}
+
 /// Remove CSI/OSC control sequences before inspecting a prompt. This mirrors
 /// Electron's root-prompt heuristic without feeding visual escape codes into
 /// the comparison.
@@ -4185,7 +4242,13 @@ async fn run_worker_loop(
                 sftp_unavailable_reason: None,
                 file_access_mode: "user".to_string(),
                 sudo_user: None,
-                has_reusable_sudo_auth: false,
+                // A saved sudo password is already a reusable credential for
+                // the file toolbar. Keep only this non-secret presence bit in
+                // the public snapshot; the password itself stays worker-local.
+                has_reusable_sudo_auth: profile
+                    .get("sudoPassword")
+                    .and_then(Value::as_str)
+                    .is_some_and(|password| !password.is_empty()),
                 login_user: profile
                     .get("username")
                     .and_then(Value::as_str)
@@ -4627,7 +4690,20 @@ async fn run_worker_loop(
     // never leak into SessionSnapshot (which is serialized to the renderer).
     let mut file_access_mode = "user".to_string();
     let mut sudo_user: Option<String> = None;
-    let mut sudo_password: Option<String> = None;
+    let mut sudo_password = profile
+        .get("sudoPassword")
+        .and_then(Value::as_str)
+        .filter(|password| !password.is_empty())
+        .map(str::to_string);
+    let mut su_password = profile
+        .get("suPassword")
+        .and_then(Value::as_str)
+        .filter(|password| !password.is_empty())
+        .map(str::to_string);
+    // File operations receive the credential matching the currently selected
+    // root method. Keep this active value separate from the two profile
+    // caches so switching sudo ↔ su cannot reuse the wrong password.
+    let mut root_password = sudo_password.clone();
     let mut sudo_prompt_buffer = String::new();
     let mut awaiting_root_access_auth: Option<PendingRootAccessAuth> = None;
     let mut pending_sudo_password = String::new();
@@ -4729,16 +4805,22 @@ async fn run_worker_loop(
                     &mut awaiting_root_access_auth,
                     &mut pending_sudo_password,
                     &mut recent_terminal_input,
-                    &mut sudo_password,
+                    &mut root_password,
                     &mut last_authenticated_root_access,
                     &mut pending_root_access_command,
                 ) {
+                    cache_root_password_for_auth(
+                        last_authenticated_root_access.as_ref(),
+                        &root_password,
+                        &mut sudo_password,
+                        &mut su_password,
+                    );
                     let mut sessions = state.sessions.write().await;
                     if let Some(session) = sessions.get_mut(tab_id) {
                         session.has_reusable_sudo_auth = matches!(
                             last_authenticated_root_access.as_ref(),
                             Some(auth) if auth.method == RootFileAccessMethod::Sudo
-                        ) && sudo_password.is_some();
+                        ) && root_password.is_some();
                     }
                 }
                 if pending_root_access_command != previous_pending_command {
@@ -4814,16 +4896,22 @@ async fn run_worker_loop(
                                 &mut awaiting_root_access_auth,
                                 &mut pending_sudo_password,
                                 &mut recent_terminal_input,
-                                &mut sudo_password,
+                                &mut root_password,
                                 &mut last_authenticated_root_access,
                                 &mut pending_root_access_command,
                             ) {
+                                cache_root_password_for_auth(
+                                    last_authenticated_root_access.as_ref(),
+                                    &root_password,
+                                    &mut sudo_password,
+                                    &mut su_password,
+                                );
                                 let mut sessions = state.sessions.write().await;
                                 if let Some(session) = sessions.get_mut(tab_id) {
                                     session.has_reusable_sudo_auth = matches!(
                                         last_authenticated_root_access.as_ref(),
                                         Some(auth) if auth.method == RootFileAccessMethod::Sudo
-                                    ) && sudo_password.is_some();
+                                    ) && root_password.is_some();
                                 }
                             }
                             if pending_root_access_command != previous_pending_command {
@@ -4849,7 +4937,9 @@ async fn run_worker_loop(
                                 &mut file_access_mode,
                                 &mut root_file_access_method,
                                 &mut sudo_user,
+                                &mut root_password,
                                 &mut sudo_password,
+                                &mut su_password,
                                 tab_id,
                                 app,
                                 &state,
@@ -4864,9 +4954,10 @@ async fn run_worker_loop(
                                 &mut file_access_mode,
                                 &mut root_file_access_method,
                                 &mut sudo_user,
+                                &mut root_password,
                                 &mut sudo_password,
+                                &mut su_password,
                                 tab_id,
-                                app,
                                 &state,
                                 &tunnel_command_tx,
                                 sftp_unavailable_reason.as_deref().unwrap_or(SFTP_UNAVAILABLE_FALLBACK),
@@ -4918,14 +5009,36 @@ async fn run_worker_loop(
                             &mut sudo_prompt_buffer,
                             &mut awaiting_root_access_auth,
                             &mut pending_sudo_password,
-                            &mut sudo_password,
+                            &mut root_password,
                             &mut last_authenticated_root_access,
                             &mut pending_root_access_command,
                         ) {
+                            cache_root_password_for_auth(
+                                last_authenticated_root_access.as_ref(),
+                                &root_password,
+                                &mut sudo_password,
+                                &mut su_password,
+                            );
                             let mut sessions = state.sessions.write().await;
                             if let Some(session) = sessions.get_mut(tab_id) {
                                 session.has_reusable_sudo_auth = false;
                             }
+                        }
+                        if autofill_root_access_password(
+                            &shell_writer,
+                            &mut awaiting_root_access_auth,
+                            &mut pending_sudo_password,
+                            &mut root_password,
+                            &sudo_password,
+                            &su_password,
+                        )
+                        .await?
+                        {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                "interactive privilege password filled from connection profile",
+                            );
                         }
                         if awaiting_root_access_auth != previous_awaiting_auth {
                             if let Some(auth) = awaiting_root_access_auth.as_ref() {
@@ -5042,7 +5155,12 @@ async fn run_worker_loop(
                                                     last_authenticated_root_access
                                                         .as_ref()
                                                         .map(|auth| auth.method),
-                                                    sudo_password.is_some(),
+                                                    root_password_for_method(
+                                                        access_method,
+                                                        &sudo_password,
+                                                        &su_password,
+                                                    )
+                                                    .is_some(),
                                                 ),
                                             );
                                             let access_changed =
@@ -5052,7 +5170,12 @@ async fn run_worker_loop(
                                             s.sudo_user = Some(observed_sudo_user.clone());
                                             s.has_reusable_sudo_auth =
                                                 access_method == RootFileAccessMethod::Sudo
-                                                    && sudo_password.is_some();
+                                                    && root_password_for_method(
+                                                        access_method,
+                                                        &sudo_password,
+                                                        &su_password,
+                                                    )
+                                                    .is_some();
                                             if access_changed {
                                                 session_state_changed = true;
                                             }
@@ -5103,6 +5226,8 @@ async fn run_worker_loop(
                                 file_access_mode = mode;
                                 sudo_user = su_user;
                                 root_file_access_method = access_method;
+                                root_password =
+                                    root_password_for_method(access_method, &sudo_password, &su_password);
                             }
                             if let (Some(cwd), Some(sftp)) = (cwd_to_follow, sftp_arc.as_ref()) {
                                 tokio::spawn(follow_shell_cwd(
@@ -5114,7 +5239,7 @@ async fn run_worker_loop(
                                     file_access_mode.clone(),
                                     root_file_access_method,
                                     sudo_user.clone(),
-                                    sudo_password.clone(),
+                                    root_password.clone(),
                                 ));
                             } else if session_state_changed {
                                 // 解耦：get_workspace_snapshot 会读整个 sessions
@@ -5259,14 +5384,36 @@ async fn run_worker_loop(
                             &mut sudo_prompt_buffer,
                             &mut awaiting_root_access_auth,
                             &mut pending_sudo_password,
-                            &mut sudo_password,
+                            &mut root_password,
                             &mut last_authenticated_root_access,
                             &mut pending_root_access_command,
                         ) {
+                            cache_root_password_for_auth(
+                                last_authenticated_root_access.as_ref(),
+                                &root_password,
+                                &mut sudo_password,
+                                &mut su_password,
+                            );
                             let mut sessions = state.sessions.write().await;
                             if let Some(session) = sessions.get_mut(tab_id) {
                                 session.has_reusable_sudo_auth = false;
                             }
+                        }
+                        if autofill_root_access_password(
+                            &shell_writer,
+                            &mut awaiting_root_access_auth,
+                            &mut pending_sudo_password,
+                            &mut root_password,
+                            &sudo_password,
+                            &su_password,
+                        )
+                        .await?
+                        {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                "interactive privilege password filled from connection profile",
+                            );
                         }
                         batch_buffer.extend_from_slice(data.as_ref());
                         if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {
@@ -5304,6 +5451,8 @@ fn spawn_remote_command(
     command: String,
     cwd: Option<String>,
     timeout_ms: u64,
+    stdin: Option<String>,
+    request_pty: bool,
     respond_to: oneshot::Sender<Result<Value, String>>,
 ) {
     let handle = Arc::clone(handle);
@@ -5313,9 +5462,11 @@ fn spawn_remote_command(
         .unwrap_or(command);
     let timeout_duration = Duration::from_millis(timeout_ms);
     tokio::spawn(async move {
-        let result = match super::system_metrics::exec_command_with_status_timeout_detailed(
+        let result = match super::system_metrics::exec_command_with_stdin_status_timeout_detailed(
             &handle,
             &command,
+            stdin.as_deref().unwrap_or(""),
+            request_pty,
             timeout_duration,
         )
         .await
@@ -5323,10 +5474,10 @@ fn spawn_remote_command(
             Ok(result) => {
                 let input_kind =
                     detect_remote_exec_input_kind(&result.output).map(ToOwned::to_owned);
-                let input_required = input_kind.is_some();
-                // This is only a redacted routing hint. The normal exec
-                // channel never accepts stdin, so an Agent must switch to
-                // FileTerm's secure interactive tool when this is true.
+                let input_required = stdin.is_none() && input_kind.is_some();
+                // This is only a redacted routing hint. A privileged exec
+                // has already received its one-shot stdin and must not route
+                // the prompt to a second input surface.
                 Ok(serde_json::json!({
                     "output": result.output,
                     "exitCode": result.exit_code,
@@ -5342,461 +5493,7 @@ fn spawn_remote_command(
     });
 }
 
-const INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS: u8 = 3;
-const INTERACTIVE_REMOTE_EXEC_OUTPUT_CAP: usize = 256 * 1024;
-const INTERACTIVE_REMOTE_EXEC_PROMPT_CAP: usize = 2 * 1024;
-use crate::services::action_review::{
-    INTERACTIVE_REMOTE_EXEC_BUSY, INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT_CODE,
-    INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE, INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED,
-    INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS, INTERACTIVE_REMOTE_EXEC_UNAVAILABLE,
-    INTERACTIVE_REMOTE_EXEC_USER_CANCELLED,
-};
-
-struct InteractiveRemoteExecTask {
-    expected_session_revision: String,
-    command: String,
-    cwd: Option<String>,
-    timeout_ms: u64,
-    audit_context: crate::services::interactive_exec_audit::InteractiveRemoteExecAuditContext,
-    respond_to: oneshot::Sender<Result<Value, String>>,
-}
-
-/// Run an interaction-capable command on a short-lived, isolated SSH PTY.
-/// This deliberately does not use `terminal_inputs`: the visible terminal is
-/// a separate user-owned channel and must never be used as a proxy for MCP.
-fn spawn_interactive_remote_command(
-    app: &AppHandle,
-    tab_id: &str,
-    handle: &Arc<Handle<ClientHandler>>,
-    request: InteractiveRemoteExecTask,
-) {
-    let app = app.clone();
-    let tab_id = tab_id.to_string();
-    let handle = Arc::clone(handle);
-    let command = request
-        .cwd
-        .filter(|path| !path.trim().is_empty())
-        .map(|path| format!("cd -- {} && {}", shell_quote(path.trim()), request.command))
-        .unwrap_or(request.command);
-    let expected_session_revision = request.expected_session_revision;
-    let timeout_ms = request.timeout_ms;
-    let audit_context = request.audit_context;
-    let respond_to = request.respond_to;
-    tokio::spawn(async move {
-        let execution_id = format!("interactive-remote-exec-{}", uuid::Uuid::new_v4());
-        let state = app.state::<crate::services::workspace::WorkspaceState>();
-        let cancellation = state.worker_controls.read().await.get(&tab_id).cloned();
-        let acquired = {
-            let mut active = state.active_interactive_remote_execs.lock().await;
-            if active.contains_key(&tab_id) {
-                false
-            } else {
-                active.insert(tab_id.clone(), execution_id.clone());
-                true
-            }
-        };
-        if !acquired {
-            let _ = respond_to.send(Err(
-                format!("{INTERACTIVE_REMOTE_EXEC_BUSY}: another interactive remote command is already awaiting input for this SSH session"),
-            ));
-            return;
-        }
-
-        let execution_timeout = Duration::from_millis(timeout_ms).saturating_add(
-            crate::services::action_review::INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT
-                .saturating_mul(INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS as u32),
-        );
-        let task = timeout(
-            execution_timeout,
-            execute_interactive_remote_command_task(
-                &app,
-                &tab_id,
-                &handle,
-                &expected_session_revision,
-                &command,
-                timeout_ms,
-                &execution_id,
-                &audit_context,
-            ),
-        );
-        let task_result = if let Some(cancellation) = cancellation {
-            tokio::select! {
-                result = task => result,
-                _ = cancellation.cancelled() => {
-                    release_interactive_remote_exec(&state, &tab_id, &execution_id).await;
-                    let _ = respond_to.send(Err(
-                        "Interactive remote command was cancelled because its SSH session closed".to_string(),
-                    ));
-                    return;
-                }
-            }
-        } else {
-            task.await
-        };
-        let result = match task_result {
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(error)) => Err(error),
-            Err(_) => Ok(serde_json::json!({
-                "output": "",
-                "exitCode": Value::Null,
-                "timedOut": true,
-                "outputTruncated": false,
-                "inputRequired": false,
-                "interactionCount": audit_context.interaction_count(),
-            })),
-        };
-
-        release_interactive_remote_exec(&state, &tab_id, &execution_id).await;
-        let _ = respond_to.send(result);
-    });
-}
-
-async fn release_interactive_remote_exec(
-    state: &crate::services::workspace::WorkspaceState,
-    tab_id: &str,
-    execution_id: &str,
-) {
-    state.active_interactive_remote_execs.lock().await.retain(
-        |active_tab_id, active_execution_id| {
-            active_tab_id != tab_id || active_execution_id != execution_id
-        },
-    );
-    state
-        .pending_remote_exec_interactions
-        .write()
-        .await
-        .retain(|_, pending| pending.execution_id != execution_id);
-}
-
-#[allow(clippy::too_many_arguments)] // Keep the task boundary explicit; each argument has a distinct lifecycle/security role.
-async fn execute_interactive_remote_command_task(
-    app: &AppHandle,
-    tab_id: &str,
-    handle: &Handle<ClientHandler>,
-    expected_session_revision: &str,
-    command: &str,
-    timeout_ms: u64,
-    execution_id: &str,
-    audit_context: &crate::services::interactive_exec_audit::InteractiveRemoteExecAuditContext,
-) -> Result<Value, String> {
-    validate_interactive_remote_exec_target(app, tab_id, expected_session_revision).await?;
-    let mut channel = handle
-        .channel_open_session()
-        .await
-        .map_err(|error| {
-            format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to open an isolated SSH exec channel: {error}")
-        })?;
-    request_interactive_remote_exec_pty(&channel).await?;
-    channel
-        .exec(true, command)
-        .await
-        .map_err(|error| {
-            format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: unable to start interactive remote command: {error}")
-        })?;
-
-    let mut output = Vec::new();
-    let mut prompt_window = String::new();
-    let mut redactions = Vec::new();
-    let mut exit_status = None;
-    let mut prompt_count = 0_u8;
-    let mut last_prompt_output_len = 0_usize;
-    let mut output_truncated = false;
-    let mut timed_out = false;
-    // The command budget applies while the isolated SSH channel is running.
-    // Waiting for a user response is governed by the separate interaction
-    // timeout and the outer task lifetime, so a password dialog does not
-    // consume the command's execution budget.
-    let mut remaining_command_time = Duration::from_millis(timeout_ms);
-
-    loop {
-        let wait_started = Instant::now();
-        let message = match timeout(remaining_command_time, channel.wait()).await {
-            Ok(message) => message,
-            Err(_) => {
-                timed_out = true;
-                break;
-            }
-        };
-        remaining_command_time = remaining_command_time.saturating_sub(wait_started.elapsed());
-        let Some(message) = message else {
-            break;
-        };
-        match message {
-            ChannelMsg::Data { data } | ChannelMsg::ExtendedData { data, .. } => {
-                let data = data.as_ref();
-                if output.len() < INTERACTIVE_REMOTE_EXEC_OUTPUT_CAP {
-                    let remaining = INTERACTIVE_REMOTE_EXEC_OUTPUT_CAP - output.len();
-                    output.extend_from_slice(&data[..data.len().min(remaining)]);
-                    output_truncated |= data.len() > remaining;
-                } else {
-                    output_truncated = true;
-                }
-
-                prompt_window.push_str(&String::from_utf8_lossy(data));
-                trim_string_front(&mut prompt_window, INTERACTIVE_REMOTE_EXEC_PROMPT_CAP);
-                if output.len() > last_prompt_output_len
-                    && interactive_remote_exec_prompt(&prompt_window).is_some()
-                {
-                    prompt_count = prompt_count.saturating_add(1);
-                    if prompt_count > INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS {
-                        return Err(format!(
-                            "{INTERACTIVE_REMOTE_EXEC_TOO_MANY_PROMPTS}: maximum supported input prompts exceeded"
-                        ));
-                    }
-                    audit_context.note_interaction(prompt_count);
-                    crate::services::interactive_exec_audit::record(
-                        app,
-                        audit_context,
-                        crate::services::interactive_exec_audit::InteractiveRemoteExecAuditEvent::InputRequested,
-                        prompt_count,
-                        None,
-                    )
-                    .await
-                    .map_err(|_| {
-                        "FileTerm could not prepare the local secure-input audit; interactive command stopped"
-                            .to_string()
-                    })?;
-                    last_prompt_output_len = output.len();
-                    let prompt = interactive_remote_exec_prompt(&prompt_window)
-                        .unwrap_or_else(|| "Remote command is waiting for input".to_string());
-                    let answer = request_interactive_remote_exec_input(
-                        app,
-                        tab_id,
-                        expected_session_revision,
-                        command,
-                        execution_id,
-                        prompt,
-                        prompt_count,
-                    )
-                    .await?;
-                    // The renderer validates the target before accepting the
-                    // response, but the tab could still reconnect or change
-                    // directory in the short interval before this write.
-                    // Revalidate on the SSH task itself so a secret never
-                    // reaches a stale channel.
-                    validate_interactive_remote_exec_target(app, tab_id, expected_session_revision)
-                        .await?;
-                    channel
-                        .data_bytes(format!("{answer}\n").into_bytes())
-                        .await
-                        .map_err(|error| {
-                            format!("Unable to send interactive remote input: {error}")
-                        })?;
-                    redactions.push(answer);
-                    // Avoid mistaking the already-consumed prompt for a new
-                    // one when the command next emits ordinary output.
-                    prompt_window.clear();
-                }
-            }
-            ChannelMsg::ExitStatus {
-                exit_status: status,
-            } => exit_status = Some(status),
-            ChannelMsg::Eof | ChannelMsg::Close if exit_status.is_some() => break,
-            ChannelMsg::Eof | ChannelMsg::Close => break,
-            _ => {}
-        }
-    }
-
-    let output = redact_interactive_remote_exec_output(
-        String::from_utf8_lossy(&output).into_owned(),
-        &redactions,
-    );
-    Ok(serde_json::json!({
-        "output": output,
-        "exitCode": exit_status,
-        "timedOut": timed_out,
-        "outputTruncated": output_truncated,
-        "inputRequired": false,
-        "interactionCount": audit_context.interaction_count(),
-    }))
-}
-
-async fn request_interactive_remote_exec_input(
-    app: &AppHandle,
-    tab_id: &str,
-    expected_session_revision: &str,
-    command: &str,
-    execution_id: &str,
-    prompt: String,
-    attempt: u8,
-) -> Result<String, String> {
-    let request_id = format!("remote-exec-input-{}", uuid::Uuid::new_v4());
-    let (sender, receiver) = oneshot::channel();
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let main_window = app.get_webview_window("main").ok_or_else(|| {
-        format!(
-            "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: FileTerm's main window is unavailable"
-        )
-    })?;
-    if !main_window.is_visible().unwrap_or(false) {
-        // A listener is registered but the user hid FileTerm in the tray.
-        // Restore the main window before emitting so the prompt is visible;
-        // the answer still only targets this isolated task channel.
-        crate::show_main_window(app);
-    }
-    validate_interactive_remote_exec_target(app, tab_id, expected_session_revision).await?;
-    let (host, shell_user, cwd) = {
-        let sessions = state.sessions.read().await;
-        let session = sessions
-            .get(tab_id)
-            .ok_or_else(|| "FileTerm SSH session closed while awaiting input".to_string())?;
-        (
-            session.access_host.clone(),
-            session.shell_user.clone(),
-            session.shell_cwd.clone(),
-        )
-    };
-    if !state
-        .insert_pending_remote_exec_interaction(
-            request_id.clone(),
-            crate::services::workspace::PendingRemoteExecInteraction {
-                tab_id: tab_id.to_string(),
-                expected_session_revision: expected_session_revision.to_string(),
-                execution_id: execution_id.to_string(),
-                sender,
-            },
-        )
-        .await
-    {
-        return Err(format!(
-            "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: FileTerm's main window is not ready to collect secure local input"
-        ));
-    }
-
-    let payload = serde_json::json!({
-        "requestId": request_id,
-        "executionId": execution_id,
-        "tabId": tab_id,
-        "command": command,
-        "host": host,
-        "shellUser": shell_user,
-        "cwd": cwd,
-        "prompt": prompt,
-        "attempt": attempt,
-        "maxAttempts": INTERACTIVE_REMOTE_EXEC_MAX_PROMPTS,
-        "inputKind": interactive_remote_exec_input_kind(&prompt),
-    });
-    if let Err(error) = app.emit("remote-exec:interaction-request", payload) {
-        state
-            .pending_remote_exec_interactions
-            .write()
-            .await
-            .remove(&request_id);
-        return Err(format!(
-            "Unable to show interactive remote input dialog: {error}"
-        ));
-    }
-
-    let response = timeout(
-        crate::services::action_review::INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT,
-        receiver,
-    )
-    .await;
-    state
-        .pending_remote_exec_interactions
-        .write()
-        .await
-        .remove(&request_id);
-    let response = match response {
-        Ok(Ok(response)) => response,
-        Ok(Err(_)) => {
-            return Err(format!(
-                "{INTERACTIVE_REMOTE_EXEC_RENDERER_UNAVAILABLE}: secure input dialog was dismissed"
-            ));
-        }
-        Err(_) => {
-            return Err(format!(
-                "{INTERACTIVE_REMOTE_EXEC_INPUT_TIMEOUT_CODE}: secure input was not provided before timeout"
-            ));
-        }
-    };
-    if response.cancelled {
-        return Err(format!(
-            "{INTERACTIVE_REMOTE_EXEC_USER_CANCELLED}: the user cancelled secure local input"
-        ));
-    }
-    response.value.ok_or_else(|| {
-        format!("{INTERACTIVE_REMOTE_EXEC_USER_CANCELLED}: no secure local input was provided")
-    })
-}
-
-/// A prompt response remains valid only while the current SSH tab refers to
-/// the same session snapshot the MCP caller inspected. Terminal output does
-/// not advance this revision; reconnects, targets, users and CWD changes do.
-async fn validate_interactive_remote_exec_target(
-    app: &AppHandle,
-    tab_id: &str,
-    expected_session_revision: &str,
-) -> Result<(), String> {
-    let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let revision = state.ai_session_revision(tab_id).await.to_string();
-    let sessions = state.sessions.read().await;
-    let session = sessions
-        .get(tab_id)
-        .ok_or_else(|| "Interactive remote command target is no longer available".to_string())?;
-    if !session.connected || revision != expected_session_revision {
-        return Err(format!(
-            "{INTERACTIVE_REMOTE_EXEC_TARGET_CHANGED}: refresh session context before retrying"
-        ));
-    }
-    Ok(())
-}
-
-async fn request_interactive_remote_exec_pty(
-    channel: &Channel<russh::client::Msg>,
-) -> Result<(), String> {
-    timeout(
-        SUDO_VERIFY_TIMEOUT,
-        channel.request_pty(
-            true,
-            "xterm-256color",
-            80,
-            24,
-            0,
-            0,
-            &[
-                (russh::Pty::ECHO, 0),
-                (russh::Pty::ECHOE, 0),
-                (russh::Pty::ECHOK, 0),
-                (russh::Pty::ECHONL, 0),
-                (russh::Pty::TTY_OP_ISPEED, 115200),
-                (russh::Pty::TTY_OP_OSPEED, 115200),
-            ],
-        ),
-    )
-    .await
-    .map_err(|_| {
-        format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: timed out while requesting an isolated PTY")
-    })?
-    .map_err(|error| {
-        format!("{INTERACTIVE_REMOTE_EXEC_UNAVAILABLE}: could not request an isolated PTY: {error}")
-    })
-}
-
-fn interactive_remote_exec_prompt(window: &str) -> Option<String> {
-    let visible = visible_shell_text(window).replace('\r', "\n");
-    let candidate = visible
-        .lines()
-        .rev()
-        .find(|line| !line.trim().is_empty())?
-        .trim()
-        .to_string();
-    let lower = candidate.to_ascii_lowercase();
-    let needs_input = lower.contains("password")
-        || candidate.contains("密码")
-        || lower.contains("passphrase")
-        || lower.contains("verification code")
-        || lower.contains("one-time")
-        || lower.contains("otp")
-        || lower.contains("[y/n]")
-        || lower.contains("[yes/no]")
-        || lower.contains("(y/n)")
-        || lower.contains("confirm")
-        || candidate.contains("确认");
-    needs_input.then(|| candidate.chars().take(512).collect())
-}
-
-fn interactive_remote_exec_input_kind(prompt: &str) -> &'static str {
+fn remote_exec_input_kind(prompt: &str) -> &'static str {
     let lower = prompt.to_ascii_lowercase();
     if lower.contains("password")
         || prompt.contains("密码")
@@ -5812,16 +5509,25 @@ fn interactive_remote_exec_input_kind(prompt: &str) -> &'static str {
 }
 
 fn detect_remote_exec_input_kind(output: &str) -> Option<&'static str> {
-    interactive_remote_exec_prompt(output).map(|prompt| interactive_remote_exec_input_kind(&prompt))
-}
-
-fn redact_interactive_remote_exec_output(mut output: String, redactions: &[String]) -> String {
-    for value in redactions {
-        if !value.is_empty() {
-            output = output.replace(value, "[REDACTED]");
-        }
-    }
-    output
+    let visible = visible_shell_text(output).replace('\r', "\n");
+    let candidate = visible
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())?
+        .trim();
+    let lower = candidate.to_ascii_lowercase();
+    let needs_input = lower.contains("password")
+        || candidate.contains("密码")
+        || lower.contains("passphrase")
+        || lower.contains("verification code")
+        || lower.contains("one-time")
+        || lower.contains("otp")
+        || lower.contains("[y/n]")
+        || lower.contains("[yes/no]")
+        || lower.contains("(y/n)")
+        || lower.contains("confirm")
+        || candidate.contains("确认");
+    needs_input.then(|| remote_exec_input_kind(candidate))
 }
 
 /// Returns `Ok(true)` when the worker should exit (Disconnect requested),
@@ -5840,8 +5546,9 @@ async fn handle_worker_cmd_without_sftp(
     root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
+    saved_sudo_password: &mut Option<String>,
+    saved_su_password: &mut Option<String>,
     tab_id: &str,
-    app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
     tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
     unavailable_reason: &str,
@@ -5874,36 +5581,19 @@ async fn handle_worker_cmd_without_sftp(
             command,
             cwd,
             timeout_ms,
+            stdin,
+            request_pty,
             respond_to,
         } => {
             if exec_channel_enabled {
-                spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
-            } else {
-                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
-            }
-            Ok(false)
-        }
-        WorkerCmd::ExecuteInteractiveRemoteCommand {
-            expected_session_revision,
-            command,
-            cwd,
-            timeout_ms,
-            audit_context,
-            respond_to,
-        } => {
-            if exec_channel_enabled {
-                spawn_interactive_remote_command(
-                    app,
-                    tab_id,
+                spawn_remote_command(
                     handle,
-                    InteractiveRemoteExecTask {
-                        expected_session_revision,
-                        command,
-                        cwd,
-                        timeout_ms,
-                        audit_context,
-                        respond_to,
-                    },
+                    command,
+                    cwd,
+                    timeout_ms,
+                    stdin,
+                    request_pty,
+                    respond_to,
                 );
             } else {
                 let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
@@ -5998,6 +5688,7 @@ async fn handle_worker_cmd_without_sftp(
             root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
+            use_saved_password,
             respond_to,
         } => {
             if mode == "root" && !exec_channel_enabled {
@@ -6020,18 +5711,32 @@ async fn handle_worker_cmd_without_sftp(
             // 对照 Electron verifyRootFileAccess 先验证凭据。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
+            let prev_saved_sudo_password = saved_sudo_password.clone();
+            let prev_saved_su_password = saved_su_password.clone();
             let prev_mode = file_access_mode.clone();
             let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
             }
-            if mode == "root" && requested_access_method != prev_access_method {
-                *sudo_password = None;
+            if mode == "root"
+                && (use_saved_password
+                    || requested_access_method != prev_access_method
+                    || sudo_password.is_none())
+            {
+                *sudo_password = root_password_for_method(
+                    requested_access_method,
+                    saved_sudo_password,
+                    saved_su_password,
+                );
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
-                    *sudo_password = Some(pwd);
+                    *sudo_password = Some(pwd.clone());
+                    match requested_access_method {
+                        RootFileAccessMethod::Sudo => *saved_sudo_password = Some(pwd),
+                        RootFileAccessMethod::Su => *saved_su_password = Some(pwd),
+                    }
                 }
             }
 
@@ -6062,6 +5767,8 @@ async fn handle_worker_cmd_without_sftp(
                     *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
+                    *saved_sudo_password = prev_saved_sudo_password;
+                    *saved_su_password = prev_saved_su_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
@@ -6103,6 +5810,8 @@ async fn handle_worker_cmd(
     root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
+    saved_sudo_password: &mut Option<String>,
+    saved_su_password: &mut Option<String>,
     tab_id: &str,
     app: &AppHandle,
     state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
@@ -6150,36 +5859,19 @@ async fn handle_worker_cmd(
             command,
             cwd,
             timeout_ms,
+            stdin,
+            request_pty,
             respond_to,
         } => {
             if exec_channel_enabled {
-                spawn_remote_command(handle, command, cwd, timeout_ms, respond_to);
-            } else {
-                let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
-            }
-            Ok(false)
-        }
-        WorkerCmd::ExecuteInteractiveRemoteCommand {
-            expected_session_revision,
-            command,
-            cwd,
-            timeout_ms,
-            audit_context,
-            respond_to,
-        } => {
-            if exec_channel_enabled {
-                spawn_interactive_remote_command(
-                    app,
-                    tab_id,
+                spawn_remote_command(
                     handle,
-                    InteractiveRemoteExecTask {
-                        expected_session_revision,
-                        command,
-                        cwd,
-                        timeout_ms,
-                        audit_context,
-                        respond_to,
-                    },
+                    command,
+                    cwd,
+                    timeout_ms,
+                    stdin,
+                    request_pty,
+                    respond_to,
                 );
             } else {
                 let _ = respond_to.send(Err("SSH Exec 通道已关闭，无法执行远程命令。".to_string()));
@@ -6966,6 +6658,7 @@ async fn handle_worker_cmd(
             root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
+            use_saved_password,
             respond_to,
         } => {
             if mode == "root" && !exec_channel_enabled {
@@ -6987,18 +6680,32 @@ async fn handle_worker_cmd(
             // 而不是等到第一次文件操作才失败（用户会以为"root 切换没接入"）。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
+            let prev_saved_sudo_password = saved_sudo_password.clone();
+            let prev_saved_su_password = saved_su_password.clone();
             let prev_mode = file_access_mode.clone();
             let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
             }
-            if mode == "root" && requested_access_method != prev_access_method {
-                *sudo_password = None;
+            if mode == "root"
+                && (use_saved_password
+                    || requested_access_method != prev_access_method
+                    || sudo_password.is_none())
+            {
+                *sudo_password = root_password_for_method(
+                    requested_access_method,
+                    saved_sudo_password,
+                    saved_su_password,
+                );
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
-                    *sudo_password = Some(pwd);
+                    *sudo_password = Some(pwd.clone());
+                    match requested_access_method {
+                        RootFileAccessMethod::Sudo => *saved_sudo_password = Some(pwd),
+                        RootFileAccessMethod::Su => *saved_su_password = Some(pwd),
+                    }
                 }
                 // empty password ⇒ keep existing (cache reuse)
             }
@@ -7035,6 +6742,8 @@ async fn handle_worker_cmd(
                     *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
+                    *saved_sudo_password = prev_saved_sudo_password;
+                    *saved_su_password = prev_saved_su_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
@@ -8817,11 +8526,10 @@ mod tests {
         coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
         detect_remote_exec_input_kind, effective_remote_forward_port, enqueue_tunnel_command,
         exec_channel_enabled, finish_shell_setup_suppression, format_sftp_unavailable_reason,
-        interactive_remote_exec_input_kind, interactive_remote_exec_prompt, is_password_prompt,
-        is_root_upload_staging_path, looks_like_mfa_prompt, looks_like_root_prompt,
-        looks_like_shell_prompt, missing_password_credential, parent_remote_item,
-        parent_remote_path, parse_root_file_access_method, password_for_authentication,
-        privilege_command_from_terminal_input, redact_interactive_remote_exec_output,
+        is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
+        looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
+        parent_remote_item, parent_remote_path, parse_root_file_access_method,
+        password_for_authentication, privilege_command_from_terminal_input,
         remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
         resource_monitoring_interval_seconds, root_access_auth_failed, root_file_command,
         root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
@@ -8875,24 +8583,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_remote_exec_only_recognizes_bounded_supported_prompts() {
-        assert_eq!(
-            interactive_remote_exec_prompt("ordinary output\nPassword for ops: "),
-            Some("Password for ops:".to_string())
-        );
-        assert_eq!(
-            interactive_remote_exec_prompt("Proceed with installation? [y/N]"),
-            Some("Proceed with installation? [y/N]".to_string())
-        );
-        assert!(interactive_remote_exec_prompt("service started successfully").is_none());
-        assert_eq!(
-            interactive_remote_exec_input_kind("Enter verification code:"),
-            "secret"
-        );
-        assert_eq!(
-            interactive_remote_exec_input_kind("Continue? [y/n]"),
-            "text"
-        );
+    fn ordinary_remote_exec_reports_bounded_input_hints_without_collecting_input() {
         assert_eq!(
             detect_remote_exec_input_kind("partial output\nPassword for ops: "),
             Some("secret")
@@ -8902,17 +8593,6 @@ mod tests {
             Some("text")
         );
         assert_eq!(detect_remote_exec_input_kind("service started"), None);
-    }
-
-    #[test]
-    fn interactive_remote_exec_redacts_every_submitted_value_from_result() {
-        assert_eq!(
-            redact_interactive_remote_exec_output(
-                "password=correct horse\nconfirmation=YES".to_string(),
-                &["correct horse".to_string(), "YES".to_string()],
-            ),
-            "password=[REDACTED]\nconfirmation=[REDACTED]"
-        );
     }
 
     #[test]
@@ -9629,6 +9309,31 @@ mod tests {
             Ok(RootFileAccessMethod::Su)
         );
         assert!(parse_root_file_access_method(Some("doas")).is_err());
+    }
+
+    #[test]
+    fn selects_separate_saved_passwords_for_sudo_and_su() {
+        let sudo_password = Some("sudo-secret".to_string());
+        let su_password = Some("su-secret".to_string());
+
+        assert_eq!(
+            super::root_password_for_method(
+                RootFileAccessMethod::Sudo,
+                &sudo_password,
+                &su_password,
+            )
+            .as_deref(),
+            Some("sudo-secret")
+        );
+        assert_eq!(
+            super::root_password_for_method(
+                RootFileAccessMethod::Su,
+                &sudo_password,
+                &su_password,
+            )
+            .as_deref(),
+            Some("su-secret")
+        );
     }
 
     #[test]

@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type {
+  AiCopilotMode,
   AiCommandRisk,
-  AiCommandSuggestion,
-  AiContextTarget,
-  AiReviewOutcome,
-  ConnectionProfile,
+  AiToolActivity,
+  ActionApprovalRequest,
   SessionSnapshot,
   WorkspaceTab
 } from '@fileterm/core'
 import { t } from '../../i18n'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
+import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
+import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
@@ -32,86 +33,157 @@ function commandRiskLabel(risk: AiCommandRisk) {
   }
 }
 
-function contextModeLabel(mode: 'metadata' | 'recent-terminal') {
-  return mode === 'metadata' ? t.aiCopilotContextMetadata : t.aiCopilotContextRecentTerminal
-}
-
-function reviewOutcomeLabel(outcome: AiReviewOutcome) {
-  switch (outcome) {
-    case 'completed':
-      return t.aiCopilotReviewCompleted
-    case 'rejected':
-      return t.aiCopilotReviewRejected
-    case 'approval-dismissed':
-      return t.aiCopilotReviewApprovalDismissed
-    case 'approval-timed-out':
-      return t.aiCopilotReviewApprovalTimedOut
-    case 'target-changed':
-      return t.aiCopilotReviewTargetChanged
-    case 'command-timed-out':
-      return t.aiCopilotReviewCommandTimedOut
-    case 'failed':
-      return t.aiCopilotReviewFailed
+function copilotModeDescription(mode: AiCopilotMode) {
+  switch (mode) {
+    case 'pure-conversation':
+      return t.aiCopilotModePureDescription
+    case 'semi-automatic':
+      return t.aiCopilotModeSemiDescription
+    case 'fully-automatic':
+      return t.aiCopilotModeFullDescription
   }
 }
 
-function reviewTargetLabel(target: AiContextTarget) {
-  return target.user ? `${target.user}@${target.displayHost}` : target.displayHost
+function copilotModeIconName(mode: AiCopilotMode): AppIconName {
+  switch (mode) {
+    case 'pure-conversation':
+      return 'message'
+    case 'semi-automatic':
+      return 'shield'
+    case 'fully-automatic':
+      return 'flash'
+  }
 }
 
-function AiCopilotReviewOutput({ output }: { output: string }) {
-  const outputScrollRef = useRef<HTMLPreElement>(null)
+const COMMAND_FEEDBACK_DISMISS_MS = 4_000
 
-  return (
-    <div className="ai-copilot-review-output">
-      <strong>{t.aiCopilotReviewOutput}</strong>
-      <div className="ai-copilot-code-block ai-copilot-review-code-block">
-        <pre ref={outputScrollRef}>{output}</pre>
-        <AiCopilotCopyButton text={output} />
-        <VerticalScrollbar ariaLabel={t.aiCopilotReviewOutput} scrollRef={outputScrollRef} />
-      </div>
-    </div>
-  )
-}
-
-function targetHasChanged({
-  target,
-  activeProfile,
-  activeSession,
-  activeTab,
-  rootTab
+function AiCopilotToolActivity({
+  activity,
+  approval,
+  isResolvingApproval = false,
+  onResolveApproval,
+  onExecuteTerminalCommand
 }: {
-  target: AiContextTarget
-  activeProfile: ConnectionProfile | null
-  activeSession: SessionSnapshot | null
-  activeTab: WorkspaceTab | null
-  rootTab: WorkspaceTab | null
+  activity: AiToolActivity
+  approval?: ActionApprovalRequest
+  isResolvingApproval?: boolean
+  onResolveApproval?: (requestId: string, approved: boolean, riskAcknowledged?: boolean) => void
+  onExecuteTerminalCommand?: (activity: AiToolActivity) => Promise<void>
 }) {
-  if (
-    !activeTab ||
-    !rootTab ||
-    !activeSession ||
-    activeTab.id !== target.tabId ||
-    rootTab.id !== target.rootTabId ||
-    activeTab.sessionType !== target.sessionType ||
-    activeSession.connected !== true
-  ) {
-    return true
-  }
-
-  const host = activeSession.accessHost || activeProfile?.host || activeTab.title
-  const user = activeSession.shellUser || activeSession.loginUser || activeProfile?.username
-  const cwd = activeSession.shellCwd || activeSession.remotePath || undefined
+  const outputScrollRef = useRef<HTMLPreElement>(null)
+  const [riskAcknowledged, setRiskAcknowledged] = useState(false)
+  const [isExecutingTerminalCommand, setIsExecutingTerminalCommand] = useState(false)
+  const result = activity.result
+  const status = result?.status ?? 'pending'
+  const canExecuteTerminalCommand = Boolean(
+    onExecuteTerminalCommand && !/[\r\n]/.test(activity.proposal.command) && !isExecutingTerminalCommand
+  )
+  const executeTerminalCommandButton =
+    onExecuteTerminalCommand && !result ? (
+      <button
+        aria-label={t.aiCopilotWriteTerminalInput}
+        className="ai-copilot-tool-write-button"
+        disabled={!canExecuteTerminalCommand || isResolvingApproval}
+        title={canExecuteTerminalCommand ? t.aiCopilotWriteTerminalInputHint : t.aiCopilotMultilinePasteUnavailable}
+        type="button"
+        onClick={() => {
+          if (!onExecuteTerminalCommand || !canExecuteTerminalCommand) return
+          setIsExecutingTerminalCommand(true)
+          void onExecuteTerminalCommand(activity)
+            .catch(() => undefined)
+            .finally(() => setIsExecutingTerminalCommand(false))
+        }}
+      >
+        <AppIcon name="terminal-file" size={13} />
+        {t.aiCopilotWriteTerminalInput}
+      </button>
+    ) : null
+  const statusLabel = result
+    ? status === 'executed'
+      ? t.aiCopilotToolExecuted
+      : status === 'input-required'
+        ? t.aiCopilotToolWaitingForInput
+        : status === 'executed-in-terminal'
+          ? t.aiCopilotToolExecutedInTerminal
+          : status === 'rejected' || status === 'auto-blocked'
+            ? t.aiCopilotToolRejected
+            : t.aiCopilotToolFailed
+    : approval
+      ? t.aiCopilotToolApprovalPending
+      : t.aiCopilotToolPending
   return (
-    (Boolean(target.sessionRevision) && target.sessionRevision !== activeSession.aiSessionRevision) ||
-    target.displayHost !== host ||
-    (target.user ?? undefined) !== (user ?? undefined) ||
-    (target.cwd ?? undefined) !== (cwd ?? undefined)
+    <section className={`ai-copilot-command-card ai-copilot-tool-activity is-${status}`}>
+      <header>
+        <span>{statusLabel}</span>
+        <span className={`ai-copilot-command-risk is-${activity.proposal.risk}`}>
+          {commandRiskLabel(activity.proposal.risk)}
+        </span>
+      </header>
+      <div className="ai-copilot-code-block ai-copilot-command-code-block">
+        <code>{activity.proposal.command}</code>
+        <AiCopilotCopyButton text={activity.proposal.command} />
+      </div>
+      {activity.proposal.explanation ? <p>{activity.proposal.explanation}</p> : null}
+      {result?.reason && status !== 'executed-in-terminal' ? (
+        <p className="is-warning">{result.reason}</p>
+      ) : status === 'executed-in-terminal' ? (
+        <p>{t.aiCopilotToolExecutedInTerminalDescription}</p>
+      ) : null}
+      {result?.stdout ? (
+        <div className="ai-copilot-tool-output-wrap">
+          <pre ref={outputScrollRef} className="ai-copilot-tool-output">
+            {result.stdout}
+          </pre>
+          <VerticalScrollbar ariaLabel={t.aiCopilotToolActivity} scrollRef={outputScrollRef} />
+        </div>
+      ) : null}
+      {approval && !result ? (
+        <div className="ai-copilot-tool-approval">
+          {approval.target ? <small>{`${t.aiCopilotToolApprovalTarget}：${approval.target}`}</small> : null}
+          {approval.requiresRiskAcknowledgement ? (
+            <label className="ai-copilot-tool-risk-ack">
+              <input
+                checked={riskAcknowledged}
+                disabled={isResolvingApproval || isExecutingTerminalCommand}
+                type="checkbox"
+                onChange={(event) => setRiskAcknowledged(event.currentTarget.checked)}
+              />
+              <span>{t.aiCopilotToolApprovalRisk}</span>
+            </label>
+          ) : null}
+          <footer className="ai-copilot-tool-approval-actions">
+            <button
+              disabled={isResolvingApproval || isExecutingTerminalCommand}
+              type="button"
+              onClick={() => onResolveApproval?.(approval.requestId, false)}
+            >
+              <AppIcon name="close" size={13} />
+              {t.aiCopilotToolReject}
+            </button>
+            {executeTerminalCommandButton}
+            <button
+              disabled={
+                isResolvingApproval ||
+                isExecutingTerminalCommand ||
+                (approval.requiresRiskAcknowledgement && !riskAcknowledged) ||
+                !onResolveApproval
+              }
+              type="button"
+              onClick={() => onResolveApproval?.(approval.requestId, true, riskAcknowledged)}
+            >
+              <AppIcon name="check" size={13} />
+              {t.aiCopilotToolApprove}
+            </button>
+          </footer>
+        </div>
+      ) : executeTerminalCommandButton ? (
+        <footer className="ai-copilot-tool-result-actions">{executeTerminalCommandButton}</footer>
+      ) : null}
+    </section>
   )
 }
 
 export function AiCopilotPanel({
-  activeProfile,
   activeSession,
   activeTab,
   rootTab,
@@ -120,7 +192,6 @@ export function AiCopilotPanel({
   onOpenSettings,
   onResizeStart
 }: {
-  activeProfile: ConnectionProfile | null
   activeSession: SessionSnapshot | null
   activeTab: WorkspaceTab | null
   rootTab: WorkspaceTab | null
@@ -133,19 +204,37 @@ export function AiCopilotPanel({
     (activeTab?.sessionType === 'ssh' || activeTab?.sessionType === 'local') && activeSession?.connected === true
   const [draft, setDraft] = useState('')
   const [referenceTerminal, setReferenceTerminal] = useState(false)
-  const [responseMode, setResponseMode] = useState<'chat' | 'command-proposal'>('chat')
+  const [isAutoModeConfirmOpen, setIsAutoModeConfirmOpen] = useState(false)
+  const [isAutoModeConfirming, setIsAutoModeConfirming] = useState(false)
   const [commandActionMessage, setCommandActionMessage] = useState<string | null>(null)
-  const [writingCommandIds, setWritingCommandIds] = useState<Set<string>>(() => new Set())
-  const writingCommandIdsRef = useRef<Set<string>>(new Set())
-  const [reviewingCommandIds, setReviewingCommandIds] = useState<Set<string>>(() => new Set())
-  const reviewingCommandIdsRef = useRef<Set<string>>(new Set())
   const [conversationSearch, setConversationSearch] = useState('')
   const [isConversationListOpen, setIsConversationListOpen] = useState(false)
   const [isRenamingConversation, setIsRenamingConversation] = useState(false)
   const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
+  const composerCompositionRef = useRef(false)
   const panelRef = useRef<HTMLElement>(null)
   const messageViewportRef = useRef<HTMLDivElement>(null)
+  const commandFeedbackTimerRef = useRef<number | null>(null)
+
+  const showCommandActionMessage = (message: string) => {
+    if (commandFeedbackTimerRef.current !== null) {
+      window.clearTimeout(commandFeedbackTimerRef.current)
+    }
+    setCommandActionMessage(message)
+    commandFeedbackTimerRef.current = window.setTimeout(() => {
+      setCommandActionMessage(null)
+      commandFeedbackTimerRef.current = null
+    }, COMMAND_FEEDBACK_DISMISS_MS)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (commandFeedbackTimerRef.current !== null) {
+        window.clearTimeout(commandFeedbackTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const handleSelectionChange = () => {
@@ -195,7 +284,11 @@ export function AiCopilotPanel({
     isStreaming,
     errorMessage,
     usage,
+    toolActivities,
+    toolApprovalRequests,
+    resolvingToolApprovalIds,
     isContextPreviewing,
+    modeState,
     selectProvider,
     selectModel,
     loadConversation,
@@ -204,7 +297,11 @@ export function AiCopilotPanel({
     deleteConversation,
     createContextPreview,
     sendMessage,
-    runReview,
+    setCopilotMode,
+    setContextAttach,
+    setDangerousCommandRestrictions,
+    resolveToolApproval,
+    resolveToolApprovalAsTerminal,
     retry,
     stop
   } = useAiCopilot()
@@ -217,10 +314,18 @@ export function AiCopilotPanel({
 
   useEffect(() => {
     const viewport = messageViewportRef.current
-    if (viewport) {
-      viewport.scrollTop = viewport.scrollHeight
-    }
-  }, [conversation?.messages, isStreaming])
+    if (!viewport) return
+
+    // Text and tool results arrive in separate render passes. Defer the final
+    // scroll until the new message/card has been laid out so the completed
+    // summary is visible instead of leaving the viewport on the old bubble.
+    const frame = window.requestAnimationFrame(() => {
+      if (messageViewportRef.current === viewport) {
+        viewport.scrollTop = viewport.scrollHeight
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [conversation?.messages, isStreaming, toolActivities])
 
   useEffect(() => {
     setIsRenamingConversation(false)
@@ -229,13 +334,14 @@ export function AiCopilotPanel({
   }, [conversation?.id, conversation?.title])
 
   useEffect(() => {
-    if ((!referenceTerminal || !isTerminalTarget) && responseMode === 'command-proposal') {
-      setResponseMode('chat')
-      setCommandActionMessage(null)
-    }
-  }, [isTerminalTarget, referenceTerminal, responseMode])
+    if (!modeState) return
+    setReferenceTerminal(modeState.attachTerminalContext)
+  }, [modeState])
 
   const canChat = Boolean(currentProvider)
+  const copilotMode: AiCopilotMode = modeState?.mode ?? 'pure-conversation'
+  const showsDangerousCommandRestrictions = copilotMode !== 'pure-conversation'
+  const requiresTerminalContext = copilotMode !== 'pure-conversation' || referenceTerminal
   const canRetry = Boolean(errorMessage && conversation?.messages.at(-1)?.role === 'user')
 
   const openNewConversation = () => {
@@ -246,15 +352,12 @@ export function AiCopilotPanel({
 
   const send = async () => {
     if (!draft.trim() || isStreaming) return
-    if (responseMode === 'command-proposal' && !referenceTerminal) {
-      setCommandActionMessage(t.aiCopilotCommandModeRequiresContext)
-      return
-    }
+    const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
 
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
-    if (referenceTerminal) {
+    if (shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
-        setCommandActionMessage(t.aiCopilotContextUnavailable)
+        showCommandActionMessage(t.aiCopilotContextUnavailable)
         return
       }
       setCommandActionMessage(null)
@@ -262,13 +365,13 @@ export function AiCopilotPanel({
         tabId: activeTab.id,
         rootTabId: rootTab.id,
         providerId: currentProvider.id,
-        mode: 'recent-terminal'
+        mode: 'L2'
       })
       if (!contextSnapshot) return
     }
 
     const sent = await sendMessage(draft, {
-      responseMode,
+      mode: copilotMode,
       ...(contextSnapshot
         ? {
             contextSnapshotId: contextSnapshot.snapshotId,
@@ -283,10 +386,11 @@ export function AiCopilotPanel({
 
   const retryLastRequest = async () => {
     if (isStreaming) return
+    const shouldAttachContext = copilotMode !== 'pure-conversation' || referenceTerminal
     let contextSnapshot: Awaited<ReturnType<typeof createContextPreview>> = null
-    if (responseMode === 'command-proposal' || referenceTerminal) {
+    if (shouldAttachContext) {
       if (!currentProvider || !activeTab || !rootTab || !isTerminalTarget) {
-        setCommandActionMessage(t.aiCopilotContextUnavailable)
+        showCommandActionMessage(t.aiCopilotContextUnavailable)
         return
       }
       setCommandActionMessage(null)
@@ -294,12 +398,12 @@ export function AiCopilotPanel({
         tabId: activeTab.id,
         rootTabId: rootTab.id,
         providerId: currentProvider.id,
-        mode: 'recent-terminal'
+        mode: 'L2'
       })
       if (!contextSnapshot) return
     }
     await retry({
-      responseMode,
+      mode: copilotMode,
       ...(contextSnapshot ? { contextSnapshotId: contextSnapshot.snapshotId } : {})
     })
   }
@@ -307,7 +411,74 @@ export function AiCopilotPanel({
   const toggleTerminalReference = () => {
     if (isStreaming || isContextPreviewing) return
     setCommandActionMessage(null)
-    setReferenceTerminal((current) => !current)
+    const next = !referenceTerminal
+    setReferenceTerminal(next)
+    void setContextAttach(next).then((state) => {
+      if (!state) setReferenceTerminal(referenceTerminal)
+    })
+  }
+
+  const selectCopilotMode = (nextMode: AiCopilotMode) => {
+    if (isStreaming || nextMode === copilotMode) return
+    if (nextMode === 'fully-automatic') {
+      setIsAutoModeConfirmOpen(true)
+      return
+    }
+    void setCopilotMode(nextMode)
+  }
+
+  const confirmFullyAutomaticMode = async () => {
+    setIsAutoModeConfirming(true)
+    const next = await setCopilotMode('fully-automatic', true)
+    setIsAutoModeConfirming(false)
+    if (next) setIsAutoModeConfirmOpen(false)
+  }
+
+  const dangerousCommandRestrictionsEnabled = modeState?.autoModeGuardrails.dangerousCommandRestrictionsEnabled ?? true
+
+  const toggleDangerousCommandRestrictions = () => {
+    if (isStreaming || !modeState) return
+    void setDangerousCommandRestrictions(!dangerousCommandRestrictionsEnabled)
+  }
+
+  const executeCommandInTerminal = (activity: AiToolActivity): Promise<void> => {
+    const targetTabId = activity.proposal.target.tabId
+    if (
+      !window.fileterm ||
+      !activeTab ||
+      activeTab.id !== targetTabId ||
+      activeTab.sessionType !== 'ssh' ||
+      !isTerminalTarget ||
+      /[\r\n]/.test(activity.proposal.command)
+    ) {
+      showCommandActionMessage(t.aiCopilotCommandWriteUnavailable)
+      return Promise.reject(new Error(t.aiCopilotCommandWriteUnavailable))
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      dispatchAppEvent(APP_EVENT.aiInsertTerminalCommand, {
+        tabId: targetTabId,
+        command: activity.proposal.command,
+        execute: true,
+        onComplete: () => {
+          const approvalRequestId = activity.proposal.approvalRequestId
+          const handoff = approvalRequestId ? resolveToolApprovalAsTerminal(approvalRequestId) : Promise.resolve()
+          void handoff
+            .then(() => {
+              showCommandActionMessage(t.aiCopilotTerminalInputWritten)
+              resolve()
+            })
+            .catch((error) => {
+              showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+              reject(error)
+            })
+        },
+        onError: () => {
+          showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+          reject(new Error(t.aiCopilotTerminalInputWriteFailed))
+        }
+      })
+    })
   }
 
   const saveConversationTitle = async () => {
@@ -328,77 +499,19 @@ export function AiCopilotPanel({
     }
   }
 
-  const writeCommand = async (suggestion: AiCommandSuggestion) => {
-    if (suggestion.multiline || suggestion.target.sessionType !== 'ssh') {
-      setCommandActionMessage(
-        suggestion.multiline ? t.aiCopilotMultilinePasteUnavailable : t.aiCopilotCommandWriteUnavailable
-      )
-      return
-    }
-    const desktopApi = window.fileterm
-    if (!desktopApi) {
-      setCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
-      return
-    }
-    if (writingCommandIdsRef.current.has(suggestion.id)) return
-    writingCommandIdsRef.current.add(suggestion.id)
-    setWritingCommandIds(new Set(writingCommandIdsRef.current))
-    try {
-      const result = await desktopApi.insertAiCommand({ commandId: suggestion.id })
-      dispatchAppEvent(APP_EVENT.aiInsertTerminalCommand, { tabId: result.tabId, command: result.command })
-      setCommandActionMessage(t.aiCopilotTerminalInputWritten)
-    } catch (error) {
-      const message = String(error)
-        .replace(/^command error:\s*/i, '')
-        .replace(/^AI_[A-Z_]+:\s*/i, '')
-        .trim()
-      setCommandActionMessage(message || t.aiCopilotTerminalInputWriteFailed)
-    } finally {
-      writingCommandIdsRef.current.delete(suggestion.id)
-      setWritingCommandIds(new Set(writingCommandIdsRef.current))
-    }
-  }
-
-  const reviewCommand = async (suggestion: AiCommandSuggestion) => {
-    const commandTargetChanged = targetHasChanged({
-      target: suggestion.target,
-      activeProfile,
-      activeSession,
-      activeTab,
-      rootTab
-    })
-    if (commandTargetChanged) {
-      setCommandActionMessage(t.aiCopilotContextTargetChanged)
-      return
-    }
-    if (suggestion.multiline || suggestion.target.sessionType !== 'ssh') {
-      setCommandActionMessage(t.aiCopilotReviewUnavailable)
-      return
-    }
-    if (reviewingCommandIdsRef.current.has(suggestion.id)) return
-
-    setCommandActionMessage(t.aiCopilotReviewInProgress)
-    reviewingCommandIdsRef.current.add(suggestion.id)
-    setReviewingCommandIds(new Set(reviewingCommandIdsRef.current))
-    try {
-      const result = await runReview(suggestion.id)
-      if (result) {
-        // The completed state is already rendered in the persisted review
-        // record. Do not repeat “Ran once” above the composer.
-        setCommandActionMessage(
-          result.review.outcome === 'completed' ? null : reviewOutcomeLabel(result.review.outcome)
-        )
-      } else {
-        setCommandActionMessage(t.aiCopilotReviewFailed)
-      }
-    } finally {
-      reviewingCommandIdsRef.current.delete(suggestion.id)
-      setReviewingCommandIds(new Set(reviewingCommandIdsRef.current))
-    }
-  }
-
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.shiftKey) return
+    // Some macOS input methods report `isComposing` as false on the Enter
+    // keydown that commits a candidate. keyCode 229 and the explicit
+    // composition ref cover both browser event orderings.
+    if (
+      event.key !== 'Enter' ||
+      event.nativeEvent.isComposing ||
+      event.keyCode === 229 ||
+      composerCompositionRef.current ||
+      event.shiftKey
+    ) {
+      return
+    }
     event.preventDefault()
     void send()
   }
@@ -691,6 +804,11 @@ export function AiCopilotPanel({
                   ) : null}
                 </section>
               </div>
+              {commandActionMessage ? (
+                <div className="ai-copilot-command-feedback" role="status" aria-live="polite">
+                  {commandActionMessage}
+                </div>
+              ) : null}
             </div>
 
             <div className="ai-copilot-message-scroll-region">
@@ -714,154 +832,35 @@ export function AiCopilotPanel({
                     <article
                       key={message.id}
                       className={`ai-copilot-message is-${message.role}`}
-                      aria-label={
-                        message.role === 'user'
-                          ? t.aiCopilotMessageUser
-                          : message.role === 'review'
-                            ? t.aiCopilotMessageReview
-                            : t.aiCopilotMessageAssistant
-                      }
+                      aria-label={message.role === 'user' ? t.aiCopilotMessageUser : t.aiCopilotMessageAssistant}
                     >
                       <span className="ai-copilot-message-role">
-                        {message.role === 'user'
-                          ? t.aiCopilotMessageUser
-                          : message.role === 'review'
-                            ? t.aiCopilotMessageReview
-                            : t.aiCopilotMessageAssistant}
+                        {message.role === 'user' ? t.aiCopilotMessageUser : t.aiCopilotMessageAssistant}
                       </span>
-                      {message.review ? (
-                        <section className={`ai-copilot-review-card is-${message.review.outcome}`}>
-                          <header>
-                            <span className={`ai-copilot-command-risk is-${message.review.risk}`}>
-                              {commandRiskLabel(message.review.risk)}
-                            </span>
-                            <strong>{reviewOutcomeLabel(message.review.outcome)}</strong>
-                          </header>
-                          <dl>
-                            <div>
-                              <dt>{t.aiCopilotReviewTarget}</dt>
-                              <dd>{reviewTargetLabel(message.review.target)}</dd>
-                            </div>
-                            <div>
-                              <dt>{t.aiCopilotReviewWorkingDirectory}</dt>
-                              <dd>{message.review.target.cwd ?? '~'}</dd>
-                            </div>
-                            <div>
-                              <dt>{t.aiCopilotReviewTimeout}</dt>
-                              <dd>{Math.ceil(message.review.timeoutMs / 1000)} s</dd>
-                            </div>
-                            {message.review.exitCode !== undefined ? (
-                              <div>
-                                <dt>{t.aiCopilotReviewExitCode}</dt>
-                                <dd>{message.review.exitCode}</dd>
-                              </div>
-                            ) : null}
-                          </dl>
-                          <div className="ai-copilot-code-block ai-copilot-review-code-block">
-                            <code>{message.review.command}</code>
-                            <AiCopilotCopyButton text={message.review.command} />
-                          </div>
-                          {message.review.timedOut ? (
-                            <p className="is-warning">{t.aiCopilotReviewCommandTimedOut}</p>
-                          ) : null}
-                          {message.review.outputTruncated ? (
-                            <p className="is-warning">{t.aiCopilotReviewOutputTruncated}</p>
-                          ) : null}
-                          {message.review.error ? <p className="is-error">{message.review.error}</p> : null}
-                          {message.review.output ? (
-                            <AiCopilotReviewOutput output={message.review.output} />
-                          ) : message.review.outcome === 'completed' ? (
-                            <p>{t.aiCopilotReviewNoOutput}</p>
-                          ) : null}
-                        </section>
-                      ) : message.role === 'assistant' ? (
+                      {message.role === 'assistant' ? (
                         <AiCopilotMarkdown content={message.content} />
                       ) : (
                         <p className="ai-copilot-message-plain">{message.content}</p>
                       )}
-                      {message.context ? (
-                        <span className="ai-copilot-message-context">
-                          <span aria-hidden="true" className="material-symbols-outlined">
-                            verified_user
-                          </span>
-                          {contextModeLabel(message.context.mode)}
-                        </span>
-                      ) : null}
-                      {message.commands?.map((suggestion) => {
-                        const commandTargetChanged = targetHasChanged({
-                          target: suggestion.target,
-                          activeProfile,
-                          activeSession,
-                          activeTab,
-                          rootTab
-                        })
-                        const commandIsBusy =
-                          reviewingCommandIds.has(suggestion.id) || writingCommandIds.has(suggestion.id)
-                        return (
-                          <section key={suggestion.id} className="ai-copilot-command-card">
-                            <header>
-                              <span className={`ai-copilot-command-risk is-${suggestion.risk}`}>
-                                {commandRiskLabel(suggestion.risk)}
-                              </span>
-                              {commandTargetChanged ? (
-                                <span className="is-target-changed">{t.aiCopilotContextTargetChanged}</span>
-                              ) : null}
-                              {suggestion.multiline ? <span>{t.aiCopilotMultilinePasteUnavailable}</span> : null}
-                            </header>
-                            <div className="ai-copilot-code-block ai-copilot-command-code-block">
-                              <code>{suggestion.command}</code>
-                              <AiCopilotCopyButton text={suggestion.command} />
-                            </div>
-                            {suggestion.explanation ? <p>{suggestion.explanation}</p> : null}
-                            <footer>
-                              <button
-                                disabled={
-                                  suggestion.multiline ||
-                                  suggestion.target.sessionType !== 'ssh' ||
-                                  commandTargetChanged ||
-                                  isStreaming ||
-                                  commandIsBusy
-                                }
-                                title={
-                                  commandTargetChanged
-                                    ? t.aiCopilotContextTargetChangedHint
-                                    : suggestion.multiline || suggestion.target.sessionType !== 'ssh'
-                                      ? t.aiCopilotReviewUnavailable
-                                      : t.aiCopilotReviewCommandHint
-                                }
-                                type="button"
-                                onClick={() => void reviewCommand(suggestion)}
-                              >
-                                <span aria-hidden="true" className="material-symbols-outlined">
-                                  {reviewingCommandIds.has(suggestion.id) ? 'progress_activity' : 'fact_check'}
-                                </span>
-                                {t.aiCopilotReviewCommand}
-                              </button>
-                              <button
-                                disabled={
-                                  suggestion.multiline ||
-                                  suggestion.target.sessionType !== 'ssh' ||
-                                  commandTargetChanged ||
-                                  commandIsBusy
-                                }
-                                title={t.aiCopilotWriteTerminalInputHint}
-                                type="button"
-                                onClick={() => void writeCommand(suggestion)}
-                              >
-                                <span aria-hidden="true" className="material-symbols-outlined">
-                                  input
-                                </span>
-                                {t.aiCopilotWriteTerminalInput}
-                              </button>
-                            </footer>
-                            <small>
-                              {commandTargetChanged
-                                ? t.aiCopilotContextTargetChangedHint
-                                : `${t.aiCopilotReviewCommandHint} ${t.aiCopilotWriteTerminalInputHint}`}
-                            </small>
-                          </section>
-                        )
-                      })}
+                      {message.toolActivities?.map((activity) => (
+                        <AiCopilotToolActivity
+                          key={activity.proposal.id}
+                          activity={activity}
+                          approval={
+                            activity.proposal.approvalRequestId
+                              ? toolApprovalRequests.find(
+                                  (request) => request.requestId === activity.proposal.approvalRequestId
+                                )
+                              : undefined
+                          }
+                          isResolvingApproval={Boolean(
+                            activity.proposal.approvalRequestId &&
+                            resolvingToolApprovalIds.has(activity.proposal.approvalRequestId)
+                          )}
+                          onResolveApproval={resolveToolApproval}
+                          onExecuteTerminalCommand={executeCommandInTerminal}
+                        />
+                      ))}
                     </article>
                   ))
                 )}
@@ -908,7 +907,12 @@ export function AiCopilotPanel({
                     aria-pressed={referenceTerminal}
                     aria-label={t.aiCopilotReferenceTerminal}
                     className={`ai-copilot-context-switch ${referenceTerminal ? 'is-active' : ''}`}
-                    disabled={isStreaming || isContextPreviewing || (!isTerminalTarget && !referenceTerminal)}
+                    disabled={
+                      isStreaming ||
+                      isContextPreviewing ||
+                      copilotMode !== 'pure-conversation' ||
+                      (!isTerminalTarget && !referenceTerminal)
+                    }
                     type="button"
                     onClick={toggleTerminalReference}
                   >
@@ -925,18 +929,15 @@ export function AiCopilotPanel({
                     </span>
                   </button>
                   <span className="ai-copilot-context-dock-hint">
-                    {referenceTerminal
-                      ? isTerminalTarget
-                        ? t.aiCopilotContextAutoHint
-                        : t.aiCopilotContextNeedsTerminal
-                      : t.aiCopilotL0ComposerHint}
+                    {copilotMode !== 'pure-conversation'
+                      ? t.aiCopilotContextLockedByMode
+                      : referenceTerminal
+                        ? isTerminalTarget
+                          ? t.aiCopilotContextAutoHint
+                          : t.aiCopilotContextNeedsTerminal
+                        : t.aiCopilotL0ComposerHint}
                   </span>
                 </div>
-                {commandActionMessage ? (
-                  <div className="ai-copilot-command-feedback" role="status">
-                    {commandActionMessage}
-                  </div>
-                ) : null}
               </section>
             ) : null}
             <div className={`ai-copilot-composer ${!canChat ? 'is-disabled' : ''}`}>
@@ -947,6 +948,15 @@ export function AiCopilotPanel({
                 rows={3}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
+                onCompositionEnd={() => {
+                  // Keep the guard active through the IME commit keydown.
+                  window.setTimeout(() => {
+                    composerCompositionRef.current = false
+                  }, 0)
+                }}
+                onCompositionStart={() => {
+                  composerCompositionRef.current = true
+                }}
                 onKeyDown={onComposerKeyDown}
               />
               <div className="ai-copilot-composer-toolbar">
@@ -973,6 +983,60 @@ export function AiCopilotPanel({
                             value={selectedModel ?? currentProvider.model}
                             onChange={(value) => selectModel(value || null)}
                           />
+                          <span
+                            aria-hidden="true"
+                            className="ai-copilot-composer-model-divider ai-copilot-mode-divider"
+                          />
+                          <DropdownSelect
+                            ariaLabel={t.aiCopilotModeLabel}
+                            className="ai-copilot-composer-select ai-copilot-mode-select"
+                            disabled={isStreaming}
+                            forceCustomMenu
+                            menuClassName="ai-copilot-mode-menu"
+                            menuPlacement="above"
+                            menuWidth="auto"
+                            options={[
+                              { value: 'pure-conversation', label: t.aiCopilotModePure },
+                              { value: 'semi-automatic', label: t.aiCopilotModeSemi },
+                              { value: 'fully-automatic', label: t.aiCopilotModeFull }
+                            ]}
+                            renderOption={(option, selected) => {
+                              const optionMode = option.value as AiCopilotMode
+                              return (
+                                <span className="ai-copilot-mode-option">
+                                  <span className="ai-copilot-mode-option-copy">
+                                    <strong>
+                                      <AppIcon
+                                        className="ai-copilot-mode-option-icon"
+                                        name={copilotModeIconName(optionMode)}
+                                        size={12}
+                                      />
+                                      <span>{option.label}</span>
+                                      {selected ? (
+                                        <AppIcon className="ai-copilot-mode-option-check" name="check" size={13} />
+                                      ) : null}
+                                    </strong>
+                                    <small>{copilotModeDescription(optionMode)}</small>
+                                  </span>
+                                </span>
+                              )
+                            }}
+                            renderValue={(option) => {
+                              const optionMode = option.value as AiCopilotMode
+                              return (
+                                <span className="ai-copilot-mode-value">
+                                  <AppIcon
+                                    className="ai-copilot-mode-value-icon"
+                                    name={copilotModeIconName(optionMode)}
+                                    size={10}
+                                  />
+                                  <span>{option.label}</span>
+                                </span>
+                              )
+                            }}
+                            value={copilotMode}
+                            onChange={(value) => selectCopilotMode(value as AiCopilotMode)}
+                          />
                         </>
                       ) : null}
                     </div>
@@ -995,59 +1059,70 @@ export function AiCopilotPanel({
                       disabled={
                         !canChat ||
                         !draft.trim() ||
-                        (responseMode === 'command-proposal' && (!referenceTerminal || !isTerminalTarget))
+                        (requiresTerminalContext && (!referenceTerminal || !isTerminalTarget))
                       }
                       type="button"
                       onClick={() => void send()}
                     >
-                      <span aria-hidden="true" className="material-symbols-outlined">
-                        arrow_upward
-                      </span>
+                      <AppIcon name="arrow-up" size={16} />
                     </button>
                   )}
                 </div>
               </div>
             </div>
           </div>
-          <div className="ai-copilot-safety-footer">
-            {canChat ? (
-              <div className="ai-copilot-response-mode" role="group" aria-label={t.aiCopilotResponseMode}>
-                <button
-                  aria-pressed={responseMode === 'chat'}
-                  className={responseMode === 'chat' ? 'is-active' : ''}
-                  title={t.aiCopilotChatMode}
-                  type="button"
-                  onClick={() => {
-                    setResponseMode('chat')
-                    setCommandActionMessage(null)
-                  }}
-                >
-                  {t.aiCopilotChatMode}
-                </button>
-                <button
-                  aria-pressed={responseMode === 'command-proposal'}
-                  className={responseMode === 'command-proposal' ? 'is-active' : ''}
-                  disabled={!referenceTerminal || !isTerminalTarget || isStreaming}
-                  title={t.aiCopilotCommandMode}
-                  type="button"
-                  onClick={() => {
-                    setResponseMode('command-proposal')
-                    setCommandActionMessage(null)
-                  }}
-                >
-                  {t.aiCopilotCommandMode}
-                </button>
-              </div>
-            ) : null}
-            {canChat && responseMode === 'command-proposal' ? (
-              <span className="ai-copilot-response-mode-hint">{t.aiCopilotCommandModeHint}</span>
-            ) : canChat && responseMode === 'chat' && !referenceTerminal ? (
-              <span className="ai-copilot-response-mode-hint">{t.aiCopilotCommandModeUnavailable}</span>
-            ) : canChat && responseMode === 'chat' && !isTerminalTarget ? (
-              <span className="ai-copilot-response-mode-hint">{t.aiCopilotContextNeedsTerminal}</span>
-            ) : null}
-          </div>
         </footer>
+      ) : null}
+      {!isConversationListOpen ? (
+        <section
+          aria-label={showsDangerousCommandRestrictions ? t.aiCopilotDangerousCommandRestrictions : undefined}
+          className="ai-copilot-dangerous-command-dock"
+        >
+          {showsDangerousCommandRestrictions ? (
+            <>
+              <span className="ai-copilot-dangerous-command-dock-hint">
+                {t.aiCopilotDangerousCommandRestrictionsHint}
+              </span>
+              <button
+                aria-checked={dangerousCommandRestrictionsEnabled}
+                aria-label={`${t.aiCopilotDangerousCommandRestrictions} · ${
+                  dangerousCommandRestrictionsEnabled
+                    ? t.aiCopilotDangerousCommandRestrictionsOn
+                    : t.aiCopilotDangerousCommandRestrictionsOff
+                }`}
+                className={`ai-copilot-dangerous-command-toggle ${
+                  dangerousCommandRestrictionsEnabled ? 'is-enabled' : 'is-disabled'
+                }`}
+                disabled={isStreaming || !modeState}
+                role="switch"
+                title={t.aiCopilotDangerousCommandRestrictionsDescription}
+                type="button"
+                onClick={toggleDangerousCommandRestrictions}
+              >
+                <AppIcon name={dangerousCommandRestrictionsEnabled ? 'shield-check' : 'shield'} size={12} />
+                <span>{t.aiCopilotDangerousCommandRestrictions}</span>
+                <strong>
+                  {dangerousCommandRestrictionsEnabled
+                    ? t.aiCopilotDangerousCommandRestrictionsOn
+                    : t.aiCopilotDangerousCommandRestrictionsOff}
+                </strong>
+              </button>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+      {isAutoModeConfirmOpen ? (
+        <ConfirmActionDialog
+          confirmLabel={t.aiCopilotModeFullConfirm}
+          confirmVariant="danger"
+          description={t.aiCopilotModeFullWarning}
+          isSubmitting={isAutoModeConfirming}
+          onClose={() => {
+            if (!isAutoModeConfirming) setIsAutoModeConfirmOpen(false)
+          }}
+          onConfirm={() => void confirmFullyAutomaticMode()}
+          title={t.aiCopilotModeFullTitle}
+        />
       ) : null}
     </aside>
   )

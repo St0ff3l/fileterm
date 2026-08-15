@@ -93,32 +93,10 @@ function latestUserMessage(messages) {
   return ''
 }
 
-function isCommandProposal(messages) {
-  return (
-    Array.isArray(messages) &&
-    messages.some((message) => {
-      return (
-        message?.role === 'system' &&
-        typeof message.content === 'string' &&
-        message.content.includes('Return exactly one JSON object')
-      )
-    })
-  )
-}
-
-function requestedMode(prompt, commandProposal) {
-  if (commandProposal && /fixture:multiline\b/i.test(prompt)) {
-    return 'multiline-command'
-  }
-  if (commandProposal) {
-    // Command-proposal mode is selected by the request envelope, not by a
-    // magic phrase in the user message. This lets QA cover the real flow
-    // where a user first asks for an explanation and then sends "重新来".
-    return 'command'
-  }
-  if (/fixture:(command|multiline)\b/i.test(prompt)) {
-    return /fixture:multiline\b/i.test(prompt) ? 'multiline-command' : 'command'
-  }
+function requestedMode(prompt, hasTools) {
+  if (/fixture:tool-sudo\b/i.test(prompt)) return 'tool-sudo'
+  if (/fixture:tool-compat\b/i.test(prompt)) return hasTools ? 'tool' : 'normal'
+  if (/fixture:tool\b/i.test(prompt)) return 'tool'
   if (/fixture:fail-once\b/i.test(prompt)) return 'fail-once'
   if (/fixture:disconnect-once\b/i.test(prompt)) return 'disconnect-once'
   if (/fixture:markdown\b/i.test(prompt)) return 'markdown'
@@ -127,29 +105,8 @@ function requestedMode(prompt, commandProposal) {
 }
 
 function responseText(mode) {
-  if (mode === 'command') {
-    return JSON.stringify({
-      answer: 'Fixture prepared a read-only command card. Review it before using it.',
-      commands: [
-        {
-          command: 'pwd',
-          explanation: 'Prints the current working directory without changing the remote host.',
-          risk: 'read-only'
-        }
-      ]
-    })
-  }
-  if (mode === 'multiline-command') {
-    return JSON.stringify({
-      answer: 'Fixture prepared a multi-line command card. It must remain unavailable for one-click terminal input.',
-      commands: [
-        {
-          command: "printf '%s\\n' fixture-one\nprintf '%s\\n' fixture-two",
-          explanation: 'A deterministic multi-line fixture command.',
-          risk: 'read-only'
-        }
-      ]
-    })
+  if (mode === 'tool-final') {
+    return 'Fixture tool loop completed. The Rust-owned remote command result was returned to the provider.'
   }
   if (mode === 'slow') {
     return Array.from({ length: 40 }, (_, index) => `fixture-stream-${index + 1} `).join('')
@@ -224,6 +181,45 @@ function streamCompletion(request, response, { mode, model, promptLength }) {
   })
   response.flushHeaders()
 
+  if (mode === 'tool' || mode === 'tool-sudo') {
+    const command = mode === 'tool-sudo' ? 'sudo id -u' : 'id -u'
+    writeSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call-fileterm-fixture',
+                type: 'function',
+                function: {
+                  name: 'fileterm_execute_remote_command',
+                  arguments: JSON.stringify({ command })
+                }
+              }
+            ]
+          },
+          finish_reason: null,
+          index: 0
+        }
+      ],
+      id: 'fileterm-fixture-tool-call',
+      model,
+      object: 'chat.completion.chunk'
+    })
+    writeSse(response, {
+      choices: [{ delta: {}, finish_reason: 'tool_calls', index: 0 }],
+      id: 'fileterm-fixture-tool-call',
+      model,
+      object: 'chat.completion.chunk',
+      usage: { completion_tokens: 1, prompt_tokens: Math.max(1, Math.ceil(promptLength / 4)) }
+    })
+    response.write('data: [DONE]\n\n')
+    response.end()
+    log('fixture-tool-call-completed', { mode, promptLength })
+    return
+  }
+
   const emitNext = () => {
     if (closed || response.writableEnded) return
 
@@ -263,13 +259,14 @@ function streamCompletion(request, response, { mode, model, promptLength }) {
 function handleCompletion(request, response, payload) {
   const model = typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : 'fileterm-fixture'
   const prompt = latestUserMessage(payload?.messages)
-  const commandProposal = isCommandProposal(payload?.messages)
-  const mode = requestedMode(prompt, commandProposal)
+  const hasTools = Array.isArray(payload?.tools) && payload.tools.length > 0
+  const requested = requestedMode(prompt, hasTools)
+  const hasToolResult = Array.isArray(payload?.messages) && payload.messages.some((message) => message?.role === 'tool')
+  const mode = (requested === 'tool' || requested === 'tool-sudo') && hasToolResult ? 'tool-final' : requested
   const onceKey = oneTimeKey(mode, prompt)
   const firstAttempt = !completedOneTimeModes.has(onceKey)
 
   log('fixture-request', {
-    commandProposal,
     mode,
     promptLength: prompt.length,
     stream: Boolean(payload?.stream)

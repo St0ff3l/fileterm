@@ -3,6 +3,8 @@ import { getName, getVersion } from '@tauri-apps/api/app'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppUpdateStatus,
+  BackupDownloadMode,
+  BackupUploadMode,
   FileTermDesktopApi,
   S3BackupConfig,
   S3BackupConfigInput,
@@ -24,7 +26,8 @@ import type {
   TransferTask,
   SessionMetricsUpdate,
   SshInteractionRequest,
-  RemoteExecInteractionRequest,
+  RemoteExecCredentials,
+  SudoPasswordRequest,
   BackupPasswordRequest,
   SshKeyFileSelection,
   SshKeyImportResult,
@@ -42,19 +45,19 @@ import type {
   AiProviderSummary,
   AiProviderTestResult,
   AiChatRequest,
-  AiCommandInsertInput,
-  AiCommandInsertResult,
-  AiReviewExecution,
   AiConversation,
   AiConversationSummary,
   AiContextPreview,
+  AiCopilotModeState,
   AiStreamEvent,
   CreateAiConversationInput,
   CreateAiContextPreviewInput,
   RenameAiConversationInput,
   RetryAiChatInput,
-  RunAiReviewInput,
   SaveAiProviderInput,
+  SetAiContextAttachInput,
+  SetAiCopilotModeInput,
+  SetAiDangerousCommandRestrictionsInput,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
@@ -393,6 +396,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     summarizeAiConversationTitle: (input: SummarizeAiConversationTitleInput) =>
       invoke<AiConversation>('app_summarize_ai_conversation_title', { input }),
     deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
+    getAiCopilotModeState: () => invoke<AiCopilotModeState>('app_get_ai_copilot_mode_state'),
+    setAiCopilotMode: (input: SetAiCopilotModeInput) =>
+      invoke<AiCopilotModeState>('app_set_ai_copilot_mode', { input }),
+    setAiContextAttach: (input: SetAiContextAttachInput) =>
+      invoke<AiCopilotModeState>('app_set_ai_context_attach', { input }),
+    setAiDangerousCommandRestrictions: (input: SetAiDangerousCommandRestrictionsInput) =>
+      invoke<AiCopilotModeState>('app_set_ai_dangerous_command_restrictions', { input }),
     createAiContextPreview: (input: CreateAiContextPreviewInput) =>
       invoke<AiContextPreview>('app_create_ai_context_preview', { input }),
     startAiChat: (input: StartAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
@@ -400,8 +410,6 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     retryAiChat: (input: RetryAiChatInput, onEvent: (event: AiStreamEvent) => void) =>
       invokeAiChat('app_retry_ai_chat', input, onEvent),
     cancelAiChat: (requestId: string) => invoke<void>('app_cancel_ai_chat', { requestId }),
-    insertAiCommand: (input: AiCommandInsertInput) => invoke<AiCommandInsertResult>('app_insert_ai_command', { input }),
-    runAiReview: (input: RunAiReviewInput) => invoke<AiReviewExecution>('app_run_ai_review', { input }),
     getUiStateItem: (key: string) => invoke<string | null>('app_get_ui_state_item', { key }),
     setUiStateItem: (key: string, value: string) => invoke<void>('app_set_ui_state_item', { key, value }),
     removeUiStateItem: (key: string) => invoke<void>('app_remove_ui_state_item', { key }),
@@ -539,13 +547,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       password?: string
     }) => invoke<WebDavSyncConfig>('app_set_webdav_sync_config', { input }),
     testWebDavSync: () => invoke<WebDavSyncResult>('app_test_webdav_sync'),
-    uploadWebDavSync: () => invoke<WebDavSyncResult>('app_upload_webdav_sync'),
-    downloadWebDavSync: () => invoke<WebDavSyncResult>('app_download_webdav_sync'),
+    uploadWebDavSync: (mode: BackupUploadMode) => invoke<WebDavSyncResult>('app_upload_webdav_sync', { mode }),
+    downloadWebDavSync: (mode: BackupDownloadMode) => invoke<WebDavSyncResult>('app_download_webdav_sync', { mode }),
     getS3BackupConfig: () => invoke<S3BackupConfig>('app_get_s3_backup_config'),
     saveS3BackupConfig: (input: S3BackupConfigInput) => invoke<S3BackupConfig>('app_set_s3_backup_config', { input }),
     testS3Backup: () => invoke<S3BackupResult>('app_test_s3_backup'),
-    uploadS3Backup: () => invoke<S3BackupResult>('app_upload_s3_backup'),
-    downloadS3Backup: () => invoke<S3BackupResult>('app_download_s3_backup'),
+    uploadS3Backup: (mode: BackupUploadMode) => invoke<S3BackupResult>('app_upload_s3_backup', { mode }),
+    downloadS3Backup: (mode: BackupDownloadMode) => invoke<S3BackupResult>('app_download_s3_backup', { mode }),
     createProfile: (input: unknown) => invoke<WorkspaceSnapshot>('app_create_profile', { input }),
     createFolder: (name: string, parentId?: string) =>
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-folder', payload: { name, parentId } }),
@@ -593,7 +601,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         args,
         options: options ?? null
       }),
-    executeRemoteCommand: (tabId: string, command: string, cwd?: string, timeoutMs?: number) =>
+    executeRemoteCommand: (
+      tabId: string,
+      command: string,
+      cwd?: string,
+      timeoutMs?: number,
+      credentials?: RemoteExecCredentials
+    ) =>
       invoke<{
         output: string
         exitCode: number | null
@@ -605,29 +619,11 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         tabId,
         command,
         cwd: cwd ?? null,
-        timeoutMs: timeoutMs ?? null
-      }),
-    executeInteractiveRemoteCommand: (
-      tabId: string,
-      expectedSessionRevision: string,
-      command: string,
-      cwd?: string,
-      timeoutMs?: number
-    ) =>
-      invoke<{
-        output: string
-        exitCode: number | null
-        timedOut: boolean
-        outputTruncated: boolean
-        inputRequired: boolean
-        inputKind?: 'secret' | 'text'
-        interactionCount?: number
-      }>('app_execute_interactive_remote_command', {
-        tabId,
-        expectedSessionRevision,
-        command,
-        cwd: cwd ?? null,
-        timeoutMs: timeoutMs ?? null
+        timeoutMs: timeoutMs ?? null,
+        sudoPassword: credentials?.sudoPassword ?? null,
+        suPassword: credentials?.suPassword ?? null,
+        saveSudoPassword: credentials?.saveSudoPassword ?? null,
+        saveSuPassword: credentials?.saveSuPassword ?? null
       }),
     openProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
@@ -673,14 +669,15 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>
       invoke<void>('app_resolve_ssh_interaction', { requestId, response }),
-    resolveRemoteExecInteraction: (requestId: string, cancelled: boolean, value?: string) =>
-      invoke<void>('app_resolve_remote_exec_interaction', {
+    resolveSudoPasswordPrompt: (requestId: string, cancelled: boolean, value?: string, save?: boolean) =>
+      invoke<void>('app_resolve_sudo_password_prompt', {
         requestId,
         cancelled,
-        value: cancelled ? null : (value ?? null)
+        value: cancelled ? null : (value ?? null),
+        save: cancelled ? false : (save ?? false)
       }),
-    setRemoteExecInteractionRendererReady: (registrationId: string, ready: boolean) =>
-      invoke<void>('app_set_remote_exec_interaction_renderer_ready', { registrationId, ready }),
+    setSudoPasswordPromptRendererReady: (registrationId: string, ready: boolean) =>
+      invoke<void>('app_set_sudo_password_renderer_ready', { registrationId, ready }),
     resolveBackupPassword: (requestId: string, cancelled: boolean, value?: string) =>
       invoke<void>('app_resolve_backup_password', {
         requestId,
@@ -693,6 +690,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
     resolveActionApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_action_approval', { requestId, approved }),
+    resolveAiTerminalHandoff: (requestId: string) => invoke<void>('app_resolve_ai_terminal_handoff', { requestId }),
     setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
       invoke<WorkspaceSnapshot>('app_set_remote_file_access_mode', { tabId, mode, options }),
     listSshTunnels: (tabId: string) => invoke<SshTunnelSnapshot[]>('app_list_ssh_tunnels', { tabId }),
@@ -718,8 +716,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
-    onRemoteExecInteraction: (listener: (request: RemoteExecInteractionRequest) => void) =>
-      subscribeReady('remote-exec:interaction-request', listener),
+    onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>
+      subscribeReady('sudo:password-request', listener),
     onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>
       subscribeReady('backup:password-request', listener),
     onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>

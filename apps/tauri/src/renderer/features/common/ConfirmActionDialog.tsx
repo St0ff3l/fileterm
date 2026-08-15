@@ -11,6 +11,7 @@ export function ConfirmActionDialog({
   description,
   errorMessage,
   extraActions = null,
+  initialFocus = 'cancel',
   isSubmitting = false,
   onClose,
   onConfirm,
@@ -24,6 +25,7 @@ export function ConfirmActionDialog({
   description: ReactNode
   errorMessage?: string | null
   extraActions?: ReactNode
+  initialFocus?: 'cancel' | 'dialog'
   isSubmitting?: boolean
   onClose(): void
   onConfirm(): void
@@ -31,6 +33,7 @@ export function ConfirmActionDialog({
 }) {
   const titleId = useId()
   const descriptionId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const confirmButtonClassName =
     confirmVariant === 'primary'
@@ -44,8 +47,9 @@ export function ConfirmActionDialog({
   )
 
   useEffect(() => {
-    cancelButtonRef.current?.focus()
-  }, [])
+    const target = initialFocus === 'dialog' ? dialogRef.current : cancelButtonRef.current
+    target?.focus()
+  }, [initialFocus])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -61,6 +65,7 @@ export function ConfirmActionDialog({
   const dialog = (
     <div className="modal-backdrop">
       <div
+        ref={dialogRef}
         className={`modal-card confirm-action-dialog${className ? ` ${className}` : ''}`}
         aria-busy={isSubmitting}
         aria-describedby={descriptionId}
@@ -68,6 +73,7 @@ export function ConfirmActionDialog({
         aria-modal="true"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
+        tabIndex={-1}
       >
         <div className="confirm-action-dialog__header">
           <div className="confirm-action-dialog__title" id={titleId}>
