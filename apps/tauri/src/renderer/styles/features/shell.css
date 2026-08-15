@@ -167,6 +167,9 @@
   grid-template-rows: auto 1fr;
   min-height: 0;
   border-right: 1px solid var(--border-light);
+  background: var(--theme-sidebar-background, var(--bg-sidebar));
+  backdrop-filter: var(--theme-sidebar-backdrop-filter, none);
+  -webkit-backdrop-filter: var(--theme-sidebar-backdrop-filter, none);
 }
 
 .fs-sidebar.is-collapsed {
@@ -220,7 +223,9 @@
   grid-template-rows: auto 1fr;
   min-height: 0;
   height: 100%;
-  background: var(--bg-sidebar);
+  background: var(--theme-sidebar-background, var(--bg-sidebar));
+  backdrop-filter: var(--theme-sidebar-backdrop-filter, none);
+  -webkit-backdrop-filter: var(--theme-sidebar-backdrop-filter, none);
 }
 
 .system-sidebar-layout.is-collapsed {

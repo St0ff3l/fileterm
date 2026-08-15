@@ -66,7 +66,9 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
   - 基础视觉 token，供半径、阴影、间距等全局样式复用。
 - `apps/tauri/src/renderer/styles/themes/default-dark.css`
 - `apps/tauri/src/renderer/styles/themes/default-light.css`
-  - 明暗主题变量与组件覆盖层。
+  - 只保存明暗主题 token。
+- `apps/tauri/src/renderer/styles/features/component-skins.css`
+  - 内置主题的组件皮肤与兼容覆盖层；保持旧 UI 的选择器作用域和级联顺序。
 - `apps/tauri/src/renderer/hooks/useThemeMode.ts`
   - 通过 `document.documentElement.dataset.theme` 切换主题。
 - `apps/tauri/src/renderer/components/TerminalView.tsx`
@@ -592,7 +594,7 @@ tokens -> theme vars -> component skins -> terminal colors
 
 约束：
 
-- 新视觉能力优先进入 `styles/themes/` 的 token 和主题层。
+- 新视觉能力先进入 `styles/themes/` 的 token 层，再进入对应 feature 的组件皮肤；`component-skins.css` 只承载内置主题的历史兼容覆盖。
 - 终端、标签页、按钮、表格、面板这类共用外观，先判断是否需要补 theme vars。
 - 不要把颜色、阴影、圆角散落在业务组件里。
 - 终端配色从 CSS 变量读取，避免和全局主题脱节。

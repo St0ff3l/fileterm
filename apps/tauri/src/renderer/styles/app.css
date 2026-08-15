@@ -1,3 +1,4 @@
 @import './themes/index.css';
+@import './features/component-skins.css';
 @import './global.css';
 @import './workstation.css';

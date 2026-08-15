@@ -17,12 +17,16 @@ import {
   type ConnectionProfile,
   type CreateProfileInput,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  createCodexThemeConfig,
+  createDefaultThemeConfig,
+  normalizeThemeConfig,
   type FileContentSnapshot,
   type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type OverviewSectionId,
   type RemoteFileItem,
   type SshConnectionDefaults,
+  type ThemeConfig,
   type UiPreferences,
   type McpAgentClientStatus
 } from '@fileterm/core'
@@ -88,6 +92,7 @@ type ErrorDetails = {
 type InitialUiPreferences = Pick<
   UiPreferences,
   | 'theme'
+  | 'themeConfig'
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
@@ -158,6 +163,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false)
   const hasRenderedWorkspaceRef = useRef(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams, initialUiPreferences))
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
+    if (initialUiPreferences?.themeConfig) {
+      return initialUiPreferences.themeConfig
+    }
+    const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
+    return createDefaultThemeConfig(initialTheme === 'default-light' ? 'light' : 'dark')
+  })
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
@@ -227,7 +239,26 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     }
   }
 
-  useThemeMode(themeMode)
+  useThemeMode(themeMode, themeConfig)
+
+  const handleSetTheme = useCallback((nextTheme: ThemeMode) => {
+    setThemeMode(nextTheme)
+    setThemeConfig((current) => {
+      const nextVariant = nextTheme === 'default-light' ? 'light' : 'dark'
+      if (current.variant === nextVariant) return current
+      if (current.codeThemeId === 'codex' || current.codeThemeId.startsWith('codex-')) {
+        return createCodexThemeConfig(nextVariant)
+      }
+      if (
+        current.codeThemeId === 'fileterm' ||
+        current.codeThemeId === 'fileterm-dark' ||
+        current.codeThemeId === 'fileterm-light'
+      ) {
+        return createDefaultThemeConfig(nextVariant)
+      }
+      return normalizeThemeConfig({ ...current, variant: nextVariant }, nextVariant)
+    })
+  }, [])
 
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow) {
@@ -305,6 +336,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     isMainWorkspaceWindow,
     isConnectionManagerWindow,
     themeMode,
+    themeConfig,
     locale,
     connectionDefaults,
     terminalZoomLocked,
@@ -315,6 +347,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     overviewSectionOrder,
     initialUiPreferencesLoaded: initialUiPreferences !== undefined,
     onThemeModeChange: setThemeMode,
+    onThemeConfigChange: setThemeConfig,
     onLocaleChange: (nextLocale) => {
       setLocale(nextLocale)
       setLocaleState(nextLocale)
@@ -1644,6 +1677,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onRefresh={handleRefreshWorkspace}
                 onUploadFiles={handleUploadFiles}
                 theme={themeMode}
+                themeConfig={themeConfig}
                 locale={locale}
                 overviewShowStats={overviewShowStats}
                 overviewShowRecent={overviewShowRecent}
@@ -1671,7 +1705,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onDeleteCommandFolder={deleteCommandFolder}
                 onUpdateCommandFolder={updateCommandFolder}
                 onUpdateCommandOrder={updateCommandOrder}
-                onSetTheme={setThemeMode}
+                onSetTheme={handleSetTheme}
+                onSetThemeConfig={setThemeConfig}
                 onSetLocale={(nextLocale) => {
                   setLocale(nextLocale)
                   setLocaleState(nextLocale)
@@ -1878,7 +1913,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           showSettings
             ? {
                 theme: themeMode,
-                onSetTheme: setThemeMode,
+                themeConfig,
+                onSetTheme: handleSetTheme,
+                onSetThemeConfig: setThemeConfig,
                 locale,
                 onSetLocale: (nextLocale) => {
                   setLocale(nextLocale)

@@ -1,18 +1,20 @@
 import { useEffect } from 'react'
+import type { ThemeConfig } from '@fileterm/core'
+import { applyThemeVariables, clearThemeVariables, type ThemeMode } from '../app/theme-config'
 
-export type ThemeMode = 'default-dark' | 'default-light'
+export type { ThemeMode } from '../app/theme-config'
 
-export function useThemeMode(themeName: ThemeMode = 'default-dark') {
+export function useThemeMode(themeName: ThemeMode = 'default-dark', themeConfig?: ThemeConfig) {
   useEffect(() => {
-    document.documentElement.dataset.theme = themeName
-    document.documentElement.style.colorScheme = themeName === 'default-light' ? 'light' : 'dark'
+    applyThemeVariables(themeName, themeConfig)
     return () => {
       if (document.documentElement.dataset.theme === themeName) {
+        clearThemeVariables()
         delete document.documentElement.dataset.theme
       }
       if (document.documentElement.style.colorScheme === (themeName === 'default-light' ? 'light' : 'dark')) {
         document.documentElement.style.removeProperty('color-scheme')
       }
     }
-  }, [themeName])
+  }, [themeConfig, themeName])
 }

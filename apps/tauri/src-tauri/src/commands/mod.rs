@@ -4,6 +4,7 @@ use crate::AppError;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
@@ -159,11 +160,424 @@ impl Default for SshConnectionDefaults {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeAnsiPalette {
+    pub black: String,
+    pub red: String,
+    pub green: String,
+    pub yellow: String,
+    pub blue: String,
+    pub magenta: String,
+    pub cyan: String,
+    pub white: String,
+    pub bright_black: String,
+    pub bright_red: String,
+    pub bright_green: String,
+    pub bright_yellow: String,
+    pub bright_blue: String,
+    pub bright_magenta: String,
+    pub bright_cyan: String,
+    pub bright_white: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSearchColors {
+    pub match_background: String,
+    pub match_ruler: String,
+    pub active_match_background: String,
+    pub active_match_text: String,
+    pub active_match_border: String,
+    pub active_match_ruler: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalThemeConfig {
+    pub background: String,
+    pub foreground: String,
+    pub cursor: String,
+    pub cursor_accent: String,
+    pub selection_background: String,
+    pub selection_foreground: String,
+    pub ansi: ThemeAnsiPalette,
+    pub search: ThemeSearchColors,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeFonts {
+    pub code: Option<String>,
+    pub ui: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSemanticColors {
+    pub diff_added: String,
+    pub diff_removed: String,
+    pub skill: String,
+    pub keyword: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeBody {
+    pub accent: String,
+    pub contrast: u8,
+    pub fonts: ThemeFonts,
+    pub ink: String,
+    pub opaque_windows: bool,
+    pub semantic_colors: ThemeSemanticColors,
+    pub surface: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub overrides: BTreeMap<String, String>,
+    pub terminal: TerminalThemeConfig,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeConfig {
+    pub schema_version: String,
+    pub code_theme_id: String,
+    pub variant: String,
+    pub theme: ThemeBody,
+}
+
+fn default_theme_ansi(variant: &str) -> ThemeAnsiPalette {
+    let is_light = variant == "light";
+    ThemeAnsiPalette {
+        black: "#000000".to_string(),
+        red: "#cd3131".to_string(),
+        green: if is_light { "#008000" } else { "#0dbc79" }.to_string(),
+        yellow: if is_light { "#795e26" } else { "#e5e510" }.to_string(),
+        blue: if is_light { "#0451a5" } else { "#2472c8" }.to_string(),
+        magenta: if is_light { "#bc05bc" } else { "#bc3fbc" }.to_string(),
+        cyan: if is_light { "#0598bc" } else { "#11a8cd" }.to_string(),
+        white: "#ffffff".to_string(),
+        bright_black: "#666666".to_string(),
+        bright_red: "#cd3131".to_string(),
+        bright_green: if is_light { "#14a800" } else { "#23d18b" }.to_string(),
+        bright_yellow: if is_light { "#795e26" } else { "#e5e510" }.to_string(),
+        bright_blue: if is_light { "#0451a5" } else { "#3b8eea" }.to_string(),
+        bright_magenta: if is_light { "#bc05bc" } else { "#d670d6" }.to_string(),
+        bright_cyan: if is_light { "#0598bc" } else { "#29b8db" }.to_string(),
+        bright_white: "#ffffff".to_string(),
+    }
+}
+
+fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
+    let is_light = variant == "light";
+    ThemeConfig {
+        schema_version: "codex-theme-v1".to_string(),
+        code_theme_id: "codex".to_string(),
+        variant: if is_light { "light" } else { "dark" }.to_string(),
+        theme: ThemeBody {
+            accent: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
+            contrast: if is_light { 45 } else { 60 },
+            fonts: ThemeFonts {
+                code: None,
+                ui: None,
+            },
+            ink: if is_light { "#1a1c1f" } else { "#fcfcfc" }.to_string(),
+            opaque_windows: false,
+            semantic_colors: ThemeSemanticColors {
+                diff_added: "#00a240".to_string(),
+                diff_removed: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
+                skill: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
+                keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+            },
+            surface: if is_light { "#ffffff" } else { "#111111" }.to_string(),
+            overrides: BTreeMap::new(),
+            terminal: TerminalThemeConfig {
+                background: if is_light { "#ffffff" } else { "#111111" }.to_string(),
+                foreground: if is_light { "#1a1c1f" } else { "#fcfcfc" }.to_string(),
+                cursor: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
+                cursor_accent: if is_light { "#ffffff" } else { "#111111" }.to_string(),
+                selection_background: if is_light { "#339cff42" } else { "#0169cc55" }.to_string(),
+                selection_foreground: if is_light { "#1a1c1f" } else { "#fcfcfc" }.to_string(),
+                ansi: default_theme_ansi(variant),
+                search: ThemeSearchColors {
+                    match_background: if is_light { "#f6cf57" } else { "#4b5563" }.to_string(),
+                    match_ruler: if is_light { "#d39b16" } else { "#9ca3af" }.to_string(),
+                    active_match_background: "#ffd43b".to_string(),
+                    active_match_text: "#111111".to_string(),
+                    active_match_border: "#8a5a00".to_string(),
+                    active_match_ruler: "#f0b400".to_string(),
+                },
+            },
+        },
+    }
+}
+
+fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
+    let is_light = variant == "light";
+    ThemeConfig {
+        schema_version: "codex-theme-v1".to_string(),
+        code_theme_id: "fileterm".to_string(),
+        variant: if is_light { "light" } else { "dark" }.to_string(),
+        theme: ThemeBody {
+            accent: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
+            contrast: if is_light { 52 } else { 60 },
+            fonts: ThemeFonts {
+                code: None,
+                ui: None,
+            },
+            ink: if is_light { "#18181b" } else { "#e7e7e7" }.to_string(),
+            opaque_windows: true,
+            semantic_colors: ThemeSemanticColors {
+                diff_added: if is_light { "#168a53" } else { "#39d98a" }.to_string(),
+                diff_removed: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
+                skill: if is_light { "#7c3aed" } else { "#b06dff" }.to_string(),
+                keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+            },
+            surface: if is_light { "#F4F4F6" } else { "#151515" }.to_string(),
+            overrides: BTreeMap::new(),
+            terminal: TerminalThemeConfig {
+                background: if is_light { "#f4f4f6" } else { "#181818" }.to_string(),
+                foreground: if is_light { "#111827" } else { "#e0e0e0" }.to_string(),
+                cursor: if is_light { "#3b82f6" } else { "#ffffff" }.to_string(),
+                cursor_accent: if is_light { "#ffffff" } else { "#181818" }.to_string(),
+                selection_background: if is_light { "#0969DA42" } else { "#388BFD85" }.to_string(),
+                selection_foreground: if is_light { "#111827" } else { "#e0e0e0" }.to_string(),
+                ansi: default_theme_ansi(variant),
+                search: ThemeSearchColors {
+                    match_background: if is_light { "#f6cf57" } else { "#4b5563" }.to_string(),
+                    match_ruler: if is_light { "#d39b16" } else { "#9ca3af" }.to_string(),
+                    active_match_background: "#ffd43b".to_string(),
+                    active_match_text: "#111111".to_string(),
+                    active_match_border: "#8a5a00".to_string(),
+                    active_match_ruler: "#f0b400".to_string(),
+                },
+            },
+        },
+    }
+}
+
+fn default_theme_config() -> ThemeConfig {
+    default_theme_config_for_variant("dark")
+}
+
+fn is_theme_hex_color(value: &str) -> bool {
+    let length = value.len();
+    (length == 4 || length == 5 || length == 7 || length == 9)
+        && value.starts_with('#')
+        && value[1..]
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+}
+
+fn normalize_theme_color(value: &mut String, fallback: &str) {
+    let trimmed = value.trim();
+    if is_theme_hex_color(trimmed) {
+        *value = trimmed.to_uppercase();
+    } else {
+        *value = fallback.to_uppercase();
+    }
+}
+
+fn is_theme_font(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.chars().all(|character| {
+            character.is_alphanumeric()
+                || character.is_whitespace()
+                || matches!(character, '_' | '.' | '\'' | '-')
+        })
+}
+
+fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig {
+    let variant = if variant == "light" { "light" } else { "dark" };
+    let trimmed_id = config.code_theme_id.trim();
+    let is_codex_theme = trimmed_id == "codex" || trimmed_id.starts_with("codex-");
+    let is_fileterm_theme = matches!(trimmed_id, "fileterm" | "fileterm-dark" | "fileterm-light");
+    let fallback = if is_codex_theme {
+        codex_theme_config_for_variant(variant)
+    } else {
+        default_theme_config_for_variant(variant)
+    };
+    config.schema_version = "codex-theme-v1".to_string();
+    config.variant = variant.to_string();
+    if trimmed_id.is_empty() || config.code_theme_id.len() > 256 {
+        config.code_theme_id = fallback.code_theme_id;
+    } else if is_fileterm_theme {
+        config.code_theme_id = "fileterm".to_string();
+    } else if matches!(trimmed_id, "codex-dark" | "codex-light") {
+        config.code_theme_id = "codex".to_string();
+    } else {
+        config.code_theme_id = trimmed_id.to_string();
+    }
+    config.theme.contrast = config.theme.contrast.min(100);
+    normalize_theme_color(&mut config.theme.accent, &fallback.theme.accent);
+    normalize_theme_color(&mut config.theme.ink, &fallback.theme.ink);
+    normalize_theme_color(&mut config.theme.surface, &fallback.theme.surface);
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.diff_added,
+        &fallback.theme.semantic_colors.diff_added,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.diff_removed,
+        &fallback.theme.semantic_colors.diff_removed,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.skill,
+        &fallback.theme.semantic_colors.skill,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.keyword,
+        &fallback.theme.semantic_colors.keyword,
+    );
+    normalize_theme_color(&mut config.theme.surface, &fallback.theme.surface);
+    config.theme.overrides.retain(|key, value| {
+        let valid_key = !key.trim().is_empty() && key.len() <= 128;
+        let valid_color = is_theme_hex_color(value.trim());
+        if valid_color {
+            *value = value.trim().to_uppercase();
+        }
+        valid_key && valid_color
+    });
+
+    for font in [&mut config.theme.fonts.code, &mut config.theme.fonts.ui] {
+        if let Some(value) = font.as_mut() {
+            let trimmed = value.trim();
+            if !is_theme_font(trimmed) {
+                *font = None;
+            } else {
+                *value = trimmed.to_string();
+            }
+        }
+    }
+
+    normalize_theme_color(
+        &mut config.theme.terminal.background,
+        &fallback.theme.terminal.background,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.foreground,
+        &fallback.theme.terminal.foreground,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.cursor,
+        &fallback.theme.terminal.cursor,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.cursor_accent,
+        &fallback.theme.terminal.cursor_accent,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.selection_background,
+        &fallback.theme.terminal.selection_background,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.selection_foreground,
+        &fallback.theme.terminal.selection_foreground,
+    );
+
+    let ansi = [
+        (
+            &mut config.theme.terminal.ansi.black,
+            &fallback.theme.terminal.ansi.black,
+        ),
+        (
+            &mut config.theme.terminal.ansi.red,
+            &fallback.theme.terminal.ansi.red,
+        ),
+        (
+            &mut config.theme.terminal.ansi.green,
+            &fallback.theme.terminal.ansi.green,
+        ),
+        (
+            &mut config.theme.terminal.ansi.yellow,
+            &fallback.theme.terminal.ansi.yellow,
+        ),
+        (
+            &mut config.theme.terminal.ansi.blue,
+            &fallback.theme.terminal.ansi.blue,
+        ),
+        (
+            &mut config.theme.terminal.ansi.magenta,
+            &fallback.theme.terminal.ansi.magenta,
+        ),
+        (
+            &mut config.theme.terminal.ansi.cyan,
+            &fallback.theme.terminal.ansi.cyan,
+        ),
+        (
+            &mut config.theme.terminal.ansi.white,
+            &fallback.theme.terminal.ansi.white,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_black,
+            &fallback.theme.terminal.ansi.bright_black,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_red,
+            &fallback.theme.terminal.ansi.bright_red,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_green,
+            &fallback.theme.terminal.ansi.bright_green,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_yellow,
+            &fallback.theme.terminal.ansi.bright_yellow,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_blue,
+            &fallback.theme.terminal.ansi.bright_blue,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_magenta,
+            &fallback.theme.terminal.ansi.bright_magenta,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_cyan,
+            &fallback.theme.terminal.ansi.bright_cyan,
+        ),
+        (
+            &mut config.theme.terminal.ansi.bright_white,
+            &fallback.theme.terminal.ansi.bright_white,
+        ),
+    ];
+    for (value, fallback_value) in ansi {
+        normalize_theme_color(value, fallback_value);
+    }
+
+    normalize_theme_color(
+        &mut config.theme.terminal.search.match_background,
+        &fallback.theme.terminal.search.match_background,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.search.match_ruler,
+        &fallback.theme.terminal.search.match_ruler,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.search.active_match_background,
+        &fallback.theme.terminal.search.active_match_background,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.search.active_match_text,
+        &fallback.theme.terminal.search.active_match_text,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.search.active_match_border,
+        &fallback.theme.terminal.search.active_match_border,
+    );
+    normalize_theme_color(
+        &mut config.theme.terminal.search.active_match_ruler,
+        &fallback.theme.terminal.search.active_match_ruler,
+    );
+    config
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub theme: String,
     pub locale: String,
+    #[serde(default = "default_theme_config")]
+    pub theme_config: ThemeConfig,
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
     #[serde(default)]
@@ -189,6 +603,7 @@ pub struct UiPreferences {
 pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
+    pub theme_config: Option<ThemeConfig>,
     pub auto_check_updates: Option<bool>,
     pub terminal_zoom_locked: Option<bool>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
@@ -331,6 +746,14 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
+    preferences.theme_config = normalize_theme_config(
+        preferences.theme_config,
+        if preferences.theme == "default-light" {
+            "light"
+        } else {
+            "dark"
+        },
+    );
     preferences
 }
 
@@ -652,6 +1075,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
         Ok(UiPreferences {
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
+            theme_config: default_theme_config(),
             auto_check_updates: default_auto_check_updates(),
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
@@ -674,11 +1098,23 @@ pub fn app_set_ui_preferences(
     let mut preferences = app_get_ui_preferences(app.clone())?;
     let previous_locale = preferences.locale.clone();
     let previous_terminal_zoom_locked = preferences.terminal_zoom_locked;
+    let theme_was_provided = input.theme.is_some();
     if let Some(theme) = input.theme {
         preferences.theme = theme;
     }
     if let Some(locale) = input.locale {
         preferences.locale = locale;
+    }
+    if let Some(theme_config) = input.theme_config {
+        let theme_variant = theme_config.variant.clone();
+        preferences.theme_config = theme_config;
+        if !theme_was_provided {
+            preferences.theme = if theme_variant == "light" {
+                "default-light".to_string()
+            } else {
+                "default-dark".to_string()
+            };
+        }
     }
     if let Some(auto_check_updates) = input.auto_check_updates {
         preferences.auto_check_updates = auto_check_updates;
@@ -778,6 +1214,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
         UiPreferencesInput {
             theme: None,
             locale: None,
+            theme_config: None,
             auto_check_updates: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
             connection_defaults: None,
@@ -4576,16 +5013,83 @@ mod ui_state_tests {
 #[cfg(test)]
 mod ui_preferences_tests {
     use super::{
-        default_overview_section_order, normalize_ui_preferences,
-        resolve_profile_with_connection_defaults, McpAgentPreferences, SshConnectionDefaults,
-        UiPreferences, UiPreferencesInput,
+        default_overview_section_order, default_theme_config, normalize_theme_config,
+        normalize_ui_preferences, resolve_profile_with_connection_defaults, McpAgentPreferences,
+        SshConnectionDefaults, UiPreferences, UiPreferencesInput,
     };
+
+    #[test]
+    fn normalizes_theme_config_colors_fonts_and_variant() {
+        let mut config = default_theme_config();
+        config.variant = "light".to_string();
+        config.theme.contrast = 255;
+        config.theme.accent = "not-a-color".to_string();
+        config.theme.terminal.ansi.red = "#abc".to_string();
+        config
+            .theme
+            .overrides
+            .insert("--bg-main".to_string(), "#abc".to_string());
+        config.theme.fonts.ui = Some("Inter".to_string());
+        config.theme.fonts.code = Some("font-family: unsafe".to_string());
+
+        let normalized = normalize_theme_config(config, "light");
+
+        assert_eq!(normalized.variant, "light");
+        assert_eq!(normalized.theme.contrast, 100);
+        assert_eq!(normalized.theme.accent, "#3B82F6");
+        assert_eq!(normalized.theme.terminal.ansi.red, "#ABC");
+        assert_eq!(
+            normalized.theme.overrides.get("--bg-main"),
+            Some(&"#ABC".to_string())
+        );
+        assert_eq!(normalized.theme.fonts.ui.as_deref(), Some("Inter"));
+        assert_eq!(normalized.theme.fonts.code, None);
+    }
+
+    #[test]
+    fn default_theme_config_keeps_the_compact_contract_and_terminal_selection_alpha() {
+        let dark = default_theme_config();
+        let light = super::default_theme_config_for_variant("light");
+        let serialized = serde_json::to_value(&dark).expect("default theme should serialize");
+
+        assert!(serialized["theme"].get("overrides").is_none());
+        assert_eq!(dark.theme.terminal.selection_background, "#388BFD85");
+        assert_eq!(light.theme.terminal.selection_background, "#0969DA42");
+    }
+
+    #[test]
+    fn legacy_component_color_table_does_not_override_the_default_css_theme() {
+        let mut legacy =
+            serde_json::to_value(default_theme_config()).expect("default theme should serialize");
+        legacy["theme"]["ui"] = serde_json::json!({
+            "surfaces": { "app": "#FF00FF" },
+            "dialog": { "surface": "#00FF00" }
+        });
+
+        let config: super::ThemeConfig =
+            serde_json::from_value(legacy).expect("legacy theme should still deserialize");
+        let normalized = normalize_theme_config(config, "dark");
+
+        assert!(normalized.theme.overrides.is_empty());
+        assert_eq!(normalized.code_theme_id, "fileterm");
+    }
+
+    #[test]
+    fn canonicalizes_legacy_fileterm_variant_id() {
+        let mut config = default_theme_config();
+        config.code_theme_id = "fileterm-dark".to_string();
+
+        let normalized = normalize_theme_config(config, "dark");
+
+        assert_eq!(normalized.code_theme_id, "fileterm");
+    }
 
     #[test]
     fn falls_back_to_safe_values_for_unknown_preferences() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
+            theme_config: default_theme_config(),
             auto_check_updates: false,
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
@@ -4616,6 +5120,7 @@ mod ui_preferences_tests {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
+            theme_config: default_theme_config(),
             auto_check_updates: false,
             terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
@@ -4656,6 +5161,7 @@ mod ui_preferences_tests {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
             auto_check_updates: true,
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
@@ -4687,6 +5193,7 @@ mod ui_preferences_tests {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
             auto_check_updates: true,
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
@@ -4770,6 +5277,7 @@ mod ui_preferences_tests {
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
         assert!(preferences.overview_show_quick_actions);
+        assert_eq!(preferences.theme_config.schema_version, "codex-theme-v1");
         assert_eq!(
             preferences.overview_section_order,
             default_overview_section_order()
@@ -4805,6 +5313,7 @@ mod ui_preferences_tests {
         let preferences = serde_json::to_value(UiPreferences {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
             auto_check_updates: false,
             terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
@@ -4826,6 +5335,11 @@ mod ui_preferences_tests {
         assert_eq!(preferences["overviewShowRecent"], false);
         assert_eq!(preferences["overviewShowAllConnections"], true);
         assert_eq!(preferences["overviewShowQuickActions"], false);
+        assert_eq!(
+            preferences["themeConfig"]["schemaVersion"],
+            "codex-theme-v1"
+        );
+        assert!(preferences["themeConfig"]["theme"]["terminal"]["ansi"]["brightBlack"].is_string());
         assert_eq!(
             preferences["overviewSectionOrder"],
             serde_json::json!(["recent", "allConnections", "stats", "quickActions"])

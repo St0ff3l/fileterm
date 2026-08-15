@@ -6,7 +6,8 @@ import type {
   ConnectionProfile,
   McpAgentClientStatus,
   OverviewSectionId,
-  AppUpdateStatus
+  AppUpdateStatus,
+  ThemeConfig
 } from '@fileterm/core'
 import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
@@ -25,6 +26,7 @@ export function HomeWorkspace({
   commandFolders = [],
   commandTemplates = [],
   theme,
+  themeConfig,
   locale,
   overviewShowStats,
   overviewShowRecent,
@@ -50,6 +52,7 @@ export function HomeWorkspace({
   onUpdateCommandFolder,
   onUpdateCommandOrder,
   onSetTheme,
+  onSetThemeConfig,
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
@@ -63,6 +66,7 @@ export function HomeWorkspace({
   commandFolders?: CommandFolder[]
   commandTemplates?: CommandTemplate[]
   theme: 'default-dark' | 'default-light'
+  themeConfig: ThemeConfig
   locale: 'zhCN' | 'enUS'
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -92,6 +96,7 @@ export function HomeWorkspace({
   onUpdateCommandFolder(folderId: string, updates: Partial<CommandFolder>): Promise<boolean> | boolean | void
   onUpdateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<boolean> | boolean | void
   onSetTheme(value: 'default-dark' | 'default-light'): void
+  onSetThemeConfig(value: ThemeConfig): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
@@ -395,7 +400,9 @@ export function HomeWorkspace({
             <div key="settings" className="page-transition" data-nav-direction={navDirection}>
               <SettingsModal
                 theme={theme}
+                themeConfig={themeConfig}
                 onSetTheme={onSetTheme}
+                onSetThemeConfig={onSetThemeConfig}
                 locale={locale}
                 onSetLocale={onSetLocale}
                 onOpenCommandManager={() => selectTab('command-manager')}

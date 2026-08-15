@@ -1067,9 +1067,341 @@ export const DEFAULT_OVERVIEW_SECTION_ORDER = [
   'quickActions'
 ] as const satisfies readonly OverviewSectionId[]
 
+export type ThemeVariant = 'dark' | 'light'
+
+export type TerminalAnsiColorName =
+  | 'black'
+  | 'red'
+  | 'green'
+  | 'yellow'
+  | 'blue'
+  | 'magenta'
+  | 'cyan'
+  | 'white'
+  | 'brightBlack'
+  | 'brightRed'
+  | 'brightGreen'
+  | 'brightYellow'
+  | 'brightBlue'
+  | 'brightMagenta'
+  | 'brightCyan'
+  | 'brightWhite'
+
+export type TerminalAnsiPalette = Record<TerminalAnsiColorName, string>
+
+export interface TerminalThemeConfig {
+  background: string
+  foreground: string
+  cursor: string
+  cursorAccent: string
+  selectionBackground: string
+  selectionForeground: string
+  ansi: TerminalAnsiPalette
+  search: {
+    matchBackground: string
+    matchRuler: string
+    activeMatchBackground: string
+    activeMatchText: string
+    activeMatchBorder: string
+    activeMatchRuler: string
+  }
+}
+
+/**
+ * Persist only the compact theme primitives and derive the larger UI alias
+ * surface in the renderer. Advanced overrides are CSS custom properties, not
+ * a persisted mirror of every component selector.
+ */
+
+export interface ThemeConfig {
+  schemaVersion: 'codex-theme-v1'
+  codeThemeId: string
+  variant: ThemeVariant
+  theme: {
+    accent: string
+    contrast: number
+    fonts: {
+      code: string | null
+      ui: string | null
+    }
+    ink: string
+    opaqueWindows: boolean
+    semanticColors: {
+      diffAdded: string
+      diffRemoved: string
+      skill: string
+      keyword: string
+    }
+    surface: string
+    /** Optional advanced color overrides; absent for normal themes. */
+    overrides?: Record<string, string>
+    terminal: TerminalThemeConfig
+  }
+}
+
+const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
+
+const DEFAULT_DARK_ANSI: TerminalAnsiPalette = {
+  black: '#000000',
+  red: '#cd3131',
+  green: '#0dbc79',
+  yellow: '#e5e510',
+  blue: '#2472c8',
+  magenta: '#bc3fbc',
+  cyan: '#11a8cd',
+  white: '#e5e5e5',
+  brightBlack: '#666666',
+  brightRed: '#cd3131',
+  brightGreen: '#23d18b',
+  brightYellow: '#e5e510',
+  brightBlue: '#3b8eea',
+  brightMagenta: '#d670d6',
+  brightCyan: '#29b8db',
+  brightWhite: '#e5e5e5'
+}
+
+const DEFAULT_LIGHT_ANSI: TerminalAnsiPalette = {
+  black: '#000000',
+  red: '#cd3131',
+  green: '#008000',
+  yellow: '#795e26',
+  blue: '#0451a5',
+  magenta: '#bc05bc',
+  cyan: '#0598bc',
+  white: '#ffffff',
+  brightBlack: '#666666',
+  brightRed: '#cd3131',
+  brightGreen: '#14a800',
+  brightYellow: '#795e26',
+  brightBlue: '#0451a5',
+  brightMagenta: '#bc05bc',
+  brightCyan: '#0598bc',
+  brightWhite: '#ffffff'
+}
+
+function defaultTerminalThemeConfig(variant: ThemeVariant): TerminalThemeConfig {
+  const isLight = variant === 'light'
+  return {
+    background: isLight ? '#f4f4f6' : '#181818',
+    foreground: isLight ? '#111827' : '#e0e0e0',
+    cursor: isLight ? '#3b82f6' : '#ffffff',
+    cursorAccent: isLight ? '#ffffff' : '#181818',
+    selectionBackground: isLight ? '#0969DA42' : '#388BFD85',
+    selectionForeground: isLight ? '#111827' : '#e0e0e0',
+    ansi: { ...(isLight ? DEFAULT_LIGHT_ANSI : DEFAULT_DARK_ANSI) },
+    search: {
+      matchBackground: isLight ? '#f6cf57' : '#4b5563',
+      matchRuler: isLight ? '#d39b16' : '#9ca3af',
+      activeMatchBackground: '#ffd43b',
+      activeMatchText: '#111111',
+      activeMatchBorder: '#8a5a00',
+      activeMatchRuler: '#f0b400'
+    }
+  }
+}
+
+export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeConfig {
+  const isLight = variant === 'light'
+  return {
+    schemaVersion: 'codex-theme-v1',
+    codeThemeId: 'codex',
+    variant,
+    theme: {
+      accent: isLight ? '#339cff' : '#0169cc',
+      contrast: isLight ? 45 : 60,
+      fonts: { code: null, ui: null },
+      ink: isLight ? '#1a1c1f' : '#fcfcfc',
+      opaqueWindows: false,
+      semanticColors: {
+        diffAdded: '#00a240',
+        diffRemoved: isLight ? '#ba2623' : '#e02e2a',
+        skill: isLight ? '#924ff7' : '#b06dff',
+        keyword: isLight ? '#b45309' : '#ffcc00'
+      },
+      surface: isLight ? '#ffffff' : '#111111',
+      terminal: {
+        background: isLight ? '#ffffff' : '#111111',
+        foreground: isLight ? '#1a1c1f' : '#fcfcfc',
+        cursor: isLight ? '#339cff' : '#0169cc',
+        cursorAccent: isLight ? '#ffffff' : '#111111',
+        selectionBackground: isLight ? '#339cff42' : '#0169cc55',
+        selectionForeground: isLight ? '#1a1c1f' : '#fcfcfc',
+        ansi: { ...(isLight ? DEFAULT_LIGHT_ANSI : DEFAULT_DARK_ANSI) },
+        search: {
+          matchBackground: isLight ? '#f6cf57' : '#4b5563',
+          matchRuler: isLight ? '#d39b16' : '#9ca3af',
+          activeMatchBackground: '#ffd43b',
+          activeMatchText: '#111111',
+          activeMatchBorder: '#8a5a00',
+          activeMatchRuler: '#f0b400'
+        }
+      }
+    }
+  }
+}
+
+export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeConfig {
+  const isLight = variant === 'light'
+  return {
+    schemaVersion: 'codex-theme-v1',
+    codeThemeId: 'fileterm',
+    variant,
+    theme: {
+      accent: isLight ? '#3b82f6' : '#8bbfff',
+      contrast: isLight ? 52 : 60,
+      fonts: { code: null, ui: null },
+      ink: isLight ? '#18181b' : '#e7e7e7',
+      opaqueWindows: true,
+      semanticColors: {
+        diffAdded: isLight ? '#168a53' : '#39d98a',
+        diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
+        skill: isLight ? '#7c3aed' : '#b06dff',
+        keyword: isLight ? '#b45309' : '#ffcc00'
+      },
+      surface: isLight ? '#F4F4F6' : '#151515',
+      terminal: defaultTerminalThemeConfig(variant)
+    }
+  }
+}
+
+function asThemeRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function normalizeThemeColor(value: unknown, fallback: string) {
+  return typeof value === 'string' && THEME_HEX_COLOR_PATTERN.test(value.trim()) ? value.trim().toUpperCase() : fallback
+}
+
+function normalizeThemeString(value: unknown, fallback: string | null) {
+  if (value === null) return null
+  return typeof value === 'string' && value.trim().length <= 256 ? value.trim() : fallback
+}
+
+function normalizeThemeFont(value: unknown, fallback: string | null) {
+  if (value === null) return null
+  if (typeof value !== 'string') return fallback
+  const trimmed = value.trim()
+  return /^[\w\u0080-\uffff][\w\u0080-\uffff .'-]{0,127}$/u.test(trimmed) ? trimmed : fallback
+}
+
+function collectThemeColorOverrides(value: unknown, prefix = '', result: Record<string, string> = {}) {
+  if (typeof value === 'string') {
+    if (prefix && THEME_HEX_COLOR_PATTERN.test(value.trim())) {
+      result[prefix] = value.trim().toUpperCase()
+    }
+    return result
+  }
+
+  const record = asThemeRecord(value)
+  for (const [key, child] of Object.entries(record)) {
+    const nextPrefix = prefix ? `${prefix}.${key}` : key
+    if (nextPrefix.length <= 128) {
+      collectThemeColorOverrides(child, nextPrefix, result)
+    }
+  }
+  return result
+}
+
+function normalizeThemeNumber(value: unknown, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(100, Math.max(0, Math.round(value)))
+}
+
+export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVariant = 'dark'): ThemeConfig {
+  const root = asThemeRecord(value)
+  const rawCodeThemeId = typeof root.codeThemeId === 'string' ? root.codeThemeId.trim() : ''
+  const isCodexTheme = rawCodeThemeId === 'codex' || rawCodeThemeId.startsWith('codex-')
+  const isFileTermTheme =
+    rawCodeThemeId === 'fileterm' || rawCodeThemeId === 'fileterm-dark' || rawCodeThemeId === 'fileterm-light'
+  const variant = root.variant === 'light' || root.variant === 'dark' ? root.variant : fallbackVariant
+  const fallback = isCodexTheme ? createCodexThemeConfig(fallbackVariant) : createDefaultThemeConfig(fallbackVariant)
+  const variantFallback = isCodexTheme
+    ? createCodexThemeConfig(variant)
+    : variant === fallbackVariant
+      ? fallback
+      : createDefaultThemeConfig(variant)
+  const rawTheme = asThemeRecord(root.theme)
+  const rawFonts = asThemeRecord(rawTheme.fonts)
+  const rawSemanticColors = asThemeRecord(rawTheme.semanticColors)
+  const rawTerminal = asThemeRecord(rawTheme.terminal)
+  const rawAnsi = asThemeRecord(rawTerminal.ansi)
+  const rawSearch = asThemeRecord(rawTerminal.search)
+  const terminalFallback = variantFallback.theme.terminal
+  const normalizedSurface = normalizeThemeColor(rawTheme.surface, variantFallback.theme.surface)
+  const rawOverrides = Object.keys(asThemeRecord(rawTheme.overrides)).length
+    ? rawTheme.overrides
+    : isFileTermTheme
+      ? undefined
+      : rawTheme.ui
+  const overrides = collectThemeColorOverrides(rawOverrides)
+
+  const ansi = Object.fromEntries(
+    (Object.keys(terminalFallback.ansi) as TerminalAnsiColorName[]).map((name) => [
+      name,
+      normalizeThemeColor(rawAnsi[name], terminalFallback.ansi[name])
+    ])
+  ) as TerminalAnsiPalette
+
+  return {
+    schemaVersion: 'codex-theme-v1',
+    codeThemeId: isFileTermTheme
+      ? 'fileterm'
+      : rawCodeThemeId === 'codex-dark' || rawCodeThemeId === 'codex-light'
+        ? 'codex'
+        : (normalizeThemeString(root.codeThemeId, variantFallback.codeThemeId) ?? variantFallback.codeThemeId),
+    variant,
+    theme: {
+      accent: normalizeThemeColor(rawTheme.accent, variantFallback.theme.accent),
+      contrast: normalizeThemeNumber(rawTheme.contrast, variantFallback.theme.contrast),
+      fonts: {
+        code: normalizeThemeFont(rawFonts.code, variantFallback.theme.fonts.code),
+        ui: normalizeThemeFont(rawFonts.ui, variantFallback.theme.fonts.ui)
+      },
+      ink: normalizeThemeColor(rawTheme.ink, variantFallback.theme.ink),
+      opaqueWindows:
+        typeof rawTheme.opaqueWindows === 'boolean' ? rawTheme.opaqueWindows : variantFallback.theme.opaqueWindows,
+      semanticColors: {
+        diffAdded: normalizeThemeColor(rawSemanticColors.diffAdded, variantFallback.theme.semanticColors.diffAdded),
+        diffRemoved: normalizeThemeColor(
+          rawSemanticColors.diffRemoved,
+          variantFallback.theme.semanticColors.diffRemoved
+        ),
+        skill: normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill),
+        keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword)
+      },
+      surface: normalizedSurface,
+      ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
+      terminal: {
+        background: normalizeThemeColor(rawTerminal.background, terminalFallback.background),
+        foreground: normalizeThemeColor(rawTerminal.foreground, terminalFallback.foreground),
+        cursor: normalizeThemeColor(rawTerminal.cursor, terminalFallback.cursor),
+        cursorAccent: normalizeThemeColor(rawTerminal.cursorAccent, terminalFallback.cursorAccent),
+        selectionBackground: normalizeThemeColor(rawTerminal.selectionBackground, terminalFallback.selectionBackground),
+        selectionForeground: normalizeThemeColor(rawTerminal.selectionForeground, terminalFallback.selectionForeground),
+        ansi,
+        search: {
+          matchBackground: normalizeThemeColor(rawSearch.matchBackground, terminalFallback.search.matchBackground),
+          matchRuler: normalizeThemeColor(rawSearch.matchRuler, terminalFallback.search.matchRuler),
+          activeMatchBackground: normalizeThemeColor(
+            rawSearch.activeMatchBackground,
+            terminalFallback.search.activeMatchBackground
+          ),
+          activeMatchText: normalizeThemeColor(rawSearch.activeMatchText, terminalFallback.search.activeMatchText),
+          activeMatchBorder: normalizeThemeColor(
+            rawSearch.activeMatchBorder,
+            terminalFallback.search.activeMatchBorder
+          ),
+          activeMatchRuler: normalizeThemeColor(rawSearch.activeMatchRuler, terminalFallback.search.activeMatchRuler)
+        }
+      }
+    }
+  }
+}
+
 export interface UiPreferences {
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
+  themeConfig: ThemeConfig
   autoCheckUpdates: boolean
   terminalZoomLocked: boolean
   connectionDefaults: SshConnectionDefaults
@@ -1084,6 +1416,7 @@ export interface UiPreferences {
 export interface UiPreferencesInput {
   theme?: UiPreferences['theme']
   locale?: UiPreferences['locale']
+  themeConfig?: ThemeConfig
   autoCheckUpdates?: boolean
   terminalZoomLocked?: boolean
   connectionDefaults?: Partial<SshConnectionDefaults>

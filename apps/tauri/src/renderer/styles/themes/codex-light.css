@@ -1,0 +1,176 @@
+:root[data-theme='codex-light'] {
+  color-scheme: light;
+
+  --bg-main: #ffffff;
+  --bg-sidebar: #f6f6f7;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --titlebar-background: #ffffff;
+  --bg-hover: #f1f1f3;
+  --bg-active: #e6f3ff;
+  --manager-head-bg: #f6f6f7;
+  --input-bg: #ffffff;
+  --command-history-head-bg: #ffffff;
+  --surface-panel: var(--bg-card);
+  --border-subtle: var(--border-light);
+
+  --border-light: rgba(26, 28, 31, 0.12);
+  --border-dark: rgba(26, 28, 31, 0.22);
+  --border: var(--border-light);
+
+  --text-main: #1a1c1f;
+  --text-muted: #64676c;
+  --text-soft: #8e9197;
+  --text-primary: var(--text-main);
+  --text-secondary: var(--text-muted);
+
+  --primary: #339cff;
+  --primary-hover: #1f8cf0;
+  --focus-outline: #339cff;
+  --accent-highlight: #339cff;
+  --accent-text: #1a1c1f;
+  --sidebar-active-accent: #1a1c1f;
+  --selection-bg: #e6f3ff;
+  --copy-link: #339cff;
+  --copy-link-hover: #1f8cf0;
+  --folder-accent: #b45309;
+  --kernel-accent: #339cff;
+  --mini-tab-active-bg: rgba(51, 156, 255, 0.1);
+  --mini-tab-active-text: #0284c7;
+  --memory-warn: #b45309;
+  --network-tx: rgba(220, 38, 38, 0.32);
+  --network-rx: #339cff;
+  --danger: #dc2626;
+  --success: #00a240;
+  --warning: #b45309;
+
+  /* 状态语义色: 面/边/文本 */
+  --danger-text: #dc2626;
+  --danger-surface: rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.2);
+  --info: var(--accent-highlight);
+  --info-text: #0284c7;
+  --info-surface: rgba(51, 156, 255, 0.08);
+  --info-border: rgba(51, 156, 255, 0.2);
+  --input-focus-ring: rgba(51, 156, 255, 0.18);
+
+  /* accent 色阶与 success */
+  --accent-tint-weak: rgba(51, 156, 255, 0.08);
+  --accent-tint: rgba(51, 156, 255, 0.14);
+  --accent-focus-ring: rgba(51, 156, 255, 0.24);
+  --success-text: #00a240;
+  --success-surface: rgba(0, 162, 64, 0.08);
+  --success-border: rgba(0, 162, 64, 0.2);
+
+  /* 中性叠层 */
+  --surface-hover: rgba(0, 0, 0, 0.05);
+  --surface-chip: rgba(0, 0, 0, 0.08);
+  --surface-inset: rgba(0, 0, 0, 0.03);
+  --surface-inset-border: var(--border-light);
+  --surface-table-head: rgba(0, 0, 0, 0.04);
+  --surface-nested: rgba(0, 0, 0, 0.03);
+  --floating-drawer-expanded-bg: rgba(255, 255, 255, 0.94);
+  --floating-drawer-expanded-border: var(--border-light);
+  --floating-drawer-shadow: 0 10px 26px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --floating-drawer-trigger-hover-bg: rgba(0, 0, 0, 0.06);
+  --modal-backdrop-bg: rgba(0, 0, 0, 0.32);
+  --modal-card-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+  --control-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --control-focus-shadow: 0 0 0 2px var(--accent-tint), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --control-inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  --terminal-dock-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --terminal-dock-header-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  --system-sidebar-toggle-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --system-sidebar-toggle-hover-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  --overview-hero-highlight: rgba(255, 255, 255, 0.02);
+  --brand-title-shadow: none;
+  --traffic-close: #ff5f57;
+  --traffic-minimize: #ffbd2e;
+  --traffic-maximize: #27c93f;
+  --window-control-surface: #f1f1f3;
+  --window-control-hover-surface: #e5e5e8;
+  --window-control-foreground: #64676c;
+  --window-control-hover-foreground: #1a1c1f;
+  --window-control-danger-bg: #c42b1c;
+  --window-control-danger-text: #ffffff;
+  --file-editor-button-bg: rgba(26, 28, 31, 0.04);
+  --file-editor-primary-shadow: 0 2px 10px rgba(51, 156, 255, 0.26);
+  --button-primary-bg: #339cff;
+  --button-primary-hover: #1f8cf0;
+  --button-primary-border: var(--border-light);
+  --button-primary-text: #ffffff;
+  --terminal-selection-bg: rgba(51, 156, 255, 0.26);
+  --monaco-editor-bg: #ffffff;
+  --monaco-editor-foreground: #1a1c1f;
+  --monaco-line-number: #8e9197;
+  --monaco-line-number-active: #64676c;
+  --monaco-cursor: #339cff;
+  --monaco-selection: #e6f3ff;
+  --monaco-inactive-selection: rgba(51, 156, 255, 0.12);
+  --monaco-line-highlight: rgba(0, 0, 0, 0.04);
+  --monaco-indent-guide: var(--border-light);
+  --monaco-indent-guide-active: var(--border-dark);
+
+  /* 连接类型语义色: 文本/面 */
+  --type-total: #339cff;
+  --type-total-surface: rgba(51, 156, 255, 0.1);
+  --type-ssh: #00a240;
+  --type-ssh-surface: rgba(0, 162, 64, 0.1);
+  --type-sftp: #0284c7;
+  --type-sftp-surface: rgba(2, 132, 199, 0.1);
+  --type-ftp: #924ff7;
+  --type-ftp-surface: rgba(146, 79, 247, 0.1);
+  --type-folder: #b45309;
+  --type-folder-surface: rgba(180, 83, 9, 0.1);
+  --type-muted: #8e9197;
+
+  --meter-track: rgba(26, 28, 31, 0.12);
+  --muted-foreground: var(--text-muted);
+
+  --terminal-bg: #ffffff;
+  --terminal-text: #1a1c1f;
+  --terminal-cursor: #339cff;
+  --terminal-cursor-accent: #ffffff;
+  --terminal-cmd-bg: rgba(26, 28, 31, 0.08);
+  --terminal-search-match-bg: #f6cf57;
+  --terminal-search-match-ruler: #d39b16;
+  --terminal-search-active-bg: #ffd43b;
+  --terminal-search-active-text: #111111;
+  --terminal-search-active-border: #8a5a00;
+  --terminal-search-active-ruler: #f0b400;
+  --terminal-cmd-text: #1a1c1f;
+  --metric-app: #b45309;
+  --metric-cache: #00a240;
+  --metric-kernel: #339cff;
+  --metric-status-green: #00a240;
+  --metric-status-yellow: #b45309;
+  --metric-status-red: #dc2626;
+  --popover-bg: #ffffff;
+  --popover-border: var(--border-light);
+  --popover-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --confirm-dialog-text: #64676c;
+  --dialog-surface: #ffffff;
+  --dialog-border: var(--border-light);
+  --dialog-shadow: 0 22px 70px rgba(15, 23, 42, 0.16), 0 1px 0 rgba(255, 255, 255, 0.82) inset;
+  --dialog-title: #1a1c1f;
+  --dialog-description: #64676c;
+  --dialog-footer-border: var(--border-light);
+  --dialog-button-secondary-bg: transparent;
+  --dialog-button-secondary-border: var(--border-light);
+  --dialog-button-secondary-text: #1a1c1f;
+  --dialog-button-secondary-hover-bg: var(--bg-hover);
+  --dialog-button-secondary-hover-border: var(--border-dark);
+  --dialog-button-primary-bg: var(--bg-hover);
+  --dialog-button-primary-border: var(--border-dark);
+  --dialog-button-primary-text: #1a1c1f;
+  --dialog-button-primary-hover-bg: var(--bg-active);
+  --dialog-button-primary-hover-border: var(--border-dark);
+  --dialog-button-danger-bg: #dc2626;
+  --dialog-button-danger-border: transparent;
+  --dialog-button-danger-text: #ffffff;
+  --dialog-button-danger-hover-bg: #e53935;
+  --dialog-button-danger-hover-border: transparent;
+  --dialog-button-danger-hover-text: #ffffff;
+  --dialog-focus-ring: 0 0 0 2px rgba(255, 255, 255, 0.88), 0 0 0 4px rgba(51, 156, 255, 0.24);
+  --dialog-warning-text: var(--danger);
+}
