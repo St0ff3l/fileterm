@@ -16,6 +16,7 @@ export type AppIconName =
   | 'presentation'
   | 'config-file'
   | 'database'
+  | 'cloud'
   | 'font-file'
   | 'package'
   | 'terminal-file'
@@ -194,6 +195,9 @@ export function AppIcon({
             d="M3.5 4.2v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4.2M3.5 8v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8"
           />
         </>
+      ) : null}
+      {name === 'cloud' ? (
+        <path {...commonProps} d="M4.5 12.5h7a3 3 0 0 0 .7-5.9 4 4 0 0 0-7.4-1.2 3 3 0 0 0-.3 7.1Z" />
       ) : null}
       {name === 'font-file' ? (
         <>

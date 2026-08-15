@@ -3,32 +3,61 @@ import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { t } from '../../i18n'
 
+const SAVED_PASSWORD_MASK = '••••••••••••'
+
 export function RootAccessModal({
   defaultSshUser,
+  defaultRootAccessMethod,
   defaultSudoUser,
   errorMessage,
+  hasSavedSudoPassword = false,
+  hasSavedSuPassword = false,
   isSubmitting = false,
   onClose,
   onSubmit
 }: {
   defaultSshUser?: string
+  defaultRootAccessMethod?: 'sudo' | 'su'
   defaultSudoUser?: string
   errorMessage?: string | null
+  hasSavedSudoPassword?: boolean
+  hasSavedSuPassword?: boolean
   isSubmitting?: boolean
   onClose(): void
   onSubmit(input: { rootAccessMethod: 'sudo' | 'su'; sudoUser: string; sudoPassword: string }): void
 }) {
-  const [rootAccessMethod, setRootAccessMethod] = useState<'sudo' | 'su'>('sudo')
+  const [rootAccessMethod, setRootAccessMethod] = useState<'sudo' | 'su'>(defaultRootAccessMethod || 'sudo')
   const [sudoUser, setSudoUser] = useState(defaultSudoUser || 'root')
   const [sudoPassword, setSudoPassword] = useState('')
+  const [usesSavedPassword, setUsesSavedPassword] = useState(false)
+
+  const hasSavedPassword = rootAccessMethod === 'sudo' ? hasSavedSudoPassword : hasSavedSuPassword
 
   useEffect(() => {
-    setRootAccessMethod('sudo')
+    setRootAccessMethod(defaultRootAccessMethod || 'sudo')
     setSudoUser(defaultSudoUser || 'root')
     setSudoPassword('')
-  }, [defaultSudoUser])
+  }, [defaultRootAccessMethod, defaultSudoUser])
 
-  const submit = () => onSubmit({ rootAccessMethod, sudoUser, sudoPassword })
+  useEffect(() => {
+    setUsesSavedPassword(hasSavedPassword)
+    setSudoPassword(hasSavedPassword ? SAVED_PASSWORD_MASK : '')
+  }, [hasSavedPassword])
+
+  const submit = () =>
+    onSubmit({
+      rootAccessMethod,
+      sudoUser,
+      // The mask is never a credential. An untouched masked field means the
+      // backend should select the saved password for the chosen method.
+      sudoPassword: usesSavedPassword ? '' : sudoPassword
+    })
+
+  const startPasswordReplacement = () => {
+    if (!usesSavedPassword) return
+    setUsesSavedPassword(false)
+    setSudoPassword('')
+  }
 
   return (
     <div className="modal-backdrop">
@@ -87,9 +116,11 @@ export function RootAccessModal({
             <label className="file-action-field">
               <span>{t.fileRootAccessPassword}</span>
               <input
-                autoFocus
+                autoFocus={!hasSavedPassword}
+                readOnly={usesSavedPassword}
                 type="password"
                 value={sudoPassword}
+                onFocus={startPasswordReplacement}
                 onChange={(event) => setSudoPassword(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && !isSubmitting) {

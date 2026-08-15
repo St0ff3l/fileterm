@@ -223,8 +223,6 @@ export interface SshProfile extends NetworkProfile {
   jumpProfileId?: string
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
-  /** Reuse the saved SSH login password for sudo when explicitly enabled. */
-  sudoSameAsLogin?: boolean
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
 }
@@ -752,11 +750,15 @@ export interface WebDavSyncConfig {
   lastEtag?: string
 }
 
+export type BackupUploadMode = 'overwrite-cloud' | 'merge-cloud'
+export type BackupDownloadMode = 'overwrite-local' | 'merge-local'
+
 export interface WebDavSyncResult {
   action: 'test' | 'upload' | 'download'
   message: string
   imported?: number
   updated?: number
+  replaced?: number
   skipped?: number
   legacyPlaintext?: boolean
 }
@@ -789,6 +791,7 @@ export interface S3BackupResult {
   message: string
   imported?: number
   updated?: number
+  replaced?: number
   skipped?: number
   legacyPlaintext?: boolean
 }
@@ -834,7 +837,7 @@ export interface CreateProfileInput {
   group: string
   remotePath: string
   note?: string
-  password?: string
+  password?: string | null
   /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
   useEmptyPassword?: boolean
   privateKeyId?: string
@@ -858,11 +861,9 @@ export interface CreateProfileInput {
   forwards?: SshForwardRule[]
   disableShellIntegration?: boolean
   /** Transient only; persisted by Rust in profile-secrets.json. */
-  sudoPassword?: string
+  sudoPassword?: string | null
   /** Transient only; persisted by Rust in profile-secrets.json. */
-  suPassword?: string
-  /** Reuse the saved SSH login password for sudo when explicitly enabled. */
-  sudoSameAsLogin?: boolean
+  suPassword?: string | null
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
   devicePath?: string
@@ -1117,6 +1118,8 @@ export interface RemoteFileAccessOptions {
   rootAccessMethod?: 'sudo' | 'su'
   sudoUser?: string
   sudoPassword?: string
+  /** Ask the backend to select the matching saved sudo/su credential. */
+  useSavedPassword?: boolean
 }
 
 export type AiProviderKind = 'openai-compatible-chat' | 'openai-responses' | 'anthropic-messages'
@@ -1512,13 +1515,13 @@ export interface FileTermDesktopApi {
   getWebDavSyncConfig(): Promise<WebDavSyncConfig>
   saveWebDavSyncConfig(input: WebDavSyncConfig & { password?: string }): Promise<WebDavSyncConfig>
   testWebDavSync(): Promise<WebDavSyncResult>
-  uploadWebDavSync(): Promise<WebDavSyncResult>
-  downloadWebDavSync(): Promise<WebDavSyncResult>
+  uploadWebDavSync(mode: BackupUploadMode): Promise<WebDavSyncResult>
+  downloadWebDavSync(mode: BackupDownloadMode): Promise<WebDavSyncResult>
   getS3BackupConfig(): Promise<S3BackupConfig>
   saveS3BackupConfig(input: S3BackupConfigInput): Promise<S3BackupConfig>
   testS3Backup(): Promise<S3BackupResult>
-  uploadS3Backup(): Promise<S3BackupResult>
-  downloadS3Backup(): Promise<S3BackupResult>
+  uploadS3Backup(mode: BackupUploadMode): Promise<S3BackupResult>
+  downloadS3Backup(mode: BackupDownloadMode): Promise<S3BackupResult>
   createFolder(name: string, parentId?: string): Promise<WorkspaceSnapshot>
   updateFolder(folderId: string, updates: Partial<ConnectionFolder>): Promise<WorkspaceSnapshot>
   deleteFolder(folderId: string): Promise<WorkspaceSnapshot>

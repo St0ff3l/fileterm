@@ -1838,9 +1838,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         rootAccess={
           rootAccessDialog
             ? {
+                defaultRootAccessMethod: rootAccessDialog.rootAccessMethod,
                 defaultSshUser: rootAccessDialog.sshUser,
                 defaultSudoUser: rootAccessDialog.sudoUser,
                 errorMessage: rootAccessDialogError,
+                hasSavedSudoPassword: rootAccessDialog.hasSavedSudoPassword,
+                hasSavedSuPassword: rootAccessDialog.hasSavedSuPassword,
                 isSubmitting: isRootAccessSubmitting,
                 onClose: dismissRootAccessDialog,
                 onSubmit: handleConfirmRootAccess
@@ -1902,6 +1905,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                     ? t.closeShortcutActiveDescription
                     : t.closeShortcutLastActiveDescription
                 ).replace('{name}', shortcutCloseConfirm.title),
+                initialFocus: 'dialog' as const,
                 isSubmitting: isBusy,
                 onClose: dismissShortcutCloseConfirm,
                 onConfirm: () => {

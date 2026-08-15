@@ -52,7 +52,10 @@ export type PermissionDialogState = {
 export type RootAccessDialogState = {
   tabId: string
   sshUser?: string
+  rootAccessMethod?: 'sudo' | 'su'
   sudoUser: string
+  hasSavedSudoPassword?: boolean
+  hasSavedSuPassword?: boolean
 }
 
 export type LocalNetworkCredentialsDialogState = {
@@ -1311,42 +1314,21 @@ export function useFileOperations({
 
     const nextMode = activeSession.fileAccessMode === 'root' ? 'user' : 'root'
     if (nextMode === 'root') {
-      if (!activeSession.hasReusableSudoAuth) {
-        rootAccessSubmittingRef.current = false
-        setRootAccessDialogError(null)
-        // 打开弹窗前重置 submitting，避免上一次提交卡死后残留的 loading
-        // 状态污染新弹窗（用户报告"关闭重开连接还是卡 loading"正是此因）。
-        setIsRootAccessSubmitting(false)
-        setRootAccessDialog({
-          tabId: activeTab.id,
-          sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
-          sudoUser: 'root'
-        })
-        return
-      }
-
-      void (async () => {
-        try {
-          onBusyChange(true)
-          setRootAccessDialogError(null)
-          const snapshot = await desktopApi.setRemoteFileAccessMode(activeTab.id, nextMode)
-          onApplySnapshot(snapshot)
-          await refreshCurrentPane('remote')
-        } catch (error) {
-          if (shouldPromptForRootAccess(error)) {
-            setRootAccessDialog({
-              tabId: activeTab.id,
-              sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
-              sudoUser: 'root'
-            })
-            reportOperationError(setRootAccessDialogError, '切换到 root 视角', error)
-            return
-          }
-          reportStatusError('切换到 root 视角', error)
-        } finally {
-          onBusyChange(false)
-        }
-      })()
+      rootAccessSubmittingRef.current = false
+      setRootAccessDialogError(null)
+      // 打开弹窗前重置 submitting，避免上一次提交卡死后残留的 loading
+      // 状态污染新弹窗（用户报告"关闭重开连接还是卡 loading"正是此因）。
+      setIsRootAccessSubmitting(false)
+      setRootAccessDialog({
+        tabId: activeTab.id,
+        sshUser: activeProfile?.type === 'ssh' ? activeProfile.username : undefined,
+        rootAccessMethod: 'sudo',
+        sudoUser: 'root',
+        hasSavedSudoPassword:
+          activeSession.hasReusableSudoAuth ||
+          (activeProfile?.type === 'ssh' && activeProfile.hasSavedSudoPassword === true),
+        hasSavedSuPassword: activeProfile?.type === 'ssh' && activeProfile.hasSavedSuPassword === true
+      })
       return
     }
 
@@ -1403,7 +1385,8 @@ export function useFileOperations({
         const snapshot = await desktopApi.setRemoteFileAccessMode(rootAccessDialog.tabId, 'root', {
           rootAccessMethod,
           sudoUser,
-          sudoPassword
+          sudoPassword,
+          useSavedPassword: sudoPassword.length === 0
         })
         onApplySnapshot(snapshot)
         await refreshCurrentPane('remote')

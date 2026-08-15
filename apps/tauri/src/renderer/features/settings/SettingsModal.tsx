@@ -7,6 +7,8 @@ import {
   type AiProviderDraft,
   type AiProviderKind,
   type AiProviderSummary,
+  type BackupDownloadMode,
+  type BackupUploadMode,
   type ConnectionProfile,
   type McpAgentClientStatus,
   type McpAgentPreferences,
@@ -30,10 +32,6 @@ type SettingsTab = 'ai' | 'agent' | 'connections' | 'interface' | 'sync' | 'tool
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
-}
-
-function buildDirectCliCommand(filetermCommand: string, subcommand: string) {
-  return [`${filetermCommand} ${subcommand} \\`, '  --tab-id TAB_ID \\', '  --command "docker ps"'].join('\n')
 }
 
 const DEFAULT_MODELS_BY_KIND: Record<AiProviderKind, string[]> = {
@@ -323,6 +321,8 @@ export function SettingsModal({
   const [s3Config, setS3Config] = useState<S3BackupConfig | null>(null)
   const [s3SecretAccessKey, setS3SecretAccessKey] = useState('')
   const [s3Message, setS3Message] = useState<string | null>(null)
+  const [backupUploadMode, setBackupUploadMode] = useState<BackupUploadMode>('overwrite-cloud')
+  const [backupDownloadMode, setBackupDownloadMode] = useState<BackupDownloadMode>('merge-local')
   const [aiProviders, setAiProviders] = useState<AiProviderSummary[]>([])
   const [aiDraft, setAiDraft] = useState<AiProviderDraft>(() => createAiProviderDraft())
   // Candidate model IDs carried by the currently applied preset. Cleared when
@@ -1268,7 +1268,10 @@ export function SettingsModal({
                       />
                     </label>
                     <label className="ai-settings-model-field">
-                      <span>{t.aiSettingsModel}</span>
+                      <div className="ai-settings-model-header">
+                        <span>{t.aiSettingsModel}</span>
+                        <small className="ai-settings-model-picker-hint">{t.aiSettingsModelAddHint}</small>
+                      </div>
                       <div className="ai-settings-model-container">
                         <div className="ai-settings-model-left">
                           {isCustomInput ? (
@@ -1346,7 +1349,7 @@ export function SettingsModal({
                           )}
                         </div>
                         <div className="ai-settings-model-right">
-                          <span className="ai-settings-model-right-title">已加入 Provider 的模型:</span>
+                          <span className="ai-settings-model-right-title">{t.aiSettingsConfiguredModelsTitle}</span>
                           {configuredModels.length > 0 ? (
                             <>
                               <div className="ai-settings-model-tags">
@@ -1378,9 +1381,7 @@ export function SettingsModal({
                               <small className="ai-settings-model-default-hint">{t.aiSettingsModelDefaultHint}</small>
                             </>
                           ) : (
-                            <div className="ai-settings-model-empty-hint">
-                              暂无已加入的模型，请在上方下拉框选择后点击 [+] 按钮添加
-                            </div>
+                            <div className="ai-settings-model-empty-hint">{t.aiSettingsModelEmptyHint}</div>
                           )}
                         </div>
                       </div>
@@ -1757,33 +1758,27 @@ export function SettingsModal({
                           <p>{t.agentMcpDirectCliDescription}</p>
                         </div>
                         <div className="agent-mcp-direct-cli-commands">
-                          {[
-                            {
-                              label: t.agentMcpDirectCliExec,
-                              command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'exec')
-                            },
-                            {
-                              label: t.agentMcpDirectCliAlias,
-                              command: buildDirectCliCommand(mcpAgentSetup.filetermCommand, 'cli exec')
-                            }
-                          ].map((item) => (
-                            <div key={item.label} className="agent-mcp-direct-cli-command">
-                              <small>{item.label}</small>
-                              <div className="agent-mcp-registration">
-                                <code>{item.command}</code>
-                                <button
-                                  aria-label={t.agentMcpDirectCliCopy}
-                                  className="copy-icon-button agent-mcp-copy-button"
-                                  disabled={!desktopApi}
-                                  title={t.agentMcpDirectCliCopy}
-                                  type="button"
-                                  onClick={() => copyMcpAgentCommand(item.command, t.agentMcpDirectCliCopied)}
-                                >
-                                  <AppIcon name="copy" size={14} strokeWidth={2} />
-                                </button>
-                              </div>
+                          <div className="agent-mcp-direct-cli-command">
+                            <small>{t.agentMcpDirectCliPath}</small>
+                            <div className="agent-mcp-registration">
+                              <code>{mcpAgentSetup.filetermCommand} --help</code>
+                              <button
+                                aria-label={t.agentMcpDirectCliCopy}
+                                className="copy-icon-button agent-mcp-copy-button"
+                                disabled={!desktopApi}
+                                title={t.agentMcpDirectCliCopy}
+                                type="button"
+                                onClick={() =>
+                                  copyMcpAgentCommand(
+                                    `${mcpAgentSetup.filetermCommand} --help`,
+                                    t.agentMcpDirectCliCopied
+                                  )
+                                }
+                              >
+                                <AppIcon name="copy" size={14} strokeWidth={2} />
+                              </button>
                             </div>
-                          ))}
+                          </div>
                         </div>
                       </div>
                     ) : null}
@@ -2097,7 +2092,7 @@ export function SettingsModal({
                   className={`sync-subtab-button ${syncSubTab === 'webdav' ? 'active' : ''}`}
                   onClick={() => setSyncSubTab('webdav')}
                 >
-                  <span className="material-symbols-outlined">cloud_sync</span>
+                  <AppIcon name="cloud" size={15} />
                   <span>WebDAV</span>
                 </button>
                 <button
@@ -2105,7 +2100,7 @@ export function SettingsModal({
                   className={`sync-subtab-button ${syncSubTab === 's3' ? 'active' : ''}`}
                   onClick={() => setSyncSubTab('s3')}
                 >
-                  <span className="material-symbols-outlined">database</span>
+                  <AppIcon name="database" size={15} />
                   <span>S3</span>
                 </button>
               </div>
@@ -2170,80 +2165,162 @@ export function SettingsModal({
                         </label>
                       </div>
                     </div>
-                    <div className="settings-update-actions webdav-sync-actions">
-                      <button
-                        className="primary-button compact"
-                        disabled={syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('save', async () => {
-                            const config = await desktopApi.saveWebDavSyncConfig({
-                              ...syncConfig,
-                              ...(syncPassword ? { password: syncPassword } : {})
+
+                    <div className="sync-config-actions-row">
+                      <div className="sync-config-primary-buttons">
+                        <button
+                          className="primary-button compact"
+                          disabled={syncOperation !== null}
+                          type="button"
+                          onClick={() => {
+                            if (!desktopApi) return
+                            void runSyncOperation('save', async () => {
+                              const config = await desktopApi.saveWebDavSyncConfig({
+                                ...syncConfig,
+                                ...(syncPassword ? { password: syncPassword } : {})
+                              })
+                              setSyncConfig(config)
+                              setSyncPassword('')
+                              setSyncMessage(t.syncConfigSaved)
                             })
-                            setSyncConfig(config)
-                            setSyncPassword('')
-                            setSyncMessage(t.syncConfigSaved)
-                          })
-                        }}
-                      >
-                        {syncOperation === 'save' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.save}</span>
-                      </button>
-                      <button
-                        className="flat-button compact"
-                        disabled={syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('test', async () => {
-                            const result = await desktopApi.testWebDavSync()
-                            setSyncMessage(result.message)
-                          })
-                        }}
-                      >
-                        {syncOperation === 'test' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.webdavTestConnection}</span>
-                      </button>
-                      <button
-                        className="flat-button compact"
-                        disabled={!syncConfig.enabled || syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('upload', async () => {
-                            const result = await desktopApi.uploadWebDavSync()
-                            setSyncMessage(result.message)
-                          })
-                        }}
-                      >
-                        {syncOperation === 'upload' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.syncUpload}</span>
-                      </button>
-                      <button
-                        className="flat-button compact"
-                        disabled={!syncConfig.enabled || syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('download', async () => {
-                            const result = await desktopApi.downloadWebDavSync()
-                            setSyncMessage(result.message)
-                          })
-                        }}
-                      >
-                        {syncOperation === 'download' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.syncDownload}</span>
-                      </button>
+                          }}
+                        >
+                          {syncOperation === 'save' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                          <span>{t.save}</span>
+                        </button>
+                        <button
+                          className="flat-button compact"
+                          disabled={syncOperation !== null}
+                          type="button"
+                          onClick={() => {
+                            if (!desktopApi) return
+                            void runSyncOperation('test', async () => {
+                              const result = await desktopApi.testWebDavSync()
+                              setSyncMessage(result.message)
+                            })
+                          }}
+                        >
+                          {syncOperation === 'test' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                          <span>{t.webdavTestConnection}</span>
+                        </button>
+                      </div>
+
+                      {syncConfig.lastSyncedAt ? (
+                        <div className="sync-last-synced-badge">
+                          <AppIcon name="history" size={13} />
+                          <span>
+                            {t.lastSync.replace('{time}', new Date(syncConfig.lastSyncedAt).toLocaleString())}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {syncMessage ? (
+                      <div className="sync-feedback-banner">
+                        <span>{syncMessage}</span>
+                      </div>
+                    ) : null}
+
+                    <div className="sync-operations-card">
+                      <div className="sync-operations-card-header">
+                        <div className="sync-operations-card-title">
+                          <AppIcon name="refresh" size={15} />
+                          <h4>{t.manualSyncTitle}</h4>
+                        </div>
+                        <span className="sync-operations-card-subtitle">{t.manualSyncDescription}</span>
+                      </div>
+
+                      <div className="sync-operations-grid">
+                        <div className="sync-op-box">
+                          <div className="sync-op-box-header">
+                            <div className="sync-op-badge upload">
+                              <AppIcon name="upload" size={14} />
+                            </div>
+                            <div>
+                              <span className="sync-op-name">{t.syncUploadTitle}</span>
+                              <p className="sync-op-help">{t.syncUploadHint}</p>
+                            </div>
+                          </div>
+                          <div className="sync-op-controls-row">
+                            <div className="sync-op-select-field">
+                              <span className="sync-op-label">{t.syncUploadMode}</span>
+                              <DropdownSelect
+                                value={backupUploadMode}
+                                options={[
+                                  { value: 'overwrite-cloud', label: t.syncUploadOverwriteCloud },
+                                  { value: 'merge-cloud', label: t.syncUploadMergeCloud }
+                                ]}
+                                onChange={(value) => setBackupUploadMode(value as BackupUploadMode)}
+                              />
+                            </div>
+                            <button
+                              className="flat-button compact sync-op-btn"
+                              disabled={!syncConfig.enabled || syncOperation !== null}
+                              type="button"
+                              onClick={() => {
+                                if (!desktopApi) return
+                                void runSyncOperation('upload', async () => {
+                                  const result = await desktopApi.uploadWebDavSync(backupUploadMode)
+                                  setSyncMessage(result.message)
+                                })
+                              }}
+                            >
+                              {syncOperation === 'upload' ? (
+                                <span aria-hidden="true" className="button-spinner" />
+                              ) : (
+                                <AppIcon name="upload" size={13} />
+                              )}
+                              <span>{t.syncUpload}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="sync-op-box">
+                          <div className="sync-op-box-header">
+                            <div className="sync-op-badge download">
+                              <AppIcon name="download" size={14} />
+                            </div>
+                            <div>
+                              <span className="sync-op-name">{t.syncDownloadTitle}</span>
+                              <p className="sync-op-help">{t.syncDownloadHint}</p>
+                            </div>
+                          </div>
+                          <div className="sync-op-controls-row">
+                            <div className="sync-op-select-field">
+                              <span className="sync-op-label">{t.syncDownloadMode}</span>
+                              <DropdownSelect
+                                value={backupDownloadMode}
+                                options={[
+                                  { value: 'merge-local', label: t.syncDownloadMergeLocal },
+                                  { value: 'overwrite-local', label: t.syncDownloadOverwriteLocal }
+                                ]}
+                                onChange={(value) => setBackupDownloadMode(value as BackupDownloadMode)}
+                              />
+                            </div>
+                            <button
+                              className="flat-button compact sync-op-btn"
+                              disabled={!syncConfig.enabled || syncOperation !== null}
+                              type="button"
+                              onClick={() => {
+                                if (!desktopApi) return
+                                void runSyncOperation('download', async () => {
+                                  const result = await desktopApi.downloadWebDavSync(backupDownloadMode)
+                                  setSyncMessage(result.message)
+                                })
+                              }}
+                            >
+                              {syncOperation === 'download' ? (
+                                <span aria-hidden="true" className="button-spinner" />
+                              ) : (
+                                <AppIcon name="download" size={13} />
+                              )}
+                              <span>{t.syncDownload}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </fieldset>
-                  {syncConfig.lastSyncedAt ? (
-                    <p className="settings-tools-hint">
-                      {t.lastSync.replace('{time}', new Date(syncConfig.lastSyncedAt).toLocaleString())}
-                    </p>
-                  ) : null}
-                  {syncMessage ? <p className="settings-tools-hint">{syncMessage}</p> : null}
                 </section>
               )}
 
@@ -2358,81 +2435,159 @@ export function SettingsModal({
                         </label>
                       </div>
                     </div>
-                    <div className="settings-update-actions webdav-sync-actions">
-                      <button
-                        className="primary-button compact"
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('s3-save', async () => {
-                            const config = await desktopApi.saveS3BackupConfig({
-                              ...s3Config,
-                              ...(s3SecretAccessKey ? { secretAccessKey: s3SecretAccessKey } : {})
+
+                    <div className="sync-config-actions-row">
+                      <div className="sync-config-primary-buttons">
+                        <button
+                          className="primary-button compact"
+                          type="button"
+                          onClick={() => {
+                            if (!desktopApi) return
+                            void runSyncOperation('s3-save', async () => {
+                              const config = await desktopApi.saveS3BackupConfig({
+                                ...s3Config,
+                                ...(s3SecretAccessKey ? { secretAccessKey: s3SecretAccessKey } : {})
+                              })
+                              setS3Config(config)
+                              setS3SecretAccessKey('')
+                              setS3Message(t.s3BackupSaved)
                             })
-                            setS3Config(config)
-                            setS3SecretAccessKey('')
-                            setS3Message(t.s3BackupSaved)
-                          })
-                        }}
-                      >
-                        {syncOperation === 's3-save' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.save}</span>
-                      </button>
-                      <button
-                        className="flat-button compact"
-                        disabled={syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('s3-test', async () => {
-                            const result = await desktopApi.testS3Backup()
-                            setS3Message(result.message)
-                          })
-                        }}
-                      >
-                        {syncOperation === 's3-test' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.s3TestConnection}</span>
-                      </button>
-                      <button
-                        className="flat-button compact"
-                        disabled={!s3Config.enabled || syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('s3-upload', async () => {
-                            const result = await desktopApi.uploadS3Backup()
-                            setS3Message(result.message)
-                          })
-                        }}
-                      >
-                        {syncOperation === 's3-upload' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                        <span>{t.syncUpload}</span>
-                      </button>
-                      <button
-                        className="flat-button compact"
-                        disabled={!s3Config.enabled || syncOperation !== null}
-                        type="button"
-                        onClick={() => {
-                          if (!desktopApi) return
-                          void runSyncOperation('s3-download', async () => {
-                            const result = await desktopApi.downloadS3Backup()
-                            setS3Message(result.message)
-                          })
-                        }}
-                      >
-                        {syncOperation === 's3-download' ? (
-                          <span aria-hidden="true" className="button-spinner" />
-                        ) : null}
-                        <span>{t.syncDownload}</span>
-                      </button>
+                          }}
+                        >
+                          {syncOperation === 's3-save' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                          <span>{t.save}</span>
+                        </button>
+                        <button
+                          className="flat-button compact"
+                          disabled={syncOperation !== null}
+                          type="button"
+                          onClick={() => {
+                            if (!desktopApi) return
+                            void runSyncOperation('s3-test', async () => {
+                              const result = await desktopApi.testS3Backup()
+                              setS3Message(result.message)
+                            })
+                          }}
+                        >
+                          {syncOperation === 's3-test' ? <span aria-hidden="true" className="button-spinner" /> : null}
+                          <span>{t.s3TestConnection}</span>
+                        </button>
+                      </div>
+
+                      {s3Config.lastSyncedAt ? (
+                        <div className="sync-last-synced-badge">
+                          <AppIcon name="history" size={13} />
+                          <span>{t.lastSync.replace('{time}', new Date(s3Config.lastSyncedAt).toLocaleString())}</span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {s3Message ? (
+                      <div className="sync-feedback-banner">
+                        <span>{s3Message}</span>
+                      </div>
+                    ) : null}
+
+                    <div className="sync-operations-card">
+                      <div className="sync-operations-card-header">
+                        <div className="sync-operations-card-title">
+                          <AppIcon name="refresh" size={15} />
+                          <h4>{t.manualSyncTitle}</h4>
+                        </div>
+                        <span className="sync-operations-card-subtitle">{t.manualSyncDescription}</span>
+                      </div>
+
+                      <div className="sync-operations-grid">
+                        <div className="sync-op-box">
+                          <div className="sync-op-box-header">
+                            <div className="sync-op-badge upload">
+                              <AppIcon name="upload" size={14} />
+                            </div>
+                            <div>
+                              <span className="sync-op-name">{t.syncUploadTitle}</span>
+                              <p className="sync-op-help">{t.syncUploadHint}</p>
+                            </div>
+                          </div>
+                          <div className="sync-op-controls-row">
+                            <div className="sync-op-select-field">
+                              <span className="sync-op-label">{t.syncUploadMode}</span>
+                              <DropdownSelect
+                                value={backupUploadMode}
+                                options={[
+                                  { value: 'overwrite-cloud', label: t.syncUploadOverwriteCloud },
+                                  { value: 'merge-cloud', label: t.syncUploadMergeCloud }
+                                ]}
+                                onChange={(value) => setBackupUploadMode(value as BackupUploadMode)}
+                              />
+                            </div>
+                            <button
+                              className="flat-button compact sync-op-btn"
+                              disabled={!s3Config.enabled || syncOperation !== null}
+                              type="button"
+                              onClick={() => {
+                                if (!desktopApi) return
+                                void runSyncOperation('s3-upload', async () => {
+                                  const result = await desktopApi.uploadS3Backup(backupUploadMode)
+                                  setS3Message(result.message)
+                                })
+                              }}
+                            >
+                              {syncOperation === 's3-upload' ? (
+                                <span aria-hidden="true" className="button-spinner" />
+                              ) : (
+                                <AppIcon name="upload" size={13} />
+                              )}
+                              <span>{t.syncUpload}</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="sync-op-box">
+                          <div className="sync-op-box-header">
+                            <div className="sync-op-badge download">
+                              <AppIcon name="download" size={14} />
+                            </div>
+                            <div>
+                              <span className="sync-op-name">{t.syncDownloadTitle}</span>
+                              <p className="sync-op-help">{t.syncDownloadHint}</p>
+                            </div>
+                          </div>
+                          <div className="sync-op-controls-row">
+                            <div className="sync-op-select-field">
+                              <span className="sync-op-label">{t.syncDownloadMode}</span>
+                              <DropdownSelect
+                                value={backupDownloadMode}
+                                options={[
+                                  { value: 'merge-local', label: t.syncDownloadMergeLocal },
+                                  { value: 'overwrite-local', label: t.syncDownloadOverwriteLocal }
+                                ]}
+                                onChange={(value) => setBackupDownloadMode(value as BackupDownloadMode)}
+                              />
+                            </div>
+                            <button
+                              className="flat-button compact sync-op-btn"
+                              disabled={!s3Config.enabled || syncOperation !== null}
+                              type="button"
+                              onClick={() => {
+                                if (!desktopApi) return
+                                void runSyncOperation('s3-download', async () => {
+                                  const result = await desktopApi.downloadS3Backup(backupDownloadMode)
+                                  setS3Message(result.message)
+                                })
+                              }}
+                            >
+                              {syncOperation === 's3-download' ? (
+                                <span aria-hidden="true" className="button-spinner" />
+                              ) : (
+                                <AppIcon name="download" size={13} />
+                              )}
+                              <span>{t.syncDownload}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </fieldset>
-                  {s3Config.lastSyncedAt ? (
-                    <p className="settings-tools-hint">
-                      {t.lastSync.replace('{time}', new Date(s3Config.lastSyncedAt).toLocaleString())}
-                    </p>
-                  ) : null}
-                  {s3Message ? <p className="settings-tools-hint">{s3Message}</p> : null}
                 </section>
               )}
             </div>

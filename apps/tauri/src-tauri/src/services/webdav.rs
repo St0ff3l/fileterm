@@ -23,6 +23,34 @@ use crate::AppError;
 const MAX_BUNDLE_BYTES: usize = 5 * 1024 * 1024;
 const DEFAULT_REMOTE_PATH: &str = "fileterm-connections.json";
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum UploadMode {
+    OverwriteCloud,
+    MergeCloud,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DownloadMode {
+    OverwriteLocal,
+    MergeLocal,
+}
+
+pub(crate) fn parse_upload_mode(value: Option<&str>) -> Result<UploadMode, AppError> {
+    match value.unwrap_or("overwrite-cloud") {
+        "overwrite-cloud" => Ok(UploadMode::OverwriteCloud),
+        "merge-cloud" => Ok(UploadMode::MergeCloud),
+        _ => Err(command_error("无效的备份上传策略")),
+    }
+}
+
+pub(crate) fn parse_download_mode(value: Option<&str>) -> Result<DownloadMode, AppError> {
+    match value.unwrap_or("merge-local") {
+        "overwrite-local" => Ok(DownloadMode::OverwriteLocal),
+        "merge-local" => Ok(DownloadMode::MergeLocal),
+        _ => Err(command_error("无效的备份下载策略")),
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredConfig {
@@ -279,7 +307,10 @@ pub(crate) fn export_bundle(
     build_export_bundle(&profiles, password)
 }
 
-fn build_export_bundle(profiles: &[Value], password: &str) -> Result<(Vec<u8>, String), AppError> {
+pub(crate) fn build_export_bundle(
+    profiles: &[Value],
+    password: &str,
+) -> Result<(Vec<u8>, String), AppError> {
     backup_crypto::encrypt_profiles(profiles, password, &export_timestamp())
         .map_err(|error| command_error(error.to_string()))
 }
@@ -376,6 +407,50 @@ fn merge_synced_profile(existing: &Value, incoming: &Value) -> Result<Value, Str
     Ok(Value::Object(merged))
 }
 
+/// Merge the local profiles into a decoded remote bundle before uploading it
+/// again. Matching connections keep the remote identity while local fields
+/// win; connections that exist on only one side are retained.
+pub(crate) fn merge_bundle_with_local(
+    app: &AppHandle,
+    remote_bytes: &[u8],
+    password: &str,
+) -> Result<(Vec<u8>, String), AppError> {
+    let decoded = parse_bundle(remote_bytes, Some(password))?;
+    let (local_profiles, _) = profile_ops::read_and_heal_profiles(app)?;
+    let mut merged = Vec::new();
+    let mut positions = std::collections::HashMap::new();
+
+    for profile in decoded.profiles {
+        let Ok(sanitized) = sanitize_import_profile(&profile) else {
+            continue;
+        };
+        let Some(fingerprint) = profile_fingerprint(&sanitized) else {
+            continue;
+        };
+        if positions.contains_key(&fingerprint) {
+            continue;
+        }
+        positions.insert(fingerprint, merged.len());
+        merged.push(sanitized);
+    }
+
+    for profile in local_profiles {
+        let sanitized = sanitize_import_profile(&profile)
+            .map_err(|error| command_error(format!("本地连接配置无效: {error}")))?;
+        let fingerprint = profile_fingerprint(&sanitized)
+            .ok_or_else(|| command_error("本地连接配置缺少有效的连接标识"))?;
+        if let Some(index) = positions.get(&fingerprint).copied() {
+            merged[index] = merge_synced_profile(&merged[index], &sanitized)
+                .map_err(|error| command_error(format!("合并连接配置失败: {error}")))?;
+        } else {
+            positions.insert(fingerprint, merged.len());
+            merged.push(sanitized);
+        }
+    }
+
+    build_export_bundle(&merged, password)
+}
+
 fn parse_bundle(
     bytes: &[u8],
     password: Option<&str>,
@@ -386,6 +461,7 @@ fn parse_bundle(
 pub(crate) struct ProfileImportSummary {
     pub imported: u64,
     pub updated: u64,
+    pub replaced: u64,
     pub skipped: u64,
     pub legacy_plaintext: bool,
 }
@@ -397,10 +473,51 @@ pub(crate) fn import_bundle(
     app: &AppHandle,
     bytes: &[u8],
     password: Option<&str>,
+    mode: DownloadMode,
 ) -> Result<ProfileImportSummary, AppError> {
     let decoded = parse_bundle(bytes, password)?;
-    let profiles = decoded.profiles;
     let (existing, _) = profile_ops::read_and_heal_profiles(app)?;
+    let mut profiles = Vec::with_capacity(decoded.profiles.len());
+    let mut skipped = 0_u64;
+    for profile in decoded.profiles {
+        match sanitize_import_profile(&profile) {
+            Ok(profile) => profiles.push(profile),
+            Err(_) => skipped += 1,
+        }
+    }
+
+    if mode == DownloadMode::OverwriteLocal {
+        let replaced = existing.len() as u64;
+        let imported = profiles.len() as u64;
+        let replacement_profiles = profiles
+            .into_iter()
+            .map(|mut profile| {
+                if let Some(fingerprint) = profile_fingerprint(&profile) {
+                    if let Some(existing_profile) = existing.iter().find(|existing_profile| {
+                        profile_fingerprint(existing_profile).as_ref() == Some(&fingerprint)
+                    }) {
+                        if let Some(object) = profile.as_object_mut() {
+                            for key in ["id", "order", "lastUsedAt"] {
+                                if let Some(value) = existing_profile.get(key) {
+                                    object.insert(key.to_string(), value.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                profile
+            })
+            .collect();
+        profile_ops::replace_profiles(app, replacement_profiles)?;
+        return Ok(ProfileImportSummary {
+            imported,
+            updated: 0,
+            replaced,
+            skipped,
+            legacy_plaintext: decoded.legacy_plaintext,
+        });
+    }
+
     let mut known = existing
         .iter()
         .filter_map(|profile| {
@@ -409,16 +526,8 @@ pub(crate) fn import_bundle(
         .collect::<std::collections::HashMap<_, _>>();
     let mut imported = 0_u64;
     let mut updated = 0_u64;
-    let mut skipped = 0_u64;
     for profile in profiles {
-        let sanitized = match sanitize_import_profile(&profile) {
-            Ok(profile) => profile,
-            Err(_) => {
-                skipped += 1;
-                continue;
-            }
-        };
-        let Some(fingerprint) = profile_fingerprint(&sanitized) else {
+        let Some(fingerprint) = profile_fingerprint(&profile) else {
             skipped += 1;
             continue;
         };
@@ -431,7 +540,7 @@ pub(crate) fn import_bundle(
                 skipped += 1;
                 continue;
             };
-            let merged = match merge_synced_profile(&existing_profile, &sanitized) {
+            let merged = match merge_synced_profile(&existing_profile, &profile) {
                 Ok(profile) => profile,
                 Err(_) => {
                     skipped += 1;
@@ -443,13 +552,14 @@ pub(crate) fn import_bundle(
             updated += 1;
             continue;
         }
-        let created = profile_ops::create_profile(app, sanitized)?;
+        let created = profile_ops::create_profile(app, profile)?;
         known.insert(fingerprint, created);
         imported += 1;
     }
     Ok(ProfileImportSummary {
         imported,
         updated,
+        replaced: 0,
         skipped,
         legacy_plaintext: decoded.legacy_plaintext,
     })
@@ -544,9 +654,9 @@ pub async fn test_connection(app: &AppHandle) -> Result<Value, AppError> {
     result
 }
 
-pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
+pub async fn upload(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppError> {
     crate::services::logging::info(app, "webdav", "upload started");
-    let result = upload_inner(app).await;
+    let result = upload_inner(app, parse_upload_mode(mode)?).await;
     match &result {
         Ok(_) => crate::services::logging::info(app, "webdav", "upload completed"),
         Err(error) => {
@@ -556,17 +666,49 @@ pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
     result
 }
 
-async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
+async fn upload_inner(app: &AppHandle, mode: UploadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
+    let (remote_exists, _) = head_payload(&client, &config).await?;
     let password = backup_prompt::request(app, "upload", "WebDAV").await?;
-    let (payload, content_hash) = export_bundle(app, &password)?;
+    let (payload, content_hash) = if mode == UploadMode::MergeCloud && remote_exists {
+        let (remote_bytes, _) = download_payload(&client, &config).await?;
+        merge_bundle_with_local(app, &remote_bytes, &password)?
+    } else {
+        export_bundle(app, &password)?
+    };
     let next_etag = upload_payload(&client, &config, payload).await?;
     config.last_etag = next_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(content_hash);
     write_config(app, &config)?;
-    Ok(serde_json::json!({ "action": "upload", "message": "连接配置已上传到 WebDAV。" }))
+    let message = match mode {
+        UploadMode::OverwriteCloud => "已用本地连接配置覆盖 WebDAV 云端备份。",
+        UploadMode::MergeCloud => "已将本地连接配置合并到 WebDAV 云端备份。",
+    };
+    Ok(serde_json::json!({
+        "action": "upload",
+        "mode": match mode {
+            UploadMode::OverwriteCloud => "overwrite-cloud",
+            UploadMode::MergeCloud => "merge-cloud",
+        },
+        "message": message,
+    }))
+}
+
+async fn head_payload(
+    client: &Client,
+    config: &StoredConfig,
+) -> Result<(bool, Option<String>), AppError> {
+    let response = authenticated(client.head(remote_url(config)?), config)
+        .send()
+        .await
+        .map_err(|error| command_error(format!("WebDAV 预检失败: {error}")))?;
+    let remote_exists = response.status().is_success();
+    if !remote_exists && response.status() != StatusCode::NOT_FOUND {
+        return Err(response_error("预检", response.status()));
+    }
+    Ok((remote_exists, etag(response.headers())))
 }
 
 /// Upload a prepared profile bundle with optimistic-concurrency protection.
@@ -581,20 +723,7 @@ async fn upload_payload(
     payload: Vec<u8>,
 ) -> Result<Option<String>, AppError> {
     let remote = remote_url(config)?;
-    let head = authenticated(client.head(remote.clone()), config)
-        .send()
-        .await
-        .map_err(|error| command_error(format!("WebDAV 预检失败: {error}")))?;
-    let remote_exists = head.status().is_success();
-    if !remote_exists && head.status() != StatusCode::NOT_FOUND {
-        return Err(response_error("预检", head.status()));
-    }
-    let remote_etag = etag(head.headers());
-    if remote_exists && config.last_etag.is_none() {
-        return Err(command_error(
-            "远端已存在配置包。请先下载并确认内容，再上传以避免首次同步覆盖。",
-        ));
-    }
+    let (_, remote_etag) = head_payload(client, config).await?;
     if let Some(last_etag) = config.last_etag.as_deref() {
         if remote_etag.as_deref() != Some(last_etag) {
             return Err(command_error(
@@ -626,9 +755,9 @@ async fn upload_payload(
     Ok(etag(response.headers()).or(remote_etag))
 }
 
-pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
+pub async fn download(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppError> {
     crate::services::logging::info(app, "webdav", "download started");
-    let result = download_inner(app).await;
+    let result = download_inner(app, parse_download_mode(mode)?).await;
     match &result {
         Ok(value) => crate::services::logging::info(
             app,
@@ -647,7 +776,7 @@ pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
     result
 }
 
-async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
+async fn download_inner(app: &AppHandle, mode: DownloadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
     let (bytes, remote_etag) = download_payload(&client, &config).await?;
@@ -658,27 +787,41 @@ async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
     } else {
         None
     };
-    let summary = import_bundle(app, &bytes, password.as_ref().map(|value| value.as_str()))?;
+    let summary = import_bundle(
+        app,
+        &bytes,
+        password.as_ref().map(|value| value.as_str()),
+        mode,
+    )?;
     config.last_etag = remote_etag;
     config.last_synced_at = Some(export_timestamp());
     config.content_hash = Some(sha256_hex(&bytes));
     write_config(app, &config)?;
+    let action = match mode {
+        DownloadMode::OverwriteLocal => format!(
+            "已用 WebDAV 云端备份覆盖本地连接：导入 {} 个，替换 {} 个，跳过 {} 个无效项。",
+            summary.imported, summary.replaced, summary.skipped
+        ),
+        DownloadMode::MergeLocal => format!(
+            "已将 WebDAV 云端备份合并到本地：新增 {} 个，更新 {} 个，跳过 {} 个无效项。",
+            summary.imported, summary.updated, summary.skipped
+        ),
+    };
     let message = if summary.legacy_plaintext {
-        format!(
-            "已从 WebDAV 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。该备份未加密，建议重新上传以生成加密备份。",
-            summary.imported, summary.updated, summary.skipped
-        )
+        format!("{action} 该备份未加密，建议重新上传以生成加密备份。")
     } else {
-        format!(
-            "已从 WebDAV 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。",
-            summary.imported, summary.updated, summary.skipped
-        )
+        action
     };
     Ok(serde_json::json!({
         "action": "download",
+        "mode": match mode {
+            DownloadMode::OverwriteLocal => "overwrite-local",
+            DownloadMode::MergeLocal => "merge-local",
+        },
         "message": message,
         "imported": summary.imported,
         "updated": summary.updated,
+        "replaced": summary.replaced,
         "skipped": summary.skipped,
         "legacyPlaintext": summary.legacy_plaintext,
     }))
@@ -719,8 +862,9 @@ async fn download_payload(
 mod tests {
     use super::{
         build_export_bundle, download_payload, merge_synced_profile, normalize_remote_path,
-        parse_bundle, read_config_at, sanitize_import_profile, sha256_hex, upload_payload,
-        validate_config, write_config_at, StoredConfig,
+        parse_bundle, parse_download_mode, parse_upload_mode, read_config_at,
+        sanitize_import_profile, sha256_hex, upload_payload, validate_config, write_config_at,
+        DownloadMode, StoredConfig, UploadMode,
     };
     use reqwest::Client;
     use serde_json::json;
@@ -791,6 +935,22 @@ mod tests {
         };
         assert!(validate_config(&config, false).is_ok());
         assert!(validate_config(&config, true).is_err());
+    }
+
+    #[test]
+    fn backup_sync_modes_have_directional_defaults_and_reject_unknown_values() {
+        assert_eq!(parse_upload_mode(None).unwrap(), UploadMode::OverwriteCloud);
+        assert_eq!(parse_download_mode(None).unwrap(), DownloadMode::MergeLocal);
+        assert_eq!(
+            parse_upload_mode(Some("merge-cloud")).unwrap(),
+            UploadMode::MergeCloud
+        );
+        assert_eq!(
+            parse_download_mode(Some("overwrite-local")).unwrap(),
+            DownloadMode::OverwriteLocal
+        );
+        assert!(parse_upload_mode(Some("merge-local")).is_err());
+        assert!(parse_download_mode(Some("overwrite-cloud")).is_err());
     }
 
     #[test]

@@ -157,6 +157,9 @@ fn strip_secret_fields(profile: &Value) -> Value {
         ] {
             obj.remove(key);
         }
+        // The old UI exposed a login-password reuse switch for sudo. Keep
+        // legacy profiles loadable, but stop surfacing the retired setting.
+        obj.remove("sudoSameAsLogin");
         if let Some(proxy) = obj.get_mut("proxy").and_then(|v| v.as_object_mut()) {
             proxy.remove("password");
         }
@@ -487,6 +490,51 @@ pub fn create_profile(app: &AppHandle, input: Value) -> Result<Value, AppError> 
     Ok(profile_value)
 }
 
+/// Replace the complete local connection list with already-validated backup
+/// profiles. The remote bundle does not carry local ids or ordering metadata,
+/// so those fields are rebuilt here while the local encrypted secret store is
+/// persisted atomically with the public profile list.
+pub fn replace_profiles(app: &AppHandle, inputs: Vec<Value>) -> Result<(), AppError> {
+    let (_, folders) = read_and_heal_profiles(app)?;
+    let mut profiles = Vec::with_capacity(inputs.len());
+    let now = chrono_now_ms();
+
+    for (index, input) in inputs.into_iter().enumerate() {
+        let group = input
+            .get("group")
+            .and_then(Value::as_str)
+            .unwrap_or(DEFAULT_GROUP)
+            .to_string();
+        let matching_folder = folders
+            .iter()
+            .find(|folder| folder.get("name").and_then(Value::as_str) == Some(group.as_str()));
+        let parent_id = matching_folder
+            .and_then(|folder| folder.get("id").and_then(Value::as_str))
+            .map(|id| Value::String(id.to_string()))
+            .unwrap_or(Value::Null);
+        let mut profile = ensure_object(&input);
+        normalize_profile_secret_input(&mut profile, None);
+        let profile_id = profile
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| new_id("profile"));
+        profile.insert("id".to_string(), Value::String(profile_id));
+        profile.insert("group".to_string(), Value::String(group));
+        profile.insert("parentId".to_string(), parent_id);
+        if profile.get("order").and_then(Value::as_i64).is_none() {
+            profile.insert(
+                "order".to_string(),
+                Value::Number(now.saturating_add(index as i64).into()),
+            );
+        }
+        profiles.push(Value::Object(profile));
+    }
+
+    persist_profiles(app, &profiles)
+}
+
 /// Update an existing profile.
 pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result<Value, AppError> {
     let (mut profiles, folders) = read_and_heal_profiles(app)?;
@@ -635,28 +683,12 @@ fn hydrate_profile_secrets(path: &std::path::Path, profiles: &mut [Value]) -> Re
     Ok(())
 }
 
-pub fn read_login_password(app: &AppHandle, profile_id: &str) -> Result<Option<String>, AppError> {
-    read_profile_secret(app, profile_id, "password")
-}
-
 pub fn read_sudo_password(app: &AppHandle, profile_id: &str) -> Result<Option<String>, AppError> {
     read_profile_secret(app, profile_id, "sudoPassword")
 }
 
 pub fn read_su_password(app: &AppHandle, profile_id: &str) -> Result<Option<String>, AppError> {
     read_profile_secret(app, profile_id, "suPassword")
-}
-
-pub fn sudo_same_as_login(app: &AppHandle, profile_id: &str) -> Result<bool, AppError> {
-    let profiles = read_json_array(app, "profiles.json")?;
-    let profile = profiles
-        .iter()
-        .find(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
-        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
-    Ok(profile
-        .get("sudoSameAsLogin")
-        .and_then(Value::as_bool)
-        .unwrap_or(false))
 }
 
 fn set_profile_secret(

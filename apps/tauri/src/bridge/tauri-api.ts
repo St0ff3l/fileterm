@@ -3,6 +3,8 @@ import { getName, getVersion } from '@tauri-apps/api/app'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type {
   AppUpdateStatus,
+  BackupDownloadMode,
+  BackupUploadMode,
   FileTermDesktopApi,
   S3BackupConfig,
   S3BackupConfigInput,
@@ -545,13 +547,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       password?: string
     }) => invoke<WebDavSyncConfig>('app_set_webdav_sync_config', { input }),
     testWebDavSync: () => invoke<WebDavSyncResult>('app_test_webdav_sync'),
-    uploadWebDavSync: () => invoke<WebDavSyncResult>('app_upload_webdav_sync'),
-    downloadWebDavSync: () => invoke<WebDavSyncResult>('app_download_webdav_sync'),
+    uploadWebDavSync: (mode: BackupUploadMode) => invoke<WebDavSyncResult>('app_upload_webdav_sync', { mode }),
+    downloadWebDavSync: (mode: BackupDownloadMode) => invoke<WebDavSyncResult>('app_download_webdav_sync', { mode }),
     getS3BackupConfig: () => invoke<S3BackupConfig>('app_get_s3_backup_config'),
     saveS3BackupConfig: (input: S3BackupConfigInput) => invoke<S3BackupConfig>('app_set_s3_backup_config', { input }),
     testS3Backup: () => invoke<S3BackupResult>('app_test_s3_backup'),
-    uploadS3Backup: () => invoke<S3BackupResult>('app_upload_s3_backup'),
-    downloadS3Backup: () => invoke<S3BackupResult>('app_download_s3_backup'),
+    uploadS3Backup: (mode: BackupUploadMode) => invoke<S3BackupResult>('app_upload_s3_backup', { mode }),
+    downloadS3Backup: (mode: BackupDownloadMode) => invoke<S3BackupResult>('app_download_s3_backup', { mode }),
     createProfile: (input: unknown) => invoke<WorkspaceSnapshot>('app_create_profile', { input }),
     createFolder: (name: string, parentId?: string) =>
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-folder', payload: { name, parentId } }),

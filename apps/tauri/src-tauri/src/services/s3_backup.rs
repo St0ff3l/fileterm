@@ -658,9 +658,9 @@ pub async fn test_connection(app: &AppHandle) -> Result<Value, AppError> {
     result
 }
 
-pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
+pub async fn upload(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppError> {
     crate::services::logging::info(app, "s3-backup", "upload started");
-    let result = upload_inner(app).await;
+    let result = upload_inner(app, webdav::parse_upload_mode(mode)?).await;
     match &result {
         Ok(_) => crate::services::logging::info(app, "s3-backup", "upload completed"),
         Err(error) => {
@@ -670,15 +670,10 @@ pub async fn upload(app: &AppHandle) -> Result<Value, AppError> {
     result
 }
 
-async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
+async fn upload_inner(app: &AppHandle, mode: webdav::UploadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
     let client = client()?;
     let remote_etag = head_object(&client, &config).await?;
-    if remote_etag.is_some() && config.last_etag.is_none() {
-        return Err(command_error(
-            "远端已存在配置包。请先下载并确认内容，再上传以避免首次备份覆盖。",
-        ));
-    }
     if let Some(last_etag) = config.last_etag.as_deref() {
         if remote_etag.as_deref() != Some(last_etag) {
             return Err(command_error(
@@ -687,7 +682,16 @@ async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
         }
     }
     let password = backup_prompt::request(app, "upload", "S3").await?;
-    let (payload, content_hash) = webdav::export_bundle(app, &password)?;
+    let (payload, content_hash) = if mode == webdav::UploadMode::MergeCloud {
+        if remote_etag.is_some() {
+            let (remote_bytes, _) = download_payload(&client, &config).await?;
+            webdav::merge_bundle_with_local(app, &remote_bytes, &password)?
+        } else {
+            webdav::export_bundle(app, &password)?
+        }
+    } else {
+        webdav::export_bundle(app, &password)?
+    };
     let mut headers = BTreeMap::new();
     headers.insert(
         "content-type",
@@ -722,12 +726,23 @@ async fn upload_inner(app: &AppHandle) -> Result<Value, AppError> {
     config.last_synced_at = Some(webdav::export_timestamp());
     config.content_hash = Some(content_hash);
     write_config(app, &config)?;
-    Ok(serde_json::json!({ "action": "upload", "message": "连接配置已上传到 S3。" }))
+    let message = match mode {
+        webdav::UploadMode::OverwriteCloud => "已用本地连接配置覆盖 S3 云端备份。",
+        webdav::UploadMode::MergeCloud => "已将本地连接配置合并到 S3 云端备份。",
+    };
+    Ok(serde_json::json!({
+        "action": "upload",
+        "mode": match mode {
+            webdav::UploadMode::OverwriteCloud => "overwrite-cloud",
+            webdav::UploadMode::MergeCloud => "merge-cloud",
+        },
+        "message": message,
+    }))
 }
 
-pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
+pub async fn download(app: &AppHandle, mode: Option<&str>) -> Result<Value, AppError> {
     crate::services::logging::info(app, "s3-backup", "download started");
-    let result = download_inner(app).await;
+    let result = download_inner(app, webdav::parse_download_mode(mode)?).await;
     match &result {
         Ok(value) => crate::services::logging::info(
             app,
@@ -746,13 +761,66 @@ pub async fn download(app: &AppHandle) -> Result<Value, AppError> {
     result
 }
 
-async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
+async fn download_inner(app: &AppHandle, mode: webdav::DownloadMode) -> Result<Value, AppError> {
     let mut config = configured(app, true)?;
+    let client = client()?;
+    let (bytes, remote_etag) = download_payload(&client, &config).await?;
+    let password = if backup_crypto::requires_password(&bytes)
+        .map_err(|error| command_error(error.to_string()))?
+    {
+        Some(backup_prompt::request(app, "download", "S3").await?)
+    } else {
+        None
+    };
+    let summary = webdav::import_bundle(
+        app,
+        &bytes,
+        password.as_ref().map(|value| value.as_str()),
+        mode,
+    )?;
+    config.last_etag = remote_etag;
+    config.last_synced_at = Some(webdav::export_timestamp());
+    config.content_hash = Some(sha256_hex(&bytes));
+    write_config(app, &config)?;
+    let action = match mode {
+        webdav::DownloadMode::OverwriteLocal => format!(
+            "已用 S3 云端备份覆盖本地连接：导入 {} 个，替换 {} 个，跳过 {} 个无效项。",
+            summary.imported, summary.replaced, summary.skipped
+        ),
+        webdav::DownloadMode::MergeLocal => format!(
+            "已将 S3 云端备份合并到本地：新增 {} 个，更新 {} 个，跳过 {} 个无效项。",
+            summary.imported, summary.updated, summary.skipped
+        ),
+    };
+    let message = if summary.legacy_plaintext {
+        format!("{action} 该备份未加密，建议重新上传以生成加密备份。")
+    } else {
+        action
+    };
+    Ok(serde_json::json!({
+        "action": "download",
+        "mode": match mode {
+            webdav::DownloadMode::OverwriteLocal => "overwrite-local",
+            webdav::DownloadMode::MergeLocal => "merge-local",
+        },
+        "message": message,
+        "imported": summary.imported,
+        "updated": summary.updated,
+        "replaced": summary.replaced,
+        "skipped": summary.skipped,
+        "legacyPlaintext": summary.legacy_plaintext,
+    }))
+}
+
+async fn download_payload(
+    client: &Client,
+    config: &StoredConfig,
+) -> Result<(Vec<u8>, Option<String>), AppError> {
     let response = signed_request(
-        &client()?,
-        &config,
+        client,
+        config,
         Method::GET,
-        object_target(&config)?,
+        object_target(config)?,
         Vec::new(),
         BTreeMap::new(),
     )?
@@ -776,38 +844,7 @@ async fn download_inner(app: &AppHandle) -> Result<Value, AppError> {
     if bytes.len() > MAX_BUNDLE_BYTES {
         return Err(command_error("S3 配置包超过 5 MB 限制"));
     }
-    let password = if backup_crypto::requires_password(&bytes)
-        .map_err(|error| command_error(error.to_string()))?
-    {
-        Some(backup_prompt::request(app, "download", "S3").await?)
-    } else {
-        None
-    };
-    let summary =
-        webdav::import_bundle(app, &bytes, password.as_ref().map(|value| value.as_str()))?;
-    config.last_etag = remote_etag;
-    config.last_synced_at = Some(webdav::export_timestamp());
-    config.content_hash = Some(sha256_hex(&bytes));
-    write_config(app, &config)?;
-    let message = if summary.legacy_plaintext {
-        format!(
-            "已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。该备份未加密，建议重新上传以生成加密备份。",
-            summary.imported, summary.updated, summary.skipped
-        )
-    } else {
-        format!(
-            "已从 S3 导入 {} 个连接，更新 {} 个现有连接；跳过 {} 个无效项。",
-            summary.imported, summary.updated, summary.skipped
-        )
-    };
-    Ok(serde_json::json!({
-        "action": "download",
-        "message": message,
-        "imported": summary.imported,
-        "updated": summary.updated,
-        "skipped": summary.skipped,
-        "legacyPlaintext": summary.legacy_plaintext,
-    }))
+    Ok((bytes.to_vec(), remote_etag))
 }
 
 #[cfg(test)]

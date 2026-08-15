@@ -3125,6 +3125,9 @@
   flex: 1 1 auto;
   padding: 8px 4px 8px 9px;
   overflow-x: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: 10px;

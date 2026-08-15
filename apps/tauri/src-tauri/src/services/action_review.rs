@@ -635,23 +635,16 @@ fn resolve_privileged_password(
     kind: PrivilegedCommandKind,
     explicit_password: Option<String>,
     saved_password: Option<String>,
-    login_password: Option<String>,
 ) -> Result<String, AppError> {
-    let password = explicit_password
-        .or(saved_password)
-        .or(match kind {
-            PrivilegedCommandKind::Sudo => login_password,
-            PrivilegedCommandKind::Su => None,
-        })
-        .ok_or_else(|| {
-            AppError::Command(
-                match kind {
-                    PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
-                    PrivilegedCommandKind::Su => SU_PASSWORD_NEEDED,
-                }
-                .to_string(),
-            )
-        })?;
+    let password = explicit_password.or(saved_password).ok_or_else(|| {
+        AppError::Command(
+            match kind {
+                PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
+                PrivilegedCommandKind::Su => SU_PASSWORD_NEEDED,
+            }
+            .to_string(),
+        )
+    })?;
     validate_privileged_password(&password)?;
     Ok(password)
 }
@@ -726,25 +719,15 @@ fn prepare_remote_exec(
             "Saving a privileged password requires a one-shot password value".to_string(),
         ));
     }
-    let (saved_password, login_password) = match kind {
+    let saved_password = match kind {
         PrivilegedCommandKind::Sudo => {
-            let saved = crate::services::profile_ops::read_sudo_password(app, profile_id)?;
-            let login = if saved.is_none()
-                && crate::services::profile_ops::sudo_same_as_login(app, profile_id)?
-            {
-                crate::services::profile_ops::read_login_password(app, profile_id)?
-            } else {
-                None
-            };
-            (saved, login)
+            crate::services::profile_ops::read_sudo_password(app, profile_id)?
         }
-        PrivilegedCommandKind::Su => (
-            crate::services::profile_ops::read_su_password(app, profile_id)?,
-            None,
-        ),
+        PrivilegedCommandKind::Su => {
+            crate::services::profile_ops::read_su_password(app, profile_id)?
+        }
     };
-    let password =
-        resolve_privileged_password(kind, explicit_password, saved_password, login_password)?;
+    let password = resolve_privileged_password(kind, explicit_password, saved_password)?;
 
     let save_password = if save_password {
         Some((profile_id.to_string(), kind, password.clone()))
@@ -975,13 +958,12 @@ mod tests {
     }
 
     #[test]
-    fn privileged_password_priority_is_explicit_saved_then_login_for_sudo_only() {
+    fn privileged_password_priority_is_explicit_then_saved_without_login_fallback() {
         assert_eq!(
             resolve_privileged_password(
                 PrivilegedCommandKind::Sudo,
                 Some("explicit".to_string()),
                 Some("saved".to_string()),
-                Some("login".to_string()),
             )
             .unwrap(),
             "explicit"
@@ -991,28 +973,11 @@ mod tests {
                 PrivilegedCommandKind::Sudo,
                 None,
                 Some("saved".to_string()),
-                Some("login".to_string()),
             )
             .unwrap(),
             "saved"
         );
-        assert_eq!(
-            resolve_privileged_password(
-                PrivilegedCommandKind::Sudo,
-                None,
-                None,
-                Some("login".to_string()),
-            )
-            .unwrap(),
-            "login"
-        );
-        let error = resolve_privileged_password(
-            PrivilegedCommandKind::Su,
-            None,
-            None,
-            Some("login".to_string()),
-        )
-        .unwrap_err();
+        let error = resolve_privileged_password(PrivilegedCommandKind::Su, None, None).unwrap_err();
         assert!(matches!(error, AppError::Command(message) if message == "SU_PASSWORD_NEEDED"));
     }
 }

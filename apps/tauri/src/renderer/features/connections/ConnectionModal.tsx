@@ -9,11 +9,78 @@ import type {
 } from '@fileterm/core'
 import { normalizeConnectionHost } from '@fileterm/shared'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 type SshConnectionSettingKey = keyof SshConnectionDefaults
+
+function ConnectionSecretField({
+  id,
+  label,
+  value,
+  hasSavedValue,
+  canClear,
+  optional = false,
+  disabled = false,
+  onChange,
+  onClear,
+  onUndo
+}: {
+  id: string
+  label: string
+  value: string | null | undefined
+  hasSavedValue: boolean
+  canClear: boolean
+  optional?: boolean
+  disabled?: boolean
+  onChange(value: string): void
+  onClear(): void
+  onUndo(): void
+}) {
+  const markedForClear = value === null
+  const showClearButton = canClear && hasSavedValue && !markedForClear
+
+  return (
+    <div className="ssh-secret-field span-2">
+      <div className="ssh-secret-field__header">
+        <label htmlFor={id}>
+          {label}
+          {optional ? <span className="ssh-secret-field__optional">{t.optionalField}</span> : null}:
+        </label>
+        {showClearButton ? (
+          <button className="ssh-secret-field__clear" type="button" onClick={onClear} title={t.clearSavedPassword}>
+            <AppIcon name="trash" size={13} />
+            {t.clearSavedPassword}
+          </button>
+        ) : markedForClear ? (
+          <span className="ssh-secret-field__cleared">
+            {t.passwordMarkedForClear}
+            <button className="ssh-secret-field__undo" type="button" onClick={onUndo}>
+              {t.undoClearSavedPassword}
+            </button>
+          </span>
+        ) : null}
+      </div>
+      <input
+        id={id}
+        autoComplete="new-password"
+        disabled={disabled || markedForClear}
+        placeholder={
+          markedForClear
+            ? t.passwordMarkedForClear
+            : hasSavedValue
+              ? t.passwordReplacePlaceholder
+              : t.passwordPlaceholder
+        }
+        type="password"
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  )
+}
 
 function effectiveConnectionSetting<K extends SshConnectionSettingKey>(
   form: CreateProfileInput,
@@ -322,38 +389,32 @@ export function ConnectionModal({
                       </label>
                     ) : null}
                     {form.type === 'ftp' || form.authType === 'password' || form.authType === 'keyboard-interactive' ? (
-                      <label className="span-2">
-                        {t.password}:
-                        <input
-                          disabled={
-                            form.type === 'ssh' &&
-                            form.authType === 'password' &&
-                            effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
-                          }
-                          type="password"
-                          value={form.password ?? ''}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              password: event.target.value,
-                              useEmptyPassword: event.target.value ? false : prev.useEmptyPassword
-                            }))
-                          }
-                        />
-                      </label>
+                      <ConnectionSecretField
+                        id="connection-password"
+                        label={t.password}
+                        value={form.password}
+                        hasSavedValue={hasSavedPassword}
+                        canClear={mode === 'edit'}
+                        disabled={
+                          form.type === 'ssh' &&
+                          form.authType === 'password' &&
+                          effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
+                        }
+                        onChange={(value) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            password: value,
+                            useEmptyPassword: value ? false : prev.useEmptyPassword
+                          }))
+                        }
+                        onClear={() => setForm((prev) => ({ ...prev, password: null, useEmptyPassword: false }))}
+                        onUndo={() => setForm((prev) => ({ ...prev, password: '' }))}
+                      />
                     ) : null}
                     {form.type === 'ssh' && form.authType === 'privateKey' ? (
                       <SshPrivateKeyField form={form} setForm={setForm} />
                     ) : null}
-                    {form.type === 'ssh' && form.authType === 'password' ? (
-                      <div className="span-2 ssh-auth-hint">
-                        {effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')
-                          ? t.emptyPasswordAuthEnabledHint
-                          : mode === 'edit' && hasSavedPassword
-                            ? t.passwordSavedHint
-                            : t.passwordAuthHint}
-                      </div>
-                    ) : form.type === 'ssh' && form.authType === 'keyboard-interactive' ? (
+                    {form.type === 'ssh' && form.authType === 'keyboard-interactive' ? (
                       <div className="span-2 ssh-auth-hint">{t.keyboardInteractiveHint}</div>
                     ) : form.type === 'ftp' ? (
                       <>
@@ -387,43 +448,28 @@ export function ConnectionModal({
                     ) : null}
                     {form.type === 'ssh' ? (
                       <>
-                        <label className="span-2">
-                          {t.sudoPassword}:
-                          <input
-                            disabled={form.sudoSameAsLogin === true}
-                            type="password"
-                            value={form.sudoPassword ?? ''}
-                            onChange={(event) => setForm((prev) => ({ ...prev, sudoPassword: event.target.value }))}
-                          />
-                        </label>
-                        <div className="span-2 ssh-auth-hint">
-                          {mode === 'edit' && hasSavedSudoPassword
-                            ? t.privilegedPasswordSavedHint
-                            : t.privilegedPasswordHint}
-                        </div>
-                        <label className="span-2">
-                          {t.suPassword}:
-                          <input
-                            type="password"
-                            value={form.suPassword ?? ''}
-                            onChange={(event) => setForm((prev) => ({ ...prev, suPassword: event.target.value }))}
-                          />
-                        </label>
-                        <div className="span-2 ssh-auth-hint">
-                          {mode === 'edit' && hasSavedSuPassword
-                            ? t.privilegedPasswordSavedHint
-                            : t.privilegedPasswordHint}
-                        </div>
-                        <label className="span-2 ssh-checkbox">
-                          <input
-                            checked={form.sudoSameAsLogin === true}
-                            type="checkbox"
-                            onChange={(event) =>
-                              setForm((prev) => ({ ...prev, sudoSameAsLogin: event.target.checked }))
-                            }
-                          />
-                          <span>{t.sudoSameAsLogin}</span>
-                        </label>
+                        <ConnectionSecretField
+                          id="connection-sudo-password"
+                          label={t.sudoPassword}
+                          value={form.sudoPassword}
+                          hasSavedValue={hasSavedSudoPassword}
+                          canClear={mode === 'edit'}
+                          optional
+                          onChange={(value) => setForm((prev) => ({ ...prev, sudoPassword: value }))}
+                          onClear={() => setForm((prev) => ({ ...prev, sudoPassword: null }))}
+                          onUndo={() => setForm((prev) => ({ ...prev, sudoPassword: '' }))}
+                        />
+                        <ConnectionSecretField
+                          id="connection-su-password"
+                          label={t.suPassword}
+                          value={form.suPassword}
+                          hasSavedValue={hasSavedSuPassword}
+                          canClear={mode === 'edit'}
+                          optional
+                          onChange={(value) => setForm((prev) => ({ ...prev, suPassword: value }))}
+                          onClear={() => setForm((prev) => ({ ...prev, suPassword: null }))}
+                          onUndo={() => setForm((prev) => ({ ...prev, suPassword: '' }))}
+                        />
                       </>
                     ) : null}
                     {form.type === 'ssh' && mode === 'edit' && form.trustedHostFingerprint ? (

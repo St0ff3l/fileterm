@@ -82,6 +82,7 @@ pub enum WorkerCmd {
         root_access_method: Option<String>,
         sudo_user: Option<String>,
         sudo_password: Option<String>,
+        use_saved_password: bool,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     ListSshTunnels {

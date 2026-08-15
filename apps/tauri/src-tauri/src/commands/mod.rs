@@ -1299,17 +1299,23 @@ pub async fn app_test_webdav_sync(app: AppHandle) -> Result<serde_json::Value, A
 }
 
 #[tauri::command]
-pub async fn app_upload_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    crate::services::webdav::upload(&app).await
+pub async fn app_upload_webdav_sync(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::webdav::upload(&app, mode.as_deref()).await
 }
 
 #[tauri::command]
-pub async fn app_download_webdav_sync(app: AppHandle) -> Result<serde_json::Value, AppError> {
+pub async fn app_download_webdav_sync(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
-    let result = crate::services::webdav::download(&app).await?;
+    let result = crate::services::webdav::download(&app, mode.as_deref()).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
-    if changed > 0 {
+    if changed > 0 || result.get("mode").and_then(Value::as_str) == Some("overwrite-local") {
         if let Ok(snapshot) = get_workspace_snapshot_unlocked(app.clone()).await {
             let _ = app.emit("workspace:snapshot", snapshot);
         }
@@ -1336,17 +1342,23 @@ pub async fn app_test_s3_backup(app: AppHandle) -> Result<serde_json::Value, App
 }
 
 #[tauri::command]
-pub async fn app_upload_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
-    crate::services::s3_backup::upload(&app).await
+pub async fn app_upload_s3_backup(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
+    crate::services::s3_backup::upload(&app, mode.as_deref()).await
 }
 
 #[tauri::command]
-pub async fn app_download_s3_backup(app: AppHandle) -> Result<serde_json::Value, AppError> {
+pub async fn app_download_s3_backup(
+    app: AppHandle,
+    mode: Option<String>,
+) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
-    let result = crate::services::s3_backup::download(&app).await?;
+    let result = crate::services::s3_backup::download(&app, mode.as_deref()).await?;
     let changed = result.get("imported").and_then(Value::as_u64).unwrap_or(0)
         + result.get("updated").and_then(Value::as_u64).unwrap_or(0);
-    if changed > 0 {
+    if changed > 0 || result.get("mode").and_then(Value::as_str) == Some("overwrite-local") {
         if let Ok(snapshot) = get_workspace_snapshot_unlocked(app.clone()).await {
             let _ = app.emit("workspace:snapshot", snapshot);
         }
@@ -3569,11 +3581,17 @@ pub async fn app_set_remote_file_access_mode(
         .and_then(|o| o.get("rootAccessMethod"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+    let use_saved_password = options
+        .as_ref()
+        .and_then(|o| o.get("useSavedPassword"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::SetRemoteFileAccessMode {
         mode,
         root_access_method,
         sudo_user,
         sudo_password,
+        use_saved_password,
         respond_to: tx,
     })
     .await?;

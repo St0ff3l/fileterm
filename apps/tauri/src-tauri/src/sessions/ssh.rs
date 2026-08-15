@@ -1526,6 +1526,63 @@ fn root_access_method_for_shell_user(
         .unwrap_or(RootFileAccessMethod::Sudo)
 }
 
+fn root_password_for_method(
+    method: RootFileAccessMethod,
+    sudo_password: &Option<String>,
+    su_password: &Option<String>,
+) -> Option<String> {
+    match method {
+        RootFileAccessMethod::Sudo => sudo_password.clone(),
+        RootFileAccessMethod::Su => su_password.clone(),
+    }
+}
+
+fn cache_root_password_for_auth(
+    auth: Option<&PendingRootAccessAuth>,
+    root_password: &Option<String>,
+    sudo_password: &mut Option<String>,
+    su_password: &mut Option<String>,
+) {
+    let Some(auth) = auth else {
+        return;
+    };
+    let Some(password) = root_password.clone() else {
+        return;
+    };
+    match auth.method {
+        RootFileAccessMethod::Sudo => *sudo_password = Some(password),
+        RootFileAccessMethod::Su => *su_password = Some(password),
+    }
+}
+
+/// Fill an interactive sudo/su prompt from the separately saved profile
+/// secret. The write happens only after the PTY has emitted a matching
+/// password prompt; no password is sent pre-emptively or written to the
+/// terminal transcript.
+async fn autofill_root_access_password(
+    shell_writer: &SshShellWriteHalf,
+    awaiting_auth: &mut Option<PendingRootAccessAuth>,
+    pending_password: &mut String,
+    root_password: &mut Option<String>,
+    sudo_password: &Option<String>,
+    su_password: &Option<String>,
+) -> Result<bool, String> {
+    let Some(auth) = awaiting_auth.clone() else {
+        return Ok(false);
+    };
+    if !auth.interactive_shell {
+        return Ok(false);
+    }
+    let Some(password) = root_password_for_method(auth.method, sudo_password, su_password) else {
+        return Ok(false);
+    };
+    write_shell_data(shell_writer, format!("{password}\r").into_bytes()).await?;
+    *root_password = Some(password);
+    pending_password.clear();
+    *awaiting_auth = None;
+    Ok(true)
+}
+
 /// Remove CSI/OSC control sequences before inspecting a prompt. This mirrors
 /// Electron's root-prompt heuristic without feeding visual escape codes into
 /// the comparison.
@@ -4185,7 +4242,13 @@ async fn run_worker_loop(
                 sftp_unavailable_reason: None,
                 file_access_mode: "user".to_string(),
                 sudo_user: None,
-                has_reusable_sudo_auth: false,
+                // A saved sudo password is already a reusable credential for
+                // the file toolbar. Keep only this non-secret presence bit in
+                // the public snapshot; the password itself stays worker-local.
+                has_reusable_sudo_auth: profile
+                    .get("sudoPassword")
+                    .and_then(Value::as_str)
+                    .is_some_and(|password| !password.is_empty()),
                 login_user: profile
                     .get("username")
                     .and_then(Value::as_str)
@@ -4627,7 +4690,20 @@ async fn run_worker_loop(
     // never leak into SessionSnapshot (which is serialized to the renderer).
     let mut file_access_mode = "user".to_string();
     let mut sudo_user: Option<String> = None;
-    let mut sudo_password: Option<String> = None;
+    let mut sudo_password = profile
+        .get("sudoPassword")
+        .and_then(Value::as_str)
+        .filter(|password| !password.is_empty())
+        .map(str::to_string);
+    let mut su_password = profile
+        .get("suPassword")
+        .and_then(Value::as_str)
+        .filter(|password| !password.is_empty())
+        .map(str::to_string);
+    // File operations receive the credential matching the currently selected
+    // root method. Keep this active value separate from the two profile
+    // caches so switching sudo ↔ su cannot reuse the wrong password.
+    let mut root_password = sudo_password.clone();
     let mut sudo_prompt_buffer = String::new();
     let mut awaiting_root_access_auth: Option<PendingRootAccessAuth> = None;
     let mut pending_sudo_password = String::new();
@@ -4729,16 +4805,22 @@ async fn run_worker_loop(
                     &mut awaiting_root_access_auth,
                     &mut pending_sudo_password,
                     &mut recent_terminal_input,
-                    &mut sudo_password,
+                    &mut root_password,
                     &mut last_authenticated_root_access,
                     &mut pending_root_access_command,
                 ) {
+                    cache_root_password_for_auth(
+                        last_authenticated_root_access.as_ref(),
+                        &root_password,
+                        &mut sudo_password,
+                        &mut su_password,
+                    );
                     let mut sessions = state.sessions.write().await;
                     if let Some(session) = sessions.get_mut(tab_id) {
                         session.has_reusable_sudo_auth = matches!(
                             last_authenticated_root_access.as_ref(),
                             Some(auth) if auth.method == RootFileAccessMethod::Sudo
-                        ) && sudo_password.is_some();
+                        ) && root_password.is_some();
                     }
                 }
                 if pending_root_access_command != previous_pending_command {
@@ -4814,16 +4896,22 @@ async fn run_worker_loop(
                                 &mut awaiting_root_access_auth,
                                 &mut pending_sudo_password,
                                 &mut recent_terminal_input,
-                                &mut sudo_password,
+                                &mut root_password,
                                 &mut last_authenticated_root_access,
                                 &mut pending_root_access_command,
                             ) {
+                                cache_root_password_for_auth(
+                                    last_authenticated_root_access.as_ref(),
+                                    &root_password,
+                                    &mut sudo_password,
+                                    &mut su_password,
+                                );
                                 let mut sessions = state.sessions.write().await;
                                 if let Some(session) = sessions.get_mut(tab_id) {
                                     session.has_reusable_sudo_auth = matches!(
                                         last_authenticated_root_access.as_ref(),
                                         Some(auth) if auth.method == RootFileAccessMethod::Sudo
-                                    ) && sudo_password.is_some();
+                                    ) && root_password.is_some();
                                 }
                             }
                             if pending_root_access_command != previous_pending_command {
@@ -4849,7 +4937,9 @@ async fn run_worker_loop(
                                 &mut file_access_mode,
                                 &mut root_file_access_method,
                                 &mut sudo_user,
+                                &mut root_password,
                                 &mut sudo_password,
+                                &mut su_password,
                                 tab_id,
                                 app,
                                 &state,
@@ -4864,7 +4954,9 @@ async fn run_worker_loop(
                                 &mut file_access_mode,
                                 &mut root_file_access_method,
                                 &mut sudo_user,
+                                &mut root_password,
                                 &mut sudo_password,
+                                &mut su_password,
                                 tab_id,
                                 &state,
                                 &tunnel_command_tx,
@@ -4917,14 +5009,36 @@ async fn run_worker_loop(
                             &mut sudo_prompt_buffer,
                             &mut awaiting_root_access_auth,
                             &mut pending_sudo_password,
-                            &mut sudo_password,
+                            &mut root_password,
                             &mut last_authenticated_root_access,
                             &mut pending_root_access_command,
                         ) {
+                            cache_root_password_for_auth(
+                                last_authenticated_root_access.as_ref(),
+                                &root_password,
+                                &mut sudo_password,
+                                &mut su_password,
+                            );
                             let mut sessions = state.sessions.write().await;
                             if let Some(session) = sessions.get_mut(tab_id) {
                                 session.has_reusable_sudo_auth = false;
                             }
+                        }
+                        if autofill_root_access_password(
+                            &shell_writer,
+                            &mut awaiting_root_access_auth,
+                            &mut pending_sudo_password,
+                            &mut root_password,
+                            &sudo_password,
+                            &su_password,
+                        )
+                        .await?
+                        {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                "interactive privilege password filled from connection profile",
+                            );
                         }
                         if awaiting_root_access_auth != previous_awaiting_auth {
                             if let Some(auth) = awaiting_root_access_auth.as_ref() {
@@ -5041,7 +5155,12 @@ async fn run_worker_loop(
                                                     last_authenticated_root_access
                                                         .as_ref()
                                                         .map(|auth| auth.method),
-                                                    sudo_password.is_some(),
+                                                    root_password_for_method(
+                                                        access_method,
+                                                        &sudo_password,
+                                                        &su_password,
+                                                    )
+                                                    .is_some(),
                                                 ),
                                             );
                                             let access_changed =
@@ -5051,7 +5170,12 @@ async fn run_worker_loop(
                                             s.sudo_user = Some(observed_sudo_user.clone());
                                             s.has_reusable_sudo_auth =
                                                 access_method == RootFileAccessMethod::Sudo
-                                                    && sudo_password.is_some();
+                                                    && root_password_for_method(
+                                                        access_method,
+                                                        &sudo_password,
+                                                        &su_password,
+                                                    )
+                                                    .is_some();
                                             if access_changed {
                                                 session_state_changed = true;
                                             }
@@ -5102,6 +5226,8 @@ async fn run_worker_loop(
                                 file_access_mode = mode;
                                 sudo_user = su_user;
                                 root_file_access_method = access_method;
+                                root_password =
+                                    root_password_for_method(access_method, &sudo_password, &su_password);
                             }
                             if let (Some(cwd), Some(sftp)) = (cwd_to_follow, sftp_arc.as_ref()) {
                                 tokio::spawn(follow_shell_cwd(
@@ -5113,7 +5239,7 @@ async fn run_worker_loop(
                                     file_access_mode.clone(),
                                     root_file_access_method,
                                     sudo_user.clone(),
-                                    sudo_password.clone(),
+                                    root_password.clone(),
                                 ));
                             } else if session_state_changed {
                                 // 解耦：get_workspace_snapshot 会读整个 sessions
@@ -5258,14 +5384,36 @@ async fn run_worker_loop(
                             &mut sudo_prompt_buffer,
                             &mut awaiting_root_access_auth,
                             &mut pending_sudo_password,
-                            &mut sudo_password,
+                            &mut root_password,
                             &mut last_authenticated_root_access,
                             &mut pending_root_access_command,
                         ) {
+                            cache_root_password_for_auth(
+                                last_authenticated_root_access.as_ref(),
+                                &root_password,
+                                &mut sudo_password,
+                                &mut su_password,
+                            );
                             let mut sessions = state.sessions.write().await;
                             if let Some(session) = sessions.get_mut(tab_id) {
                                 session.has_reusable_sudo_auth = false;
                             }
+                        }
+                        if autofill_root_access_password(
+                            &shell_writer,
+                            &mut awaiting_root_access_auth,
+                            &mut pending_sudo_password,
+                            &mut root_password,
+                            &sudo_password,
+                            &su_password,
+                        )
+                        .await?
+                        {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                "interactive privilege password filled from connection profile",
+                            );
                         }
                         batch_buffer.extend_from_slice(data.as_ref());
                         if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {
@@ -5398,6 +5546,8 @@ async fn handle_worker_cmd_without_sftp(
     root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
+    saved_sudo_password: &mut Option<String>,
+    saved_su_password: &mut Option<String>,
     tab_id: &str,
     state: &crate::services::workspace::WorkspaceState,
     tunnel_commands: &mpsc::UnboundedSender<TunnelCommand>,
@@ -5538,6 +5688,7 @@ async fn handle_worker_cmd_without_sftp(
             root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
+            use_saved_password,
             respond_to,
         } => {
             if mode == "root" && !exec_channel_enabled {
@@ -5560,18 +5711,32 @@ async fn handle_worker_cmd_without_sftp(
             // 对照 Electron verifyRootFileAccess 先验证凭据。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
+            let prev_saved_sudo_password = saved_sudo_password.clone();
+            let prev_saved_su_password = saved_su_password.clone();
             let prev_mode = file_access_mode.clone();
             let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
             }
-            if mode == "root" && requested_access_method != prev_access_method {
-                *sudo_password = None;
+            if mode == "root"
+                && (use_saved_password
+                    || requested_access_method != prev_access_method
+                    || sudo_password.is_none())
+            {
+                *sudo_password = root_password_for_method(
+                    requested_access_method,
+                    saved_sudo_password,
+                    saved_su_password,
+                );
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
-                    *sudo_password = Some(pwd);
+                    *sudo_password = Some(pwd.clone());
+                    match requested_access_method {
+                        RootFileAccessMethod::Sudo => *saved_sudo_password = Some(pwd),
+                        RootFileAccessMethod::Su => *saved_su_password = Some(pwd),
+                    }
                 }
             }
 
@@ -5602,6 +5767,8 @@ async fn handle_worker_cmd_without_sftp(
                     *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
+                    *saved_sudo_password = prev_saved_sudo_password;
+                    *saved_su_password = prev_saved_su_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
@@ -5643,6 +5810,8 @@ async fn handle_worker_cmd(
     root_file_access_method: &mut RootFileAccessMethod,
     sudo_user: &mut Option<String>,
     sudo_password: &mut Option<String>,
+    saved_sudo_password: &mut Option<String>,
+    saved_su_password: &mut Option<String>,
     tab_id: &str,
     app: &AppHandle,
     state: &tauri::State<'_, crate::services::workspace::WorkspaceState>,
@@ -6489,6 +6658,7 @@ async fn handle_worker_cmd(
             root_access_method: new_root_access_method,
             sudo_user: new_sudo_user,
             sudo_password: new_sudo_password,
+            use_saved_password,
             respond_to,
         } => {
             if mode == "root" && !exec_channel_enabled {
@@ -6510,18 +6680,32 @@ async fn handle_worker_cmd(
             // 而不是等到第一次文件操作才失败（用户会以为"root 切换没接入"）。
             let prev_sudo_user = sudo_user.clone();
             let prev_sudo_password = sudo_password.clone();
+            let prev_saved_sudo_password = saved_sudo_password.clone();
+            let prev_saved_su_password = saved_su_password.clone();
             let prev_mode = file_access_mode.clone();
             let prev_access_method = *root_file_access_method;
 
             if let Some(next_user) = new_sudo_user.filter(|user| !user.trim().is_empty()) {
                 *sudo_user = Some(next_user);
             }
-            if mode == "root" && requested_access_method != prev_access_method {
-                *sudo_password = None;
+            if mode == "root"
+                && (use_saved_password
+                    || requested_access_method != prev_access_method
+                    || sudo_password.is_none())
+            {
+                *sudo_password = root_password_for_method(
+                    requested_access_method,
+                    saved_sudo_password,
+                    saved_su_password,
+                );
             }
             if let Some(pwd) = new_sudo_password {
                 if !pwd.is_empty() {
-                    *sudo_password = Some(pwd);
+                    *sudo_password = Some(pwd.clone());
+                    match requested_access_method {
+                        RootFileAccessMethod::Sudo => *saved_sudo_password = Some(pwd),
+                        RootFileAccessMethod::Su => *saved_su_password = Some(pwd),
+                    }
                 }
                 // empty password ⇒ keep existing (cache reuse)
             }
@@ -6558,6 +6742,8 @@ async fn handle_worker_cmd(
                     *root_file_access_method = prev_access_method;
                     *sudo_user = prev_sudo_user;
                     *sudo_password = prev_sudo_password;
+                    *saved_sudo_password = prev_saved_sudo_password;
+                    *saved_su_password = prev_saved_su_password;
                     let _ = respond_to.send(Err(err));
                     return Ok(false);
                 }
@@ -9123,6 +9309,31 @@ mod tests {
             Ok(RootFileAccessMethod::Su)
         );
         assert!(parse_root_file_access_method(Some("doas")).is_err());
+    }
+
+    #[test]
+    fn selects_separate_saved_passwords_for_sudo_and_su() {
+        let sudo_password = Some("sudo-secret".to_string());
+        let su_password = Some("su-secret".to_string());
+
+        assert_eq!(
+            super::root_password_for_method(
+                RootFileAccessMethod::Sudo,
+                &sudo_password,
+                &su_password,
+            )
+            .as_deref(),
+            Some("sudo-secret")
+        );
+        assert_eq!(
+            super::root_password_for_method(
+                RootFileAccessMethod::Su,
+                &sudo_password,
+                &su_password,
+            )
+            .as_deref(),
+            Some("su-secret")
+        );
     }
 
     #[test]
