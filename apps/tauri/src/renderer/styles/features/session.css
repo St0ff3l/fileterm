@@ -322,7 +322,7 @@
 }
 
 .terminal-dock {
-  --terminal-dock-surface: color-mix(in srgb, var(--bg-card) 64%, transparent);
+  --terminal-dock-surface: var(--theme-terminal-dock-surface, color-mix(in srgb, var(--bg-card) 64%, transparent));
   --terminal-dock-border: color-mix(in srgb, var(--border) 76%, transparent);
   --terminal-dock-text-muted: var(--text-muted);
   position: absolute;

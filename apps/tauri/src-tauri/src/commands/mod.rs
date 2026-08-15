@@ -219,6 +219,20 @@ pub struct ThemeSemanticColors {
     pub diff_removed: String,
     pub skill: String,
     pub keyword: String,
+    /// Newer semantic controls are optional on disk so older theme exports
+    /// can still be deserialized and filled by `normalize_theme_config`.
+    #[serde(default)]
+    pub secondary: String,
+    #[serde(default)]
+    pub text_secondary: String,
+    #[serde(default)]
+    pub info: String,
+    #[serde(default)]
+    pub warning: String,
+    #[serde(default)]
+    pub error: String,
+    #[serde(default)]
+    pub success: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -231,6 +245,10 @@ pub struct ThemeBody {
     pub opaque_windows: bool,
     pub semantic_colors: ThemeSemanticColors,
     pub surface: String,
+    #[serde(default)]
+    pub surface_secondary: String,
+    #[serde(default)]
+    pub surface_elevated: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub overrides: BTreeMap<String, String>,
     pub terminal: TerminalThemeConfig,
@@ -287,8 +305,16 @@ fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
                 skill: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                secondary: if is_light { "#8b5cf6" } else { "#b06dff" }.to_string(),
+                text_secondary: if is_light { "#667085" } else { "#a9a9b2" }.to_string(),
+                info: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
+                warning: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                error: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
+                success: "#00a240".to_string(),
             },
             surface: if is_light { "#ffffff" } else { "#111111" }.to_string(),
+            surface_secondary: if is_light { "#ffffff" } else { "#1b1b1b" }.to_string(),
+            surface_elevated: if is_light { "#ffffff" } else { "#242424" }.to_string(),
             overrides: BTreeMap::new(),
             terminal: TerminalThemeConfig {
                 background: if is_light { "#ffffff" } else { "#111111" }.to_string(),
@@ -331,8 +357,16 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
                 skill: if is_light { "#7c3aed" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
+                text_secondary: if is_light { "#5e5e61" } else { "#9b9b9b" }.to_string(),
+                info: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
+                warning: if is_light { "#d97706" } else { "#ffcc00" }.to_string(),
+                error: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
+                success: if is_light { "#168a53" } else { "#39d98a" }.to_string(),
             },
             surface: if is_light { "#F4F4F6" } else { "#151515" }.to_string(),
+            surface_secondary: if is_light { "#ffffff" } else { "#1e1e1e" }.to_string(),
+            surface_elevated: if is_light { "#ffffff" } else { "#2a2a2a" }.to_string(),
             overrides: BTreeMap::new(),
             terminal: TerminalThemeConfig {
                 background: if is_light { "#f4f4f6" } else { "#181818" }.to_string(),
@@ -413,6 +447,14 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
     normalize_theme_color(&mut config.theme.ink, &fallback.theme.ink);
     normalize_theme_color(&mut config.theme.surface, &fallback.theme.surface);
     normalize_theme_color(
+        &mut config.theme.surface_secondary,
+        &fallback.theme.surface_secondary,
+    );
+    normalize_theme_color(
+        &mut config.theme.surface_elevated,
+        &fallback.theme.surface_elevated,
+    );
+    normalize_theme_color(
         &mut config.theme.semantic_colors.diff_added,
         &fallback.theme.semantic_colors.diff_added,
     );
@@ -428,7 +470,30 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         &mut config.theme.semantic_colors.keyword,
         &fallback.theme.semantic_colors.keyword,
     );
-    normalize_theme_color(&mut config.theme.surface, &fallback.theme.surface);
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.secondary,
+        &fallback.theme.semantic_colors.secondary,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.text_secondary,
+        &fallback.theme.semantic_colors.text_secondary,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.info,
+        &fallback.theme.semantic_colors.info,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.warning,
+        &fallback.theme.semantic_colors.warning,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.error,
+        &fallback.theme.semantic_colors.error,
+    );
+    normalize_theme_color(
+        &mut config.theme.semantic_colors.success,
+        &fallback.theme.semantic_colors.success,
+    );
     config.theme.overrides.retain(|key, value| {
         let valid_key = !key.trim().is_empty() && key.len() <= 128;
         let valid_color = is_theme_hex_color(value.trim());
@@ -5024,6 +5089,8 @@ mod ui_preferences_tests {
         config.variant = "light".to_string();
         config.theme.contrast = 255;
         config.theme.accent = "not-a-color".to_string();
+        config.theme.surface_secondary = "not-a-color".to_string();
+        config.theme.semantic_colors.text_secondary = "not-a-color".to_string();
         config.theme.terminal.ansi.red = "#abc".to_string();
         config
             .theme
@@ -5037,6 +5104,8 @@ mod ui_preferences_tests {
         assert_eq!(normalized.variant, "light");
         assert_eq!(normalized.theme.contrast, 100);
         assert_eq!(normalized.theme.accent, "#3B82F6");
+        assert_eq!(normalized.theme.surface_secondary, "#FFFFFF");
+        assert_eq!(normalized.theme.semantic_colors.text_secondary, "#5E5E61");
         assert_eq!(normalized.theme.terminal.ansi.red, "#ABC");
         assert_eq!(
             normalized.theme.overrides.get("--bg-main"),
@@ -5061,6 +5130,25 @@ mod ui_preferences_tests {
     fn legacy_component_color_table_does_not_override_the_default_css_theme() {
         let mut legacy =
             serde_json::to_value(default_theme_config()).expect("default theme should serialize");
+        for key in ["surfaceSecondary", "surfaceElevated"] {
+            legacy["theme"]
+                .as_object_mut()
+                .expect("theme should be an object")
+                .remove(key);
+        }
+        for key in [
+            "secondary",
+            "textSecondary",
+            "info",
+            "warning",
+            "error",
+            "success",
+        ] {
+            legacy["theme"]["semanticColors"]
+                .as_object_mut()
+                .expect("semantic colors should be an object")
+                .remove(key);
+        }
         legacy["theme"]["ui"] = serde_json::json!({
             "surfaces": { "app": "#FF00FF" },
             "dialog": { "surface": "#00FF00" }
@@ -5072,6 +5160,10 @@ mod ui_preferences_tests {
 
         assert!(normalized.theme.overrides.is_empty());
         assert_eq!(normalized.code_theme_id, "fileterm");
+        assert_eq!(normalized.theme.surface_secondary, "#1E1E1E");
+        assert_eq!(normalized.theme.surface_elevated, "#2A2A2A");
+        assert_eq!(normalized.theme.semantic_colors.secondary, "#8BBFFF");
+        assert_eq!(normalized.theme.semantic_colors.success, "#39D98A");
     }
 
     #[test]

@@ -50,21 +50,24 @@ function alpha(color: string, alphaPercent: number) {
 function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVariant): Record<string, string> {
   const isLight = variant === 'light'
   const surface = theme.surface
+  const surfaceSecondary = theme.surfaceSecondary
+  const surfaceElevated = theme.surfaceElevated
   const ink = theme.ink
   const accent = theme.accent
+  const secondaryAccent = theme.semanticColors.secondary
 
-  const sidebar = isLight ? blend(surface, '#000000', 3) : blend(surface, '#FFFFFF', 5)
-  const card = isLight ? '#FFFFFF' : blend(surface, '#FFFFFF', 4)
-  const elevated = isLight ? '#FFFFFF' : blend(surface, '#FFFFFF', 8)
-  const input = isLight ? '#FFFFFF' : blend(surface, '#000000', 18)
-  const hover = isLight ? blend(surface, '#000000', 5.5) : blend(surface, '#FFFFFF', 8)
-  const active = isLight ? blend(surface, accent, 12) : blend(surface, accent, 18)
-  const titlebar = isLight ? surface : blend(surface, '#000000', 8)
-  const managerHeadBg = isLight ? blend(surface, '#000000', 2) : sidebar
+  const sidebar = surfaceSecondary
+  const card = surfaceSecondary
+  const elevated = surfaceElevated
+  const input = surfaceElevated
+  const hover = isLight ? blend(surfaceElevated, '#000000', 5.5) : blend(surfaceElevated, '#FFFFFF', 8)
+  const active = isLight ? blend(surfaceElevated, accent, 12) : blend(surfaceElevated, accent, 18)
+  const titlebar = surfaceElevated
+  const managerHeadBg = surfaceSecondary
 
-  const secondaryText = isLight ? blend(surface, ink, 68) : blend(surface, ink, 64)
-  const softText = isLight ? blend(surface, ink, 48) : blend(surface, ink, 44)
-  const disabledText = isLight ? blend(surface, ink, 28) : blend(surface, ink, 26)
+  const secondaryText = theme.semanticColors.textSecondary
+  const softText = isLight ? blend(surface, secondaryText, 72) : blend(surface, secondaryText, 68)
+  const disabledText = isLight ? blend(surface, secondaryText, 46) : blend(surface, secondaryText, 42)
 
   const border = alpha(ink, isLight ? 12 : 10)
   const strongBorder = alpha(ink, isLight ? 22 : 18)
@@ -72,14 +75,16 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
 
   const focus = accent
   const accentHover = isLight ? blend(accent, '#000000', 12) : blend(accent, '#FFFFFF', 15)
+  const secondaryHover = isLight ? blend(secondaryAccent, '#000000', 12) : blend(secondaryAccent, '#FFFFFF', 15)
   const accentText = isLight ? blend(accent, ink, 35) : blend(accent, '#FFFFFF', 70)
 
-  const danger = isLight ? '#DC2626' : '#FF5F57'
-  const success = isLight ? '#16A34A' : '#39D98A'
-  const warning = isLight ? '#D97706' : '#FFCC00'
-  const info = accent
+  const danger = theme.semanticColors.error
+  const success = theme.semanticColors.success
+  const warning = theme.semanticColors.warning
+  const info = theme.semanticColors.info
 
-  const secondarySurface = alpha(accent, isLight ? 10 : 14)
+  const secondarySurface = alpha(secondaryAccent, isLight ? 10 : 14)
+  const infoSurface = alpha(info, isLight ? 10 : 14)
   const successSurface = alpha(success, isLight ? 10 : 14)
   const warningSurface = alpha(warning, isLight ? 10 : 14)
   const dangerSurface = alpha(danger, isLight ? 10 : 14)
@@ -89,18 +94,21 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
   return {
     '--bg-main': surface,
     '--bg-primary': surface,
-    '--bg-secondary': sidebar,
+    '--bg-secondary': surfaceSecondary,
     '--bg-sidebar': sidebarBackground,
     '--bg-card': card,
     '--bg-elevated': elevated,
     '--bg-hover': hover,
     '--bg-active': active,
     '--titlebar-background': titlebar,
+    '--tabbar-background': surfaceElevated,
     '--manager-head-bg': managerHeadBg,
     '--input-bg': input,
     '--command-history-head-bg': surface,
     '--surface-panel': card,
     '--surface-raised': elevated,
+    '--surface-secondary': surfaceSecondary,
+    '--surface-elevated': surfaceElevated,
     '--surface-hover': alpha(ink, isLight ? 5 : 7),
     '--surface-chip': alpha(ink, isLight ? 8 : 14),
     '--surface-inset': alpha(ink, isLight ? 3 : 5),
@@ -122,6 +130,17 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--primary': accent,
     '--primary-hover': accentHover,
     '--secondary': secondaryText,
+    '--secondary-accent': secondaryAccent,
+    '--accent-secondary': secondaryAccent,
+    '--theme-secondary': secondaryAccent,
+    '--theme-surface-secondary': surfaceSecondary,
+    '--theme-surface-elevated': surfaceElevated,
+    '--theme-text-primary': ink,
+    '--theme-text-secondary': secondaryText,
+    '--theme-info': info,
+    '--theme-warning': warning,
+    '--theme-error': danger,
+    '--theme-success': success,
     '--focus-outline': focus,
     '--accent-highlight': accent,
     '--accent-text': accentText,
@@ -141,18 +160,18 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--success-border': alpha(success, isLight ? 20 : 30),
     '--warning': warning,
     '--info': info,
-    '--info-text': accentHover,
-    '--info-surface': secondarySurface,
+    '--info-text': secondaryHover,
+    '--info-surface': infoSurface,
     '--info-border': alpha(info, isLight ? 20 : 30),
     '--folder-accent': warning,
     '--kernel-accent': accent,
     '--copy-link': accent,
     '--copy-link-hover': accentHover,
     '--mini-tab-active-bg': secondarySurface,
-    '--mini-tab-active-text': accentHover,
+    '--mini-tab-active-text': secondaryHover,
     '--memory-warn': warning,
     '--network-tx': danger,
-    '--network-rx': accent,
+    '--network-rx': info,
     '--button-primary-bg': accent,
     '--button-primary-hover': accentHover,
     '--button-primary-border': border,
@@ -225,6 +244,7 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--terminal-cmd-text': ink,
     '--terminal-right-frame-outer': sidebar,
     '--terminal-right-frame-accent': border,
+    '--theme-terminal-dock-surface': surfaceElevated,
     '--terminal-dock-surface': elevated,
     '--terminal-dock-text-muted': secondaryText,
     '--terminal-find-action-divider': 'transparent',
@@ -233,7 +253,7 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--type-total-surface': secondarySurface,
     '--type-ssh': success,
     '--type-ssh-surface': successSurface,
-    '--type-sftp': info,
+    '--type-sftp': secondaryAccent,
     '--type-sftp-surface': secondarySurface,
     '--type-ftp': theme.semanticColors.skill,
     '--type-ftp-surface': alpha(theme.semanticColors.skill, isLight ? 10 : 14),
@@ -274,12 +294,29 @@ function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boo
   const defaultConfig = createDefaultThemeConfig(variant)
   if (config.codeThemeId !== defaultConfig.codeThemeId) return false
   if (config.theme.overrides && Object.keys(config.theme.overrides).length > 0) return false
+  const semanticColorKeys: Array<keyof ThemeConfig['theme']['semanticColors']> = [
+    'diffAdded',
+    'diffRemoved',
+    'skill',
+    'keyword',
+    'secondary',
+    'textSecondary',
+    'info',
+    'warning',
+    'error',
+    'success'
+  ]
   return (
     config.theme.accent.toUpperCase() === defaultConfig.theme.accent.toUpperCase() &&
     config.theme.surface.toUpperCase() === defaultConfig.theme.surface.toUpperCase() &&
+    config.theme.surfaceSecondary.toUpperCase() === defaultConfig.theme.surfaceSecondary.toUpperCase() &&
+    config.theme.surfaceElevated.toUpperCase() === defaultConfig.theme.surfaceElevated.toUpperCase() &&
     config.theme.ink.toUpperCase() === defaultConfig.theme.ink.toUpperCase() &&
     config.theme.contrast === defaultConfig.theme.contrast &&
-    config.theme.opaqueWindows === defaultConfig.theme.opaqueWindows
+    config.theme.opaqueWindows === defaultConfig.theme.opaqueWindows &&
+    semanticColorKeys.every(
+      (key) => config.theme.semanticColors[key].toUpperCase() === defaultConfig.theme.semanticColors[key].toUpperCase()
+    )
   )
 }
 
@@ -303,7 +340,16 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
     '--theme-contrast-medium': `${Math.round(theme.contrast * 0.5)}%`,
     '--theme-contrast-strong': `${Math.round(theme.contrast)}%`,
     '--theme-surface': theme.surface,
+    '--theme-surface-secondary': theme.surfaceSecondary,
+    '--theme-surface-elevated': theme.surfaceElevated,
     '--theme-ink': theme.ink,
+    '--theme-secondary': theme.semanticColors.secondary,
+    '--theme-text-primary': theme.ink,
+    '--theme-text-secondary': theme.semanticColors.textSecondary,
+    '--theme-info': theme.semanticColors.info,
+    '--theme-warning': theme.semanticColors.warning,
+    '--theme-error': theme.semanticColors.error,
+    '--theme-success': theme.semanticColors.success,
     '--theme-window-opacity': theme.opaqueWindows ? '1' : '0.82',
     '--theme-sidebar-backdrop-filter': theme.opaqueWindows ? 'none' : 'blur(18px)',
     '--theme-font-ui': theme.fonts.ui ?? 'var(--font-ui)',
@@ -335,6 +381,7 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
   if (!isDefaultTheme) {
     Object.assign(variables, resolveCompactUiVariables(theme, variant))
   }
+  root.dataset.themeCustom = isDefaultTheme ? 'false' : 'true'
   applyThemeOverrides(variables, theme.overrides)
 
   for (const [colorName, variableName] of ANSI_VARIABLE_NAMES) {
@@ -364,4 +411,5 @@ export function clearThemeVariables() {
     root.style.removeProperty(name)
   }
   appliedThemeVariableNames.clear()
+  delete root.dataset.themeCustom
 }

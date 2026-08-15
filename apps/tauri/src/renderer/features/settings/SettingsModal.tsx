@@ -109,11 +109,36 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
           themeConfig.codeThemeId === 'codex-dark' ||
           themeConfig.codeThemeId === 'codex-light'
     if (!matchesId) return false
+    const colorValues = [
+      candidate.theme.accent,
+      candidate.theme.surface,
+      candidate.theme.surfaceSecondary,
+      candidate.theme.surfaceElevated,
+      candidate.theme.ink,
+      candidate.theme.semanticColors.secondary,
+      candidate.theme.semanticColors.textSecondary,
+      candidate.theme.semanticColors.info,
+      candidate.theme.semanticColors.warning,
+      candidate.theme.semanticColors.error,
+      candidate.theme.semanticColors.success
+    ]
+    const themeColorValues = [
+      themeConfig.theme.accent,
+      themeConfig.theme.surface,
+      themeConfig.theme.surfaceSecondary,
+      themeConfig.theme.surfaceElevated,
+      themeConfig.theme.ink,
+      themeConfig.theme.semanticColors.secondary,
+      themeConfig.theme.semanticColors.textSecondary,
+      themeConfig.theme.semanticColors.info,
+      themeConfig.theme.semanticColors.warning,
+      themeConfig.theme.semanticColors.error,
+      themeConfig.theme.semanticColors.success
+    ]
     return (
-      candidate.theme.accent.toUpperCase() === themeConfig.theme.accent.toUpperCase() &&
-      candidate.theme.surface.toUpperCase() === themeConfig.theme.surface.toUpperCase() &&
-      candidate.theme.ink.toUpperCase() === themeConfig.theme.ink.toUpperCase() &&
-      candidate.theme.contrast === themeConfig.theme.contrast
+      colorValues.every((value, index) => value.toUpperCase() === themeColorValues[index].toUpperCase()) &&
+      candidate.theme.contrast === themeConfig.theme.contrast &&
+      candidate.theme.opaqueWindows === themeConfig.theme.opaqueWindows
     )
   })
 }
@@ -2415,22 +2440,79 @@ export function SettingsModal({
                   </div>
                 </div>
 
-                <div className="theme-config-fields">
-                  <ThemeColorField
-                    label={t.themeAccent}
-                    onChange={(value) => updateThemeBody({ accent: value })}
-                    value={themeConfig.theme.accent}
-                  />
-                  <ThemeColorField
-                    label={t.themeBackground}
-                    onChange={(value) => updateThemeBody({ surface: value })}
-                    value={themeConfig.theme.surface}
-                  />
-                  <ThemeColorField
-                    label={t.themeForeground}
-                    onChange={(value) => updateThemeBody({ ink: value })}
-                    value={themeConfig.theme.ink}
-                  />
+                <div className="theme-config-color-groups">
+                  <section className="theme-config-color-group">
+                    <div className="theme-config-section-heading">
+                      <h4>{t.themeBaseColors}</h4>
+                      <span>{t.themeBaseColorsHint}</span>
+                    </div>
+                    <div className="theme-config-fields">
+                      <ThemeColorField
+                        label={t.themePrimaryColor}
+                        onChange={(value) => updateThemeBody({ accent: value })}
+                        value={themeConfig.theme.accent}
+                      />
+                      <ThemeColorField
+                        label={t.themeSecondaryColor}
+                        onChange={(value) => updateThemeSemanticColors({ secondary: value })}
+                        value={themeConfig.theme.semanticColors.secondary}
+                      />
+                      <ThemeColorField
+                        label={t.themeSurfaceColor}
+                        onChange={(value) => updateThemeBody({ surface: value })}
+                        value={themeConfig.theme.surface}
+                      />
+                      <ThemeColorField
+                        label={t.themeSurfaceSecondaryColor}
+                        onChange={(value) => updateThemeBody({ surfaceSecondary: value })}
+                        value={themeConfig.theme.surfaceSecondary}
+                      />
+                      <ThemeColorField
+                        label={t.themeSurfaceElevatedColor}
+                        onChange={(value) => updateThemeBody({ surfaceElevated: value })}
+                        value={themeConfig.theme.surfaceElevated}
+                      />
+                      <ThemeColorField
+                        label={t.themeTextPrimaryColor}
+                        onChange={(value) => updateThemeBody({ ink: value })}
+                        value={themeConfig.theme.ink}
+                      />
+                      <ThemeColorField
+                        label={t.themeTextSecondaryColor}
+                        onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
+                        value={themeConfig.theme.semanticColors.textSecondary}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="theme-config-color-group">
+                    <div className="theme-config-section-heading">
+                      <h4>{t.themeStatusColors}</h4>
+                      <span>{t.themeStatusColorsHint}</span>
+                    </div>
+                    <div className="theme-config-fields">
+                      <ThemeColorField
+                        label={t.themeInfoColor}
+                        onChange={(value) => updateThemeSemanticColors({ info: value })}
+                        value={themeConfig.theme.semanticColors.info}
+                      />
+                      <ThemeColorField
+                        label={t.themeWarningColor}
+                        onChange={(value) => updateThemeSemanticColors({ warning: value })}
+                        value={themeConfig.theme.semanticColors.warning}
+                      />
+                      <ThemeColorField
+                        label={t.themeErrorColor}
+                        onChange={(value) => updateThemeSemanticColors({ error: value })}
+                        value={themeConfig.theme.semanticColors.error}
+                      />
+                      <ThemeColorField
+                        label={t.themeSuccessColor}
+                        onChange={(value) => updateThemeSemanticColors({ success: value })}
+                        value={themeConfig.theme.semanticColors.success}
+                      />
+                    </div>
+                  </section>
                 </div>
 
                 <div className="theme-config-font-grid">

@@ -1107,6 +1107,19 @@ export interface TerminalThemeConfig {
   }
 }
 
+export interface ThemeSemanticColors {
+  diffAdded: string
+  diffRemoved: string
+  skill: string
+  keyword: string
+  secondary: string
+  textSecondary: string
+  info: string
+  warning: string
+  error: string
+  success: string
+}
+
 /**
  * Persist only the compact theme primitives and derive the larger UI alias
  * surface in the renderer. Advanced overrides are CSS custom properties, not
@@ -1126,13 +1139,10 @@ export interface ThemeConfig {
     }
     ink: string
     opaqueWindows: boolean
-    semanticColors: {
-      diffAdded: string
-      diffRemoved: string
-      skill: string
-      keyword: string
-    }
+    semanticColors: ThemeSemanticColors
     surface: string
+    surfaceSecondary: string
+    surfaceElevated: string
     /** Optional advanced color overrides; absent for normal themes. */
     overrides?: Record<string, string>
     terminal: TerminalThemeConfig
@@ -1216,9 +1226,17 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
         diffAdded: '#00a240',
         diffRemoved: isLight ? '#ba2623' : '#e02e2a',
         skill: isLight ? '#924ff7' : '#b06dff',
-        keyword: isLight ? '#b45309' : '#ffcc00'
+        keyword: isLight ? '#b45309' : '#ffcc00',
+        secondary: isLight ? '#8b5cf6' : '#b06dff',
+        textSecondary: isLight ? '#667085' : '#a9a9b2',
+        info: isLight ? '#339cff' : '#0169cc',
+        warning: isLight ? '#b45309' : '#ffcc00',
+        error: isLight ? '#ba2623' : '#e02e2a',
+        success: '#00a240'
       },
       surface: isLight ? '#ffffff' : '#111111',
+      surfaceSecondary: isLight ? '#ffffff' : '#1b1b1b',
+      surfaceElevated: isLight ? '#ffffff' : '#242424',
       terminal: {
         background: isLight ? '#ffffff' : '#111111',
         foreground: isLight ? '#1a1c1f' : '#fcfcfc',
@@ -1256,9 +1274,17 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         diffAdded: isLight ? '#168a53' : '#39d98a',
         diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
         skill: isLight ? '#7c3aed' : '#b06dff',
-        keyword: isLight ? '#b45309' : '#ffcc00'
+        keyword: isLight ? '#b45309' : '#ffcc00',
+        secondary: isLight ? '#3b82f6' : '#8bbfff',
+        textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
+        info: isLight ? '#3b82f6' : '#8bbfff',
+        warning: isLight ? '#d97706' : '#ffcc00',
+        error: isLight ? '#d94e4e' : '#ff5f57',
+        success: isLight ? '#168a53' : '#39d98a'
       },
       surface: isLight ? '#F4F4F6' : '#151515',
+      surfaceSecondary: isLight ? '#ffffff' : '#1e1e1e',
+      surfaceElevated: isLight ? '#ffffff' : '#2a2a2a',
       terminal: defaultTerminalThemeConfig(variant)
     }
   }
@@ -1328,6 +1354,11 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
   const rawSearch = asThemeRecord(rawTerminal.search)
   const terminalFallback = variantFallback.theme.terminal
   const normalizedSurface = normalizeThemeColor(rawTheme.surface, variantFallback.theme.surface)
+  const normalizedSurfaceSecondary = normalizeThemeColor(
+    rawTheme.surfaceSecondary,
+    variantFallback.theme.surfaceSecondary
+  )
+  const normalizedSurfaceElevated = normalizeThemeColor(rawTheme.surfaceElevated, variantFallback.theme.surfaceElevated)
   const rawOverrides = Object.keys(asThemeRecord(rawTheme.overrides)).length
     ? rawTheme.overrides
     : isFileTermTheme
@@ -1367,9 +1398,20 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
           variantFallback.theme.semanticColors.diffRemoved
         ),
         skill: normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill),
-        keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword)
+        keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword),
+        secondary: normalizeThemeColor(rawSemanticColors.secondary, variantFallback.theme.semanticColors.secondary),
+        textSecondary: normalizeThemeColor(
+          rawSemanticColors.textSecondary,
+          variantFallback.theme.semanticColors.textSecondary
+        ),
+        info: normalizeThemeColor(rawSemanticColors.info, variantFallback.theme.semanticColors.info),
+        warning: normalizeThemeColor(rawSemanticColors.warning, variantFallback.theme.semanticColors.warning),
+        error: normalizeThemeColor(rawSemanticColors.error, variantFallback.theme.semanticColors.error),
+        success: normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
       },
       surface: normalizedSurface,
+      surfaceSecondary: normalizedSurfaceSecondary,
+      surfaceElevated: normalizedSurfaceElevated,
       ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
       terminal: {
         background: normalizeThemeColor(rawTerminal.background, terminalFallback.background),

@@ -1,0 +1,67 @@
+/*
+ * Custom theme surface bridge.
+ *
+ * Built-in FileTerm themes keep their historical component skins. Custom
+ * themes use the compact surface hierarchy instead of inheriting those
+ * built-in hard-coded backgrounds:
+ *   surface          -> primary canvas
+ *   surfaceSecondary -> sidebars and file panes
+ *   surfaceElevated  -> title bars, tabs, controls, and overlays
+ */
+
+:root[data-theme-custom='true'] .fs-shell,
+:root[data-theme-custom='true'] .fs-main,
+:root[data-theme-custom='true'] .connection-manager-layout,
+:root[data-theme-custom='true'] .connection-manager-main {
+  background: var(--theme-surface) !important;
+}
+
+:root[data-theme-custom='true'] .fs-sidebar,
+:root[data-theme-custom='true'] .home-sidebar,
+:root[data-theme-custom='true'] .connection-manager-sidebar,
+:root[data-theme-custom='true'] .system-sidebar-layout {
+  background: var(--theme-sidebar-background, var(--theme-surface-secondary)) !important;
+}
+
+:root[data-theme-custom='true'] .fs-tabbar,
+:root[data-theme-custom='true'] .titlebar-brand,
+:root[data-theme-custom='true'] .titlebar-tabarea,
+:root[data-theme-custom='true'] .window-menubar,
+:root[data-theme-custom='true'] .standalone-window-titlebar {
+  background: var(--theme-surface-elevated) !important;
+}
+
+:root[data-theme-custom='true'] .fs-tab,
+:root[data-theme-custom='true'] .file-tabs button {
+  background: transparent;
+}
+
+:root[data-theme-custom='true'] .fs-tab.active,
+:root[data-theme-custom='true'] .file-tabs button.active {
+  background: var(--theme-surface-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .file-manager,
+:root[data-theme-custom='true'] .file-toolbar,
+:root[data-theme-custom='true'] .local-pane,
+:root[data-theme-custom='true'] .remote-pane,
+:root[data-theme-custom='true'] .command-pane-preview,
+:root[data-theme-custom='true'] .file-table-shell {
+  background: var(--theme-surface-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .file-tabs {
+  background: var(--theme-surface-elevated) !important;
+}
+
+:root[data-theme-custom='true'] .file-split-resizer {
+  background: var(--theme-surface-secondary);
+}
+
+:root[data-theme-custom='true'] .settings-modal .connection-manager-layout {
+  background: var(--theme-surface) !important;
+}
+
+:root[data-theme-custom='true'] .terminal-dock-bar {
+  background: var(--theme-surface-elevated);
+}

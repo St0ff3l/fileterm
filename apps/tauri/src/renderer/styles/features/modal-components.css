@@ -1612,6 +1612,33 @@
   gap: 10px;
 }
 
+.theme-config-color-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.theme-config-color-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.theme-config-color-group .theme-config-section-heading h4 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .theme-config-color-group .theme-config-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+
 .theme-config-font-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

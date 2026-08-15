@@ -17,6 +17,7 @@ ThemeConfig -> theme variables -> component tokens -> xterm / Monaco
 - 保留现有 `default-dark` / `default-light` 两套主题的兼容性。
 - 提供 Codex 风格的预设选择、导入配置、复制配置和即时预览。
 - 允许自定义 accent、surface、ink、contrast、语义颜色和完整 ANSI 终端调色板。
+- 通过少量表面层级控制侧栏、文件区域、顶部标签、控件和底部命令栏，不把每个组件都暴露成主题字段。
 - 让终端主题变化即时作用于已打开的 terminal，而不是只影响新建 tab。
 - 解决 issue #186：完整映射 ANSI 8 色和 bright 8 色，使日志、`ls` 等远端输出恢复可读的关键字/状态色。
 
@@ -42,8 +43,16 @@ interface ThemeConfig {
       diffRemoved: string
       skill: string
       keyword: string
+      secondary: string
+      textSecondary: string
+      info: string
+      warning: string
+      error: string
+      success: string
     }
     surface: string
+    surfaceSecondary: string
+    surfaceElevated: string
     overrides?: Record<string, string>
     terminal: TerminalThemeConfig
   }
@@ -95,16 +104,21 @@ Rust 负责读取旧格式、补默认值、限制颜色格式和 `contrast` 范
 
 主题配置只持久化少量稳定的基础控制项，renderer 再把它们解析成现有组件需要的兼容变量：
 
-| 配置含义   | 持久化字段                             | 解析后的职责                                           |
-| ---------- | -------------------------------------- | ------------------------------------------------------ |
-| 主色与交互 | `theme.accent`、`theme.contrast`       | `--primary`、`--focus-outline`、按钮/选中/hover 色阶   |
-| 表面与文字 | `theme.surface`、`theme.ink`           | `--bg-*`、`--text-*`、边框和叠层                       |
-| 语义状态   | `theme.semanticColors.*`               | 差异色、技能色以及连接/指标等状态别名                  |
-| 字体与窗口 | `theme.fonts.*`、`theme.opaqueWindows` | UI/代码字体、窗口透明度和侧栏 backdrop                 |
-| 高级覆盖   | 可选 `theme.overrides`                 | 仅接受 `--[a-z0-9-]+` CSS 自定义属性，普通用户无需理解 |
-| 终端       | `theme.terminal`                       | 基础终端色、搜索色和完整 16 色 ANSI 调色板             |
+| 配置含义   | 持久化字段                                                  | 解析后的职责                                           |
+| ---------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| 主色与交互 | `theme.accent`、`theme.contrast`                            | `--primary`、`--focus-outline`、按钮/选中/hover 色阶   |
+| 主表面     | `theme.surface`                                             | 应用主画布、页面内容和基础背景                         |
+| 次级表面   | `theme.surfaceSecondary`                                    | 应用/设置侧栏、连接后的文件区域和文件面板              |
+| 抬升表面   | `theme.surfaceElevated`                                     | 顶部标签栏、文件标签、控件、弹出层和底部命令栏         |
+| 表面与文字 | `theme.ink`                                                 | 主文本；设置页不再把文本误称为前景色                   |
+| 文本层级   | `theme.semanticColors.textSecondary`                        | `--text-secondary`、`--text-muted` 等次级文本别名      |
+| 次色与状态 | `theme.semanticColors.secondary/info/warning/error/success` | 次级交互色和信息、警告、错误、成功状态别名             |
+| 代码语义   | `theme.semanticColors.diff*/skill/keyword`                  | 差异色、技能色和关键字色                               |
+| 字体与窗口 | `theme.fonts.*`、`theme.opaqueWindows`                      | UI/代码字体、窗口透明度和侧栏 backdrop                 |
+| 高级覆盖   | 可选 `theme.overrides`                                      | 仅接受 `--[a-z0-9-]+` CSS 自定义属性，普通用户无需理解 |
+| 终端       | `theme.terminal`                                            | 基础终端色、搜索色和完整 16 色 ANSI 调色板             |
 
-`contrast` 是 0-100 的数值配置，不命名为 `--contrast-color` 或直接当作颜色使用。`resolveCompactUiVariables()` 负责从 accent、surface、ink 和 variant 派生现有组件别名；内置 FileTerm 的明暗变体继续由原有 CSS token 和组件皮肤提供像素级稳定的默认外观，设置页将预设名称与明暗变体分离。
+`contrast` 是 0-100 的数值配置，不命名为 `--contrast-color` 或直接当作颜色使用。`resolveCompactUiVariables()` 负责从 accent、三层 surface、ink、语义色和 variant 派生现有组件别名；内置 FileTerm 的明暗变体继续由原有 CSS token 和组件皮肤提供像素级稳定的默认外观，设置页将预设名称与明暗变体分离。
 
 `default-dark.css` 和 `default-light.css` 只保存 token。原先散落在主题文件中的组件选择器已迁移到 `styles/features/component-skins.css`，保留原作用域、声明和暗/亮顺序；后续可以按功能逐步把其中的硬编码色值替换为语义变量，而不需要再次改动持久化配置。
 
@@ -117,7 +131,7 @@ Rust 负责读取旧格式、补默认值、限制颜色格式和 `contrast` 范
 | `--primary` / `--primary-hover`                              | 由 compact resolver 的 accent 色阶派生；新代码直接复用现有语义别名                    |
 | `--accent-highlight` / `--accent-text`                       | 由 accent 和 ink 派生，不把 accent 当作终端蓝色别名                                   |
 | `--focus-outline`                                            | 由 accent 派生，只用于焦点、选中和拖拽目标                                            |
-| `--bg-main` / `--bg-sidebar` / `--bg-card` / `--bg-elevated` | 由 surface、variant 和 opaqueWindows 派生，作为组件兼容变量                           |
+| `--bg-main` / `--bg-sidebar` / `--bg-card` / `--bg-elevated` | 由三层 surface、variant 和 opaqueWindows 派生，作为组件兼容变量                       |
 | `--text-main` / `--text-muted` / `--text-soft`               | 由 ink 与 surface 的对比度派生，继续承担现有组件文本层级                              |
 | `--terminal-bg` / `--terminal-text`                          | 新代码使用 `--terminal-background` / `--terminal-foreground`；旧变量保留别名          |
 | `--terminal-selection-bg` 和搜索变量                         | 新代码统一使用完整的 `*-background` / `*-foreground` / `*-ruler` 语义名，旧名只作兼容 |
@@ -131,7 +145,7 @@ Rust 负责读取旧格式、补默认值、限制颜色格式和 `contrast` 范
 - 预设使用 `DropdownSelect`，只显示 FileTerm、Codex 和 Custom；顶部独立的 Light / Dark 卡片负责切换明暗变体，不写原生 `<select>`。
 - `Import` 从剪贴板读取 Codex 风格 JSON，校验后立即应用。
 - `Copy theme` 将当前规范化配置以 `fileterm-theme-v1:` 紧凑载荷写入剪贴板；前缀已携带版本，因此载荷不重复写 `schemaVersion`。导入同时兼容已有的 `codex-theme-v1:` 前缀，便于跨设备或跨会话复用。
-- 默认只展示 Accent、Background、Foreground、字体和窗口透明度等基础控制。
+- 默认只展示主色、次色、三层界面表面、文字、字体和窗口透明度等基础控制。
 - 代码语义色、可选高级 CSS overrides 和完整 ANSI 调色板按需展开，避免把实现细节平铺给普通用户。
 - 所有颜色输入显示可复制的十六进制值；预设下拉框用于整套主题恢复，手动编辑会标记为 Custom。
 - 终端背景、前景、光标、选区和搜索高亮保持可见；Normal ANSI / Bright ANSI 两组 8 色网格折叠在终端调色板中。
