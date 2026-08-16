@@ -15,7 +15,7 @@
 - Phase 4 的 Transfer journal/断点、FTP/FTPS、Telnet、Serial、WebDAV、连接导入导出、偏好/窗口事件、CSP 和本地日志均已接入 Rust backend。显式/隐式 FTPS、WebDAV HEAD/PUT/GET + ETag/hash、Telnet HTTP CONNECT/SOCKS5 已有本地真实协议夹具；实体/虚拟串口、真实 Telnet 设备、真实 WebDAV 服务和三平台结果仍未全部取得。
 - Phase 5 进行中：macOS Tauri 生产 DMG 已可打包并已有本机性能基线；自动 legacy 数据迁移与回滚代码已落地，签名 in-app updater、公证、Windows/Linux 包与 CI 结果、迁移演练和正式切换仍是发行前置。
 
-更细的差距和里程碑以 [`docs/plans/active/tauri-migration-progress.md`](plans/active/tauri-migration-progress.md) 为准；Rust 后端的模块级拆分以 [`rust-backend-migration-plan.md`](plans/active/rust-backend-migration-plan.md) 为准。
+更细的差距和里程碑以已归档的 [`docs/plans/completed/tauri-migration-progress.md`](plans/completed/tauri-migration-progress.md) 为准；Rust 后端的模块级拆分以已归档的 [`rust-backend-migration-plan.md`](plans/completed/rust-backend-migration-plan.md) 为准。
 
 ## Phase 0: 仓库初始化
 

@@ -1,7 +1,7 @@
 # 本机凭据字段加密
 
-状态：进行中（字段加密、旧数据迁移、全量质量门禁与 macOS release 构建已通过；待 Windows / Linux 打包环境验收）
-关联：[AI Copilot 功能集成计划](../completed/ai-copilot-integration.md)、[MCP / CLI interactive-exec 关闭记录](../completed/mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
+状态：实现已完成（2026-08-16）；三平台打包环境验收已集中到[统一验收计划](../active/release-candidate-acceptance.md)
+关联：[AI Copilot 功能集成计划](./ai-copilot-integration.md)、[MCP / CLI interactive-exec 关闭记录](./mcp-cli-interactive-exec.md)、[架构地图](../../architecture.md)
 
 ## 1. 结论
 
@@ -70,8 +70,6 @@ FileTerm 不使用 macOS Keychain、Windows DPAPI 或 Linux credential store，�
 - macOS、Windows、Linux CI 矩阵执行 `secret_crypto` 往返、篡改拒绝、scope 绑定与 legacy 判断测试，覆盖三端设备标识分支的编译与运行路径。
 - PR CI 的 macOS、Windows、Linux package smoke 已确认无签名包可以生成；它不读取真实安装包中的既有凭据，因此不能替代下一节的跨平台迁移验收。
 
-## 7. 待完成
+## 7. 验收范围（已转移）
 
-1. 在 Windows、Linux 打包环境验证设备标识读取与加解密往返；macOS arm64 release 构建已在 2026-08-13 通过。
-2. 在三个实际打包应用中读取既有凭据并保存一次，确认旧明文会迁移、密文在重启后可用、公开 bridge 仍只返回 `has*` 标记。
-3. Windows / Linux 验收通过后，将本计划移至 `docs/plans/completed/`。
+本计划原有的 Windows/Linux 设备标识与加解密往返、三个实际打包应用中的旧明文迁移/重启读取/公开 bridge 脱敏验收范围已转移到[统一验收计划](../active/release-candidate-acceptance.md)。macOS arm64 release 已有的通过记录保留在上文；其余平台实际通过结果以统一计划的证据记录为准。

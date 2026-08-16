@@ -1,6 +1,6 @@
 # WebDAV/S3 远程备份加密计划
 
-状态：进行中（v3 加密包、v2 兼容导入和一次性密码交互已实现；待全量质量门禁与三端验收）
+状态：实现已完成（2026-08-16）；全量质量门禁与三端打包验收已集中到[统一验收计划](../active/release-candidate-acceptance.md)
 
 关联：[架构地图](../../architecture.md)、[密钥存储加密计划](./secret-storage-encryption.md)
 
@@ -64,11 +64,6 @@
 - 密码输入只用于当前一次上传或下载，取消、超时、窗口卸载后清理 pending sender。
 - WebDAV/S3 的 HTTP/S3 认证密码仍由既有配置存储负责；备份主密码是独立的、不会持久化的密钥材料。
 
-## 5. 验收标准
+## 5. 验收范围（已转移）
 
-- [ ] Rust 单元测试覆盖 v3 往返、错误密码、密文不含 profile secret、v2 导入和 PBKDF2 兼容参数。
-- [ ] WebDAV/S3 上传请求体不出现 profile 的 password、passphrase、代理密码或 `profiles` 明文字段。
-- [ ] WebDAV/S3 下载 v3 会显示一次性密码框；v2 可导入并显示升级提示。
-- [ ] 用户主动导出 JSON 的输出格式和命令路径不变。
-- [ ] TypeScript、lint、Prettier、Rust tests、clippy 和 Tauri 构建全部通过。
-- [ ] macOS、Windows、Linux 均验证密码框可显示、取消、超时和恢复流程。
+本计划原有的 v3/v2 兼容性、密文请求体、明文导出不变、质量门禁和三平台密码交互验收范围已转移到[统一验收计划](../active/release-candidate-acceptance.md)。实现与自动化回归的事实仍保留在本页；外部打包环境的实际通过结果以统一计划的证据记录为准。
