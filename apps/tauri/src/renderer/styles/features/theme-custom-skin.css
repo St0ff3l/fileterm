@@ -63,5 +63,190 @@
 }
 
 :root[data-theme-custom='true'] .terminal-dock-bar {
-  background: var(--theme-surface-elevated);
+  background: var(--theme-surface-elevated) !important;
+}
+
+/*
+ * The renderer keeps data-theme="default-dark|default-light" for the mode,
+ * even when the values come from a custom theme. The legacy component skin is
+ * therefore still active and contains the old hard-coded pane/table colors.
+ * Rebind those structural surfaces here, without adding a token for every
+ * component and without touching the built-in themes.
+ */
+
+:root[data-theme-custom='true'] .session-workspace,
+:root[data-theme-custom='true'] .workspace-stage,
+:root[data-theme-custom='true'] .system-info-workspace,
+:root[data-theme-custom='true'] .home-workspace {
+  background: var(--theme-surface) !important;
+}
+
+:root[data-theme-custom='true'] .sys-card,
+:root[data-theme-custom='true'] .connection-summary,
+:root[data-theme-custom='true'] .process-table,
+:root[data-theme-custom='true'] .disk-table,
+:root[data-theme-custom='true'] .disk-scroll-region,
+:root[data-theme-custom='true'] .disk-body,
+:root[data-theme-custom='true'] .file-manager,
+:root[data-theme-custom='true'] .local-pane,
+:root[data-theme-custom='true'] .remote-pane,
+:root[data-theme-custom='true'] .command-pane-preview,
+:root[data-theme-custom='true'] .file-table-shell {
+  background: var(--theme-surface-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .local-terminal-frame {
+  background: var(--theme-surface-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .file-toolbar,
+:root[data-theme-custom='true'] .pane-title,
+:root[data-theme-custom='true'] .pane-path-bar,
+:root[data-theme-custom='true'] .pane-filter-bar,
+:root[data-theme-custom='true'] .file-tabs,
+:root[data-theme-custom='true'] .transfer-strip,
+:root[data-theme-custom='true'] .fs-file-table th {
+  background: var(--theme-surface-elevated) !important;
+}
+
+:root[data-theme-custom='true'] .file-toolbar,
+:root[data-theme-custom='true'] .pane-title,
+:root[data-theme-custom='true'] .pane-path-bar,
+:root[data-theme-custom='true'] .transfer-strip {
+  color: var(--theme-text-primary) !important;
+}
+
+:root[data-theme-custom='true'] .pane-title span,
+:root[data-theme-custom='true'] .pane-path-bar strong,
+:root[data-theme-custom='true'] .pane-path-bar span,
+:root[data-theme-custom='true'] .file-current-path.is-status-hint,
+:root[data-theme-custom='true'] .transfer-strip {
+  color: var(--theme-text-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .file-toolbar button,
+:root[data-theme-custom='true'] .file-tab-actions button,
+:root[data-theme-custom='true'] .pane-path-bar-action,
+:root[data-theme-custom='true'] .follow-shell-cwd-toggle,
+:root[data-theme-custom='true'] .pane-filter-mode-toggles,
+:root[data-theme-custom='true'] .pane-filter-mode-btn.active {
+  background: var(--theme-surface-elevated) !important;
+  color: var(--theme-text-primary) !important;
+}
+
+:root[data-theme-custom='true'] .pane-filter-input-wrapper:hover,
+:root[data-theme-custom='true'] .pane-filter-input-wrapper:focus-within {
+  background: var(--theme-surface-elevated) !important;
+}
+
+:root[data-theme-custom='true'] .fs-file-table {
+  color: var(--theme-text-primary) !important;
+}
+
+:root[data-theme-custom='true'] .fs-file-table th {
+  color: var(--theme-text-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme-custom='true'] .process-row:nth-child(odd),
+:root[data-theme-custom='true'] .disk-row:nth-child(odd) {
+  background: var(--theme-surface-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .fs-file-table tbody tr:nth-child(even),
+:root[data-theme-custom='true'] .process-row:nth-child(even),
+:root[data-theme-custom='true'] .disk-row:nth-child(even) {
+  background: color-mix(in srgb, var(--theme-surface-secondary) 92%, var(--theme-surface-elevated) 8%) !important;
+}
+
+:root[data-theme-custom='true'] .fs-file-table tbody tr:hover,
+:root[data-theme-custom='true'] .fs-file-table tbody tr.is-selected,
+:root[data-theme-custom='true'] .disk-row:hover {
+  background: var(--bg-active) !important;
+}
+
+:root[data-theme-custom='true'] .file-split-resizer {
+  background: transparent !important;
+}
+
+:root[data-theme-custom='true'] .file-split-resizer::before {
+  background: var(--border-light) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .system-sidebar-toggle,
+:root[data-theme-custom='true'] .system-sidebar-layout .system-title,
+:root[data-theme-custom='true'] .system-sidebar-layout .network-select,
+:root[data-theme-custom='true'] .system-sidebar-layout .grid-chart {
+  background: var(--theme-surface-elevated) !important;
+  color: var(--theme-text-primary) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .mini-tabs {
+  background: var(--theme-surface-elevated) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .mini-tabs span {
+  background: transparent !important;
+  color: var(--theme-text-secondary) !important;
+  border-color: var(--border-light) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .mini-tabs span.active {
+  background: var(--bg-active) !important;
+  color: var(--theme-text-primary) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .meter-track,
+:root[data-theme-custom='true'] .system-sidebar-layout .collapsed-resource-track {
+  background: color-mix(in srgb, var(--theme-surface-elevated) 72%, var(--theme-surface-secondary) 28%) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .disk-head {
+  background: var(--theme-surface-elevated) !important;
+  color: var(--theme-text-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .system-sidebar-layout .process-row,
+:root[data-theme-custom='true'] .system-sidebar-layout .disk-row {
+  color: var(--theme-text-primary) !important;
+}
+
+:root[data-theme-custom='true'] .terminal-dock-placeholder {
+  color: var(--theme-text-secondary) !important;
+  opacity: 0.78;
+}
+
+:root[data-theme-custom='true'] .terminal-dock-bar {
+  color: var(--theme-text-primary);
+}
+
+:root[data-theme-custom='true'] .settings-modal,
+:root[data-theme-custom='true'] .settings-modal .connection-manager-layout,
+:root[data-theme-custom='true'] .settings-modal .connection-manager-main,
+:root[data-theme-custom='true'] .settings-modal .settings-panel {
+  background: var(--theme-surface) !important;
+}
+
+:root[data-theme-custom='true'] .settings-modal .connection-manager-sidebar,
+:root[data-theme-custom='true'] .settings-modal .theme-config-toolbar,
+:root[data-theme-custom='true'] .settings-modal .theme-config-checkbox-row,
+:root[data-theme-custom='true'] .settings-modal .theme-advanced-section,
+:root[data-theme-custom='true'] .settings-modal .theme-color-field {
+  background: var(--theme-surface-secondary) !important;
+}
+
+:root[data-theme-custom='true'] .settings-modal .connection-manager-sidebar-item.active {
+  background: var(--bg-active) !important;
+}
+
+:root[data-theme-custom='true'] .settings-modal .connection-manager-footer,
+:root[data-theme-custom='true'] .settings-modal .theme-config-preview,
+:root[data-theme-custom='true'] .settings-modal .theme-config-select.dropdown-select-trigger,
+:root[data-theme-custom='true'] .settings-modal .theme-config-select.ft-select-shell select,
+:root[data-theme-custom='true'] .settings-modal .theme-color-text {
+  background: var(--theme-surface-elevated) !important;
+}
+
+:root[data-theme-custom='true'] .settings-modal .connection-manager-header {
+  background: var(--theme-surface) !important;
 }
