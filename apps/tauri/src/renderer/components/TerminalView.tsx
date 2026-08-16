@@ -681,28 +681,46 @@ export const TerminalView = memo(function TerminalView({
     getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 
   const buildTerminalTheme = () => ({
-    background: readColor('--terminal-bg', '#1e1e1e'),
-    foreground: readColor('--terminal-text', '#e0e0e0'),
+    background: readColor('--terminal-background', readColor('--terminal-bg', '#1e1e1e')),
+    foreground: readColor('--terminal-foreground', readColor('--terminal-text', '#e0e0e0')),
     cursor: readColor('--terminal-cursor', readColor('--accent-highlight', '#3b82f6')),
     cursorAccent: readColor('--terminal-cursor-accent', readColor('--terminal-bg', '#ffffff')),
-    green: readColor('--success', '#39d98a'),
-    brightGreen: readColor('--success', '#52f2a0'),
-    blue: readColor('--accent-text', '#c8d0da'),
-    brightBlue: readColor('--text-main', '#f1f5f9'),
+    black: readColor('--terminal-black', '#000000'),
+    red: readColor('--terminal-red', '#cd3131'),
+    green: readColor('--terminal-green', readColor('--success', '#39d98a')),
+    yellow: readColor('--terminal-yellow', readColor('--warning', '#e5e510')),
+    blue: readColor('--terminal-blue', readColor('--accent-text', '#2472c8')),
+    magenta: readColor('--terminal-magenta', '#bc3fbc'),
+    cyan: readColor('--terminal-cyan', '#11a8cd'),
+    white: readColor('--terminal-white', '#e5e5e5'),
+    brightBlack: readColor('--terminal-bright-black', '#666666'),
+    brightRed: readColor('--terminal-bright-red', '#cd3131'),
+    brightGreen: readColor('--terminal-bright-green', readColor('--success', '#23d18b')),
+    brightYellow: readColor('--terminal-bright-yellow', '#e5e510'),
+    brightBlue: readColor('--terminal-bright-blue', readColor('--text-main', '#3b8eea')),
+    brightMagenta: readColor('--terminal-bright-magenta', '#d670d6'),
+    brightCyan: readColor('--terminal-bright-cyan', '#29b8db'),
+    brightWhite: readColor('--terminal-bright-white', '#e5e5e5'),
     selectionBackground:
       findOpen && findQuery
-        ? readColor('--terminal-search-active-bg', '#ffd43b')
-        : readColor('--terminal-selection-bg', 'rgba(56, 139, 253, 0.52)'),
+        ? readColor('--terminal-search-active-background', readColor('--terminal-search-active-bg', '#ffd43b'))
+        : readColor('--terminal-selection-background', readColor('--terminal-selection-bg', '#386bfd')),
     selectionForeground:
       findOpen && findQuery
         ? readColor('--terminal-search-active-text', '#111111')
-        : readColor('--terminal-text', '#e0e0e0')
+        : readColor('--terminal-selection-foreground', readColor('--terminal-text', '#e0e0e0'))
   })
 
   const buildSearchDecorations = () => ({
-    matchBackground: readColor('--terminal-search-match-bg', '#4b5563'),
+    matchBackground: readColor(
+      '--terminal-search-match-background',
+      readColor('--terminal-search-match-bg', '#4b5563')
+    ),
     matchOverviewRuler: readColor('--terminal-search-match-ruler', '#9ca3af'),
-    activeMatchBackground: readColor('--terminal-search-active-bg', '#ffd43b'),
+    activeMatchBackground: readColor(
+      '--terminal-search-active-background',
+      readColor('--terminal-search-active-bg', '#ffd43b')
+    ),
     activeMatchBorder: readColor('--terminal-search-active-border', '#8a5a00'),
     activeMatchColorOverviewRuler: readColor('--terminal-search-active-ruler', '#f0b400')
   })

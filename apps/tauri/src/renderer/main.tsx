@@ -6,6 +6,7 @@ import { createTauriApi } from '../bridge/tauri-api'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { defaultLocale, setLocale, t } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
+import { applyThemeVariables } from './app/theme-config'
 import './styles/index.css'
 
 const initialWindowMode = new URLSearchParams(window.location.search).get('window') ?? 'main'
@@ -86,8 +87,7 @@ void createTauriApi()
 
         // Apply the loaded values before the first React render so CSS and the
         // proxy-backed translation table agree with App's initial state.
-        document.documentElement.dataset.theme = initialTheme
-        document.documentElement.style.colorScheme = initialTheme === 'default-light' ? 'light' : 'dark'
+        applyThemeVariables(initialTheme, initialUiPreferences?.themeConfig)
         setLocale(initialLocale)
 
         root.render(

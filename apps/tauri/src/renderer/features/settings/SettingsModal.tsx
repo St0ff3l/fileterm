@@ -3,6 +3,9 @@ import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
+  createCodexThemeConfig,
+  createDefaultThemeConfig,
+  normalizeThemeConfig,
   type AppUpdateStatus,
   type AiProviderDraft,
   type AiProviderKind,
@@ -16,6 +19,8 @@ import {
   type OverviewSectionId,
   type S3BackupConfig,
   type SshConnectionDefaults,
+  type TerminalAnsiColorName,
+  type ThemeConfig,
   type UiPreferences,
   type WebDavSyncConfig
 } from '@fileterm/core'
@@ -29,6 +34,176 @@ import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition 
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 
 type SettingsTab = 'ai' | 'agent' | 'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+
+type ThemePresetFamily = 'fileterm' | 'codex'
+type ThemePresetVariant = ThemeConfig['variant']
+
+const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
+const THEME_CONFIG_EXPORT_PREFIX = 'fileterm-theme-v1:'
+const THEME_CONFIG_IMPORT_PREFIXES = [THEME_CONFIG_EXPORT_PREFIX, 'codex-theme-v1:'] as const
+
+const ANSI_COLOR_NAMES: TerminalAnsiColorName[] = [
+  'black',
+  'red',
+  'green',
+  'yellow',
+  'blue',
+  'magenta',
+  'cyan',
+  'white',
+  'brightBlack',
+  'brightRed',
+  'brightGreen',
+  'brightYellow',
+  'brightBlue',
+  'brightMagenta',
+  'brightCyan',
+  'brightWhite'
+]
+
+const ANSI_COLOR_LABELS: Record<TerminalAnsiColorName, string> = {
+  black: 'Black',
+  red: 'Red',
+  green: 'Green',
+  yellow: 'Yellow',
+  blue: 'Blue',
+  magenta: 'Magenta',
+  cyan: 'Cyan',
+  white: 'White',
+  brightBlack: 'Bright Black',
+  brightRed: 'Bright Red',
+  brightGreen: 'Bright Green',
+  brightYellow: 'Bright Yellow',
+  brightBlue: 'Bright Blue',
+  brightMagenta: 'Bright Magenta',
+  brightCyan: 'Bright Cyan',
+  brightWhite: 'Bright White'
+}
+
+const THEME_PRESETS: Array<{
+  id: ThemePresetFamily
+  labelKey: 'themePresetFileTerm' | 'themePresetCodex'
+  config: Record<ThemePresetVariant, ThemeConfig>
+}> = [
+  {
+    id: 'fileterm',
+    labelKey: 'themePresetFileTerm',
+    config: { dark: createDefaultThemeConfig('dark'), light: createDefaultThemeConfig('light') }
+  },
+  {
+    id: 'codex',
+    labelKey: 'themePresetCodex',
+    config: { dark: createCodexThemeConfig('dark'), light: createCodexThemeConfig('light') }
+  }
+]
+
+function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESETS)[number] | undefined {
+  return THEME_PRESETS.find((preset) => {
+    const candidate = preset.config[themeConfig.variant]
+    const matchesId =
+      preset.id === 'fileterm'
+        ? themeConfig.codeThemeId === 'fileterm' ||
+          themeConfig.codeThemeId === 'fileterm-dark' ||
+          themeConfig.codeThemeId === 'fileterm-light'
+        : themeConfig.codeThemeId === 'codex' ||
+          themeConfig.codeThemeId === 'codex-dark' ||
+          themeConfig.codeThemeId === 'codex-light'
+    if (!matchesId) return false
+    const colorValues = [
+      candidate.theme.accent,
+      candidate.theme.surface,
+      candidate.theme.surfaceSecondary,
+      candidate.theme.surfaceElevated,
+      candidate.theme.ink,
+      candidate.theme.semanticColors.secondary,
+      candidate.theme.semanticColors.textSecondary,
+      candidate.theme.semanticColors.info,
+      candidate.theme.semanticColors.warning,
+      candidate.theme.semanticColors.error,
+      candidate.theme.semanticColors.success
+    ]
+    const themeColorValues = [
+      themeConfig.theme.accent,
+      themeConfig.theme.surface,
+      themeConfig.theme.surfaceSecondary,
+      themeConfig.theme.surfaceElevated,
+      themeConfig.theme.ink,
+      themeConfig.theme.semanticColors.secondary,
+      themeConfig.theme.semanticColors.textSecondary,
+      themeConfig.theme.semanticColors.info,
+      themeConfig.theme.semanticColors.warning,
+      themeConfig.theme.semanticColors.error,
+      themeConfig.theme.semanticColors.success
+    ]
+    return (
+      colorValues.every((value, index) => value.toUpperCase() === themeColorValues[index].toUpperCase()) &&
+      candidate.theme.contrast === themeConfig.theme.contrast &&
+      candidate.theme.opaqueWindows === themeConfig.theme.opaqueWindows
+    )
+  })
+}
+
+function toColorInputValue(value: string) {
+  const normalized = value.trim()
+  if (/^#[\da-f]{6}$/i.test(normalized)) return normalized
+  if (/^#[\da-f]{8}$/i.test(normalized)) return normalized.slice(0, 7)
+  if (/^#[\da-f]{3}$/i.test(normalized)) {
+    return `#${normalized
+      .slice(1)
+      .split('')
+      .map((part) => `${part}${part}`)
+      .join('')}`
+  }
+  if (/^#[\da-f]{4}$/i.test(normalized)) {
+    return `#${normalized
+      .slice(1, 4)
+      .split('')
+      .map((part) => `${part}${part}`)
+      .join('')}`
+  }
+  return '#000000'
+}
+
+function ThemeColorField({ label, value, onChange }: { label: string; value: string; onChange(value: string): void }) {
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
+  return (
+    <label className="theme-color-field">
+      <span className="theme-color-field-label">{label}</span>
+      <span className="theme-color-field-control">
+        <input
+          aria-label={label}
+          className="theme-color-picker"
+          onChange={(event) => onChange(event.target.value.toUpperCase())}
+          type="color"
+          value={toColorInputValue(value)}
+        />
+        <input
+          aria-label={`${label} HEX`}
+          className="theme-color-text"
+          onBlur={() => setDraft(value)}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            setDraft(nextValue)
+            if (THEME_HEX_COLOR_PATTERN.test(nextValue.trim())) {
+              onChange(nextValue.trim().toUpperCase())
+            }
+          }}
+          spellCheck={false}
+          value={draft}
+        />
+      </span>
+    </label>
+  )
+}
+
+function clipboardUnavailableError(lastError: unknown) {
+  return lastError instanceof Error ? lastError : new Error('Clipboard is unavailable')
+}
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
@@ -255,7 +430,9 @@ function aiProviderRequestUrlPreview(draft: AiProviderDraft) {
 
 export function SettingsModal({
   theme,
+  themeConfig,
   onSetTheme,
+  onSetThemeConfig,
   locale,
   onSetLocale,
   onOpenCommandManager,
@@ -268,7 +445,9 @@ export function SettingsModal({
   inline = false
 }: {
   theme: 'default-dark' | 'default-light'
+  themeConfig: ThemeConfig
   onSetTheme(value: 'default-dark' | 'default-light'): void
+  onSetThemeConfig(value: ThemeConfig): void
   locale: 'zhCN' | 'enUS'
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenCommandManager(): void
@@ -291,6 +470,9 @@ export function SettingsModal({
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
+  const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
+  const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
+  const [themeConfigMessage, setThemeConfigMessage] = useState<string | null>(null)
   const [mcpAgentPreferences, setMcpAgentPreferences] = useState<McpAgentPreferences>(() => ({
     ...DEFAULT_MCP_AGENT_PREFERENCES
   }))
@@ -813,6 +995,230 @@ export function SettingsModal({
       .finally(() => setIsSavingTerminalZoomPreference(false))
   }
 
+  const themeVariant = theme === 'default-light' ? 'light' : 'dark'
+
+  const setThemeConfigValue = (nextValue: ThemeConfig) => {
+    onSetThemeConfig(
+      normalizeThemeConfig(
+        {
+          ...nextValue,
+          codeThemeId: 'custom'
+        },
+        themeVariant
+      )
+    )
+    setThemeConfigMessage(null)
+  }
+
+  const updateThemeBody = (patch: Partial<ThemeConfig['theme']>) => {
+    setThemeConfigValue({
+      ...themeConfig,
+      theme: {
+        ...themeConfig.theme,
+        ...patch
+      }
+    })
+  }
+
+  const updateThemeSemanticColors = (patch: Partial<ThemeConfig['theme']['semanticColors']>) => {
+    updateThemeBody({
+      semanticColors: {
+        ...themeConfig.theme.semanticColors,
+        ...patch
+      }
+    })
+  }
+
+  const updateThemeFonts = (patch: Partial<ThemeConfig['theme']['fonts']>) => {
+    updateThemeBody({
+      fonts: {
+        ...themeConfig.theme.fonts,
+        ...patch
+      }
+    })
+  }
+
+  const updateTerminalTheme = (patch: Partial<ThemeConfig['theme']['terminal']>) => {
+    updateThemeBody({
+      terminal: {
+        ...themeConfig.theme.terminal,
+        ...patch
+      }
+    })
+  }
+
+  const updateTerminalAnsiColor = (name: TerminalAnsiColorName, value: string) => {
+    updateTerminalTheme({
+      ansi: {
+        ...themeConfig.theme.terminal.ansi,
+        [name]: value
+      }
+    })
+  }
+
+  const updateTerminalSearchColors = (patch: Partial<ThemeConfig['theme']['terminal']['search']>) => {
+    updateTerminalTheme({
+      search: {
+        ...themeConfig.theme.terminal.search,
+        ...patch
+      }
+    })
+  }
+
+  const applyThemePreset = (presetId: string, variant: ThemePresetVariant = themeVariant) => {
+    const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId)
+    if (!preset) return
+    const nextThemeConfig = normalizeThemeConfig(preset.config[variant], variant)
+    onSetThemeConfig(nextThemeConfig)
+    onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    setThemeConfigMessage(t.themePresetApplied)
+  }
+
+  const switchThemeVariant = (nextVariant: ThemePresetVariant) => {
+    if (themeConfig.variant === nextVariant) return
+
+    const matchingPreset = findMatchingThemePreset(themeConfig)
+    if (matchingPreset) {
+      applyThemePreset(matchingPreset.id, nextVariant)
+      return
+    }
+
+    const isCodexTheme = themeConfig.codeThemeId === 'codex' || themeConfig.codeThemeId.startsWith('codex-')
+    const isFileTermTheme =
+      themeConfig.codeThemeId === 'fileterm' ||
+      themeConfig.codeThemeId === 'fileterm-dark' ||
+      themeConfig.codeThemeId === 'fileterm-light'
+    if (isCodexTheme) {
+      applyThemePreset('codex', nextVariant)
+      return
+    }
+    if (isFileTermTheme) {
+      applyThemePreset('fileterm', nextVariant)
+      return
+    }
+
+    onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
+    onSetThemeConfig(normalizeThemeConfig({ ...themeConfig, variant: nextVariant }, nextVariant))
+  }
+
+  const parseImportedTheme = (text: string): unknown => {
+    const trimmed = text.trim()
+    const payload = THEME_CONFIG_IMPORT_PREFIXES.reduce(
+      (value, prefix) => (value.startsWith(prefix) ? value.slice(prefix.length) : value),
+      trimmed
+    )
+    const jsonStart = payload.indexOf('{')
+    const jsonEnd = payload.lastIndexOf('}')
+    if (jsonStart < 0 || jsonEnd <= jsonStart) {
+      throw new Error('Theme JSON was not found')
+    }
+    return JSON.parse(payload.slice(jsonStart, jsonEnd + 1)) as unknown
+  }
+
+  const readThemeClipboard = async () => {
+    let lastError: unknown = null
+    if (desktopApi?.readClipboardText) {
+      try {
+        return await desktopApi.readClipboardText()
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (navigator.clipboard?.readText) {
+      try {
+        return await navigator.clipboard.readText()
+      } catch (error) {
+        lastError = error
+      }
+    }
+    throw clipboardUnavailableError(lastError)
+  }
+
+  const writeThemeClipboard = async (text: string) => {
+    let lastError: unknown = null
+    if (desktopApi?.writeClipboardText) {
+      try {
+        await desktopApi.writeClipboardText(text)
+        return
+      } catch (error) {
+        lastError = error
+      }
+    }
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.setAttribute('aria-hidden', 'true')
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '-9999px'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    try {
+      if (document.execCommand('copy')) return
+    } catch (error) {
+      lastError = error
+    } finally {
+      document.body.removeChild(textarea)
+    }
+    throw clipboardUnavailableError(lastError)
+  }
+
+  const beginThemeConfigOperation = (operation: NonNullable<typeof themeConfigOperation>) => {
+    if (themeConfigOperationRef.current) return false
+    themeConfigOperationRef.current = operation
+    setThemeConfigOperation(operation)
+    setThemeConfigMessage(null)
+    return true
+  }
+
+  const endThemeConfigOperation = () => {
+    themeConfigOperationRef.current = null
+    setThemeConfigOperation(null)
+  }
+
+  const importThemeConfig = async () => {
+    if (!beginThemeConfigOperation('import')) return
+    try {
+      const clipboardText = await readThemeClipboard()
+      const importedTheme = normalizeThemeConfig(parseImportedTheme(clipboardText), themeVariant)
+      onSetThemeConfig(importedTheme)
+      onSetTheme(importedTheme.variant === 'light' ? 'default-light' : 'default-dark')
+      setThemeConfigMessage(t.themeImported)
+    } catch {
+      setThemeConfigMessage(t.themeImportFailed)
+    } finally {
+      endThemeConfigOperation()
+    }
+  }
+
+  const copyThemeConfig = async () => {
+    if (!beginThemeConfigOperation('copy')) return
+    try {
+      const normalizedTheme = normalizeThemeConfig({ ...themeConfig, variant: themeVariant }, themeVariant)
+      const serializedTheme = `${THEME_CONFIG_EXPORT_PREFIX}${JSON.stringify({
+        codeThemeId: normalizedTheme.codeThemeId,
+        theme: normalizedTheme.theme,
+        variant: normalizedTheme.variant
+      })}`
+      await writeThemeClipboard(serializedTheme)
+      setThemeConfigMessage(t.themeCopied)
+    } catch {
+      setThemeConfigMessage(t.themeCopyFailed)
+    } finally {
+      endThemeConfigOperation()
+    }
+  }
+
   const saveMcpAgentPreferences = (patch: Partial<McpAgentPreferences>) => {
     if (!desktopApi || mcpAgentOperation === 'save') {
       return
@@ -1045,6 +1451,11 @@ export function SettingsModal({
     allConnections: { title: t.overviewShowAllConnections, hint: t.overviewShowAllConnectionsHint },
     quickActions: { title: t.overviewShowQuickActions, hint: t.overviewShowQuickActionsHint }
   }
+
+  const selectedThemePreset = findMatchingThemePreset(themeConfig)
+  const themePresetFamily: ThemePresetFamily | 'custom' = selectedThemePreset?.id ?? 'custom'
+  const themePresetLabel = selectedThemePreset ? t[selectedThemePreset.labelKey] : t.themePresetCustom
+  const themePresetCode = themePresetFamily === 'custom' ? 'custom' : themePresetFamily
 
   const content = (
     <div
@@ -1917,40 +2328,357 @@ export function SettingsModal({
             <div className="settings-panel">
               <section className="settings-section">
                 <h3>{t.appearanceTheme}</h3>
-                <div className="theme-options-grid">
+                <div aria-label={t.themeSelection} className="theme-options-grid" role="group">
                   <button
-                    className={`theme-card dark ${theme === 'default-dark' ? 'active' : ''}`}
-                    onClick={() => onSetTheme('default-dark')}
+                    aria-pressed={themeConfig.variant === 'light'}
+                    className={`theme-card light ${themeConfig.variant === 'light' ? 'active' : ''}`}
+                    onClick={() => switchThemeVariant('light')}
                     type="button"
                   >
-                    <div className="theme-card-preview">
-                      <div className="preview-header"></div>
+                    <div aria-hidden="true" className="theme-card-preview">
+                      <div className="preview-header">
+                        <span className="dot dot-close" />
+                        <span className="dot dot-min" />
+                        <span className="dot dot-max" />
+                      </div>
                       <div className="preview-body">
                         <div className="preview-sidebar"></div>
                         <div className="preview-content"></div>
                       </div>
                     </div>
-                    <span>
-                      {t.theme}: {t.defaultDark}
-                    </span>
+                    <span className="theme-card-label">{t.themeLight}</span>
                   </button>
                   <button
-                    className={`theme-card light ${theme === 'default-light' ? 'active' : ''}`}
-                    onClick={() => onSetTheme('default-light')}
+                    aria-pressed={themeConfig.variant === 'dark'}
+                    className={`theme-card dark ${themeConfig.variant === 'dark' ? 'active' : ''}`}
+                    onClick={() => switchThemeVariant('dark')}
                     type="button"
                   >
-                    <div className="theme-card-preview">
-                      <div className="preview-header"></div>
+                    <div aria-hidden="true" className="theme-card-preview">
+                      <div className="preview-header">
+                        <span className="dot dot-close" />
+                        <span className="dot dot-min" />
+                        <span className="dot dot-max" />
+                      </div>
                       <div className="preview-body">
                         <div className="preview-sidebar"></div>
                         <div className="preview-content"></div>
                       </div>
                     </div>
-                    <span>
-                      {t.theme}: {t.defaultLight}
-                    </span>
+                    <span className="theme-card-label">{t.themeDark}</span>
                   </button>
                 </div>
+              </section>
+
+              <section className="settings-section theme-config-section">
+                <div className="theme-config-heading">
+                  <div>
+                    <h3>{t.themeCustomization}</h3>
+                    <p className="settings-tools-hint">{t.themeCustomizationHint}</p>
+                  </div>
+                  <div className="theme-config-action-group">
+                    <div className="theme-config-actions">
+                      <button
+                        className="flat-button compact theme-config-action-button"
+                        disabled={themeConfigOperation !== null}
+                        onClick={() => void importThemeConfig()}
+                        type="button"
+                      >
+                        <AppIcon name="download" size={14} />
+                        {themeConfigOperation === 'import' ? t.themeWorking : t.themeImport}
+                      </button>
+                      <button
+                        className="flat-button compact theme-config-action-button"
+                        disabled={themeConfigOperation !== null}
+                        onClick={() => void copyThemeConfig()}
+                        type="button"
+                      >
+                        <AppIcon name="copy" size={14} />
+                        {themeConfigOperation === 'copy' ? t.themeWorking : t.themeCopy}
+                      </button>
+                    </div>
+                    {themeConfigMessage ? (
+                      <span aria-live="polite" className="theme-config-action-status">
+                        {themeConfigMessage}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="theme-config-toolbar">
+                  <div className="theme-config-preset-control">
+                    <span className="theme-config-label">{t.themePreset}</span>
+                    <DropdownSelect
+                      ariaLabel={t.themePreset}
+                      className="theme-config-select"
+                      onChange={applyThemePreset}
+                      options={[
+                        ...THEME_PRESETS.map((preset) => ({ value: preset.id, label: t[preset.labelKey] })),
+                        { value: 'custom', label: t.themePresetCustom }
+                      ]}
+                      value={themePresetFamily}
+                    />
+                  </div>
+                  <div
+                    className="theme-config-preview"
+                    style={{
+                      backgroundColor: themeConfig.theme.surface,
+                      borderColor: 'var(--border-light)',
+                      color: themeConfig.theme.ink
+                    }}
+                  >
+                    <div className="theme-config-preview-title">
+                      <span style={{ color: themeConfig.theme.accent }}>●</span>
+                      <span>{themePresetLabel}</span>
+                    </div>
+                    <code className="theme-config-preview-code">
+                      <span style={{ color: themeConfig.theme.semanticColors.keyword }}>const</span>{' '}
+                      <span style={{ color: themeConfig.theme.semanticColors.skill }}>theme</span>
+                      {' = '}
+                      <span style={{ color: themeConfig.theme.accent }}>{themePresetCode}</span>
+                    </code>
+                  </div>
+                </div>
+
+                <div className="theme-config-color-groups">
+                  <section className="theme-config-color-group">
+                    <div className="theme-config-section-heading">
+                      <h4>{t.themeBaseColors}</h4>
+                      <span>{t.themeBaseColorsHint}</span>
+                    </div>
+                    <div className="theme-config-fields">
+                      <ThemeColorField
+                        label={t.themePrimaryColor}
+                        onChange={(value) => updateThemeBody({ accent: value })}
+                        value={themeConfig.theme.accent}
+                      />
+                      <ThemeColorField
+                        label={t.themeSecondaryColor}
+                        onChange={(value) => updateThemeSemanticColors({ secondary: value })}
+                        value={themeConfig.theme.semanticColors.secondary}
+                      />
+                      <ThemeColorField
+                        label={t.themeSurfaceColor}
+                        onChange={(value) => updateThemeBody({ surface: value })}
+                        value={themeConfig.theme.surface}
+                      />
+                      <ThemeColorField
+                        label={t.themeSurfaceSecondaryColor}
+                        onChange={(value) => updateThemeBody({ surfaceSecondary: value })}
+                        value={themeConfig.theme.surfaceSecondary}
+                      />
+                      <ThemeColorField
+                        label={t.themeSurfaceElevatedColor}
+                        onChange={(value) => updateThemeBody({ surfaceElevated: value })}
+                        value={themeConfig.theme.surfaceElevated}
+                      />
+                      <ThemeColorField
+                        label={t.themeTextPrimaryColor}
+                        onChange={(value) => updateThemeBody({ ink: value })}
+                        value={themeConfig.theme.ink}
+                      />
+                      <ThemeColorField
+                        label={t.themeTextSecondaryColor}
+                        onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
+                        value={themeConfig.theme.semanticColors.textSecondary}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="theme-config-color-group">
+                    <div className="theme-config-section-heading">
+                      <h4>{t.themeStatusColors}</h4>
+                      <span>{t.themeStatusColorsHint}</span>
+                    </div>
+                    <div className="theme-config-fields">
+                      <ThemeColorField
+                        label={t.themeInfoColor}
+                        onChange={(value) => updateThemeSemanticColors({ info: value })}
+                        value={themeConfig.theme.semanticColors.info}
+                      />
+                      <ThemeColorField
+                        label={t.themeWarningColor}
+                        onChange={(value) => updateThemeSemanticColors({ warning: value })}
+                        value={themeConfig.theme.semanticColors.warning}
+                      />
+                      <ThemeColorField
+                        label={t.themeErrorColor}
+                        onChange={(value) => updateThemeSemanticColors({ error: value })}
+                        value={themeConfig.theme.semanticColors.error}
+                      />
+                      <ThemeColorField
+                        label={t.themeSuccessColor}
+                        onChange={(value) => updateThemeSemanticColors({ success: value })}
+                        value={themeConfig.theme.semanticColors.success}
+                      />
+                    </div>
+                  </section>
+                </div>
+
+                <div className="theme-config-font-grid">
+                  <div className="theme-config-control">
+                    <span className="theme-config-label">{t.themeUiFont}</span>
+                    <DropdownSelect
+                      ariaLabel={t.themeUiFont}
+                      className="theme-config-select"
+                      onChange={(value) => updateThemeFonts({ ui: value || null })}
+                      options={[
+                        { value: '', label: t.themeSystemDefault },
+                        { value: 'Inter', label: 'Inter' },
+                        { value: 'SF Pro Text', label: 'SF Pro Text' },
+                        { value: 'Noto Sans SC', label: 'Noto Sans SC' }
+                      ]}
+                      value={themeConfig.theme.fonts.ui ?? ''}
+                    />
+                  </div>
+                  <div className="theme-config-control">
+                    <span className="theme-config-label">{t.themeCodeFont}</span>
+                    <DropdownSelect
+                      ariaLabel={t.themeCodeFont}
+                      className="theme-config-select"
+                      onChange={(value) => updateThemeFonts({ code: value || null })}
+                      options={[
+                        { value: '', label: t.themeSystemDefault },
+                        { value: 'JetBrains Mono', label: 'JetBrains Mono' },
+                        { value: 'SF Mono', label: 'SF Mono' },
+                        { value: 'Cascadia Code', label: 'Cascadia Code' }
+                      ]}
+                      value={themeConfig.theme.fonts.code ?? ''}
+                    />
+                  </div>
+                </div>
+
+                <div className="theme-config-checkbox-row">
+                  <label className="theme-config-switch">
+                    <span>{t.themeOpaqueWindows}</span>
+                    <input
+                      checked={themeConfig.theme.opaqueWindows}
+                      onChange={(event) => updateThemeBody({ opaqueWindows: event.target.checked })}
+                      type="checkbox"
+                    />
+                    <span aria-hidden="true" className="theme-config-switch-track" />
+                  </label>
+                </div>
+
+                <details className="theme-config-subsection theme-advanced-section">
+                  <summary className="theme-config-section-summary">
+                    <span className="theme-config-section-summary-copy">
+                      <strong>{t.themeSemanticColors}</strong>
+                      <span>{t.themeAdvancedHint}</span>
+                    </span>
+                  </summary>
+                  <div className="theme-config-fields">
+                    <ThemeColorField
+                      label={t.themeDiffAdded}
+                      onChange={(value) => updateThemeSemanticColors({ diffAdded: value })}
+                      value={themeConfig.theme.semanticColors.diffAdded}
+                    />
+                    <ThemeColorField
+                      label={t.themeDiffRemoved}
+                      onChange={(value) => updateThemeSemanticColors({ diffRemoved: value })}
+                      value={themeConfig.theme.semanticColors.diffRemoved}
+                    />
+                    <ThemeColorField
+                      label={t.themeSkillColor}
+                      onChange={(value) => updateThemeSemanticColors({ skill: value })}
+                      value={themeConfig.theme.semanticColors.skill}
+                    />
+                    <ThemeColorField
+                      label={t.themeKeywordColor}
+                      onChange={(value) => updateThemeSemanticColors({ keyword: value })}
+                      value={themeConfig.theme.semanticColors.keyword}
+                    />
+                  </div>
+                </details>
+
+                <div className="theme-config-subsection">
+                  <h4>{t.themeTerminalColors}</h4>
+                  <div className="theme-config-fields">
+                    <ThemeColorField
+                      label={t.themeTerminalBackground}
+                      onChange={(value) => updateTerminalTheme({ background: value })}
+                      value={themeConfig.theme.terminal.background}
+                    />
+                    <ThemeColorField
+                      label={t.themeTerminalForeground}
+                      onChange={(value) => updateTerminalTheme({ foreground: value })}
+                      value={themeConfig.theme.terminal.foreground}
+                    />
+                    <ThemeColorField
+                      label={t.themeTerminalCursor}
+                      onChange={(value) => updateTerminalTheme({ cursor: value })}
+                      value={themeConfig.theme.terminal.cursor}
+                    />
+                    <ThemeColorField
+                      label={t.themeTerminalCursorAccent}
+                      onChange={(value) => updateTerminalTheme({ cursorAccent: value })}
+                      value={themeConfig.theme.terminal.cursorAccent}
+                    />
+                    <ThemeColorField
+                      label={t.themeTerminalSelection}
+                      onChange={(value) => updateTerminalTheme({ selectionBackground: value })}
+                      value={themeConfig.theme.terminal.selectionBackground}
+                    />
+                    <ThemeColorField
+                      label={t.themeTerminalSelectionText}
+                      onChange={(value) => updateTerminalTheme({ selectionForeground: value })}
+                      value={themeConfig.theme.terminal.selectionForeground}
+                    />
+                  </div>
+                  <div className="theme-config-fields theme-config-search-fields">
+                    <ThemeColorField
+                      label={t.themeSearchMatch}
+                      onChange={(value) => updateTerminalSearchColors({ matchBackground: value })}
+                      value={themeConfig.theme.terminal.search.matchBackground}
+                    />
+                    <ThemeColorField
+                      label={t.themeSearchActiveMatch}
+                      onChange={(value) => updateTerminalSearchColors({ activeMatchBackground: value })}
+                      value={themeConfig.theme.terminal.search.activeMatchBackground}
+                    />
+                    <ThemeColorField
+                      label={t.themeSearchActiveText}
+                      onChange={(value) => updateTerminalSearchColors({ activeMatchText: value })}
+                      value={themeConfig.theme.terminal.search.activeMatchText}
+                    />
+                    <ThemeColorField
+                      label={t.themeSearchBorder}
+                      onChange={(value) => updateTerminalSearchColors({ activeMatchBorder: value })}
+                      value={themeConfig.theme.terminal.search.activeMatchBorder}
+                    />
+                  </div>
+                </div>
+
+                <details className="theme-advanced-section theme-terminal-ansi-details">
+                  <summary className="theme-config-section-summary">
+                    <span className="theme-config-section-summary-copy">
+                      <strong>{t.themeAnsiNormal}</strong>
+                      <span>{t.themeAnsiHint}</span>
+                    </span>
+                    <span className="theme-config-section-summary-count">16</span>
+                  </summary>
+                  <div className="theme-ansi-grid">
+                    {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
+                      <ThemeColorField
+                        key={name}
+                        label={ANSI_COLOR_LABELS[name]}
+                        onChange={(value) => updateTerminalAnsiColor(name, value)}
+                        value={themeConfig.theme.terminal.ansi[name]}
+                      />
+                    ))}
+                  </div>
+                  <h4>{t.themeAnsiBright}</h4>
+                  <div className="theme-ansi-grid">
+                    {ANSI_COLOR_NAMES.slice(8).map((name) => (
+                      <ThemeColorField
+                        key={name}
+                        label={ANSI_COLOR_LABELS[name]}
+                        onChange={(value) => updateTerminalAnsiColor(name, value)}
+                        value={themeConfig.theme.terminal.ansi[name]}
+                      />
+                    ))}
+                  </div>
+                </details>
               </section>
 
               <section className="settings-section">

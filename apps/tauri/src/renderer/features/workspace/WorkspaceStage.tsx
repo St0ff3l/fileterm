@@ -10,6 +10,7 @@ import type {
   OverviewSectionId,
   RemoteFileItem,
   SessionSnapshot,
+  ThemeConfig,
   WorkspaceTab
 } from '@fileterm/core'
 import type { Dispatch, DragEvent, SetStateAction } from 'react'
@@ -62,6 +63,7 @@ export function WorkspaceStage({
   remoteCutPaths,
   profiles,
   theme,
+  themeConfig,
   locale,
   overviewShowStats,
   overviewShowRecent,
@@ -119,6 +121,7 @@ export function WorkspaceStage({
   onUpdateCommandFolder,
   onUpdateCommandOrder,
   onSetTheme,
+  onSetThemeConfig,
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
@@ -171,6 +174,7 @@ export function WorkspaceStage({
   remoteCutPaths: string[]
   profiles: ConnectionProfile[]
   theme: 'default-dark' | 'default-light'
+  themeConfig: ThemeConfig
   locale: 'zhCN' | 'enUS'
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -239,6 +243,7 @@ export function WorkspaceStage({
   onUpdateCommandFolder(folderId: string, updates: Partial<CommandFolder>): Promise<boolean> | boolean | void
   onUpdateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<boolean> | boolean | void
   onSetTheme(value: 'default-dark' | 'default-light'): void
+  onSetThemeConfig(value: ThemeConfig): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
@@ -367,6 +372,7 @@ export function WorkspaceStage({
       commandFolders={commandFolders}
       commandTemplates={commandTemplates}
       theme={theme}
+      themeConfig={themeConfig}
       locale={locale}
       overviewShowStats={overviewShowStats}
       overviewShowRecent={overviewShowRecent}
@@ -392,6 +398,7 @@ export function WorkspaceStage({
       onUpdateCommandFolder={onUpdateCommandFolder}
       onUpdateCommandOrder={onUpdateCommandOrder}
       onSetTheme={onSetTheme}
+      onSetThemeConfig={onSetThemeConfig}
       onSetLocale={onSetLocale}
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}

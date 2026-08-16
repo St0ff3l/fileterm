@@ -1,5 +1,7 @@
 # 本地终端与 Agent MCP 接入
 
+状态：实现已完成；打包应用、真实客户端与远端环境验收已集中到[统一验收计划](../active/release-candidate-acceptance.md)
+
 ## 目标
 
 提供与远程会话并列的本地终端标签页。用户可在每个本地终端直接运行 `claude`、`codex` 等本机 CLI；FileTerm MCP 访问已经由桌面应用管理的远程连接。连接、凭据、审批和远程执行仍归 FileTerm 主进程管理。
@@ -37,11 +39,8 @@ codex mcp add fileterm -- /Applications/FileTerm.app/Contents/MacOS/fileterm mcp
 
 MCP 修改、执行、传输和隧道操作仍等待 FileTerm 审批；CLI 是用户显式启动的 JSON 接口，不重复弹审批。MCP/CLI 不返回连接凭据或 terminal transcript。
 
-## 验收重点
+## 验收范围（已转移）
 
-1. 保持一个非敏感 SSH tab 已连接，确认 MCP 能看到已打开会话。
-2. 运行 sudo/su 测试命令，验证 profile、主窗口安全输入和用户明确的一次性字段均按预期工作；密码不进入命令文本或 tool result。
-3. 运行需要 MFA、确认或 REPL 的命令，验证普通 exec 返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，不污染可见终端，也不启动隐藏 task PTY。
-4. 在 macOS、Windows、Linux 打包产物中验证默认 shell、PTY resize、复制粘贴、字体、快捷键和 `fileterm mcp` 路径。
+本节原有的四项验收范围已转移到[统一验收计划](../active/release-candidate-acceptance.md)，包括已打开 SSH 会话的 MCP 可见性、sudo/su 凭据边界、MFA/确认/REPL 的 `REMOTE_INTERACTIVE_INPUT_REQUIRED` 行为，以及 macOS/Windows/Linux 打包应用中的本地终端与 `fileterm mcp` 路径。实际通过结果以统一计划中的脱敏证据为准，本归档计划不提前宣称外部环境验收通过。
 
 真实客户端、三平台打包和生产环境的证据记录在 `docs/quality/ai-copilot-platform-regression.md`；本计划不再引用已废弃的 interactive-exec 迁移方案。

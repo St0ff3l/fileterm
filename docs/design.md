@@ -242,9 +242,12 @@ Don't:
 - `apps/tauri/src/renderer/styles/themes/tokens.css`
 - `apps/tauri/src/renderer/styles/themes/default-light.css`
 - `apps/tauri/src/renderer/styles/themes/default-dark.css`
+- `apps/tauri/src/renderer/styles/features/component-skins.css`
 - `apps/tauri/src/renderer/styles/features/shell.css`
 - `apps/tauri/src/renderer/styles/features/session.css`
 - `apps/tauri/src/renderer/styles/features/workstation-skin.css`
+
+`default-dark.css` 和 `default-light.css` 只保存主题 token；两套主题原先的组件选择器规则统一位于 `component-skins.css`。该文件在主题 token 之后、全局和业务 feature 样式之前加载，保留暗/亮规则原有的作用域与级联顺序。新增规则应优先写入对应 feature CSS，并使用语义变量；不要再把组件选择器放回主题 token 文件。
 
 新增 UI 时按以下顺序落地：
 

@@ -7,6 +7,7 @@ import {
   type PaneFocusDirection,
   type SessionMetricsUpdate,
   type SshConnectionDefaults,
+  type ThemeConfig,
   type TransferTask,
   type UiPreferences,
   type WorkspaceSnapshot
@@ -38,6 +39,7 @@ export type UseWorkspaceIpcSyncOptions = {
   isMainWorkspaceWindow: boolean
   isConnectionManagerWindow: boolean
   themeMode: ThemeMode
+  themeConfig: ThemeConfig
   locale: AppLocale
   connectionDefaults: SshConnectionDefaults
   terminalZoomLocked: boolean
@@ -48,6 +50,7 @@ export type UseWorkspaceIpcSyncOptions = {
   overviewSectionOrder: OverviewSectionId[]
   initialUiPreferencesLoaded: boolean
   onThemeModeChange(themeMode: ThemeMode): void
+  onThemeConfigChange(themeConfig: ThemeConfig): void
   onLocaleChange(locale: AppLocale): void
   onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
   onTerminalZoomLockedChange(value: boolean): void
@@ -91,6 +94,7 @@ function useLatestRef<T>(value: T) {
 type SyncedUiPreferences = Pick<
   UiPreferences,
   | 'theme'
+  | 'themeConfig'
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
@@ -104,6 +108,7 @@ type SyncedUiPreferences = Pick<
 function sameSyncedUiPreferences(left: SyncedUiPreferences, right: SyncedUiPreferences) {
   return (
     left.theme === right.theme &&
+    JSON.stringify(left.themeConfig) === JSON.stringify(right.themeConfig) &&
     left.locale === right.locale &&
     left.terminalZoomLocked === right.terminalZoomLocked &&
     left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
@@ -125,6 +130,7 @@ function sameSyncedUiPreferences(left: SyncedUiPreferences, right: SyncedUiPrefe
 function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPreferences {
   return {
     theme: preferences.theme,
+    themeConfig: preferences.themeConfig,
     locale: preferences.locale,
     connectionDefaults: { ...preferences.connectionDefaults },
     terminalZoomLocked: preferences.terminalZoomLocked,
@@ -171,6 +177,7 @@ export function useWorkspaceIpcSync({
   isMainWorkspaceWindow,
   isConnectionManagerWindow,
   themeMode,
+  themeConfig,
   locale,
   connectionDefaults,
   terminalZoomLocked,
@@ -181,6 +188,7 @@ export function useWorkspaceIpcSync({
   overviewSectionOrder,
   initialUiPreferencesLoaded,
   onThemeModeChange,
+  onThemeConfigChange,
   onLocaleChange,
   onConnectionDefaultsChange,
   onTerminalZoomLockedChange,
@@ -212,6 +220,7 @@ export function useWorkspaceIpcSync({
 
   const desktopApiRef = useLatestRef(desktopApi)
   const onThemeModeChangeRef = useLatestRef(onThemeModeChange)
+  const onThemeConfigChangeRef = useLatestRef(onThemeConfigChange)
   const onLocaleChangeRef = useLatestRef(onLocaleChange)
   const onConnectionDefaultsChangeRef = useLatestRef(onConnectionDefaultsChange)
   const onTerminalZoomLockedChangeRef = useLatestRef(onTerminalZoomLockedChange)
@@ -309,6 +318,7 @@ export function useWorkspaceIpcSync({
       if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
         onThemeModeChangeRef.current(preferences.theme)
       }
+      onThemeConfigChangeRef.current(preferences.themeConfig)
       if (preferences.locale === 'enUS' || preferences.locale === 'zhCN') {
         onLocaleChangeRef.current(preferences.locale)
       }
@@ -342,6 +352,7 @@ export function useWorkspaceIpcSync({
         if (preferences.theme === 'default-light' || preferences.theme === 'default-dark') {
           onThemeModeChangeRef.current(preferences.theme)
         }
+        onThemeConfigChangeRef.current(preferences.themeConfig)
         if (preferences.locale === 'enUS' || preferences.locale === 'zhCN') {
           onLocaleChangeRef.current(preferences.locale)
         }
@@ -377,6 +388,7 @@ export function useWorkspaceIpcSync({
 
     const nextPreferences: SyncedUiPreferences = {
       theme: themeMode,
+      themeConfig,
       locale,
       connectionDefaults,
       terminalZoomLocked,
@@ -422,6 +434,7 @@ export function useWorkspaceIpcSync({
     overviewShowQuickActions,
     overviewSectionOrder,
     terminalZoomLocked,
+    themeConfig,
     themeMode
   ])
 

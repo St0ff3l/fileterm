@@ -1,5 +1,7 @@
 # 本地终端跨平台兼容性与稳定性适配
 
+状态：实现已完成；发行候选打包与三平台手工验收已集中到[统一验收计划](../active/release-candidate-acceptance.md)
+
 ## 目标
 
 让 FileTerm 的本地终端稳定运行普通 shell、Claude Code、Codex CLI 等交互式 TUI，并在 macOS、Windows、Linux 上保持统一的 PTY、输入、resize、输出和关闭语义。
@@ -35,7 +37,7 @@
 - [x] 增加 UTF-8 中文边界、shell 启动参数、退出码、resize 去重、高输出丢帧提示等逻辑回归测试。
 - [x] 在真实 PTY 中补充 UTF-8 输出、shell 退出码和进程组终止集成测试。
 - [x] 在真实 PTY 中补充重启/重连、Ctrl+C 输入路径集成测试；CI 的 macOS、Windows、Linux 矩阵都会运行本地 PTY 测试集。
-- [ ] 在 macOS、Windows、Linux 打包产物中验收默认 shell、Claude/Codex 启动、复制粘贴、字体、快捷键和本地终端分屏；拆分出的每个 pane 必须拥有独立 PTY，关闭或重启一个 pane 不得影响其余 pane。
+- [x] 已将 macOS、Windows、Linux 打包产物中的默认 shell、Claude/Codex 启动、复制粘贴、字体、快捷键和本地终端分屏验收转移到[统一验收计划](../active/release-candidate-acceptance.md)；实际通过结果以该计划的证据记录为准。
 - [x] PR CI 在 macOS、Windows、Linux 生成无签名 Tauri 包并检查对应产物（`.app/.dmg`、NSIS installer、`.deb/.AppImage`）；默认 shell、输入法、字体、快捷键和真实客户端仍需打包应用手工验收。
 
 ## 当前不做
