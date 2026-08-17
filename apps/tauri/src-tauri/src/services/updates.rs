@@ -4,12 +4,43 @@
 //! until the user confirms the restart. macOS intentionally remains on the
 //! GitHub Release-page path so the user explicitly downloads the DMG/ZIP.
 
+use semver::Version;
+use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::AppError;
 
-const LATEST_RELEASE_API: &str = "https://api.github.com/repos/St0ff3l/fileterm/releases/latest";
+const RELEASES_API: &str = "https://api.github.com/repos/St0ff3l/fileterm/releases?per_page=100";
 const LATEST_RELEASE_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases/latest";
+const ALL_RELEASES_PAGE: &str = "https://github.com/St0ff3l/fileterm/releases";
+#[cfg(target_os = "windows")]
+const RELEASE_DOWNLOAD_BASE: &str = "https://github.com/St0ff3l/fileterm/releases/download";
+const DEFAULT_UPDATE_CHANNEL: &str = "stable";
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubRelease {
+    #[serde(default)]
+    tag_name: String,
+    #[serde(default)]
+    html_url: String,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    draft: bool,
+}
+
+#[derive(Clone, Debug)]
+struct SelectedRelease {
+    tag_name: String,
+    version: Version,
+    html_url: String,
+}
+
+#[derive(Clone, Debug)]
+struct UpdateSelection {
+    channel: String,
+    release: SelectedRelease,
+}
 
 #[cfg(target_os = "windows")]
 pub struct WindowsDownloadedUpdate {
@@ -19,6 +50,19 @@ pub struct WindowsDownloadedUpdate {
 
 fn current_version(app: &AppHandle) -> String {
     app.package_info().version.to_string()
+}
+
+fn normalize_update_channel(value: &str) -> &'static str {
+    match value {
+        "beta" => "beta",
+        _ => DEFAULT_UPDATE_CHANNEL,
+    }
+}
+
+fn update_channel(app: &AppHandle) -> String {
+    crate::commands::app_get_ui_preferences(app.clone())
+        .map(|preferences| normalize_update_channel(&preferences.update_channel).to_string())
+        .unwrap_or_else(|_| DEFAULT_UPDATE_CHANNEL.to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -32,6 +76,7 @@ const fn primary_update_mode() -> &'static str {
 }
 
 fn initial_status(app: &AppHandle) -> serde_json::Value {
+    let channel = update_channel(app);
     #[cfg(target_os = "windows")]
     let message = "Windows 将下载并验证签名，重启后安装更新。";
     #[cfg(not(target_os = "windows"))]
@@ -41,6 +86,7 @@ fn initial_status(app: &AppHandle) -> serde_json::Value {
         "state": "idle",
         "currentVersion": current_version(app),
         "updateMode": primary_update_mode(),
+        "updateChannel": channel,
         "message": message,
     })
 }
@@ -62,87 +108,175 @@ pub async fn get_status(app: &AppHandle) -> serde_json::Value {
         .unwrap_or_else(|| initial_status(app))
 }
 
-fn version_parts(value: &str) -> Vec<u64> {
-    value
-        .trim_start_matches('v')
-        .split(|character: char| !(character.is_ascii_digit()))
-        .filter(|part| !part.is_empty())
-        .take(4)
-        .map(|part| part.parse::<u64>().unwrap_or(0))
-        .collect()
+fn parse_version(value: &str) -> Option<Version> {
+    Version::parse(value.trim().trim_start_matches(['v', 'V'])).ok()
 }
 
 fn is_newer(candidate: &str, current: &str) -> bool {
-    let candidate = version_parts(candidate);
-    let current = version_parts(current);
-    let width = candidate.len().max(current.len());
-    (0..width).find_map(|index| {
-        let left = candidate.get(index).copied().unwrap_or(0);
-        let right = current.get(index).copied().unwrap_or(0);
-        (left != right).then_some(left > right)
-    }) == Some(true)
-}
-
-async fn check_release_page_update(app: &AppHandle) -> serde_json::Value {
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent("FileTerm-Tauri")
-        .build()
-    {
-        Ok(client) => client,
-        Err(error) => {
-            return serde_json::json!({
-                "state": "error", "currentVersion": current_version(app), "updateMode": "release-page",
-                "message": format!("更新检查初始化失败: {error}"),
-            });
-        }
-    };
-
-    let response = client.get(LATEST_RELEASE_API).send().await;
-    match response {
-        Ok(response) if response.status().is_success() => {
-            let release: serde_json::Value = match response.json().await {
-                Ok(release) => release,
-                Err(error) => {
-                    return serde_json::json!({
-                        "state": "error", "currentVersion": current_version(app), "updateMode": "release-page",
-                        "message": format!("更新元数据无效: {error}"),
-                    });
-                }
-            };
-            let version = release
-                .get("tag_name")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default();
-            let release_url = release
-                .get("html_url")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or(LATEST_RELEASE_PAGE);
-            if !version.is_empty() && is_newer(version, &current_version(app)) {
-                serde_json::json!({
-                    "state": "available", "currentVersion": current_version(app), "updateMode": "release-page",
-                    "availableVersion": version.trim_start_matches('v'), "releaseUrl": release_url,
-                })
-            } else {
-                serde_json::json!({ "state": "not-available", "currentVersion": current_version(app), "updateMode": "release-page" })
-            }
-        }
-        Ok(response) => serde_json::json!({
-            "state": "error", "currentVersion": current_version(app), "updateMode": "release-page",
-            "message": format!("更新检查失败 ({})", response.status()),
-        }),
-        Err(error) => serde_json::json!({
-            "state": "error", "currentVersion": current_version(app), "updateMode": "release-page",
-            "message": format!("更新检查失败: {error}"),
-        }),
+    match (parse_version(candidate), parse_version(current)) {
+        (Some(candidate), Some(current)) => candidate > current,
+        _ => false,
     }
 }
 
 #[cfg(target_os = "windows")]
-async fn check_windows_update(app: &AppHandle) -> serde_json::Value {
+fn fallback_release_page(channel: &str) -> &'static str {
+    if channel == "beta" {
+        ALL_RELEASES_PAGE
+    } else {
+        LATEST_RELEASE_PAGE
+    }
+}
+
+fn status_error(
+    app: &AppHandle,
+    update_mode: &str,
+    channel: &str,
+    message: impl Into<String>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "state": "error",
+        "currentVersion": current_version(app),
+        "updateMode": update_mode,
+        "updateChannel": channel,
+        "message": message.into(),
+    })
+}
+
+fn status_not_available(app: &AppHandle, update_mode: &str, channel: &str) -> serde_json::Value {
+    serde_json::json!({
+        "state": "not-available",
+        "currentVersion": current_version(app),
+        "updateMode": update_mode,
+        "updateChannel": channel,
+    })
+}
+
+fn select_release(releases: Vec<GithubRelease>, channel: &str) -> Option<SelectedRelease> {
+    releases
+        .into_iter()
+        .filter_map(|release| {
+            if release.draft {
+                return None;
+            }
+            let version = parse_version(&release.tag_name)?;
+            if channel != "beta" && (release.prerelease || !version.pre.is_empty()) {
+                return None;
+            }
+            let html_url = if release.html_url.trim().is_empty() {
+                format!("{ALL_RELEASES_PAGE}/tag/{}", release.tag_name)
+            } else {
+                release.html_url
+            };
+            Some(SelectedRelease {
+                tag_name: release.tag_name,
+                version,
+                html_url,
+            })
+        })
+        .max_by(|left, right| {
+            left.version
+                .cmp(&right.version)
+                .then_with(|| left.tag_name.cmp(&right.tag_name))
+        })
+}
+
+async fn fetch_release_selection(app: &AppHandle) -> Result<UpdateSelection, String> {
+    let channel = update_channel(app);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("FileTerm-Tauri")
+        .build()
+        .map_err(|error| format!("更新检查初始化失败: {error}"))?;
+    let response = client
+        .get(RELEASES_API)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|error| format!("更新检查失败: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("更新检查失败 ({})", response.status()));
+    }
+    let releases: Vec<GithubRelease> = response
+        .json()
+        .await
+        .map_err(|error| format!("更新元数据无效: {error}"))?;
+    let release = select_release(releases, &channel)
+        .ok_or_else(|| format!("没有找到符合“{channel}”更新通道的 Release"))?;
+    Ok(UpdateSelection { channel, release })
+}
+
+async fn check_release_page_update(app: &AppHandle) -> serde_json::Value {
+    let selection = match fetch_release_selection(app).await {
+        Ok(selection) => selection,
+        Err(error) => {
+            let channel = update_channel(app);
+            return status_error(app, "release-page", &channel, error);
+        }
+    };
+    let current = current_version(app);
+    let version = selection.release.version.to_string();
+    if !is_newer(&version, &current) {
+        return status_not_available(app, "release-page", &selection.channel);
+    }
+    serde_json::json!({
+        "state": "available",
+        "currentVersion": current,
+        "updateMode": "release-page",
+        "updateChannel": selection.channel,
+        "availableVersion": version,
+        "releaseTag": selection.release.tag_name,
+        "releaseUrl": selection.release.html_url,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn updater_manifest_url(tag: &str) -> Result<url::Url, String> {
+    let mut endpoint =
+        url::Url::parse(RELEASE_DOWNLOAD_BASE).map_err(|error| format!("更新地址无效: {error}"))?;
+    {
+        let mut segments = endpoint
+            .path_segments_mut()
+            .map_err(|_| "更新地址不支持路径追加".to_string())?;
+        segments.push(tag).push("latest.json");
+    }
+    Ok(endpoint)
+}
+
+#[cfg(target_os = "windows")]
+fn updater_for_release(
+    app: &AppHandle,
+    tag: &str,
+) -> Result<tauri_plugin_updater::Updater, String> {
     use tauri_plugin_updater::UpdaterExt;
 
-    let updater = match app.updater() {
+    let endpoint = updater_manifest_url(tag)?;
+    let updater = app
+        .updater()
+        .map_err(|error| format!("自动更新不可用: {error}"))?
+        .endpoints(vec![endpoint])
+        .map_err(|error| format!("更新地址配置失败: {error}"))?
+        .build()
+        .map_err(|error| format!("自动更新初始化失败: {error}"))?;
+    Ok(updater)
+}
+
+#[cfg(target_os = "windows")]
+async fn check_windows_update(app: &AppHandle) -> serde_json::Value {
+    let selection = match fetch_release_selection(app).await {
+        Ok(selection) => selection,
+        Err(error) => {
+            let channel = update_channel(app);
+            return status_error(app, "in-app", &channel, error);
+        }
+    };
+    let current = current_version(app);
+    let version = selection.release.version.to_string();
+    if !is_newer(&version, &current) {
+        return status_not_available(app, "in-app", &selection.channel);
+    }
+
+    let updater = match updater_for_release(app, &selection.release.tag_name) {
         Ok(updater) => updater,
         Err(error) => {
             crate::services::logging::warn(
@@ -150,21 +284,27 @@ async fn check_windows_update(app: &AppHandle) -> serde_json::Value {
                 "update",
                 format!("in-app updater unavailable, using release page fallback: {error}"),
             );
-            return check_release_page_update(app).await;
+            let mut fallback = check_release_page_update(app).await;
+            if fallback.get("state").and_then(serde_json::Value::as_str) == Some("available") {
+                fallback["message"] = serde_json::Value::String(
+                    "Windows 自动更新暂不可用，已切换到 GitHub 下载。".to_string(),
+                );
+            }
+            return fallback;
         }
     };
 
     match updater.check().await {
         Ok(Some(update)) => serde_json::json!({
             "state": "available",
-            "currentVersion": current_version(app),
+            "currentVersion": current,
             "updateMode": "in-app",
+            "updateChannel": selection.channel,
             "availableVersion": update.version,
-            "releaseUrl": LATEST_RELEASE_PAGE,
+            "releaseTag": selection.release.tag_name,
+            "releaseUrl": selection.release.html_url,
         }),
-        Ok(None) => serde_json::json!({
-            "state": "not-available", "currentVersion": current_version(app), "updateMode": "in-app"
-        }),
+        Ok(None) => status_not_available(app, "in-app", &selection.channel),
         Err(error) => {
             crate::services::logging::warn(
                 app,
@@ -208,12 +348,14 @@ pub async fn check(app: &AppHandle) -> Result<serde_json::Value, AppError> {
     }
 
     crate::services::logging::info(app, "update", "check started");
+    let channel = update_channel(app);
     set_status(
         app,
         serde_json::json!({
             "state": "checking",
             "currentVersion": current_version(app),
             "updateMode": primary_update_mode(),
+            "updateChannel": channel,
         }),
     )
     .await;
@@ -265,8 +407,6 @@ fn current_update_mode(status: &serde_json::Value) -> &str {
 
 #[cfg(target_os = "windows")]
 async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
-    use tauri_plugin_updater::UpdaterExt;
-
     let update_operation = app
         .state::<crate::services::workspace::WorkspaceState>()
         .update_operation
@@ -277,31 +417,54 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
         return open_release_page(app).await;
     }
 
-    let updater = match app.updater() {
+    let channel = update_channel(app);
+    let status_channel = existing_status
+        .get("updateChannel")
+        .and_then(serde_json::Value::as_str);
+    let status_tag = existing_status
+        .get("releaseTag")
+        .and_then(serde_json::Value::as_str)
+        .filter(|tag| status_channel == Some(channel.as_str()))
+        .map(str::to_string);
+    let status_release_url = existing_status
+        .get("releaseUrl")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let (release_tag, release_url) = match status_tag {
+        Some(tag) => (
+            tag,
+            status_release_url.unwrap_or_else(|| fallback_release_page(&channel).to_string()),
+        ),
+        None => match fetch_release_selection(app).await {
+            Ok(selection) => (selection.release.tag_name, selection.release.html_url),
+            Err(error) => {
+                set_status(app, status_error(app, "in-app", &channel, error)).await;
+                return Ok(());
+            }
+        },
+    };
+
+    let updater = match updater_for_release(app, &release_tag) {
         Ok(updater) => updater,
         Err(error) => {
-            let status = serde_json::json!({
-                "state": "error", "currentVersion": current_version(app), "updateMode": "in-app",
-                "message": format!("自动更新不可用: {error}"),
-            });
-            set_status(app, status).await;
+            set_status(app, status_error(app, "in-app", &channel, error)).await;
             return Ok(());
         }
     };
     let update = match updater.check().await {
         Ok(Some(update)) => update,
         Ok(None) => {
-            let status = serde_json::json!({
-                "state": "not-available", "currentVersion": current_version(app), "updateMode": "in-app"
-            });
+            let status = status_not_available(app, "in-app", &channel);
             set_status(app, status).await;
             return Ok(());
         }
         Err(error) => {
-            let status = serde_json::json!({
-                "state": "error", "currentVersion": current_version(app), "updateMode": "in-app",
-                "message": format!("重新检查更新失败: {error}"),
-            });
+            let status = status_error(
+                app,
+                "in-app",
+                &channel,
+                format!("重新检查更新失败: {error}"),
+            );
             set_status(app, status).await;
             return Ok(());
         }
@@ -313,7 +476,8 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
         app,
         serde_json::json!({
             "state": "downloading", "currentVersion": current, "updateMode": "in-app",
-            "availableVersion": version, "progress": 0,
+            "updateChannel": channel.clone(), "availableVersion": version, "releaseTag": release_tag.clone(),
+            "releaseUrl": release_url.clone(), "progress": 0,
         }),
     )
     .await;
@@ -325,6 +489,9 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
         .clone();
     let progress_current = current_version(app);
     let progress_version = version.clone();
+    let progress_channel = channel.clone();
+    let progress_tag = release_tag.clone();
+    let progress_url = release_url.clone();
     let mut received = 0_u64;
     let mut last_progress = 0_u64;
     let bytes = update
@@ -340,8 +507,10 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
                 }
                 last_progress = progress;
                 let status = serde_json::json!({
-                    "state": "downloading", "currentVersion": progress_current,
-                    "updateMode": "in-app", "availableVersion": progress_version,
+                    "state": "downloading", "currentVersion": progress_current.clone(),
+                    "updateMode": "in-app", "updateChannel": progress_channel.clone(),
+                    "availableVersion": progress_version.clone(), "releaseTag": progress_tag.clone(),
+                    "releaseUrl": progress_url.clone(),
                     "progress": progress,
                 });
                 if let Ok(mut current_status) = status_store.try_write() {
@@ -358,7 +527,9 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
         Err(error) => {
             let status = serde_json::json!({
                 "state": "error", "currentVersion": current_version(app), "updateMode": "in-app",
-                "availableVersion": version, "message": format!("更新包下载或签名验证失败: {error}"),
+                "updateChannel": channel, "availableVersion": version, "releaseTag": release_tag,
+                "releaseUrl": release_url,
+                "message": format!("更新包下载或签名验证失败: {error}"),
             });
             set_status(app, status).await;
             crate::services::logging::warn(
@@ -376,7 +547,8 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
         .await = Some(WindowsDownloadedUpdate { update, bytes });
     let status = serde_json::json!({
         "state": "downloaded", "currentVersion": current_version(app), "updateMode": "in-app",
-        "availableVersion": version,
+        "updateChannel": channel, "availableVersion": version, "releaseTag": release_tag,
+        "releaseUrl": release_url,
     });
     set_status(app, status).await;
     crate::services::logging::info(app, "update", "signed update downloaded and verified");
@@ -440,11 +612,66 @@ pub async fn install(app: &AppHandle) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_newer;
+    use super::{is_newer, select_release, GithubRelease};
 
     #[test]
     fn compares_release_tags_numerically() {
         assert!(is_newer("v1.10.0", "1.9.9"));
         assert!(!is_newer("v1.1.1", "1.1.1"));
+        assert!(is_newer("v2.2.0-beta.3", "2.2.0-beta.2"));
+        assert!(is_newer("v2.2.0", "2.2.0-beta.2"));
+        assert!(!is_newer("v2.2.0-beta.2", "2.2.0"));
+    }
+
+    fn release(tag_name: &str, prerelease: bool) -> GithubRelease {
+        GithubRelease {
+            tag_name: tag_name.to_string(),
+            html_url: format!("https://github.com/St0ff3l/fileterm/releases/tag/{tag_name}"),
+            prerelease,
+            draft: false,
+        }
+    }
+
+    #[test]
+    fn stable_channel_ignores_prereleases() {
+        let selected = select_release(
+            vec![
+                release("v2.2.0-beta.3", true),
+                release("v2.2.0-beta.2", false),
+                release("v2.1.8", false),
+            ],
+            "stable",
+        )
+        .expect("stable release should be selected");
+
+        assert_eq!(selected.tag_name, "v2.1.8");
+    }
+
+    #[test]
+    fn beta_channel_includes_stable_releases() {
+        let selected = select_release(
+            vec![release("v2.2.0-beta.3", true), release("v2.2.0", false)],
+            "beta",
+        )
+        .expect("beta release should be selected");
+
+        assert_eq!(selected.tag_name, "v2.2.0");
+    }
+
+    #[test]
+    fn draft_and_invalid_tags_are_ignored() {
+        let mut draft = release("v9.0.0", false);
+        draft.draft = true;
+        let selected = select_release(
+            vec![
+                draft,
+                release("not-a-version", true),
+                release("v2.2.0-beta.2", true),
+            ],
+            "beta",
+        )
+        .expect("valid prerelease should be selected");
+
+        assert_eq!(selected.tag_name, "v2.2.0-beta.2");
     }
 }

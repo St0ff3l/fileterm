@@ -1069,6 +1069,8 @@ export const DEFAULT_OVERVIEW_SECTION_ORDER = [
 
 export type ThemeVariant = 'dark' | 'light'
 
+export type ThemeBaseId = 'fileterm' | 'codex'
+
 export type TerminalAnsiColorName =
   | 'black'
   | 'red'
@@ -1129,6 +1131,8 @@ export interface ThemeSemanticColors {
 export interface ThemeConfig {
   schemaVersion: 'codex-theme-v1'
   codeThemeId: string
+  /** Built-in theme whose component skin this configuration inherits from. */
+  baseThemeId?: ThemeBaseId
   variant: ThemeVariant
   theme: {
     accent: string
@@ -1147,6 +1151,12 @@ export interface ThemeConfig {
     overrides?: Record<string, string>
     terminal: TerminalThemeConfig
   }
+}
+
+export interface SavedTheme {
+  id: string
+  name: string
+  config: ThemeConfig
 }
 
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
@@ -1215,6 +1225,7 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
   return {
     schemaVersion: 'codex-theme-v1',
     codeThemeId: 'codex',
+    baseThemeId: 'codex',
     variant,
     theme: {
       accent: isLight ? '#339cff' : '#0169cc',
@@ -1263,9 +1274,10 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
   return {
     schemaVersion: 'codex-theme-v1',
     codeThemeId: 'fileterm',
+    baseThemeId: 'fileterm',
     variant,
     theme: {
-      accent: isLight ? '#3b82f6' : '#8bbfff',
+      accent: isLight ? '#3b82f6' : '#1687e8',
       contrast: isLight ? 52 : 60,
       fonts: { code: null, ui: null },
       ink: isLight ? '#18181b' : '#e7e7e7',
@@ -1336,9 +1348,16 @@ function normalizeThemeNumber(value: unknown, fallback: number) {
 export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVariant = 'dark'): ThemeConfig {
   const root = asThemeRecord(value)
   const rawCodeThemeId = typeof root.codeThemeId === 'string' ? root.codeThemeId.trim() : ''
-  const isCodexTheme = rawCodeThemeId === 'codex' || rawCodeThemeId.startsWith('codex-')
+  const isCodexCodeTheme = rawCodeThemeId === 'codex' || rawCodeThemeId.startsWith('codex-')
   const isFileTermTheme =
     rawCodeThemeId === 'fileterm' || rawCodeThemeId === 'fileterm-dark' || rawCodeThemeId === 'fileterm-light'
+  const rawBaseThemeId = root.baseThemeId === 'codex' || root.baseThemeId === 'fileterm' ? root.baseThemeId : null
+  const baseThemeId: ThemeBaseId = isCodexCodeTheme
+    ? 'codex'
+    : isFileTermTheme
+      ? 'fileterm'
+      : (rawBaseThemeId ?? 'fileterm')
+  const isCodexTheme = baseThemeId === 'codex'
   const variant = root.variant === 'light' || root.variant === 'dark' ? root.variant : fallbackVariant
   const fallback = isCodexTheme ? createCodexThemeConfig(fallbackVariant) : createDefaultThemeConfig(fallbackVariant)
   const variantFallback = isCodexTheme
@@ -1380,6 +1399,7 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
       : rawCodeThemeId === 'codex-dark' || rawCodeThemeId === 'codex-light'
         ? 'codex'
         : (normalizeThemeString(root.codeThemeId, variantFallback.codeThemeId) ?? variantFallback.codeThemeId),
+    baseThemeId,
     variant,
     theme: {
       accent: normalizeThemeColor(rawTheme.accent, variantFallback.theme.accent),
@@ -1444,7 +1464,9 @@ export interface UiPreferences {
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
   themeConfig: ThemeConfig
+  customThemes: SavedTheme[]
   autoCheckUpdates: boolean
+  updateChannel: AppUpdateChannel
   terminalZoomLocked: boolean
   connectionDefaults: SshConnectionDefaults
   mcpAgent: McpAgentPreferences
@@ -1459,7 +1481,9 @@ export interface UiPreferencesInput {
   theme?: UiPreferences['theme']
   locale?: UiPreferences['locale']
   themeConfig?: ThemeConfig
+  customThemes?: SavedTheme[]
   autoCheckUpdates?: boolean
+  updateChannel?: UiPreferences['updateChannel']
   terminalZoomLocked?: boolean
   connectionDefaults?: Partial<SshConnectionDefaults>
   mcpAgent?: Partial<McpAgentPreferences>
@@ -2056,11 +2080,15 @@ export type AppUpdateState =
 
 export type AppUpdateMode = 'in-app' | 'release-page'
 
+export type AppUpdateChannel = 'stable' | 'beta'
+
 export interface AppUpdateStatus {
   state: AppUpdateState
   currentVersion: string
   updateMode?: AppUpdateMode
+  updateChannel?: AppUpdateChannel
   availableVersion?: string
+  releaseTag?: string
   releaseUrl?: string
   progress?: number
   message?: string

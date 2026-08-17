@@ -1,7 +1,9 @@
 import {
+  createCodexThemeConfig,
   createDefaultThemeConfig,
   normalizeThemeConfig,
   type TerminalAnsiColorName,
+  type ThemeBaseId,
   type ThemeConfig,
   type ThemeVariant
 } from '@fileterm/core'
@@ -73,7 +75,7 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
   const strongBorder = alpha(ink, isLight ? 22 : 18)
   const subtleBorder = alpha(ink, isLight ? 8 : 6)
 
-  const focus = accent
+  const focus = secondaryAccent
   const accentHover = isLight ? blend(accent, '#000000', 12) : blend(accent, '#FFFFFF', 15)
   const secondaryHover = isLight ? blend(secondaryAccent, '#000000', 12) : blend(secondaryAccent, '#FFFFFF', 15)
   const accentText = isLight ? blend(accent, ink, 35) : blend(accent, '#FFFFFF', 70)
@@ -142,14 +144,14 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--theme-error': danger,
     '--theme-success': success,
     '--focus-outline': focus,
-    '--accent-highlight': accent,
+    '--accent-highlight': secondaryAccent,
     '--accent-text': accentText,
     '--sidebar-active-accent': ink,
     '--selection-bg': active,
-    '--accent-tint-weak': alpha(accent, isLight ? 8 : 10),
-    '--accent-tint': alpha(accent, isLight ? 14 : 16),
-    '--accent-focus-ring': alpha(accent, isLight ? 24 : 28),
-    '--input-focus-ring': alpha(accent, isLight ? 18 : 22),
+    '--accent-tint-weak': alpha(secondaryAccent, isLight ? 8 : 10),
+    '--accent-tint': alpha(secondaryAccent, isLight ? 14 : 16),
+    '--accent-focus-ring': alpha(secondaryAccent, isLight ? 24 : 28),
+    '--input-focus-ring': alpha(secondaryAccent, isLight ? 18 : 22),
     '--danger': danger,
     '--danger-text': danger,
     '--danger-surface': dangerSurface,
@@ -165,15 +167,15 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--info-border': alpha(info, isLight ? 20 : 30),
     '--folder-accent': warning,
     '--kernel-accent': accent,
-    '--copy-link': accent,
-    '--copy-link-hover': accentHover,
+    '--copy-link': secondaryAccent,
+    '--copy-link-hover': secondaryHover,
     '--mini-tab-active-bg': secondarySurface,
     '--mini-tab-active-text': secondaryHover,
     '--memory-warn': warning,
     '--network-tx': danger,
     '--network-rx': info,
-    '--button-primary-bg': accent,
-    '--button-primary-hover': accentHover,
+    '--button-primary-bg': isLight ? accent : blend(accent, '#000000', 25),
+    '--button-primary-hover': isLight ? accentHover : blend(accent, '#000000', 12),
     '--button-primary-border': border,
     '--button-primary-text': '#FFFFFF',
     '--floating-drawer-expanded-bg': isLight ? alpha('#FFFFFF', 94) : alpha(surface, 92),
@@ -185,7 +187,7 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--modal-backdrop-bg': isLight ? 'rgba(0, 0, 0, 0.32)' : 'rgba(0, 0, 0, 0.62)',
     '--modal-card-shadow': isLight ? '0 20px 50px rgba(0, 0, 0, 0.12)' : '0 20px 60px rgba(0, 0, 0, 0.5)',
     '--control-shadow': isLight ? '0 1px 2px rgba(0, 0, 0, 0.05)' : '0 1px 2px rgba(0, 0, 0, 0.15)',
-    '--control-focus-shadow': `0 0 0 2px ${alpha(accent, isLight ? 14 : 18)}, 0 1px 2px rgba(0, 0, 0, 0.1)`,
+    '--control-focus-shadow': `0 0 0 2px ${alpha(secondaryAccent, isLight ? 14 : 18)}, 0 1px 2px rgba(0, 0, 0, 0.1)`,
     '--control-inset-shadow': isLight ? 'inset 0 1px 2px rgba(0, 0, 0, 0.04)' : 'inset 0 1px 2px rgba(0, 0, 0, 0.15)',
     '--terminal-dock-shadow': isLight ? '0 12px 32px rgba(0, 0, 0, 0.1)' : '0 16px 36px rgba(0, 0, 0, 0.35)',
     '--terminal-dock-header-shadow': isLight ? '0 8px 20px rgba(0, 0, 0, 0.08)' : '0 10px 24px rgba(0, 0, 0, 0.25)',
@@ -320,18 +322,28 @@ function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boo
   )
 }
 
-function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: ThemeConfig) {
-  for (const name of appliedThemeVariableNames) {
-    root.style.removeProperty(name)
-  }
-  appliedThemeVariableNames.clear()
+function isBuiltInTheme(config: ThemeConfig) {
+  return config.codeThemeId === 'fileterm' || config.codeThemeId === 'codex'
+}
 
+function baseThemeConfigFor(config: ThemeConfig, variant: ThemeVariant): ThemeConfig | null {
+  const baseThemeId: ThemeBaseId | undefined = config.baseThemeId
+  if (baseThemeId === 'codex') return createCodexThemeConfig(variant)
+  if (baseThemeId === 'fileterm') return createDefaultThemeConfig(variant)
+  if (config.codeThemeId === 'codex') return createCodexThemeConfig(variant)
+  if (config.codeThemeId === 'fileterm') return createDefaultThemeConfig(variant)
+  return null
+}
+
+function buildThemeVariables(
+  themeMode: ThemeMode,
+  config: ThemeConfig,
+  forceCompactSkin = false
+): { normalized: ThemeConfig; variables: Record<string, string>; isDefaultTheme: boolean } {
   const variant = themeVariantForMode(themeMode)
   const normalized = normalizeThemeConfig({ ...config, variant }, variant)
   const theme = normalized.theme
   const isDefaultTheme = isDefaultFileTermTheme(normalized, variant)
-  root.dataset.theme = themeMode
-  root.style.colorScheme = variant
   const variables: Record<string, string> = {
     '--theme-accent': theme.accent,
     '--theme-accent-hover': blend(theme.accent, theme.ink, 8),
@@ -378,10 +390,9 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
     '--terminal-search-active-bg': theme.terminal.search.activeMatchBackground
   }
 
-  if (!isDefaultTheme) {
+  if (forceCompactSkin || !isDefaultTheme) {
     Object.assign(variables, resolveCompactUiVariables(theme, variant))
   }
-  root.dataset.themeCustom = isDefaultTheme ? 'false' : 'true'
   applyThemeOverrides(variables, theme.overrides)
 
   for (const [colorName, variableName] of ANSI_VARIABLE_NAMES) {
@@ -393,6 +404,38 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
   if (theme.fonts.code) {
     variables['--font-mono'] = theme.fonts.code
   }
+
+  return { normalized, variables, isDefaultTheme }
+}
+
+function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: ThemeConfig) {
+  for (const name of appliedThemeVariableNames) {
+    root.style.removeProperty(name)
+  }
+  appliedThemeVariableNames.clear()
+
+  const variant = themeVariantForMode(themeMode)
+  const normalizedInput = normalizeThemeConfig({ ...config, variant }, variant)
+  const current = buildThemeVariables(themeMode, normalizedInput, !isBuiltInTheme(normalizedInput))
+  const customTheme = !isBuiltInTheme(current.normalized)
+  const baseConfig = customTheme ? baseThemeConfigFor(current.normalized, variant) : null
+  let variables = current.variables
+
+  if (baseConfig) {
+    const base = buildThemeVariables(themeMode, baseConfig)
+    const baseComparison = buildThemeVariables(themeMode, baseConfig, true).variables
+    variables = { ...base.variables }
+    for (const [name, value] of Object.entries(current.variables)) {
+      if (baseComparison[name] !== value) {
+        variables[name] = value
+      }
+    }
+  }
+
+  root.dataset.theme = themeMode
+  root.style.colorScheme = variant
+  const inheritsFileTermSkin = customTheme && baseConfig?.baseThemeId === 'fileterm'
+  root.dataset.themeCustom = inheritsFileTermSkin ? 'inherited' : current.isDefaultTheme ? 'false' : 'true'
 
   for (const [name, value] of Object.entries(variables)) {
     root.style.setProperty(name, value)

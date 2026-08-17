@@ -51,22 +51,6 @@
   border-color: var(--text-muted);
 }
 
-.sudo-password-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sudo-password-input-row input {
-  min-width: 0;
-  flex: 1;
-}
-
-.sudo-password-visibility {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .file-action-hint {
   margin-top: -8px;
   margin-bottom: 12px;
@@ -133,6 +117,32 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-secondary);
+}
+
+.sudo-password-prompt-modal .sudo-password-command {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-family: var(--font-mono, 'JetBrains Mono', Monaco, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
+}
+
+.sudo-password-prompt-modal .sudo-password-cwd {
+  min-width: 0;
+  max-width: 45%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: right;
 }
 
 /* SSH Verification Box */
@@ -1514,24 +1524,39 @@
 }
 
 .theme-config-toolbar {
-  align-items: stretch;
-  padding: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: var(--bg-card);
 }
 
-.theme-config-preset-control,
-.theme-config-control {
+.theme-config-preset-control {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 7px;
-  min-width: 180px;
+  flex: 1 1 180px;
+  min-width: 160px;
 }
 
-.theme-config-preset-control {
-  flex: 0 1 240px;
+.theme-config-name-control {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.theme-config-actions-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  height: 36px;
 }
 
 .theme-config-label,
@@ -1566,6 +1591,79 @@
   right: 10px;
 }
 
+.theme-config-name-input {
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: var(--input-bg, var(--bg-card));
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+}
+
+.theme-config-name-input::placeholder {
+  color: var(--text-muted);
+}
+
+.theme-config-name-input:focus-visible {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.settings-modal .theme-config-actions-control .theme-config-save-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.settings-modal .theme-config-actions-control .theme-config-danger-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 40%, var(--border-light));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-card));
+  color: var(--danger, #ef4444);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.settings-modal .theme-config-actions-control .theme-config-danger-button:hover:not(:disabled) {
+  border-color: var(--danger, #ef4444);
+  background: color-mix(in srgb, var(--danger, #ef4444) 18%, var(--bg-card));
+  color: var(--danger, #ef4444);
+}
+
+.settings-modal .theme-config-actions-control .theme-config-danger-button:focus-visible {
+  outline: none;
+  border-color: var(--danger, #ef4444);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger, #ef4444) 25%, transparent);
+}
+
 .theme-config-select.dropdown-select-trigger:hover:not(:disabled),
 .theme-config-select.ft-select-shell select:hover:not(:disabled) {
   border-color: var(--focus-outline);
@@ -1580,23 +1678,28 @@
 
 .theme-config-preview {
   display: flex;
-  flex: 1 1 280px;
-  min-height: 56px;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 12px;
+  flex: 1 1 200px;
+  min-width: 170px;
+  min-height: 36px;
+  height: 36px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 7px;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .theme-config-preview-title {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .theme-config-preview-code {
@@ -1604,6 +1707,8 @@
   font-family: var(--font-mono);
   font-size: 11.5px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .theme-config-fields {
@@ -1632,6 +1737,27 @@
 }
 
 @media (max-width: 760px) {
+  .theme-config-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .theme-config-preset-control,
+  .theme-config-name-control,
+  .theme-config-preview {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .theme-config-actions-control {
+    width: 100%;
+  }
+
+  .theme-config-actions-control .theme-config-save-button,
+  .theme-config-actions-control .theme-config-danger-button {
+    flex: 1 1 50%;
+  }
+
   .theme-config-color-group .theme-config-section-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -1648,10 +1774,10 @@
 .theme-config-checkbox-row {
   display: flex;
   align-items: center;
-  min-height: 42px;
-  padding: 0 12px;
+  min-height: 52px;
+  padding: 10px 14px;
   border: 1px solid var(--border-light);
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--bg-card);
 }
 
@@ -1744,13 +1870,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 16px;
   width: 100%;
   min-height: 32px;
   color: var(--text-main);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   user-select: none;
+}
+
+.theme-config-switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.theme-config-switch-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.theme-config-switch-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .theme-config-switch input {
@@ -1794,8 +1939,8 @@
 }
 
 .theme-config-switch input:checked + .theme-config-switch-track {
-  border-color: var(--theme-accent, var(--focus-outline));
-  background: var(--theme-accent, var(--focus-outline));
+  border-color: var(--button-primary-bg, #1687e8);
+  background: var(--button-primary-bg, #1687e8);
 }
 
 .theme-config-switch input:checked + .theme-config-switch-track::after {

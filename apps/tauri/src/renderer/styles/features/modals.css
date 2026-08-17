@@ -1035,14 +1035,14 @@
   position: absolute;
   inset: 2.5px;
   border-radius: 999px;
-  background: var(--copy-link);
+  background: var(--focus-outline, #8bbfff);
   transform: scale(0);
   transition: transform 0.16s ease;
 }
 
 .ssh-checkbox input:checked,
 .checkbox-row input:checked {
-  border-color: var(--copy-link);
+  border-color: var(--focus-outline, #8bbfff);
   background: var(--bg-main);
 }
 

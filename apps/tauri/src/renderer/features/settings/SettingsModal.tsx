@@ -18,6 +18,7 @@ import {
   type McpAgentSetup,
   type OverviewSectionId,
   type S3BackupConfig,
+  type SavedTheme,
   type SshConnectionDefaults,
   type TerminalAnsiColorName,
   type ThemeConfig,
@@ -141,6 +142,20 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
       candidate.theme.opaqueWindows === themeConfig.theme.opaqueWindows
     )
   })
+}
+
+function sameThemeConfig(left: ThemeConfig, right: ThemeConfig) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function themeBaseIdForConfig(themeConfig: ThemeConfig): 'fileterm' | 'codex' {
+  if (themeConfig.baseThemeId) return themeConfig.baseThemeId
+  return themeConfig.codeThemeId === 'codex' || themeConfig.codeThemeId.startsWith('codex-') ? 'codex' : 'fileterm'
+}
+
+function createCustomThemeId() {
+  const randomId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : null
+  return `custom-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`
 }
 
 function toColorInputValue(value: string) {
@@ -431,8 +446,10 @@ function aiProviderRequestUrlPreview(draft: AiProviderDraft) {
 export function SettingsModal({
   theme,
   themeConfig,
+  customThemes,
   onSetTheme,
   onSetThemeConfig,
+  onSetCustomThemes,
   locale,
   onSetLocale,
   onOpenCommandManager,
@@ -446,8 +463,10 @@ export function SettingsModal({
 }: {
   theme: 'default-dark' | 'default-light'
   themeConfig: ThemeConfig
+  customThemes: SavedTheme[]
   onSetTheme(value: 'default-dark' | 'default-light'): void
   onSetThemeConfig(value: ThemeConfig): void
+  onSetCustomThemes(value: SavedTheme[]): void
   locale: 'zhCN' | 'enUS'
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenCommandManager(): void
@@ -465,6 +484,7 @@ export function SettingsModal({
   const [agentSubTab, setAgentSubTab] = useState<'mcp' | 'cli'>('mcp')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
+  const [updateChannel, setUpdateChannel] = useState<UiPreferences['updateChannel']>('stable')
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
   const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
@@ -473,6 +493,9 @@ export function SettingsModal({
   const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
   const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<string | null>(null)
+  const [customThemeName, setCustomThemeName] = useState('')
+  const [editingCustomThemeId, setEditingCustomThemeId] = useState<string | null>(null)
+  const [showDeleteThemeConfirm, setShowDeleteThemeConfirm] = useState(false)
   const [mcpAgentPreferences, setMcpAgentPreferences] = useState<McpAgentPreferences>(() => ({
     ...DEFAULT_MCP_AGENT_PREFERENCES
   }))
@@ -572,6 +595,7 @@ export function SettingsModal({
       .then((preferences) => {
         if (!canceled) {
           setAutoCheckUpdates(preferences.autoCheckUpdates)
+          setUpdateChannel(preferences.updateChannel)
           setTerminalZoomLocked(preferences.terminalZoomLocked)
           setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
@@ -595,6 +619,7 @@ export function SettingsModal({
     const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
       if (!canceled) {
         setAutoCheckUpdates(preferences.autoCheckUpdates)
+        setUpdateChannel(preferences.updateChannel)
         setTerminalZoomLocked(preferences.terminalZoomLocked)
         setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
@@ -954,6 +979,28 @@ export function SettingsModal({
       .finally(() => setIsSavingUpdatePreference(false))
   }
 
+  const setUpdateChannelPreference = (nextValue: UiPreferences['updateChannel']) => {
+    if (!desktopApi || isSavingUpdatePreference || nextValue === updateChannel) {
+      return
+    }
+
+    const previousValue = updateChannel
+    setUpdateChannel(nextValue)
+    setUpdatePreferenceError(null)
+    setIsSavingUpdatePreference(true)
+    void desktopApi
+      .setUiPreferences({ updateChannel: nextValue })
+      .then((preferences) => {
+        setUpdateChannel(preferences.updateChannel)
+        void desktopApi.checkForUpdates().catch(() => undefined)
+      })
+      .catch(() => {
+        setUpdateChannel(previousValue)
+        setUpdatePreferenceError(t.updatePreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingUpdatePreference(false))
+  }
+
   const setConnectionDefault = <K extends keyof SshConnectionDefaults>(key: K, value: SshConnectionDefaults[K]) => {
     if (!desktopApi || isSavingConnectionDefaults || connectionDefaults[key] === value) {
       return
@@ -1002,7 +1049,8 @@ export function SettingsModal({
       normalizeThemeConfig(
         {
           ...nextValue,
-          codeThemeId: 'custom'
+          codeThemeId: 'custom',
+          baseThemeId: themeBaseIdForConfig(themeConfig)
         },
         themeVariant
       )
@@ -1066,12 +1114,71 @@ export function SettingsModal({
   }
 
   const applyThemePreset = (presetId: string, variant: ThemePresetVariant = themeVariant) => {
+    if (presetId.startsWith('saved:')) {
+      const savedId = presetId.slice('saved:'.length)
+      const savedTheme = customThemes.find((candidate) => candidate.id === savedId)
+      if (!savedTheme) return
+      const nextThemeConfig = normalizeThemeConfig(savedTheme.config, savedTheme.config.variant)
+      onSetThemeConfig(nextThemeConfig)
+      onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+      setEditingCustomThemeId(savedTheme.id)
+      setCustomThemeName(savedTheme.name)
+      setThemeConfigMessage(t.themePresetApplied)
+      return
+    }
+
     const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) return
     const nextThemeConfig = normalizeThemeConfig(preset.config[variant], variant)
     onSetThemeConfig(nextThemeConfig)
     onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    setEditingCustomThemeId(null)
+    setCustomThemeName('')
     setThemeConfigMessage(t.themePresetApplied)
+  }
+
+  const saveCustomTheme = () => {
+    const name = customThemeName.trim()
+    if (!name) {
+      setThemeConfigMessage(t.themeNameRequired)
+      return
+    }
+
+    const nextThemeConfig = normalizeThemeConfig(
+      {
+        ...themeConfig,
+        codeThemeId: 'custom',
+        baseThemeId: themeBaseIdForConfig(themeConfig)
+      },
+      themeVariant
+    )
+    const existingTheme = editingCustomThemeId
+      ? customThemes.find((candidate) => candidate.id === editingCustomThemeId)
+      : undefined
+    const id = existingTheme?.id ?? createCustomThemeId()
+    const nextCustomThemes = [
+      ...customThemes.filter((candidate) => candidate.id !== id),
+      { id, name, config: nextThemeConfig }
+    ]
+
+    onSetCustomThemes(nextCustomThemes)
+    onSetThemeConfig(nextThemeConfig)
+    onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    setEditingCustomThemeId(id)
+    setCustomThemeName(name)
+    setThemeConfigMessage(existingTheme ? t.themeUpdated : t.themeSaved)
+  }
+
+  const deleteCustomTheme = () => {
+    if (!selectedSavedTheme) return
+    const idToDelete = selectedSavedTheme.id
+    const nextCustomThemes = customThemes.filter((candidate) => candidate.id !== idToDelete)
+    onSetCustomThemes(nextCustomThemes)
+    setEditingCustomThemeId(null)
+    setCustomThemeName('')
+    applyThemePreset('fileterm')
+    setThemeConfigMessage(t.themeDeleted)
+    setShowDeleteThemeConfirm(false)
   }
 
   const switchThemeVariant = (nextVariant: ThemePresetVariant) => {
@@ -1193,6 +1300,8 @@ export function SettingsModal({
       const importedTheme = normalizeThemeConfig(parseImportedTheme(clipboardText), themeVariant)
       onSetThemeConfig(importedTheme)
       onSetTheme(importedTheme.variant === 'light' ? 'default-light' : 'default-dark')
+      setEditingCustomThemeId(null)
+      setCustomThemeName('')
       setThemeConfigMessage(t.themeImported)
     } catch {
       setThemeConfigMessage(t.themeImportFailed)
@@ -1207,6 +1316,7 @@ export function SettingsModal({
       const normalizedTheme = normalizeThemeConfig({ ...themeConfig, variant: themeVariant }, themeVariant)
       const serializedTheme = `${THEME_CONFIG_EXPORT_PREFIX}${JSON.stringify({
         codeThemeId: normalizedTheme.codeThemeId,
+        baseThemeId: normalizedTheme.baseThemeId,
         theme: normalizedTheme.theme,
         variant: normalizedTheme.variant
       })}`
@@ -1453,9 +1563,25 @@ export function SettingsModal({
   }
 
   const selectedThemePreset = findMatchingThemePreset(themeConfig)
-  const themePresetFamily: ThemePresetFamily | 'custom' = selectedThemePreset?.id ?? 'custom'
-  const themePresetLabel = selectedThemePreset ? t[selectedThemePreset.labelKey] : t.themePresetCustom
-  const themePresetCode = themePresetFamily === 'custom' ? 'custom' : themePresetFamily
+  const matchingSavedTheme = customThemes.find((candidate) => sameThemeConfig(candidate.config, themeConfig))
+  const editingSavedTheme = editingCustomThemeId
+    ? customThemes.find((candidate) => candidate.id === editingCustomThemeId)
+    : undefined
+  const selectedSavedTheme = editingSavedTheme ?? matchingSavedTheme
+  const themePresetValue = selectedSavedTheme ? `saved:${selectedSavedTheme.id}` : (selectedThemePreset?.id ?? 'custom')
+  const themePresetLabel = selectedSavedTheme
+    ? selectedSavedTheme.name
+    : selectedThemePreset
+      ? t[selectedThemePreset.labelKey]
+      : t.themePresetCustom
+  const themePresetCode = selectedSavedTheme || !selectedThemePreset ? 'custom' : selectedThemePreset.id
+
+  useEffect(() => {
+    if (!editingCustomThemeId && matchingSavedTheme) {
+      setEditingCustomThemeId(matchingSavedTheme.id)
+      setCustomThemeName(matchingSavedTheme.name)
+    }
+  }, [editingCustomThemeId, matchingSavedTheme])
 
   const content = (
     <div
@@ -2414,10 +2540,45 @@ export function SettingsModal({
                       onChange={applyThemePreset}
                       options={[
                         ...THEME_PRESETS.map((preset) => ({ value: preset.id, label: t[preset.labelKey] })),
+                        ...customThemes.map((savedTheme) => ({
+                          value: `saved:${savedTheme.id}`,
+                          label: savedTheme.name
+                        })),
                         { value: 'custom', label: t.themePresetCustom }
                       ]}
-                      value={themePresetFamily}
+                      value={themePresetValue}
                     />
+                  </div>
+                  <div className="theme-config-name-control">
+                    <span className="theme-config-label">{t.themeCustomName}</span>
+                    <input
+                      aria-label={t.themeCustomName}
+                      className="theme-config-name-input"
+                      maxLength={128}
+                      onChange={(event) => setCustomThemeName(event.target.value)}
+                      placeholder={t.themeCustomNamePlaceholder}
+                      value={customThemeName}
+                    />
+                  </div>
+                  <div className="theme-config-actions-control">
+                    <button
+                      className="primary-button compact theme-config-save-button"
+                      onClick={saveCustomTheme}
+                      type="button"
+                    >
+                      <AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />
+                      {editingSavedTheme ? t.themeUpdate : t.themeSave}
+                    </button>
+                    {selectedSavedTheme ? (
+                      <button
+                        className="theme-config-danger-button"
+                        onClick={() => setShowDeleteThemeConfirm(true)}
+                        type="button"
+                      >
+                        <AppIcon name="trash" size={14} />
+                        {t.themeDelete}
+                      </button>
+                    ) : null}
                   </div>
                   <div
                     className="theme-config-preview"
@@ -2550,7 +2711,10 @@ export function SettingsModal({
 
                 <div className="theme-config-checkbox-row">
                   <label className="theme-config-switch">
-                    <span>{t.themeOpaqueWindows}</span>
+                    <div className="theme-config-switch-info">
+                      <span className="theme-config-switch-title">{t.themeOpaqueWindows}</span>
+                      <span className="theme-config-switch-hint">{t.themeOpaqueWindowsHint}</span>
+                    </div>
                     <input
                       checked={themeConfig.theme.opaqueWindows}
                       onChange={(event) => updateThemeBody({ opaqueWindows: event.target.checked })}
@@ -2679,24 +2843,37 @@ export function SettingsModal({
                     ))}
                   </div>
                 </details>
+
+                {showDeleteThemeConfirm && selectedSavedTheme ? (
+                  <ConfirmActionDialog
+                    confirmLabel={t.delete}
+                    confirmVariant="danger"
+                    description={t.themeDeleteConfirmDescription.replace('{name}', selectedSavedTheme.name)}
+                    onClose={() => setShowDeleteThemeConfirm(false)}
+                    onConfirm={deleteCustomTheme}
+                    title={t.themeDeleteConfirmTitle}
+                  />
+                ) : null}
               </section>
 
               <section className="settings-section">
                 <h3>{t.terminalDisplaySettings}</h3>
                 <p className="settings-tools-hint">{t.terminalDisplaySettingsHint}</p>
-                <div className="advanced-toggle-list">
-                  <div className="advanced-toggle-row">
-                    <label className="ssh-checkbox advanced-toggle-label">
+                <div className="overview-preference-list">
+                  <label className="overview-preference-row">
+                    <span className="overview-preference-copy">
+                      <strong>{t.lockTerminalZoom}</strong>
+                      <p>{t.lockTerminalZoomHint}</p>
+                    </span>
+                    <span className="command-toggle overview-preference-toggle">
                       <input
                         checked={terminalZoomLocked}
                         disabled={!desktopApi || isSavingTerminalZoomPreference}
                         onChange={(event) => setTerminalZoomLockPreference(event.target.checked)}
                         type="checkbox"
                       />
-                      <span className="advanced-toggle-name">{t.lockTerminalZoom}</span>
-                    </label>
-                    <p className="advanced-toggle-hint">{t.lockTerminalZoomHint}</p>
-                  </div>
+                    </span>
+                  </label>
                 </div>
                 {terminalZoomPreferenceError ? <p className="modal-error">{terminalZoomPreferenceError}</p> : null}
               </section>
@@ -3350,6 +3527,22 @@ export function SettingsModal({
                     options={[
                       { value: 'auto', label: t.autoCheckUpdates },
                       { value: 'manual', label: t.doNotAutoUpdate }
+                    ]}
+                  />
+                </div>
+                <div className="update-check-preference">
+                  <div>
+                    <strong>{t.updateChannel}</strong>
+                    <p>{t.updateChannelHint}</p>
+                  </div>
+                  <DropdownSelect
+                    className="update-check-preference-select"
+                    disabled={!desktopApi || isSavingUpdatePreference}
+                    onChange={(value) => setUpdateChannelPreference(value === 'beta' ? 'beta' : 'stable')}
+                    value={updateChannel}
+                    options={[
+                      { value: 'stable', label: t.stableChannel },
+                      { value: 'beta', label: t.betaChannel }
                     ]}
                   />
                 </div>

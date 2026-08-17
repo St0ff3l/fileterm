@@ -25,6 +25,7 @@ import {
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type OverviewSectionId,
   type RemoteFileItem,
+  type SavedTheme,
   type SshConnectionDefaults,
   type ThemeConfig,
   type UiPreferences,
@@ -93,6 +94,7 @@ type InitialUiPreferences = Pick<
   UiPreferences,
   | 'theme'
   | 'themeConfig'
+  | 'customThemes'
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
@@ -170,6 +172,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
     return createDefaultThemeConfig(initialTheme === 'default-light' ? 'light' : 'dark')
   })
+  const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() => [...(initialUiPreferences?.customThemes ?? [])])
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
@@ -337,6 +340,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     isConnectionManagerWindow,
     themeMode,
     themeConfig,
+    customThemes,
     locale,
     connectionDefaults,
     terminalZoomLocked,
@@ -348,6 +352,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     initialUiPreferencesLoaded: initialUiPreferences !== undefined,
     onThemeModeChange: setThemeMode,
     onThemeConfigChange: setThemeConfig,
+    onCustomThemesChange: setCustomThemes,
     onLocaleChange: (nextLocale) => {
       setLocale(nextLocale)
       setLocaleState(nextLocale)
@@ -1678,6 +1683,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onUploadFiles={handleUploadFiles}
                 theme={themeMode}
                 themeConfig={themeConfig}
+                customThemes={customThemes}
                 locale={locale}
                 overviewShowStats={overviewShowStats}
                 overviewShowRecent={overviewShowRecent}
@@ -1707,6 +1713,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onUpdateCommandOrder={updateCommandOrder}
                 onSetTheme={handleSetTheme}
                 onSetThemeConfig={setThemeConfig}
+                onSetCustomThemes={setCustomThemes}
                 onSetLocale={(nextLocale) => {
                   setLocale(nextLocale)
                   setLocaleState(nextLocale)
@@ -1914,8 +1921,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             ? {
                 theme: themeMode,
                 themeConfig,
+                customThemes,
                 onSetTheme: handleSetTheme,
                 onSetThemeConfig: setThemeConfig,
+                onSetCustomThemes: setCustomThemes,
                 locale,
                 onSetLocale: (nextLocale) => {
                   setLocale(nextLocale)

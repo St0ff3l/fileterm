@@ -259,6 +259,8 @@ pub struct ThemeBody {
 pub struct ThemeConfig {
     pub schema_version: String,
     pub code_theme_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_theme_id: Option<String>,
     pub variant: String,
     pub theme: ThemeBody,
 }
@@ -290,6 +292,7 @@ fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
     ThemeConfig {
         schema_version: "codex-theme-v1".to_string(),
         code_theme_id: "codex".to_string(),
+        base_theme_id: Some("codex".to_string()),
         variant: if is_light { "light" } else { "dark" }.to_string(),
         theme: ThemeBody {
             accent: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
@@ -342,9 +345,10 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
     ThemeConfig {
         schema_version: "codex-theme-v1".to_string(),
         code_theme_id: "fileterm".to_string(),
+        base_theme_id: Some("fileterm".to_string()),
         variant: if is_light { "light" } else { "dark" }.to_string(),
         theme: ThemeBody {
-            accent: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
+            accent: if is_light { "#3b82f6" } else { "#1687e8" }.to_string(),
             contrast: if is_light { 52 } else { 60 },
             fonts: ThemeFonts {
                 code: None,
@@ -424,8 +428,18 @@ fn is_theme_font(value: &str) -> bool {
 fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig {
     let variant = if variant == "light" { "light" } else { "dark" };
     let trimmed_id = config.code_theme_id.trim();
-    let is_codex_theme = trimmed_id == "codex" || trimmed_id.starts_with("codex-");
+    let is_codex_code_theme = trimmed_id == "codex" || trimmed_id.starts_with("codex-");
     let is_fileterm_theme = matches!(trimmed_id, "fileterm" | "fileterm-dark" | "fileterm-light");
+    let base_theme_id = if is_codex_code_theme {
+        "codex"
+    } else if is_fileterm_theme {
+        "fileterm"
+    } else if matches!(config.base_theme_id.as_deref(), Some("codex")) {
+        "codex"
+    } else {
+        "fileterm"
+    };
+    let is_codex_theme = base_theme_id == "codex";
     let fallback = if is_codex_theme {
         codex_theme_config_for_variant(variant)
     } else {
@@ -433,6 +447,7 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
     };
     config.schema_version = "codex-theme-v1".to_string();
     config.variant = variant.to_string();
+    config.base_theme_id = Some(base_theme_id.to_string());
     if trimmed_id.is_empty() || config.code_theme_id.len() > 256 {
         config.code_theme_id = fallback.code_theme_id;
     } else if is_fileterm_theme {
@@ -638,13 +653,25 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct SavedTheme {
+    pub id: String,
+    pub name: String,
+    pub config: ThemeConfig,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub theme: String,
     pub locale: String,
     #[serde(default = "default_theme_config")]
     pub theme_config: ThemeConfig,
+    #[serde(default)]
+    pub custom_themes: Vec<SavedTheme>,
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
+    #[serde(default = "default_update_channel")]
+    pub update_channel: String,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
     #[serde(default)]
@@ -669,7 +696,9 @@ pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
     pub theme_config: Option<ThemeConfig>,
+    pub custom_themes: Option<Vec<SavedTheme>>,
     pub auto_check_updates: Option<bool>,
+    pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
     pub mcp_agent: Option<McpAgentPreferencesInput>,
@@ -687,6 +716,10 @@ const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
 
 fn default_auto_check_updates() -> bool {
     true
+}
+
+fn default_update_channel() -> String {
+    "stable".to_string()
 }
 
 fn default_use_empty_password() -> bool {
@@ -761,12 +794,47 @@ fn normalize_overview_section_order(order: Vec<String>) -> Vec<String> {
     normalized
 }
 
+fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
+    let mut normalized = Vec::new();
+    for mut saved in themes {
+        let id = saved.id.trim();
+        let name = saved.name.trim();
+        if id.is_empty()
+            || id.len() > 128
+            || name.is_empty()
+            || name.len() > 128
+            || normalized
+                .iter()
+                .any(|existing: &SavedTheme| existing.id == id)
+        {
+            continue;
+        }
+
+        saved.id = id.to_string();
+        saved.name = name.to_string();
+        let variant = if saved.config.variant == "light" {
+            "light"
+        } else {
+            "dark"
+        };
+        saved.config = normalize_theme_config(saved.config, variant);
+        normalized.push(saved);
+        if normalized.len() >= 64 {
+            break;
+        }
+    }
+    normalized
+}
+
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     if !matches!(preferences.theme.as_str(), "default-dark" | "default-light") {
         preferences.theme = DEFAULT_UI_THEME.to_string();
     }
     if !matches!(preferences.locale.as_str(), "zhCN" | "enUS") {
         preferences.locale = DEFAULT_UI_LOCALE.to_string();
+    }
+    if !matches!(preferences.update_channel.as_str(), "stable" | "beta") {
+        preferences.update_channel = default_update_channel();
     }
     if !matches!(
         preferences
@@ -819,6 +887,7 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
             "dark"
         },
     );
+    preferences.custom_themes = normalize_saved_themes(preferences.custom_themes);
     preferences
 }
 
@@ -1141,7 +1210,9 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: default_auto_check_updates(),
+            update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
@@ -1181,8 +1252,14 @@ pub fn app_set_ui_preferences(
             };
         }
     }
+    if let Some(custom_themes) = input.custom_themes {
+        preferences.custom_themes = custom_themes;
+    }
     if let Some(auto_check_updates) = input.auto_check_updates {
         preferences.auto_check_updates = auto_check_updates;
+    }
+    if let Some(update_channel) = input.update_channel {
+        preferences.update_channel = update_channel;
     }
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
@@ -1280,7 +1357,9 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             theme: None,
             locale: None,
             theme_config: None,
+            custom_themes: None,
             auto_check_updates: None,
+            update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
             connection_defaults: None,
             mcp_agent: None,
@@ -5078,9 +5157,9 @@ mod ui_state_tests {
 #[cfg(test)]
 mod ui_preferences_tests {
     use super::{
-        default_overview_section_order, default_theme_config, normalize_theme_config,
-        normalize_ui_preferences, resolve_profile_with_connection_defaults, McpAgentPreferences,
-        SshConnectionDefaults, UiPreferences, UiPreferencesInput,
+        default_overview_section_order, default_theme_config, default_update_channel,
+        normalize_theme_config, normalize_ui_preferences, resolve_profile_with_connection_defaults,
+        McpAgentPreferences, SavedTheme, SshConnectionDefaults, UiPreferences, UiPreferencesInput,
     };
 
     #[test]
@@ -5177,12 +5256,59 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn normalizes_saved_theme_identity_and_inherited_base() {
+        let mut custom = default_theme_config();
+        custom.code_theme_id = "custom".to_string();
+        custom.base_theme_id = Some("codex".to_string());
+        custom.theme.accent = "not-a-color".to_string();
+
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
+            custom_themes: vec![
+                SavedTheme {
+                    id: "  custom-one  ".to_string(),
+                    name: "  My Codex Tweak  ".to_string(),
+                    config: custom,
+                },
+                SavedTheme {
+                    id: "custom-one".to_string(),
+                    name: "Duplicate".to_string(),
+                    config: default_theme_config(),
+                },
+            ],
+            auto_check_updates: true,
+            update_channel: default_update_channel(),
+            terminal_zoom_locked: false,
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert_eq!(preferences.custom_themes.len(), 1);
+        assert_eq!(preferences.custom_themes[0].id, "custom-one");
+        assert_eq!(preferences.custom_themes[0].name, "My Codex Tweak");
+        assert_eq!(
+            preferences.custom_themes[0].config.base_theme_id.as_deref(),
+            Some("codex")
+        );
+        assert_eq!(preferences.custom_themes[0].config.theme.accent, "#0169CC");
+    }
+
+    #[test]
     fn falls_back_to_safe_values_for_unknown_preferences() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: false,
+            update_channel: "nightly".to_string(),
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
@@ -5199,6 +5325,7 @@ mod ui_preferences_tests {
 
         assert_eq!(preferences.theme, "default-dark");
         assert_eq!(preferences.locale, "zhCN");
+        assert_eq!(preferences.update_channel, "stable");
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
         assert_eq!(
@@ -5213,7 +5340,9 @@ mod ui_preferences_tests {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: false,
+            update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
@@ -5231,6 +5360,7 @@ mod ui_preferences_tests {
 
         assert_eq!(preferences.theme, "default-light");
         assert_eq!(preferences.locale, "enUS");
+        assert_eq!(preferences.update_channel, "beta");
         assert!(!preferences.auto_check_updates);
         assert!(preferences.terminal_zoom_locked);
         assert!(!preferences.overview_show_stats);
@@ -5254,7 +5384,9 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: true,
+            update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
@@ -5286,7 +5418,9 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: true,
+            update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
@@ -5365,6 +5499,7 @@ mod ui_preferences_tests {
         .expect("legacy UI preferences should still deserialize");
 
         assert!(preferences.auto_check_updates);
+        assert_eq!(preferences.update_channel, "stable");
         assert!(preferences.overview_show_stats);
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
@@ -5380,6 +5515,7 @@ mod ui_preferences_tests {
     fn uses_camel_case_for_the_update_check_preference_contract() {
         let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({
             "autoCheckUpdates": false,
+            "updateChannel": "beta",
             "overviewShowStats": false,
             "overviewShowRecent": false,
             "overviewShowAllConnections": true,
@@ -5388,6 +5524,7 @@ mod ui_preferences_tests {
         }))
         .expect("renderer preference input should deserialize");
         assert_eq!(input.auto_check_updates, Some(false));
+        assert_eq!(input.update_channel.as_deref(), Some("beta"));
         assert_eq!(input.overview_show_stats, Some(false));
         assert_eq!(input.overview_show_recent, Some(false));
         assert_eq!(input.overview_show_all_connections, Some(true));
@@ -5406,7 +5543,9 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: false,
+            update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
@@ -5423,6 +5562,7 @@ mod ui_preferences_tests {
         })
         .expect("preferences should serialize");
         assert_eq!(preferences["autoCheckUpdates"], false);
+        assert_eq!(preferences["updateChannel"], "beta");
         assert_eq!(preferences["overviewShowStats"], false);
         assert_eq!(preferences["overviewShowRecent"], false);
         assert_eq!(preferences["overviewShowAllConnections"], true);

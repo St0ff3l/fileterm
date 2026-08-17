@@ -1047,6 +1047,19 @@ has_bounded_runner() {{
 read_cpu_stat() {{
   awk '/^cpu / {{print $2, $3, $4, $5, $6, $7, $8, $9; exit}}' /proc/stat 2>/dev/null
 }}
+read_process_ticks() {{
+  awk '
+    {{
+      path=FILENAME
+      sub(/^\/proc\//, "", path)
+      sub(/\/stat$/, "", path)
+      line=$0
+      sub(/^[0-9]+ \(.+\) /, "", line)
+      count=split(line, fields, /[[:space:]]+/)
+      if (count >= 13) printf "%s|%s\n", path, fields[12] + fields[13]
+    }}
+  ' /proc/[0-9]*/stat 2>/dev/null
+}}
 set -- $(read_cpu_stat)
 user=${{1:-0}}
 nice=${{2:-0}}
@@ -1058,6 +1071,10 @@ softirq=${{7:-0}}
 steal=${{8:-0}}
 total1=$((user+nice+system+idle+iowait+irq+softirq+steal))
 idle1=$((idle+iowait))
+process_ticks_before_file="/tmp/fileterm-procs-before-$$"
+process_ticks_after_file="/tmp/fileterm-procs-after-$$"
+trap 'rm -f "$before_file" "$after_file" "$process_ticks_before_file" "$process_ticks_after_file" "$process_cpu_file"' 0 1 2 15
+read_process_ticks > "$process_ticks_before_file"
 sleep "$sleep_interval"
 set -- $(read_cpu_stat)
 user2=${{1:-0}}
@@ -1073,6 +1090,7 @@ idle2sum=$((idle2+iowait2))
 diff_total=$((total2-total1))
 diff_idle=$((idle2sum-idle1))
 if [ "$diff_total" -gt 0 ]; then cpu_pct=$((100*(diff_total-diff_idle)/diff_total)); else cpu_pct=0; fi
+read_process_ticks > "$process_ticks_after_file"
 cpu_user_pct=$(awk -v diff_total="$diff_total" -v before="$user" -v after="$user2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_system_pct=$(awk -v diff_total="$diff_total" -v before="$system" -v after="$system2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_nice_pct=$(awk -v diff_total="$diff_total" -v before="$nice" -v after="$nice2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
@@ -1354,7 +1372,6 @@ rx1=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[
 tx1=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[10]}} END {{printf "%.0f", sum+0}}' /proc/net/dev 2>/dev/null)
 before_file="/tmp/fileterm-if-before-$$"
 after_file="/tmp/fileterm-if-after-$$"
-trap 'rm -f "$before_file" "$after_file"' 0 1 2 15
 awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") printf "%s|%.0f|%.0f\n", name, values[2], values[10]}}' /proc/net/dev 2>/dev/null > "$before_file"
 sleep "$sleep_interval"
 rx2=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[2]}} END {{printf "%.0f", sum+0}}' /proc/net/dev 2>/dev/null)
@@ -1377,18 +1394,68 @@ else
 fi
 disk=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK/%sK\n", $6, $4, $2}}' | head -n 12)
 filesystems=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK|%sK|%s|%sK|%s\n", $1, $2, $3, $5, $4, $6}}' | head -n 20)
-# 进程采集：参考 meatshell 的做法，让 ps 直接按 pcpu 降序排序后取 top 40，
-# Rust 端按到达顺序逐行解析，不做 comm 分组。这样：
-# 1. 高 CPU 进程排在最前面，shell 端排序比 Rust 端再排更省资源；
-# 2. 每个 PID 一行，能看到同名进程的不同实例（如 nginx 多个 worker）；
-# 3. 用 args 而不是 comm，命令列信息量更大，能区分同名进程的不同启动参数。
-# 输出格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留，cut 截断到 200 字符）
-# pcpu 已在 awk 中除以 logical_cpu_count，归一化为「占总 CPU 资源百分比」，
-# 与 Windows 端语义对齐（0-100，单核满载不再 >100）。
-if has_bounded_runner; then
-  procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu_pct, $5, substr(args,1,200)}}')
+# 进程采集：按两次 /proc/<pid>/stat 采样计算窗口内的瞬时 CPU 占用。
+# ps 的 %CPU 是进程生命周期平均值，长时间运行的进程在突然升高时会严重漏报；
+# 同时它按单核百分比返回，多核机器还会出现与总 CPU 仪表不一致的问题。
+# 这里用进程 tick 增量 / 全局 CPU tick 增量，直接得到 0-100 的整机占比。
+process_cpu_file="/tmp/fileterm-procs-cpu-$$"
+if [ -s "$process_ticks_before_file" ] && [ -s "$process_ticks_after_file" ] && [ "$diff_total" -gt 0 ]; then
+  awk -F'|' -v diff_total="$diff_total" '
+    NR==FNR {{ before[$1]=$2; next }}
+    {{
+      delta=$2-before[$1]
+      if (delta > 0) printf "%s|%.4f\n", $1, delta * 100 / diff_total
+    }}
+  ' "$process_ticks_before_file" "$process_ticks_after_file" > "$process_cpu_file"
+fi
+
+if [ -s "$process_cpu_file" ]; then
+  procs=$(ps -eo pid=,user=,rss=,pmem=,args= 2>/dev/null | awk -v cpu_file="$process_cpu_file" '
+    BEGIN {{
+      while ((getline line < cpu_file) > 0) {{
+        split(line, values, "|")
+        cpu[values[1]]=values[2] + 0
+      }}
+      close(cpu_file)
+    }}
+    NF >= 5 {{
+      pid=$1
+      if (!(pid in cpu)) next
+      args=$5
+      for (i=6; i<=NF; i++) args=args" "$i
+      command_name=args
+      sub(/^[[:space:]]*/, "", command_name)
+      split(command_name, command_parts, /[[:space:]]+/)
+      comm=command_parts[1]
+      sub(/^.*\//, "", comm)
+      if (comm == "ps" || comm == "awk" || comm == "bash" || comm == "sleep" || comm == "sh" || comm == "powershell" || comm == "pwsh") next
+      row_count++
+      scores[row_count]=cpu[pid]
+      rows[row_count]=sprintf("%s|%s|%.1fM|%.1f|%s|%s", pid, $2, $3/1024, cpu[pid], $4, substr(args, 1, 200))
+    }}
+    END {{
+      for (rank=1; rank<=40 && rank<=row_count; rank++) {{
+        best=0
+        best_score=-1
+        for (i=1; i<=row_count; i++) {{
+          if (!used[i] && scores[i] > best_score) {{
+            best=i
+            best_score=scores[i]
+          }}
+        }}
+        if (best == 0) break
+        print rows[best]
+        used[best]=1
+      }}
+    }}
+  ')
 else
-  procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu_pct, $5, substr(args,1,200)}}')
+  # fallback：无法读取 /proc 进程 tick 时，至少保留 ps 的原始百分比，不能再除以 CPU 核数。
+  if has_bounded_runner; then
+    procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, $4, $5, substr(args,1,200)}}')
+  else
+    procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, $4, $5, substr(args,1,200)}}')
+  fi
 fi
 if [ -z "$procs" ]; then
   # fallback：极简 ps（如某些 BusyBox 不支持 --sort 或 -o args=）
@@ -1436,7 +1503,7 @@ awk -F'|' -v sample_ms="$sample_ms" '
     printf "%s|%.0f|%.0f|%d|%d\n", $1, curr_rx, curr_tx, rx_rate, tx_rate
   }}
 ' "$before_file" "$after_file"
-rm -f "$before_file" "$after_file"
+rm -f "$before_file" "$after_file" "$process_ticks_before_file" "$process_ticks_after_file" "$process_cpu_file"
 echo "__IFACE_RATES_END__"
 echo "__DISK_START__"
 echo "$disk"
@@ -1853,28 +1920,27 @@ mod tests {
     }
 
     #[test]
-    fn posix_metrics_command_sorts_processes_by_pcpu_at_shell_level() {
-        // 参考 meatshell：让 ps 直接 --sort=-pcpu 降序输出 top 40，Rust 端
-        // 不再分组或排序。验证 shell 命令包含关键片段。
+    fn posix_metrics_command_samples_instantaneous_process_cpu() {
+        // 进程 CPU 必须使用 /proc tick 增量，不能依赖 ps 的生命周期平均值。
         let command = build_posix_metrics_command("linux");
 
-        // ps 直接按 pcpu 降序取 top 40
-        assert!(command.contains("ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu"));
-        assert!(command.contains("head -n 40"));
-        // awk 接收 logical_cpu_count 并把 pcpu 归一化为总 CPU 百分比
-        assert!(command.contains(r#"awk -v logical_cpu_count="$logical_cpu_count""#));
-        assert!(command
-            .contains(r#"cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4"#));
+        assert!(command.contains("read_process_ticks()"));
+        assert!(command.contains("process_ticks_before_file"));
+        assert!(command.contains("process_ticks_after_file"));
+        assert!(command.contains("delta * 100 / diff_total"));
+        assert!(command.contains("ps -eo pid=,user=,rss=,pmem=,args="));
+        assert!(command.contains("rank<=40 && rank<=row_count"));
+        assert!(command.contains("if (comm == \"ps\" || comm == \"awk\""));
+        assert!(
+            !command.contains("cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4")
+        );
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n""#));
-        // 不应再有进程相关的 sort 命令（cpuinfo/disk 去重可能仍用 awk）
-        assert!(!command.contains("sort -t'|' -k2,2rn"));
-        assert!(!command.contains("sort -t'|' -k1,1rn"));
     }
 
     #[test]
     fn parser_keeps_disk_and_process_rows_separate() {
         // 新格式：pid|user|rss(M)|pcpu|pmem|args
-        // Rust 端不排序，按 shell 端 --sort=-pcpu 的到达顺序保留
+        // 解析器按输入顺序保留行；构造采集命令时由 shell 端按瞬时 CPU 排序。
         let metrics = parse_system_metrics(
             "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__DISK_START__\n/|10K/20K\n/dev|30K/40K\n__DISK_END__\n__PROCS_START__\n1|root|1.0M|0.1|0.5|/usr/lib/systemd/systemd\n2|root|2.0M|0.2|1.0|/usr/sbin/sshd -D\n__PROCS_END__\n",
             "linux",

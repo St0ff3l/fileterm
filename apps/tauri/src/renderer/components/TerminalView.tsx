@@ -19,6 +19,7 @@ import { CloseButton } from '../features/common/CloseButton'
 import { AppIcon } from '../features/common/AppIcon'
 import { VerticalScrollbar } from '../features/common/VerticalScrollbar'
 import { FILETERM_MONO_FONT_FAMILY, observeCanvasTextMetrics } from '../app/font-metrics'
+import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
 
 function localizeTerminalText(value: string) {
   return value
@@ -558,6 +559,7 @@ export const TerminalView = memo(function TerminalView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
+  const terminalLogColorizerRef = useRef<TerminalLogColorizer | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
   const bootTextRef = useRef(bootText)
@@ -731,6 +733,7 @@ export const TerminalView = memo(function TerminalView({
       return
     }
     terminal.options.theme = buildTerminalTheme()
+    terminalLogColorizerRef.current?.setPalette(getTerminalLogColorPalette(terminal.options.theme))
     terminal.refresh(0, Math.max(terminal.rows - 1, 0))
   }
 
@@ -1122,6 +1125,8 @@ export const TerminalView = memo(function TerminalView({
     terminal.loadAddon(webLinksAddon)
     terminal.unicode.activeVersion = '11'
     terminal.open(hostRef.current)
+    const terminalLogColorizer = new TerminalLogColorizer(terminal, getTerminalLogColorPalette(terminal.options.theme))
+    terminalLogColorizerRef.current = terminalLogColorizer
     const xtermViewport = hostRef.current.querySelector('.xterm-viewport') as HTMLElement | null
     if (xtermViewport) {
       setViewportElement(xtermViewport)
@@ -2212,6 +2217,8 @@ export const TerminalView = memo(function TerminalView({
       if (terminalUnderPointer === terminal) {
         terminalUnderPointer = null
       }
+      terminalLogColorizer.dispose()
+      terminalLogColorizerRef.current = null
       searchAddonRef.current = null
       terminalRef.current = null
       terminal.dispose()
