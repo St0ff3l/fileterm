@@ -249,3 +249,105 @@
 :root[data-theme-custom='true'] .settings-modal .connection-manager-header {
   background: var(--theme-surface) !important;
 }
+
+/*
+ * macOS Codex dark glass is deliberately limited to the Home navigation rail.
+ * The native window is transparent, so every ancestor between the rail and
+ * the AppKit vibrancy view must also be transparent. The Home content panel,
+ * title/tab bar, and settings navigation remain opaque surfaces.
+ */
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'],
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] body,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] #root {
+  --codex-glass-divider: #363636;
+  --codex-glass-surface: color-mix(in srgb, var(--theme-surface-elevated) 50%, transparent);
+  background: transparent !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] .fs-shell.is-home-active,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] .fs-shell.is-home-active .fs-main,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .workspace-stage,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .workspace-stage-transition,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-workspace {
+  background: transparent !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-sidebar {
+  background: var(--codex-glass-surface) !important;
+  background-color: var(--codex-glass-surface) !important;
+  border-right: 1px solid var(--codex-glass-divider) !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-sidebar
+  .sidebar-resizer {
+  background: transparent !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-sidebar
+  .sidebar-resizer::after {
+  display: none !important;
+  background: transparent !important;
+  transition: none !important;
+}
+
+/* Keep the two sides of the title-bar/rail corner on one static divider
+ * color. The resize hit area must not add a second animated line. */
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .titlebar-brand {
+  background: var(--codex-glass-surface) !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar {
+  background: transparent !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar::after,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .titlebar-brand::after {
+  background: var(--codex-glass-divider) !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-main-content {
+  background: var(--bg-main) !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .settings-modal
+  .connection-manager-sidebar {
+  background: var(--theme-surface-secondary, var(--bg-card)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

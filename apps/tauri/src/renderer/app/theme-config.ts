@@ -433,6 +433,7 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
   }
 
   root.dataset.theme = themeMode
+  root.dataset.themeBase = current.normalized.baseThemeId ?? 'fileterm'
   root.style.colorScheme = variant
   const inheritsFileTermSkin = customTheme && baseConfig?.baseThemeId === 'fileterm'
   root.dataset.themeCustom = inheritsFileTermSkin ? 'inherited' : current.isDefaultTheme ? 'false' : 'true'
@@ -455,4 +456,5 @@ export function clearThemeVariables() {
   }
   appliedThemeVariableNames.clear()
   delete root.dataset.themeCustom
+  delete root.dataset.themeBase
 }

@@ -1493,7 +1493,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // --- Main Workspace Render ---
 
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
-  const brandWidth = DEFAULT_SIDEBAR_WIDTH
+  // Home's top bar and navigation rail share the same vertical split. Keep
+  // the title-bar brand column synchronized while the rail is resized so the
+  // two divider segments never briefly occupy different x coordinates.
+  const brandWidth = resolvedSidebarWidth
 
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "FileTerm",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1150,
+        "minHeight": 790,
+        "dragDropEnabled": true,
+        "zoomHotkeysEnabled": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": true,
+        "backgroundColor": "#00000000"
+      }
+    ]
+  }
+}

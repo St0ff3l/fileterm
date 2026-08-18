@@ -1392,6 +1392,7 @@ dependencies = [
  "url",
  "uuid",
  "webview2-com",
+ "window-vibrancy",
  "windows 0.61.3",
  "windows-sys 0.61.2",
  "zeroize",
