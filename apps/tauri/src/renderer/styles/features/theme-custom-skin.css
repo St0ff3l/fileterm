@@ -229,7 +229,6 @@
 
 :root[data-theme-custom='true'] .settings-modal .connection-manager-sidebar,
 :root[data-theme-custom='true'] .settings-modal .theme-config-toolbar,
-:root[data-theme-custom='true'] .settings-modal .theme-config-checkbox-row,
 :root[data-theme-custom='true'] .settings-modal .theme-advanced-section,
 :root[data-theme-custom='true'] .settings-modal .theme-color-field {
   background: var(--theme-surface-secondary) !important;

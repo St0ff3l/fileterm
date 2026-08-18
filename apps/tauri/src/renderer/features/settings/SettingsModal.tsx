@@ -138,8 +138,7 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
     ]
     return (
       colorValues.every((value, index) => value.toUpperCase() === themeColorValues[index].toUpperCase()) &&
-      candidate.theme.contrast === themeConfig.theme.contrast &&
-      candidate.theme.opaqueWindows === themeConfig.theme.opaqueWindows
+      candidate.theme.contrast === themeConfig.theme.contrast
     )
   })
 }
@@ -2707,21 +2706,6 @@ export function SettingsModal({
                       value={themeConfig.theme.fonts.code ?? ''}
                     />
                   </div>
-                </div>
-
-                <div className="theme-config-checkbox-row">
-                  <label className="theme-config-switch">
-                    <div className="theme-config-switch-info">
-                      <span className="theme-config-switch-title">{t.themeOpaqueWindows}</span>
-                      <span className="theme-config-switch-hint">{t.themeOpaqueWindowsHint}</span>
-                    </div>
-                    <input
-                      checked={themeConfig.theme.opaqueWindows}
-                      onChange={(event) => updateThemeBody({ opaqueWindows: event.target.checked })}
-                      type="checkbox"
-                    />
-                    <span aria-hidden="true" className="theme-config-switch-track" />
-                  </label>
                 </div>
 
                 <details className="theme-config-subsection theme-advanced-section">

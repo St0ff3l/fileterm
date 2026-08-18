@@ -1771,16 +1771,6 @@
   gap: 12px;
 }
 
-.theme-config-checkbox-row {
-  display: flex;
-  align-items: center;
-  min-height: 52px;
-  padding: 10px 14px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--bg-card);
-}
-
 .theme-color-field {
   display: flex;
   align-items: center;
@@ -1864,96 +1854,6 @@
 .theme-color-text:focus {
   border-color: var(--focus-outline);
   outline: none;
-}
-
-.theme-config-switch {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  min-height: 32px;
-  color: var(--text-main);
-  font-size: 13px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.theme-config-switch-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.theme-config-switch-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-main);
-}
-
-.theme-config-switch-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.theme-config-switch input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.theme-config-switch-track {
-  position: relative;
-  flex: 0 0 auto;
-  width: 36px;
-  height: 22px;
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
-  background: var(--surface-chip);
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.theme-config-switch-track::after {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  content: '';
-  transition:
-    background 0.15s ease,
-    transform 0.15s ease;
-}
-
-.theme-config-switch input:checked + .theme-config-switch-track {
-  border-color: var(--button-primary-bg, #1687e8);
-  background: var(--button-primary-bg, #1687e8);
-}
-
-.theme-config-switch input:checked + .theme-config-switch-track::after {
-  background: #ffffff;
-  transform: translateX(14px);
-}
-
-.theme-config-switch input:focus-visible + .theme-config-switch-track {
-  box-shadow: 0 0 0 3px var(--accent-focus-ring);
-}
-
-.theme-config-switch:hover .theme-config-switch-track {
-  border-color: var(--focus-outline);
 }
 
 .theme-config-subsection {

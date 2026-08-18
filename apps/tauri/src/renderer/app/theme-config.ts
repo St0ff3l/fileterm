@@ -75,7 +75,7 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
   const strongBorder = alpha(ink, isLight ? 22 : 18)
   const subtleBorder = alpha(ink, isLight ? 8 : 6)
 
-  const focus = secondaryAccent
+  const focus = accent
   const accentHover = isLight ? blend(accent, '#000000', 12) : blend(accent, '#FFFFFF', 15)
   const secondaryHover = isLight ? blend(secondaryAccent, '#000000', 12) : blend(secondaryAccent, '#FFFFFF', 15)
   const accentText = isLight ? blend(accent, ink, 35) : blend(accent, '#FFFFFF', 70)
@@ -144,14 +144,14 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--theme-error': danger,
     '--theme-success': success,
     '--focus-outline': focus,
-    '--accent-highlight': secondaryAccent,
+    '--accent-highlight': accent,
     '--accent-text': accentText,
     '--sidebar-active-accent': ink,
     '--selection-bg': active,
-    '--accent-tint-weak': alpha(secondaryAccent, isLight ? 8 : 10),
-    '--accent-tint': alpha(secondaryAccent, isLight ? 14 : 16),
-    '--accent-focus-ring': alpha(secondaryAccent, isLight ? 24 : 28),
-    '--input-focus-ring': alpha(secondaryAccent, isLight ? 18 : 22),
+    '--accent-tint-weak': alpha(accent, isLight ? 8 : 10),
+    '--accent-tint': alpha(accent, isLight ? 14 : 16),
+    '--accent-focus-ring': alpha(accent, isLight ? 24 : 28),
+    '--input-focus-ring': alpha(accent, isLight ? 18 : 22),
     '--danger': danger,
     '--danger-text': danger,
     '--danger-surface': dangerSurface,
@@ -167,8 +167,8 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--info-border': alpha(info, isLight ? 20 : 30),
     '--folder-accent': warning,
     '--kernel-accent': accent,
-    '--copy-link': secondaryAccent,
-    '--copy-link-hover': secondaryHover,
+    '--copy-link': accent,
+    '--copy-link-hover': accentHover,
     '--mini-tab-active-bg': secondarySurface,
     '--mini-tab-active-text': secondaryHover,
     '--memory-warn': warning,
@@ -187,7 +187,7 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--modal-backdrop-bg': isLight ? 'rgba(0, 0, 0, 0.32)' : 'rgba(0, 0, 0, 0.62)',
     '--modal-card-shadow': isLight ? '0 20px 50px rgba(0, 0, 0, 0.12)' : '0 20px 60px rgba(0, 0, 0, 0.5)',
     '--control-shadow': isLight ? '0 1px 2px rgba(0, 0, 0, 0.05)' : '0 1px 2px rgba(0, 0, 0, 0.15)',
-    '--control-focus-shadow': `0 0 0 2px ${alpha(secondaryAccent, isLight ? 14 : 18)}, 0 1px 2px rgba(0, 0, 0, 0.1)`,
+    '--control-focus-shadow': `0 0 0 2px ${alpha(accent, isLight ? 14 : 18)}, 0 1px 2px rgba(0, 0, 0, 0.1)`,
     '--control-inset-shadow': isLight ? 'inset 0 1px 2px rgba(0, 0, 0, 0.04)' : 'inset 0 1px 2px rgba(0, 0, 0, 0.15)',
     '--terminal-dock-shadow': isLight ? '0 12px 32px rgba(0, 0, 0, 0.1)' : '0 16px 36px rgba(0, 0, 0, 0.35)',
     '--terminal-dock-header-shadow': isLight ? '0 8px 20px rgba(0, 0, 0, 0.08)' : '0 10px 24px rgba(0, 0, 0, 0.25)',

@@ -852,8 +852,6 @@ const zhCN = {
   themeUiFont: '界面字体',
   themeCodeFont: '代码字体',
   themeSystemDefault: '系统默认',
-  themeOpaqueWindows: '使用不透明窗口',
-  themeOpaqueWindowsHint: '开启后窗口与侧栏使用纯色不透明背景；关闭时启用毛玻璃半透明模糊效果。',
   themeSemanticColors: '代码语义色',
   themeAdvancedHint: '默认主题不会改变，手动调整才会覆盖语义映射。',
   themeDiffAdded: '新增内容',
@@ -2060,9 +2058,6 @@ const enUS: typeof zhCN = {
   themeUiFont: 'UI font',
   themeCodeFont: 'Code font',
   themeSystemDefault: 'System default',
-  themeOpaqueWindows: 'Use opaque windows',
-  themeOpaqueWindowsHint:
-    'Enable to use a solid opaque background for windows and sidebars; disable for a translucent glass blur effect.',
   themeSemanticColors: 'Code semantic colors',
   themeAdvancedHint: 'The default themes stay unchanged until you override a semantic token.',
   themeDiffAdded: 'Diff added',
