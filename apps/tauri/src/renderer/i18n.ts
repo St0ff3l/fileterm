@@ -809,7 +809,8 @@ const zhCN = {
   overviewPreferenceSaveFailed: '无法保存概览内容偏好。',
   themeSelection: '主题选择',
   themeCustomization: '主题自定义',
-  themeCustomizationHint: '用基础层级和语义色控制整体外观；代码语义色和终端 ANSI 调色板按需展开。',
+  themeCustomizationHint:
+    '自定义主题会分别保存深色和浅色变体；未修改的颜色跟随所选基础主题，代码语义色和终端 ANSI 调色板按需展开。',
   themePreset: '主题预设',
   themePresetFileTerm: 'FileTerm',
   themePresetCodex: 'Codex',
@@ -2017,7 +2018,7 @@ const enUS: typeof zhCN = {
   themeSelection: 'Theme Selection',
   themeCustomization: 'Theme Customization',
   themeCustomizationHint:
-    'Use base hierarchy and semantic colors to control the overall appearance; expand code semantics or the terminal ANSI palette only when needed.',
+    'Custom themes save independent dark and light variants; unchanged colors follow the selected base theme. Expand code semantics or the terminal ANSI palette only when needed.',
   themePreset: 'Theme Preset',
   themePresetFileTerm: 'FileTerm',
   themePresetCodex: 'Codex',

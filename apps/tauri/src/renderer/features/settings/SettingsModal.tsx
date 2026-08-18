@@ -25,6 +25,7 @@ import {
   type UiPreferences,
   type WebDavSyncConfig
 } from '@fileterm/core'
+import { deriveThemeVariant, getSavedThemeConfig, normalizeSavedTheme } from '../../app/theme-config'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 import { t, type LocaleMessages } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -149,6 +150,12 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
 
 function sameThemeConfig(left: ThemeConfig, right: ThemeConfig) {
   return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function findSavedThemeForConfig(savedThemes: SavedTheme[], themeConfig: ThemeConfig) {
+  return savedThemes.find((candidate) =>
+    sameThemeConfig(getSavedThemeConfig(candidate, themeConfig.variant), themeConfig)
+  )
 }
 
 function themeBaseIdForConfig(themeConfig: ThemeConfig): 'fileterm' | 'codex' {
@@ -1117,11 +1124,28 @@ export function SettingsModal({
   }
 
   const applyThemePreset = (presetId: string, variant: ThemePresetVariant = themeVariant) => {
+    if (presetId === 'custom') {
+      const nextThemeConfig = normalizeThemeConfig(
+        {
+          ...createDefaultThemeConfig(variant),
+          codeThemeId: 'custom',
+          baseThemeId: 'fileterm'
+        },
+        variant
+      )
+      onSetThemeConfig(nextThemeConfig)
+      onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+      setEditingCustomThemeId(null)
+      setCustomThemeName('')
+      setThemeConfigMessage(t.themePresetApplied)
+      return
+    }
+
     if (presetId.startsWith('saved:')) {
       const savedId = presetId.slice('saved:'.length)
       const savedTheme = customThemes.find((candidate) => candidate.id === savedId)
       if (!savedTheme) return
-      const nextThemeConfig = normalizeThemeConfig(savedTheme.config, savedTheme.config.variant)
+      const nextThemeConfig = getSavedThemeConfig(savedTheme, variant)
       onSetThemeConfig(nextThemeConfig)
       onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
       setEditingCustomThemeId(savedTheme.id)
@@ -1159,9 +1183,15 @@ export function SettingsModal({
       ? customThemes.find((candidate) => candidate.id === editingCustomThemeId)
       : undefined
     const id = existingTheme?.id ?? createCustomThemeId()
+    const normalizedExistingTheme = existingTheme ? normalizeSavedTheme(existingTheme) : null
+    const variants = {
+      dark: normalizedExistingTheme?.variants?.dark ?? deriveThemeVariant(nextThemeConfig, 'dark'),
+      light: normalizedExistingTheme?.variants?.light ?? deriveThemeVariant(nextThemeConfig, 'light')
+    }
+    variants[themeVariant] = nextThemeConfig
     const nextCustomThemes = [
       ...customThemes.filter((candidate) => candidate.id !== id),
-      { id, name, config: nextThemeConfig }
+      { id, name, config: nextThemeConfig, variants }
     ]
 
     onSetCustomThemes(nextCustomThemes)
@@ -1207,8 +1237,22 @@ export function SettingsModal({
       return
     }
 
+    const savedTheme =
+      (editingCustomThemeId ? customThemes.find((candidate) => candidate.id === editingCustomThemeId) : undefined) ??
+      findSavedThemeForConfig(customThemes, themeConfig)
+    if (savedTheme) {
+      const currentSavedVariant = getSavedThemeConfig(savedTheme, themeConfig.variant)
+      const nextThemeConfig = sameThemeConfig(currentSavedVariant, themeConfig)
+        ? getSavedThemeConfig(savedTheme, nextVariant)
+        : deriveThemeVariant(themeConfig, nextVariant)
+      onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
+      onSetThemeConfig(nextThemeConfig)
+      return
+    }
+
+    const nextThemeConfig = deriveThemeVariant(themeConfig, nextVariant)
     onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
-    onSetThemeConfig(normalizeThemeConfig({ ...themeConfig, variant: nextVariant }, nextVariant))
+    onSetThemeConfig(nextThemeConfig)
   }
 
   const parseImportedTheme = (text: string): unknown => {
@@ -1566,7 +1610,7 @@ export function SettingsModal({
   }
 
   const selectedThemePreset = findMatchingThemePreset(themeConfig)
-  const matchingSavedTheme = customThemes.find((candidate) => sameThemeConfig(candidate.config, themeConfig))
+  const matchingSavedTheme = findSavedThemeForConfig(customThemes, themeConfig)
   const editingSavedTheme = editingCustomThemeId
     ? customThemes.find((candidate) => candidate.id === editingCustomThemeId)
     : undefined

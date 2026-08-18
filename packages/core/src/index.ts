@@ -1159,6 +1159,8 @@ export interface SavedTheme {
   id: string
   name: string
   config: ThemeConfig
+  /** Independent dark/light variants for custom themes. */
+  variants?: Partial<Record<ThemeVariant, ThemeConfig>>
 }
 
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i

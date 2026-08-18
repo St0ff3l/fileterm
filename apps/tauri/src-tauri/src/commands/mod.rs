@@ -700,6 +700,8 @@ pub struct SavedTheme {
     pub id: String,
     pub name: String,
     pub config: ThemeConfig,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub variants: BTreeMap<String, ThemeConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -861,6 +863,15 @@ fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
             "dark"
         };
         saved.config = normalize_theme_config(saved.config, variant);
+        saved.variants = std::mem::take(&mut saved.variants)
+            .into_iter()
+            .filter_map(|(variant, config)| {
+                if !matches!(variant.as_str(), "dark" | "light") {
+                    return None;
+                }
+                Some((variant.clone(), normalize_theme_config(config, &variant)))
+            })
+            .collect();
         normalized.push(saved);
         if normalized.len() >= 64 {
             break;
@@ -5199,6 +5210,8 @@ mod ui_state_tests {
 
 #[cfg(test)]
 mod ui_preferences_tests {
+    use std::collections::BTreeMap;
+
     use super::{
         default_overview_section_order, default_theme_config, default_update_channel,
         normalize_theme_config, normalize_ui_preferences, resolve_profile_with_connection_defaults,
@@ -5314,11 +5327,13 @@ mod ui_preferences_tests {
                     id: "  custom-one  ".to_string(),
                     name: "  My Codex Tweak  ".to_string(),
                     config: custom,
+                    variants: BTreeMap::new(),
                 },
                 SavedTheme {
                     id: "custom-one".to_string(),
                     name: "Duplicate".to_string(),
                     config: default_theme_config(),
+                    variants: BTreeMap::new(),
                 },
             ],
             auto_check_updates: true,

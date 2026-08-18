@@ -19,7 +19,6 @@ import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
   createCodexThemeConfig,
   createDefaultThemeConfig,
-  normalizeThemeConfig,
   type FileContentSnapshot,
   type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
@@ -34,6 +33,7 @@ import {
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import { profileToForm } from './app/app-data'
 import { settledResultsError } from './app/app-utils'
+import { deriveThemeVariant, normalizeSavedTheme } from './app/theme-config'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
 import { CommandManagerModal } from './features/commands/CommandManagerModal'
 import { ConnectionManagerModal } from './features/connections/ConnectionManagerModal'
@@ -172,7 +172,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
     return createDefaultThemeConfig(initialTheme === 'default-light' ? 'light' : 'dark')
   })
-  const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() => [...(initialUiPreferences?.customThemes ?? [])])
+  const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() =>
+    (initialUiPreferences?.customThemes ?? []).map(normalizeSavedTheme)
+  )
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
@@ -259,7 +261,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       ) {
         return createDefaultThemeConfig(nextVariant)
       }
-      return normalizeThemeConfig({ ...current, variant: nextVariant }, nextVariant)
+      return deriveThemeVariant(current, nextVariant)
     })
   }, [])
 
@@ -352,7 +354,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     initialUiPreferencesLoaded: initialUiPreferences !== undefined,
     onThemeModeChange: setThemeMode,
     onThemeConfigChange: setThemeConfig,
-    onCustomThemesChange: setCustomThemes,
+    onCustomThemesChange: (nextThemes) => setCustomThemes(nextThemes.map(normalizeSavedTheme)),
     onLocaleChange: (nextLocale) => {
       setLocale(nextLocale)
       setLocaleState(nextLocale)
