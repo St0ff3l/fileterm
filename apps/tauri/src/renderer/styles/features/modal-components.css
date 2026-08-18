@@ -1771,6 +1771,38 @@
   gap: 12px;
 }
 
+.theme-config-control {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.theme-config-font-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.theme-config-font-control-row .theme-config-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-modal .theme-font-import-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 78px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 9px;
+  white-space: nowrap;
+}
+
 .theme-color-field {
   display: flex;
   align-items: center;

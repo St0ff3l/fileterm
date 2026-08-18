@@ -45,6 +45,7 @@ export type UseWorkspaceIpcSyncOptions = {
   locale: AppLocale
   connectionDefaults: SshConnectionDefaults
   terminalZoomLocked: boolean
+  filePanelRememberRatio: boolean
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -57,6 +58,7 @@ export type UseWorkspaceIpcSyncOptions = {
   onLocaleChange(locale: AppLocale): void
   onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
   onTerminalZoomLockedChange(value: boolean): void
+  onFilePanelRememberRatioChange(value: boolean): void
   onOverviewShowStatsChange(value: boolean): void
   onOverviewShowRecentChange(value: boolean): void
   onOverviewShowAllConnectionsChange(value: boolean): void
@@ -102,6 +104,7 @@ type SyncedUiPreferences = Pick<
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
+  | 'filePanelRememberRatio'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -116,6 +119,7 @@ function sameSyncedUiPreferences(left: SyncedUiPreferences, right: SyncedUiPrefe
     JSON.stringify(left.customThemes) === JSON.stringify(right.customThemes) &&
     left.locale === right.locale &&
     left.terminalZoomLocked === right.terminalZoomLocked &&
+    left.filePanelRememberRatio === right.filePanelRememberRatio &&
     left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
     left.connectionDefaults.enableExecChannel === right.connectionDefaults.enableExecChannel &&
     left.connectionDefaults.enableResourceMonitoring === right.connectionDefaults.enableResourceMonitoring &&
@@ -140,6 +144,7 @@ function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPreference
     locale: preferences.locale,
     connectionDefaults: { ...preferences.connectionDefaults },
     terminalZoomLocked: preferences.terminalZoomLocked,
+    filePanelRememberRatio: preferences.filePanelRememberRatio,
     overviewShowStats: preferences.overviewShowStats,
     overviewShowRecent: preferences.overviewShowRecent,
     overviewShowAllConnections: preferences.overviewShowAllConnections,
@@ -188,6 +193,7 @@ export function useWorkspaceIpcSync({
   locale,
   connectionDefaults,
   terminalZoomLocked,
+  filePanelRememberRatio,
   overviewShowStats,
   overviewShowRecent,
   overviewShowAllConnections,
@@ -200,6 +206,7 @@ export function useWorkspaceIpcSync({
   onLocaleChange,
   onConnectionDefaultsChange,
   onTerminalZoomLockedChange,
+  onFilePanelRememberRatioChange,
   onOverviewShowStatsChange,
   onOverviewShowRecentChange,
   onOverviewShowAllConnectionsChange,
@@ -233,6 +240,7 @@ export function useWorkspaceIpcSync({
   const onLocaleChangeRef = useLatestRef(onLocaleChange)
   const onConnectionDefaultsChangeRef = useLatestRef(onConnectionDefaultsChange)
   const onTerminalZoomLockedChangeRef = useLatestRef(onTerminalZoomLockedChange)
+  const onFilePanelRememberRatioChangeRef = useLatestRef(onFilePanelRememberRatioChange)
   const onOverviewShowStatsChangeRef = useLatestRef(onOverviewShowStatsChange)
   const onOverviewShowRecentChangeRef = useLatestRef(onOverviewShowRecentChange)
   const onOverviewShowAllConnectionsChangeRef = useLatestRef(onOverviewShowAllConnectionsChange)
@@ -334,6 +342,7 @@ export function useWorkspaceIpcSync({
       }
       onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
       onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
+      onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
       onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
       onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
       onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
@@ -369,6 +378,7 @@ export function useWorkspaceIpcSync({
         }
         onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
         onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
+        onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
         onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
         onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
         onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
@@ -404,6 +414,7 @@ export function useWorkspaceIpcSync({
       locale,
       connectionDefaults,
       terminalZoomLocked,
+      filePanelRememberRatio,
       overviewShowStats,
       overviewShowRecent,
       overviewShowAllConnections,
@@ -446,6 +457,7 @@ export function useWorkspaceIpcSync({
     overviewShowQuickActions,
     overviewSectionOrder,
     terminalZoomLocked,
+    filePanelRememberRatio,
     customThemes,
     themeConfig,
     themeMode

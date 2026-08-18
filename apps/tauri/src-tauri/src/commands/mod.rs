@@ -719,6 +719,8 @@ pub struct UiPreferences {
     pub update_channel: String,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
+    #[serde(default = "default_file_panel_remember_ratio")]
+    pub file_panel_remember_ratio: bool,
     #[serde(default)]
     pub connection_defaults: SshConnectionDefaults,
     #[serde(default)]
@@ -745,6 +747,7 @@ pub struct UiPreferencesInput {
     pub auto_check_updates: Option<bool>,
     pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
+    pub file_panel_remember_ratio: Option<bool>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
     pub mcp_agent: Option<McpAgentPreferencesInput>,
     pub overview_show_stats: Option<bool>,
@@ -765,6 +768,10 @@ fn default_auto_check_updates() -> bool {
 
 fn default_update_channel() -> String {
     "stable".to_string()
+}
+
+fn default_file_panel_remember_ratio() -> bool {
+    true
 }
 
 fn default_use_empty_password() -> bool {
@@ -1268,6 +1275,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             auto_check_updates: default_auto_check_updates(),
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: default_file_panel_remember_ratio(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: default_overview_show_stats(),
@@ -1317,6 +1325,9 @@ pub fn app_set_ui_preferences(
     }
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
+    }
+    if let Some(file_panel_remember_ratio) = input.file_panel_remember_ratio {
+        preferences.file_panel_remember_ratio = file_panel_remember_ratio;
     }
     if let Some(connection_defaults) = input.connection_defaults {
         if let Some(value) = connection_defaults.use_empty_password {
@@ -1415,6 +1426,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             auto_check_updates: None,
             update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
+            file_panel_remember_ratio: None,
             connection_defaults: None,
             mcp_agent: None,
             overview_show_stats: None,
@@ -1738,6 +1750,28 @@ pub async fn app_get_connection_library(app: AppHandle) -> Result<serde_json::Va
         "profiles": profiles,
         "folders": folders,
     }))
+}
+
+#[tauri::command]
+pub fn app_list_imported_fonts(
+    app: AppHandle,
+) -> Result<Vec<crate::services::fonts::ImportedFont>, AppError> {
+    crate::services::fonts::list(&app)
+}
+
+#[tauri::command]
+pub async fn app_import_font(
+    app: AppHandle,
+) -> Result<Option<crate::services::fonts::ImportedFont>, AppError> {
+    crate::services::fonts::import(&app).await
+}
+
+#[tauri::command]
+pub fn app_get_imported_font_data(
+    app: AppHandle,
+    font_id: String,
+) -> Result<Option<String>, AppError> {
+    crate::services::fonts::data_url(&app, &font_id)
 }
 
 #[tauri::command]
@@ -4326,6 +4360,16 @@ pub async fn app_download_remote_path(
 }
 
 #[tauri::command]
+pub async fn app_start_remote_file_drag(
+    app: AppHandle,
+    tab_id: String,
+    window_label: String,
+    items: Vec<crate::services::file_drag::RemoteFileDragItem>,
+) -> Result<(), AppError> {
+    crate::services::file_drag::start_remote_file_drag(&app, &window_label, &tab_id, items).await
+}
+
+#[tauri::command]
 pub async fn app_cancel_transfer(
     app: AppHandle,
     transfer_id: String,
@@ -5339,6 +5383,7 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: true,
@@ -5368,6 +5413,7 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "nightly".to_string(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: true,
@@ -5402,6 +5448,7 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
+            file_panel_remember_ratio: false,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,
@@ -5446,6 +5493,7 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
                 connection_scope: "not-a-scope".to_string(),
@@ -5480,6 +5528,7 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
                 connection_scope: "default-connection".to_string(),
@@ -5605,6 +5654,7 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
+            file_panel_remember_ratio: false,
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,

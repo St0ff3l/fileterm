@@ -13,6 +13,7 @@ import {
   type BackupDownloadMode,
   type BackupUploadMode,
   type ConnectionProfile,
+  type ImportedFont,
   type McpAgentClientStatus,
   type McpAgentPreferences,
   type McpAgentSetup,
@@ -26,6 +27,7 @@ import {
   type WebDavSyncConfig
 } from '@fileterm/core'
 import { deriveThemeVariant, getSavedThemeConfig, normalizeSavedTheme } from '../../app/theme-config'
+import { registerImportedFont, registerImportedFonts } from '../../app/imported-fonts'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 import { t, type LocaleMessages } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -500,6 +502,12 @@ export function SettingsModal({
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
+  const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
+  const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
+  const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
+  const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
+  const [fontImportKind, setFontImportKind] = useState<'ui' | 'code' | null>(null)
+  const [fontImportError, setFontImportError] = useState<string | null>(null)
   const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
   const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<string | null>(null)
@@ -570,6 +578,34 @@ export function SettingsModal({
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
 
   useEffect(() => {
+    if (!desktopApi) return
+
+    let canceled = false
+    void desktopApi
+      .listImportedFonts()
+      .then(async (fonts) => {
+        const entries = await Promise.all(
+          fonts.map(async (font) => {
+            const dataUrl = await desktopApi.getImportedFontData(font.id)
+            return dataUrl ? { font, dataUrl } : null
+          })
+        )
+        if (canceled) return
+        setImportedFonts(fonts)
+        registerImportedFonts(
+          entries.filter((entry): entry is { font: ImportedFont; dataUrl: string } => entry !== null)
+        )
+      })
+      .catch(() => {
+        if (!canceled) setFontImportError(t.themeFontImportFailed)
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [desktopApi])
+
+  useEffect(() => {
     setActiveTab(initialTab)
   }, [initialTab])
 
@@ -607,6 +643,7 @@ export function SettingsModal({
           setAutoCheckUpdates(preferences.autoCheckUpdates)
           setUpdateChannel(preferences.updateChannel)
           setTerminalZoomLocked(preferences.terminalZoomLocked)
+          setFilePanelRememberRatio(preferences.filePanelRememberRatio)
           setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
           setOverviewShowStats(preferences.overviewShowStats)
@@ -631,6 +668,7 @@ export function SettingsModal({
         setAutoCheckUpdates(preferences.autoCheckUpdates)
         setUpdateChannel(preferences.updateChannel)
         setTerminalZoomLocked(preferences.terminalZoomLocked)
+        setFilePanelRememberRatio(preferences.filePanelRememberRatio)
         setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
         setOverviewShowStats(preferences.overviewShowStats)
@@ -1052,6 +1090,25 @@ export function SettingsModal({
       .finally(() => setIsSavingTerminalZoomPreference(false))
   }
 
+  const setFilePanelRememberRatioPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingFilePanelPreference || nextValue === filePanelRememberRatio) {
+      return
+    }
+
+    const previousValue = filePanelRememberRatio
+    setFilePanelRememberRatio(nextValue)
+    setFilePanelPreferenceError(null)
+    setIsSavingFilePanelPreference(true)
+    void desktopApi
+      .setUiPreferences({ filePanelRememberRatio: nextValue })
+      .then((preferences) => setFilePanelRememberRatio(preferences.filePanelRememberRatio))
+      .catch(() => {
+        setFilePanelRememberRatio(previousValue)
+        setFilePanelPreferenceError(t.filePanelPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingFilePanelPreference(false))
+  }
+
   const themeVariant = theme === 'default-light' ? 'light' : 'dark'
 
   const setThemeConfigValue = (nextValue: ThemeConfig) => {
@@ -1094,6 +1151,26 @@ export function SettingsModal({
         ...patch
       }
     })
+  }
+
+  const importFontFor = async (kind: 'ui' | 'code') => {
+    if (!desktopApi || fontImportKind) return
+
+    setFontImportKind(kind)
+    setFontImportError(null)
+    try {
+      const font = await desktopApi.importFont()
+      if (!font) return
+
+      const dataUrl = await desktopApi.getImportedFontData(font.id)
+      if (dataUrl) registerImportedFont(font, dataUrl)
+      setImportedFonts((current) => [font, ...current.filter((item) => item.id !== font.id)])
+      updateThemeFonts({ [kind]: font.family })
+    } catch {
+      setFontImportError(t.themeFontImportFailed)
+    } finally {
+      setFontImportKind(null)
+    }
   }
 
   const updateTerminalTheme = (patch: Partial<ThemeConfig['theme']['terminal']>) => {
@@ -2736,35 +2813,70 @@ export function SettingsModal({
                 <div className="theme-config-font-grid">
                   <div className="theme-config-control">
                     <span className="theme-config-label">{t.themeUiFont}</span>
-                    <DropdownSelect
-                      ariaLabel={t.themeUiFont}
-                      className="theme-config-select"
-                      onChange={(value) => updateThemeFonts({ ui: value || null })}
-                      options={[
-                        { value: '', label: t.themeSystemDefault },
-                        { value: 'Inter', label: 'Inter' },
-                        { value: 'SF Pro Text', label: 'SF Pro Text' },
-                        { value: 'Noto Sans SC', label: 'Noto Sans SC' }
-                      ]}
-                      value={themeConfig.theme.fonts.ui ?? ''}
-                    />
+                    <div className="theme-config-font-control-row">
+                      <DropdownSelect
+                        ariaLabel={t.themeUiFont}
+                        className="theme-config-select"
+                        onChange={(value) => updateThemeFonts({ ui: value || null })}
+                        options={[
+                          { value: '', label: t.themeSystemDefault },
+                          { value: 'Inter', label: 'Inter' },
+                          { value: 'SF Pro Text', label: 'SF Pro Text' },
+                          { value: 'Noto Sans SC', label: 'Noto Sans SC' },
+                          ...importedFonts.map((font) => ({
+                            value: font.family,
+                            label: `${font.family} (${font.format.toUpperCase()})`
+                          }))
+                        ]}
+                        value={themeConfig.theme.fonts.ui ?? ''}
+                      />
+                      <button
+                        aria-label={t.themeImportFont}
+                        className="flat-button compact theme-font-import-button"
+                        disabled={!desktopApi || fontImportKind !== null}
+                        onClick={() => void importFontFor('ui')}
+                        title={t.themeImportFont}
+                        type="button"
+                      >
+                        <AppIcon name="upload" size={14} />
+                        {fontImportKind === 'ui' ? t.themeImportingFont : t.themeImportFont}
+                      </button>
+                    </div>
                   </div>
                   <div className="theme-config-control">
                     <span className="theme-config-label">{t.themeCodeFont}</span>
-                    <DropdownSelect
-                      ariaLabel={t.themeCodeFont}
-                      className="theme-config-select"
-                      onChange={(value) => updateThemeFonts({ code: value || null })}
-                      options={[
-                        { value: '', label: t.themeSystemDefault },
-                        { value: 'JetBrains Mono', label: 'JetBrains Mono' },
-                        { value: 'SF Mono', label: 'SF Mono' },
-                        { value: 'Cascadia Code', label: 'Cascadia Code' }
-                      ]}
-                      value={themeConfig.theme.fonts.code ?? ''}
-                    />
+                    <div className="theme-config-font-control-row">
+                      <DropdownSelect
+                        ariaLabel={t.themeCodeFont}
+                        className="theme-config-select"
+                        onChange={(value) => updateThemeFonts({ code: value || null })}
+                        options={[
+                          { value: '', label: t.themeSystemDefault },
+                          { value: 'JetBrains Mono', label: 'JetBrains Mono' },
+                          { value: 'SF Mono', label: 'SF Mono' },
+                          { value: 'Cascadia Code', label: 'Cascadia Code' },
+                          ...importedFonts.map((font) => ({
+                            value: font.family,
+                            label: `${font.family} (${font.format.toUpperCase()})`
+                          }))
+                        ]}
+                        value={themeConfig.theme.fonts.code ?? ''}
+                      />
+                      <button
+                        aria-label={t.themeImportFont}
+                        className="flat-button compact theme-font-import-button"
+                        disabled={!desktopApi || fontImportKind !== null}
+                        onClick={() => void importFontFor('code')}
+                        title={t.themeImportFont}
+                        type="button"
+                      >
+                        <AppIcon name="upload" size={14} />
+                        {fontImportKind === 'code' ? t.themeImportingFont : t.themeImportFont}
+                      </button>
+                    </div>
                   </div>
                 </div>
+                {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
 
                 <details className="theme-config-subsection theme-advanced-section">
                   <summary className="theme-config-section-summary">
@@ -2925,6 +3037,28 @@ export function SettingsModal({
                   </label>
                 </div>
                 {terminalZoomPreferenceError ? <p className="modal-error">{terminalZoomPreferenceError}</p> : null}
+              </section>
+
+              <section className="settings-section">
+                <h3>{t.filePanelSettings}</h3>
+                <p className="settings-tools-hint">{t.filePanelSettingsHint}</p>
+                <div className="overview-preference-list">
+                  <label className="overview-preference-row">
+                    <span className="overview-preference-copy">
+                      <strong>{t.rememberFilePanelRatio}</strong>
+                      <p>{t.rememberFilePanelRatioHint}</p>
+                    </span>
+                    <span className="command-toggle overview-preference-toggle">
+                      <input
+                        checked={filePanelRememberRatio}
+                        disabled={!desktopApi || isSavingFilePanelPreference}
+                        onChange={(event) => setFilePanelRememberRatioPreference(event.target.checked)}
+                        type="checkbox"
+                      />
+                    </span>
+                  </label>
+                </div>
+                {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
               </section>
 
               <section className="settings-section">

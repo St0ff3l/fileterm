@@ -1,4 +1,4 @@
-import { useState, useEffect, type DragEvent, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
+import { useState, useEffect, type DragEvent, FormEvent, MouseEvent, PointerEvent, ReactNode, RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { formatMessage, t } from '../../i18n'
@@ -152,6 +152,8 @@ export function FileTable({
   onClearSelection,
   onContextItem,
   onDragItem,
+  onNativeDragStart,
+  unifiedNativeDrag = false,
   onOpenItem,
   onSelectItem,
   onToggleSort,
@@ -169,6 +171,8 @@ export function FileTable({
   onClearSelection?(): void
   onContextItem?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
   onDragItem?(event: DragEvent<HTMLElement>, item: RemoteFileItem): void
+  onNativeDragStart?(event: PointerEvent<HTMLElement>, item: RemoteFileItem): void
+  unifiedNativeDrag?: boolean
   onOpenItem?(item: RemoteFileItem): void
   onSelectItem?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
   onToggleSort?(field: RemoteFileSortField): void
@@ -337,8 +341,23 @@ export function FileTable({
                     <FileNameCell
                       iconName={iconName}
                       item={row}
-                      draggable={row.type === 'file'}
+                      draggable={!unifiedNativeDrag && row.name !== '..'}
                       onDragStart={(event) => onDragItem?.(event, row)}
+                      nativeDragMode={unifiedNativeDrag ? 'automatic' : 'modifier'}
+                      onPointerDown={
+                        row.name !== '..'
+                          ? (event) => {
+                              // macOS uses one native drag session for both destinations. The
+                              // native drop event tells FileTerm whether the target is its local
+                              // pane; Finder receives the file promise from the same session.
+                              // Other platforms keep the modifier-key fallback until their
+                              // virtual-file drag APIs are implemented.
+                              if (unifiedNativeDrag || event.altKey) {
+                                onNativeDragStart?.(event, row)
+                              }
+                            }
+                          : undefined
+                      }
                     />
                   </td>
                   {!compact ? <td>{row.size}</td> : null}
@@ -473,12 +492,16 @@ function FileNameCell({
   draggable,
   iconName,
   item,
-  onDragStart
+  onDragStart,
+  onPointerDown,
+  nativeDragMode
 }: {
   draggable: boolean
   iconName: ReturnType<typeof getDisplayFileIconName>
   item: LocalFileItem | RemoteFileItem
   onDragStart(event: DragEvent<HTMLElement>): void
+  onPointerDown?(event: PointerEvent<HTMLElement>): void
+  nativeDragMode?: 'automatic' | 'modifier'
 }) {
   return (
     <span className="file-name-cell" title={item.name}>
@@ -486,8 +509,13 @@ function FileNameCell({
         className={`file-icon ${draggable ? 'is-draggable' : ''}`}
         draggable={draggable}
         onDragStart={onDragStart}
+        onPointerDown={onPointerDown}
         onMouseDown={(event) => event.stopPropagation()}
-        title={draggable ? t.dragTransfer : undefined}
+        title={
+          draggable || onPointerDown
+            ? `${t.dragTransfer} · ${nativeDragMode === 'automatic' ? t.dragExternalTransferAutomatic : t.dragExternalTransfer}`
+            : undefined
+        }
       >
         <AppIcon name={iconName} />
       </span>

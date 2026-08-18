@@ -18,7 +18,7 @@ import { ContextMenu } from '../features/common/ContextMenu'
 import { CloseButton } from '../features/common/CloseButton'
 import { AppIcon } from '../features/common/AppIcon'
 import { VerticalScrollbar } from '../features/common/VerticalScrollbar'
-import { FILETERM_MONO_FONT_FAMILY, observeCanvasTextMetrics } from '../app/font-metrics'
+import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../app/font-metrics'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
 
 function localizeTerminalText(value: string) {
@@ -1086,7 +1086,7 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const terminal = new Terminal({
-      fontFamily: FILETERM_MONO_FONT_FAMILY,
+      fontFamily: getConfiguredMonoFontFamily(),
       fontSize: TERMINAL_DEFAULT_FONT_SIZE,
       letterSpacing: 0.5,
       lineHeight: 1.05,
@@ -1491,6 +1491,7 @@ export const TerminalView = memo(function TerminalView({
     // packaged WebView2/WebKit builds cannot keep a fallback-font grid.
     const disposeCanvasTextMetrics = observeCanvasTextMetrics((fontFamily) => {
       terminal.options.fontFamily = fontFamily
+      terminal.clearTextureAtlas()
       terminal.refresh(0, Math.max(terminal.rows - 1, 0))
       scheduleResize(true)
     })
@@ -2303,6 +2304,13 @@ export const TerminalView = memo(function TerminalView({
     const root = document.documentElement
     const observer = new MutationObserver(() => {
       applyTerminalTheme()
+      const terminal = terminalRef.current
+      const configuredFontFamily = getConfiguredMonoFontFamily()
+      if (terminal && terminal.options.fontFamily !== configuredFontFamily) {
+        terminal.options.fontFamily = configuredFontFamily
+        terminal.clearTextureAtlas()
+        terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+      }
     })
 
     observer.observe(root, {

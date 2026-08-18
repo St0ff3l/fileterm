@@ -716,6 +716,28 @@ async fn task_for(app: &AppHandle, transfer_id: &str) -> Result<TransferTask, Ap
     task
 }
 
+/// Wait until a transfer reaches a terminal state. A staging download used
+/// for native drag-out must not start the OS drag before every selected item
+/// is present on disk.
+pub async fn wait_for_transfer(
+    app: &AppHandle,
+    transfer_id: &str,
+) -> Result<TransferTask, AppError> {
+    loop {
+        let task = task_for(app, transfer_id).await?;
+        match task.status.as_str() {
+            "done" => return Ok(task),
+            "failed" | "canceled" | "paused" | "interrupted" => {
+                return Err(transfer_error(
+                    task.message
+                        .unwrap_or_else(|| format!("传输任务未完成：{}", task.status)),
+                ))
+            }
+            _ => tokio::time::sleep(Duration::from_millis(50)).await,
+        }
+    }
+}
+
 async fn ensure_remote_directory(
     app: &AppHandle,
     tab_id: &str,
@@ -1082,7 +1104,7 @@ pub async fn create_download(
     remote_path: String,
     local_directory: String,
     target_name: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
@@ -1144,8 +1166,9 @@ pub async fn create_download(
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
     emit_task(app, task.clone(), true).await;
-    start(app.clone(), task.id).await?;
-    Ok(())
+    let task_id = task.id.clone();
+    start(app.clone(), task_id.clone()).await?;
+    Ok(task_id)
 }
 
 pub async fn create_download_directory(
@@ -1154,7 +1177,7 @@ pub async fn create_download_directory(
     remote_path: String,
     local_directory: String,
     target_name: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
@@ -1242,8 +1265,9 @@ pub async fn create_download_directory(
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
     emit_task(app, task.clone(), true).await;
-    start(app.clone(), task.id).await?;
-    Ok(())
+    let task_id = task.id.clone();
+    start(app.clone(), task_id.clone()).await?;
+    Ok(task_id)
 }
 
 async fn remove_transfer_run_if_generation(app: &AppHandle, transfer_id: &str, generation: u64) {

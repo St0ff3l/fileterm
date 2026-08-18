@@ -4,7 +4,7 @@ import OpenCC from 'opencc-js'
 import * as monacoEditor from 'monaco-editor'
 import type { FileContentSnapshot } from '@fileterm/core'
 import { t } from '../../i18n'
-import { FILETERM_MONO_FONT_FAMILY, observeCanvasTextMetrics } from '../../app/font-metrics'
+import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../../app/font-metrics'
 import { CloseButton } from '../common/CloseButton'
 import { AppIcon } from '../common/AppIcon'
 import {
@@ -378,7 +378,7 @@ export function FileEditorModal({
                     seedSearchStringFromSelection: 'always'
                   },
                   fixedOverflowWidgets: true,
-                  fontFamily: FILETERM_MONO_FONT_FAMILY,
+                  fontFamily: getConfiguredMonoFontFamily(),
                   fontLigatures: true,
                   fontSize: 13,
                   lineHeight: 20,

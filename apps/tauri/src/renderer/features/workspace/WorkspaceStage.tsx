@@ -42,6 +42,9 @@ export function WorkspaceStage({
   onCommandPaneWidthChange,
   filePanelHeight,
   onFilePanelHeightChange,
+  filePanelRatio,
+  onFilePanelRatioCommit,
+  rememberFilePanelRatio,
   shouldAlignFilePanelOnMount,
   sendTargets,
   terminalDockSendScope,
@@ -155,6 +158,9 @@ export function WorkspaceStage({
   onCommandPaneWidthChange(width: number): void
   filePanelHeight: number
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
+  filePanelRatio: number
+  onFilePanelRatioCommit(ratio: number): void
+  rememberFilePanelRatio: boolean
   shouldAlignFilePanelOnMount: boolean
   sendTargets: SessionSendTarget[]
   terminalDockSendScope: SendScope
@@ -314,6 +320,9 @@ export function WorkspaceStage({
         onCommandPaneWidthChange={onCommandPaneWidthChange}
         filePanelHeight={filePanelHeight}
         onFilePanelHeightChange={onFilePanelHeightChange}
+        filePanelRatio={filePanelRatio}
+        onFilePanelRatioCommit={onFilePanelRatioCommit}
+        rememberFilePanelRatio={rememberFilePanelRatio}
         shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
         sendTargets={sendTargets}
         terminalDockSendScope={terminalDockSendScope}

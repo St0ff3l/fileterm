@@ -347,6 +347,13 @@ export interface RemoteFileItem {
   ownerGroup?: string
 }
 
+/** A remote item prepared for a native drag-out to the host file manager. */
+export interface RemoteFileDragItem {
+  path: string
+  name: string
+  type: 'file' | 'folder'
+}
+
 export interface LocalFileItem extends RemoteFileItem {
   path: string
 }
@@ -701,6 +708,17 @@ export interface SshKeyFileSelection {
 export interface SshKeyImportResult {
   key: SshKeyMetadata
   duplicate: boolean
+}
+
+export type ImportedFontFormat = 'ttf' | 'otf'
+
+export interface ImportedFont {
+  id: string
+  family: string
+  format: ImportedFontFormat
+  fileName: string
+  contentHash: string
+  importedAt: number
 }
 
 export interface ConnectionImportPreviewItem {
@@ -1494,6 +1512,7 @@ export interface UiPreferences {
   autoCheckUpdates: boolean
   updateChannel: AppUpdateChannel
   terminalZoomLocked: boolean
+  filePanelRememberRatio: boolean
   connectionDefaults: SshConnectionDefaults
   mcpAgent: McpAgentPreferences
   overviewShowStats: boolean
@@ -1511,6 +1530,7 @@ export interface UiPreferencesInput {
   autoCheckUpdates?: boolean
   updateChannel?: UiPreferences['updateChannel']
   terminalZoomLocked?: boolean
+  filePanelRememberRatio?: boolean
   connectionDefaults?: Partial<SshConnectionDefaults>
   mcpAgent?: Partial<McpAgentPreferences>
   overviewShowStats?: boolean
@@ -1922,6 +1942,9 @@ export interface FileTermDesktopApi {
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   getConnectionLibrary(): Promise<ConnectionLibrarySnapshot>
+  listImportedFonts(): Promise<ImportedFont[]>
+  importFont(): Promise<ImportedFont | null>
+  getImportedFontData(fontId: string): Promise<string | null>
   listSshKeys(): Promise<SshKeyMetadata[]>
   selectSshKeyFile(): Promise<SshKeyFileSelection | null>
   importSshKey(input?: ImportSshKeyInput): Promise<SshKeyImportResult | null>
@@ -2041,6 +2064,7 @@ export interface FileTermDesktopApi {
     localDirectory: string,
     options?: TransferTargetOptions
   ): Promise<WorkspaceSnapshot>
+  startRemoteFileDrag(tabId: string, items: RemoteFileDragItem[]): Promise<void>
   setRemoteFileAccessMode(
     tabId: string,
     mode: 'user' | 'root',

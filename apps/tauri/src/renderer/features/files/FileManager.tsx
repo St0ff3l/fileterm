@@ -7,7 +7,8 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
-  type MouseEvent
+  type MouseEvent,
+  type PointerEvent
 } from 'react'
 import type {
   CommandExecutionOptions,
@@ -31,7 +32,7 @@ import {
   setFileDragPreview,
   WINDOWS_DRIVES_PATH
 } from '../../app/app-utils'
-import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
+import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
@@ -265,6 +266,8 @@ export function FileManager({
   isRemoteDirectoryLoading: boolean
 }) {
   const defaultRemoteSort = { field: 'name', direction: 'asc' } satisfies RemoteFileSortState
+  const desktopApi = window.fileterm
+  const useUnifiedNativeRemoteDrag = desktopApi?.platform === 'darwin'
   const canUseRemoteFiles = activeSession.connected === true && !activeSession.sftpUnavailableReason
   const remoteFilesUnavailableText = activeSession.sftpUnavailableReason ?? t.remoteDisconnectedDescription
   const isSshSession = activeTab?.sessionType === 'ssh'
@@ -296,6 +299,7 @@ export function FileManager({
   const didDragSelect = useRef(false)
   const suppressNextSelectionClick = useRef(false)
   const suppressNextClearClick = useRef(false)
+  const nativeRemoteDragRef = useRef<{ tabId: string; items: RemoteFileItem[] } | null>(null)
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const localScrollRef = useRef<HTMLDivElement | null>(null)
@@ -326,6 +330,56 @@ export function FileManager({
       return areStringArraysEqual(prev, next) ? prev : next
     })
   }, [activeSession.remoteFiles, activeSession.remotePath])
+
+  useEffect(() => {
+    if (!useUnifiedNativeRemoteDrag) {
+      return
+    }
+
+    const stopTrackingExternalDrag = (detail: { paths: string[] }) => {
+      if (detail.paths.length) {
+        nativeRemoteDragRef.current = null
+      }
+    }
+
+    const handleNativeRemoteDrop = (detail: {
+      paths: string[]
+      consume: () => void
+      position: { x: number; y: number }
+    }) => {
+      const activeDrag = nativeRemoteDragRef.current
+      if (!activeDrag || activeDrag.tabId !== activeTab?.id) {
+        return
+      }
+
+      nativeRemoteDragRef.current = null
+      const ratio = window.devicePixelRatio || 1
+      const points = [
+        detail.position,
+        { x: detail.position.x / ratio, y: detail.position.y / ratio },
+        { x: detail.position.x * ratio, y: detail.position.y * ratio }
+      ]
+      const droppedOnLocalPane = points.some((point) =>
+        document.elementFromPoint(point.x, point.y)?.closest('.local-pane')
+      )
+      if (!droppedOnLocalPane) {
+        return
+      }
+
+      detail.consume()
+      const items = activeDrag.items.filter((item) => item.name !== '..')
+      if (items.length) {
+        onDownloadFiles(items, localPath)
+      }
+    }
+
+    const stopTracking = onAppEvent(APP_EVENT.tauriNativeDragOver, stopTrackingExternalDrag)
+    const handleDrop = onAppEvent(APP_EVENT.tauriNativeDrop, handleNativeRemoteDrop)
+    return () => {
+      stopTracking()
+      handleDrop()
+    }
+  }, [activeTab?.id, localPath, onDownloadFiles, useUnifiedNativeRemoteDrag])
 
   useEffect(() => {
     if (canUseRemoteFiles) {
@@ -407,6 +461,73 @@ export function FileManager({
 
     return sortRemoteFiles(filteredRemoteFiles, remoteSort)
   }, [canUseRemoteFiles, filteredRemoteFiles, remoteSort])
+
+  const startRemoteNativeDrag = (event: PointerEvent<HTMLElement>, item: RemoteFileItem) => {
+    if (!desktopApi || !activeTab || !canUseRemoteFiles || event.button !== 0) {
+      return
+    }
+
+    if (!useUnifiedNativeRemoteDrag) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    const payloadPaths = selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
+    const payloadItems = payloadPaths
+      .map((path) => sortedRemoteRows.find((row) => row.path === path))
+      .filter((row): row is RemoteFileItem => Boolean(row && row.name !== '..'))
+    const payload = payloadItems.map(({ path, name, type }) => ({ path, name, type }))
+
+    if (!payload.length) {
+      return
+    }
+
+    const pointerId = event.pointerId
+    const startX = event.clientX
+    const startY = event.clientY
+    let nativeDragStarted = false
+
+    const cleanup = () => {
+      document.removeEventListener('pointermove', handlePointerMove, true)
+      document.removeEventListener('pointerup', handlePointerUp, true)
+      document.removeEventListener('pointercancel', handlePointerUp, true)
+      document.body.style.userSelect = ''
+    }
+
+    const handlePointerUp = () => {
+      cleanup()
+    }
+
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) {
+        return
+      }
+
+      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY)
+      if (distance < 6 || nativeDragStarted) {
+        return
+      }
+
+      nativeDragStarted = true
+      suppressNextSelectionClick.current = true
+      moveEvent.preventDefault()
+      cleanup()
+      const nativeDrag = { tabId: activeTab.id, items: payloadItems }
+      if (useUnifiedNativeRemoteDrag) {
+        nativeRemoteDragRef.current = nativeDrag
+      }
+      void desktopApi.startRemoteFileDrag(activeTab.id, payload).catch((error) => {
+        if (nativeRemoteDragRef.current === nativeDrag) {
+          nativeRemoteDragRef.current = null
+        }
+        console.error('[FileTerm] 远程文件拖出失败', error)
+      })
+    }
+
+    document.addEventListener('pointermove', handlePointerMove, true)
+    document.addEventListener('pointerup', handlePointerUp, true)
+    document.addEventListener('pointercancel', handlePointerUp, true)
+    document.body.style.userSelect = 'none'
+  }
 
   const selectedRemoteItems = activeSession.remoteFiles.filter((item) => selectedRemotePaths.includes(item.path))
   const selectedRemoteDownloadItems = selectedRemoteItems.filter((item) => item.name !== '..')
@@ -1083,7 +1204,9 @@ export function FileManager({
                     onDragItem={(event, item) => {
                       if (!canUseRemoteFiles) return
                       event.dataTransfer.effectAllowed = 'copy'
-                      const payload = selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
+                      const payload = (
+                        selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
+                      ).filter((path) => sortedRemoteRows.some((row) => row.path === path && row.name !== '..'))
                       const previewItems = sortedRemoteRows.filter((row) => payload.includes(row.path))
                       event.dataTransfer.setData(remoteFileDragType, JSON.stringify(payload))
                       setFileDragPreview(
@@ -1091,6 +1214,8 @@ export function FileManager({
                         previewItems.map((row) => row.name)
                       )
                     }}
+                    onNativeDragStart={startRemoteNativeDrag}
+                    unifiedNativeDrag={useUnifiedNativeRemoteDrag}
                     onOpenItem={(item) => {
                       if (canUseRemoteFiles) {
                         onOpenRemoteItem(item)

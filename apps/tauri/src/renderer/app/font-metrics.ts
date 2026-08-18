@@ -6,12 +6,18 @@
  * does not. Keep the font stack local to the app bundle and provide one
  * observer that asks consumers to remeasure at both boundaries.
  */
+import { APP_EVENT, onAppEvent } from '../lib/app-events'
+
 export const FILETERM_MONO_FONT_FAMILY = '"JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
 
 const FILETERM_MONO_FONT_FAMILY_REFRESH =
   '"JetBrains Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
 
-const MONO_FONT_LOADS = ['400 12px "JetBrains Mono"', '600 13px "JetBrains Mono"']
+export function getConfiguredMonoFontFamily() {
+  if (typeof document === 'undefined') return FILETERM_MONO_FONT_FAMILY
+  const configured = getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim()
+  return configured || FILETERM_MONO_FONT_FAMILY
+}
 
 function nextPaint(callback: () => void) {
   const firstFrame = window.requestAnimationFrame(() => {
@@ -43,7 +49,10 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
         return
       }
       useRefreshFontStack = !useRefreshFontStack
-      onMetricsChanged(useRefreshFontStack ? FILETERM_MONO_FONT_FAMILY_REFRESH : FILETERM_MONO_FONT_FAMILY)
+      const configuredFontFamily = getConfiguredMonoFontFamily()
+      const refreshFontFamily =
+        configuredFontFamily === FILETERM_MONO_FONT_FAMILY ? FILETERM_MONO_FONT_FAMILY_REFRESH : configuredFontFamily
+      onMetricsChanged(useRefreshFontStack ? refreshFontFamily : configuredFontFamily)
     })
   }
 
@@ -70,8 +79,13 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
   pixelRatioQuery.addEventListener('change', onPixelRatioChanged)
   window.addEventListener('resize', onViewportResize)
   window.visualViewport?.addEventListener('resize', onViewportResize)
+  const disposeImportedFontsListener = onAppEvent(APP_EVENT.importedFontsChanged, notify)
 
-  void Promise.all(MONO_FONT_LOADS.map((font) => document.fonts.load(font)))
+  const configuredFontFamily = getConfiguredMonoFontFamily()
+  void Promise.all([
+    document.fonts.load(`400 12px ${configuredFontFamily}`),
+    document.fonts.load(`600 13px ${configuredFontFamily}`)
+  ])
     .catch(() => {
       // A system fallback remains usable if a local font cannot be decoded.
     })
@@ -85,5 +99,6 @@ export function observeCanvasTextMetrics(onMetricsChanged: (fontFamily: string) 
     pixelRatioQuery.removeEventListener('change', onPixelRatioChanged)
     window.removeEventListener('resize', onViewportResize)
     window.visualViewport?.removeEventListener('resize', onViewportResize)
+    disposeImportedFontsListener()
   }
 }
