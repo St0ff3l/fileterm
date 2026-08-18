@@ -1404,7 +1404,10 @@ if [ -s "$process_ticks_before_file" ] && [ -s "$process_ticks_after_file" ] && 
     NR==FNR {{ before[$1]=$2; next }}
     {{
       delta=$2-before[$1]
-      if (delta > 0) printf "%s|%.4f\n", $1, delta * 100 / diff_total
+      # Keep processes that consumed no CPU during this short sample too.
+      # Filtering them out makes the top-process list randomly shrink to two
+      # or three rows whenever fewer processes receive a tick in the window.
+      if (($1 in before) && delta >= 0) printf "%s|%.4f\n", $1, delta * 100 / diff_total
     }}
   ' "$process_ticks_before_file" "$process_ticks_after_file" > "$process_cpu_file"
 fi
@@ -1928,6 +1931,7 @@ mod tests {
         assert!(command.contains("process_ticks_before_file"));
         assert!(command.contains("process_ticks_after_file"));
         assert!(command.contains("delta * 100 / diff_total"));
+        assert!(command.contains("($1 in before) && delta >= 0"));
         assert!(command.contains("ps -eo pid=,user=,rss=,pmem=,args="));
         assert!(command.contains("rank<=40 && rank<=row_count"));
         assert!(command.contains("if (comm == \"ps\" || comm == \"awk\""));

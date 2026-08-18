@@ -261,6 +261,7 @@
 :root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] #root {
   --codex-glass-divider: #363636;
   --codex-glass-surface: color-mix(in srgb, var(--theme-surface-elevated) 50%, transparent);
+  --codex-glass-unfocused-surface: rgb(27, 27, 27);
   background: transparent !important;
 }
 
@@ -348,6 +349,26 @@
   .settings-modal
   .connection-manager-sidebar {
   background: var(--theme-surface-secondary, var(--bg-card)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Native window blur should not expose the desktop or another window through
+ * the Codex glass. Keep the unfocused glass regions on the requested solid
+ * #1b1b1b surface while preserving the focused vibrancy treatment. */
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+  .fs-shell.is-home-active
+  .home-sidebar,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .titlebar-brand,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar {
+  background: var(--codex-glass-unfocused-surface) !important;
+  background-color: var(--codex-glass-unfocused-surface) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }

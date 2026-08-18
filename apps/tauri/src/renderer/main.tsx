@@ -16,6 +16,20 @@ const initialWindowMode = new URLSearchParams(window.location.search).get('windo
 document.documentElement.dataset.runtime = 'tauri'
 document.documentElement.classList.toggle('tauri-standalone-window', initialWindowMode !== 'main')
 
+const currentWindow = getCurrentWindow()
+const syncWindowFocusState = (focused: boolean) => {
+  document.documentElement.dataset.windowFocused = focused ? 'true' : 'false'
+}
+
+// DOM focus is not the same as native NSWindow focus. Keep the native state on
+// <html> so platform theme skins can turn off glass when the window is idle.
+document.documentElement.dataset.windowFocused = 'true'
+void currentWindow
+  .isFocused()
+  .then(syncWindowFocusState)
+  .catch(() => undefined)
+void currentWindow.onFocusChanged(({ payload }) => syncWindowFocusState(payload)).catch(() => undefined)
+
 const interactiveWindowSelector = [
   'button',
   'input',
@@ -42,9 +56,7 @@ const handleWindowMouseDown = (e: MouseEvent) => {
   if (!target || target.closest(interactiveWindowSelector)) return
   if (!target.closest('[data-tauri-drag-region]')) return
 
-  void getCurrentWindow()
-    .startDragging()
-    .catch((err) => console.error('Failed to start window dragging:', err))
+  void currentWindow.startDragging().catch((err) => console.error('Failed to start window dragging:', err))
 }
 
 window.addEventListener('mousedown', handleWindowMouseDown, true)

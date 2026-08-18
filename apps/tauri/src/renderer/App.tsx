@@ -84,6 +84,20 @@ const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
 const DEFAULT_SIDEBAR_WIDTH = 214
 const DEFAULT_COMMAND_LIST_WIDTH = 300
 const SIDEBAR_SNAP_THRESHOLD = 10
+const SIDEBAR_MIN_WIDTH = 190
+const SIDEBAR_MAX_WIDTH = 360
+// Four overview cards need 4 * 200px. Include the home body/page padding and
+// a small scrollbar allowance so the last card stays on the same row at the
+// configured 1150px minimum window width.
+const HOME_OVERVIEW_MIN_MAIN_WIDTH = 930
+
+const getSidebarMaxWidth = (windowWidth: number, isHomeWorkspace: boolean) => {
+  if (!isHomeWorkspace) {
+    return SIDEBAR_MAX_WIDTH
+  }
+
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, windowWidth - HOME_OVERVIEW_MIN_MAIN_WIDTH))
+}
 
 type ErrorDetails = {
   item?: RemoteFileItem
@@ -866,7 +880,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     }
 
     const onMouseMove = (event: globalThis.MouseEvent) => {
-      const nextWidth = Math.min(360, Math.max(190, event.clientX))
+      const maxWidth = getSidebarMaxWidth(window.innerWidth, isHomeWorkspaceVisible)
+      const nextWidth = Math.min(maxWidth, Math.max(SIDEBAR_MIN_WIDTH, event.clientX))
       setSidebarWidth(
         Math.abs(nextWidth - DEFAULT_SIDEBAR_WIDTH) <= SIDEBAR_SNAP_THRESHOLD ? DEFAULT_SIDEBAR_WIDTH : nextWidth
       )
@@ -892,7 +907,24 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [isResizingSidebar])
+  }, [isHomeWorkspaceVisible, isResizingSidebar])
+
+  // Keep a previously widened home sidebar from reintroducing a wrapped stats
+  // row when the window is resized down to its minimum width.
+  useEffect(() => {
+    if (!isHomeWorkspaceVisible) {
+      return
+    }
+
+    const clampSidebarWidth = () => {
+      const maxWidth = getSidebarMaxWidth(window.innerWidth, true)
+      setSidebarWidth((currentWidth) => (currentWidth > maxWidth ? maxWidth : currentWidth))
+    }
+
+    clampSidebarWidth()
+    window.addEventListener('resize', clampSidebarWidth)
+    return () => window.removeEventListener('resize', clampSidebarWidth)
+  }, [isHomeWorkspaceVisible])
 
   const startAiCopilotResize = useCallback(() => {
     window.getSelection()?.removeAllRanges()
@@ -1495,13 +1527,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // --- Main Workspace Render ---
 
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
-  // Home's top bar and navigation rail share the same vertical split. Keep
-  // the title-bar brand column synchronized while the rail is resized so the
-  // two divider segments never briefly occupy different x coordinates. A
-  // local-terminal workspace has no system sidebar at all, so it still needs
-  // a full brand lane; otherwise the native traffic-light inset consumes the
-  // collapsed 44px track and hides the FileTerm title under the first tab.
-  const brandWidth = shouldShowSystemSidebar ? resolvedSidebarWidth : 214
+  // Home intentionally keeps the title-bar brand lane aligned with its
+  // navigation rail. Session workspaces keep a fixed brand lane so resizing or
+  // collapsing the system sidebar does not move the terminal tabs.
+  const brandWidth = isHomeWorkspaceVisible ? resolvedSidebarWidth : DEFAULT_SIDEBAR_WIDTH
 
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,

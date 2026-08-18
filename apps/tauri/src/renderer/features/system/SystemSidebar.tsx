@@ -414,8 +414,16 @@ function getMetricTone(percent: number) {
 
 function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
   const processScrollRef = useRef<HTMLDivElement>(null)
+  const placeholderRows = Array.from({ length: Math.max(0, 4 - rows.length) }).map(() => ({
+    pid: 0,
+    user: '',
+    memory: '',
+    cpu: '',
+    command: '',
+    elapsedSeconds: 0
+  }))
   const displayRows = rows.length
-    ? rows
+    ? [...rows, ...placeholderRows]
     : Array.from({ length: 4 }).map(() => ({
         pid: 0,
         user: '',
@@ -428,9 +436,12 @@ function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
     <div className="process-scroll-region">
       <div className="process-table" ref={processScrollRef}>
         {displayRows.map((row, i) => (
-          <div className="process-row" key={rows.length ? `${row.pid}-${row.command}-${row.cpu}-${i}` : `empty-${i}`}>
+          <div
+            className="process-row"
+            key={row.pid === 0 && !row.command ? `empty-${i}` : `${row.pid}-${row.command}-${row.cpu}-${i}`}
+          >
             <span>{row.memory}</span>
-            <span>{row.cpu}%</span>
+            <span>{row.cpu ? `${row.cpu}%` : ''}</span>
             <span title={row.command}>{row.command}</span>
           </div>
         ))}
