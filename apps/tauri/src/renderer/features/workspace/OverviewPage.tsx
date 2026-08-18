@@ -107,7 +107,7 @@ export function OverviewPage({
             </div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon stat-icon-ftp">
+            <div className="stat-icon stat-icon-sftp">
               <span className="material-symbols-outlined">folder_open</span>
             </div>
             <div className="stat-content">

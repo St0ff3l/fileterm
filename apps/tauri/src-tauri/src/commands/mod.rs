@@ -219,6 +219,10 @@ pub struct ThemeSemanticColors {
     pub diff_removed: String,
     pub skill: String,
     pub keyword: String,
+    #[serde(default)]
+    pub sftp: String,
+    #[serde(default)]
+    pub ftp: String,
     /// Newer semantic controls are optional on disk so older theme exports
     /// can still be deserialized and filled by `normalize_theme_config`.
     #[serde(default)]
@@ -308,12 +312,14 @@ fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
                 skill: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
-                secondary: if is_light { "#8b5cf6" } else { "#b06dff" }.to_string(),
+                sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
+                ftp: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
+                secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#667085" } else { "#a9a9b2" }.to_string(),
                 info: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
                 warning: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
                 error: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
-                success: "#00a240".to_string(),
+                success: if is_light { "#059669" } else { "#34d399" }.to_string(),
             },
             surface: if is_light { "#ffffff" } else { "#111111" }.to_string(),
             surface_secondary: if is_light { "#ffffff" } else { "#1b1b1b" }.to_string(),
@@ -361,6 +367,8 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
                 skill: if is_light { "#7c3aed" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
+                ftp: if is_light { "#9333ea" } else { "#c084fc" }.to_string(),
                 secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#5e5e61" } else { "#9b9b9b" }.to_string(),
                 info: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
@@ -458,6 +466,20 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         config.code_theme_id = trimmed_id.to_string();
     }
     config.theme.contrast = config.theme.contrast.min(100);
+    let migrate_legacy_codex_status_colors = is_codex_theme
+        && config.theme.overrides.is_empty()
+        && config
+            .theme
+            .semantic_colors
+            .sftp
+            .trim()
+            .eq_ignore_ascii_case("#0169cc")
+        && config
+            .theme
+            .semantic_colors
+            .success
+            .trim()
+            .eq_ignore_ascii_case("#00a240");
     normalize_theme_color(&mut config.theme.accent, &fallback.theme.accent);
     normalize_theme_color(&mut config.theme.ink, &fallback.theme.ink);
     normalize_theme_color(&mut config.theme.surface, &fallback.theme.surface);
@@ -485,6 +507,23 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         &mut config.theme.semantic_colors.keyword,
         &fallback.theme.semantic_colors.keyword,
     );
+    if migrate_legacy_codex_status_colors {
+        config.theme.semantic_colors.sftp = fallback.theme.semantic_colors.sftp.clone();
+    } else {
+        normalize_theme_color(
+            &mut config.theme.semantic_colors.sftp,
+            &fallback.theme.semantic_colors.sftp,
+        );
+    }
+    if is_theme_hex_color(config.theme.semantic_colors.ftp.trim()) {
+        config.theme.semantic_colors.ftp = config.theme.semantic_colors.ftp.trim().to_uppercase();
+    } else if !is_fileterm_theme && is_theme_hex_color(config.theme.semantic_colors.skill.trim()) {
+        // Preserve the old behavior for saved themes created before FTP had
+        // its own persisted semantic color.
+        config.theme.semantic_colors.ftp = config.theme.semantic_colors.skill.trim().to_uppercase();
+    } else {
+        config.theme.semantic_colors.ftp = fallback.theme.semantic_colors.ftp.clone();
+    }
     normalize_theme_color(
         &mut config.theme.semantic_colors.secondary,
         &fallback.theme.semantic_colors.secondary,
@@ -505,10 +544,14 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         &mut config.theme.semantic_colors.error,
         &fallback.theme.semantic_colors.error,
     );
-    normalize_theme_color(
-        &mut config.theme.semantic_colors.success,
-        &fallback.theme.semantic_colors.success,
-    );
+    if migrate_legacy_codex_status_colors {
+        config.theme.semantic_colors.success = fallback.theme.semantic_colors.success.clone();
+    } else {
+        normalize_theme_color(
+            &mut config.theme.semantic_colors.success,
+            &fallback.theme.semantic_colors.success,
+        );
+    }
     config.theme.overrides.retain(|key, value| {
         let valid_key = !key.trim().is_empty() && key.len() <= 128;
         let valid_color = is_theme_hex_color(value.trim());

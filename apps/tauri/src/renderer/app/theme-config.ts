@@ -49,8 +49,13 @@ function alpha(color: string, alphaPercent: number) {
   return `color-mix(in srgb, ${color} ${percent}%, transparent ${100 - percent}%)`
 }
 
-function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVariant): Record<string, string> {
+function resolveCompactUiVariables(
+  theme: ThemeConfig['theme'],
+  variant: ThemeVariant,
+  baseThemeId?: ThemeBaseId
+): Record<string, string> {
   const isLight = variant === 'light'
+  const isCodex = baseThemeId === 'codex'
   const surface = theme.surface
   const surfaceSecondary = theme.surfaceSecondary
   const surfaceElevated = theme.surfaceElevated
@@ -62,8 +67,22 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
   const card = surfaceSecondary
   const elevated = surfaceElevated
   const input = surfaceElevated
-  const hover = isLight ? blend(surfaceElevated, '#000000', 5.5) : blend(surfaceElevated, '#FFFFFF', 8)
-  const active = isLight ? blend(surfaceElevated, accent, 12) : blend(surfaceElevated, accent, 18)
+  // Codex uses the same quiet neutral hover/active treatment as its native
+  // sidebar. Keep the primary blue for actions and status semantics instead
+  // of tinting every navigation interaction blue.
+  const hover =
+    isCodex && !isLight
+      ? '#3a3a3a'
+      : isLight
+        ? blend(surfaceElevated, '#000000', 5.5)
+        : blend(surfaceElevated, '#FFFFFF', 8)
+  const active = isCodex
+    ? isLight
+      ? '#e4e4e7'
+      : '#3a3d42'
+    : isLight
+      ? blend(surfaceElevated, accent, 12)
+      : blend(surfaceElevated, accent, 18)
   const titlebar = surfaceElevated
   const managerHeadBg = surfaceSecondary
 
@@ -75,7 +94,10 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
   const strongBorder = alpha(ink, isLight ? 22 : 18)
   const subtleBorder = alpha(ink, isLight ? 8 : 6)
 
-  const focus = accent
+  // The secondary semantic color is the focus/outline accent in the built-in
+  // dark skins. Keep Codex aligned with the default dark theme instead of
+  // silently switching its outlines back to the primary blue.
+  const focus = secondaryAccent
   const accentHover = isLight ? blend(accent, '#000000', 12) : blend(accent, '#FFFFFF', 15)
   const secondaryHover = isLight ? blend(secondaryAccent, '#000000', 12) : blend(secondaryAccent, '#FFFFFF', 15)
   const accentText = isLight ? blend(accent, ink, 35) : blend(accent, '#FFFFFF', 70)
@@ -84,8 +106,12 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
   const success = theme.semanticColors.success
   const warning = theme.semanticColors.warning
   const info = theme.semanticColors.info
+  const sftp = theme.semanticColors.sftp
+  const ftp = theme.semanticColors.ftp
+  const total = isCodex && !isLight ? '#60a5fa' : accent
 
   const secondarySurface = alpha(secondaryAccent, isLight ? 10 : 14)
+  const totalSurface = alpha(total, isLight ? 10 : 14)
   const infoSurface = alpha(info, isLight ? 10 : 14)
   const successSurface = alpha(success, isLight ? 10 : 14)
   const warningSurface = alpha(warning, isLight ? 10 : 14)
@@ -140,11 +166,13 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--theme-text-primary': ink,
     '--theme-text-secondary': secondaryText,
     '--theme-info': info,
+    '--theme-semantic-sftp': sftp,
+    '--theme-semantic-ftp': ftp,
     '--theme-warning': warning,
     '--theme-error': danger,
     '--theme-success': success,
     '--focus-outline': focus,
-    '--accent-highlight': accent,
+    '--accent-highlight': secondaryAccent,
     '--accent-text': accentText,
     '--sidebar-active-accent': ink,
     '--selection-bg': active,
@@ -251,14 +279,16 @@ function resolveCompactUiVariables(theme: ThemeConfig['theme'], variant: ThemeVa
     '--terminal-dock-text-muted': secondaryText,
     '--terminal-find-action-divider': 'transparent',
     '--terminal-dock-border': border,
-    '--type-total': accent,
-    '--type-total-surface': secondarySurface,
+    '--type-total': total,
+    '--type-total-surface': totalSurface,
     '--type-ssh': success,
     '--type-ssh-surface': successSurface,
-    '--type-sftp': secondaryAccent,
-    '--type-sftp-surface': secondarySurface,
-    '--type-ftp': theme.semanticColors.skill,
-    '--type-ftp-surface': alpha(theme.semanticColors.skill, isLight ? 10 : 14),
+    // Connection overview types have their own controls. In particular,
+    // SFTP and FTP must not consume the secondary focus/outline color.
+    '--type-sftp': sftp,
+    '--type-sftp-surface': alpha(sftp, isLight ? 10 : 14),
+    '--type-ftp': ftp,
+    '--type-ftp-surface': alpha(ftp, isLight ? 10 : 14),
     '--type-folder': warning,
     '--type-folder-surface': warningSurface,
     '--type-muted': softText,
@@ -301,6 +331,8 @@ function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boo
     'diffRemoved',
     'skill',
     'keyword',
+    'sftp',
+    'ftp',
     'secondary',
     'textSecondary',
     'info',
@@ -370,6 +402,8 @@ function buildThemeVariables(
     '--theme-semantic-diff-removed': theme.semanticColors.diffRemoved,
     '--theme-semantic-skill': theme.semanticColors.skill,
     '--theme-semantic-keyword': theme.semanticColors.keyword,
+    '--theme-semantic-sftp': theme.semanticColors.sftp,
+    '--theme-semantic-ftp': theme.semanticColors.ftp,
     '--terminal-background': theme.terminal.background,
     '--terminal-foreground': theme.terminal.foreground,
     '--terminal-cursor': theme.terminal.cursor,
@@ -390,8 +424,10 @@ function buildThemeVariables(
     '--terminal-search-active-bg': theme.terminal.search.activeMatchBackground
   }
 
-  if (forceCompactSkin || !isDefaultTheme) {
-    Object.assign(variables, resolveCompactUiVariables(theme, variant))
+  // Built-in Codex has the same compact token contract as custom themes, but
+  // its base config must still win over the legacy default-dark stylesheet.
+  if (forceCompactSkin || !isDefaultTheme || normalized.baseThemeId === 'codex') {
+    Object.assign(variables, resolveCompactUiVariables(theme, variant, normalized.baseThemeId))
   }
   applyThemeOverrides(variables, theme.overrides)
 
@@ -435,8 +471,11 @@ function applyRootVariables(root: HTMLElement, themeMode: ThemeMode, config: The
   root.dataset.theme = themeMode
   root.dataset.themeBase = current.normalized.baseThemeId ?? 'fileterm'
   root.style.colorScheme = variant
-  const inheritsFileTermSkin = customTheme && baseConfig?.baseThemeId === 'fileterm'
-  root.dataset.themeCustom = inheritsFileTermSkin ? 'inherited' : current.isDefaultTheme ? 'false' : 'true'
+  // Keep the untouched FileTerm preset on its historical skin. Every
+  // non-default theme, including a custom theme based on FileTerm, must use
+  // the same token-to-region bridge as Codex so the settings fields control
+  // the same UI areas in both themes.
+  root.dataset.themeCustom = current.isDefaultTheme ? 'false' : 'true'
 
   for (const [name, value] of Object.entries(variables)) {
     root.style.setProperty(name, value)

@@ -6,8 +6,8 @@
   --bg-card: #1b1b1b;
   --bg-elevated: #242424;
   --titlebar-background: #0e0e0e;
-  --bg-hover: #242424;
-  --bg-active: #172a3a;
+  --bg-hover: #3a3a3a;
+  --bg-active: #3a3d42;
   --manager-head-bg: #1d1d1d;
   --input-bg: #0d0d0d;
   --command-history-head-bg: #111111;
@@ -26,11 +26,11 @@
 
   --primary: #0169cc;
   --primary-hover: #147be0;
-  --focus-outline: #0169cc;
-  --accent-highlight: #0169cc;
+  --focus-outline: #8bbfff;
+  --accent-highlight: #8bbfff;
   --accent-text: #ffffff;
   --sidebar-active-accent: #fcfcfc;
-  --selection-bg: #172a3a;
+  --selection-bg: #383f48;
   --copy-link: #339cff;
   --copy-link-hover: #5cb2ff;
   --folder-accent: #ffcc00;
@@ -41,7 +41,7 @@
   --network-tx: #ff5f57;
   --network-rx: #0169cc;
   --danger: #ff5f57;
-  --success: #00a240;
+  --success: #34d399;
   --warning: #ffcc00;
 
   /* 状态语义色: 面/边/文本 */
@@ -58,9 +58,9 @@
   --accent-tint-weak: rgba(1, 105, 204, 0.1);
   --accent-tint: rgba(1, 105, 204, 0.16);
   --accent-focus-ring: rgba(1, 105, 204, 0.28);
-  --success-text: #00a240;
-  --success-surface: rgba(0, 162, 64, 0.14);
-  --success-border: rgba(0, 162, 64, 0.3);
+  --success-text: #34d399;
+  --success-surface: rgba(52, 211, 153, 0.14);
+  --success-border: rgba(52, 211, 153, 0.3);
 
   /* 中性叠层 */
   --surface-hover: rgba(252, 252, 252, 0.07);
@@ -112,12 +112,12 @@
   --monaco-indent-guide-active: var(--border-dark);
 
   /* 连接类型语义色: 文本/面 */
-  --type-total: #0169cc;
-  --type-total-surface: rgba(1, 105, 204, 0.14);
-  --type-ssh: #00a240;
-  --type-ssh-surface: rgba(0, 162, 64, 0.14);
-  --type-sftp: #0169cc;
-  --type-sftp-surface: rgba(1, 105, 204, 0.14);
+  --type-total: #60a5fa;
+  --type-total-surface: rgba(96, 165, 250, 0.14);
+  --type-ssh: #34d399;
+  --type-ssh-surface: rgba(52, 211, 153, 0.14);
+  --type-sftp: #38bdf8;
+  --type-sftp-surface: rgba(56, 189, 248, 0.14);
   --type-ftp: #b06dff;
   --type-ftp-surface: rgba(176, 109, 255, 0.14);
   --type-folder: #ffcc00;
@@ -140,9 +140,9 @@
   --terminal-search-active-ruler: #f0b400;
   --terminal-cmd-text: #fcfcfc;
   --metric-app: #ffcc00;
-  --metric-cache: #00a240;
+  --metric-cache: #34d399;
   --metric-kernel: #0169cc;
-  --metric-status-green: #00a240;
+  --metric-status-green: #34d399;
   --metric-status-yellow: #ffcc00;
   --metric-status-red: #ff5f57;
   --popover-bg: #242424;

@@ -1114,6 +1114,8 @@ export interface ThemeSemanticColors {
   diffRemoved: string
   skill: string
   keyword: string
+  sftp: string
+  ftp: string
   secondary: string
   textSecondary: string
   info: string
@@ -1238,12 +1240,14 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
         diffRemoved: isLight ? '#ba2623' : '#e02e2a',
         skill: isLight ? '#924ff7' : '#b06dff',
         keyword: isLight ? '#b45309' : '#ffcc00',
-        secondary: isLight ? '#8b5cf6' : '#b06dff',
+        sftp: isLight ? '#0284c7' : '#38bdf8',
+        ftp: isLight ? '#924ff7' : '#b06dff',
+        secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#667085' : '#a9a9b2',
         info: isLight ? '#339cff' : '#0169cc',
         warning: isLight ? '#b45309' : '#ffcc00',
         error: isLight ? '#ba2623' : '#e02e2a',
-        success: '#00a240'
+        success: isLight ? '#059669' : '#34d399'
       },
       surface: isLight ? '#ffffff' : '#111111',
       surfaceSecondary: isLight ? '#ffffff' : '#1b1b1b',
@@ -1287,6 +1291,8 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
         skill: isLight ? '#7c3aed' : '#b06dff',
         keyword: isLight ? '#b45309' : '#ffcc00',
+        sftp: isLight ? '#0284c7' : '#38bdf8',
+        ftp: isLight ? '#9333ea' : '#c084fc',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
         info: isLight ? '#3b82f6' : '#8bbfff',
@@ -1372,6 +1378,22 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
   const rawAnsi = asThemeRecord(rawTerminal.ansi)
   const rawSearch = asThemeRecord(rawTerminal.search)
   const terminalFallback = variantFallback.theme.terminal
+  const migrateLegacyCodexStatusColors =
+    isCodexTheme &&
+    Object.keys(asThemeRecord(rawTheme.overrides)).length === 0 &&
+    typeof rawSemanticColors.sftp === 'string' &&
+    rawSemanticColors.sftp.trim().toLowerCase() === '#0169cc' &&
+    typeof rawSemanticColors.success === 'string' &&
+    rawSemanticColors.success.trim().toLowerCase() === '#00a240'
+  const normalizedSkill = normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill)
+  const normalizedSftp = migrateLegacyCodexStatusColors
+    ? variantFallback.theme.semanticColors.sftp
+    : normalizeThemeColor(rawSemanticColors.sftp, variantFallback.theme.semanticColors.sftp)
+  const normalizedSuccess = migrateLegacyCodexStatusColors
+    ? variantFallback.theme.semanticColors.success
+    : normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
+  const ftpFallback = isFileTermTheme ? variantFallback.theme.semanticColors.ftp : normalizedSkill
+  const normalizedFtp = normalizeThemeColor(rawSemanticColors.ftp, ftpFallback)
   const normalizedSurface = normalizeThemeColor(rawTheme.surface, variantFallback.theme.surface)
   const normalizedSurfaceSecondary = normalizeThemeColor(
     rawTheme.surfaceSecondary,
@@ -1417,8 +1439,10 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
           rawSemanticColors.diffRemoved,
           variantFallback.theme.semanticColors.diffRemoved
         ),
-        skill: normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill),
+        skill: normalizedSkill,
         keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword),
+        sftp: normalizedSftp,
+        ftp: normalizedFtp,
         secondary: normalizeThemeColor(rawSemanticColors.secondary, variantFallback.theme.semanticColors.secondary),
         textSecondary: normalizeThemeColor(
           rawSemanticColors.textSecondary,
@@ -1427,7 +1451,7 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
         info: normalizeThemeColor(rawSemanticColors.info, variantFallback.theme.semanticColors.info),
         warning: normalizeThemeColor(rawSemanticColors.warning, variantFallback.theme.semanticColors.warning),
         error: normalizeThemeColor(rawSemanticColors.error, variantFallback.theme.semanticColors.error),
-        success: normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
+        success: normalizedSuccess
       },
       surface: normalizedSurface,
       surfaceSecondary: normalizedSurfaceSecondary,

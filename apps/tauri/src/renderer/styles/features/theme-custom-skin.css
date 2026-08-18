@@ -1,9 +1,9 @@
 /*
- * Custom theme surface bridge.
+ * Non-default theme surface bridge.
  *
- * Built-in FileTerm themes keep their historical component skins. Custom
- * themes use the compact surface hierarchy instead of inheriting those
- * built-in hard-coded backgrounds:
+ * The untouched FileTerm presets keep their historical component skins.
+ * Codex and all custom themes use the compact surface hierarchy instead of
+ * inheriting those built-in hard-coded backgrounds:
  *   surface          -> primary canvas
  *   surfaceSecondary -> sidebars and file panes
  *   surfaceElevated  -> title bars, tabs, controls, and overlays

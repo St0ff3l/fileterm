@@ -118,6 +118,8 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
       candidate.theme.ink,
       candidate.theme.semanticColors.secondary,
       candidate.theme.semanticColors.textSecondary,
+      candidate.theme.semanticColors.sftp,
+      candidate.theme.semanticColors.ftp,
       candidate.theme.semanticColors.info,
       candidate.theme.semanticColors.warning,
       candidate.theme.semanticColors.error,
@@ -131,6 +133,8 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
       themeConfig.theme.ink,
       themeConfig.theme.semanticColors.secondary,
       themeConfig.theme.semanticColors.textSecondary,
+      themeConfig.theme.semanticColors.sftp,
+      themeConfig.theme.semanticColors.ftp,
       themeConfig.theme.semanticColors.info,
       themeConfig.theme.semanticColors.warning,
       themeConfig.theme.semanticColors.error,
@@ -2641,6 +2645,16 @@ export function SettingsModal({
                         label={t.themeTextSecondaryColor}
                         onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
                         value={themeConfig.theme.semanticColors.textSecondary}
+                      />
+                      <ThemeColorField
+                        label={t.themeSftpColor}
+                        onChange={(value) => updateThemeSemanticColors({ sftp: value })}
+                        value={themeConfig.theme.semanticColors.sftp}
+                      />
+                      <ThemeColorField
+                        label={t.themeFtpColor}
+                        onChange={(value) => updateThemeSemanticColors({ ftp: value })}
+                        value={themeConfig.theme.semanticColors.ftp}
                       />
                     </div>
                   </section>
