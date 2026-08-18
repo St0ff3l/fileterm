@@ -2858,31 +2858,38 @@ export function SettingsModal({
                 <details className="theme-advanced-section theme-terminal-ansi-details">
                   <summary className="theme-config-section-summary">
                     <span className="theme-config-section-summary-copy">
-                      <strong>{t.themeAnsiNormal}</strong>
+                      <strong>{t.themeAnsiColors}</strong>
                       <span>{t.themeAnsiHint}</span>
                     </span>
                     <span className="theme-config-section-summary-count">16</span>
                   </summary>
-                  <div className="theme-ansi-grid">
-                    {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
-                      <ThemeColorField
-                        key={name}
-                        label={ANSI_COLOR_LABELS[name]}
-                        onChange={(value) => updateTerminalAnsiColor(name, value)}
-                        value={themeConfig.theme.terminal.ansi[name]}
-                      />
-                    ))}
-                  </div>
-                  <h4>{t.themeAnsiBright}</h4>
-                  <div className="theme-ansi-grid">
-                    {ANSI_COLOR_NAMES.slice(8).map((name) => (
-                      <ThemeColorField
-                        key={name}
-                        label={ANSI_COLOR_LABELS[name]}
-                        onChange={(value) => updateTerminalAnsiColor(name, value)}
-                        value={themeConfig.theme.terminal.ansi[name]}
-                      />
-                    ))}
+                  <div className="theme-terminal-ansi-groups">
+                    <section className="theme-terminal-ansi-group">
+                      <h5>{t.themeAnsiNormal}</h5>
+                      <div className="theme-config-fields">
+                        {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
+                          <ThemeColorField
+                            key={name}
+                            label={ANSI_COLOR_LABELS[name]}
+                            onChange={(value) => updateTerminalAnsiColor(name, value)}
+                            value={themeConfig.theme.terminal.ansi[name]}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                    <section className="theme-terminal-ansi-group">
+                      <h5>{t.themeAnsiBright}</h5>
+                      <div className="theme-config-fields">
+                        {ANSI_COLOR_NAMES.slice(8).map((name) => (
+                          <ThemeColorField
+                            key={name}
+                            label={ANSI_COLOR_LABELS[name]}
+                            onChange={(value) => updateTerminalAnsiColor(name, value)}
+                            value={themeConfig.theme.terminal.ansi[name]}
+                          />
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 </details>
 

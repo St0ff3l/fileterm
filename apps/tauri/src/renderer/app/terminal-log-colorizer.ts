@@ -45,6 +45,7 @@ const CELL_INDICES = 3
 const CELL_CONTENT = 0
 const CELL_FOREGROUND = 1
 const STYLE_MASK = 0xfc000000
+const FOREGROUND_INVERSE = 0x04000000
 const COLOR_MODE_RGB = 0x03000000
 const MAX_RECOLOR_LINES_PER_WRITE = 384
 
@@ -105,7 +106,12 @@ function parseRgb(value: string): number | null {
 }
 
 function withRgbForeground(original: number, rgb: number): number {
-  return (original & STYLE_MASK) | COLOR_MODE_RGB | (rgb & 0xffffff)
+  // xterm renders inverse cells by swapping foreground and background. The
+  // shell line editor uses that mode for parts of the echoed command, so
+  // preserving it would turn this foreground-only semantic color into a
+  // filled block. Keep the other foreground styles, but make recoloring
+  // explicitly foreground-only.
+  return (original & STYLE_MASK & ~FOREGROUND_INVERSE) | COLOR_MODE_RGB | (rgb & 0xffffff)
 }
 
 function getInternalLine(line: IBufferLine | undefined): InternalBufferLine | null {
