@@ -1497,8 +1497,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
   // Home's top bar and navigation rail share the same vertical split. Keep
   // the title-bar brand column synchronized while the rail is resized so the
-  // two divider segments never briefly occupy different x coordinates.
-  const brandWidth = resolvedSidebarWidth
+  // two divider segments never briefly occupy different x coordinates. A
+  // local-terminal workspace has no system sidebar at all, so it still needs
+  // a full brand lane; otherwise the native traffic-light inset consumes the
+  // collapsed 44px track and hides the FileTerm title under the first tab.
+  const brandWidth = shouldShowSystemSidebar ? resolvedSidebarWidth : 214
 
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,

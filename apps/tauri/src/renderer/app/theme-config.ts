@@ -325,7 +325,12 @@ function applyThemeOverrides(variables: Record<string, string>, overrides: Recor
 
 function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boolean {
   const defaultConfig = createDefaultThemeConfig(variant)
-  if (config.codeThemeId !== defaultConfig.codeThemeId) return false
+  // A custom configuration created directly from FileTerm starts with the
+  // exact default values. Keep that no-op custom preset on the historical
+  // FileTerm skin until the user actually changes a theme value.
+  const isFileTermPreset = config.codeThemeId === defaultConfig.codeThemeId
+  const isUnmodifiedFileTermCustom = config.codeThemeId === 'custom' && config.baseThemeId === 'fileterm'
+  if (!isFileTermPreset && !isUnmodifiedFileTermCustom) return false
   if (config.theme.overrides && Object.keys(config.theme.overrides).length > 0) return false
   const semanticColorKeys: Array<keyof ThemeConfig['theme']['semanticColors']> = [
     'diffAdded',
