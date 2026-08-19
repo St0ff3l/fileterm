@@ -348,10 +348,10 @@ export function FileTable({
                         row.name !== '..'
                           ? (event) => {
                               // Every desktop platform uses one native drag session for the
-                              // remote row. macOS supplies file promises; Windows/Linux expose
-                              // staged paths. The native drop event lets FileTerm route an
-                              // in-app drop back to the local pane while Explorer/Nautilus gets
-                              // the same real-file drag session.
+                              // remote row. macOS supplies file promises; Windows/Linux lazily
+                              // materialize paths when the drop target requests file data. The
+                              // native drop event lets FileTerm route an in-app drop back to the
+                              // local pane while Explorer/Nautilus gets the same real-file drag.
                               if (unifiedNativeDrag || event.altKey) {
                                 onNativeDragStart?.(event, row)
                               }

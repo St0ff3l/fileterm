@@ -280,8 +280,8 @@ export function FileManager({
 }) {
   const defaultRemoteSort = { field: 'name', direction: 'asc' } satisfies RemoteFileSortState
   const desktopApi = window.fileterm
-  // macOS uses NSFilePromiseProvider; Windows/Linux use the native staged-file
-  // fallback. All desktop platforms therefore use one pointer gesture for
+  // macOS uses NSFilePromiseProvider; Windows/Linux use lazy native file data
+  // providers. All desktop platforms therefore use one pointer gesture for
   // internal and external destinations. Browser HTML5 drag remains available
   // for local-file uploads and for the non-desktop renderer fallback.
   const useUnifiedNativeRemoteDrag =
@@ -355,9 +355,9 @@ export function FileManager({
     }
 
     const stopTrackingExternalDrag = (detail: { paths: string[] }) => {
-      // On Windows/Linux the native drag itself exposes the staged paths while
-      // it hovers over this window. Do not mistake that for a new external
-      // drag; the active payload is needed when the local pane receives Drop.
+      // On Windows/Linux the native provider exposes paths only after the drop
+      // target requests file data. Do not mistake that path event for a new
+      // external drag; the active payload is needed when the local pane receives Drop.
       // macOS promises have no paths, so a later real external file drop can
       // still clear a stale macOS payload here.
       if (detail.paths.length && desktopApi?.platform === 'darwin') {

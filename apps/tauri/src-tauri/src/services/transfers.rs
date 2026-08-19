@@ -2480,6 +2480,60 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
     Ok(())
 }
 
+/// Clean up a transfer created by a native drag-out operation while retaining
+/// its terminal record. Failed and canceled drag downloads are intentionally
+/// visible in the completed/terminated history so the user can see why the
+/// drag failed.
+pub(crate) async fn cleanup_drag_transfer(
+    app: &AppHandle,
+    transfer_id: &str,
+) -> Result<(), AppError> {
+    discard(app, transfer_id.to_string()).await
+}
+
+/// Clean up all download tasks whose destination belongs to a native drag
+/// staging directory. This is a second line of defense for failures that
+/// happen after the provider has materialized paths but before the OS accepts
+/// the drop, when the individual transfer IDs are no longer at the call site.
+#[cfg(not(target_os = "macos"))]
+pub(crate) async fn cleanup_drag_transfers_in_stage(
+    app: &AppHandle,
+    stage_root: &Path,
+) -> Result<(), AppError> {
+    ensure_loaded(app).await?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let transfer_ids = state
+        .transfers
+        .read()
+        .await
+        .iter()
+        .filter(|task| {
+            task.direction == "download"
+                && (task_path_in_stage(task.destination_path.as_deref(), stage_root)
+                    || task.manifest.as_ref().is_some_and(|manifest| {
+                        manifest.files.iter().any(|entry| {
+                            task_path_in_stage(Some(entry.destination_path.as_str()), stage_root)
+                                || task_path_in_stage(Some(entry.partial_path.as_str()), stage_root)
+                        })
+                    }))
+        })
+        .map(|task| task.id.clone())
+        .collect::<std::collections::HashSet<_>>();
+
+    let mut first_error = None;
+    for transfer_id in transfer_ids {
+        if let Err(error) = cleanup_drag_transfer(app, &transfer_id).await {
+            first_error.get_or_insert(error);
+        }
+    }
+    first_error.map_or(Ok(()), Err)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn task_path_in_stage(path: Option<&str>, stage_root: &Path) -> bool {
+    path.is_some_and(|path| Path::new(path).starts_with(stage_root))
+}
+
 pub async fn resume(app: &AppHandle, transfer_id: String) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;

@@ -455,10 +455,19 @@ async fn write_remote_item(
     }
     .map_err(|error| error.to_string())?;
 
-    crate::services::transfers::wait_for_transfer(app, &transfer_id)
-        .await
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    if let Err(error) = crate::services::transfers::wait_for_transfer(app, &transfer_id).await {
+        let cleanup_result =
+            crate::services::transfers::cleanup_drag_transfer(app, &transfer_id).await;
+        return match cleanup_result {
+            Ok(()) => Err(error.to_string()),
+            Err(cleanup_error) => Err(format!(
+                "{}；拖出失败任务清理失败：{}",
+                error, cleanup_error
+            )),
+        };
+    }
+
+    Ok(())
 }
 
 fn complete_promise(

@@ -1,4 +1,3 @@
-#[cfg(not(target_os = "macos"))]
 use std::collections::HashSet;
 use std::path::Path;
 #[cfg(not(target_os = "macos"))]
@@ -19,9 +18,17 @@ use crate::AppError;
 #[path = "macos.rs"]
 mod macos;
 
+#[cfg(target_os = "windows")]
+#[path = "windows_drag.rs"]
+mod windows_drag;
+
+#[cfg(target_os = "linux")]
+#[path = "linux_drag.rs"]
+mod linux_drag;
+
 #[cfg(not(target_os = "macos"))]
 const DRAG_STAGING_CLEANUP_DELAY: Duration = Duration::from_secs(300);
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 const DRAG_IMAGE: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/icons/128x128.png"));
 
 #[derive(Clone, Debug, Deserialize)]
@@ -37,9 +44,10 @@ pub struct RemoteFileDragItem {
 ///
 /// macOS uses `NSFilePromiseProvider`, so the drag session starts immediately
 /// and the transfer begins only after Finder (or another drop target) gives us
-/// its destination URL. Windows/Linux use a staged local-path drag because
-/// their common desktop drag APIs do not expose a cross-desktop file-promise
-/// contract through the current Tauri stack.
+/// its destination URL. Windows and Linux use lazy native data providers: the
+/// drag session starts without downloading bytes, and the first request for
+/// native file data prepares a temporary local path. This keeps the transfer
+/// after the user has actually dropped into Explorer/Nautilus or FileTerm.
 pub async fn start_remote_file_drag(
     app: &AppHandle,
     window_label: &str,
@@ -49,13 +57,24 @@ pub async fn start_remote_file_drag(
     if items.is_empty() {
         return Err(AppError::Command("没有可拖出的远程文件".to_string()));
     }
+    validate_remote_drag_items(&items)?;
 
     #[cfg(target_os = "macos")]
     {
         return macos::start_remote_file_drag(app, window_label, tab_id, items).await;
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        return windows_drag::start_remote_file_drag(app, window_label, tab_id, items).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        return linux_drag::start_remote_file_drag(app, window_label, tab_id, items).await;
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     start_staged_remote_file_drag(app, window_label, tab_id, items).await
 }
 
@@ -63,7 +82,7 @@ pub async fn start_remote_file_drag(
 ///
 /// This is intentionally isolated from the macOS path so it cannot silently
 /// become the default there again.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 async fn start_staged_remote_file_drag(
     app: &AppHandle,
     window_label: &str,
@@ -72,9 +91,58 @@ async fn start_staged_remote_file_drag(
 ) -> Result<(), AppError> {
     let stage_root =
         std::env::temp_dir().join(format!("fileterm-remote-drag-{}", uuid::Uuid::new_v4()));
-    tokio::fs::create_dir_all(&stage_root)
-        .await
-        .map_err(|error| AppError::Command(format!("创建拖出临时目录失败：{error}")))?;
+    let absolute_paths = prepare_staged_remote_paths(app, tab_id, &items, &stage_root).await?;
+
+    let window = match app.get_webview_window(window_label) {
+        Some(window) => window,
+        None => {
+            if let Err(cleanup_error) =
+                crate::services::transfers::cleanup_drag_transfers_in_stage(app, &stage_root).await
+            {
+                log::warn!("清理拖出阶段任务失败：{cleanup_error}");
+            }
+            remove_staging_dir(&stage_root).await;
+            return Err(AppError::Command("拖出窗口不存在".to_string()));
+        }
+    };
+    if let Err(error) = start_native_drag(
+        app.clone(),
+        window,
+        window_label,
+        absolute_paths,
+        stage_root.clone(),
+    )
+    .await
+    {
+        if let Err(cleanup_error) =
+            crate::services::transfers::cleanup_drag_transfers_in_stage(app, &stage_root).await
+        {
+            log::warn!("清理拖出阶段任务失败：{cleanup_error}");
+        }
+        remove_staging_dir(&stage_root).await;
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+/// Download remote drag items into a private temporary directory.
+///
+/// This helper is deliberately called by the platform data provider, rather
+/// than by `start_remote_file_drag`, on Windows/Linux. As a result, creating
+/// the drag session itself never starts a transfer; the helper runs only when
+/// the native drop target asks for actual file data.
+#[cfg(not(target_os = "macos"))]
+pub(crate) async fn prepare_staged_remote_paths(
+    app: &AppHandle,
+    tab_id: &str,
+    items: &[RemoteFileDragItem],
+    stage_root: &Path,
+) -> Result<Vec<PathBuf>, AppError> {
+    if let Err(error) = tokio::fs::create_dir_all(stage_root).await {
+        remove_staging_dir(stage_root).await;
+        return Err(AppError::Command(format!("创建拖出临时目录失败：{error}")));
+    }
 
     let mut names = HashSet::new();
     let mut transfer_ids = Vec::with_capacity(items.len());
@@ -84,14 +152,14 @@ async fn start_staged_remote_file_drag(
         let name = match safe_drag_name(&item.name) {
             Ok(name) => name,
             Err(error) => {
-                cancel_drag_transfers(app, &transfer_ids).await;
-                remove_staging_dir(&stage_root).await;
+                cleanup_drag_transfers(app, &transfer_ids).await;
+                remove_staging_dir(stage_root).await;
                 return Err(error);
             }
         };
-        if !names.insert(name.clone()) {
-            cancel_drag_transfers(app, &transfer_ids).await;
-            remove_staging_dir(&stage_root).await;
+        if !names.insert(drag_name_key(&name)) {
+            cleanup_drag_transfers(app, &transfer_ids).await;
+            remove_staging_dir(stage_root).await;
             return Err(AppError::Command(format!("拖出项目名称重复：{name}")));
         }
 
@@ -101,7 +169,7 @@ async fn start_staged_remote_file_drag(
                 crate::services::transfers::create_download(
                     app,
                     tab_id.to_string(),
-                    item.path,
+                    item.path.clone(),
                     local_directory,
                     Some(name.clone()),
                 )
@@ -111,7 +179,7 @@ async fn start_staged_remote_file_drag(
                 crate::services::transfers::create_download_directory(
                     app,
                     tab_id.to_string(),
-                    item.path,
+                    item.path.clone(),
                     local_directory,
                     Some(name.clone()),
                 )
@@ -123,8 +191,8 @@ async fn start_staged_remote_file_drag(
         let transfer_id = match transfer_result {
             Ok(transfer_id) => transfer_id,
             Err(error) => {
-                cancel_drag_transfers(app, &transfer_ids).await;
-                remove_staging_dir(&stage_root).await;
+                cleanup_drag_transfers(app, &transfer_ids).await;
+                remove_staging_dir(stage_root).await;
                 return Err(error);
             }
         };
@@ -134,44 +202,55 @@ async fn start_staged_remote_file_drag(
 
     for transfer_id in &transfer_ids {
         if let Err(error) = crate::services::transfers::wait_for_transfer(app, transfer_id).await {
-            cancel_drag_transfers(app, &transfer_ids).await;
-            remove_staging_dir(&stage_root).await;
+            cleanup_drag_transfers(app, &transfer_ids).await;
+            remove_staging_dir(stage_root).await;
             return Err(error);
         }
     }
 
     let mut absolute_paths = Vec::with_capacity(staged_paths.len());
     for path in staged_paths {
-        let absolute_path = match std::fs::canonicalize(&path) {
-            Ok(path) => path,
+        match std::fs::canonicalize(&path) {
+            Ok(path) => absolute_paths.push(path),
             Err(error) => {
-                remove_staging_dir(&stage_root).await;
+                cleanup_drag_transfers(app, &transfer_ids).await;
+                remove_staging_dir(stage_root).await;
                 return Err(AppError::Command(format!(
                     "拖出文件准备失败：{}：{error}",
                     path.display()
                 )));
             }
-        };
-        absolute_paths.push(absolute_path);
+        }
     }
+    Ok(absolute_paths)
+}
 
-    let window = app
-        .get_webview_window(window_label)
-        .ok_or_else(|| AppError::Command("拖出窗口不存在".to_string()))?;
-    if let Err(error) = start_native_drag(
-        app.clone(),
-        window,
-        window_label,
-        absolute_paths,
-        stage_root.clone(),
-    )
-    .await
-    {
-        remove_staging_dir(&stage_root).await;
-        return Err(error);
+fn validate_remote_drag_items(items: &[RemoteFileDragItem]) -> Result<(), AppError> {
+    let mut names = HashSet::new();
+    for item in items {
+        let name = safe_drag_name(&item.name)?;
+        if item.path.trim().is_empty() || item.path.contains('\0') {
+            return Err(AppError::Command("远程拖出路径无效".to_string()));
+        }
+        if !matches!(item.item_type.as_str(), "file" | "folder") {
+            return Err(AppError::Command("远程拖出项目类型无效".to_string()));
+        }
+        if !names.insert(drag_name_key(&name)) {
+            return Err(AppError::Command(format!("拖出项目名称重复：{name}")));
+        }
     }
-
     Ok(())
+}
+
+fn drag_name_key(name: &str) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        name.to_lowercase()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        name.to_string()
+    }
 }
 
 fn safe_drag_name(name: &str) -> Result<String, AppError> {
@@ -186,24 +265,62 @@ fn safe_drag_name(name: &str) -> Result<String, AppError> {
     {
         return Err(AppError::Command("远程拖出文件名无效".to_string()));
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        if name.ends_with(['.', ' '])
+            || name.chars().any(|character| {
+                character.is_control()
+                    || matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*')
+            })
+            || is_windows_reserved_name(name)
+        {
+            return Err(AppError::Command(
+                "远程拖出文件名在 Windows 上无效".to_string(),
+            ));
+        }
+    }
+
     Ok(name.to_string())
 }
 
+#[cfg(target_os = "windows")]
+fn is_windows_reserved_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit()
+            && stem.as_bytes()[3] != b'0')
+}
+
 #[cfg(not(target_os = "macos"))]
-async fn cancel_drag_transfers(app: &AppHandle, transfer_ids: &[String]) {
+async fn cleanup_drag_transfers(app: &AppHandle, transfer_ids: &[String]) {
     for transfer_id in transfer_ids {
-        let _ = crate::services::transfers::discard(app, transfer_id.clone()).await;
+        if let Err(error) =
+            crate::services::transfers::cleanup_drag_transfer(app, transfer_id).await
+        {
+            log::warn!("清理拖出传输任务失败 {transfer_id}: {error}");
+        }
     }
 }
 
 #[cfg(not(target_os = "macos"))]
 async fn remove_staging_dir(path: &Path) {
-    let _ = tokio::fs::remove_dir_all(path).await;
+    if let Err(error) = tokio::fs::remove_dir_all(path).await {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            log::warn!("清理拖出临时目录失败 {}: {error}", path.display());
+        }
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
 fn remove_staging_dir_sync(path: &Path) {
-    let _ = std::fs::remove_dir_all(path);
+    if let Err(error) = std::fs::remove_dir_all(path) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            log::warn!("清理拖出临时目录失败 {}: {error}", path.display());
+        }
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -214,7 +331,7 @@ fn schedule_staging_cleanup(path: PathBuf) {
     });
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 async fn start_native_drag(
     app: AppHandle,
     window: WebviewWindow,
@@ -245,7 +362,7 @@ async fn start_native_drag(
         .map_err(AppError::Command)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn start_native_drag_on_main_thread(
     app: AppHandle,
     window_label: String,
@@ -287,4 +404,48 @@ fn start_native_drag_on_main_thread(
         return Err(error.to_string());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(path: &str, name: &str, item_type: &str) -> RemoteFileDragItem {
+        RemoteFileDragItem {
+            path: path.to_string(),
+            name: name.to_string(),
+            item_type: item_type.to_string(),
+        }
+    }
+
+    #[test]
+    fn validates_mixed_file_and_folder_drag_items() {
+        let items = vec![
+            item("/remote/file.txt", "file.txt", "file"),
+            item("/remote", "remote", "folder"),
+        ];
+
+        assert!(validate_remote_drag_items(&items).is_ok());
+    }
+
+    #[test]
+    fn rejects_duplicate_names_after_normalization() {
+        let items = vec![
+            item("/remote/a", "a", "file"),
+            item("/remote/b", " a ", "folder"),
+        ];
+
+        assert!(validate_remote_drag_items(&items).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_paths_and_item_types_before_starting_drag() {
+        assert!(validate_remote_drag_items(&[item("", "file.txt", "file")]).is_err());
+        assert!(
+            validate_remote_drag_items(&[item("/remote/file.txt", "file.txt", "link")]).is_err()
+        );
+        assert!(
+            validate_remote_drag_items(&[item("/remote/file.txt", "../file.txt", "file")]).is_err()
+        );
+    }
 }

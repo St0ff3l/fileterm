@@ -1396,6 +1396,7 @@ dependencies = [
  "drag",
  "encoding_rs",
  "flate2",
+ "gdk",
  "gtk",
  "hmac 0.12.1",
  "libc",

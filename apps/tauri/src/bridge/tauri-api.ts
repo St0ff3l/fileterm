@@ -234,9 +234,9 @@ void currentWindow
   })
   .catch(() => undefined)
 
-// The native staged drag on Windows/Linux completes outside the webview's
-// pointer event stream. Forward its terminal callback so a canceled external
-// drag cannot leave the renderer holding an old remote payload.
+// The lazy native drag on Windows/Linux completes outside the webview's pointer
+// event stream. Forward its terminal callback so a canceled external drag cannot
+// leave the renderer holding an old remote payload.
 void currentWindow
   .listen('fileterm://remote-native-drag-finished', () => {
     dispatchAppEvent(APP_EVENT.tauriNativeRemoteDragFinished)
