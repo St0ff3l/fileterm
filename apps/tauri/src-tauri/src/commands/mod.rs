@@ -34,6 +34,14 @@ const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 /// `cmd_rx.recv()` 会返回 None，自然走清理路径。
 const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// The first local PTY batch must be reflected in the snapshot returned by
+/// `app_open_local_terminal` when possible. Without this short readiness
+/// window, the renderer can mount with only "Starting local shell..." while
+/// the first Windows PowerShell prompt was emitted before its global terminal
+/// data channel subscribed. Shells that intentionally stay silent are still
+/// allowed to connect after the timeout.
+const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Let a child-window close command resolve its IPC callback before destroying
 /// the calling WebView. Destroying synchronously makes WebView2 report a
 /// missing callback id and can leave renderer cleanup half-finished.
@@ -721,6 +729,10 @@ pub struct UiPreferences {
     pub terminal_zoom_locked: bool,
     #[serde(default = "default_file_panel_remember_ratio")]
     pub file_panel_remember_ratio: bool,
+    #[serde(default = "default_resource_monitoring_metrics")]
+    pub resource_monitoring_metrics: Vec<String>,
+    #[serde(default = "default_resource_monitoring_metric_order")]
+    pub resource_monitoring_metric_order: Vec<String>,
     #[serde(default)]
     pub connection_defaults: SshConnectionDefaults,
     #[serde(default)]
@@ -748,6 +760,8 @@ pub struct UiPreferencesInput {
     pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
     pub file_panel_remember_ratio: Option<bool>,
+    pub resource_monitoring_metrics: Option<Vec<String>>,
+    pub resource_monitoring_metric_order: Option<Vec<String>>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
     pub mcp_agent: Option<McpAgentPreferencesInput>,
     pub overview_show_stats: Option<bool>,
@@ -772,6 +786,41 @@ fn default_update_channel() -> String {
 
 fn default_file_panel_remember_ratio() -> bool {
     true
+}
+
+fn default_resource_monitoring_metrics() -> Vec<String> {
+    [
+        "load",
+        "cpu",
+        "memory",
+        "swap",
+        "disk",
+        "processes",
+        "network",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+fn default_resource_monitoring_metric_order() -> Vec<String> {
+    [
+        "load",
+        "cpu",
+        "cpuTemperature",
+        "memory",
+        "swap",
+        "disk",
+        "gpu",
+        "gpuMemory",
+        "gpuTemperature",
+        "gpuPower",
+        "processes",
+        "network",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
 }
 
 fn default_use_empty_password() -> bool {
@@ -841,6 +890,61 @@ fn normalize_overview_section_order(order: Vec<String>) -> Vec<String> {
     for section in DEFAULT_OVERVIEW_SECTION_ORDER {
         if !normalized.iter().any(|existing| existing == section) {
             normalized.push(section.to_string());
+        }
+    }
+    normalized
+}
+
+fn normalize_resource_monitoring_metrics(metrics: Vec<String>) -> Vec<String> {
+    const VALID_METRICS: [&str; 12] = [
+        "load",
+        "cpu",
+        "cpuTemperature",
+        "memory",
+        "swap",
+        "disk",
+        "gpu",
+        "gpuMemory",
+        "gpuTemperature",
+        "gpuPower",
+        "processes",
+        "network",
+    ];
+
+    let mut normalized = Vec::with_capacity(metrics.len());
+    for metric in metrics {
+        if VALID_METRICS.contains(&metric.as_str()) && !normalized.contains(&metric) {
+            normalized.push(metric);
+        }
+    }
+    normalized
+}
+
+fn normalize_resource_monitoring_metric_order(order: Vec<String>) -> Vec<String> {
+    const VALID_METRICS: [&str; 12] = [
+        "load",
+        "cpu",
+        "cpuTemperature",
+        "memory",
+        "swap",
+        "disk",
+        "gpu",
+        "gpuMemory",
+        "gpuTemperature",
+        "gpuPower",
+        "processes",
+        "network",
+    ];
+
+    let mut normalized = Vec::with_capacity(VALID_METRICS.len());
+    for metric in order {
+        if VALID_METRICS.contains(&metric.as_str()) && !normalized.contains(&metric) {
+            normalized.push(metric);
+        }
+    }
+    for metric in VALID_METRICS {
+        if !normalized.iter().any(|existing| existing == metric) {
+            normalized.push(metric.to_string());
         }
     }
     normalized
@@ -940,6 +1044,10 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
+    preferences.resource_monitoring_metrics =
+        normalize_resource_monitoring_metrics(preferences.resource_monitoring_metrics);
+    preferences.resource_monitoring_metric_order =
+        normalize_resource_monitoring_metric_order(preferences.resource_monitoring_metric_order);
     preferences.theme_config = normalize_theme_config(
         preferences.theme_config,
         if preferences.theme == "default-light" {
@@ -1276,6 +1384,8 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             file_panel_remember_ratio: default_file_panel_remember_ratio(),
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: default_overview_show_stats(),
@@ -1328,6 +1438,12 @@ pub fn app_set_ui_preferences(
     }
     if let Some(file_panel_remember_ratio) = input.file_panel_remember_ratio {
         preferences.file_panel_remember_ratio = file_panel_remember_ratio;
+    }
+    if let Some(resource_monitoring_metrics) = input.resource_monitoring_metrics {
+        preferences.resource_monitoring_metrics = resource_monitoring_metrics;
+    }
+    if let Some(resource_monitoring_metric_order) = input.resource_monitoring_metric_order {
+        preferences.resource_monitoring_metric_order = resource_monitoring_metric_order;
     }
     if let Some(connection_defaults) = input.connection_defaults {
         if let Some(value) = connection_defaults.use_empty_password {
@@ -1427,6 +1543,8 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
             file_panel_remember_ratio: None,
+            resource_monitoring_metrics: None,
+            resource_monitoring_metric_order: None,
             connection_defaults: None,
             mcp_agent: None,
             overview_show_stats: None,
@@ -2763,7 +2881,8 @@ async fn spawn_local_terminal_tab(
     }
 
     match start_local_terminal_for_tab(app, state, &tab_id, launch).await {
-        Ok(()) => {
+        Ok(startup_ready) => {
+            let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup_ready).await;
             if is_split_pane {
                 crate::sessions::terminal::set_terminal_state_without_snapshot(
                     app,
@@ -2811,7 +2930,7 @@ async fn start_local_terminal_for_tab(
     state: &crate::services::workspace::WorkspaceState,
     tab_id: &str,
     launch: crate::sessions::local_terminal::LocalTerminalLaunch,
-) -> Result<(), String> {
+) -> Result<oneshot::Receiver<()>, String> {
     let (worker_tx, worker_rx) = mpsc::channel(16);
     let (terminal_input_tx, terminal_input_rx) = mpsc::unbounded_channel();
     let worker_control = CancellationToken::new();
@@ -2848,7 +2967,7 @@ async fn start_local_terminal_for_tab(
         .await
         .insert(tab_id.to_string(), launch.clone());
 
-    if let Err(error) = crate::sessions::local_terminal::start_local_terminal_worker(
+    let startup_ready = match crate::sessions::local_terminal::start_local_terminal_worker(
         tab_id.to_string(),
         runtime_id,
         worker_rx,
@@ -2858,19 +2977,22 @@ async fn start_local_terminal_for_tab(
         launch,
         runtime_gate,
     ) {
-        state.workers.write().await.remove(tab_id);
-        state.terminal_inputs.write().await.remove(tab_id);
-        state.worker_controls.write().await.remove(tab_id);
-        state
-            .local_terminal_runtime_ids
-            .write()
-            .await
-            .remove(tab_id);
-        crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
-        return Err(error);
-    }
+        Ok(startup_ready) => startup_ready,
+        Err(error) => {
+            state.workers.write().await.remove(tab_id);
+            state.terminal_inputs.write().await.remove(tab_id);
+            state.worker_controls.write().await.remove(tab_id);
+            state
+                .local_terminal_runtime_ids
+                .write()
+                .await
+                .remove(tab_id);
+            crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
+            return Err(error);
+        }
+    };
 
-    Ok(())
+    Ok(startup_ready)
 }
 
 fn supports_split_panes(session_type: &str) -> bool {
@@ -3486,7 +3608,8 @@ pub async fn app_reconnect_tab(
                 launch.cwd = cwd;
             }
             match start_local_terminal_for_tab(&app, &state, &tab_id, launch).await {
-                Ok(()) => {
+                Ok(startup_ready) => {
+                    let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup_ready).await;
                     crate::sessions::terminal::set_terminal_state(
                         &app,
                         &tab_id,
@@ -5257,9 +5380,11 @@ mod ui_preferences_tests {
     use std::collections::BTreeMap;
 
     use super::{
-        default_overview_section_order, default_theme_config, default_update_channel,
-        normalize_theme_config, normalize_ui_preferences, resolve_profile_with_connection_defaults,
-        McpAgentPreferences, SavedTheme, SshConnectionDefaults, UiPreferences, UiPreferencesInput,
+        default_overview_section_order, default_resource_monitoring_metric_order,
+        default_resource_monitoring_metrics, default_theme_config, default_update_channel,
+        normalize_resource_monitoring_metric_order, normalize_theme_config,
+        normalize_ui_preferences, resolve_profile_with_connection_defaults, McpAgentPreferences,
+        SavedTheme, SshConnectionDefaults, UiPreferences, UiPreferencesInput,
     };
 
     #[test]
@@ -5384,6 +5509,8 @@ mod ui_preferences_tests {
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: true,
@@ -5414,6 +5541,8 @@ mod ui_preferences_tests {
             update_channel: "nightly".to_string(),
             terminal_zoom_locked: false,
             file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: true,
@@ -5439,6 +5568,57 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn resource_monitoring_defaults_keep_gpu_metrics_opt_in_and_order_complete() {
+        let enabled = default_resource_monitoring_metrics();
+        let order = default_resource_monitoring_metric_order();
+
+        assert!(!enabled.iter().any(|metric| metric == "gpu"));
+        assert!(!enabled.iter().any(|metric| metric == "gpuMemory"));
+        assert!(!enabled.iter().any(|metric| metric == "gpuTemperature"));
+        assert!(!enabled.iter().any(|metric| metric == "gpuPower"));
+        assert_eq!(order.len(), 12);
+        let expected_order: Vec<String> = [
+            "load",
+            "cpu",
+            "cpuTemperature",
+            "memory",
+            "swap",
+            "disk",
+            "gpu",
+            "gpuMemory",
+            "gpuTemperature",
+            "gpuPower",
+            "processes",
+            "network",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        assert_eq!(order, expected_order);
+    }
+
+    #[test]
+    fn resource_monitoring_metric_order_deduplicates_and_appends_missing_items() {
+        let normalized = normalize_resource_monitoring_metric_order(vec![
+            "network".to_string(),
+            "network".to_string(),
+            "not-a-metric".to_string(),
+            "cpu".to_string(),
+        ]);
+
+        assert_eq!(normalized[0], "network");
+        assert_eq!(normalized[1], "cpu");
+        assert_eq!(normalized.len(), 12);
+        assert_eq!(
+            normalized
+                .iter()
+                .filter(|metric| metric.as_str() == "network")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn keeps_supported_preferences_unchanged() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-light".to_string(),
@@ -5449,6 +5629,8 @@ mod ui_preferences_tests {
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
             file_panel_remember_ratio: false,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,
@@ -5494,6 +5676,8 @@ mod ui_preferences_tests {
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
                 connection_scope: "not-a-scope".to_string(),
@@ -5529,6 +5713,8 @@ mod ui_preferences_tests {
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
             file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
                 connection_scope: "default-connection".to_string(),
@@ -5655,6 +5841,8 @@ mod ui_preferences_tests {
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
             file_panel_remember_ratio: false,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,

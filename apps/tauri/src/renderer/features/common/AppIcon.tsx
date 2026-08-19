@@ -43,6 +43,7 @@ export type AppIconName =
   | 'chevron-right'
   | 'arrow-up'
   | 'arrow-down'
+  | 'drag-handle'
   | 'check'
   | 'play'
   | 'close'
@@ -343,6 +344,9 @@ export function AppIcon({
       {name === 'chevron-right' ? <path {...commonProps} d="m6 3.5 4.5 4.5L6 12.5" /> : null}
       {name === 'arrow-up' ? <path {...commonProps} d="M8 13V3m-4 4 4-4 4 4" /> : null}
       {name === 'arrow-down' ? <path {...commonProps} d="M8 3v10m-4-4 4 4 4-4" /> : null}
+      {name === 'drag-handle' ? (
+        <path {...commonProps} d="M5 4.5h.01M5 8h.01M5 11.5h.01M11 4.5h.01M11 8h.01M11 11.5h.01" strokeWidth={3} />
+      ) : null}
       {name === 'check' ? <path {...commonProps} d="m3.2 8.2 3.1 3.1 6.5-6.6" /> : null}
       {name === 'play' ? <path {...commonProps} d="M5.5 3.5v9l6.5-4.5z" /> : null}
       {name === 'close' ? <path {...commonProps} d="M3.5 3.5l9 9M12.5 3.5l-9 9" /> : null}

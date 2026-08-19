@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_RESOURCE_MONITORING_METRICS,
+  DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   createCodexThemeConfig,
@@ -18,6 +20,7 @@ import {
   type McpAgentPreferences,
   type McpAgentSetup,
   type OverviewSectionId,
+  type ResourceMonitoringMetric,
   type S3BackupConfig,
   type SavedTheme,
   type SshConnectionDefaults,
@@ -83,6 +86,24 @@ const ANSI_COLOR_LABELS: Record<TerminalAnsiColorName, string> = {
   brightCyan: 'Bright Cyan',
   brightWhite: 'Bright White'
 }
+
+const RESOURCE_MONITORING_ITEM_OPTIONS: Array<{
+  key: ResourceMonitoringMetric
+  labelKey: keyof LocaleMessages
+}> = [
+  { key: 'load', labelKey: 'load' },
+  { key: 'cpu', labelKey: 'cpu' },
+  { key: 'cpuTemperature', labelKey: 'cpuTemperature' },
+  { key: 'memory', labelKey: 'memory' },
+  { key: 'swap', labelKey: 'swap' },
+  { key: 'disk', labelKey: 'disk' },
+  { key: 'gpu', labelKey: 'gpu' },
+  { key: 'gpuMemory', labelKey: 'gpuMemory' },
+  { key: 'gpuTemperature', labelKey: 'gpuTemperature' },
+  { key: 'gpuPower', labelKey: 'gpuPower' },
+  { key: 'processes', labelKey: 'resourceMonitoringProcesses' },
+  { key: 'network', labelKey: 'resourceMonitoringNetwork' }
+]
 
 const THEME_PRESETS: Array<{
   id: ThemePresetFamily
@@ -526,6 +547,14 @@ export function SettingsModal({
   }))
   const [isSavingConnectionDefaults, setIsSavingConnectionDefaults] = useState(false)
   const [connectionDefaultsError, setConnectionDefaultsError] = useState<string | null>(null)
+  const [resourceMonitoringMetrics, setResourceMonitoringMetrics] = useState<ResourceMonitoringMetric[]>(() => [
+    ...DEFAULT_RESOURCE_MONITORING_METRICS
+  ])
+  const [resourceMonitoringMetricOrder, setResourceMonitoringMetricOrder] = useState<ResourceMonitoringMetric[]>(() => [
+    ...DEFAULT_RESOURCE_MONITORING_METRIC_ORDER
+  ])
+  const [isSavingResourceMonitoringMetrics, setIsSavingResourceMonitoringMetrics] = useState(false)
+  const [resourceMonitoringMetricsError, setResourceMonitoringMetricsError] = useState<string | null>(null)
   const [overviewShowStats, setOverviewShowStats] = useState(true)
   const [overviewShowRecent, setOverviewShowRecent] = useState(true)
   const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(true)
@@ -538,6 +567,11 @@ export function SettingsModal({
   const [overviewDragPosition, setOverviewDragPosition] = useState<ManagerDropPosition | null>(null)
   const [isSavingOverviewPreference, setIsSavingOverviewPreference] = useState(false)
   const [overviewPreferenceError, setOverviewPreferenceError] = useState<string | null>(null)
+  const [draggingResourceMonitoringMetric, setDraggingResourceMonitoringMetric] =
+    useState<ResourceMonitoringMetric | null>(null)
+  const [dragOverResourceMonitoringMetric, setDragOverResourceMonitoringMetric] =
+    useState<ResourceMonitoringMetric | null>(null)
+  const [resourceMonitoringDragPosition, setResourceMonitoringDragPosition] = useState<ManagerDropPosition | null>(null)
   const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
   const [syncPassword, setSyncPassword] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
@@ -574,6 +608,12 @@ export function SettingsModal({
     position: ManagerDropPosition | null
   }>({ source: null, target: null, position: null })
   const suppressOverviewCardClickRef = useRef(false)
+  const resourceMonitoringDragStateRef = useRef<{
+    source: ResourceMonitoringMetric | null
+    target: ResourceMonitoringMetric | null
+    position: ManagerDropPosition | null
+  }>({ source: null, target: null, position: null })
+  const suppressResourceMonitoringCardClickRef = useRef(false)
   const desktopApi = window.fileterm
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
 
@@ -644,6 +684,10 @@ export function SettingsModal({
           setUpdateChannel(preferences.updateChannel)
           setTerminalZoomLocked(preferences.terminalZoomLocked)
           setFilePanelRememberRatio(preferences.filePanelRememberRatio)
+          setResourceMonitoringMetrics(preferences.resourceMonitoringMetrics ?? DEFAULT_RESOURCE_MONITORING_METRICS)
+          setResourceMonitoringMetricOrder(
+            preferences.resourceMonitoringMetricOrder ?? DEFAULT_RESOURCE_MONITORING_METRIC_ORDER
+          )
           setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
           setOverviewShowStats(preferences.overviewShowStats)
@@ -669,6 +713,10 @@ export function SettingsModal({
         setUpdateChannel(preferences.updateChannel)
         setTerminalZoomLocked(preferences.terminalZoomLocked)
         setFilePanelRememberRatio(preferences.filePanelRememberRatio)
+        setResourceMonitoringMetrics(preferences.resourceMonitoringMetrics ?? DEFAULT_RESOURCE_MONITORING_METRICS)
+        setResourceMonitoringMetricOrder(
+          preferences.resourceMonitoringMetricOrder ?? DEFAULT_RESOURCE_MONITORING_METRIC_ORDER
+        )
         setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
         setOverviewShowStats(preferences.overviewShowStats)
@@ -1069,6 +1117,65 @@ export function SettingsModal({
         setConnectionDefaultsError(t.connectionDefaultsSaveFailed)
       })
       .finally(() => setIsSavingConnectionDefaults(false))
+  }
+
+  const persistResourceMonitoringMetrics = (next: ResourceMonitoringMetric[], previous: ResourceMonitoringMetric[]) => {
+    if (!desktopApi || isSavingResourceMonitoringMetrics) {
+      return
+    }
+
+    setResourceMonitoringMetrics(next)
+    setResourceMonitoringMetricsError(null)
+    setIsSavingResourceMonitoringMetrics(true)
+    void desktopApi
+      .setUiPreferences({ resourceMonitoringMetrics: next })
+      .then((preferences) => {
+        setResourceMonitoringMetrics(preferences.resourceMonitoringMetrics)
+        setResourceMonitoringMetricOrder(preferences.resourceMonitoringMetricOrder)
+      })
+      .catch(() => {
+        setResourceMonitoringMetrics(previous)
+        setResourceMonitoringMetricsError(t.resourceMonitoringMetricsSaveFailed)
+      })
+      .finally(() => setIsSavingResourceMonitoringMetrics(false))
+  }
+
+  const setResourceMonitoringMetric = (metric: ResourceMonitoringMetric, enabled: boolean) => {
+    if (!desktopApi || isSavingResourceMonitoringMetrics) {
+      return
+    }
+
+    const previous = resourceMonitoringMetrics
+    const next = enabled ? Array.from(new Set([...previous, metric])) : previous.filter((item) => item !== metric)
+    if (JSON.stringify(previous) === JSON.stringify(next)) {
+      return
+    }
+
+    persistResourceMonitoringMetrics(next, previous)
+  }
+
+  const persistResourceMonitoringMetricOrder = (
+    next: ResourceMonitoringMetric[],
+    previous: ResourceMonitoringMetric[]
+  ) => {
+    if (!desktopApi || isSavingResourceMonitoringMetrics) {
+      return
+    }
+
+    setResourceMonitoringMetricOrder(next)
+    setResourceMonitoringMetricsError(null)
+    setIsSavingResourceMonitoringMetrics(true)
+    void desktopApi
+      .setUiPreferences({ resourceMonitoringMetricOrder: next })
+      .then((preferences) => {
+        setResourceMonitoringMetrics(preferences.resourceMonitoringMetrics)
+        setResourceMonitoringMetricOrder(preferences.resourceMonitoringMetricOrder)
+      })
+      .catch(() => {
+        setResourceMonitoringMetricOrder(previous)
+        setResourceMonitoringMetricsError(t.resourceMonitoringMetricsSaveFailed)
+      })
+      .finally(() => setIsSavingResourceMonitoringMetrics(false))
   }
 
   const setTerminalZoomLockPreference = (nextValue: boolean) => {
@@ -1589,6 +1696,114 @@ export function SettingsModal({
       })
       .finally(() => setIsSavingOverviewPreference(false))
   }
+
+  const resetResourceMonitoringMetricOrder = () => {
+    if (!desktopApi || isSavingResourceMonitoringMetrics) {
+      return
+    }
+
+    const previousOrder = resourceMonitoringMetricOrder
+    const nextOrder = [...DEFAULT_RESOURCE_MONITORING_METRIC_ORDER]
+    if (nextOrder.every((metric, index) => metric === previousOrder[index])) {
+      return
+    }
+
+    persistResourceMonitoringMetricOrder(nextOrder, previousOrder)
+  }
+
+  const clearResourceMonitoringDragState = () => {
+    resourceMonitoringDragStateRef.current = { source: null, target: null, position: null }
+    setDraggingResourceMonitoringMetric(null)
+    setDragOverResourceMonitoringMetric(null)
+    setResourceMonitoringDragPosition(null)
+    window.setTimeout(() => {
+      suppressResourceMonitoringCardClickRef.current = false
+    }, 0)
+  }
+
+  const setResourceMonitoringDropTarget = (target: ResourceMonitoringMetric, position: ManagerDropPosition) => {
+    if (
+      resourceMonitoringDragStateRef.current.target === target &&
+      resourceMonitoringDragStateRef.current.position === position
+    ) {
+      return
+    }
+
+    resourceMonitoringDragStateRef.current.target = target
+    resourceMonitoringDragStateRef.current.position = position
+    setDragOverResourceMonitoringMetric(target)
+    setResourceMonitoringDragPosition(position)
+  }
+
+  const positionForResourceMonitoringTarget = (target: PointerSortTarget, clientY: number) => {
+    if (target.kind === 'resource-monitoring-metric-top') {
+      return 'top' as const
+    }
+
+    return resolveManagerDropPosition(target.element, clientY, false)
+  }
+
+  const applyResourceMonitoringMetricDrop = (
+    source: ResourceMonitoringMetric,
+    target: ResourceMonitoringMetric,
+    position: ManagerDropPosition
+  ) => {
+    if (source === target || position === 'inside' || isSavingResourceMonitoringMetrics) {
+      return
+    }
+
+    const previousOrder = resourceMonitoringMetricOrder
+    const nextOrder = previousOrder.filter((metric) => metric !== source)
+    const targetIndex = nextOrder.indexOf(target)
+    if (targetIndex === -1) {
+      return
+    }
+
+    nextOrder.splice(position === 'bottom' ? targetIndex + 1 : targetIndex, 0, source)
+    if (nextOrder.every((metric, index) => metric === previousOrder[index])) {
+      return
+    }
+
+    persistResourceMonitoringMetricOrder(nextOrder, previousOrder)
+  }
+
+  const handleResourceMonitoringPointerDown = usePointerSortFallback<ResourceMonitoringMetric>({
+    onStart: (metric) => {
+      if (isSavingResourceMonitoringMetrics) {
+        return
+      }
+      suppressResourceMonitoringCardClickRef.current = true
+      resourceMonitoringDragStateRef.current = { source: metric, target: null, position: null }
+      setDraggingResourceMonitoringMetric(metric)
+    },
+    onTarget: (source, target, clientY) => {
+      if (
+        source === target.id ||
+        (target.kind !== 'resource-monitoring-metric' && target.kind !== 'resource-monitoring-metric-top')
+      ) {
+        return
+      }
+      setResourceMonitoringDropTarget(
+        target.id as ResourceMonitoringMetric,
+        positionForResourceMonitoringTarget(target, clientY)
+      )
+    },
+    onDrop: (source, target, clientY) => {
+      if (
+        target &&
+        (target.kind === 'resource-monitoring-metric' || target.kind === 'resource-monitoring-metric-top') &&
+        source !== target.id
+      ) {
+        applyResourceMonitoringMetricDrop(
+          source,
+          target.id as ResourceMonitoringMetric,
+          positionForResourceMonitoringTarget(target, clientY)
+        )
+      }
+      clearResourceMonitoringDragState()
+    },
+    onCancel: clearResourceMonitoringDragState
+  })
 
   const clearOverviewDragState = () => {
     overviewDragStateRef.current = { source: null, target: null, position: null }
@@ -2514,6 +2729,82 @@ export function SettingsModal({
                           }
                         />
                       </label>
+                      <div className="resource-monitoring-items-section">
+                        <div className="resource-monitoring-items-header">
+                          <div>
+                            <strong>{t.resourceMonitoringItems}</strong>
+                            <p>{t.resourceMonitoringItemsHint}</p>
+                          </div>
+                          <button
+                            className="resource-monitoring-reset-button"
+                            disabled={!desktopApi || isSavingResourceMonitoringMetrics}
+                            onClick={resetResourceMonitoringMetricOrder}
+                            title={t.resourceMonitoringResetOrder}
+                            type="button"
+                          >
+                            <AppIcon name="refresh" size={13} />
+                            <span>{t.resourceMonitoringResetOrder}</span>
+                          </button>
+                        </div>
+                        <div className="resource-monitoring-items">
+                          {draggingResourceMonitoringMetric && resourceMonitoringMetricOrder[0] ? (
+                            <div
+                              aria-hidden="true"
+                              className="resource-monitoring-top-drop-zone"
+                              data-fileterm-sort-id={resourceMonitoringMetricOrder[0]}
+                              data-fileterm-sort-kind="resource-monitoring-metric-top"
+                            />
+                          ) : null}
+                          {resourceMonitoringMetricOrder.map((key) => {
+                            const item = RESOURCE_MONITORING_ITEM_OPTIONS.find((option) => option.key === key)
+                            if (!item) return null
+
+                            const isDragging = draggingResourceMonitoringMetric === key
+                            const isDragOver = dragOverResourceMonitoringMetric === key
+                            return (
+                              <div
+                                className={`resource-monitoring-item-card ${isDragging ? 'dragging' : ''} ${managerDropClass(isDragOver, resourceMonitoringDragPosition)}`}
+                                data-fileterm-sort-id={key}
+                                data-fileterm-sort-kind="resource-monitoring-metric"
+                                draggable={false}
+                                key={key}
+                                onClick={(event) => {
+                                  if (suppressResourceMonitoringCardClickRef.current) {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                  }
+                                }}
+                                onPointerDown={(event) => {
+                                  if (!isSavingResourceMonitoringMetrics && !targetsNestedManagerControl(event)) {
+                                    handleResourceMonitoringPointerDown(event, key)
+                                  }
+                                }}
+                              >
+                                <span
+                                  aria-label={t.resourceMonitoringDragToReorder}
+                                  className="resource-monitoring-item-drag-handle"
+                                  title={t.resourceMonitoringDragToReorder}
+                                >
+                                  <AppIcon name="drag-handle" size={15} />
+                                </span>
+                                <span className="resource-monitoring-item-copy">
+                                  <strong>{t[item.labelKey]}</strong>
+                                </span>
+                                <label className="command-toggle resource-monitoring-item-toggle">
+                                  <input
+                                    checked={resourceMonitoringMetrics.includes(key)}
+                                    disabled={
+                                      !connectionDefaults.enableResourceMonitoring || isSavingResourceMonitoringMetrics
+                                    }
+                                    onChange={(event) => setResourceMonitoringMetric(key, event.target.checked)}
+                                    type="checkbox"
+                                  />
+                                </label>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
@@ -2570,6 +2861,9 @@ export function SettingsModal({
                   </div>
                 </fieldset>
                 {connectionDefaultsError ? <p className="modal-error">{connectionDefaultsError}</p> : null}
+                {resourceMonitoringMetricsError ? (
+                  <p className="modal-error">{resourceMonitoringMetricsError}</p>
+                ) : null}
               </section>
             </div>
           ) : null}

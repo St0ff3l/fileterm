@@ -27,7 +27,8 @@ import { SplitPaneLayout } from './SplitPaneLayout'
 
 const DEFAULT_FILE_PANEL_HEIGHT = 218
 const DEFAULT_FILE_PANEL_RATIO = 30
-const MAX_FILE_PANEL_RATIO = 50
+const MAX_FILE_PANEL_RATIO = 70
+const MIN_TERMINAL_PANEL_HEIGHT = 120
 
 export function SessionWorkspace({
   activeTab,
@@ -50,8 +51,9 @@ export function SessionWorkspace({
   onFilePanelHeightChange,
   filePanelRatio,
   onFilePanelRatioCommit,
+  filePanelDiskHeaderAnchor,
+  onFilePanelDiskHeaderAnchorCommit,
   rememberFilePanelRatio,
-  shouldAlignFilePanelOnMount,
   sendTargets,
   terminalDockSendScope,
   terminalDockSelectedTabIds,
@@ -124,8 +126,9 @@ export function SessionWorkspace({
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
   filePanelRatio: number
   onFilePanelRatioCommit(ratio: number): void
+  filePanelDiskHeaderAnchor: boolean
+  onFilePanelDiskHeaderAnchorCommit(anchor: boolean): void
   rememberFilePanelRatio: boolean
-  shouldAlignFilePanelOnMount: boolean
   sendTargets: SessionSendTarget[]
   terminalDockSendScope: SendScope
   terminalDockSelectedTabIds: string[]
@@ -211,7 +214,10 @@ export function SessionWorkspace({
   const effectiveFilePanelHeight = isFilePanelEffectivelyCollapsed ? 0 : filePanelHeight
   const clampFilePanelHeight = (workspaceHeight: number, nextHeight: number) => {
     const minHeight = 25 // Allow it to shrink to just the tabs row height
-    const maxHeight = Math.max(minHeight, Math.min(workspaceHeight / 2, workspaceHeight - 160))
+    const maxHeight = Math.max(
+      minHeight,
+      Math.min((workspaceHeight * MAX_FILE_PANEL_RATIO) / 100, workspaceHeight - MIN_TERMINAL_PANEL_HEIGHT)
+    )
     return Math.min(maxHeight, Math.max(minHeight, nextHeight))
   }
 
@@ -228,6 +234,9 @@ export function SessionWorkspace({
     return clampFilePanelRatio(Number(((height / workspaceHeight) * 100).toFixed(2)))
   }
 
+  const getDiskHeaderRect = () =>
+    document.querySelector<HTMLElement>('.fs-sidebar:not(.is-collapsed) .disk-head')?.getBoundingClientRect() ?? null
+
   const syncFilePanelHeight = (mode: 'align' | 'clamp' = 'clamp') => {
     if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current || isResizingFilePanel.current) {
       return
@@ -238,8 +247,8 @@ export function SessionWorkspace({
       return
     }
 
-    if (mode === 'align' && shouldAlignFilePanelOnMount) {
-      const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
+    if (mode === 'align' && isFilePanelAlignedRef.current) {
+      const diskHeadRect = getDiskHeaderRect()
       if (diskHeadRect) {
         const nextHeight = workspaceRect.bottom - diskHeadRect.top
         const clampedHeight = clampFilePanelHeight(workspaceRect.height, nextHeight)
@@ -285,10 +294,11 @@ export function SessionWorkspace({
   useEffect(() => {
     isResizingFilePanel.current = false
     dragStateRef.current = null
+    isFilePanelAlignedRef.current = filePanelDiskHeaderAnchor
     setIsFilePanelDragging(false)
     document.body.style.cursor = ''
     document.body.style.userSelect = ''
-  }, [activeTab.id])
+  }, [activeTab.id, filePanelDiskHeaderAnchor])
 
   useEffect(() => {
     if (isFileOnly) {
@@ -299,8 +309,11 @@ export function SessionWorkspace({
 
     const stopFilePanelDragging = () => {
       const finalDragState = dragStateRef.current
-      if (rememberFilePanelRatio && finalDragState && workspaceRef.current) {
-        onFilePanelRatioCommit(filePanelRatioFromHeight(finalDragState.height, finalDragState.latestHeight))
+      if (rememberFilePanelRatio && finalDragState) {
+        if (workspaceRef.current) {
+          onFilePanelRatioCommit(filePanelRatioFromHeight(finalDragState.height, finalDragState.latestHeight))
+        }
+        onFilePanelDiskHeaderAnchorCommit(isFilePanelAlignedRef.current)
       }
       isResizingFilePanel.current = false
       dragStateRef.current = null
@@ -361,14 +374,20 @@ export function SessionWorkspace({
       document.body.style.userSelect = ''
       setIsFilePanelDragging(false)
     }
-  }, [isFileOnly, onFilePanelRatioCommit, rememberFilePanelRatio, setFilePanelHeight])
+  }, [
+    isFileOnly,
+    onFilePanelDiskHeaderAnchorCommit,
+    onFilePanelRatioCommit,
+    rememberFilePanelRatio,
+    setFilePanelHeight
+  ])
 
   useEffect(() => {
     if (isFileOnly) {
       return
     }
 
-    const ratioKey = `${activeTab.id}:${filePanelRatio}:${rememberFilePanelRatio}`
+    const ratioKey = `${activeTab.id}:${filePanelRatio}:${filePanelDiskHeaderAnchor}:${rememberFilePanelRatio}`
     if (alignmentInitializedTabRef.current === ratioKey) {
       return
     }
@@ -382,20 +401,23 @@ export function SessionWorkspace({
       const workspaceRect = workspaceRef.current.getBoundingClientRect()
       if (workspaceRect.height <= 0) return false
 
-      const nextHeight = shouldAlignFilePanelOnMount
-        ? (() => {
-            const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
-            return diskHeadRect
-              ? clampFilePanelHeight(workspaceRect.height, workspaceRect.bottom - diskHeadRect.top)
-              : null
-          })()
+      if (filePanelRatio <= 0) {
+        setIsFilePanelCollapsed(true)
+        setFilePanelHeight(0)
+        isFilePanelAlignedRef.current = filePanelDiskHeaderAnchor
+        alignmentInitializedTabRef.current = ratioKey
+        return true
+      }
+
+      const diskHeadRect = filePanelDiskHeaderAnchor ? getDiskHeaderRect() : null
+      const nextHeight = diskHeadRect
+        ? clampFilePanelHeight(workspaceRect.height, workspaceRect.bottom - diskHeadRect.top)
         : filePanelHeightFromRatio(workspaceRect.height, filePanelRatio)
 
-      if (nextHeight === null) return false
       setIsFilePanelCollapsed(filePanelRatio <= 0)
       setFilePanelHeight((prev) => (prev === nextHeight ? prev : nextHeight))
       if (nextHeight > 0) lastExpandedFilePanelHeight.current = nextHeight
-      isFilePanelAlignedRef.current = shouldAlignFilePanelOnMount
+      isFilePanelAlignedRef.current = filePanelDiskHeaderAnchor
       alignmentInitializedTabRef.current = ratioKey
       return true
     }
@@ -416,14 +438,7 @@ export function SessionWorkspace({
         window.clearTimeout(checkTimer)
       }
     }
-  }, [
-    activeTab.id,
-    filePanelRatio,
-    isFileOnly,
-    rememberFilePanelRatio,
-    shouldAlignFilePanelOnMount,
-    setFilePanelHeight
-  ])
+  }, [activeTab.id, filePanelRatio, filePanelDiskHeaderAnchor, isFileOnly, rememberFilePanelRatio, setFilePanelHeight])
 
   useEffect(() => {
     if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current) {
@@ -447,6 +462,44 @@ export function SessionWorkspace({
       syncAfterLayout()
     })
     resizeObserver.observe(workspaceRef.current)
+
+    // The disk header is in the sibling system sidebar rather than inside the
+    // workspace. Observe both sides of the alignment so a window resize or a
+    // sidebar content reflow keeps the two horizontal boundaries together.
+    const layoutRoot = document.querySelector<HTMLElement>('.fs-shell') ?? document.body
+    const sidebar = document.querySelector<HTMLElement>('.fs-sidebar:not(.is-collapsed)')
+    const sidebarCard = sidebar?.querySelector<HTMLElement>('.sys-card')
+    let observedDiskHead: HTMLElement | null = null
+    const observeDiskHead = () => {
+      const nextDiskHead = document.querySelector<HTMLElement>('.fs-sidebar:not(.is-collapsed) .disk-head')
+      if (nextDiskHead === observedDiskHead) {
+        return
+      }
+      if (observedDiskHead) {
+        resizeObserver.unobserve(observedDiskHead)
+      }
+      observedDiskHead = nextDiskHead
+      if (observedDiskHead) {
+        resizeObserver.observe(observedDiskHead)
+      }
+    }
+    if (sidebar) resizeObserver.observe(sidebar)
+    if (sidebarCard) resizeObserver.observe(sidebarCard)
+    observeDiskHead()
+
+    // The sidebar can replace its metric card while a session reconnects or
+    // while the compact layout is rebuilt. Keep observing the current header
+    // instead of retaining a detached DOM node from the first render.
+    const layoutMutationObserver = new MutationObserver(() => {
+      observeDiskHead()
+      syncAfterLayout()
+    })
+    layoutMutationObserver.observe(layoutRoot, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+      childList: true,
+      subtree: true
+    })
 
     const themeObserver = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
@@ -478,10 +531,11 @@ export function SessionWorkspace({
         themeTimer = null
       }
       resizeObserver.disconnect()
+      layoutMutationObserver.disconnect()
       themeObserver.disconnect()
       window.removeEventListener('resize', syncAfterLayout)
     }
-  }, [isFileOnly, isFilePanelCollapsed, filePanelRatio, shouldAlignFilePanelOnMount, setFilePanelHeight])
+  }, [isFileOnly, isFilePanelCollapsed, filePanelDiskHeaderAnchor, filePanelRatio, setFilePanelHeight])
 
   const handleToggleFilePanelCollapsed = () => {
     if (isFilePanelCollapsed) {
@@ -491,6 +545,7 @@ export function SessionWorkspace({
       if (rememberFilePanelRatio && workspaceRef.current) {
         const workspaceHeight = workspaceRef.current.getBoundingClientRect().height
         onFilePanelRatioCommit(filePanelRatioFromHeight(workspaceHeight, nextHeight))
+        onFilePanelDiskHeaderAnchorCommit(isFilePanelAlignedRef.current)
       }
       return
     }
@@ -503,6 +558,7 @@ export function SessionWorkspace({
     setIsFilePanelCollapsed(true)
     if (rememberFilePanelRatio) {
       onFilePanelRatioCommit(0)
+      onFilePanelDiskHeaderAnchorCommit(isFilePanelAlignedRef.current)
     }
   }
 
@@ -580,7 +636,7 @@ export function SessionWorkspace({
 
             if (workspaceRef.current) {
               const rect = workspaceRef.current.getBoundingClientRect()
-              const diskHeadRect = document.querySelector('.disk-head')?.getBoundingClientRect()
+              const diskHeadRect = getDiskHeaderRect()
               dragStateRef.current = {
                 bottom: rect.bottom,
                 height: rect.height,

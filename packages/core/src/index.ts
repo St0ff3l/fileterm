@@ -138,6 +138,47 @@ export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-inter
 /** 资源监控采集间隔，单位为秒。 */
 export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
 
+/** 侧栏可显示的资源监控项。采集总开关仍由 enableResourceMonitoring 控制。 */
+export type ResourceMonitoringMetric =
+  | 'load'
+  | 'cpu'
+  | 'cpuTemperature'
+  | 'memory'
+  | 'swap'
+  | 'disk'
+  | 'gpu'
+  | 'gpuMemory'
+  | 'gpuTemperature'
+  | 'gpuPower'
+  | 'processes'
+  | 'network'
+
+export const DEFAULT_RESOURCE_MONITORING_METRICS: ResourceMonitoringMetric[] = [
+  'load',
+  'cpu',
+  'memory',
+  'swap',
+  'disk',
+  'processes',
+  'network'
+]
+
+/** Canonical order for all resource-monitoring cards, including disabled items. */
+export const DEFAULT_RESOURCE_MONITORING_METRIC_ORDER: ResourceMonitoringMetric[] = [
+  'load',
+  'cpu',
+  'cpuTemperature',
+  'memory',
+  'swap',
+  'disk',
+  'gpu',
+  'gpuMemory',
+  'gpuTemperature',
+  'gpuPower',
+  'processes',
+  'network'
+]
+
 /** SSH connection behavior shared by newly created connections. */
 export interface SshConnectionDefaults {
   useEmptyPassword: boolean
@@ -520,6 +561,12 @@ export interface GpuInfoRow {
   vendor: string
   driver: string
   memory: string
+  usagePercent?: number
+  memoryUsed?: string
+  memoryPercent?: number
+  temperatureCelsius?: number
+  powerUsage?: string
+  powerLimit?: string
 }
 
 export interface CpuUsageBreakdown {
@@ -568,6 +615,7 @@ export interface SystemMetrics {
   cpuPercent: number
   cpuUsage: CpuUsageBreakdown
   cpuInfoRows: CpuInfoRow[]
+  cpuTemperatureCelsius?: number
   gpuInfoRows: GpuInfoRow[]
   memoryPercent: number
   memoryUsage: string
@@ -614,8 +662,19 @@ export function mergeSystemMetricsHistory(
     })
   )
 
+  // System collectors emit a full snapshot most of the time, but a partial
+  // refresh can temporarily omit the filesystem sections. Do not let that
+  // transient empty payload erase the last usable disk information in the
+  // sidebar.
+  const diskRows = nextMetrics.diskRows?.length ? nextMetrics.diskRows : (previousMetrics?.diskRows ?? [])
+  const fileSystemRows = nextMetrics.fileSystemRows?.length
+    ? nextMetrics.fileSystemRows
+    : (previousMetrics?.fileSystemRows ?? [])
+
   return {
     ...nextMetrics,
+    diskRows,
+    fileSystemRows,
     networkSamples: [...previousSamples, nextPoint].slice(-historyLimit),
     networkSamplesByInterface: mergedByInterface
   }
@@ -1513,6 +1572,8 @@ export interface UiPreferences {
   updateChannel: AppUpdateChannel
   terminalZoomLocked: boolean
   filePanelRememberRatio: boolean
+  resourceMonitoringMetrics: ResourceMonitoringMetric[]
+  resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   connectionDefaults: SshConnectionDefaults
   mcpAgent: McpAgentPreferences
   overviewShowStats: boolean
@@ -1531,6 +1592,8 @@ export interface UiPreferencesInput {
   updateChannel?: UiPreferences['updateChannel']
   terminalZoomLocked?: boolean
   filePanelRememberRatio?: boolean
+  resourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   connectionDefaults?: Partial<SshConnectionDefaults>
   mcpAgent?: Partial<McpAgentPreferences>
   overviewShowStats?: boolean

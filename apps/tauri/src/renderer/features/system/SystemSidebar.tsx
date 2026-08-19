@@ -1,5 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ConnectionProfile, NetworkSamplePoint, SessionSnapshot, SystemMetrics } from '@fileterm/core'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
+import type {
+  ConnectionProfile,
+  NetworkSamplePoint,
+  ResourceMonitoringMetric,
+  SessionSnapshot,
+  SystemMetrics
+} from '@fileterm/core'
 import { copyText, hasSelectedText } from '../../app/app-utils'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -21,6 +28,7 @@ export function SystemSidebar({
   activeSession,
   collapsed,
   showResourceMeters,
+  visibleMetrics,
   onOpenSystemInfo,
   onToggleCollapsed
 }: {
@@ -28,6 +36,7 @@ export function SystemSidebar({
   activeSession: SessionSnapshot | null
   collapsed: boolean
   showResourceMeters: boolean
+  visibleMetrics: ResourceMonitoringMetric[]
   onOpenSystemInfo(): void
   onToggleCollapsed(): void
 }) {
@@ -35,10 +44,50 @@ export function SystemSidebar({
   const metrics = activeSession?.systemMetrics
   const internalIp = metrics?.ip || '-'
   const accessAddress = activeProfile?.host || activeSession?.accessHost || '-'
-  const rows = activeSession?.systemMetrics?.diskRows ?? []
-  const diskScrollRef = useRef<HTMLDivElement>(null)
-  const systemLoad = formatSystemLoad(metrics, t)
+  const availableFileSystems = useMemo(
+    () => (metrics?.fileSystemRows ?? []).filter((row) => row.mountPoint === '/' || !isEphemeralFileSystem(row)),
+    [metrics?.fileSystemRows]
+  )
+  const rows = useMemo(() => {
+    // Prefer the normalized filesystem payload that also drives the disk
+    // meter. The legacy `diskRows` block can be absent in a partial stream,
+    // which previously left this table with only its empty placeholders even
+    // while the meter above already displayed the mounted root filesystem.
+    // Unlike the meter selector, the table keeps every reported mount
+    // (including tmpfs/devtmpfs rows) to match the historical layout.
+    const normalizedRows = (metrics?.fileSystemRows ?? [])
+      .map((row) => ({
+        path: row.mountPoint || row.name,
+        usage: `${row.available}/${row.size}`
+      }))
+      .filter((row) => row.path && row.usage !== '/')
 
+    if (normalizedRows.length > 0) {
+      return normalizedRows
+    }
+
+    // Preserve compatibility with older/partial collectors that only provide
+    // the compact block.
+    return (metrics?.diskRows ?? []).filter((row) => Boolean(row?.path && row?.usage && row.usage !== '/'))
+  }, [metrics?.fileSystemRows, metrics?.diskRows])
+  const defaultFileSystem = useMemo(() => selectPrimaryFileSystem(availableFileSystems), [availableFileSystems])
+  const [selectedDiskMountPoint, setSelectedDiskMountPoint] = useState('')
+  const diskScrollRef = useRef<HTMLDivElement>(null)
+  const systemMetricsScrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setSelectedDiskMountPoint(defaultFileSystem?.mountPoint ?? '')
+  }, [activeSession?.profileId, defaultFileSystem?.mountPoint])
+
+  useEffect(() => {
+    if (availableFileSystems.some((row) => row.mountPoint === selectedDiskMountPoint)) {
+      return
+    }
+    setSelectedDiskMountPoint(defaultFileSystem?.mountPoint ?? '')
+  }, [availableFileSystems, defaultFileSystem?.mountPoint, selectedDiskMountPoint])
+
+  const selectedFileSystem =
+    availableFileSystems.find((row) => row.mountPoint === selectedDiskMountPoint) ?? defaultFileSystem
   const sortedProcesses = useMemo(() => {
     const procs = [...(metrics?.topProcesses ?? [])]
     if (sortMode === 'command') {
@@ -95,45 +144,18 @@ export function SystemSidebar({
             <button className="system-title" onClick={onOpenSystemInfo} type="button">
               {t.systemInfo}
             </button>
-            <div className="metric-line">
-              <span>{t.running}</span>
-              <strong className="value">{formatUptime(metrics?.uptimeSeconds, metrics?.uptime)}</strong>
-            </div>
-            <div className="metric-line">
-              <span>{t.load}</span>
-              <strong className="value" title={systemLoad.title}>
-                {systemLoad.value}
-              </strong>
-            </div>
-            <Meter
-              label={t.cpu}
-              value={metrics?.cpuPercent ?? 0}
-              tone={getMetricTone(metrics?.cpuPercent ?? 0)}
-              caption=""
-              percent={metrics ? `${metrics.cpuPercent}%` : '-'}
+            <ResourceMetricCards
+              availableFileSystems={availableFileSystems}
+              fileSystem={selectedFileSystem}
+              metrics={metrics}
+              onFileSystemChange={setSelectedDiskMountPoint}
+              scrollRef={systemMetricsScrollRef}
+              visibleMetrics={visibleMetrics}
             />
-            <MemoryMeter metrics={metrics} />
-            <Meter
-              label={t.swap}
-              value={metrics?.swapPercent ?? 0}
-              tone={getMetricTone(metrics?.swapPercent ?? 0)}
-              caption={metrics?.swapUsage ?? '-'}
-              percent={metrics ? `${metrics.swapPercent}%` : '-'}
-              dotTone={getMetricTone(metrics?.swapPercent ?? 0)}
-            />
-            <div className="mini-tabs">
-              <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => setSortMode('memory')}>
-                {t.memory}
-              </span>
-              <span className={sortMode === 'cpu' ? 'active' : ''} onClick={() => setSortMode('cpu')}>
-                {t.cpu}
-              </span>
-              <span className={sortMode === 'command' ? 'active' : ''} onClick={() => setSortMode('command')}>
-                {t.command}
-              </span>
-            </div>
-            <ProcessTable rows={sortedProcesses} />
-            <NetworkPanel metrics={metrics} />
+            {visibleMetrics.includes('processes') ? (
+              <ProcessMetricPanel onSortModeChange={setSortMode} rows={sortedProcesses} sortMode={sortMode} />
+            ) : null}
+            {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
           </section>
           <section className="disk-table">
             <div className="disk-head">
@@ -161,8 +183,145 @@ export function SystemSidebar({
           </section>
         </>
       ) : showResourceMeters ? (
-        <CollapsedResourceMeters metrics={metrics} />
+        <CollapsedResourceMeters fileSystem={selectedFileSystem} metrics={metrics} visibleMetrics={visibleMetrics} />
       ) : null}
+    </div>
+  )
+}
+
+function ResourceMetricCards({
+  availableFileSystems,
+  fileSystem,
+  metrics,
+  onFileSystemChange,
+  scrollRef,
+  visibleMetrics
+}: {
+  availableFileSystems: SystemMetrics['fileSystemRows']
+  fileSystem?: SystemMetrics['fileSystemRows'][number]
+  metrics?: SystemMetrics
+  onFileSystemChange(value: string): void
+  scrollRef: RefObject<HTMLDivElement | null>
+  visibleMetrics: ResourceMonitoringMetric[]
+}) {
+  const resourceMetrics = visibleMetrics.filter((metric) => metric !== 'processes' && metric !== 'network')
+  const systemLoad = formatSystemLoad(metrics, t)
+
+  return (
+    <div className="system-metrics-scroll-region">
+      <div className="system-metrics-scroll" ref={scrollRef}>
+        <div className="metric-line system-running-line">
+          <span>{t.running}</span>
+          <strong className="value">
+            <MetricHoverDetail
+              className="metric-line-hover-detail"
+              value={formatUptime(metrics?.uptimeSeconds, metrics?.uptime)}
+            />
+          </strong>
+        </div>
+        {resourceMetrics.map((metric) => {
+          switch (metric) {
+            case 'load':
+              return (
+                <div className="metric-line" key={metric}>
+                  <span>{t.load}</span>
+                  <strong className="value">
+                    <MetricHoverDetail className="metric-line-hover-detail" value={systemLoad.value} />
+                  </strong>
+                </div>
+              )
+            case 'cpu':
+              return (
+                <Meter
+                  key={metric}
+                  label={t.cpu}
+                  value={metrics?.cpuPercent ?? 0}
+                  tone={getMetricTone(metrics?.cpuPercent ?? 0)}
+                  caption=""
+                  percent={metrics ? `${metrics.cpuPercent}%` : '-'}
+                />
+              )
+            case 'cpuTemperature': {
+              const cpuTemperature =
+                metrics?.cpuTemperatureCelsius == null ? '-' : `${Math.round(metrics.cpuTemperatureCelsius)}°C`
+              return (
+                <div className="metric-line system-temperature-line" key={metric}>
+                  <span>{t.cpuTemperature}</span>
+                  <strong className="value">
+                    <MetricHoverDetail className="metric-line-hover-detail" value={cpuTemperature} />
+                  </strong>
+                </div>
+              )
+            }
+            case 'memory':
+              return <MemoryMeter key={metric} metrics={metrics} />
+            case 'swap':
+              return (
+                <Meter
+                  key={metric}
+                  label={t.swap}
+                  value={metrics?.swapPercent ?? 0}
+                  tone={getMetricTone(metrics?.swapPercent ?? 0)}
+                  caption={metrics?.swapUsage ?? '-'}
+                  percent={metrics ? `${metrics.swapPercent}%` : '-'}
+                  dotTone={getMetricTone(metrics?.swapPercent ?? 0)}
+                />
+              )
+            case 'disk':
+              return (
+                <DiskMeter
+                  key={metric}
+                  fileSystem={fileSystem}
+                  fileSystems={availableFileSystems}
+                  onFileSystemChange={onFileSystemChange}
+                />
+              )
+            case 'gpu':
+            case 'gpuMemory':
+            case 'gpuTemperature':
+            case 'gpuPower':
+              return <GpuResourceMeter key={metric} metric={metric} metrics={metrics} />
+            default:
+              return null
+          }
+        })}
+      </div>
+      <VerticalScrollbar ariaLabel={t.scrollContent} scrollRef={scrollRef} />
+    </div>
+  )
+}
+
+function ProcessMetricPanel({
+  onSortModeChange,
+  rows,
+  sortMode
+}: {
+  onSortModeChange(mode: 'memory' | 'cpu' | 'command'): void
+  rows: SystemMetrics['topProcesses']
+  sortMode: 'memory' | 'cpu' | 'command'
+}) {
+  return (
+    <div className="system-process-panel">
+      <div className="mini-tabs">
+        <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => onSortModeChange('memory')}>
+          {t.memory}
+        </span>
+        <span className={sortMode === 'cpu' ? 'active' : ''} onClick={() => onSortModeChange('cpu')}>
+          {t.cpu}
+        </span>
+        <span className={sortMode === 'command' ? 'active' : ''} onClick={() => onSortModeChange('command')}>
+          {t.command}
+        </span>
+      </div>
+      <ProcessTable rows={rows} />
+    </div>
+  )
+}
+
+function NetworkMetricPanel({ metrics }: { metrics?: SystemMetrics }) {
+  return (
+    <div className="system-network-panel">
+      <NetworkPanel metrics={metrics} />
     </div>
   )
 }
@@ -176,7 +335,7 @@ function AddressLine({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong
         className={`${canCopy ? 'copyable' : ''} ${copied ? 'copied' : ''}`}
-        title={canCopy ? (copied ? t.copied : `${t.copy}: ${value}`) : value}
+        aria-label={canCopy ? (copied ? t.copied : `${t.copy}: ${value}`) : value}
         onClick={() => {
           if (canCopy && !hasSelectedText()) {
             copyText(value)
@@ -185,9 +344,83 @@ function AddressLine({ label, value }: { label: string; value: string }) {
           }
         }}
       >
-        {copied ? t.copied : value}
+        <MetricHoverDetail className="address-hover-detail" value={copied ? t.copied : value} />
       </strong>
     </div>
+  )
+}
+
+function MetricHoverDetail({ value, className = 'metric-caption' }: { value: string; className?: string }) {
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const textRef = useRef<HTMLSpanElement>(null)
+  const [position, setPosition] = useState<{
+    left: number
+    top: number
+    placement: 'above' | 'below'
+  } | null>(null)
+  const hasDetail = Boolean(value && value !== '-')
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current
+    const text = textRef.current
+    if (!anchor || !text || !hasDetail || text.scrollWidth <= text.clientWidth + 1 || typeof window === 'undefined') {
+      setPosition(null)
+      return
+    }
+
+    const rect = anchor.getBoundingClientRect()
+    const viewportMargin = 8
+    const tooltipWidth = 280
+    const maxLeft = Math.max(viewportMargin, window.innerWidth - viewportMargin - tooltipWidth)
+    const left = Math.min(maxLeft, Math.max(viewportMargin, rect.left))
+    const placement = rect.top < 72 ? 'below' : 'above'
+
+    setPosition({
+      left,
+      top: placement === 'above' ? rect.top - 6 : rect.bottom + 6,
+      placement
+    })
+  }, [hasDetail])
+
+  useEffect(() => {
+    if (!position) return
+    const update = () => updatePosition()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [position, updatePosition])
+
+  return (
+    <>
+      <span
+        ref={anchorRef}
+        className={`${className} metric-hover-detail`.trim()}
+        aria-label={hasDetail ? value : undefined}
+        onMouseEnter={() => {
+          if (hasDetail) updatePosition()
+        }}
+        onMouseLeave={() => setPosition(null)}
+      >
+        <span ref={textRef} className="metric-hover-detail-text">
+          {value}
+        </span>
+      </span>
+      {position && typeof document !== 'undefined'
+        ? createPortal(
+            <span
+              className={`metric-hover-detail-tooltip is-${position.placement}`}
+              role="tooltip"
+              style={{ left: position.left, top: position.top }}
+            >
+              {value}
+            </span>,
+            document.body
+          )
+        : null}
+    </>
   )
 }
 
@@ -199,7 +432,7 @@ function Meter({
   percent,
   dotTone
 }: {
-  label: string
+  label: ReactNode
   value: number
   tone: string
   caption: string
@@ -209,10 +442,10 @@ function Meter({
   return (
     <div className="meter-group">
       <div className="meter-header">
-        <span>{label}</span>
+        <span className="meter-label">{label}</span>
         <strong className="metric-chip-summary">
           {dotTone && <i className={`metric-dot ${dotTone}`} />}
-          <span>{caption}</span>
+          <MetricHoverDetail value={caption} />
           {percent && <span className="metric-percent">{percent}</span>}
         </strong>
       </div>
@@ -255,17 +488,86 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
         ].filter((segment) => parseMemory(segment.value) > 0)
       : []
 
+  const memoryTrackRef = useRef<HTMLDivElement>(null)
+  const [memoryPopoverPosition, setMemoryPopoverPosition] = useState<{
+    left: number
+    top: number
+    placement: 'above' | 'below'
+  } | null>(null)
+  const memoryPopoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const updateMemoryPopoverPosition = useCallback(() => {
+    const anchor = memoryTrackRef.current
+    if (!anchor || !segments.length || typeof window === 'undefined') {
+      setMemoryPopoverPosition(null)
+      return
+    }
+
+    const rect = anchor.getBoundingClientRect()
+    const viewportMargin = 8
+    const popoverWidth = 140
+    const popoverHeight = segments.length * 24 + 20
+    const maxLeft = Math.max(viewportMargin, window.innerWidth - viewportMargin - popoverWidth)
+    const left = Math.min(maxLeft, Math.max(viewportMargin, rect.right - popoverWidth))
+    const placement = rect.top >= popoverHeight + viewportMargin ? 'above' : 'below'
+
+    setMemoryPopoverPosition({
+      left,
+      top: placement === 'above' ? rect.top - 6 : rect.bottom + 6,
+      placement
+    })
+  }, [segments.length])
+
+  const openMemoryPopover = useCallback(() => {
+    if (memoryPopoverCloseTimerRef.current) {
+      clearTimeout(memoryPopoverCloseTimerRef.current)
+      memoryPopoverCloseTimerRef.current = null
+    }
+    updateMemoryPopoverPosition()
+  }, [updateMemoryPopoverPosition])
+
+  const closeMemoryPopover = useCallback(() => {
+    if (memoryPopoverCloseTimerRef.current) {
+      clearTimeout(memoryPopoverCloseTimerRef.current)
+    }
+    memoryPopoverCloseTimerRef.current = setTimeout(() => {
+      setMemoryPopoverPosition(null)
+      memoryPopoverCloseTimerRef.current = null
+    }, 80)
+  }, [])
+
+  useEffect(() => {
+    if (!memoryPopoverPosition) return
+    const update = () => updateMemoryPopoverPosition()
+    window.addEventListener('resize', update)
+    window.addEventListener('scroll', update, true)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.removeEventListener('scroll', update, true)
+    }
+  }, [memoryPopoverPosition, updateMemoryPopoverPosition])
+
+  useEffect(
+    () => () => {
+      if (memoryPopoverCloseTimerRef.current) {
+        clearTimeout(memoryPopoverCloseTimerRef.current)
+      }
+    },
+    []
+  )
+
   return (
     <div className="meter-group memory-meter-group">
       <div className="meter-header">
-        <span>{t.memory}</span>
+        <span className="meter-label">{t.memory}</span>
         <strong className="metric-chip-summary">
           <i className={`metric-dot ${memoryTone}`} />
-          <span>{metrics?.memoryUsage ?? '-'}</span>
+          <span className="memory-hover-value" onMouseEnter={openMemoryPopover} onMouseLeave={closeMemoryPopover}>
+            <MetricHoverDetail value={metrics?.memoryUsage ?? '-'} />
+          </span>
           <span className="metric-percent">{metrics ? `${metrics.memoryPercent}%` : '-'}</span>
         </strong>
       </div>
-      <div className="meter-track meter-track-stacked">
+      <div className="meter-track meter-track-stacked" ref={memoryTrackRef}>
         {segments.length ? (
           segments.map((segment) => (
             <i
@@ -277,32 +579,184 @@ function MemoryMeter({ metrics }: { metrics?: SystemMetrics }) {
         ) : (
           <i className={`meter-fill ${memoryTone}`} style={{ width: `${metrics?.memoryPercent ?? 0}%` }} />
         )}
-
-        {segments.length ? (
-          <div className="memory-hover-popover">
-            {segments.map((segment) => (
-              <div className="memory-hover-row" key={segment.key}>
-                <i className={`metric-dot ${segment.key}`} />
-                <span className="label">{segment.label}</span>
-                <span className="value">{segment.value}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <span
+          aria-hidden="true"
+          className="memory-hover-track-target"
+          onMouseEnter={openMemoryPopover}
+          onMouseLeave={closeMemoryPopover}
+        />
       </div>
+      {memoryPopoverPosition && segments.length && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={`memory-hover-popover is-${memoryPopoverPosition.placement}`}
+              role="tooltip"
+              style={{ left: memoryPopoverPosition.left, top: memoryPopoverPosition.top }}
+            >
+              {segments.map((segment) => (
+                <div className="memory-hover-row" key={segment.key}>
+                  <i className={`metric-dot ${segment.key}`} />
+                  <span className="label">{segment.label}</span>
+                  <span className="value">{segment.value}</span>
+                </div>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   )
 }
 
-function CollapsedResourceMeters({ metrics }: { metrics?: SystemMetrics }) {
-  const items = [
-    { key: 'cpu', label: t.cpu, value: metrics?.cpuPercent ?? 0, detail: metrics ? `${metrics.cpuPercent}%` : '-' },
-    { key: 'memory', label: t.memory, value: metrics?.memoryPercent ?? 0, detail: metrics?.memoryUsage ?? '-' },
-    { key: 'swap', label: t.swap, value: metrics?.swapPercent ?? 0, detail: metrics?.swapUsage ?? '-' }
-  ]
+function DiskMeter({
+  fileSystem,
+  fileSystems,
+  onFileSystemChange
+}: {
+  fileSystem?: SystemMetrics['fileSystemRows'][number]
+  fileSystems: SystemMetrics['fileSystemRows']
+  onFileSystemChange(value: string): void
+}) {
+  const rawPercent = fileSystem ? parseFloat(fileSystem.usagePercent) : Number.NaN
+  const hasUsage = Number.isFinite(rawPercent)
+  const percent = hasUsage ? clampPercent(rawPercent) : 0
+  const caption = fileSystem ? `${fileSystem.available} / ${fileSystem.size}` : '-'
 
   return (
-    <div className="collapsed-resource-meters" aria-label={`${t.cpu} ${t.memory} ${t.swap}`}>
+    <Meter
+      label={
+        <span className="disk-meter-label">
+          <span>{t.disk}</span>
+          {fileSystems.length > 1 ? (
+            <DropdownSelect
+              ariaLabel={t.disk}
+              className="disk-select"
+              hideArrow
+              menuPlacement="auto"
+              menuWidth="auto"
+              options={fileSystems.map((row) => ({ value: row.mountPoint, label: row.mountPoint }))}
+              onChange={onFileSystemChange}
+              value={fileSystem?.mountPoint ?? ''}
+            />
+          ) : null}
+        </span>
+      }
+      value={hasUsage ? percent : 0}
+      tone={getMetricTone(percent)}
+      caption={caption}
+      percent={hasUsage ? `${percent}%` : '-'}
+      dotTone={getMetricTone(percent)}
+    />
+  )
+}
+
+function GpuResourceMeter({ metrics, metric }: { metrics?: SystemMetrics; metric: ResourceMonitoringMetric }) {
+  const gpuRows = metrics?.gpuInfoRows ?? []
+
+  if (!gpuRows.length) {
+    return null
+  }
+
+  return (
+    <div className="gpu-monitor-group">
+      {gpuRows.map((row, index) => {
+        const gpuLabel = gpuRows.length > 1 ? `${t.gpu} ${index + 1}` : t.gpu
+        const metricLabelKey =
+          metric === 'gpuMemory' ? 'gpuMemory' : metric === 'gpuTemperature' ? 'gpuTemperature' : 'gpuPower'
+        const metricLabel = gpuRows.length > 1 ? `${t[metricLabelKey]} ${index + 1}` : t[metricLabelKey]
+        const usage = clampPercent(row.usagePercent ?? 0)
+        const memory = clampPercent(row.memoryPercent ?? 0)
+        const memoryCaption = `${row.memoryUsed ?? '-'} / ${row.memory || '-'}`
+        return (
+          <div className="gpu-monitor-card" key={`${metric}-${row.model}-${index}`}>
+            {metric === 'gpu' ? (
+              <Meter
+                label={gpuLabel}
+                value={usage}
+                tone={getMetricTone(usage)}
+                caption={row.model}
+                percent={row.usagePercent == null ? '-' : `${usage}%`}
+              />
+            ) : null}
+            {metric === 'gpuMemory' ? (
+              <Meter
+                label={metricLabel}
+                value={memory}
+                tone={getMetricTone(memory)}
+                caption={memoryCaption}
+                percent={row.memoryPercent == null ? '-' : `${memory}%`}
+                dotTone={getMetricTone(memory)}
+              />
+            ) : null}
+            {metric === 'gpuTemperature' ? (
+              <GpuMetricLine
+                label={metricLabel}
+                value={row.temperatureCelsius == null ? '-' : `${Math.round(row.temperatureCelsius)}°C`}
+              />
+            ) : null}
+            {metric === 'gpuPower' ? (
+              <GpuMetricLine
+                label={metricLabel}
+                value={
+                  row.powerUsage && row.powerUsage !== '-'
+                    ? `${row.powerUsage}${row.powerLimit && row.powerLimit !== '-' ? ` / ${row.powerLimit}` : ''}`
+                    : '-'
+                }
+              />
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function GpuMetricLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="metric-line gpu-monitor-line">
+      <span>{label}</span>
+      <strong className="value">
+        <MetricHoverDetail className="metric-line-hover-detail" value={value} />
+      </strong>
+    </div>
+  )
+}
+
+function CollapsedResourceMeters({
+  fileSystem,
+  metrics,
+  visibleMetrics
+}: {
+  fileSystem?: SystemMetrics['fileSystemRows'][number]
+  metrics?: SystemMetrics
+  visibleMetrics: ResourceMonitoringMetric[]
+}) {
+  const diskPercent = parseUsagePercent(fileSystem?.usagePercent)
+  const itemsByMetric: Partial<Record<ResourceMonitoringMetric, { label: string; value: number; detail: string }>> = {
+    cpu: {
+      label: t.cpu,
+      value: metrics?.cpuPercent ?? 0,
+      detail: metrics ? `${metrics.cpuPercent}%` : '-'
+    },
+    memory: {
+      label: t.memory,
+      value: metrics?.memoryPercent ?? 0,
+      detail: metrics?.memoryUsage ?? '-'
+    },
+    swap: { label: t.swap, value: metrics?.swapPercent ?? 0, detail: metrics?.swapUsage ?? '-' },
+    disk: {
+      label: t.disk,
+      value: fileSystem ? diskPercent : 0,
+      detail: fileSystem ? `${fileSystem.available} / ${fileSystem.size}` : '-'
+    }
+  }
+  const items = visibleMetrics.flatMap((key) => {
+    const item = itemsByMetric[key]
+    return item ? [{ key, ...item }] : []
+  })
+
+  return (
+    <div className="collapsed-resource-meters" aria-label={items.map((item) => item.label).join(' ')}>
       {items.map((item) => {
         const value = clampPercent(item.value)
         const tone = getMetricTone(value)
@@ -333,6 +787,31 @@ function clampPercent(value: number) {
     return 0
   }
   return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function parseUsagePercent(value?: string) {
+  if (!value) {
+    return 0
+  }
+  return clampPercent(parseFloat(value))
+}
+
+function selectPrimaryFileSystem(rows: SystemMetrics['fileSystemRows']) {
+  return (
+    rows.find((row) => row.mountPoint === '/') ??
+    rows.find((row) => /^c:\\?$/i.test(row.mountPoint)) ??
+    rows.find((row) => !isEphemeralFileSystem(row))
+  )
+}
+
+function isEphemeralFileSystem(row: SystemMetrics['fileSystemRows'][number]) {
+  const mountPoint = row.mountPoint.toLowerCase()
+  const name = row.name.toLowerCase()
+
+  return (
+    /^\/(?:dev|proc|sys|run|tmp)(?:\/|$)/.test(mountPoint) ||
+    /^(?:tmpfs|devtmpfs|proc|sysfs|overlay|squashfs|ramfs)/.test(name)
+  )
 }
 
 function parseUsageTotal(usage?: string) {
@@ -442,7 +921,9 @@ function ProcessTable({ rows }: { rows: SystemMetrics['topProcesses'] }) {
           >
             <span>{row.memory}</span>
             <span>{row.cpu ? `${row.cpu}%` : ''}</span>
-            <span title={row.command}>{row.command}</span>
+            <span>
+              <MetricHoverDetail className="process-hover-detail" value={row.command} />
+            </span>
           </div>
         ))}
       </div>

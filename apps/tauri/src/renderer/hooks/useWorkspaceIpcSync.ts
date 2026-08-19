@@ -5,6 +5,7 @@ import {
   type LocalFileItem,
   type OverviewSectionId,
   type PaneFocusDirection,
+  type ResourceMonitoringMetric,
   type SessionMetricsUpdate,
   type SavedTheme,
   type SshConnectionDefaults,
@@ -46,6 +47,8 @@ export type UseWorkspaceIpcSyncOptions = {
   connectionDefaults: SshConnectionDefaults
   terminalZoomLocked: boolean
   filePanelRememberRatio: boolean
+  resourceMonitoringMetrics: ResourceMonitoringMetric[]
+  resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   overviewShowStats: boolean
   overviewShowRecent: boolean
   overviewShowAllConnections: boolean
@@ -59,6 +62,8 @@ export type UseWorkspaceIpcSyncOptions = {
   onConnectionDefaultsChange(value: Partial<SshConnectionDefaults>): void
   onTerminalZoomLockedChange(value: boolean): void
   onFilePanelRememberRatioChange(value: boolean): void
+  onResourceMonitoringMetricsChange(value: ResourceMonitoringMetric[]): void
+  onResourceMonitoringMetricOrderChange(value: ResourceMonitoringMetric[]): void
   onOverviewShowStatsChange(value: boolean): void
   onOverviewShowRecentChange(value: boolean): void
   onOverviewShowAllConnectionsChange(value: boolean): void
@@ -105,6 +110,8 @@ type SyncedUiPreferences = Pick<
   | 'connectionDefaults'
   | 'terminalZoomLocked'
   | 'filePanelRememberRatio'
+  | 'resourceMonitoringMetrics'
+  | 'resourceMonitoringMetricOrder'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -120,6 +127,8 @@ function sameSyncedUiPreferences(left: SyncedUiPreferences, right: SyncedUiPrefe
     left.locale === right.locale &&
     left.terminalZoomLocked === right.terminalZoomLocked &&
     left.filePanelRememberRatio === right.filePanelRememberRatio &&
+    JSON.stringify(left.resourceMonitoringMetrics) === JSON.stringify(right.resourceMonitoringMetrics) &&
+    JSON.stringify(left.resourceMonitoringMetricOrder) === JSON.stringify(right.resourceMonitoringMetricOrder) &&
     left.connectionDefaults.useEmptyPassword === right.connectionDefaults.useEmptyPassword &&
     left.connectionDefaults.enableExecChannel === right.connectionDefaults.enableExecChannel &&
     left.connectionDefaults.enableResourceMonitoring === right.connectionDefaults.enableResourceMonitoring &&
@@ -145,6 +154,8 @@ function syncedUiPreferencesFrom(preferences: UiPreferences): SyncedUiPreference
     connectionDefaults: { ...preferences.connectionDefaults },
     terminalZoomLocked: preferences.terminalZoomLocked,
     filePanelRememberRatio: preferences.filePanelRememberRatio,
+    resourceMonitoringMetrics: [...preferences.resourceMonitoringMetrics],
+    resourceMonitoringMetricOrder: [...preferences.resourceMonitoringMetricOrder],
     overviewShowStats: preferences.overviewShowStats,
     overviewShowRecent: preferences.overviewShowRecent,
     overviewShowAllConnections: preferences.overviewShowAllConnections,
@@ -194,6 +205,8 @@ export function useWorkspaceIpcSync({
   connectionDefaults,
   terminalZoomLocked,
   filePanelRememberRatio,
+  resourceMonitoringMetrics,
+  resourceMonitoringMetricOrder,
   overviewShowStats,
   overviewShowRecent,
   overviewShowAllConnections,
@@ -207,6 +220,8 @@ export function useWorkspaceIpcSync({
   onConnectionDefaultsChange,
   onTerminalZoomLockedChange,
   onFilePanelRememberRatioChange,
+  onResourceMonitoringMetricsChange,
+  onResourceMonitoringMetricOrderChange,
   onOverviewShowStatsChange,
   onOverviewShowRecentChange,
   onOverviewShowAllConnectionsChange,
@@ -241,6 +256,8 @@ export function useWorkspaceIpcSync({
   const onConnectionDefaultsChangeRef = useLatestRef(onConnectionDefaultsChange)
   const onTerminalZoomLockedChangeRef = useLatestRef(onTerminalZoomLockedChange)
   const onFilePanelRememberRatioChangeRef = useLatestRef(onFilePanelRememberRatioChange)
+  const onResourceMonitoringMetricsChangeRef = useLatestRef(onResourceMonitoringMetricsChange)
+  const onResourceMonitoringMetricOrderChangeRef = useLatestRef(onResourceMonitoringMetricOrderChange)
   const onOverviewShowStatsChangeRef = useLatestRef(onOverviewShowStatsChange)
   const onOverviewShowRecentChangeRef = useLatestRef(onOverviewShowRecentChange)
   const onOverviewShowAllConnectionsChangeRef = useLatestRef(onOverviewShowAllConnectionsChange)
@@ -343,6 +360,8 @@ export function useWorkspaceIpcSync({
       onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
       onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
       onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
+      onResourceMonitoringMetricsChangeRef.current(preferences.resourceMonitoringMetrics)
+      onResourceMonitoringMetricOrderChangeRef.current(preferences.resourceMonitoringMetricOrder)
       onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
       onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
       onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
@@ -379,6 +398,8 @@ export function useWorkspaceIpcSync({
         onConnectionDefaultsChangeRef.current(preferences.connectionDefaults)
         onTerminalZoomLockedChangeRef.current(preferences.terminalZoomLocked)
         onFilePanelRememberRatioChangeRef.current(preferences.filePanelRememberRatio)
+        onResourceMonitoringMetricsChangeRef.current(preferences.resourceMonitoringMetrics)
+        onResourceMonitoringMetricOrderChangeRef.current(preferences.resourceMonitoringMetricOrder)
         onOverviewShowStatsChangeRef.current(preferences.overviewShowStats)
         onOverviewShowRecentChangeRef.current(preferences.overviewShowRecent)
         onOverviewShowAllConnectionsChangeRef.current(preferences.overviewShowAllConnections)
@@ -415,6 +436,8 @@ export function useWorkspaceIpcSync({
       connectionDefaults,
       terminalZoomLocked,
       filePanelRememberRatio,
+      resourceMonitoringMetrics,
+      resourceMonitoringMetricOrder,
       overviewShowStats,
       overviewShowRecent,
       overviewShowAllConnections,
@@ -458,6 +481,8 @@ export function useWorkspaceIpcSync({
     overviewSectionOrder,
     terminalZoomLocked,
     filePanelRememberRatio,
+    resourceMonitoringMetrics,
+    resourceMonitoringMetricOrder,
     customThemes,
     themeConfig,
     themeMode

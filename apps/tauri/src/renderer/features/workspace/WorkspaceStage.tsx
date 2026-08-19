@@ -44,8 +44,9 @@ export function WorkspaceStage({
   onFilePanelHeightChange,
   filePanelRatio,
   onFilePanelRatioCommit,
+  filePanelDiskHeaderAnchor,
+  onFilePanelDiskHeaderAnchorCommit,
   rememberFilePanelRatio,
-  shouldAlignFilePanelOnMount,
   sendTargets,
   terminalDockSendScope,
   terminalDockSelectedTabIds,
@@ -160,8 +161,9 @@ export function WorkspaceStage({
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
   filePanelRatio: number
   onFilePanelRatioCommit(ratio: number): void
+  filePanelDiskHeaderAnchor: boolean
+  onFilePanelDiskHeaderAnchorCommit(anchor: boolean): void
   rememberFilePanelRatio: boolean
-  shouldAlignFilePanelOnMount: boolean
   sendTargets: SessionSendTarget[]
   terminalDockSendScope: SendScope
   terminalDockSelectedTabIds: string[]
@@ -322,8 +324,9 @@ export function WorkspaceStage({
         onFilePanelHeightChange={onFilePanelHeightChange}
         filePanelRatio={filePanelRatio}
         onFilePanelRatioCommit={onFilePanelRatioCommit}
+        filePanelDiskHeaderAnchor={filePanelDiskHeaderAnchor}
+        onFilePanelDiskHeaderAnchorCommit={onFilePanelDiskHeaderAnchorCommit}
         rememberFilePanelRatio={rememberFilePanelRatio}
-        shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
         sendTargets={sendTargets}
         terminalDockSendScope={terminalDockSendScope}
         terminalDockSelectedTabIds={terminalDockSelectedTabIds}

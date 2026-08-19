@@ -525,6 +525,66 @@ fn format_storage_value(value: &str) -> String {
     trimmed.to_string()
 }
 
+fn parse_gpu_memory_bytes(value: &str) -> Option<f64> {
+    let normalized = value.trim().replace(' ', "");
+    if normalized.is_empty() || normalized == "-" {
+        return None;
+    }
+
+    let re = regex::Regex::new(r"(?i)^([0-9]+(?:\.[0-9]+)?)([KMGT]?)(?:I?B)?$").unwrap();
+    let caps = re.captures(&normalized)?;
+    let amount = caps.get(1)?.as_str().parse::<f64>().ok()?;
+    let unit = caps.get(2).map(|m| m.as_str().to_ascii_uppercase());
+    let power = match unit.as_deref() {
+        Some("K") => 1,
+        Some("M") => 2,
+        Some("G") => 3,
+        Some("T") => 4,
+        // nvidia-smi is called with `nounits`, and its memory fields are MiB.
+        Some("") | None => 2,
+        _ => return None,
+    };
+
+    Some(amount * 1024_f64.powi(power))
+}
+
+fn format_gpu_memory(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "-" {
+        return "-".to_string();
+    }
+
+    let normalized = trimmed.replace(' ', "");
+    if normalized == "-" {
+        return "-".to_string();
+    }
+    format_storage_value(&normalized)
+}
+
+fn parse_gpu_percent(value: &str) -> Option<f64> {
+    let normalized = value.trim().trim_end_matches('%');
+    let parsed = normalized.parse::<f64>().ok()?;
+    Some(parsed.clamp(0.0, 100.0))
+}
+
+fn parse_gpu_temperature(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .trim_end_matches('C')
+        .trim_end_matches('c')
+        .parse::<f64>()
+        .ok()
+}
+
+fn format_gpu_optional(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() || value == "-" {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
 fn format_process_megabytes(value: f64) -> String {
     if value >= 1024.0 {
         let decimals = if value >= 10.0 * 1024.0 { 0 } else { 1 };
@@ -769,6 +829,29 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         }
     }
 
+    // Newer collectors already provide the richer filesystem rows, while the
+    // compact sidebar table still consumes the legacy diskRows shape. Keep the
+    // compact table populated when a platform/collector emits only the richer
+    // block (which is what caused the sidebar to show an empty body).
+    if disk_rows.is_empty() {
+        for row in &file_system_rows {
+            let path = row
+                .get("mountPoint")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .or_else(|| row.get("name").and_then(serde_json::Value::as_str));
+            let available = row.get("available").and_then(serde_json::Value::as_str);
+            let size = row.get("size").and_then(serde_json::Value::as_str);
+
+            if let (Some(path), Some(available), Some(size)) = (path, available, size) {
+                disk_rows.push(serde_json::json!({
+                    "path": path,
+                    "usage": format!("{available}/{size}"),
+                }));
+            }
+        }
+    }
+
     let mut cpu_info_rows = Vec::new();
     for line in read_block("__CPUINFO_START__", "__CPUINFO_END__") {
         let parts: Vec<&str> = line.split('|').collect();
@@ -787,11 +870,28 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
     for line in read_block("__GPUINFO_START__", "__GPUINFO_END__") {
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() >= 4 {
+            let total_memory_bytes = parse_gpu_memory_bytes(parts[3]);
+            let used_memory_bytes = parts.get(5).and_then(|value| parse_gpu_memory_bytes(value));
+            let memory_percent = match (used_memory_bytes, total_memory_bytes) {
+                (Some(used), Some(total)) if total > 0.0 => {
+                    Some((used * 100.0 / total).clamp(0.0, 100.0))
+                }
+                _ => None,
+            };
             gpu_info_rows.push(serde_json::json!({
                 "model": parts[0],
                 "vendor": if parts[1].is_empty() { "-" } else { parts[1] },
                 "driver": if parts[2].is_empty() { "-" } else { parts[2] },
-                "memory": if parts[3].is_empty() { "-" } else { parts[3] },
+                "memory": format_gpu_memory(parts[3]),
+                "usagePercent": parts.get(4).and_then(|value| parse_gpu_percent(value)),
+                "memoryUsed": parts
+                    .get(5)
+                    .map(|value| format_gpu_memory(value))
+                    .filter(|value| value != "-"),
+                "memoryPercent": memory_percent,
+                "temperatureCelsius": parts.get(6).and_then(|value| parse_gpu_temperature(value)),
+                "powerUsage": format_gpu_optional(parts.get(7).copied()),
+                "powerLimit": format_gpu_optional(parts.get(8).copied()),
             }));
         }
     }
@@ -946,6 +1046,7 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
             "steal": cpu_steal,
         },
         "cpuInfoRows": cpu_info_rows,
+        "cpuTemperatureCelsius": read_line("__CPU_TEMPERATURE__").parse::<f64>().ok(),
         "gpuInfoRows": gpu_info_rows,
         "memoryPercent": mem_percent_num,
         "memoryUsage": if mem_total_bytes_num > 0.0 {
@@ -1047,6 +1148,38 @@ has_bounded_runner() {{
 read_cpu_stat() {{
   awk '/^cpu / {{print $2, $3, $4, $5, $6, $7, $8, $9; exit}}' /proc/stat 2>/dev/null
 }}
+read_cpu_temperature() {{
+  temperature=""
+  if command -v sensors >/dev/null 2>&1; then
+    temperature=$(run_bounded 2 sensors 2>/dev/null | awk '
+      BEGIN {{ IGNORECASE=1 }}
+      /Package id|Tctl:|Tdie:|Core [0-9]+:|CPU Temp|CPU Temperature/ {{
+        if (match($0, /[+-]?[0-9]+([.][0-9]+)?[[:space:]]*°?[Cc]/)) {{
+          value=substr($0, RSTART, RLENGTH)
+          gsub(/[°Cc[:space:]]/, "", value)
+          if ((value + 0) > -50 && (value + 0) < 150) {{ print value; exit }}
+        }}
+      }}
+    ')
+  fi
+  if [ -z "$temperature" ]; then
+    for zone in /sys/class/thermal/thermal_zone*; do
+      [ -r "$zone/temp" ] || continue
+      zone_type=$(cat "$zone/type" 2>/dev/null)
+      case "$zone_type" in
+        *cpu*|*CPU*|*x86_pkg_temp*|*coretemp*|*k10temp*|*soc*) ;;
+        *) continue ;;
+      esac
+      raw=$(cat "$zone/temp" 2>/dev/null)
+      case "$raw" in
+        ''|*[!0-9-]*) continue ;;
+      esac
+      temperature=$(awk -v value="$raw" 'BEGIN {{ c=value/1000; if (c > -50 && c < 150) printf "%.1f", c }}')
+      [ -n "$temperature" ] && break
+    done
+  fi
+  printf "%s" "$temperature"
+}}
 read_process_ticks() {{
   awk '
     {{
@@ -1099,6 +1232,7 @@ cpu_iowait_pct=$(awk -v diff_total="$diff_total" -v before="$iowait" -v after="$
 cpu_irq_pct=$(awk -v diff_total="$diff_total" -v before="$irq" -v after="$irq2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_softirq_pct=$(awk -v diff_total="$diff_total" -v before="$softirq" -v after="$softirq2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_steal_pct=$(awk -v diff_total="$diff_total" -v before="$steal" -v after="$steal2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
+cpu_temperature=$(read_cpu_temperature)
 os_name=$( ( . /etc/os-release >/dev/null 2>&1 && printf "%s" "$PRETTY_NAME" ) 2>/dev/null )
 [ -z "$os_name" ] && os_name=$(sed -n 's/^DISTRIB_DESCRIPTION=['"'"'"]\\{{0,1\\}}\\(.*\\)['"'"'"]\\{{0,1\\}}$/\\1/p' /etc/openwrt_release 2>/dev/null | head -n 1)
 [ -z "$os_name" ] && os_name=$(uname -s 2>/dev/null)
@@ -1340,17 +1474,26 @@ if [ -z "$cpu_info" ]; then
     }}
   ')
 fi
-gpu_info=$(run_bounded 1 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null | awk -F',' '
+gpu_info=$(run_bounded 1 nvidia-smi --query-gpu=name,driver_version,memory.total,utilization.gpu,memory.used,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | awk -F',' '
   function trim(value) {{
     sub(/^[[:space:]]+/, "", value)
     sub(/[[:space:]]+$/, "", value)
     return value
   }}
+  function with_unit(value, unit) {{
+    value=trim(value)
+    return (value == "" || value == "-") ? "-" : value " " unit
+  }}
   NF >= 3 {{
     model=trim($1)
     driver=trim($2)
-    memory=trim($3)
-    printf "%s|NVIDIA|%s|%s MiB\n", model, (driver == "" ? "-" : driver), (memory == "" ? "-" : memory)
+    memory_total=trim($3)
+    gpu_usage=trim($4)
+    memory_used=trim($5)
+    temperature=trim($6)
+    power_usage=trim($7)
+    power_limit=trim($8)
+    printf "%s|NVIDIA|%s|%s|%s|%s|%s|%s|%s\n", model, (driver == "" ? "-" : driver), with_unit(memory_total, "MiB"), with_unit(gpu_usage, "%"), with_unit(memory_used, "MiB"), with_unit(temperature, "C"), with_unit(power_usage, "W"), with_unit(power_limit, "W")
   }}
 ')
 if [ -z "$gpu_info" ]; then
@@ -1361,7 +1504,7 @@ if [ -z "$gpu_info" ]; then
       sub(/^[[:xdigit:]:.]+[[:space:]]+[^:]+: /, "", line)
       vendor=line
       sub(/[[:space:]].*$/, "", vendor)
-      printf "%s|%s|-|-\n", line, (vendor == "" ? "-" : vendor)
+      printf "%s|%s|-|-|-|-|-|-|-\n", line, (vendor == "" ? "-" : vendor)
     }}
   ')
 fi
@@ -1480,6 +1623,7 @@ echo "__UPTIME_SECONDS__$uptime_seconds"
 echo "__LOAD__$load"
 echo "__CPU__$cpu_pct"
 echo "__CPU_USAGE__$cpu_user_pct|$cpu_system_pct|$cpu_nice_pct|$cpu_idle_pct|$cpu_iowait_pct|$cpu_irq_pct|$cpu_softirq_pct|$cpu_steal_pct"
+echo "__CPU_TEMPERATURE__$cpu_temperature"
 echo "__MEM__$mem"
 echo "__MEM_BYTES__$mem_bytes"
 echo "__SWAP__$swap"
@@ -1545,6 +1689,21 @@ function Format-FileTermBytes([double]$Bytes) {
     return [string]::Format($culture, '{0:0} B', $Bytes)
 }
 
+function Get-CpuTemperatureCelsius {
+    try {
+        $zones = @(Get-CimInstance -Namespace 'root/wmi' -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue)
+        $values = @($zones | ForEach-Object {
+            if ([double]$_.CurrentTemperature -gt 0) {
+                ([double]$_.CurrentTemperature / 10) - 273.15
+            }
+        } | Where-Object { $_ -gt -50 -and $_ -lt 150 })
+        if ($values.Count -gt 0) {
+            return [Math]::Round((($values | Measure-Object -Average).Average), 1)
+        }
+    } catch {}
+    return $null
+}
+
 $os = Get-CimInstance Win32_OperatingSystem
 $cs = Get-CimInstance Win32_ComputerSystem
 $cpu = Get-CimInstance Win32_Processor
@@ -1562,6 +1721,7 @@ $swapPct   = if ($swapTotal -gt 0) { [Math]::Round($swapUsed * 100 / $swapTotal)
 $cpu1 = (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 0.3).CounterSamples
 Start-Sleep -Milliseconds 500
 $cpuPct = if ($cpu1) { [Math]::Round($cpu1.CookedValue) } else { 0 }
+$cpuTemperature = Get-CpuTemperatureCelsius
 $logicalProcessorCount = [Math]::Max(1, [Environment]::ProcessorCount)
 $systemLoad = [string]::Format(
     [Globalization.CultureInfo]::InvariantCulture,
@@ -1597,15 +1757,69 @@ foreach ($processor in @($cpu)) {
 }
 if ($cpuRows.Count -eq 0) { $cpuRows += ('-|{0}|-|-|-' -f $cpuCores) }
 
-$gpuRows = @()
-foreach ($adapter in @(Get-CimInstance Win32_VideoController)) {
-    $gpuName = ([string]$adapter.Name).Trim()
-    if (-not $gpuName) { continue }
-    $gpuVendor = ([string]$adapter.AdapterCompatibility).Trim()
-    $gpuDriver = ([string]$adapter.DriverVersion).Trim()
-    $gpuMemory = if ([double]$adapter.AdapterRAM -gt 0) { Format-FileTermBytes ([double]$adapter.AdapterRAM) } else { '-' }
-    $gpuRows += ('{0}|{1}|{2}|{3}' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory)
+function Convert-GpuMetricText([object]$Value, [string]$Unit) {
+    $text = ([string]$Value).Trim()
+    if (-not $text -or $text -eq '-') { return '-' }
+    return $text + ' ' + $Unit
 }
+
+function Get-GpuRuntimeMap {
+    $runtime = @{}
+    try {
+        $runtimeLines = @(nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits 2>$null)
+        foreach ($line in $runtimeLines) {
+            $parts = @(([string]$line) -split ',')
+            if ($parts.Count -lt 7) { continue }
+            $name = ([string]$parts[0]).Trim()
+            if (-not $name) { continue }
+            $runtime[$name.ToLowerInvariant()] = @{
+                usage = Convert-GpuMetricText $parts[1] '%'
+                memoryUsed = Convert-GpuMetricText $parts[2] 'MiB'
+                memoryTotal = Convert-GpuMetricText $parts[3] 'MiB'
+                temperature = Convert-GpuMetricText $parts[4] 'C'
+                powerUsage = Convert-GpuMetricText $parts[5] 'W'
+                powerLimit = Convert-GpuMetricText $parts[6] 'W'
+            }
+        }
+    } catch {}
+    return $runtime
+}
+
+function Get-GpuRows([object[]]$Adapters) {
+    $runtime = Get-GpuRuntimeMap
+    $rows = @()
+    foreach ($adapter in @($Adapters)) {
+        $gpuName = ([string]$adapter.Name).Trim()
+        if (-not $gpuName) { continue }
+        $gpuVendor = ([string]$adapter.AdapterCompatibility).Trim()
+        if (-not $gpuVendor) { $gpuVendor = '-' }
+        $gpuDriver = ([string]$adapter.DriverVersion).Trim()
+        if (-not $gpuDriver) { $gpuDriver = '-' }
+        $gpuMemory = if ([double]$adapter.AdapterRAM -gt 0) { Format-FileTermBytes ([double]$adapter.AdapterRAM) } else { '-' }
+        $runtimeEntry = $null
+        $gpuNameKey = $gpuName.ToLowerInvariant()
+        if ($runtime.ContainsKey($gpuNameKey)) {
+            $runtimeEntry = $runtime[$gpuNameKey]
+        } else {
+            foreach ($runtimeName in @($runtime.Keys)) {
+                if ($gpuNameKey.Contains([string]$runtimeName) -or ([string]$runtimeName).Contains($gpuNameKey)) {
+                    $runtimeEntry = $runtime[$runtimeName]
+                    break
+                }
+            }
+        }
+        if ($runtimeEntry) {
+            if ($gpuMemory -eq '-' -and $runtimeEntry.memoryTotal -ne '-') { $gpuMemory = $runtimeEntry.memoryTotal }
+            $rows += ('{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory, $runtimeEntry.usage, $runtimeEntry.memoryUsed, $runtimeEntry.temperature, $runtimeEntry.powerUsage, $runtimeEntry.powerLimit)
+        } else {
+            $rows += ('{0}|{1}|{2}|{3}|-|-|-|-|-' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory)
+        }
+    }
+    return $rows
+}
+
+$gpuAdapters = @(Get-CimInstance Win32_VideoController)
+$gpuRows = @(Get-GpuRows -Adapters $gpuAdapters)
 
 $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3'
 $diskLines = @()
@@ -1666,6 +1880,7 @@ Write-Output ('__LOAD__' + $systemLoad)
 Write-Output '__LOAD_UNIT__busy-logical-processors'
 Write-Output ('__CPU__' + $cpuPct)
 Write-Output ('__CPU_USAGE__{0}|{1}|0|{2}|0|0|0|0' -f $cpuPct, $cpuPct, [Math]::Max(0, 100 - $cpuPct))
+if ($null -ne $cpuTemperature) { Write-Output ('__CPU_TEMPERATURE__' + $cpuTemperature) } else { Write-Output '__CPU_TEMPERATURE__' }
 Write-Output ('__MEM__{0}|{1}|{2}|0|0|0' -f [Math]::Round($memUsed / 1MB), [Math]::Round($memTotal / 1MB), $memPct)
 Write-Output ('__MEM_BYTES__{0}|{1}|{2}|{3}|0|0|0' -f $memUsed, $memTotal, $memFree, $memPct)
 Write-Output ('__SWAP__{0}|{1}|{2}' -f [Math]::Round($swapUsed / 1MB), [Math]::Round($swapTotal / 1MB), $swapPct)
@@ -1730,6 +1945,7 @@ while ($true) {
     if ($cpuCounter) {
         try { $cpuPct = [Math]::Round($cpuCounter.NextValue()) } catch {}
     }
+    $cpuTemperature = Get-CpuTemperatureCelsius
     if ($memoryAvailableCounter) {
         try { $memFree = [double]$memoryAvailableCounter.NextValue() } catch {}
     }
@@ -1788,6 +2004,7 @@ while ($true) {
             $procLines += ('{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $cpuPct, $_.ProcessName)
         }
     $previousProcCpuTimes = $currentProcCpuTimes
+    $gpuRows = @(Get-GpuRows -Adapters $gpuAdapters)
 
     $waitMs = [Math]::Round($nextEmitMs - [double]$sampleClock.ElapsedMilliseconds)
     if ($waitMs -gt 0) { Start-Sleep -Milliseconds $waitMs }
@@ -1809,6 +2026,7 @@ while ($true) {
     Write-Output '__LOAD_UNIT__busy-logical-processors'
     Write-Output ('__CPU__' + $cpuPct)
     Write-Output ('__CPU_USAGE__0|{0}|0|{1}|0|0|0|0' -f $cpuPct, [Math]::Max(0, 100 - $cpuPct))
+    if ($null -ne $cpuTemperature) { Write-Output ('__CPU_TEMPERATURE__' + $cpuTemperature) } else { Write-Output '__CPU_TEMPERATURE__' }
     Write-Output ('__MEM__{0}|{1}|{2}|0|0|0' -f [Math]::Round($memUsed / 1MB), [Math]::Round($memTotal / 1MB), $memPct)
     Write-Output ('__MEM_BYTES__{0}|{1}|{2}|{3}|0|0|0' -f $memUsed, $memTotal, $memFree, $memPct)
     Write-Output ('__SWAP__{0}|{1}|{2}' -f [Math]::Round($swapUsed / 1MB), [Math]::Round($swapTotal / 1MB), $swapPct)
@@ -1913,6 +2131,8 @@ mod tests {
         let command = build_posix_metrics_command("linux");
 
         assert!(command.contains(r#"printf "%s|%sK/%sK\n"#));
+        assert!(command.contains("read_cpu_temperature()"));
+        assert!(command.contains("__CPU_TEMPERATURE__"));
         // 进程输出格式：pid|user|rss(M)|pcpu(已归一化)|pmem|args
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n"#));
         assert!(command.contains("getconf _NPROCESSORS_ONLN"));
@@ -1963,6 +2183,27 @@ mod tests {
     }
 
     #[test]
+    fn parser_backfills_legacy_disk_rows_from_filesystem_rows() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__FILESYSTEMS_START__\n/dev/sda1|100 GB|40 GB|40%|60 GB|/\n__FILESYSTEMS_END__\n",
+            "linux",
+        );
+
+        assert_eq!(metrics["diskRows"][0]["path"], "/");
+        assert_eq!(metrics["diskRows"][0]["usage"], "60 GB/100 GB");
+    }
+
+    #[test]
+    fn parser_reads_optional_cpu_temperature() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__CPU__10\n__CPU_TEMPERATURE__57.5\n",
+            "linux",
+        );
+
+        assert_eq!(metrics["cpuTemperatureCelsius"].as_f64(), Some(57.5));
+    }
+
+    #[test]
     fn parser_filters_transient_collector_processes() {
         // ps/awk/bash 等采集器自身进程应被过滤，不显示给用户
         let metrics = parse_system_metrics(
@@ -1982,7 +2223,14 @@ mod tests {
         assert!(command.contains("($cpuPct * $logicalProcessorCount) / 100"));
         assert!(command.contains("Write-Output ('__LOAD__' + $systemLoad)"));
         assert!(command.contains("Write-Output '__LOAD_UNIT__busy-logical-processors'"));
+        assert!(command.contains("Get-CpuTemperatureCelsius"));
+        assert!(command.contains("__CPU_TEMPERATURE__"));
         assert!(command.contains("Get-CimInstance Win32_VideoController"));
+        assert!(command.contains("utilization.gpu"));
+        assert!(command.contains("memory.used"));
+        assert!(command.contains("temperature.gpu"));
+        assert!(command.contains("$rows += ('{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}'"));
+        assert!(command.contains("return $rows"));
         assert!(command.contains("$processor.L3CacheSize"));
         assert!(command.contains("$fsLines   +="));
 
@@ -2010,6 +2258,24 @@ mod tests {
         assert_eq!(metrics["gpuInfoRows"][0]["memory"], "4.0 GB");
         assert_eq!(metrics["fileSystemRows"][0]["mountPoint"], "C:");
         assert_eq!(metrics["fileSystemRows"][0]["usagePercent"], "86%");
+    }
+
+    #[test]
+    fn parser_keeps_optional_gpu_runtime_metrics() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__GPUINFO_START__\nRTX 4090|NVIDIA|550.54|8.0 GB|75|4096 MiB|64|120.0 W|200.0 W\n__GPUINFO_END__\n",
+            "linux",
+        );
+
+        let gpu = &metrics["gpuInfoRows"][0];
+        assert_eq!(gpu["model"], "RTX 4090");
+        assert_eq!(gpu["usagePercent"], 75.0);
+        assert_eq!(gpu["memory"], "8.0 GB");
+        assert_eq!(gpu["memoryUsed"], "4.0 GB");
+        assert_eq!(gpu["memoryPercent"], 50.0);
+        assert_eq!(gpu["temperatureCelsius"], 64.0);
+        assert_eq!(gpu["powerUsage"], "120.0 W");
+        assert_eq!(gpu["powerLimit"], "200.0 W");
     }
 
     #[test]

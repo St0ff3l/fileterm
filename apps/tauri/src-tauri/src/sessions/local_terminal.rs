@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Manager};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 const DEFAULT_COLS: u16 = 80;
@@ -378,7 +378,7 @@ pub fn start_local_terminal_worker(
     cancellation: CancellationToken,
     launch: LocalTerminalLaunch,
     runtime_gate: Arc<LocalTerminalRuntimeGate>,
-) -> Result<(), String> {
+) -> Result<oneshot::Receiver<()>, String> {
     validate_launch(&launch)?;
     let cwd = PathBuf::from(&launch.cwd);
     if !cwd.is_dir() {
@@ -427,11 +427,13 @@ pub fn start_local_terminal_worker(
     // channel remains available for Ctrl+C and resize commands.
     let (output_tx, mut output_rx) =
         mpsc::channel::<LocalOutputChunk>(LOCAL_OUTPUT_CHANNEL_CAPACITY);
+    let (startup_ready_tx, startup_ready_rx) = oneshot::channel();
     let (output_done_tx, output_done_rx) = tokio::sync::oneshot::channel();
     let pump_app = app.clone();
     let pump_tab_id = tab_id.clone();
     let pump_runtime_id = runtime_id.clone();
     let pump_gate = runtime_gate.clone();
+    let mut startup_ready_tx = Some(startup_ready_tx);
     tauri::async_runtime::spawn(async move {
         let mut cwd_tracker = LocalOsc7CwdTracker::default();
         let mut pending_chunk = None;
@@ -472,6 +474,13 @@ pub fn start_local_terminal_worker(
             .await
             {
                 break;
+            }
+            // Signal readiness only after the first PTY batch has been
+            // appended to the authoritative session transcript. The initial
+            // local-terminal snapshot can then carry the prompt even when
+            // the renderer has not subscribed to the global data channel yet.
+            if let Some(sender) = startup_ready_tx.take() {
+                let _ = sender.send(());
             }
             if let Some(cwd) = cwd_tracker.observe(&batch) {
                 let _ = update_local_terminal_cwd(
@@ -574,7 +583,7 @@ pub fn start_local_terminal_worker(
         })
         .map_err(|error| format!("Unable to start local PTY worker: {error}"))?;
 
-    Ok(())
+    Ok(startup_ready_rx)
 }
 
 fn queue_local_terminal_output(
@@ -947,34 +956,46 @@ fn clamp_u16(value: u32, fallback: u16) -> u16 {
 fn default_shell() -> String {
     // 优先 PowerShell（Windows 默认），缺失时回退 cmd.exe。
     // Server Core / 精简镜像可能没有 powershell.exe。
-    if shell_available_in_path("powershell.exe") {
-        "powershell.exe".to_string()
-    } else if shell_available_in_path("pwsh.exe") {
-        "pwsh.exe".to_string()
-    } else {
-        "cmd.exe".to_string()
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn shell_available_in_path(name: &str) -> bool {
-    use std::path::{Path, PathBuf};
-
-    // 正常情况：PATH 里能找到。
-    if let Some(path_var) = env::var_os("PATH") {
-        if env::split_paths(&path_var).any(|dir| dir.join(name).is_file()) {
-            return true;
+    for name in ["powershell.exe", "pwsh.exe", "cmd.exe"] {
+        if let Some(shell) = resolve_windows_shell(name) {
+            return shell;
         }
     }
 
-    // Fallback：PATH 异常（如被清理过的服务进程）时，直接查 System32。
-    // Windows PowerShell 和 cmd.exe 在 System32；PowerShell 7 另查其标准安装目录。
+    // CommandBuilder/CreateProcess can still resolve this in a normal Windows
+    // environment. Keep the logical fallback even when the environment is so
+    // restricted that none of the standard locations were readable.
+    "cmd.exe".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_shell(name: &str) -> Option<String> {
+    if let Some(path_var) = env::var_os("PATH") {
+        if env::split_paths(&path_var).any(|dir| dir.join(name).is_file()) {
+            return Some(name.to_string());
+        }
+    }
+
+    standard_windows_shell_path(name).map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn standard_windows_shell_path(name: &str) -> Option<PathBuf> {
+    use std::path::Path;
+
+    // PATH 可能被桌面启动器、服务或企业策略裁剪。Windows PowerShell
+    // 实际位于 WindowsPowerShell\v1.0，而不是直接位于 System32。
     let system32 = env::var_os("SystemRoot")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
         .join("System32");
-    if system32.join(name).is_file() {
-        return true;
+    let system_candidate = if name.eq_ignore_ascii_case("powershell.exe") {
+        system32.join("WindowsPowerShell").join("v1.0").join(name)
+    } else {
+        system32.join(name)
+    };
+    if system_candidate.is_file() {
+        return Some(system_candidate);
     }
 
     if name.eq_ignore_ascii_case("pwsh.exe") {
@@ -983,16 +1004,16 @@ fn shell_available_in_path(name: &str) -> bool {
                 continue;
             };
             let base = Path::new(&root).join("PowerShell");
-            if ["7", "7-preview"]
-                .into_iter()
-                .any(|version| base.join(version).join(name).is_file())
-            {
-                return true;
+            for version in ["7", "7-preview"] {
+                let candidate = base.join(version).join(name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
             }
         }
     }
 
-    false
+    None
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1235,7 +1256,17 @@ fn configure_shell_command(
 
     match name.as_str() {
         "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" => {
-            command.args(["-NoLogo", "-NoExit"]);
+            command.arg("-NoLogo");
+            // The default Windows PowerShell profile is user-controlled and may
+            // import modules, start a prompt helper, or wait on network state.
+            // A stalled profile leaves the first local terminal permanently at
+            // "Starting local shell...". Preserve profile behavior for callers
+            // that explicitly provide launch arguments, while making the
+            // default FileTerm shell deterministic and ready immediately.
+            if extra_args.is_empty() {
+                command.arg("-NoProfile");
+            }
+            command.arg("-NoExit");
             command.args(extra_args);
             // -Command / -CommandWithArgs / -File / -EncodedCommand 互斥：用户传了这些参数时
             // 不再自动追加 UTF-8 setup，避免 PowerShell 因参数冲突直接报错。
@@ -1646,6 +1677,46 @@ mod tests {
         assert!(cmd_args_have_explicit_command(&["/K".to_string()]));
         assert!(!cmd_args_have_explicit_command(&["/q".to_string()]));
         assert!(!cmd_args_have_explicit_command(&[]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn default_powershell_launch_skips_user_profile_and_keeps_utf8_setup() {
+        let mut command = CommandBuilder::new("powershell.exe");
+        configure_shell_command(&mut command, "powershell.exe", &[], &BTreeMap::new());
+
+        let argv: Vec<String> = command
+            .get_argv()
+            .iter()
+            .filter_map(|value| value.to_str().map(ToOwned::to_owned))
+            .collect();
+        assert_eq!(
+            &argv[..4],
+            &["powershell.exe", "-NoLogo", "-NoProfile", "-NoExit"]
+        );
+        assert!(argv.windows(2).any(|values| {
+            values[0] == "-Command"
+                && values[1].contains("Console]::InputEncoding")
+                && values[1].contains("Console]::OutputEncoding")
+        }));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn explicit_powershell_arguments_preserve_profile_behavior() {
+        let mut command = CommandBuilder::new("powershell.exe");
+        let arguments = vec!["-ExecutionPolicy".to_string(), "Bypass".to_string()];
+        configure_shell_command(&mut command, "powershell.exe", &arguments, &BTreeMap::new());
+
+        let argv: Vec<String> = command
+            .get_argv()
+            .iter()
+            .filter_map(|value| value.to_str().map(ToOwned::to_owned))
+            .collect();
+        assert!(!argv.contains(&"-NoProfile".to_string()));
+        assert!(argv
+            .windows(2)
+            .any(|values| { values[0] == "-ExecutionPolicy" && values[1] == "Bypass" }));
     }
 
     #[test]

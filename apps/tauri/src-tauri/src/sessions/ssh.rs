@@ -216,7 +216,8 @@ fn resource_monitoring_interval_seconds(profile: &Value) -> u64 {
 ///
 /// Mirrors `mergeSystemMetricsHistory` from `packages/core` so the session
 /// snapshot retains the rolling `networkSamples` / `networkSamplesByInterface`
-/// history. Other fields (cpu, memory, etc.) are taken from `next` verbatim.
+/// history. Static filesystem sections are also retained when a partial
+/// refresh omits them.
 fn merge_system_metrics_history(
     previous: Option<&serde_json::Value>,
     next: serde_json::Value,
@@ -274,6 +275,23 @@ fn merge_system_metrics_history(
                 merged_by_iface.insert(name.clone(), serde_json::Value::Array(combined));
             }
             merged["networkSamplesByInterface"] = serde_json::Value::Object(merged_by_iface);
+        }
+
+        // A streaming metrics block can be partial. Preserve the last
+        // non-empty filesystem sections instead of replacing the sidebar
+        // table with its eight empty placeholder rows.
+        for field in ["diskRows", "fileSystemRows"] {
+            let next_has_rows = merged
+                .get(field)
+                .and_then(|value| value.as_array())
+                .map_or(false, |rows| !rows.is_empty());
+            if !next_has_rows {
+                if let Some(previous_rows) = prev.get(field).and_then(|value| value.as_array()) {
+                    if !previous_rows.is_empty() {
+                        merged[field] = serde_json::Value::Array(previous_rows.clone());
+                    }
+                }
+            }
         }
     }
     merged
@@ -8527,14 +8545,14 @@ mod tests {
         detect_remote_exec_input_kind, effective_remote_forward_port, enqueue_tunnel_command,
         exec_channel_enabled, finish_shell_setup_suppression, format_sftp_unavailable_reason,
         is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
-        looks_like_root_prompt, looks_like_shell_prompt, missing_password_credential,
-        parent_remote_item, parent_remote_path, parse_root_file_access_method,
-        password_for_authentication, privilege_command_from_terminal_input,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        resource_monitoring_interval_seconds, root_access_auth_failed, root_file_command,
-        root_stat_shell_command, root_upload_base64_shell_command, root_upload_shell_command,
-        shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait, strip_su_exec_output,
-        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
+        looks_like_root_prompt, looks_like_shell_prompt, merge_system_metrics_history,
+        missing_password_credential, parent_remote_item, parent_remote_path,
+        parse_root_file_access_method, password_for_authentication,
+        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
+        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
+        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
+        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
         try_keyboard_interactive_with_responder, tunnel_bind_address,
         validate_root_download_completion, validate_tunnel_rule,
@@ -8569,6 +8587,27 @@ mod tests {
         assert!(!resource_monitoring_enabled(&serde_json::json!({
             "enableResourceMonitoring": false
         })));
+    }
+
+    #[test]
+    fn partial_metrics_keep_last_filesystem_sections() {
+        let previous = serde_json::json!({
+            "diskRows": [{"path": "/", "usage": "60 GB/100 GB"}],
+            "fileSystemRows": [{"mountPoint": "/", "available": "60 GB", "size": "100 GB"}],
+            "networkSamples": [],
+            "networkSamplesByInterface": {}
+        });
+        let next = serde_json::json!({
+            "diskRows": [],
+            "fileSystemRows": [],
+            "networkSamples": [],
+            "networkSamplesByInterface": {}
+        });
+
+        let merged = merge_system_metrics_history(Some(&previous), next, 600);
+
+        assert_eq!(merged["diskRows"][0]["path"], "/");
+        assert_eq!(merged["fileSystemRows"][0]["mountPoint"], "/");
     }
 
     #[test]

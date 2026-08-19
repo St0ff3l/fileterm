@@ -17,6 +17,8 @@ import {
   type ConnectionProfile,
   type CreateProfileInput,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_RESOURCE_MONITORING_METRICS,
+  DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   createCodexThemeConfig,
   createDefaultThemeConfig,
   type FileContentSnapshot,
@@ -26,6 +28,7 @@ import {
   type RemoteFileItem,
   type SavedTheme,
   type SshConnectionDefaults,
+  type ResourceMonitoringMetric,
   type ThemeConfig,
   type UiPreferences,
   type McpAgentClientStatus
@@ -89,6 +92,8 @@ const SIDEBAR_MIN_WIDTH = 190
 const SIDEBAR_MAX_WIDTH = 360
 const FILE_PANEL_PREFERENCES_KEY = 'ui.file-panel-preferences.v1'
 const DEFAULT_FILE_PANEL_RATIO = 30
+const MAX_FILE_PANEL_RATIO = 70
+const FILE_PANEL_DISK_HEADER_ANCHOR = 'disk-header'
 // Four overview cards need 4 * 200px. Include the home body/page padding and
 // a small scrollbar allowance so the last card stays on the same row at the
 // configured 1150px minimum window width.
@@ -116,6 +121,8 @@ type InitialUiPreferences = Pick<
   | 'connectionDefaults'
   | 'terminalZoomLocked'
   | 'filePanelRememberRatio'
+  | 'resourceMonitoringMetrics'
+  | 'resourceMonitoringMetricOrder'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -147,6 +154,10 @@ function readInitialLocale(searchParams: URLSearchParams, persistedPreferences?:
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
+}
+
+function sameResourceMonitoringMetricOrder(left: ResourceMonitoringMetric[], right: ResourceMonitoringMetric[]) {
+  return left.length === right.length && left.every((metric, index) => metric === right[index])
 }
 
 export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUiPreferences } = {}) {
@@ -202,6 +213,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
     () => initialUiPreferences?.filePanelRememberRatio ?? true
   )
+  const [resourceMonitoringMetrics, setResourceMonitoringMetrics] = useState<ResourceMonitoringMetric[]>(() => [
+    ...(initialUiPreferences?.resourceMonitoringMetrics ?? DEFAULT_RESOURCE_MONITORING_METRICS)
+  ])
+  const [resourceMonitoringMetricOrder, setResourceMonitoringMetricOrder] = useState<ResourceMonitoringMetric[]>(() => [
+    ...(initialUiPreferences?.resourceMonitoringMetricOrder ?? DEFAULT_RESOURCE_MONITORING_METRIC_ORDER)
+  ])
   const [overviewShowStats, setOverviewShowStats] = useState(() => initialUiPreferences?.overviewShowStats ?? true)
   const [overviewShowRecent, setOverviewShowRecent] = useState(() => initialUiPreferences?.overviewShowRecent ?? true)
   const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(
@@ -224,6 +241,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [aiCopilotWidth, setAiCopilotWidth] = useState(368)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
   const [filePanelRatios, setFilePanelRatios] = useState<Record<string, number>>({})
+  const [filePanelDiskHeaderAnchors, setFilePanelDiskHeaderAnchors] = useState<Record<string, boolean>>({})
   const [hasLoadedFilePanelRatios, setHasLoadedFilePanelRatios] = useState(false)
   const [filePanelRatioPersistenceReady, setFilePanelRatioPersistenceReady] = useState(false)
   const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
@@ -399,6 +417,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     connectionDefaults,
     terminalZoomLocked,
     filePanelRememberRatio,
+    resourceMonitoringMetrics,
+    resourceMonitoringMetricOrder,
     overviewShowStats,
     overviewShowRecent,
     overviewShowAllConnections,
@@ -417,6 +437,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     },
     onTerminalZoomLockedChange: setTerminalZoomLocked,
     onFilePanelRememberRatioChange: setFilePanelRememberRatio,
+    onResourceMonitoringMetricsChange: setResourceMonitoringMetrics,
+    onResourceMonitoringMetricOrderChange: (nextOrder) => {
+      setResourceMonitoringMetricOrder((currentOrder) =>
+        sameResourceMonitoringMetricOrder(currentOrder, nextOrder) ? currentOrder : nextOrder
+      )
+    },
     onOverviewShowStatsChange: setOverviewShowStats,
     onOverviewShowRecentChange: setOverviewShowRecent,
     onOverviewShowAllConnectionsChange: setOverviewShowAllConnections,
@@ -446,6 +472,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         if (canceled) return
         if (!value) {
           setFilePanelRatios({})
+          setFilePanelDiskHeaderAnchors({})
           setFilePanelRatioPersistenceReady(true)
           return
         }
@@ -453,19 +480,28 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           const parsed: unknown = JSON.parse(value)
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
             setFilePanelRatios({})
-            return
-          }
-          const normalized = Object.fromEntries(
-            Object.entries(parsed).flatMap(([profileId, entry]) => {
-              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
+            setFilePanelDiskHeaderAnchors({})
+          } else {
+            const normalizedRatios: Record<string, number> = {}
+            const normalizedAnchors: Record<string, boolean> = {}
+            Object.entries(parsed).forEach(([profileId, entry]) => {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return
               const ratio = (entry as { ratio?: unknown }).ratio
-              if (typeof ratio !== 'number' || !Number.isFinite(ratio)) return []
-              return [[profileId, Math.max(0, Math.min(50, ratio))]]
+              if (typeof ratio !== 'number' || !Number.isFinite(ratio)) return
+              normalizedRatios[profileId] = Math.max(0, Math.min(MAX_FILE_PANEL_RATIO, ratio))
+              const anchor = (entry as { anchor?: unknown }).anchor
+              if (anchor === FILE_PANEL_DISK_HEADER_ANCHOR) {
+                normalizedAnchors[profileId] = true
+              } else if (typeof anchor === 'boolean') {
+                normalizedAnchors[profileId] = anchor
+              }
             })
-          )
-          setFilePanelRatios(normalized)
+            setFilePanelRatios(normalizedRatios)
+            setFilePanelDiskHeaderAnchors(normalizedAnchors)
+          }
         } catch {
           setFilePanelRatios({})
+          setFilePanelDiskHeaderAnchors({})
         }
         setFilePanelRatioPersistenceReady(true)
       })
@@ -482,12 +518,27 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   useEffect(() => {
     if (!desktopApi || !isMainWorkspaceWindow || !hasLoadedFilePanelRatios || !filePanelRatioPersistenceReady) return
     const value = JSON.stringify(
-      Object.fromEntries(Object.entries(filePanelRatios).map(([profileId, ratio]) => [profileId, { ratio }]))
+      Object.fromEntries(
+        Object.entries(filePanelRatios).map(([profileId, ratio]) => [
+          profileId,
+          {
+            ratio,
+            ...(filePanelDiskHeaderAnchors[profileId] ? { anchor: FILE_PANEL_DISK_HEADER_ANCHOR } : {})
+          }
+        ])
+      )
     )
     void desktopApi.setUiStateItem(FILE_PANEL_PREFERENCES_KEY, value).catch((cause: unknown) => {
       reportError(setError, '保存文件面板布局', cause)
     })
-  }, [desktopApi, filePanelRatios, filePanelRatioPersistenceReady, hasLoadedFilePanelRatios, isMainWorkspaceWindow])
+  }, [
+    desktopApi,
+    filePanelDiskHeaderAnchors,
+    filePanelRatios,
+    filePanelRatioPersistenceReady,
+    hasLoadedFilePanelRatios,
+    isMainWorkspaceWindow
+  ])
 
   // Child windows and the transparent Linux main window remain hidden until
   // their route's first data fetch has settled. This is the Tauri equivalent
@@ -585,8 +636,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       ? (filePanelRatios[activeTab.profileId] ?? DEFAULT_FILE_PANEL_RATIO)
       : DEFAULT_FILE_PANEL_RATIO
     : DEFAULT_FILE_PANEL_RATIO
-  const shouldAlignFilePanelOnMount = activeTab
-    ? !Object.prototype.hasOwnProperty.call(filePanelHeights, activeTab.id) && !hasLoadedFilePanelRatios
+  const activeFilePanelDiskHeaderAnchor = activeTab
+    ? filePanelRememberRatio && hasLoadedFilePanelRatios
+      ? (filePanelDiskHeaderAnchors[activeTab.profileId] ??
+        !Object.prototype.hasOwnProperty.call(filePanelRatios, activeTab.profileId))
+      : true
     : false
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
@@ -642,10 +696,21 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const commitActiveFilePanelRatio = useCallback(
     (nextRatio: number) => {
       if (!activeTab || !filePanelRememberRatio || !hasLoadedFilePanelRatios) return
-      const ratio = Math.max(0, Math.min(50, nextRatio))
+      const ratio = Math.max(0, Math.min(MAX_FILE_PANEL_RATIO, nextRatio))
       setFilePanelRatios((currentRatios) => {
         if (currentRatios[activeTab.profileId] === ratio) return currentRatios
         return { ...currentRatios, [activeTab.profileId]: ratio }
+      })
+    },
+    [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
+  )
+
+  const commitActiveFilePanelDiskHeaderAnchor = useCallback(
+    (nextAnchor: boolean) => {
+      if (!activeTab || !filePanelRememberRatio || !hasLoadedFilePanelRatios) return
+      setFilePanelDiskHeaderAnchors((currentAnchors) => {
+        if (currentAnchors[activeTab.profileId] === nextAnchor) return currentAnchors
+        return { ...currentAnchors, [activeTab.profileId]: nextAnchor }
       })
     },
     [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
@@ -1718,6 +1783,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             activeSession={activeSession}
             collapsed={isSystemSidebarCollapsed}
             showResourceMeters={isResourceMonitoringAvailable}
+            visibleMetrics={resourceMonitoringMetricOrder.filter((metric) =>
+              resourceMonitoringMetrics.includes(metric)
+            )}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
             onResizeStart={startSidebarResize}
@@ -1761,8 +1829,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onFilePanelHeightChange={setActiveFilePanelHeight}
                 filePanelRatio={activeFilePanelRatio}
                 onFilePanelRatioCommit={commitActiveFilePanelRatio}
+                filePanelDiskHeaderAnchor={activeFilePanelDiskHeaderAnchor}
+                onFilePanelDiskHeaderAnchorCommit={commitActiveFilePanelDiskHeaderAnchor}
                 rememberFilePanelRatio={filePanelRememberRatio}
-                shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
                 sendTargets={sessionSendTargets}
                 terminalDockSendScope={activeTerminalDockSendState.scope}
                 terminalDockSelectedTabIds={activeTerminalDockSendState.selectedTabIds}

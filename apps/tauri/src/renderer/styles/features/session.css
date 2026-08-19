@@ -1,7 +1,7 @@
 .session-workspace {
   display: grid;
   position: relative;
-  grid-template-rows: minmax(160px, 1fr) minmax(0, var(--file-panel-height, 300px));
+  grid-template-rows: minmax(120px, 1fr) minmax(0, var(--file-panel-height, 300px));
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
