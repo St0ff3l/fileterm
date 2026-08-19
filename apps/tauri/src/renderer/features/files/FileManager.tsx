@@ -147,6 +147,19 @@ function sortRemoteFiles(rows: RemoteFileItem[], sort: RemoteFileSortState) {
   return parentRow ? [parentRow, ...sortableRows] : sortableRows
 }
 
+function joinLocalDragTarget(directoryPath: string, name: string) {
+  const separator = directoryPath.includes('\\') ? '\\' : '/'
+  const normalized = directoryPath.replace(/[\\/]+$/, '')
+  if (normalized === separator) {
+    return `${separator}${name}`
+  }
+  return `${normalized}${separator}${name}`
+}
+
+function localDragBasename(path: string) {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? ''
+}
+
 export function FileManager({
   activeSession,
   activeTab,
@@ -267,7 +280,12 @@ export function FileManager({
 }) {
   const defaultRemoteSort = { field: 'name', direction: 'asc' } satisfies RemoteFileSortState
   const desktopApi = window.fileterm
-  const useUnifiedNativeRemoteDrag = desktopApi?.platform === 'darwin'
+  // macOS uses NSFilePromiseProvider; Windows/Linux use the native staged-file
+  // fallback. All desktop platforms therefore use one pointer gesture for
+  // internal and external destinations. Browser HTML5 drag remains available
+  // for local-file uploads and for the non-desktop renderer fallback.
+  const useUnifiedNativeRemoteDrag =
+    desktopApi?.platform === 'darwin' || desktopApi?.platform === 'win32' || desktopApi?.platform === 'linux'
   const canUseRemoteFiles = activeSession.connected === true && !activeSession.sftpUnavailableReason
   const remoteFilesUnavailableText = activeSession.sftpUnavailableReason ?? t.remoteDisconnectedDescription
   const isSshSession = activeTab?.sessionType === 'ssh'
@@ -337,7 +355,12 @@ export function FileManager({
     }
 
     const stopTrackingExternalDrag = (detail: { paths: string[] }) => {
-      if (detail.paths.length) {
+      // On Windows/Linux the native drag itself exposes the staged paths while
+      // it hovers over this window. Do not mistake that for a new external
+      // drag; the active payload is needed when the local pane receives Drop.
+      // macOS promises have no paths, so a later real external file drop can
+      // still clear a stale macOS payload here.
+      if (detail.paths.length && desktopApi?.platform === 'darwin') {
         nativeRemoteDragRef.current = null
       }
     }
@@ -368,18 +391,57 @@ export function FileManager({
 
       detail.consume()
       const items = activeDrag.items.filter((item) => item.name !== '..')
-      if (items.length) {
+      if (!items.length) {
+        return
+      }
+
+      const stagedPathsByName = new Map(detail.paths.map((path) => [localDragBasename(path), path] as const))
+      const canReuseStagedPaths =
+        desktopApi?.platform !== 'darwin' &&
+        detail.paths.length === items.length &&
+        items.every((item) => stagedPathsByName.has(item.name))
+
+      if (canReuseStagedPaths) {
+        void Promise.all(
+          items.map((item) =>
+            desktopApi!.copyLocalPath(stagedPathsByName.get(item.name)!, joinLocalDragTarget(localPath, item.name))
+          )
+        )
+          .then(() => onOpenLocalPath(localPath))
+          .catch((error) => {
+            console.error('[FileTerm] 复制原生拖动临时文件失败', error)
+          })
+      } else {
         onDownloadFiles(items, localPath)
       }
     }
 
+    let nativeRemoteDragCleanupTimer: number | null = null
+    const handleNativeRemoteDragFinished = () => {
+      // Give the native drop callback one turn to route an in-app drop before
+      // clearing the payload. External Explorer/Nautilus drops never emit a
+      // Tauri drop event back to this window, so they need this cleanup path.
+      if (nativeRemoteDragCleanupTimer !== null) {
+        window.clearTimeout(nativeRemoteDragCleanupTimer)
+      }
+      nativeRemoteDragCleanupTimer = window.setTimeout(() => {
+        nativeRemoteDragCleanupTimer = null
+        nativeRemoteDragRef.current = null
+      }, 250)
+    }
+
     const stopTracking = onAppEvent(APP_EVENT.tauriNativeDragOver, stopTrackingExternalDrag)
     const handleDrop = onAppEvent(APP_EVENT.tauriNativeDrop, handleNativeRemoteDrop)
+    const handleFinished = onAppEvent(APP_EVENT.tauriNativeRemoteDragFinished, handleNativeRemoteDragFinished)
     return () => {
       stopTracking()
       handleDrop()
+      handleFinished()
+      if (nativeRemoteDragCleanupTimer !== null) {
+        window.clearTimeout(nativeRemoteDragCleanupTimer)
+      }
     }
-  }, [activeTab?.id, localPath, onDownloadFiles, useUnifiedNativeRemoteDrag])
+  }, [activeTab?.id, desktopApi, localPath, onDownloadFiles, onOpenLocalPath, useUnifiedNativeRemoteDrag])
 
   useEffect(() => {
     if (canUseRemoteFiles) {
@@ -467,10 +529,8 @@ export function FileManager({
       return
     }
 
-    if (!useUnifiedNativeRemoteDrag) {
-      event.preventDefault()
-      event.stopPropagation()
-    }
+    event.preventDefault()
+    event.stopPropagation()
     const payloadPaths = selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
     const payloadItems = payloadPaths
       .map((path) => sortedRemoteRows.find((row) => row.path === path))

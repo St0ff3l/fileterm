@@ -9,7 +9,7 @@ use std::time::Duration;
 use serde::Deserialize;
 use tauri::AppHandle;
 #[cfg(not(target_os = "macos"))]
-use tauri::{Manager, WebviewWindow};
+use tauri::{Emitter, Manager, WebviewWindow};
 #[cfg(not(target_os = "macos"))]
 use tokio::sync::oneshot;
 
@@ -37,8 +37,9 @@ pub struct RemoteFileDragItem {
 ///
 /// macOS uses `NSFilePromiseProvider`, so the drag session starts immediately
 /// and the transfer begins only after Finder (or another drop target) gives us
-/// its destination URL. Other platforms currently use the local-path fallback
-/// below until their virtual-file drag APIs are implemented.
+/// its destination URL. Windows/Linux use a staged local-path drag because
+/// their common desktop drag APIs do not expose a cross-desktop file-promise
+/// contract through the current Tauri stack.
 pub async fn start_remote_file_drag(
     app: &AppHandle,
     window_label: &str,
@@ -157,7 +158,15 @@ async fn start_staged_remote_file_drag(
     let window = app
         .get_webview_window(window_label)
         .ok_or_else(|| AppError::Command("拖出窗口不存在".to_string()))?;
-    if let Err(error) = start_native_drag(window, absolute_paths, stage_root.clone()).await {
+    if let Err(error) = start_native_drag(
+        app.clone(),
+        window,
+        window_label,
+        absolute_paths,
+        stage_root.clone(),
+    )
+    .await
+    {
         remove_staging_dir(&stage_root).await;
         return Err(error);
     }
@@ -207,15 +216,25 @@ fn schedule_staging_cleanup(path: PathBuf) {
 
 #[cfg(not(target_os = "macos"))]
 async fn start_native_drag(
+    app: AppHandle,
     window: WebviewWindow,
+    window_label: &str,
     paths: Vec<PathBuf>,
     staging_root: PathBuf,
 ) -> Result<(), AppError> {
     let (result_sender, result_receiver) = oneshot::channel::<Result<(), String>>();
     let window_for_main = window.clone();
+    let app_for_main = app.clone();
+    let window_label = window_label.to_string();
     window
         .run_on_main_thread(move || {
-            let result = start_native_drag_on_main_thread(window_for_main, paths, staging_root);
+            let result = start_native_drag_on_main_thread(
+                app_for_main,
+                window_label,
+                window_for_main,
+                paths,
+                staging_root,
+            );
             let _ = result_sender.send(result);
         })
         .map_err(|error| AppError::Command(format!("切换到原生拖出线程失败：{error}")))?;
@@ -228,12 +247,17 @@ async fn start_native_drag(
 
 #[cfg(not(target_os = "macos"))]
 fn start_native_drag_on_main_thread(
+    app: AppHandle,
+    window_label: String,
     window: WebviewWindow,
     paths: Vec<PathBuf>,
     staging_root: PathBuf,
 ) -> Result<(), String> {
     let callback_root = staging_root.clone();
-    let callback = move |_, _| schedule_staging_cleanup(callback_root.clone());
+    let callback = move |_, _| {
+        schedule_staging_cleanup(callback_root.clone());
+        let _ = app.emit_to(&window_label, "fileterm://remote-native-drag-finished", ());
+    };
     let result = {
         #[cfg(target_os = "linux")]
         {

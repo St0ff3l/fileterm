@@ -17,6 +17,8 @@ export const APP_EVENT = {
   tauriNativeDragOver: 'fileterm:tauri-native-drag-over',
   /** Tauri 原生拖放落下，携带绝对路径。 */
   tauriNativeDrop: 'fileterm:tauri-native-drop',
+  /** Windows/Linux 原生远程拖出会话结束（成功或取消）。 */
+  tauriNativeRemoteDragFinished: 'fileterm:tauri-native-remote-drag-finished',
   /** 远端文件区被 DOM 拖入事件标记为可投放目标。 */
   tauriRemoteDragOver: 'fileterm:tauri-remote-dragover',
   /** 请求聚焦指定 tab 的终端。detail 为 tabId。 */
@@ -45,6 +47,7 @@ export interface AppEventDetailMap {
     consume: () => void
     position: { x: number; y: number }
   }
+  [APP_EVENT.tauriNativeRemoteDragFinished]: never
   [APP_EVENT.tauriRemoteDragOver]: never
   [APP_EVENT.focusTerminal]: string
   [APP_EVENT.terminalCopy]: never

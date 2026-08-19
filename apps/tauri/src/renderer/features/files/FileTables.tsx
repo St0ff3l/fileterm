@@ -347,11 +347,11 @@ export function FileTable({
                       onPointerDown={
                         row.name !== '..'
                           ? (event) => {
-                              // macOS uses one native drag session for both destinations. The
-                              // native drop event tells FileTerm whether the target is its local
-                              // pane; Finder receives the file promise from the same session.
-                              // Other platforms keep the modifier-key fallback until their
-                              // virtual-file drag APIs are implemented.
+                              // Every desktop platform uses one native drag session for the
+                              // remote row. macOS supplies file promises; Windows/Linux expose
+                              // staged paths. The native drop event lets FileTerm route an
+                              // in-app drop back to the local pane while Explorer/Nautilus gets
+                              // the same real-file drag session.
                               if (unifiedNativeDrag || event.altKey) {
                                 onNativeDragStart?.(event, row)
                               }
