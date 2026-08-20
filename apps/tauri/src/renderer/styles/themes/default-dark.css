@@ -43,7 +43,8 @@
   --mini-tab-active-text: #8bbfff;
   --memory-warn: #f59e0b;
   --network-tx: #ff7474;
-  --network-rx: #38bdf8;
+  /* Keep the network receive series independent from the SFTP connection color. */
+  --network-rx: #65a9ff;
   --danger: #ff5f57;
   --success: #34d399;
   --warning: #f59e0b;
