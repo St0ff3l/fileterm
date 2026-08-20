@@ -15,9 +15,7 @@ use std::sync::{
 use gtk::{
     gdk, gdk_pixbuf,
     glib::{ObjectExt, Propagation, SignalHandlerId},
-    prelude::{
-        DeviceExt, DragContextExtManual, PixbufLoaderExt, SeatExt, WidgetExt, WidgetExtManual,
-    },
+    prelude::{DragContextExtManual, PixbufLoaderExt, WidgetExt, WidgetExtManual},
 };
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tokio::sync::oneshot;
