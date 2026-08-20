@@ -24,10 +24,38 @@
 }
 
 .confirm-action-dialog__description {
+  min-width: 0;
   color: var(--dialog-description);
   font-size: 14px;
   line-height: 1.65;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.confirm-action-dialog__description p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.confirm-action-dialog__description pre {
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: min(320px, 36vh);
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--dialog-footer-border);
+  background: color-mix(in srgb, var(--dialog-surface) 72%, var(--dialog-description));
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-mono, 'JetBrains Mono', Monaco, monospace);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .confirm-action-dialog__warning {

@@ -3,6 +3,7 @@ import type {
   ConnectionFormMode,
   CreateProfileInput,
   FtpSecurityMode,
+  ResourceMonitoringMetric,
   SessionType,
   SshConnectionDefaults,
   SshForwardRule
@@ -12,6 +13,7 @@ import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 type SshConnectionSettingKey = keyof SshConnectionDefaults
@@ -95,6 +97,8 @@ export function ConnectionModal({
   errorMessage,
   groupOptions,
   connectionDefaults,
+  fallbackResourceMonitoringMetrics,
+  fallbackResourceMonitoringMetricOrder,
   isSubmitting = false,
   mode,
   form,
@@ -111,6 +115,9 @@ export function ConnectionModal({
   errorMessage: string | null
   groupOptions: string[]
   connectionDefaults: SshConnectionDefaults
+  /** Values shown when the profile has no per-connection sidebar metrics yet. */
+  fallbackResourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  fallbackResourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   isSubmitting?: boolean
   mode: ConnectionFormMode
   form: CreateProfileInput
@@ -558,6 +565,26 @@ export function ConnectionModal({
                             }
                           />
                         </label>
+                        {form.type === 'ssh' ? (
+                          <ResourceMonitoringMetricsEditor
+                            metrics={
+                              form.resourceMonitoringMetrics ??
+                              fallbackResourceMonitoringMetrics ??
+                              connectionDefaults.resourceMonitoringMetrics
+                            }
+                            order={
+                              form.resourceMonitoringMetricOrder ??
+                              fallbackResourceMonitoringMetricOrder ??
+                              connectionDefaults.resourceMonitoringMetricOrder
+                            }
+                            disabled={
+                              !effectiveConnectionSetting(form, connectionDefaults, 'enableResourceMonitoring') ||
+                              isSubmitting
+                            }
+                            onMetricsChange={(next) => setSshConnectionSetting('resourceMonitoringMetrics', next)}
+                            onOrderChange={(next) => setSshConnectionSetting('resourceMonitoringMetricOrder', next)}
+                          />
+                        ) : null}
                       </div>
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">

@@ -7,7 +7,7 @@
   --bg-elevated: #ffffff;
   --titlebar-background: #ffffff;
   --bg-hover: #f1f1f3;
-  --bg-active: #e6f3ff;
+  --bg-active: #e4e4e7;
   --manager-head-bg: #f6f6f7;
   --input-bg: #ffffff;
   --command-history-head-bg: #ffffff;
@@ -26,11 +26,11 @@
 
   --primary: #339cff;
   --primary-hover: #1f8cf0;
-  --focus-outline: #339cff;
-  --accent-highlight: #339cff;
+  --focus-outline: #3b82f6;
+  --accent-highlight: #3b82f6;
   --accent-text: #1a1c1f;
   --sidebar-active-accent: #1a1c1f;
-  --selection-bg: #e6f3ff;
+  --selection-bg: #e4e4e7;
   --copy-link: #339cff;
   --copy-link-hover: #1f8cf0;
   --folder-accent: #b45309;
@@ -41,7 +41,7 @@
   --network-tx: rgba(220, 38, 38, 0.32);
   --network-rx: #339cff;
   --danger: #dc2626;
-  --success: #00a240;
+  --success: #059669;
   --warning: #b45309;
 
   /* 状态语义色: 面/边/文本 */
@@ -58,9 +58,9 @@
   --accent-tint-weak: rgba(51, 156, 255, 0.08);
   --accent-tint: rgba(51, 156, 255, 0.14);
   --accent-focus-ring: rgba(51, 156, 255, 0.24);
-  --success-text: #00a240;
-  --success-surface: rgba(0, 162, 64, 0.08);
-  --success-border: rgba(0, 162, 64, 0.2);
+  --success-text: #059669;
+  --success-surface: rgba(5, 150, 105, 0.08);
+  --success-border: rgba(5, 150, 105, 0.2);
 
   /* 中性叠层 */
   --surface-hover: rgba(0, 0, 0, 0.05);
@@ -114,8 +114,8 @@
   /* 连接类型语义色: 文本/面 */
   --type-total: #339cff;
   --type-total-surface: rgba(51, 156, 255, 0.1);
-  --type-ssh: #00a240;
-  --type-ssh-surface: rgba(0, 162, 64, 0.1);
+  --type-ssh: #059669;
+  --type-ssh-surface: rgba(5, 150, 105, 0.1);
   --type-sftp: #0284c7;
   --type-sftp-surface: rgba(2, 132, 199, 0.1);
   --type-ftp: #924ff7;
@@ -140,9 +140,9 @@
   --terminal-search-active-ruler: #f0b400;
   --terminal-cmd-text: #1a1c1f;
   --metric-app: #b45309;
-  --metric-cache: #00a240;
+  --metric-cache: #059669;
   --metric-kernel: #339cff;
-  --metric-status-green: #00a240;
+  --metric-status-green: #059669;
   --metric-status-yellow: #b45309;
   --metric-status-red: #dc2626;
   --popover-bg: #ffffff;

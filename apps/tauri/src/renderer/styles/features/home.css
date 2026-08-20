@@ -36,9 +36,17 @@
   flex-direction: column;
   flex-shrink: 0;
   transition:
-    width 0.24s linear,
     min-width 0.24s linear,
     padding 0.24s linear;
+}
+
+.fs-shell.is-resizing-sidebar .home-sidebar,
+.home-sidebar:has(.sidebar-resizer.is-active) {
+  transition: none !important;
+}
+
+.home-sidebar .sidebar-resizer::after {
+  display: none !important;
 }
 
 /* Browser preview decoration; Electron uses native platform controls. */
@@ -140,7 +148,6 @@
 .sidebar-nav-link:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
-  padding-left: 14px;
 }
 
 .sidebar-nav-link:focus-visible {
@@ -149,16 +156,14 @@
 }
 
 .sidebar-nav-link.active {
-  background: var(--bg-hover);
-  border-left: 2px solid var(--sidebar-active-accent);
-  border-radius: 0 8px 8px 0;
+  background: var(--bg-active, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
   color: var(--text-main);
   font-weight: 500;
-  padding-left: 12px; /* 补偿边框宽度保持对齐 */
 }
 
 .sidebar-nav-link.active span.material-symbols-outlined {
-  color: var(--sidebar-active-accent);
+  color: var(--sidebar-active-accent, var(--text-main));
 }
 
 /* Sidebar Footer Links */

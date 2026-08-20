@@ -7,6 +7,7 @@ import type {
   McpAgentClientStatus,
   OverviewSectionId,
   AppUpdateStatus,
+  SavedTheme,
   ThemeConfig
 } from '@fileterm/core'
 import { useEffect, useState } from 'react'
@@ -27,6 +28,7 @@ export function HomeWorkspace({
   commandTemplates = [],
   theme,
   themeConfig,
+  customThemes,
   locale,
   overviewShowStats,
   overviewShowRecent,
@@ -53,6 +55,7 @@ export function HomeWorkspace({
   onUpdateCommandOrder,
   onSetTheme,
   onSetThemeConfig,
+  onSetCustomThemes,
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
@@ -67,6 +70,7 @@ export function HomeWorkspace({
   commandTemplates?: CommandTemplate[]
   theme: 'default-dark' | 'default-light'
   themeConfig: ThemeConfig
+  customThemes: SavedTheme[]
   locale: 'zhCN' | 'enUS'
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -97,6 +101,7 @@ export function HomeWorkspace({
   onUpdateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<boolean> | boolean | void
   onSetTheme(value: 'default-dark' | 'default-light'): void
   onSetThemeConfig(value: ThemeConfig): void
+  onSetCustomThemes(value: SavedTheme[]): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
@@ -212,7 +217,7 @@ export function HomeWorkspace({
   return (
     <section className={`home-workspace ${isSidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
       <div className="home-tabs-bar">
-        <TabBar {...tabBarProps} homeBrandContent={homeBrandContent} />
+        <TabBar {...tabBarProps} homeBrandContent={homeBrandContent} showAiCopilotToggle={false} />
       </div>
 
       {/* SideNavBar Component */}
@@ -401,8 +406,10 @@ export function HomeWorkspace({
               <SettingsModal
                 theme={theme}
                 themeConfig={themeConfig}
+                customThemes={customThemes}
                 onSetTheme={onSetTheme}
                 onSetThemeConfig={onSetThemeConfig}
+                onSetCustomThemes={onSetCustomThemes}
                 locale={locale}
                 onSetLocale={onSetLocale}
                 onOpenCommandManager={() => selectTab('command-manager')}

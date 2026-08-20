@@ -25,6 +25,7 @@ export interface TabBarProps {
   homeBrandContent?: ReactNode
   isAiCopilotAvailable: boolean
   isAiCopilotOpen: boolean
+  showAiCopilotToggle?: boolean
   isWorkspaceFocusMode: boolean
   onAddHomeTab(): void
   onActivateHome(id: string): void
@@ -48,6 +49,7 @@ export function TabBar({
   homeBrandContent,
   isAiCopilotAvailable,
   isAiCopilotOpen,
+  showAiCopilotToggle = true,
   isWorkspaceFocusMode,
   onAddHomeTab,
   onActivateHome,
@@ -224,17 +226,19 @@ export function TabBar({
               {isWorkspaceFocusMode ? 'close_fullscreen' : 'open_in_full'}
             </span>
           </button>
-          <button
-            aria-label={isAiCopilotAvailable ? aiCopilotLabel : t.aiCopilotUnavailable}
-            aria-pressed={isAiCopilotOpen}
-            className={`ai-copilot-toggle ${isAiCopilotOpen ? 'is-active' : ''}`}
-            disabled={!isAiCopilotAvailable}
-            title={isAiCopilotAvailable ? aiCopilotLabel : t.aiCopilotUnavailable}
-            type="button"
-            onClick={onToggleAiCopilot}
-          >
-            <span className="material-symbols-outlined">auto_awesome</span>
-          </button>
+          {showAiCopilotToggle ? (
+            <button
+              aria-label={isAiCopilotAvailable ? aiCopilotLabel : t.aiCopilotUnavailable}
+              aria-pressed={isAiCopilotOpen}
+              className={`ai-copilot-toggle ${isAiCopilotOpen ? 'is-active' : ''}`}
+              disabled={!isAiCopilotAvailable}
+              title={isAiCopilotAvailable ? aiCopilotLabel : t.aiCopilotUnavailable}
+              type="button"
+              onClick={onToggleAiCopilot}
+            >
+              <span className="material-symbols-outlined">auto_awesome</span>
+            </button>
+          ) : null}
           <button aria-label={t.settings} title={t.settings} type="button" onClick={onOpenSettings}>
             <span className="material-symbols-outlined">settings</span>
           </button>

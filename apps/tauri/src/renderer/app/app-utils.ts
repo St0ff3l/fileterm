@@ -1,5 +1,6 @@
 import type { DragEvent, MouseEvent } from 'react'
 import type { LocalFileItem, TransferTask, WorkspaceTab } from '@fileterm/core'
+import type { AppIconName } from '../features/common/AppIcon'
 import { formatMessage, localizeErrorScope, t } from '../i18n'
 
 export const localFileDragType = 'application/x-fileterm-local-file'
@@ -206,7 +207,91 @@ export function parseDraggedPaths(payload: string) {
   }
 }
 
-export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[]) {
+const DRAG_PREVIEW_ICON_STROKE_WIDTH = 1.8
+
+/**
+ * File-list icon paths in the same 16px viewBox used by AppIcon. Keeping the
+ * native PNG and HTML5 preview on these paths means drag-out uses the exact
+ * same semantic icon as the file table (folder, archive, code, image, etc.).
+ */
+const DRAG_PREVIEW_ICON_PATHS: Partial<Record<AppIconName, readonly string[]>> = {
+  folder: ['M2.5 4.5h3l1.4 1.6h6.6v5.8a1.1 1.1 0 0 1-1.1 1.1H3.6a1.1 1.1 0 0 1-1.1-1.1V5.6a1.1 1.1 0 0 1 1.1-1.1Z'],
+  file: ['M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z', 'M9.5 2.5V6H13'],
+  archive: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M8 4.1v1.1M8 6.2v1.1M8 8.3v1.1M7 10h2'
+  ],
+  video: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'm6.9 7.1 3.1 1.9-3.1 1.9Z'
+  ],
+  audio: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M9.5 7.1v3.1a1 1 0 1 1-1-.9h1',
+    'M9.5 7.1 7.7 7.7'
+  ],
+  image: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'm6 11 1.9-2 1.4 1.4 1.7-1.8 1 1.1',
+    'M7 7.2h.01'
+  ],
+  document: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M6.4 7.6h3.9M6.4 9.2h3.9M6.4 10.8h2.7'
+  ],
+  spreadsheet: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 7.7h4.6v3.8H6.2zM8.5 7.7v3.8M6.2 9.6h4.6'
+  ],
+  presentation: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 7.4h4.6v3H6.2zM8.5 10.4v1.4M7.2 11.8h2.6'
+  ],
+  'config-file': [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 8h4.6M6.2 10.5h4.6M7.4 7.2v1.6M9.6 9.7v1.6'
+  ],
+  database: [
+    'M12.5 4.2c0 1.1-2 2-4.5 2s-4.5-.9-4.5-2 2-2 4.5-2 4.5.9 4.5 2Z',
+    'M3.5 4.2v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4.2M3.5 8v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8'
+  ],
+  'font-file': [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 11.5 8.3 7l2.1 4.5M6.9 10h2.8'
+  ],
+  package: ['m8 2.2 5 2.7v6.2l-5 2.7-5-2.7V4.9l5-2.7Z', 'm3.3 5.1 4.7 2.6 4.7-2.6M8 7.7v6M5.5 3.6l4.8 2.6'],
+  'terminal-file': [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13m-6.7 2 1.5 1.4-1.5 1.4M8.8 11h2'
+  ],
+  pdf: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M6.2 10.7V7.4h1.2a.9.9 0 1 1 0 1.8H6.2m2.2 1.5V7.4h.7a1.6 1.6 0 0 1 0 3.3h-.7m2-.1V7.4h1.4'
+  ],
+  code: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'm7.1 8.1-1.4 1.2 1.4 1.2M9.1 8.1l1.4 1.2-1.4 1.2'
+  ],
+  disk: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M8.2 11.6a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z',
+    'M8.2 9.4h.01'
+  ]
+}
+
+function getDragPreviewIconPaths(iconName: AppIconName) {
+  return DRAG_PREVIEW_ICON_PATHS[iconName] ?? DRAG_PREVIEW_ICON_PATHS.file!
+}
+
+export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[], iconName: AppIconName = 'file') {
   if (!names.length) {
     return
   }
@@ -214,11 +299,13 @@ export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[
   const preview = document.createElement('div')
   preview.className = 'file-drag-preview'
   const visibleNames = names.slice(0, 2)
+  const iconPaths = getDragPreviewIconPaths(iconName)
   preview.innerHTML = `
     <span class="file-drag-preview-icon" aria-hidden="true">
-      <svg class="app-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
-        <rect x="4.5" y="4.5" width="8" height="8" rx="1.5"></rect>
-        <path d="M11.5 2.5h-5a2 2 0 0 0-2 2v5"></path>
+      <svg class="app-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="${DRAG_PREVIEW_ICON_STROKE_WIDTH}">
+          ${iconPaths.map((path) => `<path d="${path}"></path>`).join('')}
+        </g>
       </svg>
     </span>
     <span>${escapeHtml(visibleNames.join(names.length > 1 ? ', ' : ''))}${names.length > 2 ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${names.length} ${t.itemsSuffix}` : ''}</span>

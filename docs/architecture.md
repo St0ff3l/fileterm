@@ -73,8 +73,11 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
   - 通过 `document.documentElement.dataset.theme` 切换主题。
 - `apps/tauri/src/renderer/components/TerminalView.tsx`
   - 从 CSS 变量读取终端主题色，确保终端外观和全局主题联动。
+- `apps/tauri/src/renderer/app/terminal-log-colorizer.ts`
+  - 在 xterm 完成解析后对普通缓冲区的时间戳、服务名和常见日志级别着色；不向远端输出注入 ANSI，不处理 `top`、`vim`、`less` 等备用屏幕程序，并随终端主题重新套用颜色。
 - `apps/tauri/src/renderer/features/files/FileEditorModal.tsx`
   - Monaco 主题从 CSS 变量读取，跟随深色/浅色主题切换。
+- `packages/core` 的 `ThemeConfig.baseThemeId` 记录自定义主题继承的内置基准，`UiPreferences.customThemes` 保存用户命名的主题；renderer 只将相对基准真正变化的变量覆盖到主题根节点，避免微调一个颜色时整套组件皮肤被重算。
 
 ## 3. 技术栈
 
@@ -193,7 +196,7 @@ platform probe
 - macOS 菜单栏托盘图标使用 `apps/tauri/build/trayTemplate*.png` template 资源，由 Rust/Tauri backend 设置 template 属性。
 - macOS 主窗口保留原生红黄绿按钮；`tauri*.conf.json` 不保存 traffic-light 坐标。首个页面加载完成后，Rust 从 `NSWindow` 真实 frame 计算 48pt renderer 顶栏的窗口坐标中心，经按钮 superview 的 AppKit 坐标转换统一写入三个原生按钮 frame，并统一应用 `Regular` control size 与 12pt → 14pt 的中心绘制缩放。Debug、Release、本地打包和 GitHub Actions 共用同一算法，不允许 `debug_assertions` 分支、Release 垂直偏移或 renderer CSS 伪造按钮；精确设计基线见 `docs/design.md` 的“macOS 原生标题栏基线”。
 - Tauri 托盘由 Rust backend 显式创建：macOS 使用独立 template 图标，Windows/Linux 使用应用图标。主窗口与可见子窗口隐藏到托盘后会成组恢复；普通关闭请求与真正退出请求保持分离。
-- 应用更新通过 Rust/Tauri update service 统一管理，renderer 仅经 `Rust commands/events -> tauri-api.ts -> renderer` 查询状态和触发检查；Windows 使用 GitHub Release 的签名 `latest.json`、NSIS 安装器及其 `.sig` 和两段式“下载验签 → 重启安装”，macOS 发行构建使用 ad hoc 签名并保持检查后跳转 GitHub Release 下载页（不接入 Apple 证书、公证或应用内 updater）。
+- 应用更新通过 Rust/Tauri update service 统一管理，renderer 仅经 `Rust commands/events -> tauri-api.ts -> renderer` 查询状态和触发检查；更新通道持久化为 `stable` / `beta`，稳定版只选择非 prerelease Release，测试版选择 prerelease 与正式版中 SemVer 最新的一项，以便测试版自然升级到正式版。Windows 按选中的 Release tag 动态读取签名 `latest.json`、NSIS 安装器及其 `.sig`，继续采用两段式“下载验签 → 重启安装”；macOS 发行构建使用 ad hoc 签名并保持检查后跳转选中的 GitHub Release 下载页（不接入 Apple 证书、公证或应用内 updater）。
 - 原生关闭快捷键由 Rust/Tauri backend 统一收口：macOS 使用 `Cmd+Q` 请求应用退出确认、`Cmd+W` 请求关闭当前工作区项/子窗口；Windows/Linux 分别保持 `Alt+F4` 退出与 `Ctrl+W` 关闭窗口语义。最后一个工作区项只触发普通窗口关闭/隐藏，不得直接销毁主窗口；托盘退出和应用退出快捷键必须走同一确认与 transfer journal 清理链路。真正退出前还必须逐个等待独立 Monaco 编辑器完成保存或确认丢弃，任一编辑器取消都会中止 session/transfer shutdown。
 - 主题和语言属于 Rust backend 持久化的 UI preferences；Tauri 应用菜单、托盘菜单与 Windows/Linux 自绘 menubar 必须从同一份 locale 构建并在语言切换后刷新。Linux 不安装 GTK 全局应用菜单，避免它注入每个独立窗口并破坏 renderer 主题。macOS 应用菜单保留 About/Services/Hide/Bring All to Front 等标准角色，但 Quit 仍走 FileTerm 自己的脏编辑器、活动连接和 transfer cleanup 确认链路。资源监控是 SSH 连接配置，关闭后该连接不采集资源数据，工作区仅保留窄侧栏；开启时支持 1/5/15/30/60 秒采样，默认保持 1 秒，用户可按需切换到低频模式。
 - xterm 与 Monaco 会缓存字体尺寸/像素比并生成运行时样式，统一使用随包的 JetBrains Mono；本地字体完成加载、窗口缩放或跨显示器 DPI 变化后必须主动重测。生产 CSP 仅禁止 Tauri 为 `style-src` 注入 nonce，使声明的 `unsafe-inline` 能供这两个受信任的本地组件生成样式；`script-src` 继续保留 Tauri 的 hash/nonce 加固。
@@ -257,12 +260,12 @@ fileterm mcp                    fileterm <cmd>
 - 同一份桌面可执行文件同时承担 GUI、MCP server、CLI 三种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；由共享 `is_cli_command` 维护的子命令白名单（包括 `exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增 CLI 子命令必须同时更新共享白名单、`run_cli` 路由和对应的精确 `--help` 输出，避免把非 GUI 命令误启动成桌面窗口。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
 - `mcp-runtime.json` 路径在三平台：macOS `$HOME/Library/Application Support/com.fileterm.desktop/`、Windows `%APPDATA%\com.fileterm.desktop\`、Linux `$XDG_DATA_HOME/com.fileterm.desktop/` 或 `$HOME/.local/share/com.fileterm.desktop/`。CLI 端用 `#[cfg(target_os)]` 硬编码读取，依赖 `tauri.conf.json` 的 identifier 保持 `com.fileterm.desktop` 不变；可用 `FILETERM_MCP_RUNTIME_FILE` 环境变量覆盖。
-- 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，未实现 `resources/*` / `prompts/*` / `logging/*` / `notifications/progress`。
+- 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，并通过 `notifications/progress` / `notifications/message` 报告外部命令等待 FileTerm 前台密码输入的状态；未实现 `resources/*` / `prompts/*`。
 - 暴露 35 个 `fileterm_*` 工具，覆盖连接管理、会话状态、远程命令执行、远程文件操作、传输调度、SSH 隧道；tool annotations 标注 `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`。普通 `fileterm_execute_remote_command` 始终走独立、非交互 SSH exec channel，不污染可见 PTY；FTP / Telnet / Serial 不伪装支持远程 exec。
-- `fileterm_execute_remote_command` 使用独立、非交互 SSH exec channel；sudo/su 可接收用户明确的一次性参数或复用加密 profile。缺少凭据时，FileTerm 自动恢复、解除最小化并聚焦主窗口后进入本地安全 prompt；Copilot 对话区和工具活动显示等待前台输入。主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，Agent 可以询问用户后用一次性字段重试；用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。密码不进入命令文本或 tool result。普通命令遇到 MFA、确认、安装器或 REPL 输入时返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，用户必须在可见 SSH tab 完成。
+- `fileterm_execute_remote_command` 使用独立、非交互 SSH exec channel；sudo/su 可接收用户明确的一次性参数或复用加密 profile。缺少凭据时，FileTerm 自动恢复、解除最小化并聚焦主窗口后进入本地安全 prompt；Copilot 对话区和 MCP/CLI bridge 都会报告等待前台输入，原始命令继续等待用户完成密码后再返回最终结果，外部 Agent 不应重复调用。主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，Agent 可以询问用户后用一次性字段重试；用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。密码不进入命令文本或 tool result。普通命令遇到 MFA、确认、安装器或 REPL 输入时返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，用户必须在可见 SSH tab 完成。
 - Agent / MCP 设置存于 `UiPreferences.mcpAgent`，只含非敏感策略：连接范围（全部已保存连接 / 当前活动会话 / 默认连接）与操作策略（仅只读 / 经确认操作）。该策略在桌面 bridge 的 action route 前执行；连接列表、会话上下文、传输列表与等待传输也必须按范围过滤，不能只依赖 renderer 隐藏。设置页仅检测 `PATH` 并生成 Claude Code / Codex CLI 的可复制注册命令，不执行客户端、不自动写配置文件。
 - 设置页还可以按用户点击创建新的本地 PTY tab 并写入固定的 `claude` 或 `codex` 启动命令；它不是后台 Agent 进程或隐藏终端代理。密码、MFA、登录确认和 TUI 输入只会出现在这个可见的本地终端，MCP 不能触发或向该 terminal 注入任意连续键盘输入。Agent tab 使用可选、受 Rust 校验的本地 terminal title，renderer 只对枚举的受信任 client id 选择启动命令。本地 terminal 允许复用统一 pane tree 拆分，但同一树只含 local pane；每一个 pane 都启动独立 PTY/runtime、输入通道和取消令牌，不能与 SSH pane 混合或共享 shell 状态。
-- 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 超时 5s、client 超时 130s（设计上大于审批 + bridge 之和，保证审批超时不触发 client 读超时）。
+- 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 单次读写超时 5s、需审批/前台密码输入的请求最长等待 125s、client 超时 130s（设计上大于最长 bridge 等待，保证审批或密码输入超时不触发 client 读超时）。
 - **MCP 与 CLI 的关键差异**：MCP `tools/call` 的写操作必须经桌面审批对话框（外部 Agent 调用，需要二次确认）；CLI 是用户显式启动，视为已授权，不重复弹审批。两者共用同一份 action 路由和 bridge 实现。
 - **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。纯对话请求不携带 Provider tools；半自动 / 全自动使用 Rust-owned 的 `tool-call -> approval/guardrail -> isolated exec -> tool-result` 循环，工具调用绑定 L2、leaf/root、CWD/user 和 `sessionRevision`。详见 `docs/plans/completed/ai-copilot-modes.md`。
 - 当前完成度：核心代码已构建、已注册，且覆盖协议、交互提示识别、脱敏与审计纯函数测试；真实 Claude Code / Codex CLI 端到端及 macOS / Windows / Linux 的打包产物手工验收仍待完成。
@@ -540,6 +543,7 @@ interface WorkspaceTab {
 - Renderer 的传输订阅与列表状态收敛在独立 `TransferCenter`，进度变化不更新顶层 workspace state。
 - Tauri 的 SSH 终端输入使用 renderer 到 Rust backend 的单向 command，并进入每个 tab 独立的无界输入 channel；SSH worker 在写入 PTY 前按序合并当前积压，不能与 SFTP/文件操作共用有界 worker command 队列，也不能因该队列满而丢失按键。
 - 终端 resize 同样使用单向 command；终端输出在 Rust backend 按 16ms 合并，再交给 renderer 逐帧写入 xterm。
+- 终端日志颜色属于 renderer 的 xterm 表现层：远端原有 ANSI 继续由 xterm 解析，纯文本日志只在普通缓冲区完成解析后按主题色补充语义颜色；备用屏幕程序保持原始输出，避免破坏 TUI。
 - Tauri 终端输出必须使用持久的 IPC `Channel` 流式传送；普通 Tauri events 只承载低频状态和 snapshot，避免持续 PTY 输出与状态广播争用同一事件路径。
 - SSH transcript 由 controller 的有界分块缓冲统一维护，runtime 不重复拼接第二份历史。
 - 系统指标首次绑定时发送完整历史，稳定轮询只发送最新样本，由 renderer 追加到固定长度历史。

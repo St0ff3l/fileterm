@@ -7,7 +7,8 @@
 
 use crate::services::action_review::{
     request_action_approval, ActionApprovalDecision, ActionApprovalDetails, ActionApprovalSource,
-    ACTION_APPROVAL_TIMEOUT,
+    ACTION_APPROVAL_TIMEOUT, SUDO_AUTH_FAILURE, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
+    SU_AUTH_FAILURE, SU_PASSWORD_CANCELLED, SU_PASSWORD_NEEDED,
 };
 use crate::AppError;
 use serde::{Deserialize, Serialize};
@@ -26,7 +27,7 @@ use tauri::AppHandle;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     net::{TcpListener, TcpStream},
-    sync::Semaphore,
+    sync::{mpsc, Semaphore},
     time::timeout,
 };
 
@@ -144,6 +145,8 @@ struct BridgeRequest {
     params: Value,
     #[serde(default)]
     requires_approval: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    progress_token: Option<Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -154,6 +157,41 @@ struct BridgeResponse {
     result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+}
+
+/// A one-way status event sent before the final bridge response. It exists so
+/// CLI/MCP callers can observe that FileTerm has opened a foreground secure
+/// prompt while the original command remains pending for the user's input.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeProgress {
+    kind: String,
+    event: String,
+    status: String,
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    progress_token: Option<Value>,
+}
+
+impl BridgeProgress {
+    fn privileged_password_prompt(code: &str, progress_token: Option<Value>) -> Self {
+        let method = if code == SUDO_PASSWORD_NEEDED {
+            "sudo"
+        } else {
+            "su"
+        };
+        Self {
+            kind: "progress".to_string(),
+            event: "privileged-password-prompt".to_string(),
+            status: "input-required".to_string(),
+            code: code.to_string(),
+            message: format!(
+                "FileTerm opened a secure {method} password prompt in the main window. Enter the password there; the command is waiting and will continue after submission."
+            ),
+            progress_token,
+        }
+    }
 }
 
 /// Starts the desktop-owned endpoint and publishes only a per-launch,
@@ -280,14 +318,40 @@ async fn handle_runtime_connection(
     }
 
     let request_timeout = bridge_request_timeout(&envelope.request);
-    let response = match timeout(
-        request_timeout,
-        dispatch_bridge_request(&app, envelope.request),
-    )
+    let (progress_sender, mut progress_receiver) = mpsc::unbounded_channel();
+    let dispatch = dispatch_bridge_request(&app, envelope.request, Some(progress_sender));
+    tokio::pin!(dispatch);
+    let response = match timeout(request_timeout, async {
+        let mut progress_open = true;
+        loop {
+            tokio::select! {
+                result = &mut dispatch => {
+                    let response = match result {
+                        Ok(result) => BridgeResponse::success(result),
+                        Err(error) => BridgeResponse::error(error),
+                    };
+                    while let Ok(progress) = progress_receiver.try_recv() {
+                        write_bridge_progress_to_writer(&mut writer, progress)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                    }
+                    break Ok(response);
+                }
+                progress = progress_receiver.recv(), if progress_open => {
+                    match progress {
+                        Some(progress) => write_bridge_progress_to_writer(&mut writer, progress)
+                            .await
+                            .map_err(|error| error.to_string())?,
+                        None => progress_open = false,
+                    }
+                }
+            }
+        }
+    })
     .await
     {
-        Ok(Ok(result)) => BridgeResponse::success(result),
-        Ok(Err(error)) => BridgeResponse::error(error),
+        Ok(Ok(response)) => response,
+        Ok(Err(error)) => return Err(error),
         Err(_) => BridgeResponse::error(
             "FileTerm MCP request timed out; retry after checking the session",
         ),
@@ -304,7 +368,7 @@ fn bridge_request_timeout(request: &BridgeRequest) -> Duration {
         // stdio client receives the final task snapshot instead of a socket
         // timeout at the boundary.
         MCP_TRANSFER_WAIT_TIMEOUT
-    } else if request.requires_approval && action_requires_approval(&request.action) {
+    } else if action_requires_approval(&request.action) {
         ACTION_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
     } else {
         MCP_BRIDGE_TIMEOUT
@@ -359,6 +423,32 @@ async fn write_bridge_response_to_writer(
     })?
 }
 
+async fn write_bridge_progress_to_writer(
+    writer: &mut tokio::net::tcp::OwnedWriteHalf,
+    progress: BridgeProgress,
+) -> io::Result<()> {
+    let payload =
+        serde_json::to_string(&progress).map_err(|error| io::Error::other(error.to_string()))?;
+    if payload.len() > MCP_MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "FileTerm MCP bridge progress exceeds the size limit",
+        ));
+    }
+    timeout(MCP_BRIDGE_TIMEOUT, async {
+        writer.write_all(payload.as_bytes()).await?;
+        writer.write_all(b"\n").await?;
+        writer.flush().await
+    })
+    .await
+    .map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::TimedOut,
+            "FileTerm MCP bridge progress timed out",
+        )
+    })?
+}
+
 impl BridgeResponse {
     fn success(result: Value) -> Self {
         Self {
@@ -381,7 +471,12 @@ impl BridgeResponse {
     }
 }
 
-async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Result<Value, String> {
+async fn dispatch_bridge_request(
+    app: &AppHandle,
+    request: BridgeRequest,
+    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+) -> Result<Value, String> {
+    let progress_token = request.progress_token.clone();
     enforce_mcp_access_policy(app, &request).await?;
     if request.requires_approval && action_requires_approval(&request.action) {
         request_mcp_approval(app, &request.action, &request.params).await?;
@@ -401,7 +496,9 @@ async fn dispatch_bridge_request(app: &AppHandle, request: BridgeRequest) -> Res
         "reconnect_session" => reconnect_session(app, &request.params).await,
         "disconnect_session" => disconnect_session(app, &request.params).await,
         "close_session" => close_session(app, &request.params).await,
-        "execute_remote_command" => execute_remote_command(app, &request.params).await,
+        "execute_remote_command" => {
+            execute_remote_command(app, &request.params, progress_sender, progress_token).await
+        }
         "execute_command_template" => execute_command_template(app, &request.params).await,
         "write_remote_file" => write_remote_file(app, &request.params).await,
         "create_remote_directory" => create_remote_directory(app, &request.params).await,
@@ -1162,7 +1259,12 @@ async fn close_session(app: &AppHandle, params: &Value) -> Result<Value, String>
     Ok(compact_snapshot(&snapshot, Some(&tab_id), "close_session"))
 }
 
-async fn execute_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+async fn execute_remote_command(
+    app: &AppHandle,
+    params: &Value,
+    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_token: Option<Value>,
+) -> Result<Value, String> {
     let tab_id = required_string(params, "tab_id", 256)?;
     let command = required_text(params, "command", 64 * 1024)?;
     let cwd = optional_string(params, "cwd", 4_096)?;
@@ -1171,20 +1273,34 @@ async fn execute_remote_command(app: &AppHandle, params: &Value) -> Result<Value
     let su_password = optional_secret_string(params, "su_password", 4 * 1024)?;
     let save_sudo_password = optional_bool(params, "save_sudo_password")?.unwrap_or(false);
     let save_su_password = optional_bool(params, "save_su_password")?.unwrap_or(false);
-    crate::commands::app_execute_remote_command(
-        app.clone(),
-        tab_id.clone(),
-        command,
-        cwd,
-        timeout_ms,
-        sudo_password,
-        su_password,
-        Some(save_sudo_password),
-        Some(save_su_password),
+    let privileged_prompt_notice = progress_sender.map(|sender| {
+        let progress_token = progress_token.clone();
+        Arc::new(move |needed_code: &str| {
+            let _ = sender.send(BridgeProgress::privileged_password_prompt(
+                needed_code,
+                progress_token.clone(),
+            ));
+        }) as crate::services::action_review::PrivilegedPromptNotice
+    });
+    let result = crate::services::action_review::execute_remote_command(
+        app,
+        crate::services::action_review::RemoteExecRequest {
+            tab_id: tab_id.clone(),
+            command,
+            cwd,
+            timeout_ms,
+            expected_session_revision: None,
+            sudo_password,
+            su_password,
+            save_sudo_password,
+            save_su_password,
+            allow_local_privileged_prompt: true,
+            privileged_prompt_notice,
+        },
     )
     .await
-    .map(|result| json!({ "tabId": tab_id, "result": result }))
-    .map_err(public_app_error)
+    .map_err(public_app_error)?;
+    Ok(json!({ "tabId": tab_id, "result": result }))
 }
 
 async fn execute_command_template(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -1806,7 +1922,12 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
             continue;
         }
         let response = match serde_json::from_str::<Value>(&line) {
-            Ok(request) => handle_jsonrpc_request(request),
+            Ok(request) => {
+                let mut on_progress = |progress: &BridgeProgress| {
+                    let _ = write_mcp_progress(&mut stdout, progress);
+                };
+                handle_jsonrpc_request_with_progress(request, &mut on_progress)
+            }
             Err(_) => Some(jsonrpc_error(Value::Null, -32700, "Parse error")),
         };
         if let Some(response) = response {
@@ -2088,6 +2209,7 @@ fn cli_bridge_request(action: &str, params: Value) -> BridgeRequest {
         action: action.to_string(),
         params,
         requires_approval: false,
+        progress_token: None,
     }
 }
 
@@ -2220,6 +2342,9 @@ fn print_cli_help() {
         "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses an independent non-interactive SSH channel and never writes the visible terminal transcript. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
         env!("CARGO_PKG_VERSION")
     );
+    println!(
+        "When FileTerm opens its secure sudo/su prompt, `exec` waits and reports input-required on stderr; enter the password in the FileTerm window and do not retry the command."
+    );
 }
 
 fn print_cli_command_help(command: &str) {
@@ -2243,7 +2368,16 @@ fn print_cli_command_help(command: &str) {
     }
 }
 
+#[cfg(test)]
 fn handle_jsonrpc_request(request: Value) -> Option<Value> {
+    let mut ignore_progress = |_progress: &BridgeProgress| {};
+    handle_jsonrpc_request_with_progress(request, &mut ignore_progress)
+}
+
+fn handle_jsonrpc_request_with_progress<F>(request: Value, on_progress: &mut F) -> Option<Value>
+where
+    F: FnMut(&BridgeProgress),
+{
     if !request.is_object() {
         return Some(jsonrpc_error(Value::Null, -32600, "Invalid Request"));
     }
@@ -2257,7 +2391,7 @@ fn handle_jsonrpc_request(request: Value) -> Option<Value> {
         "initialize" => initialize_result(&params),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({ "tools": tool_definitions() })),
-        "tools/call" => call_tool(&params),
+        "tools/call" => call_tool(&params, on_progress),
         _ => return Some(jsonrpc_error(id, -32601, "Method not found")),
     };
     Some(match result {
@@ -2269,13 +2403,16 @@ fn handle_jsonrpc_request(request: Value) -> Option<Value> {
 fn initialize_result(_params: &Value) -> Result<Value, String> {
     Ok(json!({
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
-        "capabilities": { "tools": {} },
+        "capabilities": { "tools": {}, "logging": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded non-interactive commands; saved sudo/su credentials are consumed through SSH stdin without entering command text. If no saved credential or local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：普通后台 exec 不接管通用交互输入；sudo/su 可使用用户明确提供的一次性密码、加密 profile 或 FileTerm 主窗口安全输入；危险密码不要写入命令文本或工具结果。"
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded non-interactive commands; saved sudo/su credentials are consumed through SSH stdin without entering command text. If no saved credential is available, FileTerm opens a secure password prompt in the main window and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If no local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：普通后台 exec 不接管通用交互输入；sudo/su 缺少凭据时会自动打开 FileTerm 主窗口安全输入框，并在工具仍等待时发送状态通知；不要重复调用，先让用户完成窗口输入。危险密码不要写入命令文本或工具结果。"
     }))
 }
 
-fn call_tool(params: &Value) -> Result<Value, String> {
+fn call_tool<F>(params: &Value, on_progress: &mut F) -> Result<Value, String>
+where
+    F: FnMut(&BridgeProgress),
+{
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -2288,12 +2425,19 @@ fn call_tool(params: &Value) -> Result<Value, String> {
     let action = name
         .strip_prefix("fileterm_")
         .ok_or_else(|| "Unknown FileTerm tool".to_string())?;
+    let progress_token = params
+        .get("_meta")
+        .and_then(Value::as_object)
+        .and_then(|meta| meta.get("progressToken"))
+        .filter(|token| !token.is_null())
+        .cloned();
     let request = BridgeRequest {
         action: action.to_string(),
         params: arguments,
         requires_approval: true,
+        progress_token,
     };
-    match call_desktop_bridge(request) {
+    match call_desktop_bridge_with_progress(request, on_progress) {
         Ok(result) => Ok(tool_result(result, false)),
         Err(error) => Ok(tool_error_result(error)),
     }
@@ -2394,6 +2538,12 @@ fn mcp_error_code(error: &str) -> &'static str {
     for code in [
         MCP_POLICY_READ_ONLY,
         MCP_SCOPE_DENIED,
+        SUDO_PASSWORD_NEEDED,
+        SU_PASSWORD_NEEDED,
+        SUDO_PASSWORD_CANCELLED,
+        SU_PASSWORD_CANCELLED,
+        SUDO_AUTH_FAILURE,
+        SU_AUTH_FAILURE,
         "REMOTE_INTERACTIVE_INPUT_REQUIRED",
         MCP_TRANSFER_NOT_FOUND,
     ] {
@@ -2425,6 +2575,8 @@ fn mcp_error_is_retryable(code: &str) -> bool {
             | "FILETERM_BRIDGE_BUSY"
             | "FILETERM_REQUEST_TIMEOUT"
             | "FILETERM_SESSION_DISCONNECTED"
+            | SUDO_PASSWORD_NEEDED
+            | SU_PASSWORD_NEEDED
             | "REMOTE_INTERACTIVE_INPUT_REQUIRED"
     )
 }
@@ -2467,7 +2619,7 @@ fn tool_definitions() -> Vec<Value> {
         tool_definition("fileterm_reconnect_session", "Reconnect a FileTerm session", "Reconnect an existing session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, false, true),
         tool_definition("fileterm_disconnect_session", "Disconnect a FileTerm session", "Disconnect an open session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_close_session", "Close a FileTerm session", "Close a workspace tab after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, true, true, false),
-        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel; the visible terminal is not hijacked. Ordinary commands remain non-interactive. A command whose first token is sudo or su may use a saved profile credential through SSH stdin without exposing it to the command text. If no safe credential is available, FileTerm restores and focuses the main window and waits for the user to complete the secure foreground password prompt; if the main window or renderer is unavailable it returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED so the Agent may ask the user for the matching sudo_password or su_password and retry with that explicit one-shot value. A cancelled or timed-out prompt returns SUDO_PASSWORD_CANCELLED or SU_PASSWORD_CANCELLED and must not be retried automatically. save_* is honored only together with an explicitly supplied value. If a normal command reports inputRequired=true, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish the operation in the visible SSH terminal and retry.", json!({
+        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel; the visible terminal is not hijacked. Ordinary commands remain non-interactive. A command whose first token is sudo or su may use a saved profile credential through SSH stdin without exposing it to the command text. If no safe credential is available, FileTerm restores and focuses the main window, opens a secure foreground password prompt, and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If the main window or renderer is unavailable it returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED so the Agent may ask the user for the matching sudo_password or su_password and retry with that explicit one-shot value. A cancelled or timed-out prompt returns SUDO_PASSWORD_CANCELLED or SU_PASSWORD_CANCELLED and must not be retried automatically. save_* is honored only together with an explicitly supplied value. If a normal command reports inputRequired=true, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish the operation in the visible SSH terminal and retry.", json!({
             "tab_id": { "type": "string" },
             "command": { "type": "string" },
             "cwd": { "type": "string" },
@@ -2616,6 +2768,19 @@ fn jsonrpc_error(id: Value, code: i32, message: &str) -> Value {
 }
 
 fn call_desktop_bridge(request: BridgeRequest) -> Result<Value, String> {
+    let mut print_progress = |progress: &BridgeProgress| {
+        eprintln!("{}", progress.message);
+    };
+    call_desktop_bridge_with_progress(request, &mut print_progress)
+}
+
+fn call_desktop_bridge_with_progress<F>(
+    request: BridgeRequest,
+    on_progress: &mut F,
+) -> Result<Value, String>
+where
+    F: FnMut(&BridgeProgress),
+{
     let runtime_path = runtime_descriptor_path()?;
     let descriptor_content = fs::read_to_string(&runtime_path).map_err(|_| {
         "FileTerm desktop app is not running. Open FileTerm, then retry this MCP tool.".to_string()
@@ -2663,25 +2828,70 @@ fn call_desktop_bridge(request: BridgeRequest) -> Result<Value, String> {
             "Unable to send the request to FileTerm. Restart FileTerm and retry.".to_string()
         })?;
 
+    let mut reader = BufReader::new(stream);
     let mut response_line = String::new();
-    BufReader::new(stream)
-        .read_line(&mut response_line)
-        .map_err(|_| "FileTerm did not respond to the MCP request. Retry shortly.".to_string())?;
-    if response_line.len() > MCP_MAX_MESSAGE_BYTES {
-        return Err("FileTerm MCP response exceeds the size limit.".to_string());
+    loop {
+        response_line.clear();
+        reader.read_line(&mut response_line).map_err(|_| {
+            "FileTerm did not respond to the MCP request. Retry shortly.".to_string()
+        })?;
+        if response_line.len() > MCP_MAX_MESSAGE_BYTES {
+            return Err("FileTerm MCP response exceeds the size limit.".to_string());
+        }
+        let response_value: Value = serde_json::from_str(&response_line).map_err(|_| {
+            "FileTerm returned an invalid MCP response. Restart FileTerm and retry.".to_string()
+        })?;
+        if response_value.get("kind").and_then(Value::as_str) == Some("progress") {
+            let progress: BridgeProgress =
+                serde_json::from_value(response_value).map_err(|_| {
+                    "FileTerm returned an invalid MCP progress event. Restart FileTerm and retry."
+                        .to_string()
+                })?;
+            on_progress(&progress);
+            continue;
+        }
+        let response: BridgeResponse = serde_json::from_value(response_value).map_err(|_| {
+            "FileTerm returned an invalid MCP response. Restart FileTerm and retry.".to_string()
+        })?;
+        return if response.ok {
+            response
+                .result
+                .ok_or_else(|| "FileTerm returned an empty MCP response.".to_string())
+        } else {
+            Err(response
+                .error
+                .unwrap_or_else(|| "FileTerm could not complete the MCP request.".to_string()))
+        };
     }
-    let response: BridgeResponse = serde_json::from_str(&response_line).map_err(|_| {
-        "FileTerm returned an invalid MCP response. Restart FileTerm and retry.".to_string()
-    })?;
-    if response.ok {
-        response
-            .result
-            .ok_or_else(|| "FileTerm returned an empty MCP response.".to_string())
+}
+
+fn write_mcp_progress<W: Write>(writer: &mut W, progress: &BridgeProgress) -> io::Result<()> {
+    let notification = if let Some(progress_token) = progress.progress_token.as_ref() {
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": progress_token,
+                "progress": 0,
+                "total": 1,
+                "message": progress.message.as_str(),
+            },
+        })
     } else {
-        Err(response
-            .error
-            .unwrap_or_else(|| "FileTerm could not complete the MCP request.".to_string()))
-    }
+        json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/message",
+            "params": {
+                "level": "info",
+                "logger": "fileterm",
+                "data": progress.message.as_str(),
+            },
+        })
+    };
+    serde_json::to_writer(&mut *writer, &notification)
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    writer.write_all(b"\n")?;
+    writer.flush()
 }
 
 fn runtime_descriptor_path() -> Result<PathBuf, String> {
@@ -2724,10 +2934,13 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_jsonrpc_request, initialize_result, optional_string, pagination, tool_definitions,
-        tool_error_result, validate_tool_arguments, MCP_JSONRPC_PROTOCOL_VERSION,
+        bridge_request_timeout, handle_jsonrpc_request, initialize_result, mcp_error_code,
+        mcp_error_is_retryable, optional_string, pagination, tool_definitions, tool_error_result,
+        validate_tool_arguments, write_mcp_progress, BridgeProgress, BridgeRequest,
+        MCP_BRIDGE_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION, SUDO_PASSWORD_CANCELLED,
+        SUDO_PASSWORD_NEEDED,
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     #[test]
     fn tools_are_prefixed_and_have_strict_schemas() {
@@ -2755,6 +2968,10 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("REMOTE_INTERACTIVE_INPUT_REQUIRED"));
+        assert!(remote_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("progress/log notification"));
         assert!(
             remote_tool["outputSchema"]["properties"]["result"]["required"]
                 .as_array()
@@ -2828,6 +3045,7 @@ mod tests {
         assert!(instructions.contains("visible SSH terminal"));
         assert!(instructions.contains("ask the user"));
         assert!(instructions.contains("sudo/su"));
+        assert!(instructions.contains("progress/log notification"));
     }
 
     #[test]
@@ -2879,5 +3097,51 @@ mod tests {
             "FILETERM_OPERATION_REJECTED"
         );
         assert_eq!(rejected["structuredContent"]["error"]["retryable"], false);
+    }
+
+    #[test]
+    fn cli_exec_keeps_the_bridge_open_for_a_foreground_password_prompt() {
+        let request = BridgeRequest {
+            action: "execute_remote_command".to_string(),
+            params: json!({}),
+            requires_approval: false,
+            progress_token: None,
+        };
+        assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
+    }
+
+    #[test]
+    fn privileged_prompt_progress_uses_mcp_notifications_without_secrets() {
+        let progress = BridgeProgress::privileged_password_prompt(
+            SUDO_PASSWORD_NEEDED,
+            Some(json!("progress-1")),
+        );
+        let mut output = Vec::new();
+        write_mcp_progress(&mut output, &progress).expect("progress notification should encode");
+        let notification: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(notification["method"], "notifications/progress");
+        assert_eq!(notification["params"]["progressToken"], "progress-1");
+        assert_eq!(notification["params"]["message"], progress.message);
+        assert!(!notification.to_string().contains("password="));
+
+        let progress_without_token =
+            BridgeProgress::privileged_password_prompt(SUDO_PASSWORD_NEEDED, None);
+        output.clear();
+        write_mcp_progress(&mut output, &progress_without_token)
+            .expect("logging notification should encode");
+        let notification: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(notification["method"], "notifications/message");
+        assert_eq!(notification["params"]["logger"], "fileterm");
+    }
+
+    #[test]
+    fn privileged_prompt_errors_preserve_stable_codes_and_retry_semantics() {
+        assert_eq!(mcp_error_code(SUDO_PASSWORD_NEEDED), SUDO_PASSWORD_NEEDED);
+        assert!(mcp_error_is_retryable(SUDO_PASSWORD_NEEDED));
+        assert_eq!(
+            mcp_error_code(SUDO_PASSWORD_CANCELLED),
+            SUDO_PASSWORD_CANCELLED
+        );
+        assert!(!mcp_error_is_retryable(SUDO_PASSWORD_CANCELLED));
     }
 }

@@ -1,7 +1,7 @@
 .session-workspace {
   display: grid;
   position: relative;
-  grid-template-rows: minmax(160px, 1fr) minmax(0, var(--file-panel-height, 300px));
+  grid-template-rows: minmax(120px, 1fr) minmax(0, var(--file-panel-height, 300px));
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
@@ -1279,6 +1279,8 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
   user-select: none;
   -webkit-user-select: none;
@@ -1527,6 +1529,9 @@
 
 .file-icon.is-draggable {
   cursor: grab;
+  -webkit-user-drag: none;
+  user-select: none;
+  touch-action: none;
 }
 
 .file-icon.is-draggable:active {
@@ -1723,6 +1728,16 @@
 .transfer-row time,
 .transfer-row-meta span {
   font-size: 11px;
+}
+
+.transfer-row-path,
+.transfer-row-message {
+  grid-column: 1 / -1;
+}
+
+.transfer-row-current-item-label {
+  margin-right: 4px;
+  font-weight: 600;
 }
 
 .transfer-row-main span {

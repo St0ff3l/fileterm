@@ -1175,6 +1175,56 @@ fn install_windows_terminal_zoom_interceptor(window: &WebviewWindow<Wry>) {
 }
 
 #[cfg(target_os = "macos")]
+fn apply_macos_main_window_vibrancy(window: &WebviewWindow<Wry>) -> Result<(), String> {
+    window_vibrancy::apply_vibrancy(
+        window,
+        window_vibrancy::NSVisualEffectMaterial::UnderWindowBackground,
+        // Keep AppKit's blur state deterministic. The renderer adds the
+        // measured 32/60 color overlay; AppKit supplies only the stable blur
+        // behind it.
+        Some(window_vibrancy::NSVisualEffectState::Active),
+        None,
+    )
+    .map_err(|error| error.to_string())?;
+
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSAppearance, NSAppearanceCustomization, NSView};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let handle = window.window_handle().map_err(|error| error.to_string())?;
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return Ok(());
+    };
+    if MainThreadMarker::new().is_none() {
+        return Ok(());
+    }
+
+    let view = unsafe { &*(handle.ns_view.as_ptr() as *const NSView) };
+    // Force a dark AppKit appearance for the native material. Without this,
+    // the material can resolve against the system light appearance while the
+    // renderer is using the Codex dark theme, which is the source of the
+    // intermittent gray/over-transparent result during focus and movement.
+    if let Some(native_window) = view.window() {
+        let dark_appearance =
+            unsafe { NSAppearance::appearanceNamed(objc2_app_kit::NSAppearanceNameDarkAqua) };
+        if let Some(dark_appearance) = dark_appearance {
+            native_window.setAppearance(Some(&dark_appearance));
+        }
+    }
+
+    // window-vibrancy uses this stable tag for the view it inserts beneath
+    // the WebView. Leave it visible so AppKit owns blur consistently; the
+    // renderer's semi-transparent surface overlay keeps the resulting color
+    // deterministic.
+    if let Some(effect_view) = view.viewWithTag(91_376_254) {
+        effect_view.setHidden(false);
+        effect_view.setAlphaValue(1.0);
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
 fn calibrate_macos_traffic_lights(window: &WebviewWindow<Wry>) -> bool {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSControlSize, NSView, NSWindowButton};
@@ -1646,6 +1696,15 @@ pub fn run() {
                     .map_err(|error| error.to_string())?;
             }
 
+            #[cfg(target_os = "macos")]
+            if let Err(error) = apply_macos_main_window_vibrancy(&main_window) {
+                crate::services::logging::warn(
+                    app.handle(),
+                    "window",
+                    format!("failed to apply macOS main-window vibrancy: {error}"),
+                );
+            }
+
             let app_handle = app.handle().clone();
             main_window.on_window_event(move |event| match event {
                 WindowEvent::CloseRequested { api, .. } => {
@@ -1981,6 +2040,10 @@ pub fn run() {
             crate::commands::app_set_command_send_preferences,
             crate::commands::app_get_snapshot,
             crate::commands::app_get_connection_library,
+            crate::commands::app_list_imported_fonts,
+            crate::commands::app_import_font,
+            crate::commands::app_get_imported_font_data,
+            crate::commands::app_delete_imported_font,
             crate::commands::app_list_ssh_keys,
             crate::commands::app_select_ssh_key_file,
             crate::commands::app_import_ssh_key,
@@ -2155,7 +2218,10 @@ mod tests {
     fn loads_the_high_resolution_windows_icon_for_windows_surfaces() {
         let icon = windows_icon_image().unwrap();
 
-        assert_eq!((icon.width(), icon.height()), (32, 32));
+        // `Image::from_bytes` decodes multi-size ICO containers through the
+        // image crate, which selects the largest frame. The high-resolution
+        // 256px bitmap is exactly what tray and window surfaces want.
+        assert_eq!((icon.width(), icon.height()), (256, 256));
     }
 
     #[test]

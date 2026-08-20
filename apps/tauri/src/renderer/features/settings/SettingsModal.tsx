@@ -13,17 +13,21 @@ import {
   type BackupDownloadMode,
   type BackupUploadMode,
   type ConnectionProfile,
+  type ImportedFont,
   type McpAgentClientStatus,
   type McpAgentPreferences,
   type McpAgentSetup,
   type OverviewSectionId,
   type S3BackupConfig,
+  type SavedTheme,
   type SshConnectionDefaults,
   type TerminalAnsiColorName,
   type ThemeConfig,
   type UiPreferences,
   type WebDavSyncConfig
 } from '@fileterm/core'
+import { deriveThemeVariant, getSavedThemeConfig, normalizeSavedTheme } from '../../app/theme-config'
+import { registerImportedFont, registerImportedFonts, unregisterImportedFont } from '../../app/imported-fonts'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 import { t, type LocaleMessages } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -32,6 +36,7 @@ import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
+import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
 
 type SettingsTab = 'ai' | 'agent' | 'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
 
@@ -117,6 +122,8 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
       candidate.theme.ink,
       candidate.theme.semanticColors.secondary,
       candidate.theme.semanticColors.textSecondary,
+      candidate.theme.semanticColors.sftp,
+      candidate.theme.semanticColors.ftp,
       candidate.theme.semanticColors.info,
       candidate.theme.semanticColors.warning,
       candidate.theme.semanticColors.error,
@@ -130,6 +137,8 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
       themeConfig.theme.ink,
       themeConfig.theme.semanticColors.secondary,
       themeConfig.theme.semanticColors.textSecondary,
+      themeConfig.theme.semanticColors.sftp,
+      themeConfig.theme.semanticColors.ftp,
       themeConfig.theme.semanticColors.info,
       themeConfig.theme.semanticColors.warning,
       themeConfig.theme.semanticColors.error,
@@ -137,10 +146,29 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
     ]
     return (
       colorValues.every((value, index) => value.toUpperCase() === themeColorValues[index].toUpperCase()) &&
-      candidate.theme.contrast === themeConfig.theme.contrast &&
-      candidate.theme.opaqueWindows === themeConfig.theme.opaqueWindows
+      candidate.theme.contrast === themeConfig.theme.contrast
     )
   })
+}
+
+function sameThemeConfig(left: ThemeConfig, right: ThemeConfig) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+function findSavedThemeForConfig(savedThemes: SavedTheme[], themeConfig: ThemeConfig) {
+  return savedThemes.find((candidate) =>
+    sameThemeConfig(getSavedThemeConfig(candidate, themeConfig.variant), themeConfig)
+  )
+}
+
+function themeBaseIdForConfig(themeConfig: ThemeConfig): 'fileterm' | 'codex' {
+  if (themeConfig.baseThemeId) return themeConfig.baseThemeId
+  return themeConfig.codeThemeId === 'codex' || themeConfig.codeThemeId.startsWith('codex-') ? 'codex' : 'fileterm'
+}
+
+function createCustomThemeId() {
+  const randomId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : null
+  return `custom-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`
 }
 
 function toColorInputValue(value: string) {
@@ -431,8 +459,10 @@ function aiProviderRequestUrlPreview(draft: AiProviderDraft) {
 export function SettingsModal({
   theme,
   themeConfig,
+  customThemes,
   onSetTheme,
   onSetThemeConfig,
+  onSetCustomThemes,
   locale,
   onSetLocale,
   onOpenCommandManager,
@@ -446,8 +476,10 @@ export function SettingsModal({
 }: {
   theme: 'default-dark' | 'default-light'
   themeConfig: ThemeConfig
+  customThemes: SavedTheme[]
   onSetTheme(value: 'default-dark' | 'default-light'): void
   onSetThemeConfig(value: ThemeConfig): void
+  onSetCustomThemes(value: SavedTheme[]): void
   locale: 'zhCN' | 'enUS'
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenCommandManager(): void
@@ -465,14 +497,25 @@ export function SettingsModal({
   const [agentSubTab, setAgentSubTab] = useState<'mcp' | 'cli'>('mcp')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
+  const [updateChannel, setUpdateChannel] = useState<UiPreferences['updateChannel']>('stable')
   const [isSavingUpdatePreference, setIsSavingUpdatePreference] = useState(false)
   const [updatePreferenceError, setUpdatePreferenceError] = useState<string | null>(null)
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
+  const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
+  const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
+  const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
+  const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
+  const [fontImportKind, setFontImportKind] = useState<'ui' | 'code' | null>(null)
+  const [fontImportError, setFontImportError] = useState<string | null>(null)
+  const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
   const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
   const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<string | null>(null)
+  const [customThemeName, setCustomThemeName] = useState('')
+  const [editingCustomThemeId, setEditingCustomThemeId] = useState<string | null>(null)
+  const [showDeleteThemeConfirm, setShowDeleteThemeConfirm] = useState(false)
   const [mcpAgentPreferences, setMcpAgentPreferences] = useState<McpAgentPreferences>(() => ({
     ...DEFAULT_MCP_AGENT_PREFERENCES
   }))
@@ -537,6 +580,34 @@ export function SettingsModal({
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
 
   useEffect(() => {
+    if (!desktopApi) return
+
+    let canceled = false
+    void desktopApi
+      .listImportedFonts()
+      .then(async (fonts) => {
+        const entries = await Promise.all(
+          fonts.map(async (font) => {
+            const dataUrl = await desktopApi.getImportedFontData(font.id)
+            return dataUrl ? { font, dataUrl } : null
+          })
+        )
+        if (canceled) return
+        setImportedFonts(fonts)
+        registerImportedFonts(
+          entries.filter((entry): entry is { font: ImportedFont; dataUrl: string } => entry !== null)
+        )
+      })
+      .catch(() => {
+        if (!canceled) setFontImportError(t.themeFontImportFailed)
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [desktopApi])
+
+  useEffect(() => {
     setActiveTab(initialTab)
   }, [initialTab])
 
@@ -572,7 +643,9 @@ export function SettingsModal({
       .then((preferences) => {
         if (!canceled) {
           setAutoCheckUpdates(preferences.autoCheckUpdates)
+          setUpdateChannel(preferences.updateChannel)
           setTerminalZoomLocked(preferences.terminalZoomLocked)
+          setFilePanelRememberRatio(preferences.filePanelRememberRatio)
           setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
           setOverviewShowStats(preferences.overviewShowStats)
@@ -595,7 +668,9 @@ export function SettingsModal({
     const unsubscribe = desktopApi.onUiPreferencesChanged((preferences) => {
       if (!canceled) {
         setAutoCheckUpdates(preferences.autoCheckUpdates)
+        setUpdateChannel(preferences.updateChannel)
         setTerminalZoomLocked(preferences.terminalZoomLocked)
+        setFilePanelRememberRatio(preferences.filePanelRememberRatio)
         setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
         setOverviewShowStats(preferences.overviewShowStats)
@@ -954,6 +1029,28 @@ export function SettingsModal({
       .finally(() => setIsSavingUpdatePreference(false))
   }
 
+  const setUpdateChannelPreference = (nextValue: UiPreferences['updateChannel']) => {
+    if (!desktopApi || isSavingUpdatePreference || nextValue === updateChannel) {
+      return
+    }
+
+    const previousValue = updateChannel
+    setUpdateChannel(nextValue)
+    setUpdatePreferenceError(null)
+    setIsSavingUpdatePreference(true)
+    void desktopApi
+      .setUiPreferences({ updateChannel: nextValue })
+      .then((preferences) => {
+        setUpdateChannel(preferences.updateChannel)
+        void desktopApi.checkForUpdates().catch(() => undefined)
+      })
+      .catch(() => {
+        setUpdateChannel(previousValue)
+        setUpdatePreferenceError(t.updatePreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingUpdatePreference(false))
+  }
+
   const setConnectionDefault = <K extends keyof SshConnectionDefaults>(key: K, value: SshConnectionDefaults[K]) => {
     if (!desktopApi || isSavingConnectionDefaults || connectionDefaults[key] === value) {
       return
@@ -995,6 +1092,25 @@ export function SettingsModal({
       .finally(() => setIsSavingTerminalZoomPreference(false))
   }
 
+  const setFilePanelRememberRatioPreference = (nextValue: boolean) => {
+    if (!desktopApi || isSavingFilePanelPreference || nextValue === filePanelRememberRatio) {
+      return
+    }
+
+    const previousValue = filePanelRememberRatio
+    setFilePanelRememberRatio(nextValue)
+    setFilePanelPreferenceError(null)
+    setIsSavingFilePanelPreference(true)
+    void desktopApi
+      .setUiPreferences({ filePanelRememberRatio: nextValue })
+      .then((preferences) => setFilePanelRememberRatio(preferences.filePanelRememberRatio))
+      .catch(() => {
+        setFilePanelRememberRatio(previousValue)
+        setFilePanelPreferenceError(t.filePanelPreferenceSaveFailed)
+      })
+      .finally(() => setIsSavingFilePanelPreference(false))
+  }
+
   const themeVariant = theme === 'default-light' ? 'light' : 'dark'
 
   const setThemeConfigValue = (nextValue: ThemeConfig) => {
@@ -1002,7 +1118,8 @@ export function SettingsModal({
       normalizeThemeConfig(
         {
           ...nextValue,
-          codeThemeId: 'custom'
+          codeThemeId: 'custom',
+          baseThemeId: themeBaseIdForConfig(themeConfig)
         },
         themeVariant
       )
@@ -1038,6 +1155,54 @@ export function SettingsModal({
     })
   }
 
+  const importFontFor = async (kind: 'ui' | 'code') => {
+    if (!desktopApi || fontImportKind) return
+
+    setFontImportKind(kind)
+    setFontImportError(null)
+    try {
+      const font = await desktopApi.importFont()
+      if (!font) return
+
+      const dataUrl = await desktopApi.getImportedFontData(font.id)
+      if (dataUrl) registerImportedFont(font, dataUrl)
+      setImportedFonts((current) => [font, ...current.filter((item) => item.id !== font.id)])
+      updateThemeFonts({ [kind]: font.family })
+    } catch {
+      setFontImportError(t.themeFontImportFailed)
+    } finally {
+      setFontImportKind(null)
+    }
+  }
+
+  const handleDeleteFont = async (font: ImportedFont) => {
+    if (!desktopApi) return
+    try {
+      const success = await desktopApi.deleteImportedFont(font.id)
+      if (!success) {
+        setFontImportError(t.themeFontDeleteFailed)
+        return
+      }
+      unregisterImportedFont(font.id)
+      setImportedFonts((current) => current.filter((item) => item.id !== font.id))
+
+      const patch: Partial<ThemeConfig['theme']['fonts']> = {}
+      if (themeConfig.theme.fonts.ui === font.family) {
+        patch.ui = null
+      }
+      if (themeConfig.theme.fonts.code === font.family) {
+        patch.code = null
+      }
+      if (Object.keys(patch).length > 0) {
+        updateThemeFonts(patch)
+      }
+      setFontToDelete(null)
+      setFontImportError(null)
+    } catch {
+      setFontImportError(t.themeFontDeleteFailed)
+    }
+  }
+
   const updateTerminalTheme = (patch: Partial<ThemeConfig['theme']['terminal']>) => {
     updateThemeBody({
       terminal: {
@@ -1066,12 +1231,94 @@ export function SettingsModal({
   }
 
   const applyThemePreset = (presetId: string, variant: ThemePresetVariant = themeVariant) => {
+    if (presetId === 'custom') {
+      const nextThemeConfig = normalizeThemeConfig(
+        {
+          ...createDefaultThemeConfig(variant),
+          codeThemeId: 'custom',
+          baseThemeId: 'fileterm'
+        },
+        variant
+      )
+      onSetThemeConfig(nextThemeConfig)
+      onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+      setEditingCustomThemeId(null)
+      setCustomThemeName('')
+      setThemeConfigMessage(t.themePresetApplied)
+      return
+    }
+
+    if (presetId.startsWith('saved:')) {
+      const savedId = presetId.slice('saved:'.length)
+      const savedTheme = customThemes.find((candidate) => candidate.id === savedId)
+      if (!savedTheme) return
+      const nextThemeConfig = getSavedThemeConfig(savedTheme, variant)
+      onSetThemeConfig(nextThemeConfig)
+      onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+      setEditingCustomThemeId(savedTheme.id)
+      setCustomThemeName(savedTheme.name)
+      setThemeConfigMessage(t.themePresetApplied)
+      return
+    }
+
     const preset = THEME_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) return
     const nextThemeConfig = normalizeThemeConfig(preset.config[variant], variant)
     onSetThemeConfig(nextThemeConfig)
     onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    setEditingCustomThemeId(null)
+    setCustomThemeName('')
     setThemeConfigMessage(t.themePresetApplied)
+  }
+
+  const saveCustomTheme = () => {
+    const name = customThemeName.trim()
+    if (!name) {
+      setThemeConfigMessage(t.themeNameRequired)
+      return
+    }
+
+    const nextThemeConfig = normalizeThemeConfig(
+      {
+        ...themeConfig,
+        codeThemeId: 'custom',
+        baseThemeId: themeBaseIdForConfig(themeConfig)
+      },
+      themeVariant
+    )
+    const existingTheme = editingCustomThemeId
+      ? customThemes.find((candidate) => candidate.id === editingCustomThemeId)
+      : undefined
+    const id = existingTheme?.id ?? createCustomThemeId()
+    const normalizedExistingTheme = existingTheme ? normalizeSavedTheme(existingTheme) : null
+    const variants = {
+      dark: normalizedExistingTheme?.variants?.dark ?? deriveThemeVariant(nextThemeConfig, 'dark'),
+      light: normalizedExistingTheme?.variants?.light ?? deriveThemeVariant(nextThemeConfig, 'light')
+    }
+    variants[themeVariant] = nextThemeConfig
+    const nextCustomThemes = [
+      ...customThemes.filter((candidate) => candidate.id !== id),
+      { id, name, config: nextThemeConfig, variants }
+    ]
+
+    onSetCustomThemes(nextCustomThemes)
+    onSetThemeConfig(nextThemeConfig)
+    onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
+    setEditingCustomThemeId(id)
+    setCustomThemeName(name)
+    setThemeConfigMessage(existingTheme ? t.themeUpdated : t.themeSaved)
+  }
+
+  const deleteCustomTheme = () => {
+    if (!selectedSavedTheme) return
+    const idToDelete = selectedSavedTheme.id
+    const nextCustomThemes = customThemes.filter((candidate) => candidate.id !== idToDelete)
+    onSetCustomThemes(nextCustomThemes)
+    setEditingCustomThemeId(null)
+    setCustomThemeName('')
+    applyThemePreset('fileterm')
+    setThemeConfigMessage(t.themeDeleted)
+    setShowDeleteThemeConfirm(false)
   }
 
   const switchThemeVariant = (nextVariant: ThemePresetVariant) => {
@@ -1097,8 +1344,22 @@ export function SettingsModal({
       return
     }
 
+    const savedTheme =
+      (editingCustomThemeId ? customThemes.find((candidate) => candidate.id === editingCustomThemeId) : undefined) ??
+      findSavedThemeForConfig(customThemes, themeConfig)
+    if (savedTheme) {
+      const currentSavedVariant = getSavedThemeConfig(savedTheme, themeConfig.variant)
+      const nextThemeConfig = sameThemeConfig(currentSavedVariant, themeConfig)
+        ? getSavedThemeConfig(savedTheme, nextVariant)
+        : deriveThemeVariant(themeConfig, nextVariant)
+      onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
+      onSetThemeConfig(nextThemeConfig)
+      return
+    }
+
+    const nextThemeConfig = deriveThemeVariant(themeConfig, nextVariant)
     onSetTheme(nextVariant === 'light' ? 'default-light' : 'default-dark')
-    onSetThemeConfig(normalizeThemeConfig({ ...themeConfig, variant: nextVariant }, nextVariant))
+    onSetThemeConfig(nextThemeConfig)
   }
 
   const parseImportedTheme = (text: string): unknown => {
@@ -1193,6 +1454,8 @@ export function SettingsModal({
       const importedTheme = normalizeThemeConfig(parseImportedTheme(clipboardText), themeVariant)
       onSetThemeConfig(importedTheme)
       onSetTheme(importedTheme.variant === 'light' ? 'default-light' : 'default-dark')
+      setEditingCustomThemeId(null)
+      setCustomThemeName('')
       setThemeConfigMessage(t.themeImported)
     } catch {
       setThemeConfigMessage(t.themeImportFailed)
@@ -1207,6 +1470,7 @@ export function SettingsModal({
       const normalizedTheme = normalizeThemeConfig({ ...themeConfig, variant: themeVariant }, themeVariant)
       const serializedTheme = `${THEME_CONFIG_EXPORT_PREFIX}${JSON.stringify({
         codeThemeId: normalizedTheme.codeThemeId,
+        baseThemeId: normalizedTheme.baseThemeId,
         theme: normalizedTheme.theme,
         variant: normalizedTheme.variant
       })}`
@@ -1453,9 +1717,25 @@ export function SettingsModal({
   }
 
   const selectedThemePreset = findMatchingThemePreset(themeConfig)
-  const themePresetFamily: ThemePresetFamily | 'custom' = selectedThemePreset?.id ?? 'custom'
-  const themePresetLabel = selectedThemePreset ? t[selectedThemePreset.labelKey] : t.themePresetCustom
-  const themePresetCode = themePresetFamily === 'custom' ? 'custom' : themePresetFamily
+  const matchingSavedTheme = findSavedThemeForConfig(customThemes, themeConfig)
+  const editingSavedTheme = editingCustomThemeId
+    ? customThemes.find((candidate) => candidate.id === editingCustomThemeId)
+    : undefined
+  const selectedSavedTheme = editingSavedTheme ?? matchingSavedTheme
+  const themePresetValue = selectedSavedTheme ? `saved:${selectedSavedTheme.id}` : (selectedThemePreset?.id ?? 'custom')
+  const themePresetLabel = selectedSavedTheme
+    ? selectedSavedTheme.name
+    : selectedThemePreset
+      ? t[selectedThemePreset.labelKey]
+      : t.themePresetCustom
+  const themePresetCode = selectedSavedTheme || !selectedThemePreset ? 'custom' : selectedThemePreset.id
+
+  useEffect(() => {
+    if (!editingCustomThemeId && matchingSavedTheme) {
+      setEditingCustomThemeId(matchingSavedTheme.id)
+      setCustomThemeName(matchingSavedTheme.name)
+    }
+  }, [editingCustomThemeId, matchingSavedTheme])
 
   const content = (
     <div
@@ -2264,6 +2544,13 @@ export function SettingsModal({
                           }
                         />
                       </label>
+                      <ResourceMonitoringMetricsEditor
+                        metrics={connectionDefaults.resourceMonitoringMetrics}
+                        order={connectionDefaults.resourceMonitoringMetricOrder}
+                        disabled={!connectionDefaults.enableResourceMonitoring || isSavingConnectionDefaults}
+                        onMetricsChange={(next) => setConnectionDefault('resourceMonitoringMetrics', next)}
+                        onOrderChange={(next) => setConnectionDefault('resourceMonitoringMetricOrder', next)}
+                      />
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
@@ -2414,10 +2701,45 @@ export function SettingsModal({
                       onChange={applyThemePreset}
                       options={[
                         ...THEME_PRESETS.map((preset) => ({ value: preset.id, label: t[preset.labelKey] })),
+                        ...customThemes.map((savedTheme) => ({
+                          value: `saved:${savedTheme.id}`,
+                          label: savedTheme.name
+                        })),
                         { value: 'custom', label: t.themePresetCustom }
                       ]}
-                      value={themePresetFamily}
+                      value={themePresetValue}
                     />
+                  </div>
+                  <div className="theme-config-name-control">
+                    <span className="theme-config-label">{t.themeCustomName}</span>
+                    <input
+                      aria-label={t.themeCustomName}
+                      className="theme-config-name-input"
+                      maxLength={128}
+                      onChange={(event) => setCustomThemeName(event.target.value)}
+                      placeholder={t.themeCustomNamePlaceholder}
+                      value={customThemeName}
+                    />
+                  </div>
+                  <div className="theme-config-actions-control">
+                    <button
+                      className="primary-button compact theme-config-save-button"
+                      onClick={saveCustomTheme}
+                      type="button"
+                    >
+                      <AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />
+                      {editingSavedTheme ? t.themeUpdate : t.themeSave}
+                    </button>
+                    {selectedSavedTheme ? (
+                      <button
+                        className="theme-config-danger-button"
+                        onClick={() => setShowDeleteThemeConfirm(true)}
+                        type="button"
+                      >
+                        <AppIcon name="trash" size={14} />
+                        {t.themeDelete}
+                      </button>
+                    ) : null}
                   </div>
                   <div
                     className="theme-config-preview"
@@ -2482,6 +2804,16 @@ export function SettingsModal({
                         onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
                         value={themeConfig.theme.semanticColors.textSecondary}
                       />
+                      <ThemeColorField
+                        label={t.themeSftpColor}
+                        onChange={(value) => updateThemeSemanticColors({ sftp: value })}
+                        value={themeConfig.theme.semanticColors.sftp}
+                      />
+                      <ThemeColorField
+                        label={t.themeFtpColor}
+                        onChange={(value) => updateThemeSemanticColors({ ftp: value })}
+                        value={themeConfig.theme.semanticColors.ftp}
+                      />
                     </div>
                   </section>
 
@@ -2518,47 +2850,98 @@ export function SettingsModal({
                 <div className="theme-config-font-grid">
                   <div className="theme-config-control">
                     <span className="theme-config-label">{t.themeUiFont}</span>
-                    <DropdownSelect
-                      ariaLabel={t.themeUiFont}
-                      className="theme-config-select"
-                      onChange={(value) => updateThemeFonts({ ui: value || null })}
-                      options={[
-                        { value: '', label: t.themeSystemDefault },
-                        { value: 'Inter', label: 'Inter' },
-                        { value: 'SF Pro Text', label: 'SF Pro Text' },
-                        { value: 'Noto Sans SC', label: 'Noto Sans SC' }
-                      ]}
-                      value={themeConfig.theme.fonts.ui ?? ''}
-                    />
+                    <div className="theme-config-font-control-row">
+                      <DropdownSelect
+                        ariaLabel={t.themeUiFont}
+                        className="theme-config-select"
+                        onChange={(value) => updateThemeFonts({ ui: value || null })}
+                        options={[
+                          { value: '', label: t.themeSystemDefault },
+                          { value: 'Inter', label: 'Inter' },
+                          { value: 'SF Pro Text', label: 'SF Pro Text' },
+                          { value: 'Noto Sans SC', label: 'Noto Sans SC' },
+                          ...importedFonts.map((font) => ({
+                            value: font.family,
+                            label: `${font.family} (${font.format.toUpperCase()})`
+                          }))
+                        ]}
+                        value={themeConfig.theme.fonts.ui ?? ''}
+                      />
+                      <button
+                        aria-label={t.themeImportFont}
+                        className="flat-button compact theme-font-import-button"
+                        disabled={!desktopApi || fontImportKind !== null}
+                        onClick={() => void importFontFor('ui')}
+                        title={t.themeImportFont}
+                        type="button"
+                      >
+                        <AppIcon name="upload" size={14} />
+                        {fontImportKind === 'ui' ? t.themeImportingFont : t.themeImportFont}
+                      </button>
+                    </div>
                   </div>
                   <div className="theme-config-control">
                     <span className="theme-config-label">{t.themeCodeFont}</span>
-                    <DropdownSelect
-                      ariaLabel={t.themeCodeFont}
-                      className="theme-config-select"
-                      onChange={(value) => updateThemeFonts({ code: value || null })}
-                      options={[
-                        { value: '', label: t.themeSystemDefault },
-                        { value: 'JetBrains Mono', label: 'JetBrains Mono' },
-                        { value: 'SF Mono', label: 'SF Mono' },
-                        { value: 'Cascadia Code', label: 'Cascadia Code' }
-                      ]}
-                      value={themeConfig.theme.fonts.code ?? ''}
-                    />
+                    <div className="theme-config-font-control-row">
+                      <DropdownSelect
+                        ariaLabel={t.themeCodeFont}
+                        className="theme-config-select"
+                        onChange={(value) => updateThemeFonts({ code: value || null })}
+                        options={[
+                          { value: '', label: t.themeSystemDefault },
+                          { value: 'JetBrains Mono', label: 'JetBrains Mono' },
+                          { value: 'SF Mono', label: 'SF Mono' },
+                          { value: 'Cascadia Code', label: 'Cascadia Code' },
+                          ...importedFonts.map((font) => ({
+                            value: font.family,
+                            label: `${font.family} (${font.format.toUpperCase()})`
+                          }))
+                        ]}
+                        value={themeConfig.theme.fonts.code ?? ''}
+                      />
+                      <button
+                        aria-label={t.themeImportFont}
+                        className="flat-button compact theme-font-import-button"
+                        disabled={!desktopApi || fontImportKind !== null}
+                        onClick={() => void importFontFor('code')}
+                        title={t.themeImportFont}
+                        type="button"
+                      >
+                        <AppIcon name="upload" size={14} />
+                        {fontImportKind === 'code' ? t.themeImportingFont : t.themeImportFont}
+                      </button>
+                    </div>
                   </div>
                 </div>
+                {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
 
-                <div className="theme-config-checkbox-row">
-                  <label className="theme-config-switch">
-                    <span>{t.themeOpaqueWindows}</span>
-                    <input
-                      checked={themeConfig.theme.opaqueWindows}
-                      onChange={(event) => updateThemeBody({ opaqueWindows: event.target.checked })}
-                      type="checkbox"
-                    />
-                    <span aria-hidden="true" className="theme-config-switch-track" />
-                  </label>
-                </div>
+                {importedFonts.length > 0 ? (
+                  <div className="theme-config-imported-fonts">
+                    <div className="theme-config-imported-fonts-header">
+                      <span className="theme-config-imported-fonts-title">{t.themeImportedFonts}</span>
+                      <span className="theme-config-imported-fonts-count">{importedFonts.length}</span>
+                    </div>
+                    <div className="theme-config-imported-fonts-list">
+                      {importedFonts.map((font) => (
+                        <div key={font.id} className="theme-config-imported-font-item">
+                          <span className="theme-config-imported-font-name" title={font.fileName}>
+                            {font.family}
+                            <span className="theme-config-imported-font-format">{font.format.toUpperCase()}</span>
+                          </span>
+                          <button
+                            type="button"
+                            className="flat-button compact danger theme-config-font-delete-btn"
+                            title={`${t.themeDeleteFont}: ${font.family}`}
+                            aria-label={`${t.themeDeleteFont}: ${font.family}`}
+                            onClick={() => setFontToDelete(font)}
+                          >
+                            <AppIcon name="trash" size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <details className="theme-config-subsection theme-advanced-section">
                   <summary className="theme-config-section-summary">
@@ -2652,53 +3035,106 @@ export function SettingsModal({
                 <details className="theme-advanced-section theme-terminal-ansi-details">
                   <summary className="theme-config-section-summary">
                     <span className="theme-config-section-summary-copy">
-                      <strong>{t.themeAnsiNormal}</strong>
+                      <strong>{t.themeAnsiColors}</strong>
                       <span>{t.themeAnsiHint}</span>
                     </span>
                     <span className="theme-config-section-summary-count">16</span>
                   </summary>
-                  <div className="theme-ansi-grid">
-                    {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
-                      <ThemeColorField
-                        key={name}
-                        label={ANSI_COLOR_LABELS[name]}
-                        onChange={(value) => updateTerminalAnsiColor(name, value)}
-                        value={themeConfig.theme.terminal.ansi[name]}
-                      />
-                    ))}
-                  </div>
-                  <h4>{t.themeAnsiBright}</h4>
-                  <div className="theme-ansi-grid">
-                    {ANSI_COLOR_NAMES.slice(8).map((name) => (
-                      <ThemeColorField
-                        key={name}
-                        label={ANSI_COLOR_LABELS[name]}
-                        onChange={(value) => updateTerminalAnsiColor(name, value)}
-                        value={themeConfig.theme.terminal.ansi[name]}
-                      />
-                    ))}
+                  <div className="theme-terminal-ansi-groups">
+                    <section className="theme-terminal-ansi-group">
+                      <h5>{t.themeAnsiNormal}</h5>
+                      <div className="theme-config-fields">
+                        {ANSI_COLOR_NAMES.slice(0, 8).map((name) => (
+                          <ThemeColorField
+                            key={name}
+                            label={ANSI_COLOR_LABELS[name]}
+                            onChange={(value) => updateTerminalAnsiColor(name, value)}
+                            value={themeConfig.theme.terminal.ansi[name]}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                    <section className="theme-terminal-ansi-group">
+                      <h5>{t.themeAnsiBright}</h5>
+                      <div className="theme-config-fields">
+                        {ANSI_COLOR_NAMES.slice(8).map((name) => (
+                          <ThemeColorField
+                            key={name}
+                            label={ANSI_COLOR_LABELS[name]}
+                            onChange={(value) => updateTerminalAnsiColor(name, value)}
+                            value={themeConfig.theme.terminal.ansi[name]}
+                          />
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 </details>
+
+                {showDeleteThemeConfirm && selectedSavedTheme ? (
+                  <ConfirmActionDialog
+                    confirmLabel={t.delete}
+                    confirmVariant="danger"
+                    description={t.themeDeleteConfirmDescription.replace('{name}', selectedSavedTheme.name)}
+                    onClose={() => setShowDeleteThemeConfirm(false)}
+                    onConfirm={deleteCustomTheme}
+                    title={t.themeDeleteConfirmTitle}
+                  />
+                ) : null}
+
+                {fontToDelete ? (
+                  <ConfirmActionDialog
+                    confirmLabel={t.delete}
+                    confirmVariant="danger"
+                    description={t.themeDeleteFontConfirm.replace('{name}', fontToDelete.family)}
+                    onClose={() => setFontToDelete(null)}
+                    onConfirm={() => void handleDeleteFont(fontToDelete)}
+                    title={t.themeDeleteFont}
+                  />
+                ) : null}
               </section>
 
               <section className="settings-section">
                 <h3>{t.terminalDisplaySettings}</h3>
                 <p className="settings-tools-hint">{t.terminalDisplaySettingsHint}</p>
-                <div className="advanced-toggle-list">
-                  <div className="advanced-toggle-row">
-                    <label className="ssh-checkbox advanced-toggle-label">
+                <div className="overview-preference-list">
+                  <label className="overview-preference-row">
+                    <span className="overview-preference-copy">
+                      <strong>{t.lockTerminalZoom}</strong>
+                      <p>{t.lockTerminalZoomHint}</p>
+                    </span>
+                    <span className="command-toggle overview-preference-toggle">
                       <input
                         checked={terminalZoomLocked}
                         disabled={!desktopApi || isSavingTerminalZoomPreference}
                         onChange={(event) => setTerminalZoomLockPreference(event.target.checked)}
                         type="checkbox"
                       />
-                      <span className="advanced-toggle-name">{t.lockTerminalZoom}</span>
-                    </label>
-                    <p className="advanced-toggle-hint">{t.lockTerminalZoomHint}</p>
-                  </div>
+                    </span>
+                  </label>
                 </div>
                 {terminalZoomPreferenceError ? <p className="modal-error">{terminalZoomPreferenceError}</p> : null}
+              </section>
+
+              <section className="settings-section">
+                <h3>{t.filePanelSettings}</h3>
+                <p className="settings-tools-hint">{t.filePanelSettingsHint}</p>
+                <div className="overview-preference-list">
+                  <label className="overview-preference-row">
+                    <span className="overview-preference-copy">
+                      <strong>{t.rememberFilePanelRatio}</strong>
+                      <p>{t.rememberFilePanelRatioHint}</p>
+                    </span>
+                    <span className="command-toggle overview-preference-toggle">
+                      <input
+                        checked={filePanelRememberRatio}
+                        disabled={!desktopApi || isSavingFilePanelPreference}
+                        onChange={(event) => setFilePanelRememberRatioPreference(event.target.checked)}
+                        type="checkbox"
+                      />
+                    </span>
+                  </label>
+                </div>
+                {filePanelPreferenceError ? <p className="modal-error">{filePanelPreferenceError}</p> : null}
               </section>
 
               <section className="settings-section">
@@ -3350,6 +3786,22 @@ export function SettingsModal({
                     options={[
                       { value: 'auto', label: t.autoCheckUpdates },
                       { value: 'manual', label: t.doNotAutoUpdate }
+                    ]}
+                  />
+                </div>
+                <div className="update-check-preference">
+                  <div>
+                    <strong>{t.updateChannel}</strong>
+                    <p>{t.updateChannelHint}</p>
+                  </div>
+                  <DropdownSelect
+                    className="update-check-preference-select"
+                    disabled={!desktopApi || isSavingUpdatePreference}
+                    onChange={(value) => setUpdateChannelPreference(value === 'beta' ? 'beta' : 'stable')}
+                    value={updateChannel}
+                    options={[
+                      { value: 'stable', label: t.stableChannel },
+                      { value: 'beta', label: t.betaChannel }
                     ]}
                   />
                 </div>

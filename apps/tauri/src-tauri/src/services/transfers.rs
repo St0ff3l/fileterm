@@ -511,7 +511,7 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
     .await;
 }
 
-async fn worker_call<T>(
+pub(crate) async fn worker_call<T>(
     app: &AppHandle,
     tab_id: &str,
     make_command: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,
@@ -1082,7 +1082,7 @@ pub async fn create_download(
     remote_path: String,
     local_directory: String,
     target_name: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
@@ -1144,8 +1144,9 @@ pub async fn create_download(
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
     emit_task(app, task.clone(), true).await;
-    start(app.clone(), task.id).await?;
-    Ok(())
+    let task_id = task.id.clone();
+    start(app.clone(), task_id.clone()).await?;
+    Ok(task_id)
 }
 
 pub async fn create_download_directory(
@@ -1154,7 +1155,7 @@ pub async fn create_download_directory(
     remote_path: String,
     local_directory: String,
     target_name: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     ensure_loaded(app).await?;
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _lifecycle = state.transfer_lifecycle.lock().await;
@@ -1242,8 +1243,9 @@ pub async fn create_download_directory(
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
     emit_task(app, task.clone(), true).await;
-    start(app.clone(), task.id).await?;
-    Ok(())
+    let task_id = task.id.clone();
+    start(app.clone(), task_id.clone()).await?;
+    Ok(task_id)
 }
 
 async fn remove_transfer_run_if_generation(app: &AppHandle, transfer_id: &str, generation: u64) {

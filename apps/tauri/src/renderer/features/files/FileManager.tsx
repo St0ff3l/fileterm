@@ -7,7 +7,8 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
-  type MouseEvent
+  type MouseEvent,
+  type PointerEvent
 } from 'react'
 import type {
   CommandExecutionOptions,
@@ -22,29 +23,43 @@ import type {
 import {
   copyText,
   hasSelectedText,
-  localFileDragType,
   mergeUnique,
   nextSelection,
-  parseDraggedPaths,
   rangePaths,
-  remoteFileDragType,
-  setFileDragPreview,
   WINDOWS_DRIVES_PATH
 } from '../../app/app-utils'
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
-import { AppIcon } from '../common/AppIcon'
+import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { CommandCenter } from '../commands/CommandCenter'
 import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
-import { getDisplayFileTypeSortKey } from './file-kind'
+import { getDisplayFileIconName, getDisplayFileTypeSortKey } from './file-kind'
 import { matchesFileFilter, type FileFilterConfig } from './file-filter'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
 
 const VIEW_TRANSITION_LOADING_MS = 180
+
+type FilePane = 'local' | 'remote'
+
+type InternalFileDrag = {
+  sourcePane: FilePane
+  items: Array<LocalFileItem | RemoteFileItem>
+  startX: number
+  startY: number
+  pointerId: number
+  active: boolean
+}
+
+type InternalFileDragPreview = {
+  names: string[]
+  icon: AppIconName
+  x: number
+  y: number
+}
 
 function areStringArraysEqual(left: string[], right: string[]) {
   if (left === right) {
@@ -63,6 +78,11 @@ function areStringArraysEqual(left: string[], right: string[]) {
 
 function compareText(left: string, right: string) {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function getDragPreviewIcon(items: Array<LocalFileItem | RemoteFileItem>): AppIconName {
+  const firstItem = items[0]
+  return firstItem ? getDisplayFileIconName(firstItem) : 'file'
 }
 
 function parseSortableSize(value: string) {
@@ -278,6 +298,7 @@ export function FileManager({
   const [remoteSort, setRemoteSort] = useState<RemoteFileSortState>(defaultRemoteSort)
   const [selectedLocalPaths, setSelectedLocalPaths] = useState<string[]>([])
   const [selectedRemotePaths, setSelectedRemotePaths] = useState<string[]>([])
+  const [internalFileDragPreview, setInternalFileDragPreview] = useState<InternalFileDragPreview | null>(null)
   const [localAnchorPath, setLocalAnchorPath] = useState<string | null>(null)
   const [remoteAnchorPath, setRemoteAnchorPath] = useState<string | null>(null)
   const [keyboardPane, setKeyboardPane] = useState<'local' | 'remote'>('remote')
@@ -298,6 +319,9 @@ export function FileManager({
   const suppressNextClearClick = useRef(false)
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
+  const internalFileDragRef = useRef<InternalFileDrag | null>(null)
+  const internalFileDragRuntimeRef = useRef({ canUseRemoteFiles, localPath, onDownloadFiles, onUploadFiles })
+  internalFileDragRuntimeRef.current = { canUseRemoteFiles, localPath, onDownloadFiles, onUploadFiles }
   const localScrollRef = useRef<HTMLDivElement | null>(null)
   const remoteScrollRef = useRef<HTMLDivElement | null>(null)
   const requestedInitialLocalDirectoryRef = useRef(false)
@@ -473,6 +497,127 @@ export function FileManager({
       : selectedRemoteItems.filter((item) => item.name !== '..')
   const canPasteFromKeyboard = keyboardPane === 'local' ? canPasteToLocal : canPasteToRemote
 
+  const beginInternalFileDrag = (
+    sourcePane: FilePane,
+    item: LocalFileItem | RemoteFileItem,
+    event: PointerEvent<HTMLElement>
+  ) => {
+    if (event.button !== 0 || !event.isPrimary || item.name === '..') {
+      return
+    }
+
+    const rows = sourcePane === 'local' ? localItems : activeSession.remoteFiles
+    const selectedPaths = sourcePane === 'local' ? selectedLocalPaths : selectedRemotePaths
+    const items = (
+      selectedPaths.includes(item.path) ? rows.filter((row) => selectedPaths.includes(row.path)) : [item]
+    ).filter((row) => row.name !== '..')
+
+    if (!items.length) {
+      return
+    }
+
+    internalFileDragRef.current = {
+      sourcePane,
+      items,
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerId: event.pointerId,
+      active: false
+    }
+  }
+
+  useEffect(() => {
+    const clearInternalFileDrag = () => {
+      internalFileDragRef.current = null
+      setInternalFileDragPreview(null)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
+      const drag = internalFileDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return
+      }
+
+      if (event.buttons === 0) {
+        clearInternalFileDrag()
+        return
+      }
+
+      if (!drag.active) {
+        const deltaX = event.clientX - drag.startX
+        const deltaY = event.clientY - drag.startY
+        if (deltaX * deltaX + deltaY * deltaY < 36) {
+          return
+        }
+        drag.active = true
+        suppressNextSelectionClick.current = true
+        document.body.style.cursor = 'grabbing'
+        document.body.style.userSelect = 'none'
+      }
+
+      event.preventDefault()
+      setInternalFileDragPreview({
+        names: drag.items.map((item) => item.name),
+        icon: getDragPreviewIcon(drag.items),
+        x: event.clientX,
+        y: event.clientY
+      })
+    }
+
+    const handlePointerUp = (event: globalThis.PointerEvent) => {
+      const drag = internalFileDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return
+      }
+
+      if (!drag.active) {
+        clearInternalFileDrag()
+        return
+      }
+
+      event.preventDefault()
+      const target = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>('.local-pane, .remote-pane')
+      const targetPane: FilePane | null = target?.classList.contains('local-pane')
+        ? 'local'
+        : target?.classList.contains('remote-pane')
+          ? 'remote'
+          : null
+
+      clearInternalFileDrag()
+
+      const runtime = internalFileDragRuntimeRef.current
+      if (targetPane === 'remote' && drag.sourcePane === 'local' && runtime.canUseRemoteFiles) {
+        runtime.onUploadFiles(drag.items as LocalFileItem[])
+      } else if (targetPane === 'local' && drag.sourcePane === 'remote' && runtime.canUseRemoteFiles) {
+        runtime.onDownloadFiles(drag.items as RemoteFileItem[], runtime.localPath)
+      }
+    }
+
+    const handlePointerCancel = () => {
+      if (internalFileDragRef.current) {
+        clearInternalFileDrag()
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove, true)
+    window.addEventListener('pointerup', handlePointerUp, true)
+    window.addEventListener('pointercancel', handlePointerCancel, true)
+    window.addEventListener('blur', handlePointerCancel)
+    window.addEventListener('mouseleave', handlePointerCancel)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove, true)
+      window.removeEventListener('pointerup', handlePointerUp, true)
+      window.removeEventListener('pointercancel', handlePointerCancel, true)
+      window.removeEventListener('blur', handlePointerCancel)
+      window.removeEventListener('mouseleave', handlePointerCancel)
+      clearInternalFileDrag()
+    }
+  }, [])
+
   const submitLocalPath = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     onOpenLocalPath(localPathInput.trim() || localPath)
@@ -493,38 +638,12 @@ export function FileManager({
     if (!canUseRemoteFiles) {
       return
     }
-
-    const draggedLocalPath = event.dataTransfer.getData(localFileDragType)
-    if (draggedLocalPath) {
-      const draggedPaths = parseDraggedPaths(draggedLocalPath)
-      const items = localItems.filter((row) => draggedPaths.includes(row.path) && row.name !== '..')
-      if (items.length) {
-        onUploadFiles(items)
-      }
-      return
-    }
-
     onDropUpload(event)
   }
 
   const handleLocalPaneDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
-
-    const draggedRemotePayload = event.dataTransfer.getData(remoteFileDragType)
-    if (!draggedRemotePayload) {
-      return
-    }
-
-    if (!canUseRemoteFiles) {
-      return
-    }
-
-    const draggedPaths = parseDraggedPaths(draggedRemotePayload)
-    const items = activeSession.remoteFiles.filter((row) => draggedPaths.includes(row.path) && row.name !== '..')
-    if (items.length) {
-      onDownloadFiles(items, localPath)
-    }
   }
 
   const selectLocalItem = (event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem) => {
@@ -826,6 +945,26 @@ export function FileManager({
           className="file-split"
           ref={splitRef}
         >
+          {internalFileDragPreview ? (
+            <div
+              aria-hidden="true"
+              className="file-drag-preview"
+              style={{
+                left: internalFileDragPreview.x + 14,
+                top: internalFileDragPreview.y + 14
+              }}
+            >
+              <span className="file-drag-preview-icon">
+                <AppIcon name={internalFileDragPreview.icon} size={14} />
+              </span>
+              <span>
+                {internalFileDragPreview.names.slice(0, 2).join(internalFileDragPreview.names.length > 1 ? ', ' : '')}
+                {internalFileDragPreview.names.length > 2
+                  ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${internalFileDragPreview.names.length} ${t.itemsSuffix}`
+                  : ''}
+              </span>
+            </div>
+          ) : null}
           <div
             className="local-pane"
             onMouseDownCapture={() => {
@@ -905,16 +1044,7 @@ export function FileManager({
                   cutPaths={localCutPaths}
                   rows={filteredLocalItems}
                   selectedPaths={selectedLocalPaths}
-                  onDragItem={(event, item) => {
-                    event.dataTransfer.effectAllowed = 'copy'
-                    const payload = selectedLocalPaths.includes(item.path) ? selectedLocalPaths : [item.path]
-                    const previewItems = localItems.filter((row) => payload.includes(row.path) && row.name !== '..')
-                    event.dataTransfer.setData(localFileDragType, JSON.stringify(payload))
-                    setFileDragPreview(
-                      event,
-                      previewItems.map((row) => row.name)
-                    )
-                  }}
+                  onPointerDragStart={(event, item) => beginInternalFileDrag('local', item, event)}
                   onOpenItem={onOpenLocalItem}
                   onContextItem={(event, item) => {
                     event.preventDefault()
@@ -987,9 +1117,8 @@ export function FileManager({
             }}
             onDragOver={(event) => {
               event.preventDefault()
-              // Native Tauri drop events do not reliably share DOM coordinates
-              // with WKWebView. Record the pane that the Finder drag is over so
-              // the bridge can route its absolute paths to the correct target.
+              // Record the pane that an OS file drop is over so the bridge can
+              // route its absolute paths to the correct upload target.
               dispatchAppEvent(APP_EVENT.tauriRemoteDragOver)
               if (canUseRemoteFiles) {
                 event.dataTransfer.dropEffect = 'copy'
@@ -1080,16 +1209,10 @@ export function FileManager({
                           : { field, direction: 'asc' }
                       )
                     }}
-                    onDragItem={(event, item) => {
-                      if (!canUseRemoteFiles) return
-                      event.dataTransfer.effectAllowed = 'copy'
-                      const payload = selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
-                      const previewItems = sortedRemoteRows.filter((row) => payload.includes(row.path))
-                      event.dataTransfer.setData(remoteFileDragType, JSON.stringify(payload))
-                      setFileDragPreview(
-                        event,
-                        previewItems.map((row) => row.name)
-                      )
+                    onPointerDragStart={(event, item) => {
+                      if (canUseRemoteFiles) {
+                        beginInternalFileDrag('remote', item, event)
+                      }
                     }}
                     onOpenItem={(item) => {
                       if (canUseRemoteFiles) {

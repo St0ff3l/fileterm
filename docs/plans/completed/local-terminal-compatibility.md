@@ -22,6 +22,8 @@
 - [x] POSIX 默认 shell 支持 login shell，兼容 macOS GUI 启动时缺失的 Homebrew、npm、cargo、nvm PATH。
 - [x] 统一设置 `TERM`、`COLORTERM` 和可用的 UTF-8 locale，同时保留用户显式环境。
 - [x] Windows 支持 PowerShell/pwsh UTF-8 初始化、cmd UTF-8 code page，并为 Git Bash 等 POSIX shell 保留 login 参数入口。
+- [x] Windows 默认 PowerShell/pwsh 启动不加载用户 profile，避免 profile/module 初始化把首次本地终端卡在启动提示；显式传入启动参数时仍保留用户的 profile 行为。
+- [x] 本地 PTY 首段输出写入会话快照后才报告启动就绪（最多等待 2 秒），避免首次打开时 renderer 尚未订阅全局终端数据通道而丢失首屏；静默 shell 超时后仍允许正常连接。
 - [x] shell/CWD 不可用时给出明确错误，不让终端表现为空白。
 
 ### P1：输出与尺寸稳定性
@@ -94,7 +96,11 @@ Windows/Linux/macOS 的打包产物验收仍需要对应实体机或 CI runner�
 
 ### Windows 默认 shell fallback
 
-`default_shell()` 在 Windows 上按 `powershell.exe` → `pwsh.exe` → `cmd.exe` 顺序查找。`shell_available_in_path` 先查 `PATH`，PATH 异常（如被清理过的服务进程）时查 `%SystemRoot%\System32`，并额外检查 PowerShell 7 的标准安装目录 `%ProgramFiles%\PowerShell\7` / `7-preview`。Server Core / 精简镜像缺 PowerShell 时自动回退 `cmd.exe`。
+`default_shell()` 在 Windows 上按 `powershell.exe` → `pwsh.exe` → `cmd.exe` 顺序查找。先查 `PATH`；PATH 异常（如被桌面启动器、服务或企业策略裁剪）时，Windows PowerShell 查真实的 `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`，cmd 查 `%SystemRoot%\System32`，并额外检查 PowerShell 7 的标准安装目录 `%ProgramFiles%\PowerShell\7` / `7-preview`。通过标准目录找到的 shell 使用绝对路径启动，避免仅返回可执行文件名后再次依赖 PATH。Server Core / 精简镜像缺 PowerShell 时自动回退 `cmd.exe`。
+
+默认 PowerShell/pwsh 使用 `-NoProfile`，因为用户 profile 可能加载模块、启动 prompt helper 或等待网络资源，导致首次本地终端长期停在 `Starting local shell...`。如果调用方显式传入 `LocalTerminalLaunchOptions.args`，则不自动添加 `-NoProfile`，保留自定义 profile/启动行为。
+
+本地 PTY 的输出 pump 在首个输出批次成功写入 `SessionSnapshot.terminal_transcript` 后才发送 startup-ready 信号；打开或重连命令最多等待 2 秒再标记 shell started。这样首次 renderer 尚未建立全局终端数据 Channel 时，返回的 workspace snapshot 仍包含首屏提示符；没有输出的自定义 shell 不会被无限等待。
 
 ### PowerShell `-Command` 互斥参数检测
 

@@ -138,12 +138,57 @@ export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-inter
 /** 资源监控采集间隔，单位为秒。 */
 export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
 
+/** 侧栏可显示的资源监控项。采集总开关仍由 enableResourceMonitoring 控制。 */
+export type ResourceMonitoringMetric =
+  | 'load'
+  | 'cpu'
+  | 'cpuTemperature'
+  | 'memory'
+  | 'swap'
+  | 'disk'
+  | 'gpu'
+  | 'gpuMemory'
+  | 'gpuTemperature'
+  | 'gpuPower'
+  | 'processes'
+  | 'network'
+
+export const DEFAULT_RESOURCE_MONITORING_METRICS: ResourceMonitoringMetric[] = [
+  'load',
+  'cpu',
+  'memory',
+  'swap',
+  'disk',
+  'processes',
+  'network'
+]
+
+/** Canonical order for all resource-monitoring cards, including disabled items. */
+export const DEFAULT_RESOURCE_MONITORING_METRIC_ORDER: ResourceMonitoringMetric[] = [
+  'load',
+  'cpu',
+  'cpuTemperature',
+  'memory',
+  'swap',
+  'disk',
+  'gpu',
+  'gpuMemory',
+  'gpuTemperature',
+  'gpuPower',
+  'processes',
+  'network'
+]
+
 /** SSH connection behavior shared by newly created connections. */
 export interface SshConnectionDefaults {
   useEmptyPassword: boolean
   enableExecChannel: boolean
   enableResourceMonitoring: boolean
   resourceMonitoringIntervalSeconds: ResourceMonitoringIntervalSeconds
+  /** Sidebar metric cards enabled by default on newly created connections. */
+  resourceMonitoringMetrics: ResourceMonitoringMetric[]
+  /** Default sidebar card order (including disabled cards) for new connections. */
+  resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   reconnectMode: 'none' | 'enter' | 'auto'
   legacyAlgorithms: boolean
 }
@@ -156,6 +201,8 @@ export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
   enableExecChannel: true,
   enableResourceMonitoring: true,
   resourceMonitoringIntervalSeconds: 1,
+  resourceMonitoringMetrics: [...DEFAULT_RESOURCE_MONITORING_METRICS],
+  resourceMonitoringMetricOrder: [...DEFAULT_RESOURCE_MONITORING_METRIC_ORDER],
   reconnectMode: 'none',
   legacyAlgorithms: false
 }
@@ -217,6 +264,10 @@ export interface SshProfile extends NetworkProfile {
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
+  /** Sidebar metric cards enabled for this connection. Absent = legacy global preference fallback. */
+  resourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  /** Sidebar card order (including disabled cards) for this connection. */
+  resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   reconnectMode?: 'none' | 'enter' | 'auto'
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
@@ -341,6 +392,8 @@ export interface RemoteFileItem {
   path: string
   name: string
   type: 'file' | 'folder'
+  /** Whether the remote entry is a symbolic link to the effective type. */
+  isSymlink?: boolean
   modified: string
   size: string
   permission?: string
@@ -513,6 +566,12 @@ export interface GpuInfoRow {
   vendor: string
   driver: string
   memory: string
+  usagePercent?: number
+  memoryUsed?: string
+  memoryPercent?: number
+  temperatureCelsius?: number
+  powerUsage?: string
+  powerLimit?: string
 }
 
 export interface CpuUsageBreakdown {
@@ -561,6 +620,7 @@ export interface SystemMetrics {
   cpuPercent: number
   cpuUsage: CpuUsageBreakdown
   cpuInfoRows: CpuInfoRow[]
+  cpuTemperatureCelsius?: number
   gpuInfoRows: GpuInfoRow[]
   memoryPercent: number
   memoryUsage: string
@@ -607,8 +667,19 @@ export function mergeSystemMetricsHistory(
     })
   )
 
+  // System collectors emit a full snapshot most of the time, but a partial
+  // refresh can temporarily omit the filesystem sections. Do not let that
+  // transient empty payload erase the last usable disk information in the
+  // sidebar.
+  const diskRows = nextMetrics.diskRows?.length ? nextMetrics.diskRows : (previousMetrics?.diskRows ?? [])
+  const fileSystemRows = nextMetrics.fileSystemRows?.length
+    ? nextMetrics.fileSystemRows
+    : (previousMetrics?.fileSystemRows ?? [])
+
   return {
     ...nextMetrics,
+    diskRows,
+    fileSystemRows,
     networkSamples: [...previousSamples, nextPoint].slice(-historyLimit),
     networkSamplesByInterface: mergedByInterface
   }
@@ -701,6 +772,17 @@ export interface SshKeyFileSelection {
 export interface SshKeyImportResult {
   key: SshKeyMetadata
   duplicate: boolean
+}
+
+export type ImportedFontFormat = 'ttf' | 'otf'
+
+export interface ImportedFont {
+  id: string
+  family: string
+  format: ImportedFontFormat
+  fileName: string
+  contentHash: string
+  importedAt: number
 }
 
 export interface ConnectionImportPreviewItem {
@@ -853,6 +935,10 @@ export interface CreateProfileInput {
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
+  /** Sidebar metric cards enabled for this connection. Undefined keeps the profile-level fallback. */
+  resourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  /** Sidebar card order (including disabled cards) for this connection. */
+  resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   reconnectMode?: 'none' | 'enter' | 'auto'
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
@@ -1069,6 +1155,8 @@ export const DEFAULT_OVERVIEW_SECTION_ORDER = [
 
 export type ThemeVariant = 'dark' | 'light'
 
+export type ThemeBaseId = 'fileterm' | 'codex'
+
 export type TerminalAnsiColorName =
   | 'black'
   | 'red'
@@ -1112,6 +1200,8 @@ export interface ThemeSemanticColors {
   diffRemoved: string
   skill: string
   keyword: string
+  sftp: string
+  ftp: string
   secondary: string
   textSecondary: string
   info: string
@@ -1129,6 +1219,8 @@ export interface ThemeSemanticColors {
 export interface ThemeConfig {
   schemaVersion: 'codex-theme-v1'
   codeThemeId: string
+  /** Built-in theme whose component skin this configuration inherits from. */
+  baseThemeId?: ThemeBaseId
   variant: ThemeVariant
   theme: {
     accent: string
@@ -1149,43 +1241,51 @@ export interface ThemeConfig {
   }
 }
 
+export interface SavedTheme {
+  id: string
+  name: string
+  config: ThemeConfig
+  /** Independent dark/light variants for custom themes. */
+  variants?: Partial<Record<ThemeVariant, ThemeConfig>>
+}
+
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
 
 const DEFAULT_DARK_ANSI: TerminalAnsiPalette = {
-  black: '#000000',
-  red: '#cd3131',
-  green: '#0dbc79',
-  yellow: '#e5e510',
-  blue: '#2472c8',
-  magenta: '#bc3fbc',
-  cyan: '#11a8cd',
-  white: '#e5e5e5',
-  brightBlack: '#666666',
-  brightRed: '#cd3131',
-  brightGreen: '#23d18b',
-  brightYellow: '#e5e510',
-  brightBlue: '#3b8eea',
-  brightMagenta: '#d670d6',
-  brightCyan: '#29b8db',
-  brightWhite: '#e5e5e5'
+  black: '#1c1d22',
+  red: '#e05555',
+  green: '#10b981',
+  yellow: '#eab308',
+  blue: '#3b82f6',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#e2e8f0',
+  brightBlack: '#64748b',
+  brightRed: '#f87171',
+  brightGreen: '#34d399',
+  brightYellow: '#fde047',
+  brightBlue: '#60a5fa',
+  brightMagenta: '#e879f9',
+  brightCyan: '#67e8f9',
+  brightWhite: '#ffffff'
 }
 
 const DEFAULT_LIGHT_ANSI: TerminalAnsiPalette = {
-  black: '#000000',
-  red: '#cd3131',
-  green: '#008000',
-  yellow: '#795e26',
-  blue: '#0451a5',
-  magenta: '#bc05bc',
-  cyan: '#0598bc',
-  white: '#ffffff',
-  brightBlack: '#666666',
-  brightRed: '#cd3131',
-  brightGreen: '#14a800',
-  brightYellow: '#795e26',
-  brightBlue: '#0451a5',
-  brightMagenta: '#bc05bc',
-  brightCyan: '#0598bc',
+  black: '#18181b',
+  red: '#dc2626',
+  green: '#16a34a',
+  yellow: '#ca8a04',
+  blue: '#2563eb',
+  magenta: '#9333ea',
+  cyan: '#0891b2',
+  white: '#f1f5f9',
+  brightBlack: '#64748b',
+  brightRed: '#ef4444',
+  brightGreen: '#22c55e',
+  brightYellow: '#eab308',
+  brightBlue: '#3b82f6',
+  brightMagenta: '#a855f7',
+  brightCyan: '#06b6d4',
   brightWhite: '#ffffff'
 }
 
@@ -1215,6 +1315,7 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
   return {
     schemaVersion: 'codex-theme-v1',
     codeThemeId: 'codex',
+    baseThemeId: 'codex',
     variant,
     theme: {
       accent: isLight ? '#339cff' : '#0169cc',
@@ -1223,26 +1324,28 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
       ink: isLight ? '#1a1c1f' : '#fcfcfc',
       opaqueWindows: false,
       semanticColors: {
-        diffAdded: '#00a240',
-        diffRemoved: isLight ? '#ba2623' : '#e02e2a',
-        skill: isLight ? '#924ff7' : '#b06dff',
-        keyword: isLight ? '#b45309' : '#ffcc00',
-        secondary: isLight ? '#8b5cf6' : '#b06dff',
-        textSecondary: isLight ? '#667085' : '#a9a9b2',
-        info: isLight ? '#339cff' : '#0169cc',
-        warning: isLight ? '#b45309' : '#ffcc00',
-        error: isLight ? '#ba2623' : '#e02e2a',
-        success: '#00a240'
+        diffAdded: '#10b981',
+        diffRemoved: isLight ? '#ba2623' : '#f43f5e',
+        skill: isLight ? '#924ff7' : '#a855f7',
+        keyword: isLight ? '#b45309' : '#fbbf24',
+        sftp: isLight ? '#0284c7' : '#38bdf8',
+        ftp: isLight ? '#924ff7' : '#b06dff',
+        secondary: isLight ? '#3b82f6' : '#8bbfff',
+        textSecondary: isLight ? '#667085' : '#a1a1aa',
+        info: isLight ? '#339cff' : '#38bdf8',
+        warning: isLight ? '#b45309' : '#f59e0b',
+        error: isLight ? '#ba2623' : '#f43f5e',
+        success: isLight ? '#059669' : '#34d399'
       },
       surface: isLight ? '#ffffff' : '#111111',
-      surfaceSecondary: isLight ? '#ffffff' : '#1b1b1b',
-      surfaceElevated: isLight ? '#ffffff' : '#242424',
+      surfaceSecondary: isLight ? '#ffffff' : '#181818',
+      surfaceElevated: isLight ? '#ffffff' : '#222222',
       terminal: {
         background: isLight ? '#ffffff' : '#111111',
         foreground: isLight ? '#1a1c1f' : '#fcfcfc',
-        cursor: isLight ? '#339cff' : '#0169cc',
+        cursor: isLight ? '#339cff' : '#38bdf8',
         cursorAccent: isLight ? '#ffffff' : '#111111',
-        selectionBackground: isLight ? '#339cff42' : '#0169cc55',
+        selectionBackground: isLight ? '#339cff42' : '#38bdf844',
         selectionForeground: isLight ? '#1a1c1f' : '#fcfcfc',
         ansi: { ...(isLight ? DEFAULT_LIGHT_ANSI : DEFAULT_DARK_ANSI) },
         search: {
@@ -1263,24 +1366,27 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
   return {
     schemaVersion: 'codex-theme-v1',
     codeThemeId: 'fileterm',
+    baseThemeId: 'fileterm',
     variant,
     theme: {
-      accent: isLight ? '#3b82f6' : '#8bbfff',
+      accent: isLight ? '#3b82f6' : '#1687e8',
       contrast: isLight ? 52 : 60,
       fonts: { code: null, ui: null },
       ink: isLight ? '#18181b' : '#e7e7e7',
       opaqueWindows: true,
       semanticColors: {
-        diffAdded: isLight ? '#168a53' : '#39d98a',
+        diffAdded: isLight ? '#168a53' : '#34d399',
         diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
         skill: isLight ? '#7c3aed' : '#b06dff',
-        keyword: isLight ? '#b45309' : '#ffcc00',
+        keyword: isLight ? '#b45309' : '#fbbf24',
+        sftp: isLight ? '#0284c7' : '#38bdf8',
+        ftp: isLight ? '#9333ea' : '#c084fc',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
-        info: isLight ? '#3b82f6' : '#8bbfff',
-        warning: isLight ? '#d97706' : '#ffcc00',
+        info: isLight ? '#3b82f6' : '#38bdf8',
+        warning: isLight ? '#d97706' : '#f59e0b',
         error: isLight ? '#d94e4e' : '#ff5f57',
-        success: isLight ? '#168a53' : '#39d98a'
+        success: isLight ? '#168a53' : '#34d399'
       },
       surface: isLight ? '#F4F4F6' : '#151515',
       surfaceSecondary: isLight ? '#ffffff' : '#1e1e1e',
@@ -1336,9 +1442,16 @@ function normalizeThemeNumber(value: unknown, fallback: number) {
 export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVariant = 'dark'): ThemeConfig {
   const root = asThemeRecord(value)
   const rawCodeThemeId = typeof root.codeThemeId === 'string' ? root.codeThemeId.trim() : ''
-  const isCodexTheme = rawCodeThemeId === 'codex' || rawCodeThemeId.startsWith('codex-')
+  const isCodexCodeTheme = rawCodeThemeId === 'codex' || rawCodeThemeId.startsWith('codex-')
   const isFileTermTheme =
     rawCodeThemeId === 'fileterm' || rawCodeThemeId === 'fileterm-dark' || rawCodeThemeId === 'fileterm-light'
+  const rawBaseThemeId = root.baseThemeId === 'codex' || root.baseThemeId === 'fileterm' ? root.baseThemeId : null
+  const baseThemeId: ThemeBaseId = isCodexCodeTheme
+    ? 'codex'
+    : isFileTermTheme
+      ? 'fileterm'
+      : (rawBaseThemeId ?? 'fileterm')
+  const isCodexTheme = baseThemeId === 'codex'
   const variant = root.variant === 'light' || root.variant === 'dark' ? root.variant : fallbackVariant
   const fallback = isCodexTheme ? createCodexThemeConfig(fallbackVariant) : createDefaultThemeConfig(fallbackVariant)
   const variantFallback = isCodexTheme
@@ -1353,6 +1466,22 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
   const rawAnsi = asThemeRecord(rawTerminal.ansi)
   const rawSearch = asThemeRecord(rawTerminal.search)
   const terminalFallback = variantFallback.theme.terminal
+  const migrateLegacyCodexStatusColors =
+    isCodexTheme &&
+    Object.keys(asThemeRecord(rawTheme.overrides)).length === 0 &&
+    typeof rawSemanticColors.sftp === 'string' &&
+    rawSemanticColors.sftp.trim().toLowerCase() === '#0169cc' &&
+    typeof rawSemanticColors.success === 'string' &&
+    rawSemanticColors.success.trim().toLowerCase() === '#00a240'
+  const normalizedSkill = normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill)
+  const normalizedSftp = migrateLegacyCodexStatusColors
+    ? variantFallback.theme.semanticColors.sftp
+    : normalizeThemeColor(rawSemanticColors.sftp, variantFallback.theme.semanticColors.sftp)
+  const normalizedSuccess = migrateLegacyCodexStatusColors
+    ? variantFallback.theme.semanticColors.success
+    : normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
+  const ftpFallback = isFileTermTheme ? variantFallback.theme.semanticColors.ftp : normalizedSkill
+  const normalizedFtp = normalizeThemeColor(rawSemanticColors.ftp, ftpFallback)
   const normalizedSurface = normalizeThemeColor(rawTheme.surface, variantFallback.theme.surface)
   const normalizedSurfaceSecondary = normalizeThemeColor(
     rawTheme.surfaceSecondary,
@@ -1380,6 +1509,7 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
       : rawCodeThemeId === 'codex-dark' || rawCodeThemeId === 'codex-light'
         ? 'codex'
         : (normalizeThemeString(root.codeThemeId, variantFallback.codeThemeId) ?? variantFallback.codeThemeId),
+    baseThemeId,
     variant,
     theme: {
       accent: normalizeThemeColor(rawTheme.accent, variantFallback.theme.accent),
@@ -1397,8 +1527,10 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
           rawSemanticColors.diffRemoved,
           variantFallback.theme.semanticColors.diffRemoved
         ),
-        skill: normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill),
+        skill: normalizedSkill,
         keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword),
+        sftp: normalizedSftp,
+        ftp: normalizedFtp,
         secondary: normalizeThemeColor(rawSemanticColors.secondary, variantFallback.theme.semanticColors.secondary),
         textSecondary: normalizeThemeColor(
           rawSemanticColors.textSecondary,
@@ -1407,7 +1539,7 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
         info: normalizeThemeColor(rawSemanticColors.info, variantFallback.theme.semanticColors.info),
         warning: normalizeThemeColor(rawSemanticColors.warning, variantFallback.theme.semanticColors.warning),
         error: normalizeThemeColor(rawSemanticColors.error, variantFallback.theme.semanticColors.error),
-        success: normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
+        success: normalizedSuccess
       },
       surface: normalizedSurface,
       surfaceSecondary: normalizedSurfaceSecondary,
@@ -1444,8 +1576,13 @@ export interface UiPreferences {
   theme: 'default-dark' | 'default-light'
   locale: 'zhCN' | 'enUS'
   themeConfig: ThemeConfig
+  customThemes: SavedTheme[]
   autoCheckUpdates: boolean
+  updateChannel: AppUpdateChannel
   terminalZoomLocked: boolean
+  filePanelRememberRatio: boolean
+  resourceMonitoringMetrics: ResourceMonitoringMetric[]
+  resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   connectionDefaults: SshConnectionDefaults
   mcpAgent: McpAgentPreferences
   overviewShowStats: boolean
@@ -1459,8 +1596,13 @@ export interface UiPreferencesInput {
   theme?: UiPreferences['theme']
   locale?: UiPreferences['locale']
   themeConfig?: ThemeConfig
+  customThemes?: SavedTheme[]
   autoCheckUpdates?: boolean
+  updateChannel?: UiPreferences['updateChannel']
   terminalZoomLocked?: boolean
+  filePanelRememberRatio?: boolean
+  resourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   connectionDefaults?: Partial<SshConnectionDefaults>
   mcpAgent?: Partial<McpAgentPreferences>
   overviewShowStats?: boolean
@@ -1872,6 +2014,10 @@ export interface FileTermDesktopApi {
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
   getConnectionLibrary(): Promise<ConnectionLibrarySnapshot>
+  listImportedFonts(): Promise<ImportedFont[]>
+  importFont(): Promise<ImportedFont | null>
+  getImportedFontData(fontId: string): Promise<string | null>
+  deleteImportedFont(fontId: string): Promise<boolean>
   listSshKeys(): Promise<SshKeyMetadata[]>
   selectSshKeyFile(): Promise<SshKeyFileSelection | null>
   importSshKey(input?: ImportSshKeyInput): Promise<SshKeyImportResult | null>
@@ -2056,11 +2202,15 @@ export type AppUpdateState =
 
 export type AppUpdateMode = 'in-app' | 'release-page'
 
+export type AppUpdateChannel = 'stable' | 'beta'
+
 export interface AppUpdateStatus {
   state: AppUpdateState
   currentVersion: string
   updateMode?: AppUpdateMode
+  updateChannel?: AppUpdateChannel
   availableVersion?: string
+  releaseTag?: string
   releaseUrl?: string
   progress?: number
   message?: string

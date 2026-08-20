@@ -38,7 +38,8 @@ export function DropdownSelect({
   renderOption,
   renderValue,
   menuClassName,
-  forceCustomMenu = false
+  forceCustomMenu = false,
+  hideArrow = false
 }: {
   value: string
   options: DropdownOption[]
@@ -56,6 +57,7 @@ export function DropdownSelect({
   renderValue?: (option: DropdownOption) => ReactNode
   menuClassName?: string
   forceCustomMenu?: boolean
+  hideArrow?: boolean
 }) {
   const nativeSelect = useNativeSelect() && !forceCustomMenu
   const [open, setOpen] = useState(false)
@@ -205,7 +207,7 @@ export function DropdownSelect({
             </option>
           ))}
         </select>
-        <AppIcon className="ft-select-shell__icon" name="chevron-down" size={arrowSize} />
+        {hideArrow ? null : <AppIcon className="ft-select-shell__icon" name="chevron-down" size={arrowSize} />}
       </span>
     )
   }
@@ -279,7 +281,7 @@ export function DropdownSelect({
         <span className="dropdown-select-value">
           {selectedOption && renderValue ? renderValue(selectedOption) : selectedLabel}
         </span>
-        <AppIcon className="dropdown-select-arrow" name="chevron-down" size={arrowSize} />
+        {hideArrow ? null : <AppIcon className="dropdown-select-arrow" name="chevron-down" size={arrowSize} />}
       </button>
       {open && typeof document !== 'undefined' ? createPortal(menuElement, document.body) : null}
     </>

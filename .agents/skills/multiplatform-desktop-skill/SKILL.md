@@ -58,6 +58,7 @@ FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分�
 - 颜色、阴影、圆角和间距先进入 `token → theme vars → component skin`，不要在业务组件散落十六进制颜色或平台专用 magic number。
 - 所有表单下拉框统一使用 `<DropdownSelect>`：macOS 下渲染 `.ft-select-shell` 原生样式外壳，Windows 和 Linux 下自动开启自绘 Popover 浮层菜单 (`dropdown-select-trigger` + `dropdown-select-menu`)，严禁直接写原生 `<select>` 标签。
 - `DropdownSelect` 的下拉箭头必须由公用组件通过控件实际高度自适应，不能在业务组件中固定一个跨尺寸的箭头大小；新增或调整控件高度时，同时验证 macOS 原生外壳与 Windows/Linux 自绘触发器的箭头比例、边距和垂直居中。
+- **紧凑系统指标磁盘选择器例外**：系统侧栏磁盘容量行中的 `disk-select` 仍必须使用 `<DropdownSelect>`，以保留键盘和跨平台切换语义；由于该行只有约 28px 宽、挂载点本身已经是可识别的交互文本，可通过 `hideArrow` 隐藏视觉箭头。不得把这个例外扩展到普通表单或其他下拉框；macOS 原生壳与 Windows/Linux 自绘触发器仍必须验证点击、键盘和菜单定位。
 - 优先在已有 `data-platform` 选择器中写差异。需要新增 CSS 时，写清楚为何只影响一个平台；不要用 `!important` 覆盖不清楚来源的规则。
 - Windows/Linux 的 CJK 字体高度可能高于 macOS。检查按钮、表格行、地址栏、标签栏、状态栏和弹窗标题的 line-height，避免文字垂直截断。
 - 高 DPI 下检查图标是否发虚、1px 边框是否稳定、紧凑布局是否仍可点击。不要只依赖开发机浏览器的像素结果。

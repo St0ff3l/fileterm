@@ -1,9 +1,9 @@
 /*
- * Custom theme surface bridge.
+ * Non-default theme surface bridge.
  *
- * Built-in FileTerm themes keep their historical component skins. Custom
- * themes use the compact surface hierarchy instead of inheriting those
- * built-in hard-coded backgrounds:
+ * The untouched FileTerm presets keep their historical component skins.
+ * Codex and all custom themes use the compact surface hierarchy instead of
+ * inheriting those built-in hard-coded backgrounds:
  *   surface          -> primary canvas
  *   surfaceSecondary -> sidebars and file panes
  *   surfaceElevated  -> title bars, tabs, controls, and overlays
@@ -229,7 +229,6 @@
 
 :root[data-theme-custom='true'] .settings-modal .connection-manager-sidebar,
 :root[data-theme-custom='true'] .settings-modal .theme-config-toolbar,
-:root[data-theme-custom='true'] .settings-modal .theme-config-checkbox-row,
 :root[data-theme-custom='true'] .settings-modal .theme-advanced-section,
 :root[data-theme-custom='true'] .settings-modal .theme-color-field {
   background: var(--theme-surface-secondary) !important;
@@ -249,4 +248,127 @@
 
 :root[data-theme-custom='true'] .settings-modal .connection-manager-header {
   background: var(--theme-surface) !important;
+}
+
+/*
+ * macOS Codex dark glass is deliberately limited to the Home navigation rail.
+ * The native window is transparent, so every ancestor between the rail and
+ * the AppKit vibrancy view must also be transparent. The Home content panel,
+ * title/tab bar, and settings navigation remain opaque surfaces.
+ */
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'],
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] body,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] #root {
+  --codex-glass-divider: #363636;
+  --codex-glass-surface: color-mix(in srgb, var(--theme-surface-elevated) 50%, transparent);
+  --codex-glass-unfocused-surface: rgb(27, 27, 27);
+  background: transparent !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] .fs-shell.is-home-active,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'] .fs-shell.is-home-active .fs-main,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .workspace-stage,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .workspace-stage-transition,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-workspace {
+  background: transparent !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-sidebar {
+  background: var(--codex-glass-surface) !important;
+  background-color: var(--codex-glass-surface) !important;
+  border-right: 1px solid var(--codex-glass-divider) !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-sidebar
+  .sidebar-resizer {
+  background: transparent !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-sidebar
+  .sidebar-resizer::after {
+  display: none !important;
+  background: transparent !important;
+  transition: none !important;
+}
+
+/* Keep the two sides of the title-bar/rail corner on one static divider
+ * color. The resize hit area must not add a second animated line. */
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .titlebar-brand {
+  background: var(--codex-glass-surface) !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar {
+  background: transparent !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar::after,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .titlebar-brand::after {
+  background: var(--codex-glass-divider) !important;
+  transition: none !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .home-main-content {
+  background: var(--bg-main) !important;
+}
+
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark']
+  .fs-shell.is-home-active
+  .settings-modal
+  .connection-manager-sidebar {
+  background: var(--theme-surface-secondary, var(--bg-card)) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Native window blur should not expose the desktop or another window through
+ * the Codex glass. Keep the unfocused glass regions on the requested solid
+ * #1b1b1b surface while preserving the focused vibrancy treatment. */
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+  .fs-shell.is-home-active
+  .home-sidebar,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .titlebar-brand,
+:root[data-platform='darwin'][data-theme-base='codex'][data-theme='default-dark'][data-window-focused='false']
+  .fs-shell.is-home-active
+  .home-tabs-bar
+  .fs-tabbar {
+  background: var(--codex-glass-unfocused-surface) !important;
+  background-color: var(--codex-glass-unfocused-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }

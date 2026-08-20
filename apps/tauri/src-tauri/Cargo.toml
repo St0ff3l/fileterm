@@ -1,6 +1,6 @@
 [package]
 name = "fileterm"
-version = "2.2.0-beta.2"
+version = "2.2.0"
 description = "FileTerm desktop workspace"
 authors = ["FileTerm"]
 edition = "2021"
@@ -17,6 +17,7 @@ arboard = "3"
 open = "5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+semver = "1"
 tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico", "macos-private-api"] }
 tauri-plugin-updater = "2"
 thiserror = "2"
@@ -38,6 +39,7 @@ aes-gcm = "0.11"
 argon2 = "0.6.0-rc.8"
 zeroize = "1.8"
 flate2 = "1"
+log = "0.4"
 tokio-socks = "0.5"
 tokio-serial = "5.5"
 suppaftp = { version = "10", default-features = false, features = ["tokio-async-native-tls", "deprecated"] }
@@ -47,7 +49,23 @@ portable-pty = "0.9"
 [target.'cfg(target_os = "windows")'.dependencies]
 raw-window-handle = "0.6"
 webview2-com = "0.38"
-windows = "0.61"
+image = { version = "0.25", default-features = false, features = ["png"] }
+windows-core = "0.61"
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_Ole",
+  "Win32_System_SystemServices",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+] }
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Dwm",
@@ -65,16 +83,34 @@ libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "NSArray",
+  "NSData",
+  "NSAttributedString",
+  "NSDictionary",
+  "NSError",
+  "NSGeometry",
+  "NSOperation",
+  "NSString",
+  "NSURL",
+] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "std",
+  "NSApplication",
+  "NSAttributedString",
   "NSButton",
   "NSCell",
+  "NSAppearance",
+  "NSColor",
   "NSControl",
-  "NSResponder",
+  "NSEvent",
   "NSView",
   "NSWindow",
+  "block2",
   "objc2-quartz-core",
 ] }
+block2 = { version = "0.6.2", default-features = false, features = ["alloc"] }
 objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
   "std",
   "CALayer",
@@ -83,12 +119,14 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = [
   "objc2-core-foundation",
 ] }
 raw-window-handle = "0.6"
+window-vibrancy = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Tauri exposes the native GTK window on Linux. Keep this target-scoped so the
 # tray restore path can request a real desktop activation without affecting
 # macOS or Windows builds.
 gtk = { version = "0.18", features = ["v3_24"] }
+gdk = "0.18"
 
 [dev-dependencies]
 rand = "0.10"

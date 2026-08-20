@@ -17,15 +17,18 @@ import {
   type ConnectionProfile,
   type CreateProfileInput,
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_RESOURCE_MONITORING_METRICS,
+  DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   createCodexThemeConfig,
   createDefaultThemeConfig,
-  normalizeThemeConfig,
   type FileContentSnapshot,
   type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   type OverviewSectionId,
   type RemoteFileItem,
+  type SavedTheme,
   type SshConnectionDefaults,
+  type ResourceMonitoringMetric,
   type ThemeConfig,
   type UiPreferences,
   type McpAgentClientStatus
@@ -33,6 +36,8 @@ import {
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
 import { profileToForm } from './app/app-data'
 import { settledResultsError } from './app/app-utils'
+import { deriveThemeVariant, normalizeSavedTheme } from './app/theme-config'
+import { registerImportedFonts } from './app/imported-fonts'
 import { CommandEditorModal, emptyCommandForm, toCommandTemplateInput } from './features/commands/CommandEditorModal'
 import { CommandManagerModal } from './features/commands/CommandManagerModal'
 import { ConnectionManagerModal } from './features/connections/ConnectionManagerModal'
@@ -83,6 +88,24 @@ const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
 const DEFAULT_SIDEBAR_WIDTH = 214
 const DEFAULT_COMMAND_LIST_WIDTH = 300
 const SIDEBAR_SNAP_THRESHOLD = 10
+const SIDEBAR_MIN_WIDTH = 190
+const SIDEBAR_MAX_WIDTH = 360
+const FILE_PANEL_PREFERENCES_KEY = 'ui.file-panel-preferences.v1'
+const DEFAULT_FILE_PANEL_RATIO = 30
+const MAX_FILE_PANEL_RATIO = 70
+const FILE_PANEL_DISK_HEADER_ANCHOR = 'disk-header'
+// Four overview cards need 4 * 200px. Include the home body/page padding and
+// a small scrollbar allowance so the last card stays on the same row at the
+// configured 1150px minimum window width.
+const HOME_OVERVIEW_MIN_MAIN_WIDTH = 930
+
+const getSidebarMaxWidth = (windowWidth: number, isHomeWorkspace: boolean) => {
+  if (!isHomeWorkspace) {
+    return SIDEBAR_MAX_WIDTH
+  }
+
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, windowWidth - HOME_OVERVIEW_MIN_MAIN_WIDTH))
+}
 
 type ErrorDetails = {
   item?: RemoteFileItem
@@ -93,9 +116,13 @@ type InitialUiPreferences = Pick<
   UiPreferences,
   | 'theme'
   | 'themeConfig'
+  | 'customThemes'
   | 'locale'
   | 'connectionDefaults'
   | 'terminalZoomLocked'
+  | 'filePanelRememberRatio'
+  | 'resourceMonitoringMetrics'
+  | 'resourceMonitoringMetricOrder'
   | 'overviewShowStats'
   | 'overviewShowRecent'
   | 'overviewShowAllConnections'
@@ -127,6 +154,10 @@ function readInitialLocale(searchParams: URLSearchParams, persistedPreferences?:
 
 function sameOverviewSectionOrder(left: OverviewSectionId[], right: OverviewSectionId[]) {
   return left.length === right.length && left.every((sectionId, index) => sectionId === right[index])
+}
+
+function sameResourceMonitoringMetricOrder(left: ResourceMonitoringMetric[], right: ResourceMonitoringMetric[]) {
+  return left.length === right.length && left.every((metric, index) => metric === right[index])
 }
 
 export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUiPreferences } = {}) {
@@ -170,12 +201,24 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
     return createDefaultThemeConfig(initialTheme === 'default-light' ? 'light' : 'dark')
   })
+  const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() =>
+    (initialUiPreferences?.customThemes ?? []).map(normalizeSavedTheme)
+  )
   const [locale, setLocaleState] = useState<AppLocale>(() => readInitialLocale(searchParams, initialUiPreferences))
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
     ...DEFAULT_SSH_CONNECTION_DEFAULTS,
     ...(initialUiPreferences?.connectionDefaults ?? {})
   }))
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(() => initialUiPreferences?.terminalZoomLocked ?? false)
+  const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(
+    () => initialUiPreferences?.filePanelRememberRatio ?? true
+  )
+  const [resourceMonitoringMetrics, setResourceMonitoringMetrics] = useState<ResourceMonitoringMetric[]>(() => [
+    ...(initialUiPreferences?.resourceMonitoringMetrics ?? DEFAULT_RESOURCE_MONITORING_METRICS)
+  ])
+  const [resourceMonitoringMetricOrder, setResourceMonitoringMetricOrder] = useState<ResourceMonitoringMetric[]>(() => [
+    ...(initialUiPreferences?.resourceMonitoringMetricOrder ?? DEFAULT_RESOURCE_MONITORING_METRIC_ORDER)
+  ])
   const [overviewShowStats, setOverviewShowStats] = useState(() => initialUiPreferences?.overviewShowStats ?? true)
   const [overviewShowRecent, setOverviewShowRecent] = useState(() => initialUiPreferences?.overviewShowRecent ?? true)
   const [overviewShowAllConnections, setOverviewShowAllConnections] = useState(
@@ -197,6 +240,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [sidebarWidth, setSidebarWidth] = useState(214)
   const [aiCopilotWidth, setAiCopilotWidth] = useState(368)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
+  const [filePanelRatios, setFilePanelRatios] = useState<Record<string, number>>({})
+  const [filePanelDiskHeaderAnchors, setFilePanelDiskHeaderAnchors] = useState<Record<string, boolean>>({})
+  const [hasLoadedFilePanelRatios, setHasLoadedFilePanelRatios] = useState(false)
+  const [filePanelRatioPersistenceReady, setFilePanelRatioPersistenceReady] = useState(false)
   const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
   const [workspaceFocusModes, setWorkspaceFocusModes] = useState<Record<string, boolean>>({})
   const [workspaceViews, setWorkspaceViews] = useState<Record<string, 'file' | 'command' | 'tunnel'>>({})
@@ -212,6 +259,34 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // AppKit chrome because its traffic lights are intentionally native.
   const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux'
   const hasRevealedStandaloneWindowRef = useRef(false)
+
+  useEffect(() => {
+    if (!desktopApi) return
+
+    let canceled = false
+    void desktopApi
+      .listImportedFonts()
+      .then(async (fonts) => {
+        const entries = await Promise.all(
+          fonts.map(async (font) => {
+            const dataUrl = await desktopApi.getImportedFontData(font.id)
+            return dataUrl ? { font, dataUrl } : null
+          })
+        )
+        if (!canceled) {
+          registerImportedFonts(
+            entries.filter((entry): entry is { font: (typeof fonts)[number]; dataUrl: string } => entry !== null)
+          )
+        }
+      })
+      .catch((cause: unknown) => {
+        if (!canceled) reportError(setError, '加载导入字体', cause)
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [desktopApi])
 
   const openConnectionImportPreview = (source: 'files' | 'folder' = 'files') => {
     void desktopApi
@@ -256,7 +331,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       ) {
         return createDefaultThemeConfig(nextVariant)
       }
-      return normalizeThemeConfig({ ...current, variant: nextVariant }, nextVariant)
+      return deriveThemeVariant(current, nextVariant)
     })
   }, [])
 
@@ -337,9 +412,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     isConnectionManagerWindow,
     themeMode,
     themeConfig,
+    customThemes,
     locale,
     connectionDefaults,
     terminalZoomLocked,
+    filePanelRememberRatio,
+    resourceMonitoringMetrics,
+    resourceMonitoringMetricOrder,
     overviewShowStats,
     overviewShowRecent,
     overviewShowAllConnections,
@@ -348,6 +427,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     initialUiPreferencesLoaded: initialUiPreferences !== undefined,
     onThemeModeChange: setThemeMode,
     onThemeConfigChange: setThemeConfig,
+    onCustomThemesChange: (nextThemes) => setCustomThemes(nextThemes.map(normalizeSavedTheme)),
     onLocaleChange: (nextLocale) => {
       setLocale(nextLocale)
       setLocaleState(nextLocale)
@@ -356,6 +436,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       setConnectionDefaults((currentDefaults) => ({ ...currentDefaults, ...nextDefaults }))
     },
     onTerminalZoomLockedChange: setTerminalZoomLocked,
+    onFilePanelRememberRatioChange: setFilePanelRememberRatio,
+    onResourceMonitoringMetricsChange: setResourceMonitoringMetrics,
+    onResourceMonitoringMetricOrderChange: (nextOrder) => {
+      setResourceMonitoringMetricOrder((currentOrder) =>
+        sameResourceMonitoringMetricOrder(currentOrder, nextOrder) ? currentOrder : nextOrder
+      )
+    },
     onOverviewShowStatsChange: setOverviewShowStats,
     onOverviewShowRecentChange: setOverviewShowRecent,
     onOverviewShowAllConnectionsChange: setOverviewShowAllConnections,
@@ -371,6 +458,87 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onError: (scope, err) => reportError(setError, scope, err),
     onStatusMessage: (msg) => setError(msg)
   })
+
+  useEffect(() => {
+    if (!desktopApi || !isMainWorkspaceWindow) {
+      setHasLoadedFilePanelRatios(true)
+      return
+    }
+
+    let canceled = false
+    void desktopApi
+      .getUiStateItem(FILE_PANEL_PREFERENCES_KEY)
+      .then((value) => {
+        if (canceled) return
+        if (!value) {
+          setFilePanelRatios({})
+          setFilePanelDiskHeaderAnchors({})
+          setFilePanelRatioPersistenceReady(true)
+          return
+        }
+        try {
+          const parsed: unknown = JSON.parse(value)
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            setFilePanelRatios({})
+            setFilePanelDiskHeaderAnchors({})
+          } else {
+            const normalizedRatios: Record<string, number> = {}
+            const normalizedAnchors: Record<string, boolean> = {}
+            Object.entries(parsed).forEach(([profileId, entry]) => {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return
+              const ratio = (entry as { ratio?: unknown }).ratio
+              if (typeof ratio !== 'number' || !Number.isFinite(ratio)) return
+              normalizedRatios[profileId] = Math.max(0, Math.min(MAX_FILE_PANEL_RATIO, ratio))
+              const anchor = (entry as { anchor?: unknown }).anchor
+              if (anchor === FILE_PANEL_DISK_HEADER_ANCHOR) {
+                normalizedAnchors[profileId] = true
+              } else if (typeof anchor === 'boolean') {
+                normalizedAnchors[profileId] = anchor
+              }
+            })
+            setFilePanelRatios(normalizedRatios)
+            setFilePanelDiskHeaderAnchors(normalizedAnchors)
+          }
+        } catch {
+          setFilePanelRatios({})
+          setFilePanelDiskHeaderAnchors({})
+        }
+        setFilePanelRatioPersistenceReady(true)
+      })
+      .catch((cause: unknown) => reportError(setError, '读取文件面板布局', cause))
+      .finally(() => {
+        if (!canceled) setHasLoadedFilePanelRatios(true)
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [desktopApi, isMainWorkspaceWindow])
+
+  useEffect(() => {
+    if (!desktopApi || !isMainWorkspaceWindow || !hasLoadedFilePanelRatios || !filePanelRatioPersistenceReady) return
+    const value = JSON.stringify(
+      Object.fromEntries(
+        Object.entries(filePanelRatios).map(([profileId, ratio]) => [
+          profileId,
+          {
+            ratio,
+            ...(filePanelDiskHeaderAnchors[profileId] ? { anchor: FILE_PANEL_DISK_HEADER_ANCHOR } : {})
+          }
+        ])
+      )
+    )
+    void desktopApi.setUiStateItem(FILE_PANEL_PREFERENCES_KEY, value).catch((cause: unknown) => {
+      reportError(setError, '保存文件面板布局', cause)
+    })
+  }, [
+    desktopApi,
+    filePanelDiskHeaderAnchors,
+    filePanelRatios,
+    filePanelRatioPersistenceReady,
+    hasLoadedFilePanelRatios,
+    isMainWorkspaceWindow
+  ])
 
   // Child windows and the transparent Linux main window remain hidden until
   // their route's first data fetch has settled. This is the Tauri equivalent
@@ -463,8 +631,16 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   })
 
   const activeFilePanelHeight = activeTab ? (filePanelHeights[activeTab.id] ?? 218) : 218
-  const shouldAlignFilePanelOnMount = activeTab
-    ? !Object.prototype.hasOwnProperty.call(filePanelHeights, activeTab.id)
+  const activeFilePanelRatio = activeTab
+    ? filePanelRememberRatio && hasLoadedFilePanelRatios
+      ? (filePanelRatios[activeTab.profileId] ?? DEFAULT_FILE_PANEL_RATIO)
+      : DEFAULT_FILE_PANEL_RATIO
+    : DEFAULT_FILE_PANEL_RATIO
+  const activeFilePanelDiskHeaderAnchor = activeTab
+    ? filePanelRememberRatio && hasLoadedFilePanelRatios
+      ? (filePanelDiskHeaderAnchors[activeTab.profileId] ??
+        !Object.prototype.hasOwnProperty.call(filePanelRatios, activeTab.profileId))
+      : true
     : false
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
@@ -479,6 +655,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         connectionDefaults.enableResourceMonitoring)
       : false
   const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
+  // Sidebar metrics are per-connection. Profiles created before this field
+  // existed fall back to the legacy global preference, which the settings
+  // dialog no longer writes, so existing connections keep their display.
+  const activeSidebarMetrics =
+    activeProfile?.type === 'ssh' && activeProfile.resourceMonitoringMetrics
+      ? activeProfile.resourceMonitoringMetrics
+      : resourceMonitoringMetrics
+  const activeSidebarMetricOrder =
+    activeProfile?.type === 'ssh' && activeProfile.resourceMonitoringMetricOrder
+      ? activeProfile.resourceMonitoringMetricOrder
+      : resourceMonitoringMetricOrder
   const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
   const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
   const launchLocalAgent = useCallback(
@@ -515,6 +702,29 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       })
     },
     [activeTabId]
+  )
+
+  const commitActiveFilePanelRatio = useCallback(
+    (nextRatio: number) => {
+      if (!activeTab || !filePanelRememberRatio || !hasLoadedFilePanelRatios) return
+      const ratio = Math.max(0, Math.min(MAX_FILE_PANEL_RATIO, nextRatio))
+      setFilePanelRatios((currentRatios) => {
+        if (currentRatios[activeTab.profileId] === ratio) return currentRatios
+        return { ...currentRatios, [activeTab.profileId]: ratio }
+      })
+    },
+    [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
+  )
+
+  const commitActiveFilePanelDiskHeaderAnchor = useCallback(
+    (nextAnchor: boolean) => {
+      if (!activeTab || !filePanelRememberRatio || !hasLoadedFilePanelRatios) return
+      setFilePanelDiskHeaderAnchors((currentAnchors) => {
+        if (currentAnchors[activeTab.profileId] === nextAnchor) return currentAnchors
+        return { ...currentAnchors, [activeTab.profileId]: nextAnchor }
+      })
+    },
+    [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
   )
 
   const setActiveCommandPaneWidth = useCallback(
@@ -859,7 +1069,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     }
 
     const onMouseMove = (event: globalThis.MouseEvent) => {
-      const nextWidth = Math.min(360, Math.max(190, event.clientX))
+      const maxWidth = getSidebarMaxWidth(window.innerWidth, isHomeWorkspaceVisible)
+      const nextWidth = Math.min(maxWidth, Math.max(SIDEBAR_MIN_WIDTH, event.clientX))
       setSidebarWidth(
         Math.abs(nextWidth - DEFAULT_SIDEBAR_WIDTH) <= SIDEBAR_SNAP_THRESHOLD ? DEFAULT_SIDEBAR_WIDTH : nextWidth
       )
@@ -885,7 +1096,24 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [isResizingSidebar])
+  }, [isHomeWorkspaceVisible, isResizingSidebar])
+
+  // Keep a previously widened home sidebar from reintroducing a wrapped stats
+  // row when the window is resized down to its minimum width.
+  useEffect(() => {
+    if (!isHomeWorkspaceVisible) {
+      return
+    }
+
+    const clampSidebarWidth = () => {
+      const maxWidth = getSidebarMaxWidth(window.innerWidth, true)
+      setSidebarWidth((currentWidth) => (currentWidth > maxWidth ? maxWidth : currentWidth))
+    }
+
+    clampSidebarWidth()
+    window.addEventListener('resize', clampSidebarWidth)
+    return () => window.removeEventListener('resize', clampSidebarWidth)
+  }, [isHomeWorkspaceVisible])
 
   const startAiCopilotResize = useCallback(() => {
     window.getSelection()?.removeAllRanges()
@@ -1300,6 +1528,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               connectionDefaults={connectionDefaults}
               errorMessage={formError}
               groupOptions={connectionGroupOptions}
+              fallbackResourceMonitoringMetrics={resourceMonitoringMetrics}
+              fallbackResourceMonitoringMetricOrder={resourceMonitoringMetricOrder}
               mode={editingProfileId ? 'edit' : 'create'}
               form={form}
               hasSavedPassword={
@@ -1408,6 +1638,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           connectionDefaults={connectionDefaults}
           editingProfileId={editingProfileId}
           errorMessage={formError}
+          fallbackResourceMonitoringMetrics={resourceMonitoringMetrics}
+          fallbackResourceMonitoringMetricOrder={resourceMonitoringMetricOrder}
           groupOptions={connectionGroupOptions}
           mode={editingProfileId ? 'edit' : formWindowMode}
           form={form}
@@ -1488,7 +1720,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // --- Main Workspace Render ---
 
   const resolvedSidebarWidth = isSystemSidebarCollapsed ? 44 : sidebarWidth
-  const brandWidth = DEFAULT_SIDEBAR_WIDTH
+  // Home intentionally keeps the title-bar brand lane aligned with its
+  // navigation rail. Session workspaces keep a fixed brand lane so resizing or
+  // collapsing the system sidebar does not move the terminal tabs.
+  const brandWidth = isHomeWorkspaceVisible ? resolvedSidebarWidth : DEFAULT_SIDEBAR_WIDTH
 
   const tabBarProps: Omit<TabBarProps, 'homeBrandContent'> = {
     activeHomeTabId: effectiveActiveLocalTabId,
@@ -1563,6 +1798,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             activeSession={activeSession}
             collapsed={isSystemSidebarCollapsed}
             showResourceMeters={isResourceMonitoringAvailable}
+            visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
             onResizeStart={startSidebarResize}
@@ -1604,7 +1840,11 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 }}
                 filePanelHeight={activeFilePanelHeight}
                 onFilePanelHeightChange={setActiveFilePanelHeight}
-                shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
+                filePanelRatio={activeFilePanelRatio}
+                onFilePanelRatioCommit={commitActiveFilePanelRatio}
+                filePanelDiskHeaderAnchor={activeFilePanelDiskHeaderAnchor}
+                onFilePanelDiskHeaderAnchorCommit={commitActiveFilePanelDiskHeaderAnchor}
+                rememberFilePanelRatio={filePanelRememberRatio}
                 sendTargets={sessionSendTargets}
                 terminalDockSendScope={activeTerminalDockSendState.scope}
                 terminalDockSelectedTabIds={activeTerminalDockSendState.selectedTabIds}
@@ -1678,6 +1918,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onUploadFiles={handleUploadFiles}
                 theme={themeMode}
                 themeConfig={themeConfig}
+                customThemes={customThemes}
                 locale={locale}
                 overviewShowStats={overviewShowStats}
                 overviewShowRecent={overviewShowRecent}
@@ -1707,6 +1948,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onUpdateCommandOrder={updateCommandOrder}
                 onSetTheme={handleSetTheme}
                 onSetThemeConfig={setThemeConfig}
+                onSetCustomThemes={setCustomThemes}
                 onSetLocale={(nextLocale) => {
                   setLocale(nextLocale)
                   setLocaleState(nextLocale)
@@ -1914,8 +2156,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             ? {
                 theme: themeMode,
                 themeConfig,
+                customThemes,
                 onSetTheme: handleSetTheme,
                 onSetThemeConfig: setThemeConfig,
+                onSetCustomThemes: setCustomThemes,
                 locale,
                 onSetLocale: (nextLocale) => {
                   setLocale(nextLocale)

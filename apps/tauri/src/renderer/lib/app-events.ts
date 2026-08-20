@@ -29,6 +29,8 @@ export const APP_EVENT = {
   terminalFind: 'fileterm:terminal-find',
   /** 请求最后聚焦的终端调整字号。 */
   terminalZoom: 'fileterm:terminal-zoom',
+  /** 导入字体的 @font-face 已更新，需要重新测量画布文字。 */
+  importedFontsChanged: 'fileterm:imported-fonts-changed',
   /** AI 命令交给当前 TerminalDock；默认仅填入，execute=true 时走现有发送流程。 */
   aiInsertTerminalCommand: 'fileterm:ai-insert-terminal-command'
 } as const
@@ -37,7 +39,7 @@ export type AppEventName = (typeof APP_EVENT)[keyof typeof APP_EVENT]
 
 /** 事件名 → detail 类型映射。无 detail 的事件用 `never`。 */
 export interface AppEventDetailMap {
-  [APP_EVENT.tauriNativeDragOver]: { position: { x: number; y: number } }
+  [APP_EVENT.tauriNativeDragOver]: { paths: string[]; position: { x: number; y: number } }
   [APP_EVENT.tauriNativeDrop]: {
     paths: string[]
     consume: () => void
@@ -49,6 +51,7 @@ export interface AppEventDetailMap {
   [APP_EVENT.terminalPaste]: never
   [APP_EVENT.terminalFind]: never
   [APP_EVENT.terminalZoom]: TerminalZoomOperation
+  [APP_EVENT.importedFontsChanged]: never
   [APP_EVENT.aiInsertTerminalCommand]: {
     tabId: string
     command: string

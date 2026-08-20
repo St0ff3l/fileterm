@@ -9,6 +9,7 @@ import type {
   LocalFileItem,
   OverviewSectionId,
   RemoteFileItem,
+  SavedTheme,
   SessionSnapshot,
   ThemeConfig,
   WorkspaceTab
@@ -41,7 +42,11 @@ export function WorkspaceStage({
   onCommandPaneWidthChange,
   filePanelHeight,
   onFilePanelHeightChange,
-  shouldAlignFilePanelOnMount,
+  filePanelRatio,
+  onFilePanelRatioCommit,
+  filePanelDiskHeaderAnchor,
+  onFilePanelDiskHeaderAnchorCommit,
+  rememberFilePanelRatio,
   sendTargets,
   terminalDockSendScope,
   terminalDockSelectedTabIds,
@@ -64,6 +69,7 @@ export function WorkspaceStage({
   profiles,
   theme,
   themeConfig,
+  customThemes,
   locale,
   overviewShowStats,
   overviewShowRecent,
@@ -122,6 +128,7 @@ export function WorkspaceStage({
   onUpdateCommandOrder,
   onSetTheme,
   onSetThemeConfig,
+  onSetCustomThemes,
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
@@ -152,7 +159,11 @@ export function WorkspaceStage({
   onCommandPaneWidthChange(width: number): void
   filePanelHeight: number
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
-  shouldAlignFilePanelOnMount: boolean
+  filePanelRatio: number
+  onFilePanelRatioCommit(ratio: number): void
+  filePanelDiskHeaderAnchor: boolean
+  onFilePanelDiskHeaderAnchorCommit(anchor: boolean): void
+  rememberFilePanelRatio: boolean
   sendTargets: SessionSendTarget[]
   terminalDockSendScope: SendScope
   terminalDockSelectedTabIds: string[]
@@ -175,6 +186,7 @@ export function WorkspaceStage({
   profiles: ConnectionProfile[]
   theme: 'default-dark' | 'default-light'
   themeConfig: ThemeConfig
+  customThemes: SavedTheme[]
   locale: 'zhCN' | 'enUS'
   overviewShowStats: boolean
   overviewShowRecent: boolean
@@ -244,6 +256,7 @@ export function WorkspaceStage({
   onUpdateCommandOrder(id: string, newParentId: string | undefined, newOrder: number): Promise<boolean> | boolean | void
   onSetTheme(value: 'default-dark' | 'default-light'): void
   onSetThemeConfig(value: ThemeConfig): void
+  onSetCustomThemes(value: SavedTheme[]): void
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
@@ -309,7 +322,11 @@ export function WorkspaceStage({
         onCommandPaneWidthChange={onCommandPaneWidthChange}
         filePanelHeight={filePanelHeight}
         onFilePanelHeightChange={onFilePanelHeightChange}
-        shouldAlignFilePanelOnMount={shouldAlignFilePanelOnMount}
+        filePanelRatio={filePanelRatio}
+        onFilePanelRatioCommit={onFilePanelRatioCommit}
+        filePanelDiskHeaderAnchor={filePanelDiskHeaderAnchor}
+        onFilePanelDiskHeaderAnchorCommit={onFilePanelDiskHeaderAnchorCommit}
+        rememberFilePanelRatio={rememberFilePanelRatio}
         sendTargets={sendTargets}
         terminalDockSendScope={terminalDockSendScope}
         terminalDockSelectedTabIds={terminalDockSelectedTabIds}
@@ -373,6 +390,7 @@ export function WorkspaceStage({
       commandTemplates={commandTemplates}
       theme={theme}
       themeConfig={themeConfig}
+      customThemes={customThemes}
       locale={locale}
       overviewShowStats={overviewShowStats}
       overviewShowRecent={overviewShowRecent}
@@ -399,6 +417,7 @@ export function WorkspaceStage({
       onUpdateCommandOrder={onUpdateCommandOrder}
       onSetTheme={onSetTheme}
       onSetThemeConfig={onSetThemeConfig}
+      onSetCustomThemes={onSetCustomThemes}
       onSetLocale={onSetLocale}
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}

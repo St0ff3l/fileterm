@@ -38,8 +38,10 @@ pub const SU_AUTH_FAILURE: &str = "SU_AUTH_FAILURE";
 /// command afterwards.
 pub const REMOTE_INTERACTIVE_INPUT_REQUIRED: &str = "REMOTE_INTERACTIVE_INPUT_REQUIRED";
 
-/// Optional Copilot-only progress callback fired after FileTerm has restored
-/// the main window and before the local sudo/su prompt starts waiting.
+/// Optional progress callback fired after FileTerm has restored the main
+/// window and before the local sudo/su prompt starts waiting. AI Copilot and
+/// the MCP/CLI bridge use it to tell their caller that the foreground prompt
+/// is ready for the user.
 pub type PrivilegedPromptNotice = Arc<dyn Fn(&str) + Send + Sync>;
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -266,8 +268,9 @@ pub struct RemoteExecRequest {
     /// Whether a missing privileged credential may be resolved through the
     /// local FileTerm password prompt.
     pub allow_local_privileged_prompt: bool,
-    /// Optional progress hook used by Copilot to show that the tool call is
-    /// waiting for the user in the foreground FileTerm window.
+    /// Optional progress hook used by AI Copilot and the MCP/CLI bridge to show
+    /// that the tool call is waiting for the user in the foreground FileTerm
+    /// window.
     pub privileged_prompt_notice: Option<PrivilegedPromptNotice>,
 }
 
@@ -518,9 +521,6 @@ async fn request_sudo_password_prompt(
     {
         return Err(AppError::Command(needed_code.to_string()));
     }
-    if let Some(notice) = privileged_prompt_notice {
-        notice(needed_code);
-    }
     let payload = serde_json::json!({
         "requestId": request_id,
         "tabId": tab_id,
@@ -545,6 +545,9 @@ async fn request_sudo_password_prompt(
             format!("privileged password prompt delivery failed: {error}"),
         );
         return Err(AppError::Command(needed_code.to_string()));
+    }
+    if let Some(notice) = privileged_prompt_notice {
+        notice(needed_code);
     }
 
     let response = match timeout(Duration::from_secs(120), receiver).await {

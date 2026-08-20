@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Manager};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 const DEFAULT_COLS: u16 = 80;
@@ -303,7 +303,7 @@ fn decode_osc7_cwd(payload: &str) -> Option<String> {
         if path.starts_with('/') && path.as_bytes().get(2) == Some(&b':') {
             path.remove(0);
         }
-        return Some(path);
+        Some(path)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -378,7 +378,7 @@ pub fn start_local_terminal_worker(
     cancellation: CancellationToken,
     launch: LocalTerminalLaunch,
     runtime_gate: Arc<LocalTerminalRuntimeGate>,
-) -> Result<(), String> {
+) -> Result<oneshot::Receiver<()>, String> {
     validate_launch(&launch)?;
     let cwd = PathBuf::from(&launch.cwd);
     if !cwd.is_dir() {
@@ -427,11 +427,13 @@ pub fn start_local_terminal_worker(
     // channel remains available for Ctrl+C and resize commands.
     let (output_tx, mut output_rx) =
         mpsc::channel::<LocalOutputChunk>(LOCAL_OUTPUT_CHANNEL_CAPACITY);
+    let (startup_ready_tx, startup_ready_rx) = oneshot::channel();
     let (output_done_tx, output_done_rx) = tokio::sync::oneshot::channel();
     let pump_app = app.clone();
     let pump_tab_id = tab_id.clone();
     let pump_runtime_id = runtime_id.clone();
     let pump_gate = runtime_gate.clone();
+    let mut startup_ready_tx = Some(startup_ready_tx);
     tauri::async_runtime::spawn(async move {
         let mut cwd_tracker = LocalOsc7CwdTracker::default();
         let mut pending_chunk = None;
@@ -472,6 +474,13 @@ pub fn start_local_terminal_worker(
             .await
             {
                 break;
+            }
+            // Signal readiness only after the first PTY batch has been
+            // appended to the authoritative session transcript. The initial
+            // local-terminal snapshot can then carry the prompt even when
+            // the renderer has not subscribed to the global data channel yet.
+            if let Some(sender) = startup_ready_tx.take() {
+                let _ = sender.send(());
             }
             if let Some(cwd) = cwd_tracker.observe(&batch) {
                 let _ = update_local_terminal_cwd(
@@ -574,7 +583,7 @@ pub fn start_local_terminal_worker(
         })
         .map_err(|error| format!("Unable to start local PTY worker: {error}"))?;
 
-    Ok(())
+    Ok(startup_ready_rx)
 }
 
 fn queue_local_terminal_output(
@@ -713,9 +722,9 @@ impl LocalProcessTree {
                 return Self::default();
             }
 
-            return Self {
+            Self {
                 job_handle: Some(job_handle as usize),
-            };
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -947,34 +956,46 @@ fn clamp_u16(value: u32, fallback: u16) -> u16 {
 fn default_shell() -> String {
     // 优先 PowerShell（Windows 默认），缺失时回退 cmd.exe。
     // Server Core / 精简镜像可能没有 powershell.exe。
-    if shell_available_in_path("powershell.exe") {
-        "powershell.exe".to_string()
-    } else if shell_available_in_path("pwsh.exe") {
-        "pwsh.exe".to_string()
-    } else {
-        "cmd.exe".to_string()
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn shell_available_in_path(name: &str) -> bool {
-    use std::path::{Path, PathBuf};
-
-    // 正常情况：PATH 里能找到。
-    if let Some(path_var) = env::var_os("PATH") {
-        if env::split_paths(&path_var).any(|dir| dir.join(name).is_file()) {
-            return true;
+    for name in ["powershell.exe", "pwsh.exe", "cmd.exe"] {
+        if let Some(shell) = resolve_windows_shell(name) {
+            return shell;
         }
     }
 
-    // Fallback：PATH 异常（如被清理过的服务进程）时，直接查 System32。
-    // Windows PowerShell 和 cmd.exe 在 System32；PowerShell 7 另查其标准安装目录。
+    // CommandBuilder/CreateProcess can still resolve this in a normal Windows
+    // environment. Keep the logical fallback even when the environment is so
+    // restricted that none of the standard locations were readable.
+    "cmd.exe".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_shell(name: &str) -> Option<String> {
+    if let Some(path_var) = env::var_os("PATH") {
+        if env::split_paths(&path_var).any(|dir| dir.join(name).is_file()) {
+            return Some(name.to_string());
+        }
+    }
+
+    standard_windows_shell_path(name).map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn standard_windows_shell_path(name: &str) -> Option<PathBuf> {
+    use std::path::Path;
+
+    // PATH 可能被桌面启动器、服务或企业策略裁剪。Windows PowerShell
+    // 实际位于 WindowsPowerShell\v1.0，而不是直接位于 System32。
     let system32 = env::var_os("SystemRoot")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
         .join("System32");
-    if system32.join(name).is_file() {
-        return true;
+    let system_candidate = if name.eq_ignore_ascii_case("powershell.exe") {
+        system32.join("WindowsPowerShell").join("v1.0").join(name)
+    } else {
+        system32.join(name)
+    };
+    if system_candidate.is_file() {
+        return Some(system_candidate);
     }
 
     if name.eq_ignore_ascii_case("pwsh.exe") {
@@ -983,16 +1004,16 @@ fn shell_available_in_path(name: &str) -> bool {
                 continue;
             };
             let base = Path::new(&root).join("PowerShell");
-            if ["7", "7-preview"]
-                .into_iter()
-                .any(|version| base.join(version).join(name).is_file())
-            {
-                return true;
+            for version in ["7", "7-preview"] {
+                let candidate = base.join(version).join(name);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
             }
         }
     }
 
-    false
+    None
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1102,6 +1123,7 @@ fn shell_name(shell: &str) -> String {
         .to_ascii_lowercase()
 }
 
+#[cfg(not(target_os = "windows"))]
 fn has_non_empty_env(name: &str) -> bool {
     env::var_os(name).is_some_and(|value| !value.is_empty())
 }
@@ -1235,7 +1257,17 @@ fn configure_shell_command(
 
     match name.as_str() {
         "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" => {
-            command.args(["-NoLogo", "-NoExit"]);
+            command.arg("-NoLogo");
+            // The default Windows PowerShell profile is user-controlled and may
+            // import modules, start a prompt helper, or wait on network state.
+            // A stalled profile leaves the first local terminal permanently at
+            // "Starting local shell...". Preserve profile behavior for callers
+            // that explicitly provide launch arguments, while making the
+            // default FileTerm shell deterministic and ready immediately.
+            if extra_args.is_empty() {
+                command.arg("-NoProfile");
+            }
+            command.arg("-NoExit");
             command.args(extra_args);
             // -Command / -CommandWithArgs / -File / -EncodedCommand 互斥：用户传了这些参数时
             // 不再自动追加 UTF-8 setup，避免 PowerShell 因参数冲突直接报错。
@@ -1320,11 +1352,13 @@ mod tests {
     use super::{
         append_local_output_chunk, clamp_u16, cmd_args_have_explicit_command,
         configure_shell_command, default_launch, local_shell_exit_summary,
-        powershell_args_have_explicit_command, resolve_launch, run_pty_loop,
-        scan_alt_screen_transition, shell_name, validate_launch, AltScreenTransitionScanner,
-        LocalOsc7CwdTracker, LocalOutputChunk, LocalProcessTree, LocalPtyCommand,
-        LocalTerminalLaunch, LocalTerminalLaunchOptions, Utf8StreamDecoder,
+        powershell_args_have_explicit_command, resolve_launch, scan_alt_screen_transition,
+        shell_name, validate_launch, AltScreenTransitionScanner, LocalOsc7CwdTracker,
+        LocalOutputChunk, LocalProcessTree, LocalTerminalLaunch, LocalTerminalLaunchOptions,
+        Utf8StreamDecoder,
     };
+    #[cfg(unix)]
+    use super::{run_pty_loop, LocalPtyCommand};
 
     #[cfg(unix)]
     type TestPtyMaster = Box<dyn portable_pty::MasterPty + Send>;
@@ -1436,10 +1470,25 @@ mod tests {
 
     #[test]
     fn launch_options_merge_platform_defaults_with_one_shot_overrides() {
+        // validate_launch rejects path-like shells that do not exist, so the
+        // override must name a real file on every platform the test runs on.
+        let shell = if cfg!(windows) {
+            std::env::var_os("SystemRoot")
+                .map(|root| {
+                    std::path::PathBuf::from(root)
+                        .join("System32")
+                        .join("cmd.exe")
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .unwrap_or_else(|| "cmd.exe".to_string())
+        } else {
+            "/bin/sh".to_string()
+        };
         let mut environment = BTreeMap::new();
         environment.insert("FILETERM_TEST".to_string(), "present".to_string());
         let launch = resolve_launch(Some(LocalTerminalLaunchOptions {
-            shell: Some("/bin/sh".to_string()),
+            shell: Some(shell.clone()),
             title: Some("Agent terminal".to_string()),
             cwd: Some("/tmp".to_string()),
             args: Some(vec!["-i".to_string()]),
@@ -1447,7 +1496,7 @@ mod tests {
         }))
         .expect("valid local launch options should resolve");
 
-        assert_eq!(launch.shell, "/bin/sh");
+        assert_eq!(launch.shell, shell);
         assert_eq!(launch.title.as_deref(), Some("Agent terminal"));
         assert_eq!(launch.cwd, "/tmp");
         assert_eq!(launch.args, vec!["-i"]);
@@ -1646,6 +1695,46 @@ mod tests {
         assert!(cmd_args_have_explicit_command(&["/K".to_string()]));
         assert!(!cmd_args_have_explicit_command(&["/q".to_string()]));
         assert!(!cmd_args_have_explicit_command(&[]));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn default_powershell_launch_skips_user_profile_and_keeps_utf8_setup() {
+        let mut command = CommandBuilder::new("powershell.exe");
+        configure_shell_command(&mut command, "powershell.exe", &[], &BTreeMap::new());
+
+        let argv: Vec<String> = command
+            .get_argv()
+            .iter()
+            .filter_map(|value| value.to_str().map(ToOwned::to_owned))
+            .collect();
+        assert_eq!(
+            &argv[..4],
+            &["powershell.exe", "-NoLogo", "-NoProfile", "-NoExit"]
+        );
+        assert!(argv.windows(2).any(|values| {
+            values[0] == "-Command"
+                && values[1].contains("Console]::InputEncoding")
+                && values[1].contains("Console]::OutputEncoding")
+        }));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn explicit_powershell_arguments_preserve_profile_behavior() {
+        let mut command = CommandBuilder::new("powershell.exe");
+        let arguments = vec!["-ExecutionPolicy".to_string(), "Bypass".to_string()];
+        configure_shell_command(&mut command, "powershell.exe", &arguments, &BTreeMap::new());
+
+        let argv: Vec<String> = command
+            .get_argv()
+            .iter()
+            .filter_map(|value| value.to_str().map(ToOwned::to_owned))
+            .collect();
+        assert!(!argv.contains(&"-NoProfile".to_string()));
+        assert!(argv
+            .windows(2)
+            .any(|values| { values[0] == "-ExecutionPolicy" && values[1] == "Bypass" }));
     }
 
     #[test]
@@ -2040,7 +2129,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn real_local_conpty_preserves_output_and_exit_status() {
-        use std::io::Read;
+        use std::io::{Read, Write};
 
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -2068,20 +2157,75 @@ mod tests {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => break,
-                    Ok(size) => output.extend_from_slice(&buffer[..size]),
+                    Ok(size) => {
+                        output.extend_from_slice(&buffer[..size]);
+                        let _ = output_tx.send(output.clone());
+                    }
                     Err(_) => break,
                 }
             }
             let _ = output_tx.send(output);
         });
-        let writer = master
+        // Keep the ConPTY input pipe open while cmd.exe runs: closing the
+        // writer early makes conhost treat the client as gone and terminate
+        // the child with STATUS_CONTROL_C_EXIT before it can echo anything.
+        let mut writer = master
             .take_writer()
             .expect("ConPTY writer should be available");
+        // cmd.exe under ConPTY emits ESC[6n (cursor position request) at
+        // startup and blocks until the terminal replies. In the real app
+        // xterm.js answers automatically; this test has to emulate that
+        // reply, otherwise cmd.exe never runs the command.
+        let mut replied_cpr = false;
+        let mut output = Vec::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        let status = loop {
+            while let Ok(snapshot) = output_rx.try_recv() {
+                output = snapshot;
+            }
+            if !replied_cpr && output.windows(4).any(|window| window == b"\x1b[6n") {
+                replied_cpr = true;
+                let _ = writer.write_all(b"\x1b[1;1R");
+                let _ = writer.flush();
+            }
+            if let Ok(Some(status)) = child.try_wait() {
+                break status;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cmd.exe did not exit within 15s; output so far: {:?}",
+                String::from_utf8_lossy(&output)
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
         drop(writer);
-        let status = child.wait().expect("cmd.exe should exit");
-        let output = output_rx
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .expect("ConPTY reader should finish after shell exit");
+        // ConPTY renders through conhost on a throttled refresh pass, so the
+        // echo bytes can still be in flight after cmd.exe exits. Wait for the
+        // payload to reach the reader before closing the master, otherwise
+        // conhost is torn down with the data still buffered inside it.
+        let mut output = Vec::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            match output_rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                Ok(snapshot) => {
+                    output = snapshot;
+                    if String::from_utf8_lossy(&output).contains("FileTerm local") {
+                        break;
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        // Closing the master ends the conhost session; the reader then sees
+        // EOF and publishes its final snapshot.
+        drop(master);
+        if let Ok(snapshot) = output_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            output = snapshot;
+        }
 
         assert!(String::from_utf8_lossy(&output).contains("FileTerm local"));
         assert_eq!(status.exit_code(), 7);

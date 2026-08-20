@@ -1,4 +1,8 @@
-import { DEFAULT_SSH_CONNECTION_DEFAULTS } from '@fileterm/core'
+import {
+  DEFAULT_RESOURCE_MONITORING_METRICS,
+  DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
+  DEFAULT_SSH_CONNECTION_DEFAULTS
+} from '@fileterm/core'
 import type {
   ConnectionProfile,
   CreateProfileInput,
@@ -49,6 +53,8 @@ export const defaultForm: CreateProfileInput = {
   enableExecChannel: true,
   enableResourceMonitoring: true,
   resourceMonitoringIntervalSeconds: 1,
+  resourceMonitoringMetrics: DEFAULT_RESOURCE_MONITORING_METRICS,
+  resourceMonitoringMetricOrder: DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   reconnectMode: 'none',
   legacyAlgorithms: false,
   secure: false,
@@ -99,6 +105,10 @@ function connectionSettingsForProfile(profile: SshProfile, defaults: SshConnecti
       overrides.resourceMonitoringIntervalSeconds ??
       profile.resourceMonitoringIntervalSeconds ??
       defaults.resourceMonitoringIntervalSeconds,
+    // Metrics are handled by direct pass-through in profileToForm; these
+    // entries only satisfy the full-defaults shape for the form helper.
+    resourceMonitoringMetrics: defaults.resourceMonitoringMetrics,
+    resourceMonitoringMetricOrder: defaults.resourceMonitoringMetricOrder,
     reconnectMode: overrides.reconnectMode ?? profile.reconnectMode ?? defaults.reconnectMode,
     legacyAlgorithms: overrides.legacyAlgorithms ?? profile.legacyAlgorithms ?? defaults.legacyAlgorithms
   }
@@ -133,6 +143,10 @@ export function profileToForm(
     enableResourceMonitoring: profile.type === 'ssh' ? sshConnectionSettings.enableResourceMonitoring : true,
     resourceMonitoringIntervalSeconds:
       profile.type === 'ssh' ? sshConnectionSettings.resourceMonitoringIntervalSeconds : 1,
+    // Sidebar metrics stay pass-through: a profile without saved values keeps
+    // its legacy fallback instead of being rewritten with current defaults.
+    resourceMonitoringMetrics: profile.type === 'ssh' ? profile.resourceMonitoringMetrics : undefined,
+    resourceMonitoringMetricOrder: profile.type === 'ssh' ? profile.resourceMonitoringMetricOrder : undefined,
     reconnectMode: profile.type === 'ssh' ? sshConnectionSettings.reconnectMode : 'none',
     legacyAlgorithms: profile.type === 'ssh' ? sshConnectionSettings.legacyAlgorithms : false,
     secure: profile.type === 'ftp' ? profile.secure : false,

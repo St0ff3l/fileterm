@@ -1538,7 +1538,7 @@
   position: absolute;
   inset: 2.5px;
   border-radius: 999px !important;
-  background: var(--copy-link);
+  background: var(--focus-outline, #8bbfff);
   transform: scale(0);
   transition: transform 0.16s ease;
 }
@@ -1549,7 +1549,7 @@
 .command-toggle input[type='checkbox']:checked,
 .command-editor-checkbox-row input[type='checkbox']:checked,
 .overview-preference-toggle input[type='checkbox']:checked {
-  border-color: var(--copy-link);
+  border-color: var(--focus-outline, #8bbfff);
 }
 
 .command-toggle input:checked::after,
@@ -1611,7 +1611,7 @@
 .session-send-target-remember-inline input[type='checkbox']:checked,
 .session-send-target-header input[type='checkbox']:checked,
 .terminal-dock-option-row input[type='checkbox']:checked {
-  border-color: var(--copy-link) !important;
+  border-color: var(--focus-outline, #8bbfff) !important;
   background: transparent !important; /* Keep outer border circle transparent inside */
 }
 
@@ -1625,7 +1625,7 @@
   position: absolute;
   inset: 2.5px;
   border-radius: 999px !important;
-  background: var(--copy-link);
+  background: var(--focus-outline, #8bbfff);
   transform: scale(0);
   transition: transform 0.16s cubic-bezier(0.12, 0.4, 0.29, 1.46);
 }
@@ -1640,7 +1640,7 @@
 
 /* Indeterminate checkbox state */
 .session-send-target-header input[type='checkbox']:indeterminate {
-  border-color: var(--copy-link) !important;
+  border-color: var(--focus-outline, #8bbfff) !important;
   background: transparent !important;
 }
 

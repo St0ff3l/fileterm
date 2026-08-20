@@ -525,6 +525,68 @@ fn format_storage_value(value: &str) -> String {
     trimmed.to_string()
 }
 
+fn parse_gpu_memory_bytes(value: &str) -> Option<f64> {
+    let normalized = value.trim().replace(' ', "");
+    if normalized.is_empty() || normalized == "-" {
+        return None;
+    }
+
+    let re = regex::Regex::new(r"(?i)^([0-9]+(?:\.[0-9]+)?)([KMGT]?)(?:I?B)?$").unwrap();
+    let caps = re.captures(&normalized)?;
+    let amount = caps.get(1)?.as_str().parse::<f64>().ok()?;
+    let unit = caps.get(2).map(|m| m.as_str().to_ascii_uppercase());
+    let power = match unit.as_deref() {
+        Some("K") => 1,
+        Some("M") => 2,
+        Some("G") => 3,
+        Some("T") => 4,
+        // nvidia-smi is called with `nounits`, and its memory fields are MiB.
+        Some("") | None => 2,
+        _ => return None,
+    };
+
+    Some(amount * 1024_f64.powi(power))
+}
+
+fn format_gpu_memory(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "-" {
+        return "-".to_string();
+    }
+
+    let normalized = trimmed.replace(' ', "");
+    if normalized == "-" {
+        return "-".to_string();
+    }
+    format_storage_value(&normalized)
+}
+
+fn parse_gpu_percent(value: &str) -> Option<f64> {
+    let normalized = value.trim().trim_end_matches('%');
+    let parsed = normalized.parse::<f64>().ok()?;
+    Some(parsed.clamp(0.0, 100.0))
+}
+
+fn parse_gpu_temperature(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .trim_end_matches('C')
+        .trim_end_matches('c')
+        .trim_end_matches('°')
+        .trim()
+        .parse::<f64>()
+        .ok()
+}
+
+fn format_gpu_optional(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty() || value == "-" {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
 fn format_process_megabytes(value: f64) -> String {
     if value >= 1024.0 {
         let decimals = if value >= 10.0 * 1024.0 { 0 } else { 1 };
@@ -769,6 +831,29 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         }
     }
 
+    // Newer collectors already provide the richer filesystem rows, while the
+    // compact sidebar table still consumes the legacy diskRows shape. Keep the
+    // compact table populated when a platform/collector emits only the richer
+    // block (which is what caused the sidebar to show an empty body).
+    if disk_rows.is_empty() {
+        for row in &file_system_rows {
+            let path = row
+                .get("mountPoint")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .or_else(|| row.get("name").and_then(serde_json::Value::as_str));
+            let available = row.get("available").and_then(serde_json::Value::as_str);
+            let size = row.get("size").and_then(serde_json::Value::as_str);
+
+            if let (Some(path), Some(available), Some(size)) = (path, available, size) {
+                disk_rows.push(serde_json::json!({
+                    "path": path,
+                    "usage": format!("{available}/{size}"),
+                }));
+            }
+        }
+    }
+
     let mut cpu_info_rows = Vec::new();
     for line in read_block("__CPUINFO_START__", "__CPUINFO_END__") {
         let parts: Vec<&str> = line.split('|').collect();
@@ -787,16 +872,33 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
     for line in read_block("__GPUINFO_START__", "__GPUINFO_END__") {
         let parts: Vec<&str> = line.split('|').collect();
         if parts.len() >= 4 {
+            let total_memory_bytes = parse_gpu_memory_bytes(parts[3]);
+            let used_memory_bytes = parts.get(5).and_then(|value| parse_gpu_memory_bytes(value));
+            let memory_percent = match (used_memory_bytes, total_memory_bytes) {
+                (Some(used), Some(total)) if total > 0.0 => {
+                    Some((used * 100.0 / total).clamp(0.0, 100.0))
+                }
+                _ => None,
+            };
             gpu_info_rows.push(serde_json::json!({
                 "model": parts[0],
                 "vendor": if parts[1].is_empty() { "-" } else { parts[1] },
                 "driver": if parts[2].is_empty() { "-" } else { parts[2] },
-                "memory": if parts[3].is_empty() { "-" } else { parts[3] },
+                "memory": format_gpu_memory(parts[3]),
+                "usagePercent": parts.get(4).and_then(|value| parse_gpu_percent(value)),
+                "memoryUsed": parts
+                    .get(5)
+                    .map(|value| format_gpu_memory(value))
+                    .filter(|value| value != "-"),
+                "memoryPercent": memory_percent,
+                "temperatureCelsius": parts.get(6).and_then(|value| parse_gpu_temperature(value)),
+                "powerUsage": format_gpu_optional(parts.get(7).copied()),
+                "powerLimit": format_gpu_optional(parts.get(8).copied()),
             }));
         }
     }
 
-    // Top processes: shell 端已用 `ps --sort=-pcpu` 按 pcpu 降序取 top 40，
+    // Top processes: shell 端按瞬时 CPU 占用降序取 top 40，
     // 这里按到达顺序逐行解析，不做 comm 分组。每行一个 PID，保留 pid/user
     // 字段供排查使用，command 用 args（完整命令行）而非 comm。
     // 格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留）
@@ -816,7 +918,12 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
         let user = parts[1].to_string();
         let memory_str = parts[2].to_lowercase();
         let memory_mb: f64 = memory_str.replace('m', "").parse().unwrap_or(0.0);
-        let cpu_val: f64 = parts[3].parse().unwrap_or(0.0);
+        let cpu_val = match parts[3].parse::<f64>() {
+            Ok(value) if value.is_finite() && (0.0..=100.0).contains(&value) => value,
+            // The collector is expected to emit a system-wide 0-100 value.
+            // Do not let malformed or unbounded samples reach the renderer.
+            _ => continue,
+        };
         let _mem_percent: f64 = parts[4].parse().unwrap_or(0.0);
         let command = parts[5].to_string();
 
@@ -946,6 +1053,7 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
             "steal": cpu_steal,
         },
         "cpuInfoRows": cpu_info_rows,
+        "cpuTemperatureCelsius": read_line("__CPU_TEMPERATURE__").parse::<f64>().ok(),
         "gpuInfoRows": gpu_info_rows,
         "memoryPercent": mem_percent_num,
         "memoryUsage": if mem_total_bytes_num > 0.0 {
@@ -1047,6 +1155,51 @@ has_bounded_runner() {{
 read_cpu_stat() {{
   awk '/^cpu / {{print $2, $3, $4, $5, $6, $7, $8, $9; exit}}' /proc/stat 2>/dev/null
 }}
+read_cpu_temperature() {{
+  temperature=""
+  if command -v sensors >/dev/null 2>&1; then
+    temperature=$(run_bounded 2 sensors 2>/dev/null | awk '
+      BEGIN {{ IGNORECASE=1 }}
+      /Package id|Tctl:|Tdie:|Core [0-9]+:|CPU Temp|CPU Temperature/ {{
+        if (match($0, /[+-]?[0-9]+([.][0-9]+)?[[:space:]]*°?[Cc]/)) {{
+          value=substr($0, RSTART, RLENGTH)
+          gsub(/[+°Cc[:space:]]/, "", value)
+          if ((value + 0) > -50 && (value + 0) < 150) {{ print value; exit }}
+        }}
+      }}
+    ')
+  fi
+  if [ -z "$temperature" ]; then
+    for zone in /sys/class/thermal/thermal_zone*; do
+      [ -r "$zone/temp" ] || continue
+      zone_type=$(cat "$zone/type" 2>/dev/null)
+      case "$zone_type" in
+        *cpu*|*CPU*|*x86_pkg_temp*|*coretemp*|*k10temp*|*soc*) ;;
+        *) continue ;;
+      esac
+      raw=$(cat "$zone/temp" 2>/dev/null)
+      case "$raw" in
+        ''|*[!0-9-]*) continue ;;
+      esac
+      temperature=$(awk -v value="$raw" 'BEGIN {{ c=value/1000; if (c > -50 && c < 150) printf "%.1f", c }}')
+      [ -n "$temperature" ] && break
+    done
+  fi
+  printf "%s" "$temperature"
+}}
+read_process_ticks() {{
+  awk '
+    {{
+      path=FILENAME
+      sub(/^\/proc\//, "", path)
+      sub(/\/stat$/, "", path)
+      line=$0
+      sub(/^[0-9]+ \(.+\) /, "", line)
+      count=split(line, fields, /[[:space:]]+/)
+      if (count >= 13) printf "%s|%s\n", path, fields[12] + fields[13]
+    }}
+  ' /proc/[0-9]*/stat 2>/dev/null
+}}
 set -- $(read_cpu_stat)
 user=${{1:-0}}
 nice=${{2:-0}}
@@ -1058,7 +1211,15 @@ softirq=${{7:-0}}
 steal=${{8:-0}}
 total1=$((user+nice+system+idle+iowait+irq+softirq+steal))
 idle1=$((idle+iowait))
+process_ticks_before_file="/tmp/fileterm-procs-before-$$"
+process_ticks_after_file="/tmp/fileterm-procs-after-$$"
+process_cpu_file="/tmp/fileterm-procs-cpu-$$"
+process_cpu_tmp_file="/tmp/fileterm-procs-cpu-tmp-$$"
+gpu_info_file="/tmp/fileterm-gpu-info-$$"
+trap 'rm -f "$before_file" "$after_file" "$process_ticks_before_file" "$process_ticks_after_file" "$process_cpu_file" "$process_cpu_tmp_file" "$gpu_info_file"' 0 1 2 15
+read_process_ticks > "$process_ticks_before_file"
 sleep "$sleep_interval"
+read_process_ticks > "$process_ticks_after_file"
 set -- $(read_cpu_stat)
 user2=${{1:-0}}
 nice2=${{2:-0}}
@@ -1081,6 +1242,7 @@ cpu_iowait_pct=$(awk -v diff_total="$diff_total" -v before="$iowait" -v after="$
 cpu_irq_pct=$(awk -v diff_total="$diff_total" -v before="$irq" -v after="$irq2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_softirq_pct=$(awk -v diff_total="$diff_total" -v before="$softirq" -v after="$softirq2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_steal_pct=$(awk -v diff_total="$diff_total" -v before="$steal" -v after="$steal2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
+cpu_temperature=$(read_cpu_temperature)
 os_name=$( ( . /etc/os-release >/dev/null 2>&1 && printf "%s" "$PRETTY_NAME" ) 2>/dev/null )
 [ -z "$os_name" ] && os_name=$(sed -n 's/^DISTRIB_DESCRIPTION=['"'"'"]\\{{0,1\\}}\\(.*\\)['"'"'"]\\{{0,1\\}}$/\\1/p' /etc/openwrt_release 2>/dev/null | head -n 1)
 [ -z "$os_name" ] && os_name=$(uname -s 2>/dev/null)
@@ -1322,31 +1484,212 @@ if [ -z "$cpu_info" ]; then
     }}
   ')
 fi
-gpu_info=$(run_bounded 1 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader,nounits 2>/dev/null | awk -F',' '
+: > "$gpu_info_file"
+nvidia_gpu_info=$(run_bounded 1 nvidia-smi --query-gpu=name,driver_version,memory.total,utilization.gpu,memory.used,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits 2>/dev/null | awk -F',' '
   function trim(value) {{
     sub(/^[[:space:]]+/, "", value)
     sub(/[[:space:]]+$/, "", value)
     return value
   }}
+  function with_unit(value, unit) {{
+    value=trim(value)
+    return (value == "" || value == "-") ? "-" : value " " unit
+  }}
   NF >= 3 {{
     model=trim($1)
     driver=trim($2)
-    memory=trim($3)
-    printf "%s|NVIDIA|%s|%s MiB\n", model, (driver == "" ? "-" : driver), (memory == "" ? "-" : memory)
+    memory_total=trim($3)
+    gpu_usage=trim($4)
+    memory_used=trim($5)
+    temperature=trim($6)
+    power_usage=trim($7)
+    power_limit=trim($8)
+    printf "%s|NVIDIA|%s|%s|%s|%s|%s|%s|%s\n", model, (driver == "" ? "-" : driver), with_unit(memory_total, "MiB"), with_unit(gpu_usage, "%"), with_unit(memory_used, "MiB"), with_unit(temperature, "C"), with_unit(power_usage, "W"), with_unit(power_limit, "W")
   }}
 ')
-if [ -z "$gpu_info" ]; then
-  gpu_info=$(run_bounded 1 lspci 2>/dev/null | awk '
+if [ -n "$nvidia_gpu_info" ]; then
+  printf "%s\n" "$nvidia_gpu_info" >> "$gpu_info_file"
+fi
+
+format_gpu_sysfs_bytes() {{
+  value="$1"
+  case "$value" in
+    ''|*[!0-9]*) printf "%s" "-" ;;
+    *) awk -v bytes="$value" 'BEGIN {{ if (bytes > 0) printf "%.0f MiB", bytes / 1024 / 1024; else print "-" }}' ;;
+  esac
+}}
+
+format_gpu_microwatts() {{
+  value="$1"
+  case "$value" in
+    ''|*[!0-9]*) printf "%s" "-" ;;
+    *) awk -v microwatts="$value" 'BEGIN {{ if (microwatts > 0) printf "%.1f W", microwatts / 1000000; else print "-" }}' ;;
+  esac
+}}
+
+read_gpu_memory_value() {{
+  card="$1"
+  field="$2"
+  for candidate in \
+    "$card/device/$field" \
+    "$card/device/tile0/$field" \
+    "$card/device/gt/gt0/$field"; do
+    [ -r "$candidate" ] || continue
+    raw=$(cat "$candidate" 2>/dev/null)
+    case "$raw" in
+      ''|*[!0-9]*) continue ;;
+    esac
+    formatted=$(format_gpu_sysfs_bytes "$raw")
+    [ "$formatted" != "-" ] && {{
+      printf "%s" "$formatted"
+      return
+    }}
+  done
+  printf "%s" "-"
+}}
+
+read_gpu_temperature_value() {{
+  card="$1"
+  for hwmon in "$card"/device/hwmon/hwmon*; do
+    [ -r "$hwmon/temp1_input" ] || continue
+    raw=$(cat "$hwmon/temp1_input" 2>/dev/null)
+    case "$raw" in
+      ''|*[!0-9-]*) continue ;;
+    esac
+    formatted=$(awk -v millidegrees="$raw" 'BEGIN {{ c=millidegrees / 1000; if (c > -50 && c < 150) printf "%.1f C", c }}')
+    [ -n "$formatted" ] && {{
+      printf "%s" "$formatted"
+      return
+    }}
+  done
+  printf "%s" "-"
+}}
+
+read_gpu_power_value() {{
+  card="$1"
+  mode="$2"
+  for hwmon in "$card"/device/hwmon/hwmon*; do
+    [ -d "$hwmon" ] || continue
+    if [ "$mode" = "limit" ]; then
+      power_files="power1_cap power1_max"
+    else
+      power_files="power1_average power1_input"
+    fi
+    for power_name in $power_files; do
+      power_file="$hwmon/$power_name"
+      [ -r "$power_file" ] || continue
+      raw=$(cat "$power_file" 2>/dev/null)
+      formatted=$(format_gpu_microwatts "$raw")
+      [ "$formatted" != "-" ] && {{
+        printf "%s" "$formatted"
+        return
+      }}
+    done
+  done
+  printf "%s" "-"
+}}
+
+read_intel_gpu_usage() {{
+  card="$1"
+  card_number=$(printf "%s\n" "$card" | sed 's#.*/card##')
+  if ! command -v intel_gpu_top >/dev/null 2>&1; then
+    printf "%s" "-"
+    return
+  fi
+  usage=$(run_bounded 2 intel_gpu_top -J -s 1000 -o - -d "drm:/dev/dri/card$card_number" 2>/dev/null | awk '
+    {{
+      line=$0
+      while (match(line, /"busy"[[:space:]]*:[[:space:]]*[0-9]+([.][0-9]+)?/)) {{
+        token=substr(line, RSTART, RLENGTH)
+        sub(/^.*:[[:space:]]*/, "", token)
+        value=token + 0
+        if (value > maximum) maximum=value
+        seen=1
+        line=substr(line, RSTART + RLENGTH)
+      }}
+    }}
+    END {{
+      if (seen) {{
+        if (maximum < 0) maximum=0
+        if (maximum > 100) maximum=100
+        printf "%.1f", maximum
+      }}
+    }}
+  ')
+  [ -n "$usage" ] && printf "%s%%" "$usage" || printf "%s" "-"
+}}
+
+# Linux DRM exposes vendor-independent card directories. AMD's amdgpu and
+# Intel's i915/xe drivers expose busy, VRAM, hwmon temperature and power
+# values there when the kernel/driver supports them. Keep NVIDIA rows from
+# nvidia-smi and only use this path for NVIDIA when that query was unavailable.
+for card in /sys/class/drm/card*; do
+  [ -d "$card/device" ] || continue
+  card_name=$(printf "%s\n" "$card" | sed 's#.*/card##')
+  card_number="$card_name"
+  case "$card_number" in
+    ''|*[!0-9]*) continue ;;
+  esac
+  [ -r "$card/device/vendor" ] || continue
+  vendor_id=$(cat "$card/device/vendor" 2>/dev/null)
+  case "$vendor_id" in
+    0x1002|0X1002) vendor="AMD" ;;
+    0x8086|0X8086) vendor="Intel" ;;
+    0x10de|0X10DE) vendor="NVIDIA" ;;
+    *) vendor="-" ;;
+  esac
+  if [ "$vendor" = "NVIDIA" ] && [ -n "$nvidia_gpu_info" ]; then
+    continue
+  fi
+  slot=$(sed -n 's/^PCI_SLOT_NAME=//p' "$card/device/uevent" 2>/dev/null | head -n 1)
+  gpu_line=$(lspci -s "$slot" 2>/dev/null | head -n 1)
+  model=$(printf "%s\n" "$gpu_line" | awk '
+    {{
+      line=$0
+      sub(/^[[:xdigit:]:.]+[[:space:]]+[^:]+:[[:space:]]*/, "", line)
+      sub(/[[:space:]]+\[[[:xdigit:]:]+\]$/, "", line)
+      print line
+      exit
+    }}
+  ')
+  [ -n "$model" ] || model="$vendor GPU"
+  driver=$(readlink "$card/device/driver" 2>/dev/null | sed 's#.*/##')
+  [ -n "$driver" ] || driver="-"
+
+  gpu_usage="-"
+  if [ -r "$card/device/gpu_busy_percent" ]; then
+    raw_usage=$(cat "$card/device/gpu_busy_percent" 2>/dev/null)
+    case "$raw_usage" in
+      ''|*[!0-9.]*) ;;
+      *) gpu_usage=$(awk -v value="$raw_usage" 'BEGIN {{ if (value < 0) value=0; if (value > 100) value=100; printf "%.1f%%", value }}') ;;
+    esac
+  elif [ "$vendor" = "Intel" ]; then
+    gpu_usage=$(read_intel_gpu_usage "$card")
+  fi
+  gpu_memory=$(read_gpu_memory_value "$card" "mem_info_vram_total")
+  gpu_memory_used=$(read_gpu_memory_value "$card" "mem_info_vram_used")
+  gpu_temperature=$(read_gpu_temperature_value "$card")
+  gpu_power=$(read_gpu_power_value "$card" "current")
+  gpu_power_limit=$(read_gpu_power_value "$card" "limit")
+  printf "%s|%s|%s|%s|%s|%s|%s|%s|%s\n" \
+    "$model" "$vendor" "$driver" "$gpu_memory" "$gpu_usage" "$gpu_memory_used" \
+    "$gpu_temperature" "$gpu_power" "$gpu_power_limit" >> "$gpu_info_file"
+done
+
+if [ ! -s "$gpu_info_file" ]; then
+  # Last-resort hardware discovery for systems without DRM sysfs.
+  run_bounded 1 lspci 2>/dev/null | awk '
     BEGIN {{ IGNORECASE=1 }}
     /VGA compatible controller|3D controller|Display controller/ {{
       line=$0
       sub(/^[[:xdigit:]:.]+[[:space:]]+[^:]+: /, "", line)
       vendor=line
       sub(/[[:space:]].*$/, "", vendor)
-      printf "%s|%s|-|-\n", line, (vendor == "" ? "-" : vendor)
+      printf "%s|%s|-|-|-|-|-|-|-\n", line, (vendor == "" ? "-" : vendor)
     }}
-  ')
+  ' >> "$gpu_info_file"
 fi
+gpu_info=$(cat "$gpu_info_file" 2>/dev/null)
 ifaces=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); if (name != "lo") {{ if (out != "") out=out ","; out=out name }}}} END {{print out}}' /proc/net/dev 2>/dev/null)
 active_iface=$(awk '$2 == 00000000 {{print $1; exit}}' /proc/net/route 2>/dev/null)
 [ -z "$active_iface" ] && active_iface=$(echo "$ifaces" | awk -F, '{{print $1}}')
@@ -1354,7 +1697,6 @@ rx1=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[
 tx1=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[10]}} END {{printf "%.0f", sum+0}}' /proc/net/dev 2>/dev/null)
 before_file="/tmp/fileterm-if-before-$$"
 after_file="/tmp/fileterm-if-after-$$"
-trap 'rm -f "$before_file" "$after_file"' 0 1 2 15
 awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") printf "%s|%.0f|%.0f\n", name, values[2], values[10]}}' /proc/net/dev 2>/dev/null > "$before_file"
 sleep "$sleep_interval"
 rx2=$(awk -F: 'NR>2 {{name=$1; gsub(/[[:space:]]/,"",name); split($2, values, /[[:space:]]+/); if (name != "lo") sum += values[2]}} END {{printf "%.0f", sum+0}}' /proc/net/dev 2>/dev/null)
@@ -1377,18 +1719,84 @@ else
 fi
 disk=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK/%sK\n", $6, $4, $2}}' | head -n 12)
 filesystems=$(printf "%s\n" "$df_output" | awk 'NR>1 {{printf "%s|%sK|%sK|%s|%sK|%s\n", $1, $2, $3, $5, $4, $6}}' | head -n 20)
-# 进程采集：参考 meatshell 的做法，让 ps 直接按 pcpu 降序排序后取 top 40，
-# Rust 端按到达顺序逐行解析，不做 comm 分组。这样：
-# 1. 高 CPU 进程排在最前面，shell 端排序比 Rust 端再排更省资源；
-# 2. 每个 PID 一行，能看到同名进程的不同实例（如 nginx 多个 worker）；
-# 3. 用 args 而不是 comm，命令列信息量更大，能区分同名进程的不同启动参数。
-# 输出格式：pid|user|rss(M)|pcpu|pmem|args（args 内部空格保留，cut 截断到 200 字符）
-# pcpu 已在 awk 中除以 logical_cpu_count，归一化为「占总 CPU 资源百分比」，
-# 与 Windows 端语义对齐（0-100，单核满载不再 >100）。
-if has_bounded_runner; then
-  procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu_pct, $5, substr(args,1,200)}}')
+# 进程采集：按两次 /proc/<pid>/stat 采样计算窗口内的瞬时 CPU 占用。
+# ps 的 %CPU 是进程生命周期平均值，长时间运行的进程在突然升高时会严重漏报；
+# 同时它按单核百分比返回，多核机器还会出现与总 CPU 仪表不一致的问题。
+# 这里用进程 tick 增量 / 全局 CPU tick 增量，直接得到 0-100 的整机占比。
+if [ -s "$process_ticks_before_file" ] && [ -s "$process_ticks_after_file" ] && [ "$diff_total" -gt 0 ]; then
+  # A process delta larger than the global delta means the two /proc snapshots
+  # are not comparable (PID reuse, a broken proc reader, or a too-short sample).
+  # Reject the whole tick sample and use ps below rather than emitting values
+  # such as thousands of percent.
+  if awk -F'|' -v diff_total="$diff_total" '
+    NR==FNR {{ before[$1]=$2; next }}
+    {{
+      if (!($1 in before)) next
+      delta=$2-before[$1]
+      if (delta < 0 || delta > diff_total) {{ invalid=1; next }}
+      # Keep processes that consumed no CPU during this short sample too.
+      # Filtering them out makes the top-process list randomly shrink to two
+      # or three rows whenever fewer processes receive a tick in the window.
+      printf "%s|%.4f\n", $1, delta * 100 / diff_total
+      matched++
+    }}
+    END {{ if (matched == 0 || invalid) exit 1 }}
+  ' "$process_ticks_before_file" "$process_ticks_after_file" > "$process_cpu_tmp_file"; then
+    mv "$process_cpu_tmp_file" "$process_cpu_file"
+  else
+    rm -f "$process_cpu_tmp_file" "$process_cpu_file"
+  fi
+fi
+
+if [ -s "$process_cpu_file" ]; then
+  procs=$(ps -eo pid=,user=,rss=,pmem=,args= 2>/dev/null | awk -v cpu_file="$process_cpu_file" '
+    BEGIN {{
+      while ((getline line < cpu_file) > 0) {{
+        split(line, values, "|")
+        cpu[values[1]]=values[2] + 0
+      }}
+      close(cpu_file)
+    }}
+    NF >= 5 {{
+      pid=$1
+      if (!(pid in cpu)) next
+      args=$5
+      for (i=6; i<=NF; i++) args=args" "$i
+      command_name=args
+      sub(/^[[:space:]]*/, "", command_name)
+      split(command_name, command_parts, /[[:space:]]+/)
+      comm=command_parts[1]
+      sub(/^.*\//, "", comm)
+      if (comm == "ps" || comm == "awk" || comm == "bash" || comm == "sleep" || comm == "sh" || comm == "powershell" || comm == "pwsh") next
+      if (cpu[pid] < 0 || cpu[pid] > 100) next
+      row_count++
+      scores[row_count]=cpu[pid]
+      rows[row_count]=sprintf("%s|%s|%.1fM|%.1f|%s|%s", pid, $2, $3/1024, cpu[pid], $4, substr(args, 1, 200))
+    }}
+    END {{
+      for (rank=1; rank<=40 && rank<=row_count; rank++) {{
+        best=0
+        best_score=-1
+        for (i=1; i<=row_count; i++) {{
+          if (!used[i] && scores[i] > best_score) {{
+            best=i
+            best_score=scores[i]
+          }}
+        }}
+        if (best == 0) break
+        print rows[best]
+        used[best]=1
+      }}
+    }}
+  ')
 else
-  procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu_pct, $5, substr(args,1,200)}}')
+  # fallback：无法读取 /proc 进程 tick 或快照校验失败时，使用 ps 的
+  # 生命周期平均值。ps 的 %CPU 按单核百分比返回，这里归一化到整机 0-100。
+  if has_bounded_runner; then
+    procs=$(run_bounded 1 ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu=$4+0; if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count; if (cpu < 0) cpu=0; if (cpu > 100) cpu=100; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu, $5, substr(args,1,200)}}')
+  else
+    procs=$(ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu 2>/dev/null | head -n 40 | awk -v logical_cpu_count="$logical_cpu_count" 'NF >= 6 {{rss=$3/1024; args=$6; for(i=7;i<=NF;i++) args=args" "$i; cpu=$4+0; if (logical_cpu_count + 0 > 0) cpu=cpu/logical_cpu_count; if (cpu < 0) cpu=0; if (cpu > 100) cpu=100; printf "%s|%s|%.1fM|%.1f|%s|%s\n", $1, $2, rss, cpu, $5, substr(args,1,200)}}')
+  fi
 fi
 if [ -z "$procs" ]; then
   # fallback：极简 ps（如某些 BusyBox 不支持 --sort 或 -o args=）
@@ -1410,6 +1818,7 @@ echo "__UPTIME_SECONDS__$uptime_seconds"
 echo "__LOAD__$load"
 echo "__CPU__$cpu_pct"
 echo "__CPU_USAGE__$cpu_user_pct|$cpu_system_pct|$cpu_nice_pct|$cpu_idle_pct|$cpu_iowait_pct|$cpu_irq_pct|$cpu_softirq_pct|$cpu_steal_pct"
+echo "__CPU_TEMPERATURE__$cpu_temperature"
 echo "__MEM__$mem"
 echo "__MEM_BYTES__$mem_bytes"
 echo "__SWAP__$swap"
@@ -1436,7 +1845,7 @@ awk -F'|' -v sample_ms="$sample_ms" '
     printf "%s|%.0f|%.0f|%d|%d\n", $1, curr_rx, curr_tx, rx_rate, tx_rate
   }}
 ' "$before_file" "$after_file"
-rm -f "$before_file" "$after_file"
+rm -f "$before_file" "$after_file" "$process_ticks_before_file" "$process_ticks_after_file" "$process_cpu_file" "$process_cpu_tmp_file" "$gpu_info_file"
 echo "__IFACE_RATES_END__"
 echo "__DISK_START__"
 echo "$disk"
@@ -1475,6 +1884,21 @@ function Format-FileTermBytes([double]$Bytes) {
     return [string]::Format($culture, '{0:0} B', $Bytes)
 }
 
+function Get-CpuTemperatureCelsius {
+    try {
+        $zones = @(Get-CimInstance -Namespace 'root/wmi' -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue)
+        $values = @($zones | ForEach-Object {
+            if ([double]$_.CurrentTemperature -gt 0) {
+                ([double]$_.CurrentTemperature / 10) - 273.15
+            }
+        } | Where-Object { $_ -gt -50 -and $_ -lt 150 })
+        if ($values.Count -gt 0) {
+            return [Math]::Round((($values | Measure-Object -Average).Average), 1)
+        }
+    } catch {}
+    return $null
+}
+
 $os = Get-CimInstance Win32_OperatingSystem
 $cs = Get-CimInstance Win32_ComputerSystem
 $cpu = Get-CimInstance Win32_Processor
@@ -1492,6 +1916,7 @@ $swapPct   = if ($swapTotal -gt 0) { [Math]::Round($swapUsed * 100 / $swapTotal)
 $cpu1 = (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 0.3).CounterSamples
 Start-Sleep -Milliseconds 500
 $cpuPct = if ($cpu1) { [Math]::Round($cpu1.CookedValue) } else { 0 }
+$cpuTemperature = Get-CpuTemperatureCelsius
 $logicalProcessorCount = [Math]::Max(1, [Environment]::ProcessorCount)
 $systemLoad = [string]::Format(
     [Globalization.CultureInfo]::InvariantCulture,
@@ -1527,15 +1952,69 @@ foreach ($processor in @($cpu)) {
 }
 if ($cpuRows.Count -eq 0) { $cpuRows += ('-|{0}|-|-|-' -f $cpuCores) }
 
-$gpuRows = @()
-foreach ($adapter in @(Get-CimInstance Win32_VideoController)) {
-    $gpuName = ([string]$adapter.Name).Trim()
-    if (-not $gpuName) { continue }
-    $gpuVendor = ([string]$adapter.AdapterCompatibility).Trim()
-    $gpuDriver = ([string]$adapter.DriverVersion).Trim()
-    $gpuMemory = if ([double]$adapter.AdapterRAM -gt 0) { Format-FileTermBytes ([double]$adapter.AdapterRAM) } else { '-' }
-    $gpuRows += ('{0}|{1}|{2}|{3}' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory)
+function Convert-GpuMetricText([object]$Value, [string]$Unit) {
+    $text = ([string]$Value).Trim()
+    if (-not $text -or $text -eq '-') { return '-' }
+    return $text + ' ' + $Unit
 }
+
+function Get-GpuRuntimeMap {
+    $runtime = @{}
+    try {
+        $runtimeLines = @(nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits 2>$null)
+        foreach ($line in $runtimeLines) {
+            $parts = @(([string]$line) -split ',')
+            if ($parts.Count -lt 7) { continue }
+            $name = ([string]$parts[0]).Trim()
+            if (-not $name) { continue }
+            $runtime[$name.ToLowerInvariant()] = @{
+                usage = Convert-GpuMetricText $parts[1] '%'
+                memoryUsed = Convert-GpuMetricText $parts[2] 'MiB'
+                memoryTotal = Convert-GpuMetricText $parts[3] 'MiB'
+                temperature = Convert-GpuMetricText $parts[4] 'C'
+                powerUsage = Convert-GpuMetricText $parts[5] 'W'
+                powerLimit = Convert-GpuMetricText $parts[6] 'W'
+            }
+        }
+    } catch {}
+    return $runtime
+}
+
+function Get-GpuRows([object[]]$Adapters) {
+    $runtime = Get-GpuRuntimeMap
+    $rows = @()
+    foreach ($adapter in @($Adapters)) {
+        $gpuName = ([string]$adapter.Name).Trim()
+        if (-not $gpuName) { continue }
+        $gpuVendor = ([string]$adapter.AdapterCompatibility).Trim()
+        if (-not $gpuVendor) { $gpuVendor = '-' }
+        $gpuDriver = ([string]$adapter.DriverVersion).Trim()
+        if (-not $gpuDriver) { $gpuDriver = '-' }
+        $gpuMemory = if ([double]$adapter.AdapterRAM -gt 0) { Format-FileTermBytes ([double]$adapter.AdapterRAM) } else { '-' }
+        $runtimeEntry = $null
+        $gpuNameKey = $gpuName.ToLowerInvariant()
+        if ($runtime.ContainsKey($gpuNameKey)) {
+            $runtimeEntry = $runtime[$gpuNameKey]
+        } else {
+            foreach ($runtimeName in @($runtime.Keys)) {
+                if ($gpuNameKey.Contains([string]$runtimeName) -or ([string]$runtimeName).Contains($gpuNameKey)) {
+                    $runtimeEntry = $runtime[$runtimeName]
+                    break
+                }
+            }
+        }
+        if ($runtimeEntry) {
+            if ($gpuMemory -eq '-' -and $runtimeEntry.memoryTotal -ne '-') { $gpuMemory = $runtimeEntry.memoryTotal }
+            $rows += ('{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory, $runtimeEntry.usage, $runtimeEntry.memoryUsed, $runtimeEntry.temperature, $runtimeEntry.powerUsage, $runtimeEntry.powerLimit)
+        } else {
+            $rows += ('{0}|{1}|{2}|{3}|-|-|-|-|-' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory)
+        }
+    }
+    return $rows
+}
+
+$gpuAdapters = @(Get-CimInstance Win32_VideoController)
+$gpuRows = @(Get-GpuRows -Adapters $gpuAdapters)
 
 $disks = Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3'
 $diskLines = @()
@@ -1596,6 +2075,7 @@ Write-Output ('__LOAD__' + $systemLoad)
 Write-Output '__LOAD_UNIT__busy-logical-processors'
 Write-Output ('__CPU__' + $cpuPct)
 Write-Output ('__CPU_USAGE__{0}|{1}|0|{2}|0|0|0|0' -f $cpuPct, $cpuPct, [Math]::Max(0, 100 - $cpuPct))
+if ($null -ne $cpuTemperature) { Write-Output ('__CPU_TEMPERATURE__' + $cpuTemperature) } else { Write-Output '__CPU_TEMPERATURE__' }
 Write-Output ('__MEM__{0}|{1}|{2}|0|0|0' -f [Math]::Round($memUsed / 1MB), [Math]::Round($memTotal / 1MB), $memPct)
 Write-Output ('__MEM_BYTES__{0}|{1}|{2}|{3}|0|0|0' -f $memUsed, $memTotal, $memFree, $memPct)
 Write-Output ('__SWAP__{0}|{1}|{2}' -f [Math]::Round($swapUsed / 1MB), [Math]::Round($swapTotal / 1MB), $swapPct)
@@ -1660,6 +2140,7 @@ while ($true) {
     if ($cpuCounter) {
         try { $cpuPct = [Math]::Round($cpuCounter.NextValue()) } catch {}
     }
+    $cpuTemperature = Get-CpuTemperatureCelsius
     if ($memoryAvailableCounter) {
         try { $memFree = [double]$memoryAvailableCounter.NextValue() } catch {}
     }
@@ -1718,6 +2199,7 @@ while ($true) {
             $procLines += ('{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $cpuPct, $_.ProcessName)
         }
     $previousProcCpuTimes = $currentProcCpuTimes
+    $gpuRows = @(Get-GpuRows -Adapters $gpuAdapters)
 
     $waitMs = [Math]::Round($nextEmitMs - [double]$sampleClock.ElapsedMilliseconds)
     if ($waitMs -gt 0) { Start-Sleep -Milliseconds $waitMs }
@@ -1739,6 +2221,7 @@ while ($true) {
     Write-Output '__LOAD_UNIT__busy-logical-processors'
     Write-Output ('__CPU__' + $cpuPct)
     Write-Output ('__CPU_USAGE__0|{0}|0|{1}|0|0|0|0' -f $cpuPct, [Math]::Max(0, 100 - $cpuPct))
+    if ($null -ne $cpuTemperature) { Write-Output ('__CPU_TEMPERATURE__' + $cpuTemperature) } else { Write-Output '__CPU_TEMPERATURE__' }
     Write-Output ('__MEM__{0}|{1}|{2}|0|0|0' -f [Math]::Round($memUsed / 1MB), [Math]::Round($memTotal / 1MB), $memPct)
     Write-Output ('__MEM_BYTES__{0}|{1}|{2}|{3}|0|0|0' -f $memUsed, $memTotal, $memFree, $memPct)
     Write-Output ('__SWAP__{0}|{1}|{2}' -f [Math]::Round($swapUsed / 1MB), [Math]::Round($swapTotal / 1MB), $swapPct)
@@ -1843,6 +2326,8 @@ mod tests {
         let command = build_posix_metrics_command("linux");
 
         assert!(command.contains(r#"printf "%s|%sK/%sK\n"#));
+        assert!(command.contains("read_cpu_temperature()"));
+        assert!(command.contains("__CPU_TEMPERATURE__"));
         // 进程输出格式：pid|user|rss(M)|pcpu(已归一化)|pmem|args
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n"#));
         assert!(command.contains("getconf _NPROCESSORS_ONLN"));
@@ -1853,28 +2338,74 @@ mod tests {
     }
 
     #[test]
-    fn posix_metrics_command_sorts_processes_by_pcpu_at_shell_level() {
-        // 参考 meatshell：让 ps 直接 --sort=-pcpu 降序输出 top 40，Rust 端
-        // 不再分组或排序。验证 shell 命令包含关键片段。
+    fn posix_metrics_command_collects_amd_and_intel_drm_runtime_metrics() {
         let command = build_posix_metrics_command("linux");
 
-        // ps 直接按 pcpu 降序取 top 40
-        assert!(command.contains("ps -eo pid=,user=,rss=,pcpu=,pmem=,args= --sort=-pcpu"));
-        assert!(command.contains("head -n 40"));
-        // awk 接收 logical_cpu_count 并把 pcpu 归一化为总 CPU 百分比
-        assert!(command.contains(r#"awk -v logical_cpu_count="$logical_cpu_count""#));
-        assert!(command
-            .contains(r#"cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4"#));
+        assert!(command.contains("nvidia_gpu_info"));
+        assert!(command.contains("gpu_busy_percent"));
+        assert!(command.contains("mem_info_vram_total"));
+        assert!(command.contains("mem_info_vram_used"));
+        assert!(command.contains("power1_average"));
+        assert!(command.contains("power1_cap"));
+        assert!(command.contains("0x1002|0X1002"));
+        assert!(command.contains("0x8086|0X8086"));
+        assert!(command.contains("i915/xe"));
+        assert!(command.contains("intel_gpu_top -J -s 1000 -o - -d"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_metrics_command_is_valid_sh_syntax() {
+        let status = std::process::Command::new("sh")
+            .args(["-n", "-c", &build_posix_metrics_command("linux")])
+            .status()
+            .expect("shell syntax checker should start");
+
+        assert!(
+            status.success(),
+            "generated POSIX metrics script is invalid"
+        );
+    }
+
+    #[test]
+    fn parser_reads_signed_cpu_temperature_from_sensors() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__CPU__10\n__CPU_TEMPERATURE__+46.0\n",
+            "linux",
+        );
+
+        assert_eq!(metrics["cpuTemperatureCelsius"].as_f64(), Some(46.0));
+    }
+
+    #[test]
+    fn posix_metrics_command_samples_instantaneous_process_cpu() {
+        // 进程 CPU 必须使用 /proc tick 增量，不能依赖 ps 的生命周期平均值。
+        let command = build_posix_metrics_command("linux");
+
+        assert!(command.contains("read_process_ticks()"));
+        assert!(command.contains("process_ticks_before_file"));
+        assert!(command.contains("process_ticks_after_file"));
+        assert!(command.contains("process_cpu_tmp_file"));
+        assert!(command.contains("delta * 100 / diff_total"));
+        assert!(command.contains("delta > diff_total"));
+        assert!(
+            command.contains("($1 in before) && delta >= 0")
+                || command.contains("if (!($1 in before)) next")
+        );
+        assert!(command.contains("ps -eo pid=,user=,rss=,pmem=,args="));
+        assert!(command.contains("rank<=40 && rank<=row_count"));
+        assert!(command.contains("if (comm == \"ps\" || comm == \"awk\""));
+        assert!(
+            !command.contains("cpu_pct=(logical_cpu_count + 0 > 0) ? $4 / logical_cpu_count : $4")
+        );
+        assert!(command.contains("cpu=cpu/logical_cpu_count"));
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n""#));
-        // 不应再有进程相关的 sort 命令（cpuinfo/disk 去重可能仍用 awk）
-        assert!(!command.contains("sort -t'|' -k2,2rn"));
-        assert!(!command.contains("sort -t'|' -k1,1rn"));
     }
 
     #[test]
     fn parser_keeps_disk_and_process_rows_separate() {
         // 新格式：pid|user|rss(M)|pcpu|pmem|args
-        // Rust 端不排序，按 shell 端 --sort=-pcpu 的到达顺序保留
+        // 解析器按输入顺序保留行；构造采集命令时由 shell 端按瞬时 CPU 排序。
         let metrics = parse_system_metrics(
             "__PLATFORM__linux\n__CPU__10\n__MEM__1|2|50|0|0|0\n__MEM_BYTES__1048576|2097152|1048576|50|0|0|0\n__SWAP__0|0|0\n__SWAP_BYTES__0|0|0|0\n__CPU_USAGE__1|2|0|97|0|0|0|0\n__DISK_START__\n/|10K/20K\n/dev|30K/40K\n__DISK_END__\n__PROCS_START__\n1|root|1.0M|0.1|0.5|/usr/lib/systemd/systemd\n2|root|2.0M|0.2|1.0|/usr/sbin/sshd -D\n__PROCS_END__\n",
             "linux",
@@ -1893,6 +2424,27 @@ mod tests {
     }
 
     #[test]
+    fn parser_backfills_legacy_disk_rows_from_filesystem_rows() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__FILESYSTEMS_START__\n/dev/sda1|100 GB|40 GB|40%|60 GB|/\n__FILESYSTEMS_END__\n",
+            "linux",
+        );
+
+        assert_eq!(metrics["diskRows"][0]["path"], "/");
+        assert_eq!(metrics["diskRows"][0]["usage"], "60 GB/100 GB");
+    }
+
+    #[test]
+    fn parser_reads_optional_cpu_temperature() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__CPU__10\n__CPU_TEMPERATURE__57.5\n",
+            "linux",
+        );
+
+        assert_eq!(metrics["cpuTemperatureCelsius"].as_f64(), Some(57.5));
+    }
+
+    #[test]
     fn parser_filters_transient_collector_processes() {
         // ps/awk/bash 等采集器自身进程应被过滤，不显示给用户
         let metrics = parse_system_metrics(
@@ -1906,13 +2458,33 @@ mod tests {
     }
 
     #[test]
+    fn parser_rejects_invalid_or_unbounded_process_cpu_samples() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__PROCS_START__\n100|root|1.0M|40666.7|0.5|/usr/bin/bad-sample\n101|root|2.0M|12.3|1.0|/usr/bin/valid\n102|root|3.0M|NaN|1.0|/usr/bin/nan-sample\n__PROCS_END__\n",
+            "linux",
+        );
+
+        let procs = metrics["topProcesses"].as_array().unwrap();
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0]["pid"], 101);
+        assert_eq!(procs[0]["cpu"], "12.3");
+    }
+
+    #[test]
     fn windows_metrics_command_emits_electron_compatible_load() {
         let command = build_windows_metrics_command();
 
         assert!(command.contains("($cpuPct * $logicalProcessorCount) / 100"));
         assert!(command.contains("Write-Output ('__LOAD__' + $systemLoad)"));
         assert!(command.contains("Write-Output '__LOAD_UNIT__busy-logical-processors'"));
+        assert!(command.contains("Get-CpuTemperatureCelsius"));
+        assert!(command.contains("__CPU_TEMPERATURE__"));
         assert!(command.contains("Get-CimInstance Win32_VideoController"));
+        assert!(command.contains("utilization.gpu"));
+        assert!(command.contains("memory.used"));
+        assert!(command.contains("temperature.gpu"));
+        assert!(command.contains("$rows += ('{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}'"));
+        assert!(command.contains("return $rows"));
         assert!(command.contains("$processor.L3CacheSize"));
         assert!(command.contains("$fsLines   +="));
 
@@ -1940,6 +2512,24 @@ mod tests {
         assert_eq!(metrics["gpuInfoRows"][0]["memory"], "4.0 GB");
         assert_eq!(metrics["fileSystemRows"][0]["mountPoint"], "C:");
         assert_eq!(metrics["fileSystemRows"][0]["usagePercent"], "86%");
+    }
+
+    #[test]
+    fn parser_keeps_optional_gpu_runtime_metrics() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__linux\n__GPUINFO_START__\nRTX 4090|NVIDIA|550.54|8.0 GB|75|4096 MiB|64 C|120.0 W|200.0 W\n__GPUINFO_END__\n",
+            "linux",
+        );
+
+        let gpu = &metrics["gpuInfoRows"][0];
+        assert_eq!(gpu["model"], "RTX 4090");
+        assert_eq!(gpu["usagePercent"], 75.0);
+        assert_eq!(gpu["memory"], "8.0 GB");
+        assert_eq!(gpu["memoryUsed"], "4.0 GB");
+        assert_eq!(gpu["memoryPercent"], 50.0);
+        assert_eq!(gpu["temperatureCelsius"], 64.0);
+        assert_eq!(gpu["powerUsage"], "120.0 W");
+        assert_eq!(gpu["powerLimit"], "200.0 W");
     }
 
     #[test]

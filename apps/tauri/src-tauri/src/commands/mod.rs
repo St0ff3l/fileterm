@@ -34,6 +34,14 @@ const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 /// `cmd_rx.recv()` 会返回 None，自然走清理路径。
 const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// The first local PTY batch must be reflected in the snapshot returned by
+/// `app_open_local_terminal` when possible. Without this short readiness
+/// window, the renderer can mount with only "Starting local shell..." while
+/// the first Windows PowerShell prompt was emitted before its global terminal
+/// data channel subscribed. Shells that intentionally stay silent are still
+/// allowed to connect after the timeout.
+const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Let a child-window close command resolve its IPC callback before destroying
 /// the calling WebView. Destroying synchronously makes WebView2 report a
 /// missing callback id and can leave renderer cleanup half-finished.
@@ -79,6 +87,10 @@ pub struct SshConnectionDefaults {
     pub enable_resource_monitoring: bool,
     #[serde(default = "default_resource_monitoring_interval_seconds")]
     pub resource_monitoring_interval_seconds: u64,
+    #[serde(default = "default_resource_monitoring_metrics")]
+    pub resource_monitoring_metrics: Vec<String>,
+    #[serde(default = "default_resource_monitoring_metric_order")]
+    pub resource_monitoring_metric_order: Vec<String>,
     #[serde(default = "default_reconnect_mode")]
     pub reconnect_mode: String,
     #[serde(default = "default_legacy_algorithms")]
@@ -92,6 +104,8 @@ pub struct SshConnectionDefaultsInput {
     pub enable_exec_channel: Option<bool>,
     pub enable_resource_monitoring: Option<bool>,
     pub resource_monitoring_interval_seconds: Option<u64>,
+    pub resource_monitoring_metrics: Option<Vec<String>>,
+    pub resource_monitoring_metric_order: Option<Vec<String>>,
     pub reconnect_mode: Option<String>,
     pub legacy_algorithms: Option<bool>,
 }
@@ -154,6 +168,8 @@ impl Default for SshConnectionDefaults {
             enable_exec_channel: default_enable_exec_channel(),
             enable_resource_monitoring: default_enable_resource_monitoring(),
             resource_monitoring_interval_seconds: default_resource_monitoring_interval_seconds(),
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             reconnect_mode: default_reconnect_mode(),
             legacy_algorithms: default_legacy_algorithms(),
         }
@@ -219,6 +235,10 @@ pub struct ThemeSemanticColors {
     pub diff_removed: String,
     pub skill: String,
     pub keyword: String,
+    #[serde(default)]
+    pub sftp: String,
+    #[serde(default)]
+    pub ftp: String,
     /// Newer semantic controls are optional on disk so older theme exports
     /// can still be deserialized and filled by `normalize_theme_config`.
     #[serde(default)]
@@ -259,6 +279,8 @@ pub struct ThemeBody {
 pub struct ThemeConfig {
     pub schema_version: String,
     pub code_theme_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_theme_id: Option<String>,
     pub variant: String,
     pub theme: ThemeBody,
 }
@@ -290,6 +312,7 @@ fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
     ThemeConfig {
         schema_version: "codex-theme-v1".to_string(),
         code_theme_id: "codex".to_string(),
+        base_theme_id: Some("codex".to_string()),
         variant: if is_light { "light" } else { "dark" }.to_string(),
         theme: ThemeBody {
             accent: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
@@ -305,12 +328,14 @@ fn codex_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
                 skill: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
-                secondary: if is_light { "#8b5cf6" } else { "#b06dff" }.to_string(),
+                sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
+                ftp: if is_light { "#924ff7" } else { "#b06dff" }.to_string(),
+                secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#667085" } else { "#a9a9b2" }.to_string(),
                 info: if is_light { "#339cff" } else { "#0169cc" }.to_string(),
                 warning: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
                 error: if is_light { "#ba2623" } else { "#e02e2a" }.to_string(),
-                success: "#00a240".to_string(),
+                success: if is_light { "#059669" } else { "#34d399" }.to_string(),
             },
             surface: if is_light { "#ffffff" } else { "#111111" }.to_string(),
             surface_secondary: if is_light { "#ffffff" } else { "#1b1b1b" }.to_string(),
@@ -342,9 +367,10 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
     ThemeConfig {
         schema_version: "codex-theme-v1".to_string(),
         code_theme_id: "fileterm".to_string(),
+        base_theme_id: Some("fileterm".to_string()),
         variant: if is_light { "light" } else { "dark" }.to_string(),
         theme: ThemeBody {
-            accent: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
+            accent: if is_light { "#3b82f6" } else { "#1687e8" }.to_string(),
             contrast: if is_light { 52 } else { 60 },
             fonts: ThemeFonts {
                 code: None,
@@ -357,6 +383,8 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
                 diff_removed: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
                 skill: if is_light { "#7c3aed" } else { "#b06dff" }.to_string(),
                 keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
+                ftp: if is_light { "#9333ea" } else { "#c084fc" }.to_string(),
                 secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#5e5e61" } else { "#9b9b9b" }.to_string(),
                 info: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
@@ -424,8 +452,18 @@ fn is_theme_font(value: &str) -> bool {
 fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig {
     let variant = if variant == "light" { "light" } else { "dark" };
     let trimmed_id = config.code_theme_id.trim();
-    let is_codex_theme = trimmed_id == "codex" || trimmed_id.starts_with("codex-");
+    let is_codex_code_theme = trimmed_id == "codex" || trimmed_id.starts_with("codex-");
     let is_fileterm_theme = matches!(trimmed_id, "fileterm" | "fileterm-dark" | "fileterm-light");
+    let base_theme_id = if is_codex_code_theme {
+        "codex"
+    } else if is_fileterm_theme {
+        "fileterm"
+    } else if matches!(config.base_theme_id.as_deref(), Some("codex")) {
+        "codex"
+    } else {
+        "fileterm"
+    };
+    let is_codex_theme = base_theme_id == "codex";
     let fallback = if is_codex_theme {
         codex_theme_config_for_variant(variant)
     } else {
@@ -433,6 +471,7 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
     };
     config.schema_version = "codex-theme-v1".to_string();
     config.variant = variant.to_string();
+    config.base_theme_id = Some(base_theme_id.to_string());
     if trimmed_id.is_empty() || config.code_theme_id.len() > 256 {
         config.code_theme_id = fallback.code_theme_id;
     } else if is_fileterm_theme {
@@ -443,6 +482,20 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         config.code_theme_id = trimmed_id.to_string();
     }
     config.theme.contrast = config.theme.contrast.min(100);
+    let migrate_legacy_codex_status_colors = is_codex_theme
+        && config.theme.overrides.is_empty()
+        && config
+            .theme
+            .semantic_colors
+            .sftp
+            .trim()
+            .eq_ignore_ascii_case("#0169cc")
+        && config
+            .theme
+            .semantic_colors
+            .success
+            .trim()
+            .eq_ignore_ascii_case("#00a240");
     normalize_theme_color(&mut config.theme.accent, &fallback.theme.accent);
     normalize_theme_color(&mut config.theme.ink, &fallback.theme.ink);
     normalize_theme_color(&mut config.theme.surface, &fallback.theme.surface);
@@ -470,6 +523,23 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         &mut config.theme.semantic_colors.keyword,
         &fallback.theme.semantic_colors.keyword,
     );
+    if migrate_legacy_codex_status_colors {
+        config.theme.semantic_colors.sftp = fallback.theme.semantic_colors.sftp.clone();
+    } else {
+        normalize_theme_color(
+            &mut config.theme.semantic_colors.sftp,
+            &fallback.theme.semantic_colors.sftp,
+        );
+    }
+    if is_theme_hex_color(config.theme.semantic_colors.ftp.trim()) {
+        config.theme.semantic_colors.ftp = config.theme.semantic_colors.ftp.trim().to_uppercase();
+    } else if !is_fileterm_theme && is_theme_hex_color(config.theme.semantic_colors.skill.trim()) {
+        // Preserve the old behavior for saved themes created before FTP had
+        // its own persisted semantic color.
+        config.theme.semantic_colors.ftp = config.theme.semantic_colors.skill.trim().to_uppercase();
+    } else {
+        config.theme.semantic_colors.ftp = fallback.theme.semantic_colors.ftp.clone();
+    }
     normalize_theme_color(
         &mut config.theme.semantic_colors.secondary,
         &fallback.theme.semantic_colors.secondary,
@@ -490,10 +560,14 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
         &mut config.theme.semantic_colors.error,
         &fallback.theme.semantic_colors.error,
     );
-    normalize_theme_color(
-        &mut config.theme.semantic_colors.success,
-        &fallback.theme.semantic_colors.success,
-    );
+    if migrate_legacy_codex_status_colors {
+        config.theme.semantic_colors.success = fallback.theme.semantic_colors.success.clone();
+    } else {
+        normalize_theme_color(
+            &mut config.theme.semantic_colors.success,
+            &fallback.theme.semantic_colors.success,
+        );
+    }
     config.theme.overrides.retain(|key, value| {
         let valid_key = !key.trim().is_empty() && key.len() <= 128;
         let valid_color = is_theme_hex_color(value.trim());
@@ -638,15 +712,35 @@ fn normalize_theme_config(mut config: ThemeConfig, variant: &str) -> ThemeConfig
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct SavedTheme {
+    pub id: String,
+    pub name: String,
+    pub config: ThemeConfig,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub variants: BTreeMap<String, ThemeConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub theme: String,
     pub locale: String,
     #[serde(default = "default_theme_config")]
     pub theme_config: ThemeConfig,
+    #[serde(default)]
+    pub custom_themes: Vec<SavedTheme>,
     #[serde(default = "default_auto_check_updates")]
     pub auto_check_updates: bool,
+    #[serde(default = "default_update_channel")]
+    pub update_channel: String,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
+    #[serde(default = "default_file_panel_remember_ratio")]
+    pub file_panel_remember_ratio: bool,
+    #[serde(default = "default_resource_monitoring_metrics")]
+    pub resource_monitoring_metrics: Vec<String>,
+    #[serde(default = "default_resource_monitoring_metric_order")]
+    pub resource_monitoring_metric_order: Vec<String>,
     #[serde(default)]
     pub connection_defaults: SshConnectionDefaults,
     #[serde(default)]
@@ -669,8 +763,13 @@ pub struct UiPreferencesInput {
     pub theme: Option<String>,
     pub locale: Option<String>,
     pub theme_config: Option<ThemeConfig>,
+    pub custom_themes: Option<Vec<SavedTheme>>,
     pub auto_check_updates: Option<bool>,
+    pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
+    pub file_panel_remember_ratio: Option<bool>,
+    pub resource_monitoring_metrics: Option<Vec<String>>,
+    pub resource_monitoring_metric_order: Option<Vec<String>>,
     pub connection_defaults: Option<SshConnectionDefaultsInput>,
     pub mcp_agent: Option<McpAgentPreferencesInput>,
     pub overview_show_stats: Option<bool>,
@@ -687,6 +786,49 @@ const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
 
 fn default_auto_check_updates() -> bool {
     true
+}
+
+fn default_update_channel() -> String {
+    "stable".to_string()
+}
+
+fn default_file_panel_remember_ratio() -> bool {
+    true
+}
+
+fn default_resource_monitoring_metrics() -> Vec<String> {
+    [
+        "load",
+        "cpu",
+        "memory",
+        "swap",
+        "disk",
+        "processes",
+        "network",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+fn default_resource_monitoring_metric_order() -> Vec<String> {
+    [
+        "load",
+        "cpu",
+        "cpuTemperature",
+        "memory",
+        "swap",
+        "disk",
+        "gpu",
+        "gpuMemory",
+        "gpuTemperature",
+        "gpuPower",
+        "processes",
+        "network",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
 }
 
 fn default_use_empty_password() -> bool {
@@ -761,12 +903,111 @@ fn normalize_overview_section_order(order: Vec<String>) -> Vec<String> {
     normalized
 }
 
+fn normalize_resource_monitoring_metrics(metrics: Vec<String>) -> Vec<String> {
+    const VALID_METRICS: [&str; 12] = [
+        "load",
+        "cpu",
+        "cpuTemperature",
+        "memory",
+        "swap",
+        "disk",
+        "gpu",
+        "gpuMemory",
+        "gpuTemperature",
+        "gpuPower",
+        "processes",
+        "network",
+    ];
+
+    let mut normalized = Vec::with_capacity(metrics.len());
+    for metric in metrics {
+        if VALID_METRICS.contains(&metric.as_str()) && !normalized.contains(&metric) {
+            normalized.push(metric);
+        }
+    }
+    normalized
+}
+
+fn normalize_resource_monitoring_metric_order(order: Vec<String>) -> Vec<String> {
+    const VALID_METRICS: [&str; 12] = [
+        "load",
+        "cpu",
+        "cpuTemperature",
+        "memory",
+        "swap",
+        "disk",
+        "gpu",
+        "gpuMemory",
+        "gpuTemperature",
+        "gpuPower",
+        "processes",
+        "network",
+    ];
+
+    let mut normalized = Vec::with_capacity(VALID_METRICS.len());
+    for metric in order {
+        if VALID_METRICS.contains(&metric.as_str()) && !normalized.contains(&metric) {
+            normalized.push(metric);
+        }
+    }
+    for metric in VALID_METRICS {
+        if !normalized.iter().any(|existing| existing == metric) {
+            normalized.push(metric.to_string());
+        }
+    }
+    normalized
+}
+
+fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
+    let mut normalized = Vec::new();
+    for mut saved in themes {
+        let id = saved.id.trim();
+        let name = saved.name.trim();
+        if id.is_empty()
+            || id.len() > 128
+            || name.is_empty()
+            || name.len() > 128
+            || normalized
+                .iter()
+                .any(|existing: &SavedTheme| existing.id == id)
+        {
+            continue;
+        }
+
+        saved.id = id.to_string();
+        saved.name = name.to_string();
+        let variant = if saved.config.variant == "light" {
+            "light"
+        } else {
+            "dark"
+        };
+        saved.config = normalize_theme_config(saved.config, variant);
+        saved.variants = std::mem::take(&mut saved.variants)
+            .into_iter()
+            .filter_map(|(variant, config)| {
+                if !matches!(variant.as_str(), "dark" | "light") {
+                    return None;
+                }
+                Some((variant.clone(), normalize_theme_config(config, &variant)))
+            })
+            .collect();
+        normalized.push(saved);
+        if normalized.len() >= 64 {
+            break;
+        }
+    }
+    normalized
+}
+
 fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     if !matches!(preferences.theme.as_str(), "default-dark" | "default-light") {
         preferences.theme = DEFAULT_UI_THEME.to_string();
     }
     if !matches!(preferences.locale.as_str(), "zhCN" | "enUS") {
         preferences.locale = DEFAULT_UI_LOCALE.to_string();
+    }
+    if !matches!(preferences.update_channel.as_str(), "stable" | "beta") {
+        preferences.update_channel = default_update_channel();
     }
     if !matches!(
         preferences
@@ -811,6 +1052,10 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
+    preferences.resource_monitoring_metrics =
+        normalize_resource_monitoring_metrics(preferences.resource_monitoring_metrics);
+    preferences.resource_monitoring_metric_order =
+        normalize_resource_monitoring_metric_order(preferences.resource_monitoring_metric_order);
     preferences.theme_config = normalize_theme_config(
         preferences.theme_config,
         if preferences.theme == "default-light" {
@@ -819,6 +1064,7 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
             "dark"
         },
     );
+    preferences.custom_themes = normalize_saved_themes(preferences.custom_themes);
     preferences
 }
 
@@ -1141,8 +1387,13 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             theme: DEFAULT_UI_THEME.to_string(),
             locale: DEFAULT_UI_LOCALE.to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: default_auto_check_updates(),
+            update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: default_file_panel_remember_ratio(),
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: default_overview_show_stats(),
@@ -1181,11 +1432,26 @@ pub fn app_set_ui_preferences(
             };
         }
     }
+    if let Some(custom_themes) = input.custom_themes {
+        preferences.custom_themes = custom_themes;
+    }
     if let Some(auto_check_updates) = input.auto_check_updates {
         preferences.auto_check_updates = auto_check_updates;
     }
+    if let Some(update_channel) = input.update_channel {
+        preferences.update_channel = update_channel;
+    }
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
+    }
+    if let Some(file_panel_remember_ratio) = input.file_panel_remember_ratio {
+        preferences.file_panel_remember_ratio = file_panel_remember_ratio;
+    }
+    if let Some(resource_monitoring_metrics) = input.resource_monitoring_metrics {
+        preferences.resource_monitoring_metrics = resource_monitoring_metrics;
+    }
+    if let Some(resource_monitoring_metric_order) = input.resource_monitoring_metric_order {
+        preferences.resource_monitoring_metric_order = resource_monitoring_metric_order;
     }
     if let Some(connection_defaults) = input.connection_defaults {
         if let Some(value) = connection_defaults.use_empty_password {
@@ -1201,6 +1467,14 @@ pub fn app_set_ui_preferences(
             preferences
                 .connection_defaults
                 .resource_monitoring_interval_seconds = value;
+        }
+        if let Some(value) = connection_defaults.resource_monitoring_metrics {
+            preferences.connection_defaults.resource_monitoring_metrics = value;
+        }
+        if let Some(value) = connection_defaults.resource_monitoring_metric_order {
+            preferences
+                .connection_defaults
+                .resource_monitoring_metric_order = value;
         }
         if let Some(value) = connection_defaults.reconnect_mode {
             preferences.connection_defaults.reconnect_mode = value;
@@ -1280,8 +1554,13 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             theme: None,
             locale: None,
             theme_config: None,
+            custom_themes: None,
             auto_check_updates: None,
+            update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
+            file_panel_remember_ratio: None,
+            resource_monitoring_metrics: None,
+            resource_monitoring_metric_order: None,
             connection_defaults: None,
             mcp_agent: None,
             overview_show_stats: None,
@@ -1605,6 +1884,33 @@ pub async fn app_get_connection_library(app: AppHandle) -> Result<serde_json::Va
         "profiles": profiles,
         "folders": folders,
     }))
+}
+
+#[tauri::command]
+pub fn app_list_imported_fonts(
+    app: AppHandle,
+) -> Result<Vec<crate::services::fonts::ImportedFont>, AppError> {
+    crate::services::fonts::list(&app)
+}
+
+#[tauri::command]
+pub async fn app_import_font(
+    app: AppHandle,
+) -> Result<Option<crate::services::fonts::ImportedFont>, AppError> {
+    crate::services::fonts::import(&app).await
+}
+
+#[tauri::command]
+pub fn app_get_imported_font_data(
+    app: AppHandle,
+    font_id: String,
+) -> Result<Option<String>, AppError> {
+    crate::services::fonts::data_url(&app, &font_id)
+}
+
+#[tauri::command]
+pub fn app_delete_imported_font(app: AppHandle, font_id: String) -> Result<bool, AppError> {
+    crate::services::fonts::delete(&app, &font_id)
 }
 
 #[tauri::command]
@@ -2596,7 +2902,8 @@ async fn spawn_local_terminal_tab(
     }
 
     match start_local_terminal_for_tab(app, state, &tab_id, launch).await {
-        Ok(()) => {
+        Ok(startup_ready) => {
+            let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup_ready).await;
             if is_split_pane {
                 crate::sessions::terminal::set_terminal_state_without_snapshot(
                     app,
@@ -2644,7 +2951,7 @@ async fn start_local_terminal_for_tab(
     state: &crate::services::workspace::WorkspaceState,
     tab_id: &str,
     launch: crate::sessions::local_terminal::LocalTerminalLaunch,
-) -> Result<(), String> {
+) -> Result<oneshot::Receiver<()>, String> {
     let (worker_tx, worker_rx) = mpsc::channel(16);
     let (terminal_input_tx, terminal_input_rx) = mpsc::unbounded_channel();
     let worker_control = CancellationToken::new();
@@ -2681,7 +2988,7 @@ async fn start_local_terminal_for_tab(
         .await
         .insert(tab_id.to_string(), launch.clone());
 
-    if let Err(error) = crate::sessions::local_terminal::start_local_terminal_worker(
+    let startup_ready = match crate::sessions::local_terminal::start_local_terminal_worker(
         tab_id.to_string(),
         runtime_id,
         worker_rx,
@@ -2691,19 +2998,22 @@ async fn start_local_terminal_for_tab(
         launch,
         runtime_gate,
     ) {
-        state.workers.write().await.remove(tab_id);
-        state.terminal_inputs.write().await.remove(tab_id);
-        state.worker_controls.write().await.remove(tab_id);
-        state
-            .local_terminal_runtime_ids
-            .write()
-            .await
-            .remove(tab_id);
-        crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
-        return Err(error);
-    }
+        Ok(startup_ready) => startup_ready,
+        Err(error) => {
+            state.workers.write().await.remove(tab_id);
+            state.terminal_inputs.write().await.remove(tab_id);
+            state.worker_controls.write().await.remove(tab_id);
+            state
+                .local_terminal_runtime_ids
+                .write()
+                .await
+                .remove(tab_id);
+            crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
+            return Err(error);
+        }
+    };
 
-    Ok(())
+    Ok(startup_ready)
 }
 
 fn supports_split_panes(session_type: &str) -> bool {
@@ -3319,7 +3629,8 @@ pub async fn app_reconnect_tab(
                 launch.cwd = cwd;
             }
             match start_local_terminal_for_tab(&app, &state, &tab_id, launch).await {
-                Ok(()) => {
+                Ok(startup_ready) => {
+                    let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup_ready).await;
                     crate::sessions::terminal::set_terminal_state(
                         &app,
                         &tab_id,
@@ -5077,10 +5388,14 @@ mod ui_state_tests {
 
 #[cfg(test)]
 mod ui_preferences_tests {
+    use std::collections::BTreeMap;
+
     use super::{
-        default_overview_section_order, default_theme_config, normalize_theme_config,
+        default_overview_section_order, default_resource_monitoring_metric_order,
+        default_resource_monitoring_metrics, default_theme_config, default_update_channel,
+        normalize_resource_monitoring_metric_order, normalize_theme_config,
         normalize_ui_preferences, resolve_profile_with_connection_defaults, McpAgentPreferences,
-        SshConnectionDefaults, UiPreferences, UiPreferencesInput,
+        SavedTheme, SshConnectionDefaults, UiPreferences, UiPreferencesInput,
     };
 
     #[test]
@@ -5177,13 +5492,68 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn normalizes_saved_theme_identity_and_inherited_base() {
+        let mut custom = default_theme_config();
+        custom.code_theme_id = "custom".to_string();
+        custom.base_theme_id = Some("codex".to_string());
+        custom.theme.accent = "not-a-color".to_string();
+
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
+            custom_themes: vec![
+                SavedTheme {
+                    id: "  custom-one  ".to_string(),
+                    name: "  My Codex Tweak  ".to_string(),
+                    config: custom,
+                    variants: BTreeMap::new(),
+                },
+                SavedTheme {
+                    id: "custom-one".to_string(),
+                    name: "Duplicate".to_string(),
+                    config: default_theme_config(),
+                    variants: BTreeMap::new(),
+                },
+            ],
+            auto_check_updates: true,
+            update_channel: default_update_channel(),
+            terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences::default(),
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert_eq!(preferences.custom_themes.len(), 1);
+        assert_eq!(preferences.custom_themes[0].id, "custom-one");
+        assert_eq!(preferences.custom_themes[0].name, "My Codex Tweak");
+        assert_eq!(
+            preferences.custom_themes[0].config.base_theme_id.as_deref(),
+            Some("codex")
+        );
+        assert_eq!(preferences.custom_themes[0].config.theme.accent, "#0169CC");
+    }
+
+    #[test]
     fn falls_back_to_safe_values_for_unknown_preferences() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "unknown-theme".to_string(),
             locale: "unknown-locale".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: false,
+            update_channel: "nightly".to_string(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: true,
@@ -5199,6 +5569,7 @@ mod ui_preferences_tests {
 
         assert_eq!(preferences.theme, "default-dark");
         assert_eq!(preferences.locale, "zhCN");
+        assert_eq!(preferences.update_channel, "stable");
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
         assert_eq!(
@@ -5208,13 +5579,69 @@ mod ui_preferences_tests {
     }
 
     #[test]
+    fn resource_monitoring_defaults_keep_gpu_metrics_opt_in_and_order_complete() {
+        let enabled = default_resource_monitoring_metrics();
+        let order = default_resource_monitoring_metric_order();
+
+        assert!(!enabled.iter().any(|metric| metric == "gpu"));
+        assert!(!enabled.iter().any(|metric| metric == "gpuMemory"));
+        assert!(!enabled.iter().any(|metric| metric == "gpuTemperature"));
+        assert!(!enabled.iter().any(|metric| metric == "gpuPower"));
+        assert_eq!(order.len(), 12);
+        let expected_order: Vec<String> = [
+            "load",
+            "cpu",
+            "cpuTemperature",
+            "memory",
+            "swap",
+            "disk",
+            "gpu",
+            "gpuMemory",
+            "gpuTemperature",
+            "gpuPower",
+            "processes",
+            "network",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        assert_eq!(order, expected_order);
+    }
+
+    #[test]
+    fn resource_monitoring_metric_order_deduplicates_and_appends_missing_items() {
+        let normalized = normalize_resource_monitoring_metric_order(vec![
+            "network".to_string(),
+            "network".to_string(),
+            "not-a-metric".to_string(),
+            "cpu".to_string(),
+        ]);
+
+        assert_eq!(normalized[0], "network");
+        assert_eq!(normalized[1], "cpu");
+        assert_eq!(normalized.len(), 12);
+        assert_eq!(
+            normalized
+                .iter()
+                .filter(|metric| metric.as_str() == "network")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn keeps_supported_preferences_unchanged() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-light".to_string(),
             locale: "enUS".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: false,
+            update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
+            file_panel_remember_ratio: false,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,
@@ -5231,6 +5658,7 @@ mod ui_preferences_tests {
 
         assert_eq!(preferences.theme, "default-light");
         assert_eq!(preferences.locale, "enUS");
+        assert_eq!(preferences.update_channel, "beta");
         assert!(!preferences.auto_check_updates);
         assert!(preferences.terminal_zoom_locked);
         assert!(!preferences.overview_show_stats);
@@ -5254,8 +5682,13 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: true,
+            update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
                 connection_scope: "not-a-scope".to_string(),
@@ -5286,8 +5719,13 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: true,
+            update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences {
                 connection_scope: "default-connection".to_string(),
@@ -5312,6 +5750,8 @@ mod ui_preferences_tests {
             enable_exec_channel: false,
             enable_resource_monitoring: false,
             resource_monitoring_interval_seconds: 15,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             reconnect_mode: "enter".to_string(),
             legacy_algorithms: false,
         };
@@ -5365,6 +5805,7 @@ mod ui_preferences_tests {
         .expect("legacy UI preferences should still deserialize");
 
         assert!(preferences.auto_check_updates);
+        assert_eq!(preferences.update_channel, "stable");
         assert!(preferences.overview_show_stats);
         assert!(preferences.overview_show_recent);
         assert!(preferences.overview_show_all_connections);
@@ -5380,6 +5821,7 @@ mod ui_preferences_tests {
     fn uses_camel_case_for_the_update_check_preference_contract() {
         let input: UiPreferencesInput = serde_json::from_value(serde_json::json!({
             "autoCheckUpdates": false,
+            "updateChannel": "beta",
             "overviewShowStats": false,
             "overviewShowRecent": false,
             "overviewShowAllConnections": true,
@@ -5388,6 +5830,7 @@ mod ui_preferences_tests {
         }))
         .expect("renderer preference input should deserialize");
         assert_eq!(input.auto_check_updates, Some(false));
+        assert_eq!(input.update_channel.as_deref(), Some("beta"));
         assert_eq!(input.overview_show_stats, Some(false));
         assert_eq!(input.overview_show_recent, Some(false));
         assert_eq!(input.overview_show_all_connections, Some(true));
@@ -5406,8 +5849,13 @@ mod ui_preferences_tests {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
             theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
             auto_check_updates: false,
+            update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
+            file_panel_remember_ratio: false,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             connection_defaults: SshConnectionDefaults::default(),
             mcp_agent: McpAgentPreferences::default(),
             overview_show_stats: false,
@@ -5423,6 +5871,7 @@ mod ui_preferences_tests {
         })
         .expect("preferences should serialize");
         assert_eq!(preferences["autoCheckUpdates"], false);
+        assert_eq!(preferences["updateChannel"], "beta");
         assert_eq!(preferences["overviewShowStats"], false);
         assert_eq!(preferences["overviewShowRecent"], false);
         assert_eq!(preferences["overviewShowAllConnections"], true);

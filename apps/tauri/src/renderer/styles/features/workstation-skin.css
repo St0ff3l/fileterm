@@ -358,11 +358,11 @@ textarea:focus-visible,
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 28px;
-  margin: 0 0 10px;
+  height: 24px;
+  margin: 0 0 7px;
   border: 1px solid transparent;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   line-height: 1;
   text-align: center;
@@ -475,7 +475,7 @@ textarea:focus-visible,
 .metric-line,
 .meter-row {
   height: 23px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
 }
 
@@ -530,12 +530,14 @@ textarea:focus-visible,
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  height: 22px;
-  font-size: 11px;
+  height: 20px;
+  font-size: 10px;
   font-weight: 600;
 }
 
-.metric-line span {
+.system-sidebar-layout .metric-line span,
+.system-sidebar-layout .meter-header span {
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -548,50 +550,259 @@ textarea:focus-visible,
 .meter-row strong,
 .meter-header strong {
   font-family: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .meter-group {
-  margin-bottom: 10px;
+  margin-bottom: 7px;
 }
 
 .meter-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  column-gap: 8px;
   align-items: center;
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
-.meter-header span {
-  flex-shrink: 0;
+.meter-header > .meter-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
   white-space: nowrap;
-  margin-right: 8px;
   font-weight: 600;
 }
 
 .meter-header strong {
   font-weight: 600;
-  flex: 1;
-  display: flex;
-  justify-content: flex-end;
+  min-width: 0;
 }
 
 .metric-chip-summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 38px;
+  column-gap: 6px;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  width: 100%;
+  min-width: 0;
   font-weight: 600;
 }
 
-.metric-percent {
-  margin-left: 0;
-  color: inherit;
-  font-weight: 600;
+.metric-chip-summary .metric-dot {
+  grid-column: 1;
+  justify-self: center;
+}
+
+.metric-chip-summary .metric-caption {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.memory-hover-value {
+  display: block;
+  grid-column: 2;
+  min-width: 0;
+}
+
+.metric-hover-detail {
+  display: block;
+  min-width: 0;
+  overflow: visible !important;
+}
+
+.address-hover-detail,
+.metric-line-hover-detail,
+.process-hover-detail {
+  width: 100%;
+}
+
+.metric-hover-detail-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-hover-detail-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  display: block;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 6px 8px;
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  background: var(--popover-bg);
+  box-shadow: var(--popover-shadow);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.metric-hover-detail-tooltip.is-above {
+  transform: translateY(-100%);
+}
+
+.metric-hover-detail-tooltip.is-below {
+  transform: none;
+}
+
+.metric-chip-summary .metric-percent {
+  grid-column: 3;
+  min-width: 0;
   text-align: right;
+}
+
+/* The filesystem selector sits between the "disk" label and the status dot.
+   It fills the remaining label-column space and truncates with an ellipsis;
+   the full mount point stays reachable via the dropdown menu. */
+.disk-meter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.disk-select {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.disk-select.dropdown-select-trigger {
+  flex: 1 1 auto;
+  width: auto;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 2px;
+  gap: 1px;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  font-size: 9px;
+}
+
+.disk-select.ft-select-shell {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  width: auto;
+  height: 18px;
+  min-height: 18px;
+}
+
+.disk-select.ft-select-shell select {
+  min-width: 0;
+  padding: 0 2px !important;
+  font-size: 9px;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* The label column is shared by every meter row so the status dots align
+   vertically. It grows with the sidebar (up to 84px) so the disk mount point
+   can show more characters on wide sidebars, and never shrinks below the
+   48px rhythm used by .metric-line. */
+.system-sidebar-layout .meter-header {
+  grid-template-columns: clamp(48px, 30%, 84px) minmax(0, 1fr);
+}
+
+.system-sidebar-layout .meter-header > .meter-label {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger:focus,
+.system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger:focus-visible,
+.system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger:active,
+.system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger[aria-expanded='true'] {
+  outline: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger:focus-within,
+.system-sidebar-layout .meter-header .disk-select.ft-select-shell:focus-within {
+  outline: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.system-sidebar-layout .meter-header .disk-select.ft-select-shell select {
+  width: 100%;
+  min-width: 0;
+  padding: 0 2px !important;
+  font-size: 9px;
+}
+
+.system-sidebar-layout .meter-header .disk-select.ft-select-shell select:focus,
+.system-sidebar-layout .meter-header .disk-select.ft-select-shell select:focus-visible {
+  outline: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-focus-ring-color: transparent !important;
+}
+
+/* Keep the two text-only summary rows on the same label column as the meter
+   rows so their values align with the status dots. */
+.system-sidebar-layout .metric-line {
+  display: grid;
+  grid-template-columns: clamp(48px, 30%, 84px) minmax(0, 1fr);
+  width: 100%;
+}
+
+.system-sidebar-layout .metric-line .value {
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  justify-self: end;
+  padding-right: 0 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.system-sidebar-layout .meter-header,
+.system-sidebar-layout .metric-chip-summary {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.system-sidebar-layout .metric-chip-summary .metric-percent {
+  justify-self: end;
+  padding-right: 0 !important;
+}
+
+.gpu-monitor-group {
+  margin-top: 2px;
+}
+
+.gpu-monitor-card + .gpu-monitor-card {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-light);
+}
+
+.gpu-monitor-line {
+  margin-bottom: 2px;
 }
 
 .meter-track {
@@ -633,28 +844,42 @@ textarea:focus-visible,
 }
 
 .memory-hover-popover {
-  position: absolute;
-  top: 10px;
-  right: 0;
-  z-index: 100;
-  display: none;
+  position: fixed;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  display: flex;
   flex-direction: column;
   gap: 6px;
+  width: max-content;
   min-width: 140px;
+  max-width: min(180px, calc(100vw - 16px));
   padding: 10px 12px;
   background: var(--popover-bg);
   border: 1px solid var(--popover-border);
   border-radius: var(--radius-md);
   box-shadow: var(--popover-shadow);
+  pointer-events: none;
 }
 
-.memory-meter-group {
+.memory-hover-popover.is-above {
+  transform: translateY(-100%);
+}
+
+.memory-hover-popover.is-below {
+  transform: none;
+}
+
+.memory-meter-group .meter-track {
   position: relative;
-  cursor: pointer;
 }
 
-.memory-meter-group:hover .memory-hover-popover {
-  display: flex;
+.memory-hover-track-target {
+  position: absolute;
+  top: -3px;
+  left: 24%;
+  width: 30%;
+  height: 11px;
+  cursor: pointer;
 }
 
 .memory-hover-row {
@@ -809,7 +1034,7 @@ textarea:focus-visible,
 }
 
 .session-workspace {
-  grid-template-rows: minmax(160px, 1fr) var(--file-panel-height, 218px);
+  grid-template-rows: minmax(120px, 1fr) var(--file-panel-height, 218px);
 }
 
 .session-split-resizer {

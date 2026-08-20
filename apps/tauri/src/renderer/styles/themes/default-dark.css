@@ -35,27 +35,28 @@
   --accent-text: #c8d0da;
   --sidebar-active-accent: #ffffff;
   --selection-bg: #383f48;
-  --copy-link: #65a9ff;
-  --copy-link-hover: #8bbfff;
+  --copy-link: #38bdf8;
+  --copy-link-hover: #7dd3fc;
   --folder-accent: #65a9ff;
   --kernel-accent: #65a9ff;
   --mini-tab-active-bg: #294366;
   --mini-tab-active-text: #8bbfff;
-  --memory-warn: #ffcc00;
+  --memory-warn: #f59e0b;
   --network-tx: #ff7474;
+  /* Keep the network receive series independent from the SFTP connection color. */
   --network-rx: #65a9ff;
   --danger: #ff5f57;
-  --success: #39d98a;
-  --warning: #ffcc00;
+  --success: #34d399;
+  --warning: #f59e0b;
 
   /* 状态语义色:面/边/文本,统一替代散落的红蓝硬编码 */
   --danger-text: #ff8f88;
   --danger-surface: rgba(255, 95, 87, 0.12);
   --danger-border: rgba(255, 95, 87, 0.3);
-  --info: var(--accent-highlight);
-  --info-text: var(--accent-highlight);
-  --info-surface: rgba(139, 191, 255, 0.12);
-  --info-border: rgba(139, 191, 255, 0.32);
+  --info: #38bdf8;
+  --info-text: #38bdf8;
+  --info-surface: rgba(56, 189, 248, 0.12);
+  --info-border: rgba(56, 189, 248, 0.32);
   --input-focus-ring: rgba(255, 255, 255, 0.08);
 
   /* accent 色阶(交互高亮)与 success 面/边/文本 */

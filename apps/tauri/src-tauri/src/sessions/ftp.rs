@@ -673,9 +673,10 @@ async fn list_files_with_state<T: TokioTlsStream + Send>(
             continue;
         }
         let full_path = join_remote_path(path, name);
+        let is_symlink = entry.is_symlink();
         let mut is_directory = entry.is_directory();
         let mut size = entry.size();
-        if !parsed.type_is_trusted {
+        if !parsed.type_is_trusted || is_symlink {
             let resolved = resolve_untrusted_ftp_entry(ftp, &full_path, state).await;
             is_directory = resolved.0;
             if let Some(resolved_size) = resolved.1 {
@@ -693,7 +694,12 @@ async fn list_files_with_state<T: TokioTlsStream + Send>(
         files.push(serde_json::json!({
             "name": name,
             "path": full_path,
-            "type": if is_directory { "folder" } else if entry.is_symlink() { "symlink" } else { "file" },
+            "type": super::ssh::effective_remote_file_type(
+                is_directory,
+                is_symlink,
+                is_directory,
+            ),
+            "isSymlink": is_symlink,
             "size": if is_directory { "-".to_string() } else { format_bytes(size as u64) },
             "modified": modified,
             "permission": permission,

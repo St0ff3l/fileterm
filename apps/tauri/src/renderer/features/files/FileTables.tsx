@@ -1,4 +1,4 @@
-import { useState, useEffect, type DragEvent, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
+import { useCallback, useState, useEffect, FormEvent, MouseEvent, PointerEvent, ReactNode, RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { formatMessage, t } from '../../i18n'
@@ -6,6 +6,12 @@ import { AppIcon } from '../common/AppIcon'
 import { getDisplayFileIconName, getDisplayFileTypeLabel } from './file-kind'
 
 import type { FileFilterConfig } from './file-filter'
+
+// File rows are deliberately fixed-height in workstation-skin.css. Keeping
+// the virtualizer on that same value prevents it from correcting scrollTop
+// while a trackpad momentum gesture is in progress.
+const FILE_TABLE_ROW_HEIGHT = 24
+const FILE_TABLE_OVERSCAN = 8
 
 export type RemoteFileSortField = 'name' | 'size' | 'type' | 'modified' | 'permission' | 'ownerGroup'
 
@@ -151,7 +157,7 @@ export function FileTable({
   selectedPaths,
   onClearSelection,
   onContextItem,
-  onDragItem,
+  onPointerDragStart,
   onOpenItem,
   onSelectItem,
   onToggleSort,
@@ -168,7 +174,7 @@ export function FileTable({
   selectedPaths?: string[]
   onClearSelection?(): void
   onContextItem?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
-  onDragItem?(event: DragEvent<HTMLElement>, item: RemoteFileItem): void
+  onPointerDragStart?(event: PointerEvent<HTMLElement>, item: RemoteFileItem): void
   onOpenItem?(item: RemoteFileItem): void
   onSelectItem?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
   onToggleSort?(field: RemoteFileSortField): void
@@ -234,11 +240,20 @@ export function FileTable({
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  const getItemKey = useCallback(
+    (index: number) => {
+      const row = rows[index]
+      return row ? `${row.path}:${row.name}` : index
+    },
+    [rows]
+  )
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 33,
-    overscan: 15
+    estimateSize: () => FILE_TABLE_ROW_HEIGHT,
+    getItemKey,
+    overscan: FILE_TABLE_OVERSCAN
   })
 
   const virtualItems = rowVirtualizer.getVirtualItems()
@@ -320,7 +335,6 @@ export function FileTable({
               return (
                 <tr
                   key={row.path}
-                  ref={rowVirtualizer.measureElement}
                   data-index={virtualRow.index}
                   className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths?.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
                   onClick={(event) => onSelectItem?.(event, row)}
@@ -337,8 +351,8 @@ export function FileTable({
                     <FileNameCell
                       iconName={iconName}
                       item={row}
-                      draggable={row.type === 'file'}
-                      onDragStart={(event) => onDragItem?.(event, row)}
+                      draggable={row.name !== '..'}
+                      onPointerDown={row.name !== '..' ? (event) => onPointerDragStart?.(event, row) : undefined}
                     />
                   </td>
                   {!compact ? <td>{row.size}</td> : null}
@@ -372,7 +386,7 @@ export function LocalFileTable({
   selectedPaths,
   onClearSelection,
   onContextItem,
-  onDragItem,
+  onPointerDragStart,
   onOpenItem,
   onSelectItem,
   onSelectionDragEnter,
@@ -384,17 +398,26 @@ export function LocalFileTable({
   selectedPaths: string[]
   onClearSelection(): void
   onContextItem(event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem): void
-  onDragItem(event: DragEvent<HTMLElement>, item: LocalFileItem): void
+  onPointerDragStart(event: PointerEvent<HTMLElement>, item: LocalFileItem): void
   onOpenItem(item: LocalFileItem): void
   onSelectItem(event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem): void
   onSelectionDragEnter(item: LocalFileItem): void
   onSelectionDragStart(event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem): void
 }) {
+  const getItemKey = useCallback(
+    (index: number) => {
+      const row = rows[index]
+      return row ? `${row.path}:${row.name}` : index
+    },
+    [rows]
+  )
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 33,
-    overscan: 15
+    estimateSize: () => FILE_TABLE_ROW_HEIGHT,
+    getItemKey,
+    overscan: FILE_TABLE_OVERSCAN
   })
 
   const virtualItems = rowVirtualizer.getVirtualItems()
@@ -435,7 +458,6 @@ export function LocalFileTable({
           return (
             <tr
               key={`${row.path}:${row.name}`}
-              ref={rowVirtualizer.measureElement}
               data-index={virtualRow.index}
               className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
               onClick={(event) => onSelectItem(event, row)}
@@ -453,7 +475,7 @@ export function LocalFileTable({
                   iconName={iconName}
                   item={row}
                   draggable={row.name !== '..'}
-                  onDragStart={(event) => onDragItem(event, row)}
+                  onPointerDown={(event) => onPointerDragStart(event, row)}
                 />
               </td>
             </tr>
@@ -473,19 +495,23 @@ function FileNameCell({
   draggable,
   iconName,
   item,
-  onDragStart
+  onPointerDown
 }: {
   draggable: boolean
   iconName: ReturnType<typeof getDisplayFileIconName>
   item: LocalFileItem | RemoteFileItem
-  onDragStart(event: DragEvent<HTMLElement>): void
+  onPointerDown?(event: PointerEvent<HTMLElement>): void
 }) {
   return (
     <span className="file-name-cell" title={item.name}>
       <span
         className={`file-icon ${draggable ? 'is-draggable' : ''}`}
-        draggable={draggable}
-        onDragStart={onDragStart}
+        // FileTerm transfers use the pointer gesture below instead of the
+        // browser/OS drag session. This keeps remote files from becoming
+        // external filesystem drops while still allowing cross-pane transfer.
+        draggable={false}
+        onPointerDown={onPointerDown}
+        onDragStart={(event) => event.preventDefault()}
         onMouseDown={(event) => event.stopPropagation()}
         title={draggable ? t.dragTransfer : undefined}
       >

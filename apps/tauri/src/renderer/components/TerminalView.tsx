@@ -18,7 +18,8 @@ import { ContextMenu } from '../features/common/ContextMenu'
 import { CloseButton } from '../features/common/CloseButton'
 import { AppIcon } from '../features/common/AppIcon'
 import { VerticalScrollbar } from '../features/common/VerticalScrollbar'
-import { FILETERM_MONO_FONT_FAMILY, observeCanvasTextMetrics } from '../app/font-metrics'
+import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../app/font-metrics'
+import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
 
 function localizeTerminalText(value: string) {
   return value
@@ -558,6 +559,7 @@ export const TerminalView = memo(function TerminalView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
+  const terminalLogColorizerRef = useRef<TerminalLogColorizer | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
   const bootTextRef = useRef(bootText)
@@ -590,7 +592,14 @@ export const TerminalView = memo(function TerminalView({
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
-  const lastObservedHostRectRef = useRef<{ width: number; height: number } | null>(null)
+  const lastObservedHostRectRef = useRef<{
+    left: number
+    top: number
+    right: number
+    bottom: number
+    width: number
+    height: number
+  } | null>(null)
   const isHorizontalResizeActiveRef = useRef(false)
   const lastTerminalOutputAtRef = useRef(0)
   const awaitingCommandCompletionRef = useRef(false)
@@ -685,22 +694,22 @@ export const TerminalView = memo(function TerminalView({
     foreground: readColor('--terminal-foreground', readColor('--terminal-text', '#e0e0e0')),
     cursor: readColor('--terminal-cursor', readColor('--accent-highlight', '#3b82f6')),
     cursorAccent: readColor('--terminal-cursor-accent', readColor('--terminal-bg', '#ffffff')),
-    black: readColor('--terminal-black', '#000000'),
-    red: readColor('--terminal-red', '#cd3131'),
-    green: readColor('--terminal-green', readColor('--success', '#39d98a')),
-    yellow: readColor('--terminal-yellow', readColor('--warning', '#e5e510')),
-    blue: readColor('--terminal-blue', readColor('--accent-text', '#2472c8')),
-    magenta: readColor('--terminal-magenta', '#bc3fbc'),
-    cyan: readColor('--terminal-cyan', '#11a8cd'),
-    white: readColor('--terminal-white', '#e5e5e5'),
-    brightBlack: readColor('--terminal-bright-black', '#666666'),
-    brightRed: readColor('--terminal-bright-red', '#cd3131'),
-    brightGreen: readColor('--terminal-bright-green', readColor('--success', '#23d18b')),
-    brightYellow: readColor('--terminal-bright-yellow', '#e5e510'),
-    brightBlue: readColor('--terminal-bright-blue', readColor('--text-main', '#3b8eea')),
-    brightMagenta: readColor('--terminal-bright-magenta', '#d670d6'),
-    brightCyan: readColor('--terminal-bright-cyan', '#29b8db'),
-    brightWhite: readColor('--terminal-bright-white', '#e5e5e5'),
+    black: readColor('--terminal-black', '#1c1d22'),
+    red: readColor('--terminal-red', '#e05555'),
+    green: readColor('--terminal-green', readColor('--success', '#10b981')),
+    yellow: readColor('--terminal-yellow', readColor('--warning', '#eab308')),
+    blue: readColor('--terminal-blue', readColor('--accent-text', '#3b82f6')),
+    magenta: readColor('--terminal-magenta', '#c084fc'),
+    cyan: readColor('--terminal-cyan', '#22d3ee'),
+    white: readColor('--terminal-white', '#e2e8f0'),
+    brightBlack: readColor('--terminal-bright-black', '#64748b'),
+    brightRed: readColor('--terminal-bright-red', '#f87171'),
+    brightGreen: readColor('--terminal-bright-green', readColor('--success', '#34d399')),
+    brightYellow: readColor('--terminal-bright-yellow', '#fde047'),
+    brightBlue: readColor('--terminal-bright-blue', readColor('--text-main', '#60a5fa')),
+    brightMagenta: readColor('--terminal-bright-magenta', '#e879f9'),
+    brightCyan: readColor('--terminal-bright-cyan', '#67e8f9'),
+    brightWhite: readColor('--terminal-bright-white', '#ffffff'),
     selectionBackground:
       findOpen && findQuery
         ? readColor('--terminal-search-active-background', readColor('--terminal-search-active-bg', '#ffd43b'))
@@ -731,6 +740,7 @@ export const TerminalView = memo(function TerminalView({
       return
     }
     terminal.options.theme = buildTerminalTheme()
+    terminalLogColorizerRef.current?.setPalette(getTerminalLogColorPalette(terminal.options.theme))
     terminal.refresh(0, Math.max(terminal.rows - 1, 0))
   }
 
@@ -1083,7 +1093,7 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const terminal = new Terminal({
-      fontFamily: FILETERM_MONO_FONT_FAMILY,
+      fontFamily: getConfiguredMonoFontFamily(),
       fontSize: TERMINAL_DEFAULT_FONT_SIZE,
       letterSpacing: 0.5,
       lineHeight: 1.05,
@@ -1122,6 +1132,8 @@ export const TerminalView = memo(function TerminalView({
     terminal.loadAddon(webLinksAddon)
     terminal.unicode.activeVersion = '11'
     terminal.open(hostRef.current)
+    const terminalLogColorizer = new TerminalLogColorizer(terminal, getTerminalLogColorPalette(terminal.options.theme))
+    terminalLogColorizerRef.current = terminalLogColorizer
     const xtermViewport = hostRef.current.querySelector('.xterm-viewport') as HTMLElement | null
     if (xtermViewport) {
       setViewportElement(xtermViewport)
@@ -1486,6 +1498,7 @@ export const TerminalView = memo(function TerminalView({
     // packaged WebView2/WebKit builds cannot keep a fallback-font grid.
     const disposeCanvasTextMetrics = observeCanvasTextMetrics((fontFamily) => {
       terminal.options.fontFamily = fontFamily
+      terminal.clearTextureAtlas()
       terminal.refresh(0, Math.max(terminal.rows - 1, 0))
       scheduleResize(true)
     })
@@ -1699,9 +1712,9 @@ export const TerminalView = memo(function TerminalView({
         return
       }
 
-      const { width, height } = host.getBoundingClientRect()
+      const { left, top, right, bottom, width, height } = host.getBoundingClientRect()
       const lastObservedRect = lastObservedHostRectRef.current
-      lastObservedHostRectRef.current = { width, height }
+      lastObservedHostRectRef.current = { left, top, right, bottom, width, height }
 
       const widthChanged = Boolean(
         lastObservedRect && Math.abs(lastObservedRect.width - width) > TERMINAL_RESIZE_PIXEL_EPSILON
@@ -1785,19 +1798,52 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
-      const bounds = host.getBoundingClientRect()
+      const bounds = lastObservedHostRectRef.current
+      if (!bounds) {
+        return false
+      }
+
       return clientX >= bounds.left && clientX <= bounds.right && clientY >= bounds.top && clientY <= bounds.bottom
     }
 
+    const isRootRetargetedGesture = (event: Event) => {
+      const target = event.target
+      return (
+        target === null ||
+        target === window ||
+        target === document ||
+        target === document.documentElement ||
+        target === document.body
+      )
+    }
+
     const isTerminalGestureTarget = (event: Event) => {
-      if (isEventInsideTerminal(event) || isEventOverTerminal(event)) {
+      if (isEventInsideTerminal(event)) {
         return true
       }
 
       // WebView2, WebKitGTK and WKWebView can dispatch a compositor gesture
-      // at the document root rather than the element beneath the pinch. The
-      // xterm textarea is the authoritative focus owner in that case; a click
-      // into another pane updates lastFocusedTerminal before its next gesture.
+      // at the document root rather than the element beneath the pinch. Only
+      // those root-retargeted events need the geometry/focus fallback. A
+      // regular file-pane wheel event must stay on the native file scroller;
+      // reading terminal bounds for every such event forces a synchronous
+      // layout while a virtualized table is mounting rows.
+      if (!isRootRetargetedGesture(event)) {
+        return false
+      }
+
+      if (isEventOverTerminal(event)) {
+        return true
+      }
+
+      const { clientX, clientY } = event as MouseEvent
+      if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        return false
+      }
+
+      // The xterm textarea is the authoritative focus owner when the WebView
+      // drops both the target and composed path. A click into another pane
+      // updates lastFocusedTerminal before its next gesture.
       return lastFocusedTerminal === terminal && document.activeElement === terminalTextarea
     }
 
@@ -1898,10 +1944,6 @@ export const TerminalView = memo(function TerminalView({
     const onWheel = (event: WheelEvent) => {
       const matchesTerminal = isTerminalGestureTarget(event)
       if (!matchesTerminal) {
-        logTerminalZoom(terminal, 'wheel-window-ignored-not-terminal', {
-          ...describeTerminalInput(event),
-          tabId: tabIdRef.current
-        })
         return
       }
 
@@ -2212,6 +2254,8 @@ export const TerminalView = memo(function TerminalView({
       if (terminalUnderPointer === terminal) {
         terminalUnderPointer = null
       }
+      terminalLogColorizer.dispose()
+      terminalLogColorizerRef.current = null
       searchAddonRef.current = null
       terminalRef.current = null
       terminal.dispose()
@@ -2296,6 +2340,13 @@ export const TerminalView = memo(function TerminalView({
     const root = document.documentElement
     const observer = new MutationObserver(() => {
       applyTerminalTheme()
+      const terminal = terminalRef.current
+      const configuredFontFamily = getConfiguredMonoFontFamily()
+      if (terminal && terminal.options.fontFamily !== configuredFontFamily) {
+        terminal.options.fontFamily = configuredFontFamily
+        terminal.clearTextureAtlas()
+        terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+      }
     })
 
     observer.observe(root, {

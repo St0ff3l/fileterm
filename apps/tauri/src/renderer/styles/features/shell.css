@@ -164,7 +164,11 @@
   grid-column: 1;
   grid-row: 2 / 4;
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* The only in-flow child is the sidebar layout (the resizer is absolute),
+     so a single definite row is required: with `auto 1fr` the layout lands in
+     the auto row and its `height: 100%` resolves to content height in WebKit,
+     collapsing the mount table below the resource card. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   border-right: 1px solid var(--border-light);
   background: var(--theme-sidebar-background, var(--bg-sidebar));
@@ -215,6 +219,113 @@
   min-width: 0;
   overflow: hidden;
   container-type: inline-size;
+}
+
+/* Resource summaries (including uptime) have an independent compact viewport.
+   Process and network panels stay outside this region so their own layouts do
+   not scroll with it. */
+.system-metrics-scroll-region {
+  --system-metric-row-height: 28px;
+  position: relative;
+  height: calc(var(--system-metric-row-height) * 6);
+  min-height: calc(var(--system-metric-row-height) * 6);
+  max-height: calc(var(--system-metric-row-height) * 6);
+  min-width: 0;
+  overflow: visible;
+}
+
+.system-metrics-scroll {
+  height: 100%;
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+  scroll-snap-type: y proximity;
+}
+
+.system-metrics-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.system-metrics-scroll-region > .vertical-scrollbar {
+  right: -10px;
+}
+
+/* Keep the resource viewport on whole rows. Without an explicit row box the
+   meter margins vary with the active metric and the next row can peek through
+   at the bottom of the compact sidebar. */
+.system-metrics-scroll > .metric-line,
+.system-metrics-scroll > .meter-group {
+  box-sizing: border-box;
+  height: var(--system-metric-row-height);
+  min-height: var(--system-metric-row-height);
+  max-height: var(--system-metric-row-height);
+  margin: 0;
+  scroll-snap-align: start;
+}
+
+.system-metrics-scroll > .meter-group {
+  display: grid;
+  grid-template-rows: 20px 5px;
+  align-content: center;
+  row-gap: 3px;
+  overflow: visible;
+}
+
+.system-metrics-scroll > .meter-group .meter-header {
+  height: 20px;
+  margin: 0;
+}
+
+.system-metrics-scroll > .meter-group .meter-track {
+  width: 100%;
+  height: 5px;
+}
+
+/* GPU metrics contain one card per physical GPU. Flatten the wrapper so each
+   card is a normal snap-aligned row rather than a variable-height block. */
+.system-metrics-scroll > .gpu-monitor-group {
+  display: contents;
+}
+
+.system-metrics-scroll > .gpu-monitor-group > .gpu-monitor-card {
+  box-sizing: border-box;
+  height: var(--system-metric-row-height);
+  min-height: var(--system-metric-row-height);
+  max-height: var(--system-metric-row-height);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  scroll-snap-align: start;
+}
+
+.system-metrics-scroll > .gpu-monitor-group > .gpu-monitor-card .meter-group {
+  display: grid;
+  grid-template-rows: 20px 5px;
+  align-content: center;
+  row-gap: 3px;
+  height: var(--system-metric-row-height);
+  min-height: var(--system-metric-row-height);
+  max-height: var(--system-metric-row-height);
+  margin: 0;
+}
+
+.system-metrics-scroll > .gpu-monitor-group > .gpu-monitor-card .meter-header {
+  height: 20px;
+  margin: 0;
+}
+
+.system-metrics-scroll > .gpu-monitor-group > .gpu-monitor-card .meter-track {
+  height: 5px;
+}
+
+.system-metrics-scroll > .gpu-monitor-group > .gpu-monitor-card .metric-line {
+  box-sizing: border-box;
+  height: var(--system-metric-row-height);
+  min-height: var(--system-metric-row-height);
+  max-height: var(--system-metric-row-height);
+  margin: 0;
 }
 
 .system-sidebar-layout {
@@ -736,12 +847,16 @@
 .disk-scroll-region {
   position: relative;
   min-height: 0;
-  flex: 1;
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 0;
   overflow: hidden;
 }
 
 .disk-body {
   height: 100%;
+  min-width: 0;
+  width: 100%;
   overflow: auto;
   scrollbar-width: none;
 }
@@ -754,9 +869,16 @@
 .disk-head {
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  box-sizing: border-box;
+  flex: 0 0 25px;
+  min-width: 0;
+  width: 100%;
   height: 25px;
   border-bottom: 1px solid var(--border-light);
   font-size: 13px;
+  position: relative;
+  z-index: 1;
+  background: var(--theme-sidebar-background, var(--bg-sidebar));
 }
 
 .disk-row {
@@ -774,6 +896,8 @@
 
 .disk-head span,
 .disk-row span {
+  box-sizing: border-box;
+  min-width: 0;
   padding: 4px 12px;
   overflow: hidden;
   text-overflow: ellipsis;

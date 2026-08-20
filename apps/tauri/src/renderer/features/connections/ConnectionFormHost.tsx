@@ -1,4 +1,10 @@
-import type { ConnectionFormMode, ConnectionProfile, CreateProfileInput, SshConnectionDefaults } from '@fileterm/core'
+import type {
+  ConnectionFormMode,
+  ConnectionProfile,
+  CreateProfileInput,
+  ResourceMonitoringMetric,
+  SshConnectionDefaults
+} from '@fileterm/core'
 import type { FormEvent } from 'react'
 import { ConnectionModal } from './ConnectionModal'
 
@@ -7,6 +13,8 @@ export function ConnectionFormHost({
   errorMessage,
   form,
   connectionDefaults,
+  fallbackResourceMonitoringMetrics,
+  fallbackResourceMonitoringMetricOrder,
   groupOptions,
   isSubmitting,
   mode,
@@ -21,6 +29,8 @@ export function ConnectionFormHost({
   errorMessage: string | null
   form: CreateProfileInput
   connectionDefaults: SshConnectionDefaults
+  fallbackResourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  fallbackResourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   groupOptions: string[]
   isSubmitting?: boolean
   mode: ConnectionFormMode
@@ -45,6 +55,8 @@ export function ConnectionFormHost({
     <ConnectionModal
       errorMessage={errorMessage}
       connectionDefaults={connectionDefaults}
+      fallbackResourceMonitoringMetrics={fallbackResourceMonitoringMetrics}
+      fallbackResourceMonitoringMetricOrder={fallbackResourceMonitoringMetricOrder}
       groupOptions={groupOptions}
       isSubmitting={isSubmitting}
       mode={mode}

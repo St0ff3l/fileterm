@@ -52,6 +52,7 @@ import type {
   AiStreamEvent,
   CreateAiConversationInput,
   CreateAiContextPreviewInput,
+  ImportedFont,
   RenameAiConversationInput,
   RetryAiChatInput,
   SaveAiProviderInput,
@@ -69,6 +70,7 @@ import { APP_EVENT, dispatchAppEvent } from '../renderer/lib/app-events'
 
 let latestNativeDropPaths: string[] = []
 let latestNativeDropAt = 0
+const currentWindow = getCurrentWindow()
 const terminalDataListeners = new Set<(payload: TerminalDataPayload) => void>()
 let terminalDataChannel: Channel<TerminalDataPayload> | null = null
 let terminalDataRegistration: Promise<void> | null = null
@@ -196,10 +198,11 @@ function subscribeTerminalData(listener: (payload: TerminalDataPayload) => void)
 // the existing DOM drop handler can hand main-process code real local paths.
 // The list is single-use to prevent a stale native drop from being paired with
 // a later browser-only drop of the same number of files.
-void getCurrentWindow()
+void currentWindow
   .onDragDropEvent((event) => {
     if (event.payload.type === 'enter' || event.payload.type === 'over') {
       dispatchAppEvent(APP_EVENT.tauriNativeDragOver, {
+        paths: event.payload.type === 'enter' ? [...event.payload.paths] : [],
         position: event.payload.position
       })
       return
@@ -524,6 +527,10 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<{ profiles: WorkspaceSnapshot['profiles']; folders: WorkspaceSnapshot['folders'] }>(
         'app_get_connection_library'
       ),
+    listImportedFonts: () => invoke<ImportedFont[]>('app_list_imported_fonts'),
+    importFont: () => invoke<ImportedFont | null>('app_import_font'),
+    getImportedFontData: (fontId: string) => invoke<string | null>('app_get_imported_font_data', { fontId }),
+    deleteImportedFont: (fontId: string) => invoke<boolean>('app_delete_imported_font', { fontId }),
     listSshKeys: () => invoke<SshKeyMetadata[]>('app_list_ssh_keys'),
     selectSshKeyFile: () => invoke<SshKeyFileSelection | null>('app_select_ssh_key_file'),
     importSshKey: (input?: ImportSshKeyInput) => invoke<SshKeyImportResult | null>('app_import_ssh_key', { input }),
