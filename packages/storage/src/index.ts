@@ -330,6 +330,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         enableExecChannel: input.enableExecChannel ?? true,
         enableResourceMonitoring: input.enableResourceMonitoring ?? true,
         resourceMonitoringIntervalSeconds: input.resourceMonitoringIntervalSeconds,
+        resourceMonitoringMetrics: input.resourceMonitoringMetrics,
+        resourceMonitoringMetricOrder: input.resourceMonitoringMetricOrder,
         reconnectMode: input.reconnectMode,
         legacyAlgorithms: input.legacyAlgorithms,
         connectionOverrides: input.connectionOverrides,

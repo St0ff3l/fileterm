@@ -655,6 +655,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         connectionDefaults.enableResourceMonitoring)
       : false
   const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
+  // Sidebar metrics are per-connection. Profiles created before this field
+  // existed fall back to the legacy global preference, which the settings
+  // dialog no longer writes, so existing connections keep their display.
+  const activeSidebarMetrics =
+    activeProfile?.type === 'ssh' && activeProfile.resourceMonitoringMetrics
+      ? activeProfile.resourceMonitoringMetrics
+      : resourceMonitoringMetrics
+  const activeSidebarMetricOrder =
+    activeProfile?.type === 'ssh' && activeProfile.resourceMonitoringMetricOrder
+      ? activeProfile.resourceMonitoringMetricOrder
+      : resourceMonitoringMetricOrder
   const isLocalTerminalWorkspace = activeTab?.sessionType === 'local'
   const shouldShowSystemSidebar = showSidebar && !isLocalTerminalWorkspace
   const launchLocalAgent = useCallback(
@@ -1517,6 +1528,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               connectionDefaults={connectionDefaults}
               errorMessage={formError}
               groupOptions={connectionGroupOptions}
+              fallbackResourceMonitoringMetrics={resourceMonitoringMetrics}
+              fallbackResourceMonitoringMetricOrder={resourceMonitoringMetricOrder}
               mode={editingProfileId ? 'edit' : 'create'}
               form={form}
               hasSavedPassword={
@@ -1625,6 +1638,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           connectionDefaults={connectionDefaults}
           editingProfileId={editingProfileId}
           errorMessage={formError}
+          fallbackResourceMonitoringMetrics={resourceMonitoringMetrics}
+          fallbackResourceMonitoringMetricOrder={resourceMonitoringMetricOrder}
           groupOptions={connectionGroupOptions}
           mode={editingProfileId ? 'edit' : formWindowMode}
           form={form}
@@ -1783,9 +1798,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             activeSession={activeSession}
             collapsed={isSystemSidebarCollapsed}
             showResourceMeters={isResourceMonitoringAvailable}
-            visibleMetrics={resourceMonitoringMetricOrder.filter((metric) =>
-              resourceMonitoringMetrics.includes(metric)
-            )}
+            visibleMetrics={activeSidebarMetricOrder.filter((metric) => activeSidebarMetrics.includes(metric))}
             isResizing={isResizingSidebar}
             onOpenSystemInfo={openSystemInfo}
             onResizeStart={startSidebarResize}

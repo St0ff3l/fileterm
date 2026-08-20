@@ -87,6 +87,10 @@ pub struct SshConnectionDefaults {
     pub enable_resource_monitoring: bool,
     #[serde(default = "default_resource_monitoring_interval_seconds")]
     pub resource_monitoring_interval_seconds: u64,
+    #[serde(default = "default_resource_monitoring_metrics")]
+    pub resource_monitoring_metrics: Vec<String>,
+    #[serde(default = "default_resource_monitoring_metric_order")]
+    pub resource_monitoring_metric_order: Vec<String>,
     #[serde(default = "default_reconnect_mode")]
     pub reconnect_mode: String,
     #[serde(default = "default_legacy_algorithms")]
@@ -100,6 +104,8 @@ pub struct SshConnectionDefaultsInput {
     pub enable_exec_channel: Option<bool>,
     pub enable_resource_monitoring: Option<bool>,
     pub resource_monitoring_interval_seconds: Option<u64>,
+    pub resource_monitoring_metrics: Option<Vec<String>>,
+    pub resource_monitoring_metric_order: Option<Vec<String>>,
     pub reconnect_mode: Option<String>,
     pub legacy_algorithms: Option<bool>,
 }
@@ -162,6 +168,8 @@ impl Default for SshConnectionDefaults {
             enable_exec_channel: default_enable_exec_channel(),
             enable_resource_monitoring: default_enable_resource_monitoring(),
             resource_monitoring_interval_seconds: default_resource_monitoring_interval_seconds(),
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             reconnect_mode: default_reconnect_mode(),
             legacy_algorithms: default_legacy_algorithms(),
         }
@@ -1459,6 +1467,14 @@ pub fn app_set_ui_preferences(
             preferences
                 .connection_defaults
                 .resource_monitoring_interval_seconds = value;
+        }
+        if let Some(value) = connection_defaults.resource_monitoring_metrics {
+            preferences.connection_defaults.resource_monitoring_metrics = value;
+        }
+        if let Some(value) = connection_defaults.resource_monitoring_metric_order {
+            preferences
+                .connection_defaults
+                .resource_monitoring_metric_order = value;
         }
         if let Some(value) = connection_defaults.reconnect_mode {
             preferences.connection_defaults.reconnect_mode = value;
@@ -5747,6 +5763,8 @@ mod ui_preferences_tests {
             enable_exec_channel: false,
             enable_resource_monitoring: false,
             resource_monitoring_interval_seconds: 15,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
             reconnect_mode: "enter".to_string(),
             legacy_algorithms: false,
         };

@@ -185,6 +185,10 @@ export interface SshConnectionDefaults {
   enableExecChannel: boolean
   enableResourceMonitoring: boolean
   resourceMonitoringIntervalSeconds: ResourceMonitoringIntervalSeconds
+  /** Sidebar metric cards enabled by default on newly created connections. */
+  resourceMonitoringMetrics: ResourceMonitoringMetric[]
+  /** Default sidebar card order (including disabled cards) for new connections. */
+  resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
   reconnectMode: 'none' | 'enter' | 'auto'
   legacyAlgorithms: boolean
 }
@@ -197,6 +201,8 @@ export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
   enableExecChannel: true,
   enableResourceMonitoring: true,
   resourceMonitoringIntervalSeconds: 1,
+  resourceMonitoringMetrics: [...DEFAULT_RESOURCE_MONITORING_METRICS],
+  resourceMonitoringMetricOrder: [...DEFAULT_RESOURCE_MONITORING_METRIC_ORDER],
   reconnectMode: 'none',
   legacyAlgorithms: false
 }
@@ -258,6 +264,10 @@ export interface SshProfile extends NetworkProfile {
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
+  /** Sidebar metric cards enabled for this connection. Absent = legacy global preference fallback. */
+  resourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  /** Sidebar card order (including disabled cards) for this connection. */
+  resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   reconnectMode?: 'none' | 'enter' | 'auto'
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
@@ -943,6 +953,10 @@ export interface CreateProfileInput {
   enableExecChannel?: boolean
   enableResourceMonitoring?: boolean
   resourceMonitoringIntervalSeconds?: ResourceMonitoringIntervalSeconds
+  /** Sidebar metric cards enabled for this connection. Undefined keeps the profile-level fallback. */
+  resourceMonitoringMetrics?: ResourceMonitoringMetric[]
+  /** Sidebar card order (including disabled cards) for this connection. */
+  resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   reconnectMode?: 'none' | 'enter' | 'auto'
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
