@@ -1399,7 +1399,9 @@ dependencies = [
  "gdk",
  "gtk",
  "hmac 0.12.1",
+ "image",
  "libc",
+ "log",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
@@ -1432,6 +1434,7 @@ dependencies = [
  "webview2-com",
  "window-vibrancy",
  "windows 0.61.3",
+ "windows-core 0.61.2",
  "windows-sys 0.61.2",
  "zeroize",
 ]

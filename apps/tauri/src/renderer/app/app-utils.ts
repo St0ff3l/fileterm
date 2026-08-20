@@ -1,5 +1,5 @@
 import type { DragEvent, MouseEvent } from 'react'
-import type { LocalFileItem, TransferTask, WorkspaceTab } from '@fileterm/core'
+import type { LocalFileItem, RemoteDragImage, TransferTask, WorkspaceTab } from '@fileterm/core'
 import { formatMessage, localizeErrorScope, t } from '../i18n'
 
 export const localFileDragType = 'application/x-fileterm-local-file'
@@ -216,9 +216,10 @@ export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[
   const visibleNames = names.slice(0, 2)
   preview.innerHTML = `
     <span class="file-drag-preview-icon" aria-hidden="true">
-      <svg class="app-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
-        <rect x="4.5" y="4.5" width="8" height="8" rx="1.5"></rect>
-        <path d="M11.5 2.5h-5a2 2 0 0 0-2 2v5"></path>
+      <svg class="app-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <g fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="33.6" transform="scale(0.015625)">
+          ${COPY_ICON_PATHS.map((path) => `<path d="${path}"></path>`).join('')}
+        </g>
       </svg>
     </span>
     <span>${escapeHtml(visibleNames.join(names.length > 1 ? ', ' : ''))}${names.length > 2 ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${names.length} ${t.itemsSuffix}` : ''}</span>
@@ -226,6 +227,154 @@ export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[
   document.body.appendChild(preview)
   event.dataTransfer.setDragImage(preview, 10, 10)
   window.setTimeout(() => preview.remove(), 0)
+}
+
+/**
+ * AppIcon `copy` 图标的路径数据（1024 视野，经 scale(0.015625) 映射到 16 视野）。
+ * 拖拽 ghost 与终端悬浮窗共用同一枚复制图标。
+ */
+const COPY_ICON_PATHS = [
+  'M761.088 715.3152a38.7072 38.7072 0 1 1 0-77.4144 37.4272 37.4272 0 0 0 37.4272-37.4272V265.0112a37.4272 37.4272 0 0 0-37.4272-37.4272H425.6256a37.4272 37.4272 0 0 0-37.4272 37.4272 38.7072 38.7072 0 1 1-77.4144 0 115.0976 115.0976 0 0 1 114.8416-114.8416h335.4624a115.0976 115.0976 0 0 1 114.8416 114.8416v335.4624a115.0976 115.0976 0 0 1-114.8416 114.8416z',
+  'M589.4656 883.0976H268.1856a121.1392 121.1392 0 0 1-121.2928-121.2928v-322.56a121.1392 121.1392 0 0 1 121.2928-121.344h321.28a121.1392 121.1392 0 0 1 121.2928 121.2928v322.56c1.28 67.1232-54.1696 121.344-121.2928 121.344zM268.1856 395.3152a43.52 43.52 0 0 0-43.8784 43.8784v322.56a43.52 43.52 0 0 0 43.8784 43.8784h321.28a43.52 43.52 0 0 0 43.8784-43.8784v-322.56a43.52 43.52 0 0 0-43.8784-43.8784z'
+] as const
+
+/** Ghost 布局常量，与 session.css 中 `.native-drag-ghost` 保持一致。 */
+const NATIVE_DRAG_GHOST_LAYOUT = {
+  paddingX: 10,
+  paddingY: 7,
+  maxWidth: 360,
+  radius: 5,
+  borderWidth: 1,
+  iconSize: 14,
+  iconGap: 7,
+  titleFontSize: 12,
+  /** 与终端悬浮窗复制图标一致的描边粗细（AppIcon strokeWidth 2.1）。 */
+  iconStrokeWidth: 2.1,
+  /** 光标到 ghost 左上角的逻辑偏移（native-drag-ghost 悬浮定位）。 */
+  cursorOffset: 14
+} as const
+
+/**
+ * 为 Windows 原生拖出渲染 Shell 拖拽图像（DragImageBits 同款位图）。
+ * 与 DOM 版 `.native-drag-ghost` 同视觉（单行图标 + 文件名，对齐 macOS）：
+ * 主题色通过隐藏探针元素读取，文本与图标用 canvas 绘制，输出 PNG data
+ * URL + 物理像素尺寸/偏移。
+ */
+export function buildNativeDragImage(names: string[]): RemoteDragImage | null {
+  if (!names.length || typeof document === 'undefined') {
+    return null
+  }
+
+  const probe = document.createElement('div')
+  probe.className = 'native-drag-ghost'
+  probe.style.position = 'fixed'
+  probe.style.left = '-9999px'
+  probe.style.top = '-9999px'
+  probe.style.visibility = 'hidden'
+  const icon = document.createElement('span')
+  icon.className = 'file-drag-preview-icon'
+  probe.appendChild(icon)
+  document.body.appendChild(probe)
+  const probeStyles = window.getComputedStyle(probe)
+  const iconStyles = window.getComputedStyle(icon)
+  const background = probeStyles.backgroundColor
+  const titleColor = probeStyles.color
+  const borderColor = probeStyles.borderColor
+  const titleFont = `${NATIVE_DRAG_GHOST_LAYOUT.titleFontSize}px ${probeStyles.fontFamily}`
+  const iconColor = iconStyles.color
+  probe.remove()
+
+  const visibleNames = names.slice(0, 2).join(names.length > 1 ? ', ' : '')
+  const titleText =
+    names.length > 2
+      ? `${visibleNames} ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${names.length} ${t.itemsSuffix}`.trim()
+      : visibleNames
+
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return null
+  }
+
+  // 先用逻辑像素排版，再按 devicePixelRatio 放大绘制。
+  const scale = Math.max(1, window.devicePixelRatio || 1)
+  const layoutPadding = NATIVE_DRAG_GHOST_LAYOUT.paddingX * 2
+  context.font = titleFont
+  const titleWidth = context.measureText(titleText).width
+  const titleRowWidth = NATIVE_DRAG_GHOST_LAYOUT.iconSize + NATIVE_DRAG_GHOST_LAYOUT.iconGap + titleWidth
+  const logicalWidth = Math.min(
+    NATIVE_DRAG_GHOST_LAYOUT.maxWidth,
+    Math.ceil(layoutPadding + titleRowWidth + NATIVE_DRAG_GHOST_LAYOUT.borderWidth * 2)
+  )
+  const titleRowHeight = Math.max(NATIVE_DRAG_GHOST_LAYOUT.iconSize, NATIVE_DRAG_GHOST_LAYOUT.titleFontSize + 3)
+  const logicalHeight =
+    NATIVE_DRAG_GHOST_LAYOUT.paddingY * 2 + titleRowHeight + NATIVE_DRAG_GHOST_LAYOUT.borderWidth * 2
+
+  canvas.width = Math.ceil(logicalWidth * scale)
+  canvas.height = Math.ceil(logicalHeight * scale)
+  context.scale(scale, scale)
+
+  const layout = NATIVE_DRAG_GHOST_LAYOUT
+  // 圆角卡片背景
+  context.beginPath()
+  context.roundRect(
+    layout.borderWidth / 2,
+    layout.borderWidth / 2,
+    logicalWidth - layout.borderWidth,
+    logicalHeight - layout.borderWidth,
+    layout.radius
+  )
+  context.fillStyle = background
+  context.fill()
+  context.lineWidth = layout.borderWidth
+  context.strokeStyle = Array.isArray(borderColor) ? borderColor[0] : borderColor
+  context.stroke()
+
+  // 单行内容：复制图标 + 文件名
+  const contentTop = layout.borderWidth + layout.paddingY
+  const iconLeft = layout.borderWidth + layout.paddingX
+  // 图标路径为 1024 视野，直接缩放到 iconSize 像素；描边宽度按
+  // AppIcon 语义（strokeWidth*16 于 1024 视野）换算，与终端悬浮窗一致。
+  const iconScale = layout.iconSize / 1024
+  context.save()
+  context.translate(iconLeft, contentTop)
+  context.scale(iconScale, iconScale)
+  context.fillStyle = iconColor
+  context.strokeStyle = iconColor
+  context.lineWidth = layout.iconStrokeWidth * 16
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+  for (const pathData of COPY_ICON_PATHS) {
+    const iconPath = new Path2D(pathData)
+    context.fill(iconPath)
+    context.stroke(iconPath)
+  }
+  context.restore()
+
+  context.font = titleFont
+  context.fillStyle = titleColor
+  context.textBaseline = 'middle'
+  context.fillText(
+    titleText,
+    iconLeft + layout.iconSize + layout.iconGap,
+    contentTop + titleRowHeight / 2,
+    logicalWidth - layout.borderWidth - layout.paddingX - (iconLeft + layout.iconSize + layout.iconGap)
+  )
+
+  let dataUrl: string
+  try {
+    dataUrl = canvas.toDataURL('image/png')
+  } catch {
+    return null
+  }
+
+  return {
+    dataUrl,
+    width: canvas.width,
+    height: canvas.height,
+    offsetX: Math.round(-layout.cursorOffset * scale),
+    offsetY: Math.round(-layout.cursorOffset * scale)
+  }
 }
 
 export function transferStatusText(transfer: TransferTask) {

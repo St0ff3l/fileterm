@@ -16,11 +16,13 @@ import type {
   CommandTemplate,
   CommandTemplateInput,
   LocalFileItem,
+  RemoteDragImage,
   RemoteFileItem,
   SessionSnapshot,
   WorkspaceTab
 } from '@fileterm/core'
 import {
+  buildNativeDragImage,
   copyText,
   hasSelectedText,
   localFileDragType,
@@ -289,6 +291,12 @@ export function FileManager({
   const canUseRemoteFiles = activeSession.connected === true && !activeSession.sftpUnavailableReason
   const remoteFilesUnavailableText = activeSession.sftpUnavailableReason ?? t.remoteDisconnectedDescription
   const isSshSession = activeTab?.sessionType === 'ssh'
+  const isFtpSession = activeTab?.sessionType === 'ftp'
+  // Mirrors the Rust-side `session_supports_streaming` gate in windows_drag.rs:
+  // SSH (user and root view) and FTP sessions all stream bytes through the OLE
+  // FileContents channel (browser-style drag out). Other session types fall
+  // back to staging into a temp folder before the drag loop starts.
+  const supportsStreamingNativeDrag = desktopApi?.platform === 'win32' && (isSshSession || isFtpSession)
   const canManageTunnels = activeSession.capabilities?.tunnels === true
   const showRemoteDirectoryLoading = isRemoteDirectoryLoading || activeSession.remoteFilesLoading === true
   const showLocalDirectoryLoading = isLocalDirectoryLoading && !isWorkspaceRefreshing
@@ -318,6 +326,14 @@ export function FileManager({
   const suppressNextSelectionClick = useRef(false)
   const suppressNextClearClick = useRef(false)
   const nativeRemoteDragRef = useRef<{ tabId: string; items: RemoteFileItem[] } | null>(null)
+  const [nativeDragGhost, setNativeDragGhost] = useState<{
+    names: string[]
+    x: number
+    y: number
+  } | null>(null)
+  // OLE 拖拽循环期间 webview 收不到指针事件；ghost 位置改由 Rust 侧
+  // GiveFeedback 上报的光标事件驱动（tauriNativeRemoteDragCursor）。
+  const nativeDragGhostNamesRef = useRef<string[] | null>(null)
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const localScrollRef = useRef<HTMLDivElement | null>(null)
@@ -396,7 +412,11 @@ export function FileManager({
       }
 
       const stagedPathsByName = new Map(detail.paths.map((path) => [localDragBasename(path), path] as const))
+      // Streaming drags expose CF_HDROP virtual paths that only exist to let
+      // the drop target accept the gesture; the bytes are never on disk, so
+      // the pane drop must download directly instead of copying staged files.
       const canReuseStagedPaths =
+        !supportsStreamingNativeDrag &&
         desktopApi?.platform !== 'darwin' &&
         detail.paths.length === items.length &&
         items.every((item) => stagedPathsByName.has(item.name))
@@ -441,7 +461,64 @@ export function FileManager({
         window.clearTimeout(nativeRemoteDragCleanupTimer)
       }
     }
-  }, [activeTab?.id, desktopApi, localPath, onDownloadFiles, onOpenLocalPath, useUnifiedNativeRemoteDrag])
+  }, [
+    activeTab?.id,
+    desktopApi,
+    localPath,
+    onDownloadFiles,
+    onOpenLocalPath,
+    supportsStreamingNativeDrag,
+    useUnifiedNativeRemoteDrag
+  ])
+
+  const nativeDragGhostActive = nativeDragGhost !== null
+  useEffect(() => {
+    if (!nativeDragGhostActive) {
+      return
+    }
+    // Ghost 只在原生拖拽接管前跟随光标。此阶段松开鼠标意味着拖拽取消，
+    // 但启动拖拽时的 pointerup 监听已被清理（OLE 循环期间 webview 收不到
+    // 指针事件），必须在这里补检 buttons，否则松开后 ghost 仍会跟随光标。
+    const handleGhostPointerMove = (event: globalThis.PointerEvent) => {
+      if (event.buttons === 0) {
+        setNativeDragGhost(null)
+        return
+      }
+      setNativeDragGhost((prev) => (prev ? { ...prev, x: event.clientX, y: event.clientY } : prev))
+    }
+    const handleGhostPointerUp = () => {
+      setNativeDragGhost(null)
+    }
+    document.addEventListener('pointermove', handleGhostPointerMove, true)
+    document.addEventListener('pointerup', handleGhostPointerUp, true)
+    document.addEventListener('pointercancel', handleGhostPointerUp, true)
+    return () => {
+      document.removeEventListener('pointermove', handleGhostPointerMove, true)
+      document.removeEventListener('pointerup', handleGhostPointerUp, true)
+      document.removeEventListener('pointercancel', handleGhostPointerUp, true)
+    }
+  }, [nativeDragGhostActive])
+
+  useEffect(() => {
+    if (desktopApi?.platform !== 'win32') {
+      return
+    }
+    // The Shell drag image only renders over targets that cooperate with
+    // IDropTargetHelper (desktop / Explorer). While the cursor stays inside
+    // this window, the drag loop reports its position via GiveFeedback and
+    // the DOM ghost keeps following; once it leaves, the ghost hides and the
+    // Shell image takes over.
+    return onAppEvent(APP_EVENT.tauriNativeRemoteDragCursor, (cursor) => {
+      if (!cursor.inWindow) {
+        setNativeDragGhost(null)
+        return
+      }
+      const names = nativeDragGhostNamesRef.current
+      if (names) {
+        setNativeDragGhost({ names, x: cursor.x, y: cursor.y })
+      }
+    })
+  }, [desktopApi])
 
   useEffect(() => {
     if (canUseRemoteFiles) {
@@ -575,12 +652,30 @@ export function FileManager({
       if (useUnifiedNativeRemoteDrag) {
         nativeRemoteDragRef.current = nativeDrag
       }
-      void desktopApi.startRemoteFileDrag(activeTab.id, payload).catch((error) => {
-        if (nativeRemoteDragRef.current === nativeDrag) {
-          nativeRemoteDragRef.current = null
-        }
-        console.error('[FileTerm] 远程文件拖出失败', error)
-      })
+      // SSH and FTP drags stream through the OLE FileContents channel; other
+      // session types stage into a temp folder first. Either way the DOM ghost
+      // follows the cursor while it stays inside the window (fed by
+      // GiveFeedback cursor reports), and a Shell drag image with the same
+      // visual takes over once the drag leaves the window — like a browser.
+      let dragImage: RemoteDragImage | null = null
+      if (desktopApi?.platform === 'win32') {
+        const names = payloadItems.map((row) => row.name)
+        nativeDragGhostNamesRef.current = names
+        setNativeDragGhost({ names, x: moveEvent.clientX, y: moveEvent.clientY })
+        dragImage = buildNativeDragImage(names)
+      }
+      void desktopApi
+        .startRemoteFileDrag(activeTab.id, payload, dragImage)
+        .catch((error) => {
+          if (nativeRemoteDragRef.current === nativeDrag) {
+            nativeRemoteDragRef.current = null
+          }
+          console.error('[FileTerm] 远程文件拖出失败', error)
+        })
+        .finally(() => {
+          nativeDragGhostNamesRef.current = null
+          setNativeDragGhost(null)
+        })
     }
 
     document.addEventListener('pointermove', handlePointerMove, true)
@@ -889,6 +984,19 @@ export function FileManager({
       tabIndex={0}
       style={{ '--local-pane-width': `${commandPaneWidth}px` } as CSSProperties}
     >
+      {nativeDragGhost ? (
+        <div className="native-drag-ghost" style={{ left: nativeDragGhost.x + 14, top: nativeDragGhost.y + 14 }}>
+          <span className="file-drag-preview-icon" aria-hidden="true">
+            <AppIcon name="copy" size={14} strokeWidth={2.1} />
+          </span>
+          <span className="native-drag-ghost-title">
+            {nativeDragGhost.names.slice(0, 2).join(nativeDragGhost.names.length > 1 ? ', ' : '')}
+            {nativeDragGhost.names.length > 2
+              ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${nativeDragGhost.names.length} ${t.itemsSuffix}`
+              : ''}
+          </span>
+        </div>
+      ) : null}
       <div className="file-tabs">
         <div className="file-tabs-left">
           <button

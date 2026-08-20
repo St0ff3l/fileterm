@@ -284,7 +284,7 @@ fn merge_system_metrics_history(
             let next_has_rows = merged
                 .get(field)
                 .and_then(|value| value.as_array())
-                .map_or(false, |rows| !rows.is_empty());
+                .is_some_and(|rows| !rows.is_empty());
             if !next_has_rows {
                 if let Some(previous_rows) = prev.get(field).and_then(|value| value.as_array()) {
                     if !previous_rows.is_empty() {
@@ -5681,6 +5681,10 @@ async fn handle_worker_cmd_without_sftp(
             let _ = respond_to.send(sftp_unavailable_result(unavailable_reason));
             Ok(false)
         }
+        WorkerCmd::ReadRemoteFileRange { respond_to, .. } => {
+            let _ = respond_to.send(sftp_unavailable_result(unavailable_reason));
+            Ok(false)
+        }
         WorkerCmd::WriteRemoteFile { respond_to, .. }
         | WorkerCmd::CreateRemoteDirectory { respond_to, .. }
         | WorkerCmd::CreateRemoteFile { respond_to, .. }
@@ -6287,6 +6291,42 @@ async fn handle_worker_cmd(
                     }
                 };
                 let _ = respond_to.send(res);
+            });
+            Ok(false)
+        }
+        WorkerCmd::ReadRemoteFileRange {
+            path,
+            offset,
+            length,
+            respond_to,
+        } => {
+            // 拖出流式读取：走专用传输通道，避免占用浏览通道阻塞文件管理器。
+            let handle = Arc::clone(handle);
+            let sftp = Arc::clone(sftp);
+            let transfer_sftp_slot = Arc::clone(transfer_sftp_slot);
+            let app = app.clone();
+            let tab_id = tab_id.to_string();
+            let fam = file_access_mode.clone();
+            let method = *root_file_access_method;
+            let su = sudo_user.clone();
+            let sp = sudo_password.clone();
+            tokio::spawn(async move {
+                let result = if fam == "root" {
+                    read_root_remote_file_range(&handle, &path, offset, length, method, &su, &sp)
+                        .await
+                } else {
+                    let transfer_sftp =
+                        acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id)
+                            .await;
+                    let sftp_guard = transfer_sftp.write().await;
+                    let result = read_remote_file_range(&sftp_guard, &path, offset, length).await;
+                    drop(sftp_guard);
+                    if result.is_err() {
+                        invalidate_transfer_sftp(&transfer_sftp, &sftp, &transfer_sftp_slot).await;
+                    }
+                    result
+                };
+                let _ = respond_to.send(result);
             });
             Ok(false)
         }
@@ -7314,6 +7354,196 @@ async fn download_remote_file(
         .await
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+/// 按偏移读取远端文件片段（Windows 流式拖出用）。
+/// 每次调用独立 open/seek/read/close，无跨调用句柄状态。
+async fn read_remote_file_range(
+    sftp: &SftpSession,
+    path: &str,
+    offset: u64,
+    length: u64,
+) -> Result<Vec<u8>, String> {
+    if length == 0 {
+        return Ok(Vec::new());
+    }
+    let mut source = sftp.open(path).await.map_err(|error| error.to_string())?;
+    source
+        .seek(std::io::SeekFrom::Start(offset))
+        .await
+        .map_err(|error| error.to_string())?;
+    let mut buffer = vec![0_u8; length as usize];
+    let mut filled = 0_usize;
+    while filled < buffer.len() {
+        let read = source
+            .read(&mut buffer[filled..])
+            .await
+            .map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        filled += read;
+    }
+    buffer.truncate(filled);
+    Ok(buffer)
+}
+
+/// root 视图拖出流式读取：通过 exec 通道执行 `tail -c +N | head -c M`，
+/// 与 `download_root_remote_file` 相同的 sudo/su 通道语义，只是不落盘。
+#[allow(clippy::too_many_arguments)]
+async fn read_root_remote_file_range(
+    handle: &Handle<ClientHandler>,
+    remote_path: &str,
+    offset: u64,
+    length: u64,
+    access_method: RootFileAccessMethod,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<Vec<u8>, String> {
+    if length == 0 {
+        return Ok(Vec::new());
+    }
+    if access_method == RootFileAccessMethod::Su {
+        return read_root_remote_file_range_via_su_pty(
+            handle,
+            remote_path,
+            offset,
+            length,
+            sudo_user,
+            sudo_password,
+        )
+        .await;
+    }
+    let shell_command = if offset == 0 {
+        format!("head -c {length} -- {}", shell_quote(remote_path))
+    } else {
+        format!(
+            "tail -c +{} -- {} | head -c {length}",
+            offset + 1,
+            shell_quote(remote_path)
+        )
+    };
+    let (command, password) =
+        root_file_command(access_method, sudo_user, sudo_password, &shell_command);
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    channel
+        .exec(true, command.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+    if let Some(password) = password.as_deref() {
+        channel
+            .data(format!("{password}\n").as_bytes())
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+
+    let mut payload = Vec::new();
+    let mut stderr = String::new();
+    let mut exit_status = None;
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Data { data }) => {
+                if payload.len() < length as usize {
+                    let remaining = length as usize - payload.len();
+                    let bytes = data.as_ref();
+                    let take = bytes.len().min(remaining);
+                    payload.extend_from_slice(&bytes[..take]);
+                }
+            }
+            Some(ChannelMsg::ExtendedData { data, .. }) => {
+                if stderr.len() < 4096 {
+                    stderr.push_str(&String::from_utf8_lossy(data.as_ref()));
+                }
+            }
+            Some(ChannelMsg::ExitStatus {
+                exit_status: status,
+            }) => {
+                exit_status = Some(status);
+            }
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+            _ => {}
+        }
+    }
+    match exit_status {
+        Some(0) => Ok(payload),
+        Some(status) => {
+            let suffix = if stderr.trim().is_empty() {
+                String::new()
+            } else {
+                format!("：{}", stderr.trim())
+            };
+            Err(format!("root 范围读取命令退出码 {status}{suffix}"))
+        }
+        None => Err("root 范围读取命令未返回退出状态".to_string()),
+    }
+}
+
+/// su 通道走 PTY，命令输出必须 base64 编码后过滤回显噪声再解码。
+async fn read_root_remote_file_range_via_su_pty(
+    handle: &Handle<ClientHandler>,
+    remote_path: &str,
+    offset: u64,
+    length: u64,
+    sudo_user: &Option<String>,
+    sudo_password: &Option<String>,
+) -> Result<Vec<u8>, String> {
+    let shell_command = if offset == 0 {
+        format!("head -c {length} -- {} | base64", shell_quote(remote_path))
+    } else {
+        format!(
+            "tail -c +{} -- {} | head -c {length} | base64",
+            offset + 1,
+            shell_quote(remote_path)
+        )
+    };
+    let command = su_exec_command(&shell_command);
+    let (command, password) =
+        root_file_command(RootFileAccessMethod::Su, sudo_user, sudo_password, &command);
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|error| error.to_string())?;
+    request_root_exec_pty(&channel).await?;
+    channel
+        .exec(true, command.as_str())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let mut encoded = Vec::new();
+    let initial_data = wait_for_su_output_marker(&mut channel, password.as_deref()).await?;
+    append_base64_stream_bytes(&mut encoded, &initial_data);
+
+    let mut exit_status = None;
+    loop {
+        match channel.wait().await {
+            Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
+                append_base64_stream_bytes(&mut encoded, data.as_ref());
+            }
+            Some(ChannelMsg::ExitStatus {
+                exit_status: status,
+            }) => {
+                exit_status = Some(status);
+            }
+            Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+            _ => {}
+        }
+    }
+    match exit_status {
+        Some(0) => {}
+        Some(status) => return Err(format!("su 范围读取命令退出码 {status}")),
+        None => return Err("su 范围读取命令未返回退出状态".to_string()),
+    }
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(&encoded)
+        .map_err(|error| format!("root 范围读取 base64 解码失败: {error}"))?;
+    if decoded.len() as u64 > length {
+        Ok(decoded[..length as usize].to_vec())
+    } else {
+        Ok(decoded)
+    }
 }
 
 async fn replace_remote_file(

@@ -19,6 +19,10 @@ export const APP_EVENT = {
   tauriNativeDrop: 'fileterm:tauri-native-drop',
   /** Windows/Linux 原生远程拖出会话结束（成功或取消）。 */
   tauriNativeRemoteDragFinished: 'fileterm:tauri-native-remote-drag-finished',
+  /** Windows 原生远程拖出越过暂存下载阶段，OLE 拖拽循环即将接管。 */
+  tauriNativeRemoteDragStarted: 'fileterm:tauri-native-remote-drag-started',
+  /** Windows 原生远程拖出期间 GiveFeedback 上报的光标位置与是否在源窗口内。 */
+  tauriNativeRemoteDragCursor: 'fileterm:tauri-native-remote-drag-cursor',
   /** 远端文件区被 DOM 拖入事件标记为可投放目标。 */
   tauriRemoteDragOver: 'fileterm:tauri-remote-dragover',
   /** 请求聚焦指定 tab 的终端。detail 为 tabId。 */
@@ -48,6 +52,8 @@ export interface AppEventDetailMap {
     position: { x: number; y: number }
   }
   [APP_EVENT.tauriNativeRemoteDragFinished]: never
+  [APP_EVENT.tauriNativeRemoteDragStarted]: never
+  [APP_EVENT.tauriNativeRemoteDragCursor]: { x: number; y: number; inWindow: boolean }
   [APP_EVENT.tauriRemoteDragOver]: never
   [APP_EVENT.focusTerminal]: string
   [APP_EVENT.terminalCopy]: never

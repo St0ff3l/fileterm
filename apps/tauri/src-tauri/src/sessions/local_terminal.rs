@@ -303,7 +303,7 @@ fn decode_osc7_cwd(payload: &str) -> Option<String> {
         if path.starts_with('/') && path.as_bytes().get(2) == Some(&b':') {
             path.remove(0);
         }
-        return Some(path);
+        Some(path)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -722,9 +722,9 @@ impl LocalProcessTree {
                 return Self::default();
             }
 
-            return Self {
+            Self {
                 job_handle: Some(job_handle as usize),
-            };
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -1123,6 +1123,7 @@ fn shell_name(shell: &str) -> String {
         .to_ascii_lowercase()
 }
 
+#[cfg(not(target_os = "windows"))]
 fn has_non_empty_env(name: &str) -> bool {
     env::var_os(name).is_some_and(|value| !value.is_empty())
 }
@@ -1351,11 +1352,13 @@ mod tests {
     use super::{
         append_local_output_chunk, clamp_u16, cmd_args_have_explicit_command,
         configure_shell_command, default_launch, local_shell_exit_summary,
-        powershell_args_have_explicit_command, resolve_launch, run_pty_loop,
-        scan_alt_screen_transition, shell_name, validate_launch, AltScreenTransitionScanner,
-        LocalOsc7CwdTracker, LocalOutputChunk, LocalProcessTree, LocalPtyCommand,
-        LocalTerminalLaunch, LocalTerminalLaunchOptions, Utf8StreamDecoder,
+        powershell_args_have_explicit_command, resolve_launch, scan_alt_screen_transition,
+        shell_name, validate_launch, AltScreenTransitionScanner, LocalOsc7CwdTracker,
+        LocalOutputChunk, LocalProcessTree, LocalTerminalLaunch, LocalTerminalLaunchOptions,
+        Utf8StreamDecoder,
     };
+    #[cfg(unix)]
+    use super::{run_pty_loop, LocalPtyCommand};
 
     #[cfg(unix)]
     type TestPtyMaster = Box<dyn portable_pty::MasterPty + Send>;
@@ -1467,10 +1470,25 @@ mod tests {
 
     #[test]
     fn launch_options_merge_platform_defaults_with_one_shot_overrides() {
+        // validate_launch rejects path-like shells that do not exist, so the
+        // override must name a real file on every platform the test runs on.
+        let shell = if cfg!(windows) {
+            std::env::var_os("SystemRoot")
+                .map(|root| {
+                    std::path::PathBuf::from(root)
+                        .join("System32")
+                        .join("cmd.exe")
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .unwrap_or_else(|| "cmd.exe".to_string())
+        } else {
+            "/bin/sh".to_string()
+        };
         let mut environment = BTreeMap::new();
         environment.insert("FILETERM_TEST".to_string(), "present".to_string());
         let launch = resolve_launch(Some(LocalTerminalLaunchOptions {
-            shell: Some("/bin/sh".to_string()),
+            shell: Some(shell.clone()),
             title: Some("Agent terminal".to_string()),
             cwd: Some("/tmp".to_string()),
             args: Some(vec!["-i".to_string()]),
@@ -1478,7 +1496,7 @@ mod tests {
         }))
         .expect("valid local launch options should resolve");
 
-        assert_eq!(launch.shell, "/bin/sh");
+        assert_eq!(launch.shell, shell);
         assert_eq!(launch.title.as_deref(), Some("Agent terminal"));
         assert_eq!(launch.cwd, "/tmp");
         assert_eq!(launch.args, vec!["-i"]);
@@ -2111,7 +2129,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn real_local_conpty_preserves_output_and_exit_status() {
-        use std::io::Read;
+        use std::io::{Read, Write};
 
         let pty_system = native_pty_system();
         let pair = pty_system
@@ -2139,20 +2157,75 @@ mod tests {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => break,
-                    Ok(size) => output.extend_from_slice(&buffer[..size]),
+                    Ok(size) => {
+                        output.extend_from_slice(&buffer[..size]);
+                        let _ = output_tx.send(output.clone());
+                    }
                     Err(_) => break,
                 }
             }
             let _ = output_tx.send(output);
         });
-        let writer = master
+        // Keep the ConPTY input pipe open while cmd.exe runs: closing the
+        // writer early makes conhost treat the client as gone and terminate
+        // the child with STATUS_CONTROL_C_EXIT before it can echo anything.
+        let mut writer = master
             .take_writer()
             .expect("ConPTY writer should be available");
+        // cmd.exe under ConPTY emits ESC[6n (cursor position request) at
+        // startup and blocks until the terminal replies. In the real app
+        // xterm.js answers automatically; this test has to emulate that
+        // reply, otherwise cmd.exe never runs the command.
+        let mut replied_cpr = false;
+        let mut output = Vec::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        let status = loop {
+            while let Ok(snapshot) = output_rx.try_recv() {
+                output = snapshot;
+            }
+            if !replied_cpr && output.windows(4).any(|window| window == b"\x1b[6n") {
+                replied_cpr = true;
+                let _ = writer.write_all(b"\x1b[1;1R");
+                let _ = writer.flush();
+            }
+            if let Ok(Some(status)) = child.try_wait() {
+                break status;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cmd.exe did not exit within 15s; output so far: {:?}",
+                String::from_utf8_lossy(&output)
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
         drop(writer);
-        let status = child.wait().expect("cmd.exe should exit");
-        let output = output_rx
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .expect("ConPTY reader should finish after shell exit");
+        // ConPTY renders through conhost on a throttled refresh pass, so the
+        // echo bytes can still be in flight after cmd.exe exits. Wait for the
+        // payload to reach the reader before closing the master, otherwise
+        // conhost is torn down with the data still buffered inside it.
+        let mut output = Vec::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            match output_rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                Ok(snapshot) => {
+                    output = snapshot;
+                    if String::from_utf8_lossy(&output).contains("FileTerm local") {
+                        break;
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        // Closing the master ends the conhost session; the reader then sees
+        // EOF and publishes its final snapshot.
+        drop(master);
+        if let Ok(snapshot) = output_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            output = snapshot;
+        }
 
         assert!(String::from_utf8_lossy(&output).contains("FileTerm local"));
         assert_eq!(status.exit_code(), 7);

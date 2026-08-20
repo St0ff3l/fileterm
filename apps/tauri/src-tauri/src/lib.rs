@@ -2218,7 +2218,10 @@ mod tests {
     fn loads_the_high_resolution_windows_icon_for_windows_surfaces() {
         let icon = windows_icon_image().unwrap();
 
-        assert_eq!((icon.width(), icon.height()), (32, 32));
+        // `Image::from_bytes` decodes multi-size ICO containers through the
+        // image crate, which selects the largest frame. The high-resolution
+        // 256px bitmap is exactly what tray and window surfaces want.
+        assert_eq!((icon.width(), icon.height()), (256, 256));
     }
 
     #[test]

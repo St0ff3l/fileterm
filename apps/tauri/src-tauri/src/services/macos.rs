@@ -178,6 +178,7 @@ pub(super) async fn start_remote_file_drag(
     window_label: &str,
     tab_id: &str,
     items: Vec<RemoteFileDragItem>,
+    _drag_image: Option<super::RemoteDragImage>,
 ) -> Result<(), AppError> {
     validate_items(&items)?;
 

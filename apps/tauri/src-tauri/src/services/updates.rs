@@ -252,8 +252,7 @@ fn updater_for_release(
 
     let endpoint = updater_manifest_url(tag)?;
     let updater = app
-        .updater()
-        .map_err(|error| format!("自动更新不可用: {error}"))?
+        .updater_builder()
         .endpoints(vec![endpoint])
         .map_err(|error| format!("更新地址配置失败: {error}"))?
         .build()
@@ -424,7 +423,7 @@ async fn download_windows_update(app: &AppHandle) -> Result<(), AppError> {
     let status_tag = existing_status
         .get("releaseTag")
         .and_then(serde_json::Value::as_str)
-        .filter(|tag| status_channel == Some(channel.as_str()))
+        .filter(|_| status_channel == Some(channel.as_str()))
         .map(str::to_string);
     let status_release_url = existing_status
         .get("releaseUrl")

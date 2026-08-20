@@ -511,7 +511,7 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
     .await;
 }
 
-async fn worker_call<T>(
+pub(crate) async fn worker_call<T>(
     app: &AppHandle,
     tab_id: &str,
     make_command: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,

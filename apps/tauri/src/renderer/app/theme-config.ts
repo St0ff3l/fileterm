@@ -50,6 +50,14 @@ function alpha(color: string, alphaPercent: number) {
   return `color-mix(in srgb, ${color} ${percent}%, transparent ${100 - percent}%)`
 }
 
+// Sidebar frosted glass depends on native window translucency, which only
+// macOS provides via vibrancy. Windows and Linux main windows are opaque, so
+// a blurred translucent sidebar there only costs GPU with nothing real to
+// blur behind it. Fail closed: unknown platform means no glass.
+function sidebarGlassSupported(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.platform === 'darwin'
+}
+
 function resolveCompactUiVariables(
   theme: ThemeConfig['theme'],
   variant: ThemeVariant,
@@ -118,7 +126,8 @@ function resolveCompactUiVariables(
   const warningSurface = alpha(warning, isLight ? 10 : 14)
   const dangerSurface = alpha(danger, isLight ? 10 : 14)
 
-  const sidebarBackground = theme.opaqueWindows ? sidebar : alpha(sidebar, isLight ? 88 : 82)
+  const sidebarGlassActive = !theme.opaqueWindows && sidebarGlassSupported()
+  const sidebarBackground = sidebarGlassActive ? alpha(sidebar, isLight ? 88 : 82) : sidebar
 
   return {
     '--bg-main': surface,
@@ -259,7 +268,7 @@ function resolveCompactUiVariables(
     '--dialog-button-danger-hover-border': 'transparent',
     '--dialog-button-danger-hover-text': '#ffffff',
     '--theme-sidebar-background': sidebarBackground,
-    '--theme-sidebar-backdrop-filter': theme.opaqueWindows ? 'none' : 'blur(18px)',
+    '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
     '--window-control-surface': elevated,
     '--window-control-hover-surface': hover,
     '--window-control-foreground': secondaryText,
@@ -309,8 +318,7 @@ function resolveCompactUiVariables(
     '--monaco-inactive-selection': alpha(accent, isLight ? 12 : 18),
     '--monaco-line-highlight': alpha(ink, isLight ? 4 : 6),
     '--monaco-indent-guide': border,
-    '--monaco-indent-guide-active': strongBorder,
-    '--theme-window-opacity': theme.opaqueWindows ? '1' : '0.82'
+    '--monaco-indent-guide-active': strongBorder
   }
 }
 
@@ -450,6 +458,7 @@ function buildThemeVariables(
   const normalized = normalizeThemeConfig({ ...config, variant }, variant)
   const theme = normalized.theme
   const isDefaultTheme = isDefaultFileTermTheme(normalized, variant)
+  const sidebarGlassActive = !theme.opaqueWindows && sidebarGlassSupported()
   const variables: Record<string, string> = {
     '--theme-accent': theme.accent,
     '--theme-accent-hover': blend(theme.accent, theme.ink, 8),
@@ -468,8 +477,7 @@ function buildThemeVariables(
     '--theme-warning': theme.semanticColors.warning,
     '--theme-error': theme.semanticColors.error,
     '--theme-success': theme.semanticColors.success,
-    '--theme-window-opacity': theme.opaqueWindows ? '1' : '0.82',
-    '--theme-sidebar-backdrop-filter': theme.opaqueWindows ? 'none' : 'blur(18px)',
+    '--theme-sidebar-backdrop-filter': sidebarGlassActive ? 'blur(18px)' : 'none',
     '--theme-font-ui': theme.fonts.ui ?? 'var(--font-ui)',
     '--theme-font-code': theme.fonts.code ?? 'var(--font-mono)',
     '--theme-semantic-diff-added': theme.semanticColors.diffAdded,

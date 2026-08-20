@@ -35,6 +35,7 @@ import type {
   ImportSshKeyInput,
   LocalFileItem,
   RemoteFileDragItem,
+  RemoteDragImage,
   LocalNetworkShareConnectionResult,
   SshForwardRule,
   SshTunnelSnapshot,
@@ -240,6 +241,25 @@ void currentWindow
 void currentWindow
   .listen('fileterm://remote-native-drag-finished', () => {
     dispatchAppEvent(APP_EVENT.tauriNativeRemoteDragFinished)
+  })
+  .catch(() => undefined)
+
+// Windows stages every remote item before the OLE drag loop starts. Forward
+// the moment the OS drag actually begins so the renderer can retire its
+// preparing ghost in favor of the native drag cursor.
+void currentWindow
+  .listen('fileterm://remote-native-drag-started', () => {
+    dispatchAppEvent(APP_EVENT.tauriNativeRemoteDragStarted)
+  })
+  .catch(() => undefined)
+
+// The Shell drag image only renders over drop targets that cooperate with
+// IDropTargetHelper (desktop / Explorer). Over this app's own window the drag
+// loop reports cursor positions via GiveFeedback instead, so the renderer can
+// keep its DOM ghost alive while the cursor stays inside the window.
+void currentWindow
+  .listen<{ x: number; y: number; inWindow: boolean }>('fileterm://remote-native-drag-cursor', (event) => {
+    dispatchAppEvent(APP_EVENT.tauriNativeRemoteDragCursor, event.payload)
   })
   .catch(() => undefined)
 
@@ -532,11 +552,12 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         localDirectory,
         options: options ?? null
       }),
-    startRemoteFileDrag: (tabId: string, items: RemoteFileDragItem[]) =>
+    startRemoteFileDrag: (tabId: string, items: RemoteFileDragItem[], dragImage?: RemoteDragImage | null) =>
       invoke<void>('app_start_remote_file_drag', {
         tabId,
         windowLabel: currentWindow.label,
-        items
+        items,
+        dragImage: dragImage ?? null
       }),
     getSnapshot: () => invoke<WorkspaceSnapshot>('app_get_snapshot'),
     getConnectionLibrary: () =>

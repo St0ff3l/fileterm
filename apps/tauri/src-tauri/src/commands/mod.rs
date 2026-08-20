@@ -4488,8 +4488,16 @@ pub async fn app_start_remote_file_drag(
     tab_id: String,
     window_label: String,
     items: Vec<crate::services::file_drag::RemoteFileDragItem>,
+    drag_image: Option<crate::services::file_drag::RemoteDragImage>,
 ) -> Result<(), AppError> {
-    crate::services::file_drag::start_remote_file_drag(&app, &window_label, &tab_id, items).await
+    crate::services::file_drag::start_remote_file_drag(
+        &app,
+        &window_label,
+        &tab_id,
+        items,
+        drag_image,
+    )
+    .await
 }
 
 #[tauri::command]

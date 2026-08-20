@@ -110,6 +110,7 @@ pub async fn start_remote_file_drag(
     window_label: &str,
     tab_id: &str,
     items: Vec<RemoteFileDragItem>,
+    _drag_image: Option<super::RemoteDragImage>,
 ) -> std::result::Result<(), crate::AppError> {
     let window = app
         .get_webview_window(window_label)

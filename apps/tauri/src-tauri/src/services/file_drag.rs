@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use serde::Deserialize;
 use tauri::AppHandle;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 use tauri::{Emitter, Manager, WebviewWindow};
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 use tokio::sync::oneshot;
 
 use crate::AppError;
@@ -40,6 +40,19 @@ pub struct RemoteFileDragItem {
     pub item_type: String,
 }
 
+/// Shell 拖拽图像（Windows DragImageBits 同源）：PNG data URL 由 renderer
+/// 按物理像素密度渲染，尺寸/偏移均为物理像素，偏移为光标热点在图像内的
+/// 位置（负值表示图像位于光标右下方）。
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDragImage {
+    pub data_url: String,
+    pub width: u32,
+    pub height: u32,
+    pub offset_x: i32,
+    pub offset_y: i32,
+}
+
 /// Start a native drag for selected remote items.
 ///
 /// macOS uses `NSFilePromiseProvider`, so the drag session starts immediately
@@ -53,6 +66,7 @@ pub async fn start_remote_file_drag(
     window_label: &str,
     tab_id: &str,
     items: Vec<RemoteFileDragItem>,
+    drag_image: Option<RemoteDragImage>,
 ) -> Result<(), AppError> {
     if items.is_empty() {
         return Err(AppError::Command("没有可拖出的远程文件".to_string()));
@@ -61,17 +75,19 @@ pub async fn start_remote_file_drag(
 
     #[cfg(target_os = "macos")]
     {
-        return macos::start_remote_file_drag(app, window_label, tab_id, items).await;
+        return macos::start_remote_file_drag(app, window_label, tab_id, items, drag_image).await;
     }
 
     #[cfg(target_os = "windows")]
     {
-        return windows_drag::start_remote_file_drag(app, window_label, tab_id, items).await;
+        return windows_drag::start_remote_file_drag(app, window_label, tab_id, items, drag_image)
+            .await;
     }
 
     #[cfg(target_os = "linux")]
     {
-        return linux_drag::start_remote_file_drag(app, window_label, tab_id, items).await;
+        return linux_drag::start_remote_file_drag(app, window_label, tab_id, items, drag_image)
+            .await;
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
