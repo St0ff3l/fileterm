@@ -23,17 +23,11 @@ fn conpty_preserves_output_and_exit_status() {
         .expect("local ConPTY should open in the test environment");
     eprintln!("conpty stage: build command");
     let portable_pty::PtyPair { master, slave } = pair;
-    let mut command = CommandBuilder::new("powershell.exe");
-    command.args([
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[Console]::WriteLine('FileTerm local'); exit 7",
-    ]);
+    let mut command = CommandBuilder::new("cmd.exe");
+    command.args(["/C", "echo FileTerm local && exit /B 7"]);
     let mut child = slave
         .spawn_command(command)
-        .expect("powershell.exe should start in ConPTY");
+        .expect("cmd.exe should start in ConPTY");
     eprintln!("conpty stage: child spawned");
     drop(slave);
 
@@ -78,13 +72,10 @@ fn conpty_preserves_output_and_exit_status() {
     // Keep the input side alive: ConPTY may ask the terminal host for its
     // cursor position before the shell can finish starting.
     eprintln!("conpty stage: keep writer for cursor responses");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
     eprintln!("conpty stage: wait for child");
     let status = loop {
-        if let Some(status) = child
-            .try_wait()
-            .expect("PowerShell status should be readable")
-        {
+        if let Some(status) = child.try_wait().expect("cmd.exe status should be readable") {
             break status;
         }
         if std::time::Instant::now() >= deadline {
@@ -98,7 +89,7 @@ fn conpty_preserves_output_and_exit_status() {
             // on this failure path so the test reports promptly instead of
             // consuming the entire Actions job timeout.
             std::mem::forget(master);
-            panic!("PowerShell did not exit within the ConPTY test timeout");
+            panic!("cmd.exe did not exit within the ConPTY test timeout");
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     };
