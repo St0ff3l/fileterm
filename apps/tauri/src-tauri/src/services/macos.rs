@@ -17,7 +17,7 @@ use objc2_app_kit::{
     NSForegroundColorAttributeName, NSImage, NSPasteboardWriting, NSStringDrawing, NSView,
 };
 use objc2_foundation::{
-    NSData, NSAttributedStringKey, NSDictionary, NSError, NSMutableArray, NSOperationQueue,
+    NSAttributedStringKey, NSData, NSDictionary, NSError, NSMutableArray, NSOperationQueue,
     NSPoint, NSRect, NSSize, NSString, NSURL,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -192,13 +192,8 @@ pub(super) async fn start_remote_file_drag(
     let tab_id = tab_id.to_string();
     window
         .run_on_main_thread(move || {
-            let result = start_on_main_thread(
-                window_for_main,
-                app_for_main,
-                tab_id,
-                items,
-                drag_image,
-            );
+            let result =
+                start_on_main_thread(window_for_main, app_for_main, tab_id, items, drag_image);
             let _ = result_sender.send(result);
         })
         .map_err(|error| AppError::Command(format!("切换到原生拖出线程失败：{error}")))?;
