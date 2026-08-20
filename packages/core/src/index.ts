@@ -392,6 +392,8 @@ export interface RemoteFileItem {
   path: string
   name: string
   type: 'file' | 'folder'
+  /** Whether the remote entry is a symbolic link to the effective type. */
+  isSymlink?: boolean
   modified: string
   size: string
   permission?: string
@@ -1270,40 +1272,40 @@ export interface SavedTheme {
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
 
 const DEFAULT_DARK_ANSI: TerminalAnsiPalette = {
-  black: '#000000',
-  red: '#cd3131',
-  green: '#0dbc79',
-  yellow: '#e5e510',
-  blue: '#2472c8',
-  magenta: '#bc3fbc',
-  cyan: '#11a8cd',
-  white: '#e5e5e5',
-  brightBlack: '#666666',
-  brightRed: '#cd3131',
-  brightGreen: '#23d18b',
-  brightYellow: '#e5e510',
-  brightBlue: '#3b8eea',
-  brightMagenta: '#d670d6',
-  brightCyan: '#29b8db',
-  brightWhite: '#e5e5e5'
+  black: '#1c1d22',
+  red: '#e05555',
+  green: '#10b981',
+  yellow: '#eab308',
+  blue: '#3b82f6',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#e2e8f0',
+  brightBlack: '#64748b',
+  brightRed: '#f87171',
+  brightGreen: '#34d399',
+  brightYellow: '#fde047',
+  brightBlue: '#60a5fa',
+  brightMagenta: '#e879f9',
+  brightCyan: '#67e8f9',
+  brightWhite: '#ffffff'
 }
 
 const DEFAULT_LIGHT_ANSI: TerminalAnsiPalette = {
-  black: '#000000',
-  red: '#cd3131',
-  green: '#008000',
-  yellow: '#795e26',
-  blue: '#0451a5',
-  magenta: '#bc05bc',
-  cyan: '#0598bc',
-  white: '#ffffff',
-  brightBlack: '#666666',
-  brightRed: '#cd3131',
-  brightGreen: '#14a800',
-  brightYellow: '#795e26',
-  brightBlue: '#0451a5',
-  brightMagenta: '#bc05bc',
-  brightCyan: '#0598bc',
+  black: '#18181b',
+  red: '#dc2626',
+  green: '#16a34a',
+  yellow: '#ca8a04',
+  blue: '#2563eb',
+  magenta: '#9333ea',
+  cyan: '#0891b2',
+  white: '#f1f5f9',
+  brightBlack: '#64748b',
+  brightRed: '#ef4444',
+  brightGreen: '#22c55e',
+  brightYellow: '#eab308',
+  brightBlue: '#3b82f6',
+  brightMagenta: '#a855f7',
+  brightCyan: '#06b6d4',
   brightWhite: '#ffffff'
 }
 
@@ -1342,28 +1344,28 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
       ink: isLight ? '#1a1c1f' : '#fcfcfc',
       opaqueWindows: false,
       semanticColors: {
-        diffAdded: '#00a240',
-        diffRemoved: isLight ? '#ba2623' : '#e02e2a',
-        skill: isLight ? '#924ff7' : '#b06dff',
-        keyword: isLight ? '#b45309' : '#ffcc00',
+        diffAdded: '#10b981',
+        diffRemoved: isLight ? '#ba2623' : '#f43f5e',
+        skill: isLight ? '#924ff7' : '#a855f7',
+        keyword: isLight ? '#b45309' : '#fbbf24',
         sftp: isLight ? '#0284c7' : '#38bdf8',
         ftp: isLight ? '#924ff7' : '#b06dff',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
-        textSecondary: isLight ? '#667085' : '#a9a9b2',
-        info: isLight ? '#339cff' : '#0169cc',
-        warning: isLight ? '#b45309' : '#ffcc00',
-        error: isLight ? '#ba2623' : '#e02e2a',
+        textSecondary: isLight ? '#667085' : '#a1a1aa',
+        info: isLight ? '#339cff' : '#38bdf8',
+        warning: isLight ? '#b45309' : '#f59e0b',
+        error: isLight ? '#ba2623' : '#f43f5e',
         success: isLight ? '#059669' : '#34d399'
       },
       surface: isLight ? '#ffffff' : '#111111',
-      surfaceSecondary: isLight ? '#ffffff' : '#1b1b1b',
-      surfaceElevated: isLight ? '#ffffff' : '#242424',
+      surfaceSecondary: isLight ? '#ffffff' : '#181818',
+      surfaceElevated: isLight ? '#ffffff' : '#222222',
       terminal: {
         background: isLight ? '#ffffff' : '#111111',
         foreground: isLight ? '#1a1c1f' : '#fcfcfc',
-        cursor: isLight ? '#339cff' : '#0169cc',
+        cursor: isLight ? '#339cff' : '#38bdf8',
         cursorAccent: isLight ? '#ffffff' : '#111111',
-        selectionBackground: isLight ? '#339cff42' : '#0169cc55',
+        selectionBackground: isLight ? '#339cff42' : '#38bdf844',
         selectionForeground: isLight ? '#1a1c1f' : '#fcfcfc',
         ansi: { ...(isLight ? DEFAULT_LIGHT_ANSI : DEFAULT_DARK_ANSI) },
         search: {
@@ -1393,18 +1395,18 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
       ink: isLight ? '#18181b' : '#e7e7e7',
       opaqueWindows: true,
       semanticColors: {
-        diffAdded: isLight ? '#168a53' : '#39d98a',
+        diffAdded: isLight ? '#168a53' : '#34d399',
         diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
         skill: isLight ? '#7c3aed' : '#b06dff',
-        keyword: isLight ? '#b45309' : '#ffcc00',
+        keyword: isLight ? '#b45309' : '#fbbf24',
         sftp: isLight ? '#0284c7' : '#38bdf8',
         ftp: isLight ? '#9333ea' : '#c084fc',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
-        info: isLight ? '#3b82f6' : '#8bbfff',
-        warning: isLight ? '#d97706' : '#ffcc00',
+        info: isLight ? '#3b82f6' : '#38bdf8',
+        warning: isLight ? '#d97706' : '#f59e0b',
         error: isLight ? '#d94e4e' : '#ff5f57',
-        success: isLight ? '#168a53' : '#39d98a'
+        success: isLight ? '#168a53' : '#34d399'
       },
       surface: isLight ? '#F4F4F6' : '#151515',
       surfaceSecondary: isLight ? '#ffffff' : '#1e1e1e',
@@ -2035,6 +2037,7 @@ export interface FileTermDesktopApi {
   listImportedFonts(): Promise<ImportedFont[]>
   importFont(): Promise<ImportedFont | null>
   getImportedFontData(fontId: string): Promise<string | null>
+  deleteImportedFont(fontId: string): Promise<boolean>
   listSshKeys(): Promise<SshKeyMetadata[]>
   selectSshKeyFile(): Promise<SshKeyFileSelection | null>
   importSshKey(input?: ImportSshKeyInput): Promise<SshKeyImportResult | null>

@@ -1909,6 +1909,11 @@ pub fn app_get_imported_font_data(
 }
 
 #[tauri::command]
+pub fn app_delete_imported_font(app: AppHandle, font_id: String) -> Result<bool, AppError> {
+    crate::services::fonts::delete(&app, &font_id)
+}
+
+#[tauri::command]
 pub fn app_list_ssh_keys(app: AppHandle) -> Result<Vec<serde_json::Value>, AppError> {
     crate::services::ssh_keys::list(&app)
 }

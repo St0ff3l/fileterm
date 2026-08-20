@@ -27,7 +27,7 @@ import {
   type WebDavSyncConfig
 } from '@fileterm/core'
 import { deriveThemeVariant, getSavedThemeConfig, normalizeSavedTheme } from '../../app/theme-config'
-import { registerImportedFont, registerImportedFonts } from '../../app/imported-fonts'
+import { registerImportedFont, registerImportedFonts, unregisterImportedFont } from '../../app/imported-fonts'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
 import { t, type LocaleMessages } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
@@ -509,6 +509,7 @@ export function SettingsModal({
   const [importedFonts, setImportedFonts] = useState<ImportedFont[]>([])
   const [fontImportKind, setFontImportKind] = useState<'ui' | 'code' | null>(null)
   const [fontImportError, setFontImportError] = useState<string | null>(null)
+  const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
   const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
   const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
   const [themeConfigMessage, setThemeConfigMessage] = useState<string | null>(null)
@@ -1171,6 +1172,34 @@ export function SettingsModal({
       setFontImportError(t.themeFontImportFailed)
     } finally {
       setFontImportKind(null)
+    }
+  }
+
+  const handleDeleteFont = async (font: ImportedFont) => {
+    if (!desktopApi) return
+    try {
+      const success = await desktopApi.deleteImportedFont(font.id)
+      if (!success) {
+        setFontImportError(t.themeFontDeleteFailed)
+        return
+      }
+      unregisterImportedFont(font.id)
+      setImportedFonts((current) => current.filter((item) => item.id !== font.id))
+
+      const patch: Partial<ThemeConfig['theme']['fonts']> = {}
+      if (themeConfig.theme.fonts.ui === font.family) {
+        patch.ui = null
+      }
+      if (themeConfig.theme.fonts.code === font.family) {
+        patch.code = null
+      }
+      if (Object.keys(patch).length > 0) {
+        updateThemeFonts(patch)
+      }
+      setFontToDelete(null)
+      setFontImportError(null)
+    } catch {
+      setFontImportError(t.themeFontDeleteFailed)
     }
   }
 
@@ -2886,6 +2915,34 @@ export function SettingsModal({
                 </div>
                 {fontImportError ? <p className="settings-tools-error">{fontImportError}</p> : null}
 
+                {importedFonts.length > 0 ? (
+                  <div className="theme-config-imported-fonts">
+                    <div className="theme-config-imported-fonts-header">
+                      <span className="theme-config-imported-fonts-title">{t.themeImportedFonts}</span>
+                      <span className="theme-config-imported-fonts-count">{importedFonts.length}</span>
+                    </div>
+                    <div className="theme-config-imported-fonts-list">
+                      {importedFonts.map((font) => (
+                        <div key={font.id} className="theme-config-imported-font-item">
+                          <span className="theme-config-imported-font-name" title={font.fileName}>
+                            {font.family}
+                            <span className="theme-config-imported-font-format">{font.format.toUpperCase()}</span>
+                          </span>
+                          <button
+                            type="button"
+                            className="flat-button compact danger theme-config-font-delete-btn"
+                            title={`${t.themeDeleteFont}: ${font.family}`}
+                            aria-label={`${t.themeDeleteFont}: ${font.family}`}
+                            onClick={() => setFontToDelete(font)}
+                          >
+                            <AppIcon name="trash" size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <details className="theme-config-subsection theme-advanced-section">
                   <summary className="theme-config-section-summary">
                     <span className="theme-config-section-summary-copy">
@@ -3021,6 +3078,17 @@ export function SettingsModal({
                     onClose={() => setShowDeleteThemeConfirm(false)}
                     onConfirm={deleteCustomTheme}
                     title={t.themeDeleteConfirmTitle}
+                  />
+                ) : null}
+
+                {fontToDelete ? (
+                  <ConfirmActionDialog
+                    confirmLabel={t.delete}
+                    confirmVariant="danger"
+                    description={t.themeDeleteFontConfirm.replace('{name}', fontToDelete.family)}
+                    onClose={() => setFontToDelete(null)}
+                    onConfirm={() => void handleDeleteFont(fontToDelete)}
+                    title={t.themeDeleteFont}
                   />
                 ) : null}
               </section>

@@ -2133,12 +2133,9 @@ fn decode_bytes(buf: &[u8], encoding: &str) -> Result<String, String> {
     let normalized = normalize_encoding(encoding);
     match normalized {
         "utf-8" => {
-            let mut s = String::from_utf8_lossy(buf).into_owned();
-            // Strip UTF-8 BOM if present
-            if s.starts_with('\u{feff}') {
-                s = s[3..].to_string();
-            }
-            Ok(s)
+            let text = std::str::from_utf8(buf)
+                .map_err(|error| format!("utf-8 decode failed: {error}"))?;
+            Ok(text.strip_prefix('\u{feff}').unwrap_or(text).to_string())
         }
         "utf-8-bom" => {
             let start = if buf.starts_with(&[0xef, 0xbb, 0xbf]) {
@@ -2157,18 +2154,30 @@ fn decode_bytes(buf: &[u8], encoding: &str) -> Result<String, String> {
             let start = if buf.starts_with(&[0xfe, 0xff]) { 2 } else { 0 };
             decode_utf16(&buf[start..], false)
         }
-        "gb18030" => Ok(encoding_rs::GB18030.decode(buf).0.into_owned()),
-        "gbk" => Ok(encoding_rs::GBK.decode(buf).0.into_owned()),
-        "big5" => Ok(encoding_rs::BIG5.decode(buf).0.into_owned()),
-        "euc-jp" => Ok(encoding_rs::EUC_JP.decode(buf).0.into_owned()),
-        "shift_jis" => Ok(encoding_rs::SHIFT_JIS.decode(buf).0.into_owned()),
-        "iso-2022-jp" => Ok(encoding_rs::ISO_2022_JP.decode(buf).0.into_owned()),
-        "euc-kr" => Ok(encoding_rs::EUC_KR.decode(buf).0.into_owned()),
-        "windows-1252" => Ok(encoding_rs::WINDOWS_1252.decode(buf).0.into_owned()),
-        "iso-8859-1" => Ok(encoding_rs::WINDOWS_1252.decode(buf).0.into_owned()),
-        "windows-1251" => Ok(encoding_rs::WINDOWS_1251.decode(buf).0.into_owned()),
-        _ => Ok(String::from_utf8_lossy(buf).into_owned()),
+        "gb18030" => decode_with_encoding(encoding_rs::GB18030, buf, normalized),
+        "gbk" => decode_with_encoding(encoding_rs::GBK, buf, normalized),
+        "big5" => decode_with_encoding(encoding_rs::BIG5, buf, normalized),
+        "euc-jp" => decode_with_encoding(encoding_rs::EUC_JP, buf, normalized),
+        "shift_jis" => decode_with_encoding(encoding_rs::SHIFT_JIS, buf, normalized),
+        "iso-2022-jp" => decode_with_encoding(encoding_rs::ISO_2022_JP, buf, normalized),
+        "euc-kr" => decode_with_encoding(encoding_rs::EUC_KR, buf, normalized),
+        "windows-1252" => decode_with_encoding(encoding_rs::WINDOWS_1252, buf, normalized),
+        "iso-8859-1" => decode_with_encoding(encoding_rs::WINDOWS_1252, buf, normalized),
+        "windows-1251" => decode_with_encoding(encoding_rs::WINDOWS_1251, buf, normalized),
+        _ => Err(format!("unsupported text encoding: {normalized}")),
     }
+}
+
+fn decode_with_encoding(
+    encoding: &'static encoding_rs::Encoding,
+    bytes: &[u8],
+    label: &str,
+) -> Result<String, String> {
+    let (text, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        return Err(format!("{label} decode failed: invalid byte sequence"));
+    }
+    Ok(text.into_owned())
 }
 
 /// Decode UTF-16 bytes (little-endian or big-endian) into a string.
@@ -2191,41 +2200,53 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
 
 /// Encode a string into bytes using the given encoding. Mirrors Electron's
 /// `encodeText` (iconv-lite + BOM prefixing for utf-8-bom / utf-16le / utf-16be).
-fn encode_text(content: &str, encoding: &str) -> Vec<u8> {
+fn encode_text(content: &str, encoding: &str) -> Result<Vec<u8>, String> {
     let normalized = normalize_encoding(encoding);
     match normalized {
-        "utf-8" => content.as_bytes().to_vec(),
+        "utf-8" => Ok(content.as_bytes().to_vec()),
         "utf-8-bom" => {
             let mut bytes = vec![0xef, 0xbb, 0xbf];
             bytes.extend_from_slice(content.as_bytes());
-            bytes
+            Ok(bytes)
         }
         "utf-16le" => {
             let mut bytes = vec![0xff, 0xfe];
             for unit in content.encode_utf16() {
                 bytes.extend_from_slice(&unit.to_le_bytes());
             }
-            bytes
+            Ok(bytes)
         }
         "utf-16be" => {
             let mut bytes = vec![0xfe, 0xff];
             for unit in content.encode_utf16() {
                 bytes.extend_from_slice(&unit.to_be_bytes());
             }
-            bytes
+            Ok(bytes)
         }
-        "gb18030" => encoding_rs::GB18030.encode(content).0.into_owned(),
-        "gbk" => encoding_rs::GBK.encode(content).0.into_owned(),
-        "big5" => encoding_rs::BIG5.encode(content).0.into_owned(),
-        "euc-jp" => encoding_rs::EUC_JP.encode(content).0.into_owned(),
-        "shift_jis" => encoding_rs::SHIFT_JIS.encode(content).0.into_owned(),
-        "iso-2022-jp" => encoding_rs::ISO_2022_JP.encode(content).0.into_owned(),
-        "euc-kr" => encoding_rs::EUC_KR.encode(content).0.into_owned(),
-        "windows-1252" => encoding_rs::WINDOWS_1252.encode(content).0.into_owned(),
-        "iso-8859-1" => encoding_rs::WINDOWS_1252.encode(content).0.into_owned(),
-        "windows-1251" => encoding_rs::WINDOWS_1251.encode(content).0.into_owned(),
-        _ => content.as_bytes().to_vec(),
+        "gb18030" => encode_with_encoding(encoding_rs::GB18030, content, normalized),
+        "gbk" => encode_with_encoding(encoding_rs::GBK, content, normalized),
+        "big5" => encode_with_encoding(encoding_rs::BIG5, content, normalized),
+        "euc-jp" => encode_with_encoding(encoding_rs::EUC_JP, content, normalized),
+        "shift_jis" => encode_with_encoding(encoding_rs::SHIFT_JIS, content, normalized),
+        "iso-2022-jp" => encode_with_encoding(encoding_rs::ISO_2022_JP, content, normalized),
+        "euc-kr" => encode_with_encoding(encoding_rs::EUC_KR, content, normalized),
+        "windows-1252" => encode_with_encoding(encoding_rs::WINDOWS_1252, content, normalized),
+        "iso-8859-1" => encode_with_encoding(encoding_rs::WINDOWS_1252, content, normalized),
+        "windows-1251" => encode_with_encoding(encoding_rs::WINDOWS_1251, content, normalized),
+        _ => Err(format!("unsupported text encoding: {normalized}")),
     }
+}
+
+fn encode_with_encoding(
+    encoding: &'static encoding_rs::Encoding,
+    content: &str,
+    label: &str,
+) -> Result<Vec<u8>, String> {
+    let (bytes, _, had_errors) = encoding.encode(content);
+    if had_errors {
+        return Err(format!("{label} cannot encode one or more characters"));
+    }
+    Ok(bytes.into_owned())
 }
 
 /// Compute the OpenSSH-style SHA256 fingerprint of a host key.
@@ -6829,6 +6850,10 @@ async fn handle_worker_cmd(
 // SFTP helpers (russh-sftp 2.x)
 // ─────────────────────────────────────────────────────────────────────────────
 
+fn editor_staging_path(path: &str) -> String {
+    format!("{path}.fileterm-edit-{}", uuid::Uuid::new_v4())
+}
+
 pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, String> {
     let entries = sftp.read_dir(dir_path).await.map_err(|e| e.to_string())?;
     let mut items = Vec::new();
@@ -6847,14 +6872,17 @@ pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, 
         let perm_bits = stat.permissions.unwrap_or(0);
         let is_dir = stat.is_dir();
         let is_link = stat.is_symlink();
-        let file_type = if is_dir {
-            "folder"
-        } else if is_link {
-            "symlink"
-        } else {
-            "file"
-        };
-        let size_str = if is_dir {
+        // `DirEntry::metadata()` preserves the link itself. Resolve the
+        // target only for navigation so a link to a directory remains
+        // enterable while a link to a regular file opens in the editor.
+        let link_target_is_dir = is_link
+            && sftp
+                .metadata(&full_path)
+                .await
+                .map(|target| target.is_dir())
+                .unwrap_or(false);
+        let file_type = effective_remote_file_type(is_dir, is_link, link_target_is_dir);
+        let size_str = if is_dir || link_target_is_dir {
             "-".to_string()
         } else {
             format_bytes(stat.size.unwrap_or(0))
@@ -6867,6 +6895,7 @@ pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, 
             "name": name,
             "path": full_path,
             "type": file_type,
+            "isSymlink": is_link,
             "size": size_str,
             "modified": modified,
             "permission": permission,
@@ -6928,11 +6957,72 @@ async fn write_file(
     encoding: &str,
 ) -> Result<(), String> {
     use tokio::io::AsyncWriteExt;
-    let bytes = encode_text(content, encoding);
-    let mut f = sftp.create(path).await.map_err(|e| e.to_string())?;
-    f.write_all(&bytes).await.map_err(|e| e.to_string())?;
-    f.flush().await.map_err(|e| e.to_string())?;
-    Ok(())
+    let bytes = encode_text(content, encoding)?;
+    let destination_metadata = match sftp.symlink_metadata(path).await {
+        Ok(metadata) => Some(metadata),
+        Err(error) if is_sftp_not_found(&error) => None,
+        Err(error) => return Err(format!("无法读取远端文件属性: {error}")),
+    };
+    let commit_path = if destination_metadata
+        .as_ref()
+        .is_some_and(SftpMetadata::is_symlink)
+    {
+        sftp.canonicalize(path)
+            .await
+            .map_err(|error| format!("无法解析远端软链接目标，已阻止保存: {error}"))?
+    } else {
+        path.to_string()
+    };
+    let staging_path = editor_staging_path(&commit_path);
+
+    // Check write permission against the destination before using rename for
+    // a regular file. Otherwise a writable parent directory could let an
+    // atomic replacement bypass a read-only destination's file mode.
+    if destination_metadata.is_some() {
+        let _ = sftp
+            .open_with_flags(path, OpenFlags::WRITE)
+            .await
+            .map_err(|error| format!("远端文件不可写: {error}"))?;
+    }
+
+    let write_result = async {
+        {
+            let mut file = sftp
+                .create(&staging_path)
+                .await
+                .map_err(|error| format!("无法创建远端编辑临时文件: {error}"))?;
+            file.write_all(&bytes)
+                .await
+                .map_err(|error| format!("写入远端编辑临时文件失败: {error}"))?;
+            file.flush()
+                .await
+                .map_err(|error| format!("刷新远端编辑临时文件失败: {error}"))?;
+        }
+
+        let written_size = sftp
+            .symlink_metadata(&staging_path)
+            .await
+            .map_err(|error| format!("无法校验远端编辑临时文件: {error}"))?
+            .size
+            .unwrap_or(0);
+        if written_size != bytes.len() as u64 {
+            return Err(format!(
+                "远端编辑临时文件校验失败：{written_size} bytes，期望 {}",
+                bytes.len()
+            ));
+        }
+        Ok::<(), String>(())
+    }
+    .await;
+
+    if let Err(error) = write_result {
+        let _ = sftp.remove_file(&staging_path).await;
+        return Err(error);
+    }
+
+    // Commit the effective target path so a symlink remains intact while its
+    // regular-file target still receives the same atomic rename/rollback.
+    replace_remote_file(sftp, &staging_path, &commit_path).await
 }
 
 async fn create_dir(sftp: &SftpSession, path: &str) -> Result<(), String> {
@@ -7655,6 +7745,23 @@ fn root_stat_shell_command(path: &str) -> String {
     )
 }
 
+fn root_editor_write_shell_command(staging_path: &str, expected_size: u64) -> String {
+    format!(
+        "set -e\nbase64 -d > {}\ntest \"$(wc -c < {})\" -eq {}",
+        shell_quote(staging_path),
+        shell_quote(staging_path),
+        expected_size,
+    )
+}
+
+fn root_editor_verify_shell_command(path: &str, expected_size: u64) -> String {
+    format!(
+        "set -e\ntest \"$(wc -c < {})\" -eq {}",
+        shell_quote(path),
+        expected_size,
+    )
+}
+
 async fn stat_root_remote_file(
     handle: &Handle<ClientHandler>,
     path: &str,
@@ -7700,24 +7807,23 @@ async fn replace_root_remote_file(
         .parent()
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| "/".to_string());
-    let command = format!(
-        "set -e\nmkdir -p {}\nif [ -L {} ]; then\n  cat -- {} > {}\n  rm -f -- {}\nelse\n  if [ -e {} ]; then\n    chown --reference={} -- {} 2>/dev/null || true\n    chmod --reference={} -- {} 2>/dev/null || true\n  fi\n  mv -f -- {} {}\nfi",
-        shell_quote(&parent),
-        shell_quote(destination_path),
-        shell_quote(partial_path),
-        shell_quote(destination_path),
-        shell_quote(partial_path),
-        shell_quote(destination_path),
-        shell_quote(destination_path),
-        shell_quote(partial_path),
-        shell_quote(destination_path),
-        shell_quote(partial_path),
-        shell_quote(partial_path),
-        shell_quote(destination_path),
-    );
+    let command = root_replace_remote_file_command(&parent, partial_path, destination_path);
     exec_shell_file_command(handle, &command, access_method, sudo_user, sudo_password)
         .await
         .map(|_| ())
+}
+
+fn root_replace_remote_file_command(
+    parent: &str,
+    partial_path: &str,
+    destination_path: &str,
+) -> String {
+    format!(
+        "set -e\nmkdir -p {parent}\nif [ -L {destination} ]; then\n  target=\"$(readlink -f -- {destination} 2>/dev/null || true)\"\n  if [ -n \"$target\" ] && [ -f \"$target\" ]; then\n    chown --reference=\"$target\" -- {partial} 2>/dev/null || true\n    chmod --reference=\"$target\" -- {partial} 2>/dev/null || true\n    mv -f -- {partial} \"$target\"\n  else\n    cat -- {partial} > {destination}\n    rm -f -- {partial}\n  fi\nelse\n  if [ -e {destination} ]; then\n    chown --reference={destination} -- {partial} 2>/dev/null || true\n    chmod --reference={destination} -- {partial} 2>/dev/null || true\n  fi\n  mv -f -- {partial} {destination}\nfi",
+        parent = shell_quote(parent),
+        partial = shell_quote(partial_path),
+        destination = shell_quote(destination_path),
+    )
 }
 
 async fn commit_root_staging_file(
@@ -8500,14 +8606,24 @@ async fn exec_list_dir_via_shell(
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<Vec<Value>, String> {
-    let cmd = format!(
-        "find {} -maxdepth 1 -mindepth 1 -printf '%y|%s|%T@|%u:%g|%m|%f\\n' 2>/dev/null",
-        shell_quote(path)
-    );
+    let cmd = root_list_shell_command(path);
     let output =
         exec_shell_file_command(handle, &cmd, access_method, sudo_user, sudo_password).await?;
-    let path_norm = path.trim_end_matches('/');
+    Ok(parse_root_file_list(&output, path))
+}
 
+fn root_list_shell_command(path: &str) -> String {
+    // `%y` is the entry type and `%Y` is the type after following a
+    // symbolic link. Keep both so the renderer can retain link information
+    // without mistaking a link to a regular file for a directory.
+    format!(
+        "find {} -maxdepth 1 -mindepth 1 -printf '%y|%Y|%s|%T@|%u:%g|%m|%f\\n' 2>/dev/null",
+        shell_quote(path)
+    )
+}
+
+fn parse_root_file_list(output: &str, path: &str) -> Vec<Value> {
+    let path_norm = path.trim_end_matches('/');
     let mut items = Vec::new();
     if let Some(parent_item) = parent_remote_item(path) {
         items.push(parent_item);
@@ -8517,39 +8633,35 @@ async fn exec_list_dir_via_shell(
         if line.is_empty() {
             continue;
         }
-        let parts: Vec<&str> = line.splitn(6, '|').collect();
-        if parts.len() < 6 {
+        let parts: Vec<&str> = line.splitn(7, '|').collect();
+        if parts.len() < 7 {
             continue;
         }
         let type_char = parts[0].chars().next().unwrap_or('f');
         let is_dir = type_char == 'd';
         let is_link = type_char == 'l';
-        let size_value = parts[1].parse::<u64>().unwrap_or(0);
-        let size_str = if is_dir {
+        let link_target_is_dir = is_link && parts[1].starts_with('d');
+        let effective_is_dir = is_dir || link_target_is_dir;
+        let size_value = parts[2].parse::<u64>().unwrap_or(0);
+        let size_str = if effective_is_dir {
             "-".to_string()
         } else {
             format_bytes(size_value)
         };
-        let mtime: i64 = parts[2]
+        let mtime: i64 = parts[3]
             .split('.')
             .next()
             .unwrap_or("0")
             .parse()
             .unwrap_or(0);
-        let owner_group = parts[3].to_string();
-        let perm_octal = u32::from_str_radix(parts[4], 8).unwrap_or(0o644);
-        let name = parts[5].to_string();
+        let owner_group = parts[4].to_string();
+        let perm_octal = u32::from_str_radix(parts[5], 8).unwrap_or(0o644);
+        let name = parts[6].to_string();
         if name == "." || name == ".." {
             continue;
         }
 
-        let file_type = if is_dir {
-            "folder"
-        } else if is_link {
-            "symlink"
-        } else {
-            "file"
-        };
+        let file_type = effective_remote_file_type(is_dir, is_link, link_target_is_dir);
         let permission = format_perm(perm_octal, is_dir, is_link);
         let full_path = if path_norm.is_empty() || path_norm == "/" {
             format!("/{}", name)
@@ -8562,6 +8674,7 @@ async fn exec_list_dir_via_shell(
             "name": name,
             "path": full_path,
             "type": file_type,
+            "isSymlink": is_link,
             "size": size_str,
             "modified": modified,
             "permission": permission,
@@ -8578,7 +8691,19 @@ async fn exec_list_dir_via_shell(
                 .cmp(b["name"].as_str().unwrap_or(""))
         })
     });
-    Ok(items)
+    items
+}
+
+pub(super) fn effective_remote_file_type(
+    is_dir: bool,
+    is_link: bool,
+    link_target_is_dir: bool,
+) -> &'static str {
+    if is_dir || (is_link && link_target_is_dir) {
+        "folder"
+    } else {
+        "file"
+    }
 }
 
 /// Read a file via the active root strategy + base64 (binary-safe over exec).
@@ -8614,8 +8739,13 @@ async fn exec_write_file_via_shell(
     sudo_user: &Option<String>,
     sudo_password: &Option<String>,
 ) -> Result<(), String> {
-    let bytes = encode_text(content, encoding);
-    let cmd = format!("base64 -d | tee {} > /dev/null", shell_quote(path));
+    let bytes = encode_text(content, encoding)?;
+    let staging_path = editor_staging_path(path);
+    // Never stream editor content directly into the destination. The old
+    // `base64 -d | tee destination` pipeline truncated the original first,
+    // and a failed/truncated base64 stage could still be reported successful
+    // because the shell returned tee's status.
+    let cmd = root_editor_write_shell_command(&staging_path, bytes.len() as u64);
     let command = if access_method == RootFileAccessMethod::Su {
         su_exec_command(&cmd)
     } else {
@@ -8677,6 +8807,28 @@ async fn exec_write_file_via_shell(
     if access_method == RootFileAccessMethod::Su {
         strip_su_exec_output(&output)?;
     }
+
+    replace_root_remote_file(
+        handle,
+        &staging_path,
+        path,
+        access_method,
+        sudo_user,
+        sudo_password,
+    )
+    .await
+    .map_err(|error| format!("远端文件提交失败（临时文件保留：{staging_path}）：{error}"))?;
+
+    exec_shell_file_command(
+        handle,
+        &root_editor_verify_shell_command(path, bytes.len() as u64),
+        access_method,
+        sudo_user,
+        sudo_password,
+    )
+    .await
+    .map(|_| ())
+    .map_err(|error| format!("远端文件提交后校验失败：{error}"))?;
     Ok(())
 }
 
@@ -8771,21 +8923,23 @@ fn format_perm(perm: u32, is_dir: bool, is_link: bool) -> String {
 mod tests {
     use super::{
         build_http_connect_request, build_legacy_preferred, capture_root_access_password_input,
-        coalesce_terminal_input, contains_interrupt_byte, default_ssh_key_paths,
-        detect_remote_exec_input_kind, effective_remote_forward_port, enqueue_tunnel_command,
-        exec_channel_enabled, finish_shell_setup_suppression, format_sftp_unavailable_reason,
-        is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
-        looks_like_root_prompt, looks_like_shell_prompt, merge_system_metrics_history,
-        missing_password_credential, parent_remote_item, parent_remote_path,
-        parse_root_file_access_method, password_for_authentication,
-        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
-        root_file_command, root_stat_shell_command, root_upload_base64_shell_command,
-        root_upload_shell_command, shell_cwd_setup_for_platform, split_prompt_tail_for_setup_wait,
-        strip_su_exec_output, su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
-        track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
-        try_keyboard_interactive_with_responder, tunnel_bind_address,
-        validate_root_download_completion, validate_tunnel_rule,
+        coalesce_terminal_input, contains_interrupt_byte, decode_bytes, default_ssh_key_paths,
+        detect_remote_exec_input_kind, effective_remote_file_type, effective_remote_forward_port,
+        encode_text, enqueue_tunnel_command, exec_channel_enabled, finish_shell_setup_suppression,
+        format_sftp_unavailable_reason, is_password_prompt, is_root_upload_staging_path,
+        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        merge_system_metrics_history, missing_password_credential, parent_remote_item,
+        parent_remote_path, parse_root_file_access_method, parse_root_file_list,
+        password_for_authentication, privilege_command_from_terminal_input,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        resource_monitoring_interval_seconds, root_access_auth_failed,
+        root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
+        root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
+        root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
+        split_prompt_tail_for_setup_wait, strip_su_exec_output, su_exec_command,
+        suppress_shell_setup_echo, track_cwd_and_user, track_root_access_prompt_from_terminal,
+        trim_string_front, trusted_host_fingerprint, try_keyboard_interactive_with_responder,
+        tunnel_bind_address, validate_root_download_completion, validate_tunnel_rule,
         wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, KeyboardInteractiveRequest,
         RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand,
         SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
@@ -8838,6 +8992,69 @@ mod tests {
 
         assert_eq!(merged["diskRows"][0]["path"], "/");
         assert_eq!(merged["fileSystemRows"][0]["mountPoint"], "/");
+    }
+
+    #[test]
+    fn remote_symlinks_use_their_target_type_for_navigation() {
+        assert_eq!(effective_remote_file_type(false, true, false), "file");
+        assert_eq!(effective_remote_file_type(false, true, true), "folder");
+        assert_eq!(effective_remote_file_type(true, false, false), "folder");
+    }
+
+    #[test]
+    fn editor_encoding_rejects_corrupt_utf8_and_lossy_output() {
+        assert_eq!(
+            decode_bytes(b"\xef\xbb\xbf# comment\n", "utf-8").unwrap(),
+            "# comment\n"
+        );
+        assert!(decode_bytes(b"valid\xff", "utf-8").is_err());
+        assert_eq!(encode_text("中文", "utf-8").unwrap(), "中文".as_bytes());
+        assert!(encode_text("emoji 😀", "gbk").is_err());
+    }
+
+    #[test]
+    fn root_editor_write_is_staged_and_size_checked_before_commit() {
+        let write_command = root_editor_write_shell_command("/etc/.fileterm-edit", 42);
+        assert!(write_command.contains("base64 -d > '/etc/.fileterm-edit'"));
+        assert!(write_command.contains("wc -c < '/etc/.fileterm-edit'"));
+        assert!(write_command.contains("-eq 42"));
+        assert!(!write_command.contains("tee"));
+
+        let verify_command = root_editor_verify_shell_command("/etc/sysctl.conf", 42);
+        assert!(verify_command.contains("wc -c < '/etc/sysctl.conf'"));
+        assert!(verify_command.ends_with("-eq 42"));
+
+        let replace_command = root_replace_remote_file_command(
+            "/etc",
+            "/etc/.fileterm-edit",
+            "/etc/sysctl.d/99-sysctl.conf",
+        );
+        assert!(replace_command.contains("readlink -f"));
+        assert!(replace_command.contains("mv -f -- '/etc/.fileterm-edit' \"$target\""));
+    }
+
+    #[test]
+    fn root_listing_keeps_symlink_metadata_and_parses_target_type() {
+        assert!(root_list_shell_command("/etc/sysctl.d")
+            .contains("-printf '%y|%Y|%s|%T@|%u:%g|%m|%f\\n'"));
+
+        let items = parse_root_file_list(
+            "l|f|12|1710000000.0|root:root|644|99-sysctl.conf\nl|d|8|1710000001.0|root:root|755|linked-dir\n",
+            "/etc/sysctl.d",
+        );
+        let file = items
+            .iter()
+            .find(|item| item["name"] == "99-sysctl.conf")
+            .expect("symlink to file should be listed");
+        assert_eq!(file["type"], "file");
+        assert_eq!(file["isSymlink"], true);
+
+        let folder = items
+            .iter()
+            .find(|item| item["name"] == "linked-dir")
+            .expect("symlink to directory should be listed");
+        assert_eq!(folder["type"], "folder");
+        assert_eq!(folder["isSymlink"], true);
     }
 
     #[test]

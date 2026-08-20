@@ -86,6 +86,14 @@ export function SystemSidebar({
     setSelectedDiskMountPoint(defaultFileSystem?.mountPoint ?? '')
   }, [availableFileSystems, defaultFileSystem?.mountPoint, selectedDiskMountPoint])
 
+  useEffect(() => {
+    // Reconnects reuse the sidebar DOM node, so explicitly start the resource
+    // viewport at the top when the remote session changes connection state.
+    if (systemMetricsScrollRef.current) {
+      systemMetricsScrollRef.current.scrollTop = 0
+    }
+  }, [activeSession?.connected, activeSession?.profileId])
+
   const selectedFileSystem =
     availableFileSystems.find((row) => row.mountPoint === selectedDiskMountPoint) ?? defaultFileSystem
   const sortedProcesses = useMemo(() => {

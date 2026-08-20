@@ -2,13 +2,13 @@
   color-scheme: dark;
 
   --bg-main: #111111;
-  --bg-sidebar: #1d1d1d;
-  --bg-card: #1b1b1b;
-  --bg-elevated: #242424;
+  --bg-sidebar: #181818;
+  --bg-card: #181818;
+  --bg-elevated: #222222;
   --titlebar-background: #0e0e0e;
-  --bg-hover: #3a3a3a;
-  --bg-active: #3a3d42;
-  --manager-head-bg: #1d1d1d;
+  --bg-hover: #2a2a2a;
+  --bg-active: #333338;
+  --manager-head-bg: #181818;
   --input-bg: #0d0d0d;
   --command-history-head-bg: #111111;
   --surface-panel: var(--bg-card);
@@ -19,8 +19,8 @@
   --border: var(--border-light);
 
   --text-main: #fcfcfc;
-  --text-muted: #a6a6a6;
-  --text-soft: #7a7a7a;
+  --text-muted: #a1a1aa;
+  --text-soft: #71717a;
   --text-primary: var(--text-main);
   --text-secondary: var(--text-muted);
 
@@ -31,25 +31,25 @@
   --accent-text: #ffffff;
   --sidebar-active-accent: #fcfcfc;
   --selection-bg: #383f48;
-  --copy-link: #339cff;
-  --copy-link-hover: #5cb2ff;
-  --folder-accent: #ffcc00;
+  --copy-link: #38bdf8;
+  --copy-link-hover: #7dd3fc;
+  --folder-accent: #fbbf24;
   --kernel-accent: #0169cc;
   --mini-tab-active-bg: rgba(1, 105, 204, 0.14);
-  --mini-tab-active-text: #339cff;
-  --memory-warn: #ffcc00;
-  --network-tx: #ff5f57;
-  --network-rx: #0169cc;
-  --danger: #ff5f57;
+  --mini-tab-active-text: #38bdf8;
+  --memory-warn: #f59e0b;
+  --network-tx: #f43f5e;
+  --network-rx: #38bdf8;
+  --danger: #f43f5e;
   --success: #34d399;
-  --warning: #ffcc00;
+  --warning: #f59e0b;
 
   /* 状态语义色: 面/边/文本 */
-  --danger-text: #ff5f57;
-  --danger-surface: rgba(255, 95, 87, 0.14);
-  --danger-border: rgba(255, 95, 87, 0.3);
+  --danger-text: #f43f5e;
+  --danger-surface: rgba(244, 63, 94, 0.14);
+  --danger-border: rgba(244, 63, 94, 0.3);
   --info: var(--accent-highlight);
-  --info-text: #339cff;
+  --info-text: #38bdf8;
   --info-surface: rgba(1, 105, 204, 0.14);
   --info-border: rgba(1, 105, 204, 0.3);
   --input-focus-ring: rgba(1, 105, 204, 0.22);

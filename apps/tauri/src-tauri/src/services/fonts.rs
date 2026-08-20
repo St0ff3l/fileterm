@@ -150,6 +150,26 @@ pub fn data_url(app: &AppHandle, font_id: &str) -> Result<Option<String>, AppErr
     )))
 }
 
+pub fn delete(app: &AppHandle, font_id: &str) -> Result<bool, AppError> {
+    if !is_safe_font_id(font_id) {
+        return Err(AppError::Command("无效的字体 ID。".to_string()));
+    }
+    let paths = FontPaths::for_app(app)?;
+    let mut index = read_index(&paths)?;
+    let Some(position) = index.fonts.iter().position(|font| font.id == font_id) else {
+        return Ok(false);
+    };
+
+    let font = index.fonts.remove(position);
+    write_index(&paths, &index)?;
+    if let Ok(font_path) = paths.font_path(&font) {
+        if font_path.exists() {
+            let _ = fs::remove_file(font_path);
+        }
+    }
+    Ok(true)
+}
+
 fn read_index(paths: &FontPaths) -> Result<ImportedFontIndex, AppError> {
     if !paths.index_path.exists() {
         return Ok(ImportedFontIndex {
@@ -256,7 +276,10 @@ mod tests {
     #[test]
     fn accepts_only_safe_ids() {
         assert!(is_safe_font_id("font-abc_123"));
+        assert!(is_safe_font_id("font-1234567890abcdef"));
         assert!(!is_safe_font_id("../font"));
+        assert!(!is_safe_font_id("/root/font"));
+        assert!(!is_safe_font_id("font/evil"));
         assert!(!is_safe_font_id(""));
     }
 }

@@ -81,14 +81,14 @@ function resolveCompactUiVariables(
   // of tinting every navigation interaction blue.
   const hover =
     isCodex && !isLight
-      ? '#3a3a3a'
+      ? '#2a2a2a'
       : isLight
         ? blend(surfaceElevated, '#000000', 5.5)
         : blend(surfaceElevated, '#FFFFFF', 8)
   const active = isCodex
     ? isLight
       ? '#e4e4e7'
-      : '#3a3d42'
+      : '#333338'
     : isLight
       ? blend(surfaceElevated, accent, 12)
       : blend(surfaceElevated, accent, 18)

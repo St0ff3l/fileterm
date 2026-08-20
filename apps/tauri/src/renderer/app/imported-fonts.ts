@@ -52,6 +52,12 @@ export function registerImportedFonts(entries: Array<{ font: ImportedFont; dataU
   notifyImportedFontsChanged()
 }
 
+export function unregisterImportedFont(fontId: string) {
+  importedFontSources.delete(fontId)
+  syncImportedFontStyle()
+  notifyImportedFontsChanged()
+}
+
 export function clearImportedFonts() {
   importedFontSources.clear()
   if (typeof document !== 'undefined') {

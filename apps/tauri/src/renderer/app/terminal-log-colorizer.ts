@@ -9,6 +9,9 @@ export type TerminalLogColorPalette = Readonly<{
   info: string
   debug: string
   address: string
+  number: string
+  permission: string
+  flag: string
 }>
 
 type LogColorKey = keyof TerminalLogColorPalette
@@ -49,9 +52,9 @@ const FOREGROUND_INVERSE = 0x04000000
 const COLOR_MODE_RGB = 0x03000000
 const MAX_RECOLOR_LINES_PER_WRITE = 384
 
-// The rules intentionally stay conservative. They cover the line-oriented
-// output users commonly inspect in a remote terminal while avoiding broad
-// punctuation rules that would make shell prompts and tabular commands noisy.
+// Rules provide rich semantic highlighting for terminal logs, commands,
+// file listings, permissions, and numeric metrics while strictly avoiding
+// false positives inside package paths, URLs, and filenames.
 const LOG_COLOR_RULE_DEFINITIONS: ReadonlyArray<{
   color: LogColorKey
   pattern: string
@@ -59,37 +62,49 @@ const LOG_COLOR_RULE_DEFINITIONS: ReadonlyArray<{
   {
     color: 'error',
     pattern:
-      '\\b(?:error|err|failed|failure|fatal|critical|exception|panic|denied|refused|unauthori[sz]ed|oom|killed|segmentation\\s+fault)\\b'
+      '(?<![./\\-_@\\w])(?:error|err|failed|failure|fatal|critical|exception|panic|denied|refused|unauthori[sz]ed|oom|killed|segmentation\\s+fault)(?![./\\-_@\\w])'
   },
   {
     color: 'warning',
-    pattern: '\\b(?:warn(?:ing)?|caution|deprecated|retry|retries|backoff)\\b'
+    pattern: '(?<![./\\-_@\\w])(?:warn(?:ing)?|caution|deprecated|retry|retries|backoff)(?![./\\-_@\\w])'
   },
   {
     color: 'success',
-    pattern: '\\b(?:ok|success(?:ful)?|passed|completed|done|ready)\\b'
+    pattern: '(?<![./\\-_@\\w])(?:ok|success(?:ful)?|passed|done|ready)(?![./\\-_@\\w])'
   },
   {
     color: 'info',
-    pattern: '\\b(?:info|notice|note)\\b'
+    pattern: '(?<![./\\-_@\\w])(?:info|notice|note)(?![./\\-_@\\w])'
   },
   {
     color: 'debug',
-    pattern: '\\b(?:debug|trace|verbose)\\b'
+    pattern: '(?<![./\\-_@\\w])(?:debug|trace|verbose)(?![./\\-_@\\w])'
   },
   {
     color: 'timestamp',
     pattern:
-      '(?:\\b\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?|\\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:\\s+\\d{4})?|(?:\\d{1,2}月\\s+)?\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:\\s+\\d{4})?|\\b\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s+\\d{2}:\\d{2}:\\d{2})'
-  },
-  {
-    color: 'service',
-    pattern: '(?:\\b[A-Za-z][A-Za-z0-9_.@/-]*(?:\\[\\d+\\])?)(?=:\\s)'
+      '(?:\\b\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?\\b|\\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2}\\s+(?:\\d{2}:\\d{2}(?::\\d{2})?(?:[.,]\\d+)?|\\d{4})\\b|(?:\\d{1,2}月\\s+)?\\d{1,2}\\s+\\d{2}:\\d{2}(?::\\d{2})?(?:[.,]\\d+)?(?:\\s+\\d{4})?|\\b\\d{1,2}\\/\\d{1,2}\\/\\d{4}\\s+\\d{2}:\\d{2}(?::\\d{2})?\\b)'
   },
   {
     color: 'address',
     pattern:
-      '(?:\\bhttps?:\\/\\/[^\\s]+|\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b|\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b)'
+      '(?:\\bhttps?:\\/\\/[^\\s]+|\\b(?:\\d{1,3}\\.){3}\\d{1,3}(?::\\d{1,5})?\\b|\\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\\b)'
+  },
+  {
+    color: 'permission',
+    pattern: '(?<!\\S)[-dlcbsp][-rwxstST]{9}(?!\\S)'
+  },
+  {
+    color: 'service',
+    pattern: '(?:\\b[A-Za-z][A-Za-z0-9_.@/\\[\\]-]*(?:\\[\\d+\\])?)(?=\\s*:\\s)'
+  },
+  {
+    color: 'flag',
+    pattern: '(?<=\\s|^)(?:--[a-zA-Z0-9][a-zA-Z0-9_-]*|-[a-zA-Z0-9]+)(?=\\s|$|[,;:=])'
+  },
+  {
+    color: 'number',
+    pattern: '(?<![./\\-_@\\w])\\d+(?:\\.\\d+)?(?:ms|s|m|h|d|k|m|g|t|kb|mb|gb|tb|b|%|px|em|rem)?(?![./\\-_@\\w])'
   }
 ]
 
@@ -162,13 +177,16 @@ function createPaletteFromTheme(theme: ITheme | undefined): TerminalLogColorPale
   const pick = (value: string | undefined, fallback: string) => value || fallback
   return {
     timestamp: pick(theme?.brightGreen, pick(theme?.green, '#39d98a')),
-    service: pick(theme?.brightYellow, pick(theme?.yellow, '#e5e510')),
-    error: pick(theme?.brightRed, pick(theme?.red, '#cd3131')),
-    warning: pick(theme?.brightYellow, pick(theme?.yellow, '#e5e510')),
-    success: pick(theme?.brightGreen, pick(theme?.green, '#39d98a')),
-    info: pick(theme?.brightBlue, pick(theme?.blue, '#2472c8')),
-    debug: pick(theme?.brightMagenta, pick(theme?.magenta, '#bc3fbc')),
-    address: pick(theme?.brightCyan, pick(theme?.cyan, '#11a8cd'))
+    service: pick(theme?.brightYellow, pick(theme?.yellow, '#eab308')),
+    error: pick(theme?.brightRed, pick(theme?.red, '#e05555')),
+    warning: pick(theme?.brightYellow, pick(theme?.yellow, '#f59e0b')),
+    success: pick(theme?.brightGreen, pick(theme?.green, '#34d399')),
+    info: pick(theme?.brightBlue, pick(theme?.blue, '#38bdf8')),
+    debug: pick(theme?.brightMagenta, pick(theme?.magenta, '#c084fc')),
+    address: pick(theme?.brightCyan, pick(theme?.cyan, '#22d3ee')),
+    number: pick(theme?.brightMagenta, pick(theme?.magenta, '#c084fc')),
+    permission: pick(theme?.brightYellow, pick(theme?.yellow, '#f59e0b')),
+    flag: pick(theme?.brightYellow, pick(theme?.yellow, '#fde047'))
   }
 }
 

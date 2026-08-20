@@ -567,6 +567,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     listImportedFonts: () => invoke<ImportedFont[]>('app_list_imported_fonts'),
     importFont: () => invoke<ImportedFont | null>('app_import_font'),
     getImportedFontData: (fontId: string) => invoke<string | null>('app_get_imported_font_data', { fontId }),
+    deleteImportedFont: (fontId: string) => invoke<boolean>('app_delete_imported_font', { fontId }),
     listSshKeys: () => invoke<SshKeyMetadata[]>('app_list_ssh_keys'),
     selectSshKeyFile: () => invoke<SshKeyFileSelection | null>('app_select_ssh_key_file'),
     importSshKey: (input?: ImportSshKeyInput) => invoke<SshKeyImportResult | null>('app_import_ssh_key', { input }),
