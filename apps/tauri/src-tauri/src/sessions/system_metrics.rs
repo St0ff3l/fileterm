@@ -2662,5 +2662,4 @@ mod tests {
         );
         assert_eq!(metrics["topProcesses"][1]["command"], "/usr/sbin/sshd -D");
     }
-
 }

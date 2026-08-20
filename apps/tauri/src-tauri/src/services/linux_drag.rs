@@ -194,7 +194,7 @@ fn start_remote_file_drag_on_main_thread(
             }
         }
     });
-    if let Err(error) = push_signal_handler(&handler_ids, data_handler_id) {
+    if let Err(error) = push_signal_handler(&handler_ids, &data_handler_id) {
         gtk_window.disconnect(data_handler_id);
         gtk_window.drag_source_unset();
         cleanup.finish(false);
@@ -231,7 +231,7 @@ fn start_remote_file_drag_on_main_thread(
         cleanup_for_failed.finish(false);
         Propagation::Proceed
     });
-    if let Err(error) = push_signal_handler(&handler_ids, failed_handler_id) {
+    if let Err(error) = push_signal_handler(&handler_ids, &failed_handler_id) {
         gtk_window.disconnect(failed_handler_id);
         gtk_window.disconnect(data_handler_id);
         cleanup_signal_handlers(&handler_ids, &gtk_window);
@@ -246,7 +246,7 @@ fn start_remote_file_drag_on_main_thread(
         cleanup_signal_handlers(&handler_ids_for_end, &window_for_end);
         cleanup_for_end.finish(false);
     });
-    if let Err(error) = push_signal_handler(&handler_ids, end_handler_id) {
+    if let Err(error) = push_signal_handler(&handler_ids, &end_handler_id) {
         gtk_window.disconnect(end_handler_id);
         gtk_window.disconnect(failed_handler_id);
         gtk_window.disconnect(data_handler_id);
@@ -291,11 +291,11 @@ fn cleanup_signal_handlers(
 
 fn push_signal_handler(
     handler_ids: &Arc<Mutex<Vec<SignalHandlerId>>>,
-    handler_id: SignalHandlerId,
+    handler_id: &SignalHandlerId,
 ) -> std::result::Result<(), String> {
     handler_ids
         .lock()
         .map_err(|_| "拖放处理器状态损坏".to_string())?
-        .push(handler_id);
+        .push(handler_id.clone());
     Ok(())
 }
