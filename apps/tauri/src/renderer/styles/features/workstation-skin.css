@@ -663,67 +663,10 @@ textarea:focus-visible,
   text-align: right;
 }
 
+/* The filesystem selector sits between the "disk" label and the status dot.
+   It fills the remaining label-column space and truncates with an ellipsis;
+   the full mount point stays reachable via the dropdown menu. */
 .disk-meter-label {
-  min-width: 0;
-}
-
-.disk-select {
-  flex: 0 0 auto;
-  max-width: 34px;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 9px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.disk-select {
-  width: 32px;
-  height: 18px;
-  min-height: 18px;
-  padding: 0 2px;
-  border: 1px solid transparent;
-}
-
-.system-sidebar-layout .disk-select.dropdown-select-trigger {
-  height: 18px;
-  min-height: 18px;
-  padding: 0 2px;
-  gap: 1px;
-  font-size: 9px;
-  border: 0 !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-.system-sidebar-layout .disk-select.ft-select-shell {
-  height: 18px;
-  min-height: 18px;
-}
-
-.system-sidebar-layout .disk-select.ft-select-shell select {
-  padding: 0 2px !important;
-  font-size: 9px;
-  border: 0 !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-/* The shared native-select shell is full-width by default. In the compact
-   resource card the filesystem selector is an inline affordance beside the
-   label, so keep it from creating a second line or stealing the value column. */
-.system-sidebar-layout .meter-header {
-  grid-template-columns: max-content minmax(0, 1fr);
-}
-
-.system-sidebar-layout .meter-header > .meter-label {
-  max-width: 100%;
-}
-
-.system-sidebar-layout .disk-meter-label {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -732,20 +675,59 @@ textarea:focus-visible,
   overflow: hidden;
 }
 
-.system-sidebar-layout .meter-header .disk-select.ft-select-shell,
-.system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger {
-  display: inline-flex;
-  flex: 0 0 28px;
-  width: 28px !important;
-  min-width: 28px !important;
-  max-width: 28px;
+.disk-select {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.disk-select.dropdown-select-trigger {
+  flex: 1 1 auto;
+  width: auto;
   height: 18px;
   min-height: 18px;
-  box-sizing: border-box;
   padding: 0 2px;
+  gap: 1px;
   border: 0 !important;
   box-shadow: none !important;
   background: transparent !important;
+  font-size: 9px;
+}
+
+.disk-select.ft-select-shell {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  width: auto;
+  height: 18px;
+  min-height: 18px;
+}
+
+.disk-select.ft-select-shell select {
+  min-width: 0;
+  padding: 0 2px !important;
+  font-size: 9px;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* The label column is shared by every meter row so the status dots align
+   vertically. It grows with the sidebar (up to 84px) so the disk mount point
+   can show more characters on wide sidebars, and never shrinks below the
+   48px rhythm used by .metric-line. */
+.system-sidebar-layout .meter-header {
+  grid-template-columns: clamp(48px, 30%, 84px) minmax(0, 1fr);
+}
+
+.system-sidebar-layout .meter-header > .meter-label {
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .system-sidebar-layout .meter-header .disk-select.dropdown-select-trigger:focus,
@@ -779,11 +761,11 @@ textarea:focus-visible,
   -webkit-focus-ring-color: transparent !important;
 }
 
-/* Keep the two text-only summary rows on a stable value column even when the
-   label is translated or the sidebar is resized to its minimum width. */
+/* Keep the two text-only summary rows on the same label column as the meter
+   rows so their values align with the status dots. */
 .system-sidebar-layout .metric-line {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: clamp(48px, 30%, 84px) minmax(0, 1fr);
   width: 100%;
 }
 
