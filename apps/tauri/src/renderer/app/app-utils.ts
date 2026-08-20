@@ -1,5 +1,6 @@
 import type { DragEvent, MouseEvent } from 'react'
 import type { LocalFileItem, RemoteDragImage, TransferTask, WorkspaceTab } from '@fileterm/core'
+import type { AppIconName } from '../features/common/AppIcon'
 import { formatMessage, localizeErrorScope, t } from '../i18n'
 
 export const localFileDragType = 'application/x-fileterm-local-file'
@@ -206,7 +207,91 @@ export function parseDraggedPaths(payload: string) {
   }
 }
 
-export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[]) {
+const DRAG_PREVIEW_ICON_STROKE_WIDTH = 1.8
+
+/**
+ * File-list icon paths in the same 16px viewBox used by AppIcon. Keeping the
+ * native PNG and HTML5 preview on these paths means drag-out uses the exact
+ * same semantic icon as the file table (folder, archive, code, image, etc.).
+ */
+const DRAG_PREVIEW_ICON_PATHS: Partial<Record<AppIconName, readonly string[]>> = {
+  folder: ['M2.5 4.5h3l1.4 1.6h6.6v5.8a1.1 1.1 0 0 1-1.1 1.1H3.6a1.1 1.1 0 0 1-1.1-1.1V5.6a1.1 1.1 0 0 1 1.1-1.1Z'],
+  file: ['M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z', 'M9.5 2.5V6H13'],
+  archive: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M8 4.1v1.1M8 6.2v1.1M8 8.3v1.1M7 10h2'
+  ],
+  video: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'm6.9 7.1 3.1 1.9-3.1 1.9Z'
+  ],
+  audio: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M9.5 7.1v3.1a1 1 0 1 1-1-.9h1',
+    'M9.5 7.1 7.7 7.7'
+  ],
+  image: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'm6 11 1.9-2 1.4 1.4 1.7-1.8 1 1.1',
+    'M7 7.2h.01'
+  ],
+  document: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M6.4 7.6h3.9M6.4 9.2h3.9M6.4 10.8h2.7'
+  ],
+  spreadsheet: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 7.7h4.6v3.8H6.2zM8.5 7.7v3.8M6.2 9.6h4.6'
+  ],
+  presentation: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 7.4h4.6v3H6.2zM8.5 10.4v1.4M7.2 11.8h2.6'
+  ],
+  'config-file': [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 8h4.6M6.2 10.5h4.6M7.4 7.2v1.6M9.6 9.7v1.6'
+  ],
+  database: [
+    'M12.5 4.2c0 1.1-2 2-4.5 2s-4.5-.9-4.5-2 2-2 4.5-2 4.5.9 4.5 2Z',
+    'M3.5 4.2v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V4.2M3.5 8v3.8c0 1.1 2 2 4.5 2s4.5-.9 4.5-2V8'
+  ],
+  'font-file': [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13M6.2 11.5 8.3 7l2.1 4.5M6.9 10h2.8'
+  ],
+  package: ['m8 2.2 5 2.7v6.2l-5 2.7-5-2.7V4.9l5-2.7Z', 'm3.3 5.1 4.7 2.6 4.7-2.6M8 7.7v6M5.5 3.6l4.8 2.6'],
+  'terminal-file': [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13m-6.7 2 1.5 1.4-1.5 1.4M8.8 11h2'
+  ],
+  pdf: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M6.2 10.7V7.4h1.2a.9.9 0 1 1 0 1.8H6.2m2.2 1.5V7.4h.7a1.6 1.6 0 0 1 0 3.3h-.7m2-.1V7.4h1.4'
+  ],
+  code: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'm7.1 8.1-1.4 1.2 1.4 1.2M9.1 8.1l1.4 1.2-1.4 1.2'
+  ],
+  disk: [
+    'M5 2.5h4.5L13 6v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z',
+    'M9.5 2.5V6H13',
+    'M8.2 11.6a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z',
+    'M8.2 9.4h.01'
+  ]
+}
+
+function getDragPreviewIconPaths(iconName: AppIconName) {
+  return DRAG_PREVIEW_ICON_PATHS[iconName] ?? DRAG_PREVIEW_ICON_PATHS.file!
+}
+
+export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[], iconName: AppIconName = 'file') {
   if (!names.length) {
     return
   }
@@ -214,11 +299,12 @@ export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[
   const preview = document.createElement('div')
   preview.className = 'file-drag-preview'
   const visibleNames = names.slice(0, 2)
+  const iconPaths = getDragPreviewIconPaths(iconName)
   preview.innerHTML = `
     <span class="file-drag-preview-icon" aria-hidden="true">
       <svg class="app-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <g fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="33.6" transform="scale(0.015625)">
-          ${COPY_ICON_PATHS.map((path) => `<path d="${path}"></path>`).join('')}
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="${DRAG_PREVIEW_ICON_STROKE_WIDTH}">
+          ${iconPaths.map((path) => `<path d="${path}"></path>`).join('')}
         </g>
       </svg>
     </span>
@@ -228,15 +314,6 @@ export function setFileDragPreview(event: DragEvent<HTMLElement>, names: string[
   event.dataTransfer.setDragImage(preview, 10, 10)
   window.setTimeout(() => preview.remove(), 0)
 }
-
-/**
- * AppIcon `copy` 图标的路径数据（1024 视野，经 scale(0.015625) 映射到 16 视野）。
- * 拖拽 ghost 与终端悬浮窗共用同一枚复制图标。
- */
-const COPY_ICON_PATHS = [
-  'M761.088 715.3152a38.7072 38.7072 0 1 1 0-77.4144 37.4272 37.4272 0 0 0 37.4272-37.4272V265.0112a37.4272 37.4272 0 0 0-37.4272-37.4272H425.6256a37.4272 37.4272 0 0 0-37.4272 37.4272 38.7072 38.7072 0 1 1-77.4144 0 115.0976 115.0976 0 0 1 114.8416-114.8416h335.4624a115.0976 115.0976 0 0 1 114.8416 114.8416v335.4624a115.0976 115.0976 0 0 1-114.8416 114.8416z',
-  'M589.4656 883.0976H268.1856a121.1392 121.1392 0 0 1-121.2928-121.2928v-322.56a121.1392 121.1392 0 0 1 121.2928-121.344h321.28a121.1392 121.1392 0 0 1 121.2928 121.2928v322.56c1.28 67.1232-54.1696 121.344-121.2928 121.344zM268.1856 395.3152a43.52 43.52 0 0 0-43.8784 43.8784v322.56a43.52 43.52 0 0 0 43.8784 43.8784h321.28a43.52 43.52 0 0 0 43.8784-43.8784v-322.56a43.52 43.52 0 0 0-43.8784-43.8784z'
-] as const
 
 /** Ghost 布局常量，与 session.css 中 `.native-drag-ghost` 保持一致。 */
 const NATIVE_DRAG_GHOST_LAYOUT = {
@@ -248,19 +325,19 @@ const NATIVE_DRAG_GHOST_LAYOUT = {
   iconSize: 14,
   iconGap: 7,
   titleFontSize: 12,
-  /** 与终端悬浮窗复制图标一致的描边粗细（AppIcon strokeWidth 2.1）。 */
-  iconStrokeWidth: 2.1,
+  /** 与文件区域 AppIcon 默认 strokeWidth 一致。 */
+  iconStrokeWidth: DRAG_PREVIEW_ICON_STROKE_WIDTH,
   /** 光标到 ghost 左上角的逻辑偏移（native-drag-ghost 悬浮定位）。 */
   cursorOffset: 14
 } as const
 
 /**
- * 为 Windows 原生拖出渲染 Shell 拖拽图像（DragImageBits 同款位图）。
- * 与 DOM 版 `.native-drag-ghost` 同视觉（单行图标 + 文件名，对齐 macOS）：
+ * 为 Windows/macOS 原生拖出渲染 Shell/AppKit 共用的拖拽图像。
+ * 与 DOM 版 `.native-drag-ghost` 同视觉（单行文件区域图标 + 文件名）：
  * 主题色通过隐藏探针元素读取，文本与图标用 canvas 绘制，输出 PNG data
  * URL + 物理像素尺寸/偏移。
  */
-export function buildNativeDragImage(names: string[]): RemoteDragImage | null {
+export function buildNativeDragImage(names: string[], iconName: AppIconName = 'file'): RemoteDragImage | null {
   if (!names.length || typeof document === 'undefined') {
     return null
   }
@@ -330,23 +407,21 @@ export function buildNativeDragImage(names: string[]): RemoteDragImage | null {
   context.strokeStyle = Array.isArray(borderColor) ? borderColor[0] : borderColor
   context.stroke()
 
-  // 单行内容：复制图标 + 文件名
+  // 单行内容：文件区域图标 + 文件名
   const contentTop = layout.borderWidth + layout.paddingY
   const iconLeft = layout.borderWidth + layout.paddingX
-  // 图标路径为 1024 视野，直接缩放到 iconSize 像素；描边宽度按
-  // AppIcon 语义（strokeWidth*16 于 1024 视野）换算，与终端悬浮窗一致。
-  const iconScale = layout.iconSize / 1024
+  // 路径使用和 AppIcon 相同的 16px 视野，缩放后描边宽度也保持一致。
+  const iconPaths = getDragPreviewIconPaths(iconName)
+  const iconScale = layout.iconSize / 16
   context.save()
   context.translate(iconLeft, contentTop)
   context.scale(iconScale, iconScale)
-  context.fillStyle = iconColor
   context.strokeStyle = iconColor
-  context.lineWidth = layout.iconStrokeWidth * 16
+  context.lineWidth = layout.iconStrokeWidth
   context.lineCap = 'round'
   context.lineJoin = 'round'
-  for (const pathData of COPY_ICON_PATHS) {
+  for (const pathData of iconPaths) {
     const iconPath = new Path2D(pathData)
-    context.fill(iconPath)
     context.stroke(iconPath)
   }
   context.restore()
@@ -372,6 +447,8 @@ export function buildNativeDragImage(names: string[]): RemoteDragImage | null {
     dataUrl,
     width: canvas.width,
     height: canvas.height,
+    logicalWidth,
+    logicalHeight,
     offsetX: Math.round(-layout.cursorOffset * scale),
     offsetY: Math.round(-layout.cursorOffset * scale)
   }

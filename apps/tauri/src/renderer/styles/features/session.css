@@ -1279,6 +1279,8 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
   user-select: none;
   -webkit-user-select: none;
@@ -1557,8 +1559,8 @@
   white-space: nowrap;
 }
 
-/* Windows 原生拖出：暂存下载期间跟随光标的准备浮层（macOS 由系统拖拽图像兜底）。
-   与 macOS 拖拽视觉对齐：单行图标 + 文件名。 */
+/* Windows 原生拖出：暂存下载期间跟随光标的准备浮层；macOS/Windows
+   对外使用同源的渲染预览图。 */
 .native-drag-ghost {
   position: fixed;
   z-index: 9999;
@@ -1747,6 +1749,11 @@
 .transfer-row time,
 .transfer-row-meta span {
   font-size: 11px;
+}
+
+.transfer-row-path,
+.transfer-row-message {
+  grid-column: 1 / -1;
 }
 
 .transfer-row-main span {

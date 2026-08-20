@@ -1,4 +1,14 @@
-import { useState, useEffect, type DragEvent, FormEvent, MouseEvent, PointerEvent, ReactNode, RefObject } from 'react'
+import {
+  useCallback,
+  useState,
+  useEffect,
+  type DragEvent,
+  FormEvent,
+  MouseEvent,
+  PointerEvent,
+  ReactNode,
+  RefObject
+} from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { formatMessage, t } from '../../i18n'
@@ -6,6 +16,12 @@ import { AppIcon } from '../common/AppIcon'
 import { getDisplayFileIconName, getDisplayFileTypeLabel } from './file-kind'
 
 import type { FileFilterConfig } from './file-filter'
+
+// File rows are deliberately fixed-height in workstation-skin.css. Keeping
+// the virtualizer on that same value prevents it from correcting scrollTop
+// while a trackpad momentum gesture is in progress.
+const FILE_TABLE_ROW_HEIGHT = 24
+const FILE_TABLE_OVERSCAN = 8
 
 export type RemoteFileSortField = 'name' | 'size' | 'type' | 'modified' | 'permission' | 'ownerGroup'
 
@@ -238,11 +254,20 @@ export function FileTable({
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  const getItemKey = useCallback(
+    (index: number) => {
+      const row = rows[index]
+      return row ? `${row.path}:${row.name}` : index
+    },
+    [rows]
+  )
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 33,
-    overscan: 15
+    estimateSize: () => FILE_TABLE_ROW_HEIGHT,
+    getItemKey,
+    overscan: FILE_TABLE_OVERSCAN
   })
 
   const virtualItems = rowVirtualizer.getVirtualItems()
@@ -324,7 +349,6 @@ export function FileTable({
               return (
                 <tr
                   key={row.path}
-                  ref={rowVirtualizer.measureElement}
                   data-index={virtualRow.index}
                   className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths?.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
                   onClick={(event) => onSelectItem?.(event, row)}
@@ -409,11 +433,20 @@ export function LocalFileTable({
   onSelectionDragEnter(item: LocalFileItem): void
   onSelectionDragStart(event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem): void
 }) {
+  const getItemKey = useCallback(
+    (index: number) => {
+      const row = rows[index]
+      return row ? `${row.path}:${row.name}` : index
+    },
+    [rows]
+  )
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 33,
-    overscan: 15
+    estimateSize: () => FILE_TABLE_ROW_HEIGHT,
+    getItemKey,
+    overscan: FILE_TABLE_OVERSCAN
   })
 
   const virtualItems = rowVirtualizer.getVirtualItems()
@@ -454,7 +487,6 @@ export function LocalFileTable({
           return (
             <tr
               key={`${row.path}:${row.name}`}
-              ref={rowVirtualizer.measureElement}
               data-index={virtualRow.index}
               className={`${row.type === 'folder' ? 'is-folder' : 'is-file'} ${selectedPaths.includes(row.path) ? 'is-selected' : ''} ${cutPaths?.includes(row.path) ? 'is-cut-pending' : ''}`}
               onClick={(event) => onSelectItem(event, row)}

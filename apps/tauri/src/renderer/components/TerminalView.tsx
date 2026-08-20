@@ -592,7 +592,14 @@ export const TerminalView = memo(function TerminalView({
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
-  const lastObservedHostRectRef = useRef<{ width: number; height: number } | null>(null)
+  const lastObservedHostRectRef = useRef<{
+    left: number
+    top: number
+    right: number
+    bottom: number
+    width: number
+    height: number
+  } | null>(null)
   const isHorizontalResizeActiveRef = useRef(false)
   const lastTerminalOutputAtRef = useRef(0)
   const awaitingCommandCompletionRef = useRef(false)
@@ -1705,9 +1712,9 @@ export const TerminalView = memo(function TerminalView({
         return
       }
 
-      const { width, height } = host.getBoundingClientRect()
+      const { left, top, right, bottom, width, height } = host.getBoundingClientRect()
       const lastObservedRect = lastObservedHostRectRef.current
-      lastObservedHostRectRef.current = { width, height }
+      lastObservedHostRectRef.current = { left, top, right, bottom, width, height }
 
       const widthChanged = Boolean(
         lastObservedRect && Math.abs(lastObservedRect.width - width) > TERMINAL_RESIZE_PIXEL_EPSILON
@@ -1791,19 +1798,52 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
-      const bounds = host.getBoundingClientRect()
+      const bounds = lastObservedHostRectRef.current
+      if (!bounds) {
+        return false
+      }
+
       return clientX >= bounds.left && clientX <= bounds.right && clientY >= bounds.top && clientY <= bounds.bottom
     }
 
+    const isRootRetargetedGesture = (event: Event) => {
+      const target = event.target
+      return (
+        target === null ||
+        target === window ||
+        target === document ||
+        target === document.documentElement ||
+        target === document.body
+      )
+    }
+
     const isTerminalGestureTarget = (event: Event) => {
-      if (isEventInsideTerminal(event) || isEventOverTerminal(event)) {
+      if (isEventInsideTerminal(event)) {
         return true
       }
 
       // WebView2, WebKitGTK and WKWebView can dispatch a compositor gesture
-      // at the document root rather than the element beneath the pinch. The
-      // xterm textarea is the authoritative focus owner in that case; a click
-      // into another pane updates lastFocusedTerminal before its next gesture.
+      // at the document root rather than the element beneath the pinch. Only
+      // those root-retargeted events need the geometry/focus fallback. A
+      // regular file-pane wheel event must stay on the native file scroller;
+      // reading terminal bounds for every such event forces a synchronous
+      // layout while a virtualized table is mounting rows.
+      if (!isRootRetargetedGesture(event)) {
+        return false
+      }
+
+      if (isEventOverTerminal(event)) {
+        return true
+      }
+
+      const { clientX, clientY } = event as MouseEvent
+      if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        return false
+      }
+
+      // The xterm textarea is the authoritative focus owner when the WebView
+      // drops both the target and composed path. A click into another pane
+      // updates lastFocusedTerminal before its next gesture.
       return lastFocusedTerminal === terminal && document.activeElement === terminalTextarea
     }
 
@@ -1904,10 +1944,6 @@ export const TerminalView = memo(function TerminalView({
     const onWheel = (event: WheelEvent) => {
       const matchesTerminal = isTerminalGestureTarget(event)
       if (!matchesTerminal) {
-        logTerminalZoom(terminal, 'wheel-window-ignored-not-terminal', {
-          ...describeTerminalInput(event),
-          tabId: tabIdRef.current
-        })
         return
       }
 

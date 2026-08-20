@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::ptr::null_mut;
 
+use base64::Engine as _;
 use block2::RcBlock;
 use objc2::{
     define_class, msg_send,
@@ -16,14 +17,14 @@ use objc2_app_kit::{
     NSForegroundColorAttributeName, NSImage, NSPasteboardWriting, NSStringDrawing, NSView,
 };
 use objc2_foundation::{
-    NSAttributedStringKey, NSDictionary, NSError, NSMutableArray, NSOperationQueue, NSPoint,
-    NSRect, NSSize, NSString, NSURL,
+    NSData, NSAttributedStringKey, NSDictionary, NSError, NSMutableArray, NSOperationQueue,
+    NSPoint, NSRect, NSSize, NSString, NSURL,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use tauri::{AppHandle, Manager, WebviewWindow};
 use tokio::sync::oneshot;
 
-use super::RemoteFileDragItem;
+use super::{RemoteDragImage, RemoteFileDragItem};
 use crate::AppError;
 
 const FILE_PROMISE_UTI: &str = "public.data";
@@ -178,7 +179,7 @@ pub(super) async fn start_remote_file_drag(
     window_label: &str,
     tab_id: &str,
     items: Vec<RemoteFileDragItem>,
-    _drag_image: Option<super::RemoteDragImage>,
+    drag_image: Option<RemoteDragImage>,
 ) -> Result<(), AppError> {
     validate_items(&items)?;
 
@@ -191,7 +192,13 @@ pub(super) async fn start_remote_file_drag(
     let tab_id = tab_id.to_string();
     window
         .run_on_main_thread(move || {
-            let result = start_on_main_thread(window_for_main, app_for_main, tab_id, items);
+            let result = start_on_main_thread(
+                window_for_main,
+                app_for_main,
+                tab_id,
+                items,
+                drag_image,
+            );
             let _ = result_sender.send(result);
         })
         .map_err(|error| AppError::Command(format!("切换到原生拖出线程失败：{error}")))?;
@@ -224,6 +231,7 @@ fn start_on_main_thread(
     app: AppHandle,
     tab_id: String,
     items: Vec<RemoteFileDragItem>,
+    drag_image: Option<RemoteDragImage>,
 ) -> Result<(), String> {
     let handle = window
         .window_handle()
@@ -231,6 +239,14 @@ fn start_on_main_thread(
     let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
         return Err("当前窗口不是 macOS 原生窗口".to_string());
     };
+
+    let shared_drag_image = drag_image.and_then(|spec| match decode_drag_preview_image(&spec) {
+        Ok(image) => Some(image),
+        Err(error) => {
+            log::warn!("跳过 macOS 原生拖拽预览图：{error}");
+            None
+        }
+    });
 
     unsafe {
         let mtm = MainThreadMarker::new_unchecked();
@@ -247,7 +263,10 @@ fn start_on_main_thread(
         let item_count = items.len();
         let mut delegates = Vec::with_capacity(items.len());
         for item in items {
-            let image = make_drag_preview_image(&item);
+            let image = shared_drag_image
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| make_drag_preview_image(&item));
             let image_size = image.size();
             let image_rect = NSRect::new(
                 NSPoint::new(
@@ -317,6 +336,39 @@ fn start_on_main_thread(
         });
         Ok(())
     }
+}
+
+fn decode_drag_preview_image(spec: &RemoteDragImage) -> Result<Retained<NSImage>, String> {
+    let payload = match spec.data_url.strip_prefix("data:") {
+        Some(rest) => rest.rsplit_once(',').map(|(_, data)| data).unwrap_or(rest),
+        None => spec.data_url.as_str(),
+    };
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .map_err(|error| format!("拖拽图像 base64 解码失败：{error}"))?;
+    if bytes.is_empty() {
+        return Err("拖拽图像为空".to_string());
+    }
+
+    let data = NSData::with_bytes(&bytes);
+    let image = NSImage::initWithData(NSImage::alloc(), &data)
+        .ok_or_else(|| "macOS 无法解码拖拽图像".to_string())?;
+    let image_size = image.size();
+    let logical_width = if spec.logical_width.is_finite() && spec.logical_width > 0.0 {
+        spec.logical_width
+    } else {
+        image_size.width
+    };
+    let logical_height = if spec.logical_height.is_finite() && spec.logical_height > 0.0 {
+        spec.logical_height
+    } else {
+        image_size.height
+    };
+    if logical_width <= 0.0 || logical_height <= 0.0 {
+        return Err("拖拽图像尺寸无效".to_string());
+    }
+    image.setSize(NSSize::new(logical_width, logical_height));
+    Ok(image)
 }
 
 const DRAG_PREVIEW_HEIGHT: f64 = 28.0;

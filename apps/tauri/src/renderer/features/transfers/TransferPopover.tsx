@@ -279,7 +279,16 @@ export function TransferPopover({
                 <i className="transfer-progress">
                   <b style={{ width: `${progress}%` }} />
                 </i>
-                {transfer.message ? <small title={transfer.message}>{transfer.message}</small> : null}
+                {transfer.destinationPath ? (
+                  <small className="transfer-row-path" title={transfer.destinationPath}>
+                    {t.transferDestination} {transfer.destinationPath}
+                  </small>
+                ) : null}
+                {transfer.message ? (
+                  <small className="transfer-row-message" title={transfer.message}>
+                    {transfer.message}
+                  </small>
+                ) : null}
               </div>
             )
           })

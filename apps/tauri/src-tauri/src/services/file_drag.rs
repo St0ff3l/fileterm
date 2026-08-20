@@ -49,6 +49,13 @@ pub struct RemoteDragImage {
     pub data_url: String,
     pub width: u32,
     pub height: u32,
+    /// Logical CSS-pixel dimensions before renderer device-pixel scaling.
+    /// These are used by AppKit, which otherwise treats the raw PNG pixels as
+    /// points and displays a Retina drag preview at twice the intended size.
+    #[serde(default)]
+    pub logical_width: f64,
+    #[serde(default)]
+    pub logical_height: f64,
     pub offset_x: i32,
     pub offset_y: i32,
 }

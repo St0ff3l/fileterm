@@ -416,6 +416,9 @@ export interface RemoteDragImage {
   dataUrl: string
   width: number
   height: number
+  /** Logical CSS-pixel dimensions before device-pixel scaling. */
+  logicalWidth: number
+  logicalHeight: number
   offsetX: number
   offsetY: number
 }

@@ -36,14 +36,14 @@ import {
 } from '../../app/app-utils'
 import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
-import { AppIcon } from '../common/AppIcon'
+import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { CommandCenter } from '../commands/CommandCenter'
 import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
-import { getDisplayFileTypeSortKey } from './file-kind'
+import { getDisplayFileIconName, getDisplayFileTypeSortKey } from './file-kind'
 import { matchesFileFilter, type FileFilterConfig } from './file-filter'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
 
@@ -66,6 +66,11 @@ function areStringArraysEqual(left: string[], right: string[]) {
 
 function compareText(left: string, right: string) {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function getDragPreviewIcon(items: Array<LocalFileItem | RemoteFileItem>): AppIconName {
+  const firstItem = items[0]
+  return firstItem ? getDisplayFileIconName(firstItem) : 'file'
 }
 
 function parseSortableSize(value: string) {
@@ -328,12 +333,13 @@ export function FileManager({
   const nativeRemoteDragRef = useRef<{ tabId: string; items: RemoteFileItem[] } | null>(null)
   const [nativeDragGhost, setNativeDragGhost] = useState<{
     names: string[]
+    icon: AppIconName
     x: number
     y: number
   } | null>(null)
   // OLE 拖拽循环期间 webview 收不到指针事件；ghost 位置改由 Rust 侧
   // GiveFeedback 上报的光标事件驱动（tauriNativeRemoteDragCursor）。
-  const nativeDragGhostNamesRef = useRef<string[] | null>(null)
+  const nativeDragGhostInfoRef = useRef<{ names: string[]; icon: AppIconName } | null>(null)
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const localScrollRef = useRef<HTMLDivElement | null>(null)
@@ -513,9 +519,9 @@ export function FileManager({
         setNativeDragGhost(null)
         return
       }
-      const names = nativeDragGhostNamesRef.current
-      if (names) {
-        setNativeDragGhost({ names, x: cursor.x, y: cursor.y })
+      const dragGhostInfo = nativeDragGhostInfoRef.current
+      if (dragGhostInfo) {
+        setNativeDragGhost({ ...dragGhostInfo, x: cursor.x, y: cursor.y })
       }
     })
   }, [desktopApi])
@@ -653,16 +659,18 @@ export function FileManager({
         nativeRemoteDragRef.current = nativeDrag
       }
       // SSH and FTP drags stream through the OLE FileContents channel; other
-      // session types stage into a temp folder first. Either way the DOM ghost
-      // follows the cursor while it stays inside the window (fed by
-      // GiveFeedback cursor reports), and a Shell drag image with the same
-      // visual takes over once the drag leaves the window — like a browser.
+      // session types stage into a temp folder first. The renderer preview is
+      // also passed to macOS so AppKit and Windows use the same card outside
+      // the FileTerm window.
       let dragImage: RemoteDragImage | null = null
-      if (desktopApi?.platform === 'win32') {
+      const dragIcon = getDragPreviewIcon(payloadItems)
+      if (desktopApi?.platform === 'win32' || desktopApi?.platform === 'darwin') {
         const names = payloadItems.map((row) => row.name)
-        nativeDragGhostNamesRef.current = names
-        setNativeDragGhost({ names, x: moveEvent.clientX, y: moveEvent.clientY })
-        dragImage = buildNativeDragImage(names)
+        if (desktopApi.platform === 'win32') {
+          nativeDragGhostInfoRef.current = { names, icon: dragIcon }
+          setNativeDragGhost({ names, icon: dragIcon, x: moveEvent.clientX, y: moveEvent.clientY })
+        }
+        dragImage = buildNativeDragImage(names, dragIcon)
       }
       void desktopApi
         .startRemoteFileDrag(activeTab.id, payload, dragImage)
@@ -673,7 +681,7 @@ export function FileManager({
           console.error('[FileTerm] 远程文件拖出失败', error)
         })
         .finally(() => {
-          nativeDragGhostNamesRef.current = null
+          nativeDragGhostInfoRef.current = null
           setNativeDragGhost(null)
         })
     }
@@ -987,7 +995,7 @@ export function FileManager({
       {nativeDragGhost ? (
         <div className="native-drag-ghost" style={{ left: nativeDragGhost.x + 14, top: nativeDragGhost.y + 14 }}>
           <span className="file-drag-preview-icon" aria-hidden="true">
-            <AppIcon name="copy" size={14} strokeWidth={2.1} />
+            <AppIcon name={nativeDragGhost.icon} size={14} />
           </span>
           <span className="native-drag-ghost-title">
             {nativeDragGhost.names.slice(0, 2).join(nativeDragGhost.names.length > 1 ? ', ' : '')}
@@ -1201,7 +1209,8 @@ export function FileManager({
                     event.dataTransfer.setData(localFileDragType, JSON.stringify(payload))
                     setFileDragPreview(
                       event,
-                      previewItems.map((row) => row.name)
+                      previewItems.map((row) => row.name),
+                      getDragPreviewIcon(previewItems)
                     )
                   }}
                   onOpenItem={onOpenLocalItem}
@@ -1379,7 +1388,8 @@ export function FileManager({
                       event.dataTransfer.setData(remoteFileDragType, JSON.stringify(payload))
                       setFileDragPreview(
                         event,
-                        previewItems.map((row) => row.name)
+                        previewItems.map((row) => row.name),
+                        getDragPreviewIcon(previewItems)
                       )
                     }}
                     onNativeDragStart={startRemoteNativeDrag}
