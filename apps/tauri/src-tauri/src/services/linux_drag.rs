@@ -194,8 +194,8 @@ fn start_remote_file_drag_on_main_thread(
             }
         }
     });
-    if let Err(error) = push_signal_handler(&handler_ids, &data_handler_id) {
-        gtk_window.disconnect(data_handler_id);
+    if let Err((error, handler_id)) = push_signal_handler(&handler_ids, data_handler_id) {
+        gtk_window.disconnect(handler_id);
         gtk_window.drag_source_unset();
         cleanup.finish(false);
         return Err(error);
@@ -231,9 +231,8 @@ fn start_remote_file_drag_on_main_thread(
         cleanup_for_failed.finish(false);
         Propagation::Proceed
     });
-    if let Err(error) = push_signal_handler(&handler_ids, &failed_handler_id) {
-        gtk_window.disconnect(failed_handler_id);
-        gtk_window.disconnect(data_handler_id);
+    if let Err((error, handler_id)) = push_signal_handler(&handler_ids, failed_handler_id) {
+        gtk_window.disconnect(handler_id);
         cleanup_signal_handlers(&handler_ids, &gtk_window);
         cleanup.finish(false);
         return Err(error);
@@ -246,10 +245,8 @@ fn start_remote_file_drag_on_main_thread(
         cleanup_signal_handlers(&handler_ids_for_end, &window_for_end);
         cleanup_for_end.finish(false);
     });
-    if let Err(error) = push_signal_handler(&handler_ids, &end_handler_id) {
-        gtk_window.disconnect(end_handler_id);
-        gtk_window.disconnect(failed_handler_id);
-        gtk_window.disconnect(data_handler_id);
+    if let Err((error, handler_id)) = push_signal_handler(&handler_ids, end_handler_id) {
+        gtk_window.disconnect(handler_id);
         cleanup_signal_handlers(&handler_ids, &gtk_window);
         cleanup.finish(false);
         return Err(error);
@@ -291,11 +288,12 @@ fn cleanup_signal_handlers(
 
 fn push_signal_handler(
     handler_ids: &Arc<Mutex<Vec<SignalHandlerId>>>,
-    handler_id: &SignalHandlerId,
-) -> std::result::Result<(), String> {
-    handler_ids
-        .lock()
-        .map_err(|_| "拖放处理器状态损坏".to_string())?
-        .push(handler_id.clone());
+    handler_id: SignalHandlerId,
+) -> std::result::Result<(), (String, SignalHandlerId)> {
+    let mut registered_handlers = match handler_ids.lock() {
+        Ok(registered_handlers) => registered_handlers,
+        Err(_) => return Err(("拖放处理器状态损坏".to_string(), handler_id)),
+    };
+    registered_handlers.push(handler_id);
     Ok(())
 }
