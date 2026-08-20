@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 use serde_json::Value;
 use suppaftp::list::{File as ListedFile, ListParser};
 use suppaftp::tokio::{
-    AsyncDataStream, AsyncFtpStream, AsyncNativeTlsConnector, AsyncNativeTlsFtpStream,
-    AsyncNativeTlsStream, AsyncNoTlsStream, ImplAsyncFtpStream, TokioTlsStream,
+    AsyncFtpStream, AsyncNativeTlsConnector, AsyncNativeTlsFtpStream, ImplAsyncFtpStream,
+    TokioTlsStream,
 };
 use suppaftp::{FtpError, Status};
 use tauri::{AppHandle, Emitter, Manager};
@@ -23,22 +22,6 @@ const TRANSFER_CANCELED: &str = "transfer canceled";
 enum FtpClient {
     Plain(AsyncFtpStream),
     Secure(AsyncNativeTlsFtpStream),
-}
-
-/// 拖出流式读取的 RETR 数据流。`retr_as_stream` 的返回类型随连接的
-/// TLS 后端变化，这里跟随 `FtpClient` 的枚举一一对应。
-enum FtpDragReader {
-    Plain(AsyncDataStream<AsyncNoTlsStream>),
-    Secure(AsyncDataStream<AsyncNativeTlsStream>),
-}
-
-/// 拖出专用 FTP 连接状态：与浏览连接分离，顺序读取时复用同一条 RETR
-/// 流，seek 或切换文件时 ABOR 后按新偏移重开。
-struct FtpDragState {
-    client: FtpClient,
-    file: String,
-    next_offset: u64,
-    reader: Option<FtpDragReader>,
 }
 
 #[derive(Default)]
@@ -119,7 +102,6 @@ async fn run_ftp_worker(
     )
     .await;
     let mut transfer_jobs = tokio::task::JoinSet::new();
-    let drag_state = Arc::new(tokio::sync::Mutex::new(None::<FtpDragState>));
     let cleanup_app = app.clone();
     let cleanup_tab_id = tab_id.to_string();
     tokio::spawn(async move {
@@ -148,30 +130,6 @@ async fn run_ftp_worker(
             }) => {
                 let result = client_read(&mut client, &path, &encoding).await;
                 let _ = respond_to.send(result);
-            }
-            Some(WorkerCmd::ReadRemoteFileRange {
-                path,
-                offset,
-                length,
-                respond_to,
-            }) => {
-                // 拖出流式读取：专用连接 + RETR 流复用，spawn 避免阻塞浏览命令。
-                let profile = profile.clone();
-                let host = host.to_string();
-                let drag_state = Arc::clone(&drag_state);
-                transfer_jobs.spawn(async move {
-                    let result = read_remote_range_for_drag(
-                        &profile,
-                        &host,
-                        port,
-                        &drag_state,
-                        &path,
-                        offset,
-                        length,
-                    )
-                    .await;
-                    let _ = respond_to.send(result);
-                });
             }
             Some(WorkerCmd::WriteRemoteFile {
                 path,
@@ -1161,145 +1119,6 @@ async fn download_file<T: TokioTlsStream + Send + 'static>(
     ftp.finalize_retr_stream(stream)
         .await
         .map_err(|error| error.to_string())
-}
-
-/// 拖出流式读取：维持一条专用 FTP 连接，顺序读取时复用当前 RETR 流；
-/// 偏移或文件不匹配时 ABOR 旧流后按新偏移重开。与 `download_file`
-/// 不同，这里不落盘——字节直接回给 OLE `FileContents` IStream。
-async fn read_remote_range_for_drag(
-    profile: &Value,
-    host: &str,
-    port: u16,
-    drag_state: &Arc<tokio::sync::Mutex<Option<FtpDragState>>>,
-    path: &str,
-    offset: u64,
-    length: u64,
-) -> Result<Vec<u8>, String> {
-    if length == 0 {
-        return Ok(Vec::new());
-    }
-    let mut state_guard = drag_state.lock().await;
-    let reusable = state_guard.as_ref().is_some_and(|state| {
-        state.reader.is_some() && state.file == path && state.next_offset == offset
-    });
-    if !reusable {
-        if let Some(mut state) = state_guard.take() {
-            // RETR 未读完时只有 ABOR 能安全收尾；ABOR 后的连接直接弃用，
-            // 由下方的新连接接管，避免在状态未知的连接上重试。
-            if let Some(reader) = state.reader.take() {
-                let _ = abort_drag_reader(&mut state.client, reader).await;
-            }
-        }
-        let client = connect_ftp(profile, host, port).await?;
-        let mut state = FtpDragState {
-            client,
-            file: path.to_string(),
-            next_offset: offset,
-            reader: None,
-        };
-        if offset > 0 {
-            let result = match &mut state.client {
-                FtpClient::Plain(ftp) => ftp.resume_transfer(offset as usize).await,
-                FtpClient::Secure(ftp) => ftp.resume_transfer(offset as usize).await,
-            };
-            if let Err(error) = result {
-                return Err(error.to_string());
-            }
-        }
-        let reader = match &mut state.client {
-            FtpClient::Plain(ftp) => {
-                FtpDragReader::Plain(ftp.retr_as_stream(path).await.map_err(fmt_ftp_error)?)
-            }
-            FtpClient::Secure(ftp) => {
-                FtpDragReader::Secure(ftp.retr_as_stream(path).await.map_err(fmt_ftp_error)?)
-            }
-        };
-        state.reader = Some(reader);
-        *state_guard = Some(state);
-    }
-
-    let read_result = async {
-        let state = state_guard.as_mut().expect("drag state must be present");
-        let reader = state.reader.as_mut().expect("drag reader must be present");
-        let mut buffer = vec![0_u8; length as usize];
-        let mut filled = 0_usize;
-        while filled < buffer.len() {
-            let count = match reader {
-                FtpDragReader::Plain(stream) => stream
-                    .read(&mut buffer[filled..])
-                    .await
-                    .map_err(|error| error.to_string())?,
-                FtpDragReader::Secure(stream) => stream
-                    .read(&mut buffer[filled..])
-                    .await
-                    .map_err(|error| error.to_string())?,
-            };
-            if count == 0 {
-                break;
-            }
-            filled += count;
-        }
-        buffer.truncate(filled);
-        Ok::<(Vec<u8>, bool), String>((buffer, filled < length as usize))
-    }
-    .await;
-
-    match read_result {
-        Ok((buffer, hit_eof)) => {
-            if let Some(state) = state_guard.as_mut() {
-                state.next_offset += buffer.len() as u64;
-                if hit_eof {
-                    // RETR 已到 EOF：消费 226 应答让连接可继续复用；失败则弃用。
-                    if let Some(reader) = state.reader.take() {
-                        if finalize_drag_reader(&mut state.client, reader)
-                            .await
-                            .is_err()
-                        {
-                            *state_guard = None;
-                        }
-                    }
-                }
-            }
-            Ok(buffer)
-        }
-        Err(error) => {
-            // 读失败后连接状态未知，直接丢弃。
-            *state_guard = None;
-            Err(error)
-        }
-    }
-}
-
-fn fmt_ftp_error(error: FtpError) -> String {
-    error.to_string()
-}
-
-async fn abort_drag_reader(client: &mut FtpClient, reader: FtpDragReader) -> Result<(), String> {
-    match (client, reader) {
-        (FtpClient::Plain(ftp), FtpDragReader::Plain(stream)) => {
-            ftp.abort(stream).await.map(|_| ()).map_err(fmt_ftp_error)
-        }
-        (FtpClient::Secure(ftp), FtpDragReader::Secure(stream)) => {
-            ftp.abort(stream).await.map(|_| ()).map_err(fmt_ftp_error)
-        }
-        _ => Err("FTP 拖拽流与连接类型不匹配".to_string()),
-    }
-}
-
-async fn finalize_drag_reader(client: &mut FtpClient, reader: FtpDragReader) -> Result<(), String> {
-    match (client, reader) {
-        (FtpClient::Plain(ftp), FtpDragReader::Plain(stream)) => ftp
-            .finalize_retr_stream(stream)
-            .await
-            .map(|_| ())
-            .map_err(fmt_ftp_error),
-        (FtpClient::Secure(ftp), FtpDragReader::Secure(stream)) => ftp
-            .finalize_retr_stream(stream)
-            .await
-            .map(|_| ())
-            .map_err(fmt_ftp_error),
-        _ => Err("FTP 拖拽流与连接类型不匹配".to_string()),
-    }
 }
 
 async fn replace_file<T: TokioTlsStream + Send>(

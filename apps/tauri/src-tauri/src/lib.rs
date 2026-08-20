@@ -2100,7 +2100,6 @@ pub fn run() {
             crate::commands::app_upload_file,
             crate::commands::app_download_file,
             crate::commands::app_download_remote_path,
-            crate::commands::app_start_remote_file_drag,
             crate::commands::app_cancel_transfer,
             crate::commands::app_pause_transfer,
             crate::commands::app_resume_transfer,

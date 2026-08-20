@@ -466,9 +466,6 @@ pub(crate) fn reject_unsupported(command: WorkerCmd, message: &str) {
         WorkerCmd::ReadRemoteFile { respond_to, .. } => {
             let _ = respond_to.send(Err(message.to_string()));
         }
-        WorkerCmd::ReadRemoteFileRange { respond_to, .. } => {
-            let _ = respond_to.send(Err(message.to_string()));
-        }
         WorkerCmd::ExecuteRemoteCommand { respond_to, .. } => {
             let _ = respond_to.send(Err(message.to_string()));
         }

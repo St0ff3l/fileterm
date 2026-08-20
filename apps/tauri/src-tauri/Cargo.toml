@@ -45,7 +45,6 @@ tokio-serial = "5.5"
 suppaftp = { version = "10", default-features = false, features = ["tokio-async-native-tls", "deprecated"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 portable-pty = "0.9"
-drag = "2.1.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 raw-window-handle = "0.6"
@@ -100,24 +99,12 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
   "std",
   "NSApplication",
   "NSAttributedString",
-  "NSBezierPath",
   "NSButton",
   "NSCell",
   "NSAppearance",
   "NSColor",
   "NSControl",
-  "NSDragging",
-  "NSDraggingItem",
-  "NSDraggingSession",
   "NSEvent",
-  "NSFilePromiseProvider",
-  "NSFont",
-  "NSGraphicsContext",
-  "NSImage",
-  "NSPasteboard",
-  "NSPasteboardItem",
-  "NSResponder",
-  "NSStringDrawing",
   "NSView",
   "NSWindow",
   "block2",

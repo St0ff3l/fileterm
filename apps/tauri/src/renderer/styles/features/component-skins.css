@@ -820,14 +820,6 @@
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38);
 }
 
-:root:not([data-theme]) .native-drag-ghost,
-:root[data-theme='default-dark'] .native-drag-ghost,
-:root[data-theme='default'] .native-drag-ghost {
-  background: rgba(35, 44, 58, 0.96);
-  color: var(--text-main);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.38);
-}
-
 :root:not([data-theme]) .file-drag-preview-icon,
 :root[data-theme='default-dark'] .file-drag-preview-icon,
 :root[data-theme='default'] .file-drag-preview-icon {
@@ -3800,12 +3792,6 @@
 }
 
 :root[data-theme='default-light'] .file-drag-preview {
-  background: rgba(255, 255, 255, 0.96);
-  color: var(--text-main);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
-}
-
-:root[data-theme='default-light'] .native-drag-ghost {
   background: rgba(255, 255, 255, 0.96);
   color: var(--text-main);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);

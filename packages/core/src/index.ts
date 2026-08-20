@@ -400,29 +400,6 @@ export interface RemoteFileItem {
   ownerGroup?: string
 }
 
-/** A remote item prepared for a native drag-out to the host file manager. */
-export interface RemoteFileDragItem {
-  path: string
-  name: string
-  type: 'file' | 'folder'
-}
-
-/**
- * Shell drag image for a native drag-out (Windows DragImageBits).
- * The bitmap is a PNG data URL rendered by the webview at physical pixel
- * density; offsets position the image relative to the cursor.
- */
-export interface RemoteDragImage {
-  dataUrl: string
-  width: number
-  height: number
-  /** Logical CSS-pixel dimensions before device-pixel scaling. */
-  logicalWidth: number
-  logicalHeight: number
-  offsetX: number
-  offsetY: number
-}
-
 export interface LocalFileItem extends RemoteFileItem {
   path: string
 }
@@ -2160,7 +2137,6 @@ export interface FileTermDesktopApi {
     localDirectory: string,
     options?: TransferTargetOptions
   ): Promise<WorkspaceSnapshot>
-  startRemoteFileDrag(tabId: string, items: RemoteFileDragItem[], dragImage?: RemoteDragImage | null): Promise<void>
   setRemoteFileAccessMode(
     tabId: string,
     mode: 'user' | 'root',

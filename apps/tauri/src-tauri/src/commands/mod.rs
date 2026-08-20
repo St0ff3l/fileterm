@@ -4504,24 +4504,6 @@ pub async fn app_download_remote_path(
 }
 
 #[tauri::command]
-pub async fn app_start_remote_file_drag(
-    app: AppHandle,
-    tab_id: String,
-    window_label: String,
-    items: Vec<crate::services::file_drag::RemoteFileDragItem>,
-    drag_image: Option<crate::services::file_drag::RemoteDragImage>,
-) -> Result<(), AppError> {
-    crate::services::file_drag::start_remote_file_drag(
-        &app,
-        &window_label,
-        &tab_id,
-        items,
-        drag_image,
-    )
-    .await
-}
-
-#[tauri::command]
 pub async fn app_cancel_transfer(
     app: AppHandle,
     transfer_id: String,

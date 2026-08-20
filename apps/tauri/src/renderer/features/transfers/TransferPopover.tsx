@@ -286,6 +286,11 @@ export function TransferPopover({
                 ) : null}
                 {transfer.message ? (
                   <small className="transfer-row-message" title={transfer.message}>
+                    {transfer.manifest && !isCompletedTransfer(transfer) ? (
+                      <span className="transfer-row-current-item-label">
+                        {transfer.direction === 'download' ? t.currentDownloadItem : t.currentUploadItem}
+                      </span>
+                    ) : null}
                     {transfer.message}
                   </small>
                 ) : null}

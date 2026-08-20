@@ -33,13 +33,6 @@ pub enum WorkerCmd {
         encoding: String,
         respond_to: tokio::sync::oneshot::Sender<Result<String, String>>,
     },
-    ReadRemoteFileRange {
-        path: String,
-        offset: u64,
-        /// 一次最多读取的字节数；返回实际读到的长度（EOF 时可为 0）。
-        length: u64,
-        respond_to: tokio::sync::oneshot::Sender<Result<Vec<u8>, String>>,
-    },
     WriteRemoteFile {
         path: String,
         content: String,

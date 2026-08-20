@@ -1529,6 +1529,9 @@
 
 .file-icon.is-draggable {
   cursor: grab;
+  -webkit-user-drag: none;
+  user-select: none;
+  touch-action: none;
 }
 
 .file-icon.is-draggable:active {
@@ -1554,30 +1557,6 @@
 }
 
 .file-drag-preview span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Windows 原生拖出：暂存下载期间跟随光标的准备浮层；macOS/Windows
-   对外使用同源的渲染预览图。 */
-.native-drag-ghost {
-  position: fixed;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  max-width: 360px;
-  padding: 7px 10px;
-  border: 1px solid var(--border-dark);
-  border-radius: 5px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.native-drag-ghost-title {
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1754,6 +1733,11 @@
 .transfer-row-path,
 .transfer-row-message {
   grid-column: 1 / -1;
+}
+
+.transfer-row-current-item-label {
+  margin-right: 4px;
+  font-weight: 600;
 }
 
 .transfer-row-main span {

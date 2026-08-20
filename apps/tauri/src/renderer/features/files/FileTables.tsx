@@ -1,14 +1,4 @@
-import {
-  useCallback,
-  useState,
-  useEffect,
-  type DragEvent,
-  FormEvent,
-  MouseEvent,
-  PointerEvent,
-  ReactNode,
-  RefObject
-} from 'react'
+import { useCallback, useState, useEffect, FormEvent, MouseEvent, PointerEvent, ReactNode, RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { formatMessage, t } from '../../i18n'
@@ -167,9 +157,7 @@ export function FileTable({
   selectedPaths,
   onClearSelection,
   onContextItem,
-  onDragItem,
-  onNativeDragStart,
-  unifiedNativeDrag = false,
+  onPointerDragStart,
   onOpenItem,
   onSelectItem,
   onToggleSort,
@@ -186,9 +174,7 @@ export function FileTable({
   selectedPaths?: string[]
   onClearSelection?(): void
   onContextItem?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
-  onDragItem?(event: DragEvent<HTMLElement>, item: RemoteFileItem): void
-  onNativeDragStart?(event: PointerEvent<HTMLElement>, item: RemoteFileItem): void
-  unifiedNativeDrag?: boolean
+  onPointerDragStart?(event: PointerEvent<HTMLElement>, item: RemoteFileItem): void
   onOpenItem?(item: RemoteFileItem): void
   onSelectItem?(event: MouseEvent<HTMLTableRowElement>, item: RemoteFileItem): void
   onToggleSort?(field: RemoteFileSortField): void
@@ -365,23 +351,8 @@ export function FileTable({
                     <FileNameCell
                       iconName={iconName}
                       item={row}
-                      draggable={!unifiedNativeDrag && row.name !== '..'}
-                      onDragStart={(event) => onDragItem?.(event, row)}
-                      nativeDragMode={unifiedNativeDrag ? 'automatic' : 'modifier'}
-                      onPointerDown={
-                        row.name !== '..'
-                          ? (event) => {
-                              // Every desktop platform uses one native drag session for the
-                              // remote row. macOS supplies file promises; Windows/Linux lazily
-                              // materialize paths when the drop target requests file data. The
-                              // native drop event lets FileTerm route an in-app drop back to the
-                              // local pane while Explorer/Nautilus gets the same real-file drag.
-                              if (unifiedNativeDrag || event.altKey) {
-                                onNativeDragStart?.(event, row)
-                              }
-                            }
-                          : undefined
-                      }
+                      draggable={row.name !== '..'}
+                      onPointerDown={row.name !== '..' ? (event) => onPointerDragStart?.(event, row) : undefined}
                     />
                   </td>
                   {!compact ? <td>{row.size}</td> : null}
@@ -415,7 +386,7 @@ export function LocalFileTable({
   selectedPaths,
   onClearSelection,
   onContextItem,
-  onDragItem,
+  onPointerDragStart,
   onOpenItem,
   onSelectItem,
   onSelectionDragEnter,
@@ -427,7 +398,7 @@ export function LocalFileTable({
   selectedPaths: string[]
   onClearSelection(): void
   onContextItem(event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem): void
-  onDragItem(event: DragEvent<HTMLElement>, item: LocalFileItem): void
+  onPointerDragStart(event: PointerEvent<HTMLElement>, item: LocalFileItem): void
   onOpenItem(item: LocalFileItem): void
   onSelectItem(event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem): void
   onSelectionDragEnter(item: LocalFileItem): void
@@ -504,7 +475,7 @@ export function LocalFileTable({
                   iconName={iconName}
                   item={row}
                   draggable={row.name !== '..'}
-                  onDragStart={(event) => onDragItem(event, row)}
+                  onPointerDown={(event) => onPointerDragStart(event, row)}
                 />
               </td>
             </tr>
@@ -524,30 +495,25 @@ function FileNameCell({
   draggable,
   iconName,
   item,
-  onDragStart,
-  onPointerDown,
-  nativeDragMode
+  onPointerDown
 }: {
   draggable: boolean
   iconName: ReturnType<typeof getDisplayFileIconName>
   item: LocalFileItem | RemoteFileItem
-  onDragStart(event: DragEvent<HTMLElement>): void
   onPointerDown?(event: PointerEvent<HTMLElement>): void
-  nativeDragMode?: 'automatic' | 'modifier'
 }) {
   return (
     <span className="file-name-cell" title={item.name}>
       <span
         className={`file-icon ${draggable ? 'is-draggable' : ''}`}
-        draggable={draggable}
-        onDragStart={onDragStart}
+        // FileTerm transfers use the pointer gesture below instead of the
+        // browser/OS drag session. This keeps remote files from becoming
+        // external filesystem drops while still allowing cross-pane transfer.
+        draggable={false}
         onPointerDown={onPointerDown}
+        onDragStart={(event) => event.preventDefault()}
         onMouseDown={(event) => event.stopPropagation()}
-        title={
-          draggable || onPointerDown
-            ? `${t.dragTransfer} · ${nativeDragMode === 'automatic' ? t.dragExternalTransferAutomatic : t.dragExternalTransfer}`
-            : undefined
-        }
+        title={draggable ? t.dragTransfer : undefined}
       >
         <AppIcon name={iconName} />
       </span>

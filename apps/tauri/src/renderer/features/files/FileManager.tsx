@@ -16,25 +16,19 @@ import type {
   CommandTemplate,
   CommandTemplateInput,
   LocalFileItem,
-  RemoteDragImage,
   RemoteFileItem,
   SessionSnapshot,
   WorkspaceTab
 } from '@fileterm/core'
 import {
-  buildNativeDragImage,
   copyText,
   hasSelectedText,
-  localFileDragType,
   mergeUnique,
   nextSelection,
-  parseDraggedPaths,
   rangePaths,
-  remoteFileDragType,
-  setFileDragPreview,
   WINDOWS_DRIVES_PATH
 } from '../../app/app-utils'
-import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
@@ -48,6 +42,24 @@ import { matchesFileFilter, type FileFilterConfig } from './file-filter'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
 
 const VIEW_TRANSITION_LOADING_MS = 180
+
+type FilePane = 'local' | 'remote'
+
+type InternalFileDrag = {
+  sourcePane: FilePane
+  items: Array<LocalFileItem | RemoteFileItem>
+  startX: number
+  startY: number
+  pointerId: number
+  active: boolean
+}
+
+type InternalFileDragPreview = {
+  names: string[]
+  icon: AppIconName
+  x: number
+  y: number
+}
 
 function areStringArraysEqual(left: string[], right: string[]) {
   if (left === right) {
@@ -152,19 +164,6 @@ function sortRemoteFiles(rows: RemoteFileItem[], sort: RemoteFileSortState) {
   })
 
   return parentRow ? [parentRow, ...sortableRows] : sortableRows
-}
-
-function joinLocalDragTarget(directoryPath: string, name: string) {
-  const separator = directoryPath.includes('\\') ? '\\' : '/'
-  const normalized = directoryPath.replace(/[\\/]+$/, '')
-  if (normalized === separator) {
-    return `${separator}${name}`
-  }
-  return `${normalized}${separator}${name}`
-}
-
-function localDragBasename(path: string) {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? ''
 }
 
 export function FileManager({
@@ -286,22 +285,9 @@ export function FileManager({
   isRemoteDirectoryLoading: boolean
 }) {
   const defaultRemoteSort = { field: 'name', direction: 'asc' } satisfies RemoteFileSortState
-  const desktopApi = window.fileterm
-  // macOS uses NSFilePromiseProvider; Windows/Linux use lazy native file data
-  // providers. All desktop platforms therefore use one pointer gesture for
-  // internal and external destinations. Browser HTML5 drag remains available
-  // for local-file uploads and for the non-desktop renderer fallback.
-  const useUnifiedNativeRemoteDrag =
-    desktopApi?.platform === 'darwin' || desktopApi?.platform === 'win32' || desktopApi?.platform === 'linux'
   const canUseRemoteFiles = activeSession.connected === true && !activeSession.sftpUnavailableReason
   const remoteFilesUnavailableText = activeSession.sftpUnavailableReason ?? t.remoteDisconnectedDescription
   const isSshSession = activeTab?.sessionType === 'ssh'
-  const isFtpSession = activeTab?.sessionType === 'ftp'
-  // Mirrors the Rust-side `session_supports_streaming` gate in windows_drag.rs:
-  // SSH (user and root view) and FTP sessions all stream bytes through the OLE
-  // FileContents channel (browser-style drag out). Other session types fall
-  // back to staging into a temp folder before the drag loop starts.
-  const supportsStreamingNativeDrag = desktopApi?.platform === 'win32' && (isSshSession || isFtpSession)
   const canManageTunnels = activeSession.capabilities?.tunnels === true
   const showRemoteDirectoryLoading = isRemoteDirectoryLoading || activeSession.remoteFilesLoading === true
   const showLocalDirectoryLoading = isLocalDirectoryLoading && !isWorkspaceRefreshing
@@ -312,6 +298,7 @@ export function FileManager({
   const [remoteSort, setRemoteSort] = useState<RemoteFileSortState>(defaultRemoteSort)
   const [selectedLocalPaths, setSelectedLocalPaths] = useState<string[]>([])
   const [selectedRemotePaths, setSelectedRemotePaths] = useState<string[]>([])
+  const [internalFileDragPreview, setInternalFileDragPreview] = useState<InternalFileDragPreview | null>(null)
   const [localAnchorPath, setLocalAnchorPath] = useState<string | null>(null)
   const [remoteAnchorPath, setRemoteAnchorPath] = useState<string | null>(null)
   const [keyboardPane, setKeyboardPane] = useState<'local' | 'remote'>('remote')
@@ -330,18 +317,11 @@ export function FileManager({
   const didDragSelect = useRef(false)
   const suppressNextSelectionClick = useRef(false)
   const suppressNextClearClick = useRef(false)
-  const nativeRemoteDragRef = useRef<{ tabId: string; items: RemoteFileItem[] } | null>(null)
-  const [nativeDragGhost, setNativeDragGhost] = useState<{
-    names: string[]
-    icon: AppIconName
-    x: number
-    y: number
-  } | null>(null)
-  // OLE 拖拽循环期间 webview 收不到指针事件；ghost 位置改由 Rust 侧
-  // GiveFeedback 上报的光标事件驱动（tauriNativeRemoteDragCursor）。
-  const nativeDragGhostInfoRef = useRef<{ names: string[]; icon: AppIconName } | null>(null)
   const localDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
   const remoteDragSelection = useRef<{ basePaths: string[]; startPath: string | null } | null>(null)
+  const internalFileDragRef = useRef<InternalFileDrag | null>(null)
+  const internalFileDragRuntimeRef = useRef({ canUseRemoteFiles, localPath, onDownloadFiles, onUploadFiles })
+  internalFileDragRuntimeRef.current = { canUseRemoteFiles, localPath, onDownloadFiles, onUploadFiles }
   const localScrollRef = useRef<HTMLDivElement | null>(null)
   const remoteScrollRef = useRef<HTMLDivElement | null>(null)
   const requestedInitialLocalDirectoryRef = useRef(false)
@@ -370,161 +350,6 @@ export function FileManager({
       return areStringArraysEqual(prev, next) ? prev : next
     })
   }, [activeSession.remoteFiles, activeSession.remotePath])
-
-  useEffect(() => {
-    if (!useUnifiedNativeRemoteDrag) {
-      return
-    }
-
-    const stopTrackingExternalDrag = (detail: { paths: string[] }) => {
-      // On Windows/Linux the native provider exposes paths only after the drop
-      // target requests file data. Do not mistake that path event for a new
-      // external drag; the active payload is needed when the local pane receives Drop.
-      // macOS promises have no paths, so a later real external file drop can
-      // still clear a stale macOS payload here.
-      if (detail.paths.length && desktopApi?.platform === 'darwin') {
-        nativeRemoteDragRef.current = null
-      }
-    }
-
-    const handleNativeRemoteDrop = (detail: {
-      paths: string[]
-      consume: () => void
-      position: { x: number; y: number }
-    }) => {
-      const activeDrag = nativeRemoteDragRef.current
-      if (!activeDrag || activeDrag.tabId !== activeTab?.id) {
-        return
-      }
-
-      nativeRemoteDragRef.current = null
-      const ratio = window.devicePixelRatio || 1
-      const points = [
-        detail.position,
-        { x: detail.position.x / ratio, y: detail.position.y / ratio },
-        { x: detail.position.x * ratio, y: detail.position.y * ratio }
-      ]
-      const droppedOnLocalPane = points.some((point) =>
-        document.elementFromPoint(point.x, point.y)?.closest('.local-pane')
-      )
-      if (!droppedOnLocalPane) {
-        return
-      }
-
-      detail.consume()
-      const items = activeDrag.items.filter((item) => item.name !== '..')
-      if (!items.length) {
-        return
-      }
-
-      const stagedPathsByName = new Map(detail.paths.map((path) => [localDragBasename(path), path] as const))
-      // Streaming drags expose CF_HDROP virtual paths that only exist to let
-      // the drop target accept the gesture; the bytes are never on disk, so
-      // the pane drop must download directly instead of copying staged files.
-      const canReuseStagedPaths =
-        !supportsStreamingNativeDrag &&
-        desktopApi?.platform !== 'darwin' &&
-        detail.paths.length === items.length &&
-        items.every((item) => stagedPathsByName.has(item.name))
-
-      if (canReuseStagedPaths) {
-        void Promise.all(
-          items.map((item) =>
-            desktopApi!.copyLocalPath(stagedPathsByName.get(item.name)!, joinLocalDragTarget(localPath, item.name))
-          )
-        )
-          .then(() => onOpenLocalPath(localPath))
-          .catch((error) => {
-            console.error('[FileTerm] 复制原生拖动临时文件失败', error)
-          })
-      } else {
-        onDownloadFiles(items, localPath)
-      }
-    }
-
-    let nativeRemoteDragCleanupTimer: number | null = null
-    const handleNativeRemoteDragFinished = () => {
-      // Give the native drop callback one turn to route an in-app drop before
-      // clearing the payload. External Explorer/Nautilus drops never emit a
-      // Tauri drop event back to this window, so they need this cleanup path.
-      if (nativeRemoteDragCleanupTimer !== null) {
-        window.clearTimeout(nativeRemoteDragCleanupTimer)
-      }
-      nativeRemoteDragCleanupTimer = window.setTimeout(() => {
-        nativeRemoteDragCleanupTimer = null
-        nativeRemoteDragRef.current = null
-      }, 250)
-    }
-
-    const stopTracking = onAppEvent(APP_EVENT.tauriNativeDragOver, stopTrackingExternalDrag)
-    const handleDrop = onAppEvent(APP_EVENT.tauriNativeDrop, handleNativeRemoteDrop)
-    const handleFinished = onAppEvent(APP_EVENT.tauriNativeRemoteDragFinished, handleNativeRemoteDragFinished)
-    return () => {
-      stopTracking()
-      handleDrop()
-      handleFinished()
-      if (nativeRemoteDragCleanupTimer !== null) {
-        window.clearTimeout(nativeRemoteDragCleanupTimer)
-      }
-    }
-  }, [
-    activeTab?.id,
-    desktopApi,
-    localPath,
-    onDownloadFiles,
-    onOpenLocalPath,
-    supportsStreamingNativeDrag,
-    useUnifiedNativeRemoteDrag
-  ])
-
-  const nativeDragGhostActive = nativeDragGhost !== null
-  useEffect(() => {
-    if (!nativeDragGhostActive) {
-      return
-    }
-    // Ghost 只在原生拖拽接管前跟随光标。此阶段松开鼠标意味着拖拽取消，
-    // 但启动拖拽时的 pointerup 监听已被清理（OLE 循环期间 webview 收不到
-    // 指针事件），必须在这里补检 buttons，否则松开后 ghost 仍会跟随光标。
-    const handleGhostPointerMove = (event: globalThis.PointerEvent) => {
-      if (event.buttons === 0) {
-        setNativeDragGhost(null)
-        return
-      }
-      setNativeDragGhost((prev) => (prev ? { ...prev, x: event.clientX, y: event.clientY } : prev))
-    }
-    const handleGhostPointerUp = () => {
-      setNativeDragGhost(null)
-    }
-    document.addEventListener('pointermove', handleGhostPointerMove, true)
-    document.addEventListener('pointerup', handleGhostPointerUp, true)
-    document.addEventListener('pointercancel', handleGhostPointerUp, true)
-    return () => {
-      document.removeEventListener('pointermove', handleGhostPointerMove, true)
-      document.removeEventListener('pointerup', handleGhostPointerUp, true)
-      document.removeEventListener('pointercancel', handleGhostPointerUp, true)
-    }
-  }, [nativeDragGhostActive])
-
-  useEffect(() => {
-    if (desktopApi?.platform !== 'win32') {
-      return
-    }
-    // The Shell drag image only renders over targets that cooperate with
-    // IDropTargetHelper (desktop / Explorer). While the cursor stays inside
-    // this window, the drag loop reports its position via GiveFeedback and
-    // the DOM ghost keeps following; once it leaves, the ghost hides and the
-    // Shell image takes over.
-    return onAppEvent(APP_EVENT.tauriNativeRemoteDragCursor, (cursor) => {
-      if (!cursor.inWindow) {
-        setNativeDragGhost(null)
-        return
-      }
-      const dragGhostInfo = nativeDragGhostInfoRef.current
-      if (dragGhostInfo) {
-        setNativeDragGhost({ ...dragGhostInfo, x: cursor.x, y: cursor.y })
-      }
-    })
-  }, [desktopApi])
 
   useEffect(() => {
     if (canUseRemoteFiles) {
@@ -607,91 +432,6 @@ export function FileManager({
     return sortRemoteFiles(filteredRemoteFiles, remoteSort)
   }, [canUseRemoteFiles, filteredRemoteFiles, remoteSort])
 
-  const startRemoteNativeDrag = (event: PointerEvent<HTMLElement>, item: RemoteFileItem) => {
-    if (!desktopApi || !activeTab || !canUseRemoteFiles || event.button !== 0) {
-      return
-    }
-
-    event.preventDefault()
-    event.stopPropagation()
-    const payloadPaths = selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
-    const payloadItems = payloadPaths
-      .map((path) => sortedRemoteRows.find((row) => row.path === path))
-      .filter((row): row is RemoteFileItem => Boolean(row && row.name !== '..'))
-    const payload = payloadItems.map(({ path, name, type }) => ({ path, name, type }))
-
-    if (!payload.length) {
-      return
-    }
-
-    const pointerId = event.pointerId
-    const startX = event.clientX
-    const startY = event.clientY
-    let nativeDragStarted = false
-
-    const cleanup = () => {
-      document.removeEventListener('pointermove', handlePointerMove, true)
-      document.removeEventListener('pointerup', handlePointerUp, true)
-      document.removeEventListener('pointercancel', handlePointerUp, true)
-      document.body.style.userSelect = ''
-    }
-
-    const handlePointerUp = () => {
-      cleanup()
-    }
-
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) {
-        return
-      }
-
-      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY)
-      if (distance < 6 || nativeDragStarted) {
-        return
-      }
-
-      nativeDragStarted = true
-      suppressNextSelectionClick.current = true
-      moveEvent.preventDefault()
-      cleanup()
-      const nativeDrag = { tabId: activeTab.id, items: payloadItems }
-      if (useUnifiedNativeRemoteDrag) {
-        nativeRemoteDragRef.current = nativeDrag
-      }
-      // SSH and FTP drags stream through the OLE FileContents channel; other
-      // session types stage into a temp folder first. The renderer preview is
-      // also passed to macOS so AppKit and Windows use the same card outside
-      // the FileTerm window.
-      let dragImage: RemoteDragImage | null = null
-      const dragIcon = getDragPreviewIcon(payloadItems)
-      if (desktopApi?.platform === 'win32' || desktopApi?.platform === 'darwin') {
-        const names = payloadItems.map((row) => row.name)
-        if (desktopApi.platform === 'win32') {
-          nativeDragGhostInfoRef.current = { names, icon: dragIcon }
-          setNativeDragGhost({ names, icon: dragIcon, x: moveEvent.clientX, y: moveEvent.clientY })
-        }
-        dragImage = buildNativeDragImage(names, dragIcon)
-      }
-      void desktopApi
-        .startRemoteFileDrag(activeTab.id, payload, dragImage)
-        .catch((error) => {
-          if (nativeRemoteDragRef.current === nativeDrag) {
-            nativeRemoteDragRef.current = null
-          }
-          console.error('[FileTerm] 远程文件拖出失败', error)
-        })
-        .finally(() => {
-          nativeDragGhostInfoRef.current = null
-          setNativeDragGhost(null)
-        })
-    }
-
-    document.addEventListener('pointermove', handlePointerMove, true)
-    document.addEventListener('pointerup', handlePointerUp, true)
-    document.addEventListener('pointercancel', handlePointerUp, true)
-    document.body.style.userSelect = 'none'
-  }
-
   const selectedRemoteItems = activeSession.remoteFiles.filter((item) => selectedRemotePaths.includes(item.path))
   const selectedRemoteDownloadItems = selectedRemoteItems.filter((item) => item.name !== '..')
   const contextLocalItem =
@@ -757,6 +497,127 @@ export function FileManager({
       : selectedRemoteItems.filter((item) => item.name !== '..')
   const canPasteFromKeyboard = keyboardPane === 'local' ? canPasteToLocal : canPasteToRemote
 
+  const beginInternalFileDrag = (
+    sourcePane: FilePane,
+    item: LocalFileItem | RemoteFileItem,
+    event: PointerEvent<HTMLElement>
+  ) => {
+    if (event.button !== 0 || !event.isPrimary || item.name === '..') {
+      return
+    }
+
+    const rows = sourcePane === 'local' ? localItems : activeSession.remoteFiles
+    const selectedPaths = sourcePane === 'local' ? selectedLocalPaths : selectedRemotePaths
+    const items = (
+      selectedPaths.includes(item.path) ? rows.filter((row) => selectedPaths.includes(row.path)) : [item]
+    ).filter((row) => row.name !== '..')
+
+    if (!items.length) {
+      return
+    }
+
+    internalFileDragRef.current = {
+      sourcePane,
+      items,
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerId: event.pointerId,
+      active: false
+    }
+  }
+
+  useEffect(() => {
+    const clearInternalFileDrag = () => {
+      internalFileDragRef.current = null
+      setInternalFileDragPreview(null)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
+      const drag = internalFileDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return
+      }
+
+      if (event.buttons === 0) {
+        clearInternalFileDrag()
+        return
+      }
+
+      if (!drag.active) {
+        const deltaX = event.clientX - drag.startX
+        const deltaY = event.clientY - drag.startY
+        if (deltaX * deltaX + deltaY * deltaY < 36) {
+          return
+        }
+        drag.active = true
+        suppressNextSelectionClick.current = true
+        document.body.style.cursor = 'grabbing'
+        document.body.style.userSelect = 'none'
+      }
+
+      event.preventDefault()
+      setInternalFileDragPreview({
+        names: drag.items.map((item) => item.name),
+        icon: getDragPreviewIcon(drag.items),
+        x: event.clientX,
+        y: event.clientY
+      })
+    }
+
+    const handlePointerUp = (event: globalThis.PointerEvent) => {
+      const drag = internalFileDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) {
+        return
+      }
+
+      if (!drag.active) {
+        clearInternalFileDrag()
+        return
+      }
+
+      event.preventDefault()
+      const target = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest<HTMLElement>('.local-pane, .remote-pane')
+      const targetPane: FilePane | null = target?.classList.contains('local-pane')
+        ? 'local'
+        : target?.classList.contains('remote-pane')
+          ? 'remote'
+          : null
+
+      clearInternalFileDrag()
+
+      const runtime = internalFileDragRuntimeRef.current
+      if (targetPane === 'remote' && drag.sourcePane === 'local' && runtime.canUseRemoteFiles) {
+        runtime.onUploadFiles(drag.items as LocalFileItem[])
+      } else if (targetPane === 'local' && drag.sourcePane === 'remote' && runtime.canUseRemoteFiles) {
+        runtime.onDownloadFiles(drag.items as RemoteFileItem[], runtime.localPath)
+      }
+    }
+
+    const handlePointerCancel = () => {
+      if (internalFileDragRef.current) {
+        clearInternalFileDrag()
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove, true)
+    window.addEventListener('pointerup', handlePointerUp, true)
+    window.addEventListener('pointercancel', handlePointerCancel, true)
+    window.addEventListener('blur', handlePointerCancel)
+    window.addEventListener('mouseleave', handlePointerCancel)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove, true)
+      window.removeEventListener('pointerup', handlePointerUp, true)
+      window.removeEventListener('pointercancel', handlePointerCancel, true)
+      window.removeEventListener('blur', handlePointerCancel)
+      window.removeEventListener('mouseleave', handlePointerCancel)
+      clearInternalFileDrag()
+    }
+  }, [])
+
   const submitLocalPath = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     onOpenLocalPath(localPathInput.trim() || localPath)
@@ -777,38 +638,12 @@ export function FileManager({
     if (!canUseRemoteFiles) {
       return
     }
-
-    const draggedLocalPath = event.dataTransfer.getData(localFileDragType)
-    if (draggedLocalPath) {
-      const draggedPaths = parseDraggedPaths(draggedLocalPath)
-      const items = localItems.filter((row) => draggedPaths.includes(row.path) && row.name !== '..')
-      if (items.length) {
-        onUploadFiles(items)
-      }
-      return
-    }
-
     onDropUpload(event)
   }
 
   const handleLocalPaneDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
-
-    const draggedRemotePayload = event.dataTransfer.getData(remoteFileDragType)
-    if (!draggedRemotePayload) {
-      return
-    }
-
-    if (!canUseRemoteFiles) {
-      return
-    }
-
-    const draggedPaths = parseDraggedPaths(draggedRemotePayload)
-    const items = activeSession.remoteFiles.filter((row) => draggedPaths.includes(row.path) && row.name !== '..')
-    if (items.length) {
-      onDownloadFiles(items, localPath)
-    }
   }
 
   const selectLocalItem = (event: MouseEvent<HTMLTableRowElement>, item: LocalFileItem) => {
@@ -992,19 +827,6 @@ export function FileManager({
       tabIndex={0}
       style={{ '--local-pane-width': `${commandPaneWidth}px` } as CSSProperties}
     >
-      {nativeDragGhost ? (
-        <div className="native-drag-ghost" style={{ left: nativeDragGhost.x + 14, top: nativeDragGhost.y + 14 }}>
-          <span className="file-drag-preview-icon" aria-hidden="true">
-            <AppIcon name={nativeDragGhost.icon} size={14} />
-          </span>
-          <span className="native-drag-ghost-title">
-            {nativeDragGhost.names.slice(0, 2).join(nativeDragGhost.names.length > 1 ? ', ' : '')}
-            {nativeDragGhost.names.length > 2
-              ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${nativeDragGhost.names.length} ${t.itemsSuffix}`
-              : ''}
-          </span>
-        </div>
-      ) : null}
       <div className="file-tabs">
         <div className="file-tabs-left">
           <button
@@ -1123,6 +945,26 @@ export function FileManager({
           className="file-split"
           ref={splitRef}
         >
+          {internalFileDragPreview ? (
+            <div
+              aria-hidden="true"
+              className="file-drag-preview"
+              style={{
+                left: internalFileDragPreview.x + 14,
+                top: internalFileDragPreview.y + 14
+              }}
+            >
+              <span className="file-drag-preview-icon">
+                <AppIcon name={internalFileDragPreview.icon} size={14} />
+              </span>
+              <span>
+                {internalFileDragPreview.names.slice(0, 2).join(internalFileDragPreview.names.length > 1 ? ', ' : '')}
+                {internalFileDragPreview.names.length > 2
+                  ? ` ${t.moreItemsPrefix ? `${t.moreItemsPrefix} ` : ''}${internalFileDragPreview.names.length} ${t.itemsSuffix}`
+                  : ''}
+              </span>
+            </div>
+          ) : null}
           <div
             className="local-pane"
             onMouseDownCapture={() => {
@@ -1202,17 +1044,7 @@ export function FileManager({
                   cutPaths={localCutPaths}
                   rows={filteredLocalItems}
                   selectedPaths={selectedLocalPaths}
-                  onDragItem={(event, item) => {
-                    event.dataTransfer.effectAllowed = 'copy'
-                    const payload = selectedLocalPaths.includes(item.path) ? selectedLocalPaths : [item.path]
-                    const previewItems = localItems.filter((row) => payload.includes(row.path) && row.name !== '..')
-                    event.dataTransfer.setData(localFileDragType, JSON.stringify(payload))
-                    setFileDragPreview(
-                      event,
-                      previewItems.map((row) => row.name),
-                      getDragPreviewIcon(previewItems)
-                    )
-                  }}
+                  onPointerDragStart={(event, item) => beginInternalFileDrag('local', item, event)}
                   onOpenItem={onOpenLocalItem}
                   onContextItem={(event, item) => {
                     event.preventDefault()
@@ -1285,9 +1117,8 @@ export function FileManager({
             }}
             onDragOver={(event) => {
               event.preventDefault()
-              // Native Tauri drop events do not reliably share DOM coordinates
-              // with WKWebView. Record the pane that the Finder drag is over so
-              // the bridge can route its absolute paths to the correct target.
+              // Record the pane that an OS file drop is over so the bridge can
+              // route its absolute paths to the correct upload target.
               dispatchAppEvent(APP_EVENT.tauriRemoteDragOver)
               if (canUseRemoteFiles) {
                 event.dataTransfer.dropEffect = 'copy'
@@ -1378,22 +1209,11 @@ export function FileManager({
                           : { field, direction: 'asc' }
                       )
                     }}
-                    onDragItem={(event, item) => {
-                      if (!canUseRemoteFiles) return
-                      event.dataTransfer.effectAllowed = 'copy'
-                      const payload = (
-                        selectedRemotePaths.includes(item.path) ? selectedRemotePaths : [item.path]
-                      ).filter((path) => sortedRemoteRows.some((row) => row.path === path && row.name !== '..'))
-                      const previewItems = sortedRemoteRows.filter((row) => payload.includes(row.path))
-                      event.dataTransfer.setData(remoteFileDragType, JSON.stringify(payload))
-                      setFileDragPreview(
-                        event,
-                        previewItems.map((row) => row.name),
-                        getDragPreviewIcon(previewItems)
-                      )
+                    onPointerDragStart={(event, item) => {
+                      if (canUseRemoteFiles) {
+                        beginInternalFileDrag('remote', item, event)
+                      }
                     }}
-                    onNativeDragStart={startRemoteNativeDrag}
-                    unifiedNativeDrag={useUnifiedNativeRemoteDrag}
                     onOpenItem={(item) => {
                       if (canUseRemoteFiles) {
                         onOpenRemoteItem(item)
