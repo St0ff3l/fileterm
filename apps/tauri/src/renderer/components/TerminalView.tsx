@@ -152,6 +152,47 @@ function isFocusTrackingSequence(data: string) {
   return data === `${escape}[I` || data === `${escape}[O`
 }
 
+function isHydratedTerminalResponse(data: string) {
+  // A transcript is a recording of PTY output, not a live terminal state.
+  // When it is replayed after a tab switch, xterm can answer historical
+  // terminal queries (CPR/DA/mode/color/window reports) and emit those
+  // answers through onData. Forwarding the synthetic answers to the now-idle
+  // shell makes it echo fragments such as `;201R` or `2RR0;276;0c`.
+  const escape = String.fromCharCode(27)
+  const csiPrefix = `${escape}[`
+  if (data.startsWith(csiPrefix)) {
+    const csi = data.slice(csiPrefix.length)
+    if (csi === '0n') return true
+    if (/^\??\d+(?:;\d+)*R$/.test(csi)) return true
+    if (/^(?:\?|>)[\d;]*c$/.test(csi)) return true
+    if (/^(?:4|6|8);\d+(?:;\d+)?t$/.test(csi)) return true
+    if (/^(?:\?)?\d+(?:;\d+)*\$y$/.test(csi)) return true
+  }
+
+  const oscPrefix = `${escape}]`
+  if (data.startsWith(oscPrefix)) {
+    const osc = data.slice(oscPrefix.length)
+    const stringTerminator = `${escape}\\`
+    const body = osc.endsWith(String.fromCharCode(7))
+      ? osc.slice(0, -1)
+      : osc.endsWith(stringTerminator)
+        ? osc.slice(0, -stringTerminator.length)
+        : null
+    if (body !== null && /^(?:4;\d+|10|11|12);rgb:[0-9a-f]+(?:\/[0-9a-f]+){2}$/i.test(body)) {
+      return true
+    }
+  }
+
+  const dcsPrefix = `${escape}P`
+  const dcsTerminator = `${escape}\\`
+  if (data.startsWith(dcsPrefix) && data.endsWith(dcsTerminator)) {
+    const dcs = data.slice(dcsPrefix.length, -dcsTerminator.length)
+    return /^[01]\$r[\s\S]*$/.test(dcs)
+  }
+
+  return false
+}
+
 type VimVisualSelection = {
   text: string
   mode: 'character' | 'line' | 'block'
@@ -586,6 +627,8 @@ export const TerminalView = memo(function TerminalView({
   const imeCompositionTextRef = useRef('')
   const imeCompositionEndedAtRef = useRef(0)
   const imeCompositionDataForwardedRef = useRef(false)
+  const replayingTranscriptRef = useRef(false)
+  const transcriptReplayGenerationRef = useRef(0)
   // `onData` is registered once for the xterm instance.  Reading the prop
   // through a ref prevents a stale terminal-state event from a background
   // tab from swallowing keystrokes after this tab is brought back.
@@ -987,8 +1030,20 @@ export const TerminalView = memo(function TerminalView({
       writeFrameRef.current = null
     }
     isWritingRef.current = false
+    const replayGeneration = transcriptReplayGenerationRef.current + 1
+    transcriptReplayGenerationRef.current = replayGeneration
+    replayingTranscriptRef.current = true
     terminal.reset()
-    terminal.write(formatTerminalChunk(terminal, renderedTranscriptRef.current))
+    const replayText = formatTerminalChunk(terminal, renderedTranscriptRef.current)
+    if (replayText) {
+      terminal.write(replayText, () => {
+        if (transcriptReplayGenerationRef.current === replayGeneration) {
+          replayingTranscriptRef.current = false
+        }
+      })
+    } else {
+      replayingTranscriptRef.current = false
+    }
     suppressHydratedChunksUntilRef.current = Date.now() + 1500
   }
 
@@ -1436,6 +1491,10 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
+      if (replayingTranscriptRef.current) {
+        return true
+      }
+
       if (parsed.data === '?') {
         let clipboardText = ''
         try {
@@ -1534,6 +1593,10 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const onDataDispose = terminal.onData((data) => {
+      if (replayingTranscriptRef.current && isHydratedTerminalResponse(data)) {
+        return
+      }
+
       if (imeCompositionActiveRef.current) {
         // Intermediate composition text is owned by the IME and must never
         // reach the remote PTY before compositionend.
@@ -2216,6 +2279,8 @@ export const TerminalView = memo(function TerminalView({
       pendingWriteRef.current = ''
       renderedTranscriptRef.current = ''
       suppressHydratedChunksUntilRef.current = 0
+      replayingTranscriptRef.current = false
+      transcriptReplayGenerationRef.current += 1
       preserveVisibleBufferRef.current = false
       lastSyncedSizeRef.current = null
       lastObservedHostRectRef.current = null
