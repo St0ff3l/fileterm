@@ -152,16 +152,51 @@ function isFocusTrackingSequence(data: string) {
   return data === `${escape}[I` || data === `${escape}[O`
 }
 
-function isHydratedTerminalResponse(data: string) {
+function readHydrationControlSequence(data: string, start: number, escape: string) {
+  const csiPrefix = `${escape}[`
+  if (data.startsWith(csiPrefix, start)) {
+    for (let index = start + csiPrefix.length; index < data.length; index += 1) {
+      const code = data.charCodeAt(index)
+      if (code >= 0x40 && code <= 0x7e) {
+        return data.slice(start, index + 1)
+      }
+    }
+    return null
+  }
+
+  const oscPrefix = `${escape}]`
+  const dcsPrefix = `${escape}P`
+  const isOsc = data.startsWith(oscPrefix, start)
+  const isDcs = data.startsWith(dcsPrefix, start)
+  if (!isOsc && !isDcs) {
+    return null
+  }
+
+  const stringStart = start + 2
+  const bell = String.fromCharCode(7)
+  const stringTerminator = `${escape}\\`
+  const bellIndex = isOsc ? data.indexOf(bell, stringStart) : -1
+  const stringTerminatorIndex = data.indexOf(stringTerminator, stringStart)
+  let end = -1
+  if (bellIndex >= 0 && stringTerminatorIndex >= 0) {
+    end = Math.min(bellIndex + bell.length, stringTerminatorIndex + stringTerminator.length)
+  } else if (bellIndex >= 0) {
+    end = bellIndex + bell.length
+  } else if (stringTerminatorIndex >= 0) {
+    end = stringTerminatorIndex + stringTerminator.length
+  }
+  return end >= 0 ? data.slice(start, end) : null
+}
+
+function isHydrationResponseSequence(sequence: string, escape: string) {
   // A transcript is a recording of PTY output, not a live terminal state.
   // When it is replayed after a tab switch, xterm can answer historical
   // terminal queries (CPR/DA/mode/color/window reports) and emit those
   // answers through onData. Forwarding the synthetic answers to the now-idle
   // shell makes it echo fragments such as `;201R` or `2RR0;276;0c`.
-  const escape = String.fromCharCode(27)
   const csiPrefix = `${escape}[`
-  if (data.startsWith(csiPrefix)) {
-    const csi = data.slice(csiPrefix.length)
+  if (sequence.startsWith(csiPrefix)) {
+    const csi = sequence.slice(csiPrefix.length)
     if (csi === '0n') return true
     if (/^\??\d+(?:;\d+)*R$/.test(csi)) return true
     if (/^(?:\?|>)[\d;]*c$/.test(csi)) return true
@@ -170,8 +205,8 @@ function isHydratedTerminalResponse(data: string) {
   }
 
   const oscPrefix = `${escape}]`
-  if (data.startsWith(oscPrefix)) {
-    const osc = data.slice(oscPrefix.length)
+  if (sequence.startsWith(oscPrefix)) {
+    const osc = sequence.slice(oscPrefix.length)
     const stringTerminator = `${escape}\\`
     const body = osc.endsWith(String.fromCharCode(7))
       ? osc.slice(0, -1)
@@ -185,12 +220,39 @@ function isHydratedTerminalResponse(data: string) {
 
   const dcsPrefix = `${escape}P`
   const dcsTerminator = `${escape}\\`
-  if (data.startsWith(dcsPrefix) && data.endsWith(dcsTerminator)) {
-    const dcs = data.slice(dcsPrefix.length, -dcsTerminator.length)
+  if (sequence.startsWith(dcsPrefix) && sequence.endsWith(dcsTerminator)) {
+    const dcs = sequence.slice(dcsPrefix.length, -dcsTerminator.length)
     return /^[01]\$r[\s\S]*$/.test(dcs)
   }
 
   return false
+}
+
+function stripHydratedTerminalResponses(data: string) {
+  const escape = String.fromCharCode(27)
+  let result = ''
+  let removedResponse = false
+  let index = 0
+
+  while (index < data.length) {
+    if (data[index] !== escape) {
+      result += data[index]
+      index += 1
+      continue
+    }
+
+    const sequence = readHydrationControlSequence(data, index, escape)
+    if (sequence && isHydrationResponseSequence(sequence, escape)) {
+      removedResponse = true
+      index += sequence.length
+      continue
+    }
+
+    result += data[index]
+    index += 1
+  }
+
+  return removedResponse ? result : data
 }
 
 type VimVisualSelection = {
@@ -1593,7 +1655,10 @@ export const TerminalView = memo(function TerminalView({
     }
 
     const onDataDispose = terminal.onData((data) => {
-      if (replayingTranscriptRef.current && isHydratedTerminalResponse(data)) {
+      if (replayingTranscriptRef.current) {
+        data = stripHydratedTerminalResponses(data)
+      }
+      if (!data) {
         return
       }
 
