@@ -42,6 +42,16 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 以下标题属于固定格式，必须原样保留，不得改写成“相关 Pull Request”“本版本包含的主要 PR”或其他近义标题：中文使用 `### 本版本包含的主要 PR 和问题修复`、`### 反馈与支持`，英文使用 `### Main PRs and issues`、`### Feedback & Support`。
 
+`### 反馈与支持` 以及其下的两段中文正文、空行和链接组成一个逐字固定块，必须整体复制，不得改写、拆分、改成列表或替换链接：
+
+```md
+### 反馈与支持
+
+遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
+
+也可以打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81) 加入社区。
+```
+
 ```md
 ## FileTerm <version>
 
