@@ -51,14 +51,17 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 - **稳定性/兼容性**：平台或核心链路变化。
 - **安全与隐私**：数据发送、权限、凭据和人工确认边界。
 
-### 本版本包含的主要 PR 和问题修复
+### 本版本包含的主要 PR
 
 - [PR #123](https://github.com/St0ff3l/fileterm/pull/123)：简要说明。
-- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456)：简要说明。
+
+完整变更记录请查看 [v<old> 与 v<version> 的比较](https://github.com/St0ff3l/fileterm/compare/v<old>...v<version>)。
+
+### 反馈与支持
 
 遇到问题请前往 [GitHub Issues](https://github.com/St0ff3l/fileterm/issues) 提交反馈，并附上操作系统、FileTerm 版本、连接类型、复现步骤和脱敏日志；不要提交密码、私钥或 token。
 
-也可以打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#社区交流) 加入社区。
+也可以打开仓库 [README 的“社区交流”部分](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81) 加入社区。
 
 ---
 
@@ -72,14 +75,17 @@ One-sentence release summary in English.
 - **Stability and compatibility**: Describe platform or core workflow changes.
 - **Security and privacy**: Describe data scope, permissions, credentials, and confirmation boundaries.
 
-### Main PRs and issues
+### Main PRs
 
 - [PR #123](https://github.com/St0ff3l/fileterm/pull/123): Short description.
-- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456): Short description.
+
+See the [comparison between v<old> and v<version>](https://github.com/St0ff3l/fileterm/compare/v<old>...v<version>) for the complete change set.
+
+### Feedback & Support
 
 For problems, open a [GitHub Issue](https://github.com/St0ff3l/fileterm/issues) with the operating system, FileTerm version, connection type, reproduction steps, and redacted logs. Do not submit passwords, private keys, or tokens.
 
-Join the community through the [README community section](https://github.com/St0ff3l/fileterm#社区交流).
+Join the community through the [README community section](https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81).
 ```
 
 链接要求：
@@ -88,7 +94,7 @@ Join the community through the [README community section](https://github.com/St0
 - PR 使用 `/pull/<number>`，Issue 使用 `/issues/<number>`。
 - 版本对比使用 `/compare/v<old>...v<new>`，例如：
   `[Full Changelog](https://github.com/St0ff3l/fileterm/compare/v2.1.6...v2.2.0-beta.1)`。
-- README 社区入口使用 README 锚点的完整链接，并确认锚点与 README 标题一致。
+- README 社区入口固定使用 `https://github.com/St0ff3l/fileterm#%E7%A4%BE%E5%8C%BA%E4%BA%A4%E6%B5%81`，并确认锚点与 README 标题一致。
 - 发布正文中的链接必须是 Markdown 链接，不要只写裸 URL，也不要把本地文件路径写入 release notes。
 - 中文正文之后必须紧跟英文正文；英文正文应翻译相同的功能范围、安全边界和反馈信息，不要新增未在中文正文确认的功能。
 
