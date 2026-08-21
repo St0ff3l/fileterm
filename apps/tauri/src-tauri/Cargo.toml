@@ -1,6 +1,6 @@
 [package]
 name = "fileterm"
-version = "2.2.1"
+version = "2.2.2"
 description = "FileTerm desktop workspace"
 authors = ["FileTerm"]
 edition = "2021"
