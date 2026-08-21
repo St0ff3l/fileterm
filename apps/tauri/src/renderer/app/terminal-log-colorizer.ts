@@ -288,9 +288,20 @@ export class TerminalLogColorizer implements IDisposable {
   }
 
   private readonly resize: Terminal['resize'] = (cols, rows) => {
-    this.restoreBuffer()
+    // A file-panel toggle changes the terminal height and therefore its row
+    // count while keeping the column count stable. xterm preserves the
+    // existing BufferLine cell data for row-only resizes, so restoring every
+    // semantic foreground before each animation frame briefly exposes the
+    // uncolored buffer and causes visible flicker. Only column changes can
+    // reflow the buffer and require a restore/recolor pass.
+    const columnsChanged = this.terminal.cols !== cols
+    if (columnsChanged) {
+      this.restoreBuffer()
+    }
     const result = this.originalResize(cols, rows)
-    this.recolorAll()
+    if (columnsChanged) {
+      this.recolorAll()
+    }
     return result
   }
 
