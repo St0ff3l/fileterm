@@ -8,7 +8,7 @@ FileTerm 2.2.2 聚焦 macOS 退出确认交互与 SSH root 大文件上传稳定
 - **SSH root 大文件上传**：root 模式的上传临时文件从 `/tmp` 调整到 `/var/tmp`，避免 `/tmp` 为 `tmpfs` 时大文件 staging 消耗服务器内存；历史 `/tmp` 临时任务仍兼容断点恢复。
 - **稳定性验证**：补充 root 上传 staging 路径兼容性测试，并继续覆盖 SSH、传输服务和 Tauri 合约测试。
 
-### 本版本包含的主要 PR
+### 本版本包含的主要 PR 和问题修复
 
 - [PR #208](https://github.com/St0ff3l/fileterm/pull/208)：稳定退出确认焦点与 root 大文件上传 staging。
 
@@ -32,7 +32,7 @@ FileTerm 2.2.2 focuses on macOS quit confirmation behavior and SSH root-mode lar
 - **SSH root large-file uploads**: Root-mode upload staging now uses `/var/tmp` instead of `/tmp`, avoiding memory-backed staging when `/tmp` is a `tmpfs`; existing `/tmp` staging tasks remain compatible with resume.
 - **Stability validation**: Added compatibility coverage for root upload staging paths while retaining SSH, transfer-service, and Tauri contract coverage.
 
-### Main PRs
+### Main PRs and issues
 
 - [PR #208](https://github.com/St0ff3l/fileterm/pull/208): Stabilize quit confirmation focus and root large-file upload staging.
 

@@ -40,6 +40,8 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 
 推荐结构：中文正文、英文正文、GitHub 官方生成区。中文和英文都属于自定义正文，英文版本紧跟在中文版本后面；官方生成区必须由 GitHub 在最后追加。
 
+以下标题属于固定格式，必须原样保留，不得改写成“相关 Pull Request”“本版本包含的主要 PR”或其他近义标题：中文使用 `### 本版本包含的主要 PR 和问题修复`、`### 反馈与支持`，英文使用 `### Main PRs and issues`、`### Feedback & Support`。
+
 ```md
 ## FileTerm <version>
 
@@ -51,9 +53,10 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 - **稳定性/兼容性**：平台或核心链路变化。
 - **安全与隐私**：数据发送、权限、凭据和人工确认边界。
 
-### 本版本包含的主要 PR
+### 本版本包含的主要 PR 和问题修复
 
 - [PR #123](https://github.com/St0ff3l/fileterm/pull/123)：简要说明。
+- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456)：简要说明。
 
 完整变更记录请查看 [v<old> 与 v<version> 的比较](https://github.com/St0ff3l/fileterm/compare/v<old>...v<version>)。
 
@@ -75,9 +78,10 @@ One-sentence release summary in English.
 - **Stability and compatibility**: Describe platform or core workflow changes.
 - **Security and privacy**: Describe data scope, permissions, credentials, and confirmation boundaries.
 
-### Main PRs
+### Main PRs and issues
 
 - [PR #123](https://github.com/St0ff3l/fileterm/pull/123): Short description.
+- [Issue #456](https://github.com/St0ff3l/fileterm/issues/456): Short description.
 
 See the [comparison between v<old> and v<version>](https://github.com/St0ff3l/fileterm/compare/v<old>...v<version>) for the complete change set.
 
