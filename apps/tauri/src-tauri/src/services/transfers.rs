@@ -16,6 +16,10 @@ const UPDATE_INTERVAL: Duration = Duration::from_millis(200);
 const SPEED_SAMPLE_INTERVAL: Duration = Duration::from_millis(120);
 const TRANSFER_STOP_TIMEOUT: Duration = Duration::from_secs(15);
 const PARTIAL_SUFFIX: &str = ".fileterm-part";
+// /tmp is frequently mounted as tmpfs on small Linux hosts. Keep new root
+// upload staging on the disk-oriented temporary filesystem instead.
+const ROOT_STAGING_PREFIX: &str = "/var/tmp/fileterm-root-upload-";
+const LEGACY_ROOT_STAGING_PREFIX: &str = "/tmp/fileterm-root-upload-";
 
 fn is_false(value: &bool) -> bool {
     !*value
@@ -201,10 +205,14 @@ fn root_staging_path(name: &str) -> String {
         })
         .collect::<String>();
     format!(
-        "/tmp/fileterm-root-upload-{}-{}.part",
+        "{ROOT_STAGING_PREFIX}{}-{}.part",
         uuid::Uuid::new_v4(),
         safe_name
     )
+}
+
+pub(crate) fn is_root_upload_staging_path(path: &str) -> bool {
+    path.starts_with(ROOT_STAGING_PREFIX) || path.starts_with(LEGACY_ROOT_STAGING_PREFIX)
 }
 
 fn normalize_root_upload_staging(task: &mut TransferTask) {
@@ -216,13 +224,11 @@ fn normalize_root_upload_staging(task: &mut TransferTask) {
         (task.destination_path.as_deref(), task.partial_path.clone())
     {
         if task.staging_path.is_none() {
-            task.staging_path = Some(
-                if current_partial.starts_with("/tmp/fileterm-root-upload-") {
-                    current_partial
-                } else {
-                    root_staging_path(&task.name)
-                },
-            );
+            task.staging_path = Some(if is_root_upload_staging_path(&current_partial) {
+                current_partial
+            } else {
+                root_staging_path(&task.name)
+            });
         }
         task.partial_path = Some(partial_path(destination));
     }
@@ -230,13 +236,11 @@ fn normalize_root_upload_staging(task: &mut TransferTask) {
     if let Some(manifest) = task.manifest.as_mut() {
         for entry in &mut manifest.files {
             if entry.staging_path.is_none() {
-                entry.staging_path = Some(
-                    if entry.partial_path.starts_with("/tmp/fileterm-root-upload-") {
-                        entry.partial_path.clone()
-                    } else {
-                        root_staging_path(&entry.relative_path)
-                    },
-                );
+                entry.staging_path = Some(if is_root_upload_staging_path(&entry.partial_path) {
+                    entry.partial_path.clone()
+                } else {
+                    root_staging_path(&entry.relative_path)
+                });
             }
             entry.partial_path = partial_path(&entry.destination_path);
         }
@@ -2572,10 +2576,11 @@ pub async fn shutdown(app: &AppHandle) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        can_resume_from, failure_status, interrupt_status, join_remote_path, manifest_totals,
-        normalize_root_upload_staging, partial_path, progress_event_due, relative_remote_path,
-        select_journal_tasks, TransferFileIdentity, TransferManifest, TransferManifestEntry,
-        TransferTask, JOURNAL_MAX_TASKS, UPDATE_INTERVAL,
+        can_resume_from, failure_status, interrupt_status, is_root_upload_staging_path,
+        join_remote_path, manifest_totals, normalize_root_upload_staging, partial_path,
+        progress_event_due, relative_remote_path, root_staging_path, select_journal_tasks,
+        TransferFileIdentity, TransferManifest, TransferManifestEntry, TransferTask,
+        JOURNAL_MAX_TASKS, UPDATE_INTERVAL,
     };
 
     #[test]
@@ -2632,6 +2637,18 @@ mod tests {
         assert!(progress_event_due(None, now));
         assert!(!progress_event_due(Some(now - UPDATE_INTERVAL / 2), now));
         assert!(progress_event_due(Some(now - UPDATE_INTERVAL), now));
+    }
+
+    #[test]
+    fn new_root_upload_staging_uses_disk_backed_temp_path() {
+        let path = root_staging_path("debian.iso");
+
+        assert!(path.starts_with("/var/tmp/fileterm-root-upload-"));
+        assert!(is_root_upload_staging_path(&path));
+        assert!(is_root_upload_staging_path(
+            "/tmp/fileterm-root-upload-legacy.part"
+        ));
+        assert!(!is_root_upload_staging_path("/home/user/debian.iso"));
     }
 
     #[test]

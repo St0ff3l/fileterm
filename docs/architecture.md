@@ -226,7 +226,7 @@ platform probe
 - 文件区手动切换 user/root 只改变独立的 SFTP/exec 文件通道，不向交互终端写命令；相同 shell 用户的重复 prompt 不会覆盖手动选择。
 - 终端与文件通道不是同一远端进程。文件区进入特权身份会通过独立 exec channel 重建与终端一致的 sudo 或 su 策略；优先复用终端输入期间已捕获的授权，也支持远端免密 sudo / su。
 - 普通远程 exec 的 `sudo` / `su` 前缀由 Rust 在独立 exec channel 中处理：sudo 使用 `-S` 通过 stdin 发送凭据，su 只在该独立 exec channel 上设置受控 PTY 标志；密码不进入命令文本、可见终端、日志或 tool result。凭据优先使用用户明确的一次性参数、加密 profile，缺失时由 Rust 恢复、解除最小化并聚焦主窗口，再展示本地安全 prompt；Copilot 对话区和工具活动都会显示等待前台输入的说明。主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`，由 Agent 按结果处理。MFA/验证码/确认/REPL 等 generic input 仍返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`。
-- 特权上传的字节流仍走登录用户可写的随机 /tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY。
+- 特权上传的字节流仍走登录用户可写的随机 /var/tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY；历史 /tmp staging 任务继续兼容恢复，避免把旧断点遗留在不可访问路径。
 
 ## 4.5 MCP / CLI 外部 Agent 桥接边界
 
@@ -561,7 +561,7 @@ interface WorkspaceTab {
 - 普通断线和暂停保留临时文件；只有显式丢弃才清理断点。
 - 本地最终替换采用可回滚的备份重命名。Windows 文件占用导致替换失败时保留 `.fileterm-part`，避免丢失已传数据。
 - 目录任务持久化逐文件 manifest：已完成文件经过目标大小复核后跳过，当前文件按真实 `.fileterm-part` 长度继续。
-- SFTP root 上传为每个任务同时持久化不可预测的 /tmp staging 路径和目标同目录 .fileterm-part：登录用户的 SFTP 通道写入 staging（始终保存源文件从 0 开始的连续前缀），完成校验后由 sudo/su 用短命令复制为目标 partial，再校验并替换正式文件。失败恢复优先检查 staging，若 staging 已提交则改查目标 partial。普通 SFTP/FTP/FTPS 直接写目标同目录断点。
+- SFTP root 上传为每个任务同时持久化不可预测的 /var/tmp staging 路径和目标同目录 .fileterm-part：登录用户的 SFTP 通道写入 staging（始终保存源文件从 0 开始的连续前缀），完成校验后由 sudo/su 用短命令复制为目标 partial，再校验并替换正式文件。失败恢复优先检查 staging，若 staging 已提交则改查目标 partial。历史 /tmp staging 任务按原路径恢复。普通 SFTP/FTP/FTPS 直接写目标同目录断点。
 - FTP 上传优先使用 `APPE`，服务器不支持时回退 `REST + STOR`；回退结果不安全时删除断点并从零重传，避免拼接出等长但错误的文件。
 - FTP 安全模式明确区分未加密 FTP、显式 FTPS 和隐式 FTPS。
 - SFTP 可恢复路径保持有序流式写入。并行绝对 offset 会让文件长度无法证明前缀连续，因此在没有持久化范围位图前不用于断点判断。

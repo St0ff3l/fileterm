@@ -39,7 +39,7 @@ use tokio_socks::tcp::Socks5Stream;
 use tokio_util::sync::CancellationToken;
 
 use super::{TransferFileStat, WorkerCmd};
-use crate::services::WorkspaceTabStatus;
+use crate::services::{transfers::is_root_upload_staging_path, WorkspaceTabStatus};
 
 const DEFAULT_SSH_KEY_FILES: [&str; 4] = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
 const SSH_INTERACTION_TIMEOUT: Duration = Duration::from_secs(300);
@@ -6021,7 +6021,7 @@ async fn handle_worker_cmd(
             let su = sudo_user.clone();
             let sp = sudo_password.clone();
             tokio::spawn(async move {
-                // Root uploads are deliberately staged under /tmp first. The
+                // Root uploads are deliberately staged under /var/tmp first. The
                 // login user's SFTP channel transfers the bulk bytes there,
                 // then CommitRemoteStaging performs one short sudo/su command
                 // to create the protected .fileterm-part. This keeps su out
@@ -7503,10 +7503,6 @@ async fn replace_remote_file(
 // ─────────────────────────────────────────────────────────────────────────────
 // root-mode helpers (exec channel + `sudo` / `su`)
 // ─────────────────────────────────────────────────────────────────────────────
-
-fn is_root_upload_staging_path(path: &str) -> bool {
-    path.starts_with("/tmp/fileterm-root-upload-")
-}
 
 fn root_stat_shell_command(path: &str) -> String {
     format!(
@@ -9863,6 +9859,9 @@ mod tests {
 
     #[test]
     fn root_upload_staging_is_transferred_through_login_sftp() {
+        assert!(is_root_upload_staging_path(
+            "/var/tmp/fileterm-root-upload-a57f-example.part"
+        ));
         assert!(is_root_upload_staging_path(
             "/tmp/fileterm-root-upload-a57f-example.part"
         ));
