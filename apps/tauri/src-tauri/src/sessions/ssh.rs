@@ -2186,7 +2186,9 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
         return Err("utf-16 data length is odd".to_string());
     }
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| {
             if little_endian {
                 u16::from_le_bytes([chunk[0], chunk[1]])
