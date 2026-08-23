@@ -815,7 +815,6 @@ fn default_resource_monitoring_metric_order() -> Vec<String> {
     [
         "load",
         "cpu",
-        "cpuTemperature",
         "memory",
         "swap",
         "disk",
@@ -904,10 +903,9 @@ fn normalize_overview_section_order(order: Vec<String>) -> Vec<String> {
 }
 
 fn normalize_resource_monitoring_metrics(metrics: Vec<String>) -> Vec<String> {
-    const VALID_METRICS: [&str; 12] = [
+    const VALID_METRICS: [&str; 11] = [
         "load",
         "cpu",
-        "cpuTemperature",
         "memory",
         "swap",
         "disk",
@@ -929,10 +927,9 @@ fn normalize_resource_monitoring_metrics(metrics: Vec<String>) -> Vec<String> {
 }
 
 fn normalize_resource_monitoring_metric_order(order: Vec<String>) -> Vec<String> {
-    const VALID_METRICS: [&str; 12] = [
+    const VALID_METRICS: [&str; 11] = [
         "load",
         "cpu",
-        "cpuTemperature",
         "memory",
         "swap",
         "disk",
@@ -1200,9 +1197,28 @@ fn shell_quote_path(path: &std::path::Path) -> String {
     }
 }
 
+/// Resolve a CLI from the inherited PATH and the installation directories that
+/// desktop launchers commonly omit from PATH. Finder-launched macOS apps do not
+/// source the user's shell profile, so npm/nvm-installed clients must also be
+/// discoverable without spawning a shell or executing the client.
 fn resolve_local_cli(command: &str) -> Option<std::path::PathBuf> {
+    let mut search_paths = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    append_local_cli_search_paths(&mut search_paths);
+    resolve_local_cli_from_paths(command, search_paths)
+}
+
+fn resolve_local_cli_from_paths<I>(command: &str, directories: I) -> Option<std::path::PathBuf>
+where
+    I: IntoIterator<Item = std::path::PathBuf>,
+{
     let direct = std::path::PathBuf::from(command);
-    if direct.components().count() > 1 && direct.is_file() {
+    if direct.components().count() > 1
+        && direct.is_file()
+        && !is_embedded_desktop_app_cli(command, &direct)
+    {
         return Some(direct);
     }
 
@@ -1211,16 +1227,166 @@ fn resolve_local_cli(command: &str) -> Option<std::path::PathBuf> {
     } else {
         &[""]
     };
-    let search_path = std::env::var_os("PATH")?;
-    for directory in std::env::split_paths(&search_path) {
+
+    for directory in directories {
         for extension in extensions {
             let candidate = directory.join(format!("{command}{extension}"));
-            if candidate.is_file() {
+            if candidate.is_file() && !is_embedded_desktop_app_cli(command, &candidate) {
                 return Some(candidate);
             }
         }
     }
     None
+}
+
+/// ChatGPT for macOS ships an internal `codex` executable in its app bundle.
+/// That binary is not the user-facing Codex CLI, even when the desktop app
+/// exposes its Resources directory through PATH. Do not report it as an
+/// installed CLI; also cover symlinks that resolve into an app bundle.
+fn is_embedded_desktop_app_cli(command: &str, candidate: &std::path::Path) -> bool {
+    if !command.eq_ignore_ascii_case("codex") {
+        return false;
+    }
+
+    fn is_macos_app_internal_path(path: &std::path::Path) -> bool {
+        let components = path
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().to_ascii_lowercase())
+            .collect::<Vec<_>>();
+
+        components.windows(3).any(|window| {
+            window[0].ends_with(".app")
+                && window[1] == "contents"
+                && matches!(window[2].as_str(), "resources" | "macos")
+        })
+    }
+
+    if is_macos_app_internal_path(candidate) {
+        return true;
+    }
+
+    candidate
+        .canonicalize()
+        .map(|resolved| is_macos_app_internal_path(&resolved))
+        .unwrap_or(false)
+}
+
+fn append_local_cli_search_paths(search_paths: &mut Vec<std::path::PathBuf>) {
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from);
+
+    if let Some(home) = home.as_ref() {
+        append_home_cli_search_paths(search_paths, home);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        for path in [
+            std::path::PathBuf::from("/opt/homebrew/bin"),
+            std::path::PathBuf::from("/usr/local/bin"),
+        ] {
+            push_unique_cli_search_path(search_paths, path);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        for path in [
+            std::path::PathBuf::from("/usr/local/bin"),
+            std::path::PathBuf::from("/usr/bin"),
+        ] {
+            push_unique_cli_search_path(search_paths, path);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(app_data) = std::env::var_os("APPDATA") {
+            push_unique_cli_search_path(
+                search_paths,
+                std::path::PathBuf::from(app_data).join("npm"),
+            );
+        }
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            let local_app_data = std::path::PathBuf::from(local_app_data);
+            push_unique_cli_search_path(search_paths, local_app_data.join("pnpm"));
+            push_unique_cli_search_path(search_paths, local_app_data.join("Volta/bin"));
+        }
+        if let Some(volta_home) = std::env::var_os("VOLTA_HOME") {
+            push_unique_cli_search_path(
+                search_paths,
+                std::path::PathBuf::from(volta_home).join("bin"),
+            );
+        }
+        if let Some(nvm_symlink) = std::env::var_os("NVM_SYMLINK") {
+            push_unique_cli_search_path(search_paths, std::path::PathBuf::from(nvm_symlink));
+        }
+        if let Some(nvm_home) = std::env::var_os("NVM_HOME") {
+            let nvm_home = std::path::PathBuf::from(nvm_home);
+            push_unique_cli_search_path(search_paths, nvm_home.clone());
+            if let Ok(entries) = std::fs::read_dir(nvm_home) {
+                for entry in entries.flatten() {
+                    push_unique_cli_search_path(search_paths, entry.path());
+                }
+            }
+        }
+        if let Some(home) = home.as_ref() {
+            push_unique_cli_search_path(search_paths, home.join("scoop/shims"));
+        }
+        push_unique_cli_search_path(
+            search_paths,
+            std::path::PathBuf::from(r"C:\Program Files\nodejs"),
+        );
+    }
+}
+
+fn append_home_cli_search_paths(
+    search_paths: &mut Vec<std::path::PathBuf>,
+    home: &std::path::Path,
+) {
+    // Native Claude Code installs and the common Node version managers.
+    for relative in [
+        ".local/bin",
+        ".claude/local",
+        ".claude/bin",
+        ".npm-global/bin",
+        "n/bin",
+        ".volta/bin",
+        ".bun/bin",
+        ".asdf/shims",
+        ".local/share/mise/shims",
+        ".fnm/current/bin",
+        ".nvm/current/bin",
+    ] {
+        push_unique_cli_search_path(search_paths, home.join(relative));
+    }
+
+    // nvm keeps each Node version in its own bin directory. The directory
+    // order is deterministic so a packaged app gets the newest lexical
+    // version first when PATH is unavailable.
+    let nvm_versions = home.join(".nvm/versions/node");
+    if let Ok(entries) = std::fs::read_dir(nvm_versions) {
+        let mut version_bins = entries
+            .flatten()
+            .map(|entry| entry.path().join("bin"))
+            .filter(|path| path.is_dir())
+            .collect::<Vec<_>>();
+        version_bins.sort_by(|left, right| right.cmp(left));
+        for path in version_bins {
+            push_unique_cli_search_path(search_paths, path);
+        }
+    }
+}
+
+fn push_unique_cli_search_path(
+    search_paths: &mut Vec<std::path::PathBuf>,
+    path: std::path::PathBuf,
+) {
+    if path.as_os_str().is_empty() || search_paths.iter().any(|existing| existing == &path) {
+        return;
+    }
+    search_paths.push(path);
 }
 
 /// Discover locally installed Agent CLIs without launching them. This keeps
@@ -5028,7 +5194,78 @@ mod command_template_tests {
 
 #[cfg(test)]
 mod mcp_agent_setup_tests {
-    use super::app_get_mcp_agent_setup;
+    use super::{
+        app_get_mcp_agent_setup, append_home_cli_search_paths, resolve_local_cli_from_paths,
+    };
+
+    #[test]
+    fn resolves_cli_from_ordered_search_paths_without_running_it() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-cli-discovery-{}", uuid::Uuid::new_v4()));
+        let first_dir = root.join("first");
+        let second_dir = root.join("second");
+        std::fs::create_dir_all(&first_dir).expect("first search directory should be created");
+        std::fs::create_dir_all(&second_dir).expect("second search directory should be created");
+        let first_cli = first_dir.join("claude");
+        let second_cli = second_dir.join("claude");
+        std::fs::write(&first_cli, b"placeholder")
+            .expect("first CLI placeholder should be written");
+        std::fs::write(&second_cli, b"placeholder")
+            .expect("second CLI placeholder should be written");
+
+        let resolved = resolve_local_cli_from_paths("claude", vec![first_dir, second_dir]);
+
+        assert_eq!(resolved, Some(first_cli));
+        std::fs::remove_dir_all(root).expect("temporary CLI discovery directory should be removed");
+    }
+
+    #[test]
+    fn includes_nvm_node_bins_for_desktop_launcher_fallback() {
+        let root = std::env::temp_dir().join(format!("fileterm-cli-home-{}", uuid::Uuid::new_v4()));
+        let nvm_bin = root.join(".nvm/versions/node/v24.15.0/bin");
+        std::fs::create_dir_all(&nvm_bin).expect("nvm bin directory should be created");
+        let claude = nvm_bin.join("claude");
+        std::fs::write(&claude, b"placeholder").expect("Claude placeholder should be written");
+
+        let mut search_paths = Vec::new();
+        append_home_cli_search_paths(&mut search_paths, &root);
+        let resolved = resolve_local_cli_from_paths("claude", search_paths);
+
+        assert_eq!(resolved, Some(claude));
+        std::fs::remove_dir_all(root).expect("temporary CLI home should be removed");
+    }
+
+    #[test]
+    fn ignores_codex_bundled_inside_a_macos_desktop_app() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-codex-app-{}", uuid::Uuid::new_v4()));
+        let app_resources = root.join("ChatGPT.app/Contents/Resources");
+        std::fs::create_dir_all(&app_resources)
+            .expect("desktop app Resources directory should be created");
+        let bundled_codex = app_resources.join("codex");
+        std::fs::write(&bundled_codex, b"desktop helper")
+            .expect("bundled Codex placeholder should be written");
+
+        let resolved = resolve_local_cli_from_paths("codex", vec![app_resources]);
+
+        assert_eq!(resolved, None);
+        std::fs::remove_dir_all(root).expect("temporary desktop app directory should be removed");
+    }
+
+    #[test]
+    fn still_resolves_user_codex_cli_outside_a_desktop_app() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-codex-cli-{}", uuid::Uuid::new_v4()));
+        let cli_dir = root.join(".local/bin");
+        std::fs::create_dir_all(&cli_dir).expect("user CLI directory should be created");
+        let codex = cli_dir.join("codex");
+        std::fs::write(&codex, b"user CLI").expect("user Codex placeholder should be written");
+
+        let resolved = resolve_local_cli_from_paths("codex", vec![cli_dir]);
+
+        assert_eq!(resolved, Some(codex));
+        std::fs::remove_dir_all(root).expect("temporary user CLI directory should be removed");
+    }
 
     #[test]
     fn generates_stdio_registration_commands_for_supported_clients() {
@@ -5587,11 +5824,10 @@ mod ui_preferences_tests {
         assert!(!enabled.iter().any(|metric| metric == "gpuMemory"));
         assert!(!enabled.iter().any(|metric| metric == "gpuTemperature"));
         assert!(!enabled.iter().any(|metric| metric == "gpuPower"));
-        assert_eq!(order.len(), 12);
+        assert_eq!(order.len(), 11);
         let expected_order: Vec<String> = [
             "load",
             "cpu",
-            "cpuTemperature",
             "memory",
             "swap",
             "disk",
@@ -5619,7 +5855,7 @@ mod ui_preferences_tests {
 
         assert_eq!(normalized[0], "network");
         assert_eq!(normalized[1], "cpu");
-        assert_eq!(normalized.len(), 12);
+        assert_eq!(normalized.len(), 11);
         assert_eq!(
             normalized
                 .iter()

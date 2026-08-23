@@ -249,18 +249,6 @@ function ResourceMetricCards({
                   percent={metrics ? `${metrics.cpuPercent}%` : '-'}
                 />
               )
-            case 'cpuTemperature': {
-              const cpuTemperature =
-                metrics?.cpuTemperatureCelsius == null ? '-' : `${Math.round(metrics.cpuTemperatureCelsius)}°C`
-              return (
-                <div className="metric-line system-temperature-line" key={metric}>
-                  <span>{t.cpuTemperature}</span>
-                  <strong className="value">
-                    <MetricHoverDetail className="metric-line-hover-detail" value={cpuTemperature} />
-                  </strong>
-                </div>
-              )
-            }
             case 'memory':
               return <MemoryMeter key={metric} metrics={metrics} />
             case 'swap':

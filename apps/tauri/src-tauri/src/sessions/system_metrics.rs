@@ -562,7 +562,10 @@ fn format_gpu_memory(value: &str) -> String {
 }
 
 fn parse_gpu_percent(value: &str) -> Option<f64> {
-    let normalized = value.trim().trim_end_matches('%');
+    // PowerShell's Windows emitter formats nvidia-smi values as `49 %`.
+    // Trim again after removing the suffix so the whitespace between the
+    // number and unit does not turn an otherwise valid sample into `None`.
+    let normalized = value.trim().trim_end_matches('%').trim();
     let parsed = normalized.parse::<f64>().ok()?;
     Some(parsed.clamp(0.0, 100.0))
 }
@@ -1053,7 +1056,6 @@ pub fn parse_system_metrics(raw: &str, fallback_platform: &str) -> serde_json::V
             "steal": cpu_steal,
         },
         "cpuInfoRows": cpu_info_rows,
-        "cpuTemperatureCelsius": read_line("__CPU_TEMPERATURE__").parse::<f64>().ok(),
         "gpuInfoRows": gpu_info_rows,
         "memoryPercent": mem_percent_num,
         "memoryUsage": if mem_total_bytes_num > 0.0 {
@@ -1155,38 +1157,6 @@ has_bounded_runner() {{
 read_cpu_stat() {{
   awk '/^cpu / {{print $2, $3, $4, $5, $6, $7, $8, $9; exit}}' /proc/stat 2>/dev/null
 }}
-read_cpu_temperature() {{
-  temperature=""
-  if command -v sensors >/dev/null 2>&1; then
-    temperature=$(run_bounded 2 sensors 2>/dev/null | awk '
-      BEGIN {{ IGNORECASE=1 }}
-      /Package id|Tctl:|Tdie:|Core [0-9]+:|CPU Temp|CPU Temperature/ {{
-        if (match($0, /[+-]?[0-9]+([.][0-9]+)?[[:space:]]*°?[Cc]/)) {{
-          value=substr($0, RSTART, RLENGTH)
-          gsub(/[+°Cc[:space:]]/, "", value)
-          if ((value + 0) > -50 && (value + 0) < 150) {{ print value; exit }}
-        }}
-      }}
-    ')
-  fi
-  if [ -z "$temperature" ]; then
-    for zone in /sys/class/thermal/thermal_zone*; do
-      [ -r "$zone/temp" ] || continue
-      zone_type=$(cat "$zone/type" 2>/dev/null)
-      case "$zone_type" in
-        *cpu*|*CPU*|*x86_pkg_temp*|*coretemp*|*k10temp*|*soc*) ;;
-        *) continue ;;
-      esac
-      raw=$(cat "$zone/temp" 2>/dev/null)
-      case "$raw" in
-        ''|*[!0-9-]*) continue ;;
-      esac
-      temperature=$(awk -v value="$raw" 'BEGIN {{ c=value/1000; if (c > -50 && c < 150) printf "%.1f", c }}')
-      [ -n "$temperature" ] && break
-    done
-  fi
-  printf "%s" "$temperature"
-}}
 read_process_ticks() {{
   awk '
     {{
@@ -1242,7 +1212,6 @@ cpu_iowait_pct=$(awk -v diff_total="$diff_total" -v before="$iowait" -v after="$
 cpu_irq_pct=$(awk -v diff_total="$diff_total" -v before="$irq" -v after="$irq2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_softirq_pct=$(awk -v diff_total="$diff_total" -v before="$softirq" -v after="$softirq2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
 cpu_steal_pct=$(awk -v diff_total="$diff_total" -v before="$steal" -v after="$steal2" 'BEGIN {{ if (diff_total > 0) printf "%.1f", (after-before) * 100 / diff_total; else print "0.0" }}')
-cpu_temperature=$(read_cpu_temperature)
 os_name=$( ( . /etc/os-release >/dev/null 2>&1 && printf "%s" "$PRETTY_NAME" ) 2>/dev/null )
 [ -z "$os_name" ] && os_name=$(sed -n 's/^DISTRIB_DESCRIPTION=['"'"'"]\\{{0,1\\}}\\(.*\\)['"'"'"]\\{{0,1\\}}$/\\1/p' /etc/openwrt_release 2>/dev/null | head -n 1)
 [ -z "$os_name" ] && os_name=$(uname -s 2>/dev/null)
@@ -1818,7 +1787,6 @@ echo "__UPTIME_SECONDS__$uptime_seconds"
 echo "__LOAD__$load"
 echo "__CPU__$cpu_pct"
 echo "__CPU_USAGE__$cpu_user_pct|$cpu_system_pct|$cpu_nice_pct|$cpu_idle_pct|$cpu_iowait_pct|$cpu_irq_pct|$cpu_softirq_pct|$cpu_steal_pct"
-echo "__CPU_TEMPERATURE__$cpu_temperature"
 echo "__MEM__$mem"
 echo "__MEM_BYTES__$mem_bytes"
 echo "__SWAP__$swap"
@@ -1884,19 +1852,32 @@ function Format-FileTermBytes([double]$Bytes) {
     return [string]::Format($culture, '{0:0} B', $Bytes)
 }
 
-function Get-CpuTemperatureCelsius {
+function Get-CpuUsagePercent {
+    # Get-Counter rejects sub-second SampleInterval values on Windows. Use the
+    # .NET performance counter directly so the initial snapshot is useful and
+    # does not silently collapse to 0% on localized Windows installations.
     try {
-        $zones = @(Get-CimInstance -Namespace 'root/wmi' -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue)
-        $values = @($zones | ForEach-Object {
-            if ([double]$_.CurrentTemperature -gt 0) {
-                ([double]$_.CurrentTemperature / 10) - 273.15
-            }
-        } | Where-Object { $_ -gt -50 -and $_ -lt 150 })
-        if ($values.Count -gt 0) {
-            return [Math]::Round((($values | Measure-Object -Average).Average), 1)
+        $counter = New-Object Diagnostics.PerformanceCounter('Processor', '% Processor Time', '_Total')
+        $null = $counter.NextValue()
+        Start-Sleep -Milliseconds 500
+        $value = [double]$counter.NextValue()
+        if ($value -ge 0 -and $value -le 100) {
+            return [Math]::Round($value)
         }
     } catch {}
-    return $null
+
+    # Keep a CIM fallback for Server Core/minimal images where the performance
+    # counter category is unavailable.
+    try {
+        $loads = @(Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue |
+            Where-Object { $null -ne $_.LoadPercentage } |
+            ForEach-Object { [double]$_.LoadPercentage })
+        if ($loads.Count -gt 0) {
+            return [Math]::Round((($loads | Measure-Object -Average).Average))
+        }
+    } catch {}
+
+    return 0
 }
 
 $os = Get-CimInstance Win32_OperatingSystem
@@ -1913,10 +1894,7 @@ $swapUsed  = $swapTotal - $swapFree
 $swapPct   = if ($swapTotal -gt 0) { [Math]::Round($swapUsed * 100 / $swapTotal) } else { 0 }
 
 # CPU usage sampled over 0.5s
-$cpu1 = (Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 0.3).CounterSamples
-Start-Sleep -Milliseconds 500
-$cpuPct = if ($cpu1) { [Math]::Round($cpu1.CookedValue) } else { 0 }
-$cpuTemperature = Get-CpuTemperatureCelsius
+$cpuPct = Get-CpuUsagePercent
 $logicalProcessorCount = [Math]::Max(1, [Environment]::ProcessorCount)
 $systemLoad = [string]::Format(
     [Globalization.CultureInfo]::InvariantCulture,
@@ -1954,7 +1932,7 @@ if ($cpuRows.Count -eq 0) { $cpuRows += ('-|{0}|-|-|-' -f $cpuCores) }
 
 function Convert-GpuMetricText([object]$Value, [string]$Unit) {
     $text = ([string]$Value).Trim()
-    if (-not $text -or $text -eq '-') { return '-' }
+    if (-not $text -or $text -eq '-' -or $text -match '^(?:\[?N/?A\]?|NA)$') { return '-' }
     return $text + ' ' + $Unit
 }
 
@@ -2004,7 +1982,10 @@ function Get-GpuRows([object[]]$Adapters) {
             }
         }
         if ($runtimeEntry) {
-            if ($gpuMemory -eq '-' -and $runtimeEntry.memoryTotal -ne '-') { $gpuMemory = $runtimeEntry.memoryTotal }
+            # Win32_VideoController.AdapterRAM is truncated to 4 GB on some
+            # WDDM laptop drivers. nvidia-smi reports the physical VRAM, so
+            # prefer its runtime total whenever it is available.
+            if ($runtimeEntry.memoryTotal -ne '-') { $gpuMemory = $runtimeEntry.memoryTotal }
             $rows += ('{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory, $runtimeEntry.usage, $runtimeEntry.memoryUsed, $runtimeEntry.temperature, $runtimeEntry.powerUsage, $runtimeEntry.powerLimit)
         } else {
             $rows += ('{0}|{1}|{2}|{3}|-|-|-|-|-' -f $gpuName, $gpuVendor, $gpuDriver, $gpuMemory)
@@ -2075,7 +2056,6 @@ Write-Output ('__LOAD__' + $systemLoad)
 Write-Output '__LOAD_UNIT__busy-logical-processors'
 Write-Output ('__CPU__' + $cpuPct)
 Write-Output ('__CPU_USAGE__{0}|{1}|0|{2}|0|0|0|0' -f $cpuPct, $cpuPct, [Math]::Max(0, 100 - $cpuPct))
-if ($null -ne $cpuTemperature) { Write-Output ('__CPU_TEMPERATURE__' + $cpuTemperature) } else { Write-Output '__CPU_TEMPERATURE__' }
 Write-Output ('__MEM__{0}|{1}|{2}|0|0|0' -f [Math]::Round($memUsed / 1MB), [Math]::Round($memTotal / 1MB), $memPct)
 Write-Output ('__MEM_BYTES__{0}|{1}|{2}|{3}|0|0|0' -f $memUsed, $memTotal, $memFree, $memPct)
 Write-Output ('__SWAP__{0}|{1}|{2}' -f [Math]::Round($swapUsed / 1MB), [Math]::Round($swapTotal / 1MB), $swapPct)
@@ -2140,7 +2120,6 @@ while ($true) {
     if ($cpuCounter) {
         try { $cpuPct = [Math]::Round($cpuCounter.NextValue()) } catch {}
     }
-    $cpuTemperature = Get-CpuTemperatureCelsius
     if ($memoryAvailableCounter) {
         try { $memFree = [double]$memoryAvailableCounter.NextValue() } catch {}
     }
@@ -2195,8 +2174,8 @@ while ($true) {
             $procId = [string]$_.Id
             $currentProcCpuTimes[$procId] = $currentCpu
             $prevCpu = $previousProcCpuTimes[$procId]
-            $cpuPct = if ($null -ne $prevCpu) { [Math]::Max(0, [Math]::Round((([double]$currentCpu - [double]$prevCpu) / $procElapsedSeconds) * 100 / $logicalProcessorCount, 1)) } else { 0 }
-            $procLines += ('{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $cpuPct, $_.ProcessName)
+            $processCpuPct = if ($null -ne $prevCpu) { [Math]::Max(0, [Math]::Round((([double]$currentCpu - [double]$prevCpu) / $procElapsedSeconds) * 100 / $logicalProcessorCount, 1)) } else { 0 }
+            $procLines += ('{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $processCpuPct, $_.ProcessName)
         }
     $previousProcCpuTimes = $currentProcCpuTimes
     $gpuRows = @(Get-GpuRows -Adapters $gpuAdapters)
@@ -2221,7 +2200,6 @@ while ($true) {
     Write-Output '__LOAD_UNIT__busy-logical-processors'
     Write-Output ('__CPU__' + $cpuPct)
     Write-Output ('__CPU_USAGE__0|{0}|0|{1}|0|0|0|0' -f $cpuPct, [Math]::Max(0, 100 - $cpuPct))
-    if ($null -ne $cpuTemperature) { Write-Output ('__CPU_TEMPERATURE__' + $cpuTemperature) } else { Write-Output '__CPU_TEMPERATURE__' }
     Write-Output ('__MEM__{0}|{1}|{2}|0|0|0' -f [Math]::Round($memUsed / 1MB), [Math]::Round($memTotal / 1MB), $memPct)
     Write-Output ('__MEM_BYTES__{0}|{1}|{2}|{3}|0|0|0' -f $memUsed, $memTotal, $memFree, $memPct)
     Write-Output ('__SWAP__{0}|{1}|{2}' -f [Math]::Round($swapUsed / 1MB), [Math]::Round($swapTotal / 1MB), $swapPct)
@@ -2326,8 +2304,6 @@ mod tests {
         let command = build_posix_metrics_command("linux");
 
         assert!(command.contains(r#"printf "%s|%sK/%sK\n"#));
-        assert!(command.contains("read_cpu_temperature()"));
-        assert!(command.contains("__CPU_TEMPERATURE__"));
         // 进程输出格式：pid|user|rss(M)|pcpu(已归一化)|pmem|args
         assert!(command.contains(r#"printf "%s|%s|%.1fM|%.1f|%s|%s\n"#));
         assert!(command.contains("getconf _NPROCESSORS_ONLN"));
@@ -2365,16 +2341,6 @@ mod tests {
             status.success(),
             "generated POSIX metrics script is invalid"
         );
-    }
-
-    #[test]
-    fn parser_reads_signed_cpu_temperature_from_sensors() {
-        let metrics = parse_system_metrics(
-            "__PLATFORM__linux\n__CPU__10\n__CPU_TEMPERATURE__+46.0\n",
-            "linux",
-        );
-
-        assert_eq!(metrics["cpuTemperatureCelsius"].as_f64(), Some(46.0));
     }
 
     #[test]
@@ -2435,16 +2401,6 @@ mod tests {
     }
 
     #[test]
-    fn parser_reads_optional_cpu_temperature() {
-        let metrics = parse_system_metrics(
-            "__PLATFORM__linux\n__CPU__10\n__CPU_TEMPERATURE__57.5\n",
-            "linux",
-        );
-
-        assert_eq!(metrics["cpuTemperatureCelsius"].as_f64(), Some(57.5));
-    }
-
-    #[test]
     fn parser_filters_transient_collector_processes() {
         // ps/awk/bash 等采集器自身进程应被过滤，不显示给用户
         let metrics = parse_system_metrics(
@@ -2477,8 +2433,8 @@ mod tests {
         assert!(command.contains("($cpuPct * $logicalProcessorCount) / 100"));
         assert!(command.contains("Write-Output ('__LOAD__' + $systemLoad)"));
         assert!(command.contains("Write-Output '__LOAD_UNIT__busy-logical-processors'"));
-        assert!(command.contains("Get-CpuTemperatureCelsius"));
-        assert!(command.contains("__CPU_TEMPERATURE__"));
+        assert!(command.contains("Get-CpuUsagePercent"));
+        assert!(!command.contains("-SampleInterval 0.3"));
         assert!(command.contains("Get-CimInstance Win32_VideoController"));
         assert!(command.contains("utilization.gpu"));
         assert!(command.contains("memory.used"));
@@ -2487,6 +2443,8 @@ mod tests {
         assert!(command.contains("return $rows"));
         assert!(command.contains("$processor.L3CacheSize"));
         assert!(command.contains("$fsLines   +="));
+        assert!(command.contains("prefer its runtime total"));
+        assert!(command.contains("N/?A"));
 
         let metrics = parse_system_metrics(
             "__PLATFORM__windows\n__LOAD__1.25\n__LOAD_UNIT__busy-logical-processors\n",
@@ -2533,10 +2491,30 @@ mod tests {
     }
 
     #[test]
+    fn parser_accepts_windows_gpu_units_and_prefers_runtime_vram_total() {
+        let metrics = parse_system_metrics(
+            "__PLATFORM__windows\n__GPUINFO_START__\nNVIDIA GeForce RTX 3070 Laptop GPU|NVIDIA|32.0.16.1047|8192 MiB|49 %|920 MiB|49 C|19.37 W|-\n__GPUINFO_END__\n",
+            "windows",
+        );
+
+        let gpu = &metrics["gpuInfoRows"][0];
+        assert_eq!(gpu["usagePercent"], 49.0);
+        assert_eq!(gpu["memory"], "8.0 GB");
+        assert_eq!(gpu["memoryUsed"], "920.0 MB");
+        assert_eq!(gpu["temperatureCelsius"], 49.0);
+        assert_eq!(gpu["powerUsage"], "19.37 W");
+        assert!(gpu["powerLimit"].is_null());
+    }
+
+    #[test]
     fn windows_streaming_metrics_reuses_warm_counters_on_a_fixed_clock() {
         let command = build_windows_streaming_metrics_command(1);
 
         assert!(command.contains("Diagnostics.PerformanceCounter('Processor'"));
+        assert!(command.contains("$processCpuPct = if"));
+        assert!(command
+            .contains("'{0}||{1}M|{2}|0|{3}' -f $_.Id, $memMB, $processCpuPct, $_.ProcessName"));
+        assert!(command.contains("Write-Output ('__CPU__' + $cpuPct)"));
         assert!(command.contains("$nextEmitMs += 1000"));
         assert!(command.contains("while ($true)"));
         assert!(command.matches("__FILETERM_METRICS_BLOCK__").count() >= 2);

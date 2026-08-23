@@ -13,7 +13,6 @@ const RESOURCE_MONITORING_METER_OPTIONS: Array<{
 }> = [
   { key: 'load', labelKey: 'load' },
   { key: 'cpu', labelKey: 'cpu' },
-  { key: 'cpuTemperature', labelKey: 'cpuTemperature' },
   { key: 'memory', labelKey: 'memory' },
   { key: 'swap', labelKey: 'swap' },
   { key: 'disk', labelKey: 'disk' },
