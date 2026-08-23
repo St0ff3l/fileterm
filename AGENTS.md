@@ -46,6 +46,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 
 ### UI 与公用组件边界
 
+- **语言名称使用本地自称**：语言选择器中的语言名称必须保持该语言自己的写法（如 `简体中文`、`English`、`한국어` / `조선어`），不得根据当前界面语言翻译；新增语言时同样遵循此规则。
 - **下拉框统一走 DropdownSelect**：所有表单与设置项的下拉菜单必须统一使用公用组件 `<DropdownSelect>`，严禁直写原始 HTML `<select>` 标签（确保 macOS 下包裹 `ft-select-shell` 外壳，Windows / Linux 下 100% 触发自绘 React Portal 弹出菜单）。
 - **下拉箭头随控件缩放**：`DropdownSelect` 的箭头必须由组件根据当前控件实际高度自适应（覆盖 macOS 原生外壳和 Windows/Linux 自绘触发器），业务组件不得写死一套箭头尺寸或覆盖共享计算；新增紧凑/表单尺寸时必须检查箭头与文字的垂直对齐。
 - **图标矢量就地化**：所有按钮与视觉图标优先使用预置的离线 SVG 图标组件 `<AppIcon />`，严禁新增 `<span className="material-symbols-outlined">` 依赖外部字体/WebFont 图标。
