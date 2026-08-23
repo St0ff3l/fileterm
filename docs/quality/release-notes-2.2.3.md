@@ -11,7 +11,7 @@ FileTerm 2.2.3 聚焦 Windows 远程系统监控准确性与 macOS 打包版本�
 
 ### 本版本包含的主要 PR 和问题修复
 
-- Windows 远程系统监控、GPU 显存识别和本机 Agent CLI 检测修复。
+- [PR #210](https://github.com/St0ff3l/fileterm/pull/210)：Windows 远程系统监控、GPU 显存识别和本机 Agent CLI 检测修复。
 
 完整变更记录请查看 [v2.2.2 与 v2.2.3 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.2...v2.2.3)。
 
@@ -36,7 +36,7 @@ FileTerm 2.2.3 focuses on accurate Windows remote system metrics and reliable lo
 
 ### Main PRs and issues
 
-- Windows remote system metrics, GPU VRAM detection, and local Agent CLI detection fixes.
+- [PR #210](https://github.com/St0ff3l/fileterm/pull/210): Windows remote system metrics, GPU VRAM detection, and local Agent CLI detection fixes.
 
 See the [comparison between v2.2.2 and v2.2.3](https://github.com/St0ff3l/fileterm/compare/v2.2.2...v2.2.3) for the complete change set.
 
