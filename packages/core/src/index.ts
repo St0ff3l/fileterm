@@ -142,7 +142,6 @@ export type ResourceMonitoringIntervalSeconds = 1 | 5 | 15 | 30 | 60
 export type ResourceMonitoringMetric =
   | 'load'
   | 'cpu'
-  | 'cpuTemperature'
   | 'memory'
   | 'swap'
   | 'disk'
@@ -167,7 +166,6 @@ export const DEFAULT_RESOURCE_MONITORING_METRICS: ResourceMonitoringMetric[] = [
 export const DEFAULT_RESOURCE_MONITORING_METRIC_ORDER: ResourceMonitoringMetric[] = [
   'load',
   'cpu',
-  'cpuTemperature',
   'memory',
   'swap',
   'disk',
@@ -228,7 +226,7 @@ export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
 
 export type McpAgentClientId = 'claude-code' | 'codex-cli'
 
-/** Local client discovery result. Detection only reads PATH and never runs the client. */
+/** Local client discovery result. Detection reads PATH and known install locations, never runs the client. */
 export interface McpAgentClientStatus {
   id: McpAgentClientId
   label: string
@@ -620,7 +618,6 @@ export interface SystemMetrics {
   cpuPercent: number
   cpuUsage: CpuUsageBreakdown
   cpuInfoRows: CpuInfoRow[]
-  cpuTemperatureCelsius?: number
   gpuInfoRows: GpuInfoRow[]
   memoryPercent: number
   memoryUsage: string
