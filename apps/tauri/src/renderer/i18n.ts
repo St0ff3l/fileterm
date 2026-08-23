@@ -1,3 +1,10 @@
+// Language selectors use each language's own name instead of translating it
+// with the currently active UI locale.
+const languageNames = {
+  zhCN: '简体中文',
+  enUS: 'English'
+} as const
+
 const zhCN = {
   appTitle: 'FileTerm',
   syncStatus: '同步状态',
@@ -814,8 +821,8 @@ const zhCN = {
   filePanelPreferenceSaveFailed: '无法保存文件面板偏好。',
   languageSelection: '语言',
   languageSidebarLabel: '语言 Language',
-  languageZhCN: '简体中文',
-  languageEnglish: 'English',
+  languageZhCN: languageNames.zhCN,
+  languageEnglish: languageNames.enUS,
   overviewContentSettings: '概览内容',
   overviewContentSettingsHint: '选择概览页显示的内容，并拖动卡片调整模块顺序。',
   overviewShowStats: '显示连接统计',
@@ -2051,8 +2058,8 @@ const enUS: typeof zhCN = {
   filePanelPreferenceSaveFailed: 'Unable to save the file panel preference.',
   languageSelection: 'Language',
   languageSidebarLabel: '语言 Language',
-  languageZhCN: 'Simplified Chinese',
-  languageEnglish: 'English',
+  languageZhCN: languageNames.zhCN,
+  languageEnglish: languageNames.enUS,
   overviewContentSettings: 'Overview Content',
   overviewContentSettingsHint: 'Choose what appears on the overview page and drag cards to reorder the sections.',
   overviewShowStats: 'Show connection statistics',
