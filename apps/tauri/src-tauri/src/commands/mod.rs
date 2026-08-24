@@ -1539,6 +1539,64 @@ pub fn app_open_logs_directory(app: AppHandle) -> Result<(), AppError> {
     open::that(log_directory).map_err(|error| AppError::Command(error.to_string()))
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialPortListItem {
+    pub port_name: String,
+    pub port_type: String,
+    pub manufacturer: Option<String>,
+    pub product: Option<String>,
+    pub serial_number: Option<String>,
+    pub vendor_id: Option<u16>,
+    pub product_id: Option<u16>,
+}
+
+fn map_serial_port_info(port: tokio_serial::SerialPortInfo) -> SerialPortListItem {
+    let (port_type, manufacturer, product, serial_number, vendor_id, product_id) = match port
+        .port_type
+    {
+        tokio_serial::SerialPortType::UsbPort(info) => (
+            "usb",
+            info.manufacturer,
+            info.product,
+            info.serial_number,
+            Some(info.vid),
+            Some(info.pid),
+        ),
+        tokio_serial::SerialPortType::PciPort => ("pci", None, None, None, None, None),
+        tokio_serial::SerialPortType::BluetoothPort => ("bluetooth", None, None, None, None, None),
+        tokio_serial::SerialPortType::Unknown => ("unknown", None, None, None, None, None),
+    };
+
+    SerialPortListItem {
+        port_name: port.port_name,
+        port_type: port_type.to_string(),
+        manufacturer,
+        product,
+        serial_number,
+        vendor_id,
+        product_id,
+    }
+}
+
+#[tauri::command]
+pub async fn app_list_serial_ports() -> Result<Vec<SerialPortListItem>, AppError> {
+    let ports = tauri::async_runtime::spawn_blocking(tokio_serial::available_ports)
+        .await
+        .map_err(|error| AppError::Command(format!("串口设备扫描失败：{error}")))?
+        .map_err(|error| AppError::Command(format!("串口设备扫描失败：{error}")))?;
+
+    Ok(ports.into_iter().map(map_serial_port_info).collect())
+}
+
+#[tauri::command]
+pub async fn app_save_session_log(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<Option<String>, AppError> {
+    crate::services::session_logs::save_current_session(&app, &tab_id).await
+}
+
 #[tauri::command]
 pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError> {
     let path = crate::storage::state_path(&app)?;
@@ -2835,6 +2893,7 @@ async fn cleanup_unattached_session(
     tab_id: &str,
 ) {
     stop_session_worker(state, tab_id).await;
+    crate::services::session_logs::stop_for_tab(state, tab_id).await;
 
     state.tabs.write().await.retain(|tab| tab.id != tab_id);
     state.sessions.write().await.remove(tab_id);
@@ -2890,6 +2949,7 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
         )
         .await;
     }
+    crate::services::session_logs::shutdown(&state).await;
 }
 
 /// 为指定 profile 创建并启动一个新的 session（tab + session + worker）。
@@ -2997,6 +3057,16 @@ async fn spawn_session_for_profile(
         .write()
         .await
         .insert(tab_id.clone(), worker_control.clone());
+
+    if let Err(error) =
+        crate::services::session_logs::start_for_tab(app, state, &tab_id, profile).await
+    {
+        crate::services::logging::warn(
+            app,
+            "session-log",
+            format!("启动会话日志失败 tab={tab_id}: {error}"),
+        );
+    }
 
     start_session_worker(
         tab_id.clone(),
@@ -3626,6 +3696,7 @@ pub async fn app_close_pane(
     )
     .await;
     stop_session_worker(&state, &pane_tab_id).await;
+    crate::services::session_logs::stop_for_tab(&state, &pane_tab_id).await;
 
     let outcome = {
         let mut tabs = state.tabs.write().await;
@@ -3914,6 +3985,16 @@ pub async fn app_reconnect_tab(
                 .await
                 .insert(tab_id.clone(), worker_control.clone());
 
+            if let Err(error) =
+                crate::services::session_logs::start_for_tab(&app, &state, &tab_id, profile).await
+            {
+                crate::services::logging::warn(
+                    &app,
+                    "session-log",
+                    format!("启动会话日志失败 tab={tab_id}: {error}"),
+                );
+            }
+
             start_session_worker(
                 tab_id,
                 profile.clone(),
@@ -4049,6 +4130,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
         )
         .await;
         stop_session_worker(&state, &tab_id).await;
+        crate::services::session_logs::stop_for_tab(&state, &tab_id).await;
         {
             let mut tabs = state.tabs.write().await;
             let root_idx = tabs
@@ -4103,6 +4185,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
             )
             .await?;
             stop_session_worker(&state, id).await;
+            crate::services::session_logs::stop_for_tab(&state, id).await;
         }
         {
             let mut tabs = state.tabs.write().await;
@@ -6162,6 +6245,38 @@ mod permission_contract_tests {
         assert_eq!(parse_remote_permission_mode("755").unwrap(), 0o755);
         assert!(parse_remote_permission_mode("888").is_err());
         assert!(parse_remote_permission_mode("75").is_err());
+    }
+}
+
+#[cfg(test)]
+mod serial_port_contract_tests {
+    use super::map_serial_port_info;
+
+    #[test]
+    fn maps_usb_metadata_without_accessing_hardware() {
+        let item = map_serial_port_info(tokio_serial::SerialPortInfo {
+            port_name: "/dev/cu.test".to_string(),
+            port_type: tokio_serial::SerialPortType::UsbPort(tokio_serial::UsbPortInfo {
+                vid: 0x1234,
+                pid: 0xabcd,
+                serial_number: Some("SN-1".to_string()),
+                manufacturer: Some("Test Vendor".to_string()),
+                product: Some("Test Adapter".to_string()),
+            }),
+        });
+
+        assert_eq!(item.port_name, "/dev/cu.test");
+        assert_eq!(item.port_type, "usb");
+        assert_eq!(item.vendor_id, Some(0x1234));
+        assert_eq!(item.product_id, Some(0xabcd));
+        assert_eq!(item.manufacturer.as_deref(), Some("Test Vendor"));
+        assert_eq!(item.product.as_deref(), Some("Test Adapter"));
+        assert_eq!(item.serial_number.as_deref(), Some("SN-1"));
+
+        let serialized = serde_json::to_value(item).expect("serial port item should serialize");
+        assert_eq!(serialized["portName"], "/dev/cu.test");
+        assert_eq!(serialized["vendorId"], 0x1234);
+        assert_eq!(serialized["productId"], 0xabcd);
     }
 }
 

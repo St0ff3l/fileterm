@@ -56,7 +56,7 @@ export type ShortcutCloseConfirm = {
 }
 
 export type WorkspaceTabContextAction =
-  'copy' | 'clone' | 'connect' | 'connectAll' | 'disconnect' | 'close' | 'closeOthers' | 'closeAll'
+  'copy' | 'clone' | 'connect' | 'connectAll' | 'disconnect' | 'saveSessionLog' | 'close' | 'closeOthers' | 'closeAll'
 
 export type WorkspaceStageKind = 'home' | 'session' | 'system'
 export type WorkspaceNavigationDirection = 'up' | 'down'
@@ -1534,6 +1534,22 @@ export function useWorkspaceTabs({
         onError('连接全部 SSH', error)
       } finally {
         onBusyChange(false)
+      }
+      return
+    }
+
+    if (action === 'saveSessionLog') {
+      if (target.kind !== 'session' || !desktopApi) {
+        return
+      }
+
+      try {
+        const savedPath = await desktopApi.saveSessionLog(target.id)
+        if (savedPath) {
+          onStatusMessage(`${t.sessionLogSaved}: ${savedPath}`)
+        }
+      } catch (error) {
+        onError(t.sessionLogSaveFailed, error)
       }
       return
     }

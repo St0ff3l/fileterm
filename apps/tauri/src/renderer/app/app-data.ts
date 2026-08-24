@@ -40,6 +40,8 @@ export const defaultForm: CreateProfileInput = {
   group: t.defaultGroup,
   remotePath: '/',
   note: '',
+  sessionLogEnabled: false,
+  sessionLogDirectory: '',
   password: '',
   useEmptyPassword: false,
   privateKeyId: '',
@@ -69,7 +71,11 @@ export const defaultForm: CreateProfileInput = {
   dataBits: 8,
   stopBits: 1,
   parity: 'none',
-  flowControl: 'none'
+  flowControl: 'none',
+  newlineMode: 'none',
+  inputMode: 'text',
+  outputMode: 'text',
+  localEcho: false
 }
 
 function connectionOverridesForProfile(profile: SshProfile): SshConnectionOverrides {
@@ -129,6 +135,8 @@ export function profileToForm(
     group: profile.group,
     remotePath: profile.remotePath,
     note: profile.note ?? '',
+    sessionLogEnabled: profile.sessionLogEnabled ?? false,
+    sessionLogDirectory: profile.sessionLogDirectory ?? '',
     password: profile.type === 'ssh' || profile.type === 'ftp' ? (profile.password ?? '') : '',
     useEmptyPassword: profile.type === 'ssh' ? sshConnectionSettings.useEmptyPassword : false,
     trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',
@@ -147,7 +155,12 @@ export function profileToForm(
     // its legacy fallback instead of being rewritten with current defaults.
     resourceMonitoringMetrics: profile.type === 'ssh' ? profile.resourceMonitoringMetrics : undefined,
     resourceMonitoringMetricOrder: profile.type === 'ssh' ? profile.resourceMonitoringMetricOrder : undefined,
-    reconnectMode: profile.type === 'ssh' ? sshConnectionSettings.reconnectMode : 'none',
+    reconnectMode:
+      profile.type === 'ssh'
+        ? sshConnectionSettings.reconnectMode
+        : profile.type === 'serial'
+          ? (profile.reconnectMode ?? 'none')
+          : 'none',
     legacyAlgorithms: profile.type === 'ssh' ? sshConnectionSettings.legacyAlgorithms : false,
     secure: profile.type === 'ftp' ? profile.secure : false,
     securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
@@ -166,6 +179,10 @@ export function profileToForm(
     dataBits: profile.type === 'serial' ? profile.dataBits : 8,
     stopBits: profile.type === 'serial' ? profile.stopBits : 1,
     parity: profile.type === 'serial' ? profile.parity : 'none',
-    flowControl: profile.type === 'serial' ? profile.flowControl : 'none'
+    flowControl: profile.type === 'serial' ? profile.flowControl : 'none',
+    newlineMode: profile.type === 'serial' ? (profile.newlineMode ?? 'none') : 'none',
+    inputMode: profile.type === 'serial' ? (profile.inputMode ?? 'text') : 'text',
+    outputMode: profile.type === 'serial' ? (profile.outputMode ?? 'text') : 'text',
+    localEcho: profile.type === 'serial' ? (profile.localEcho ?? false) : false
   }
 }

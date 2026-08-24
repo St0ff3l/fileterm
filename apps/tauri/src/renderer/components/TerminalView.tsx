@@ -20,6 +20,15 @@ import { AppIcon } from '../features/common/AppIcon'
 import { VerticalScrollbar } from '../features/common/VerticalScrollbar'
 import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../app/font-metrics'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
+import {
+  getTerminalFontSize,
+  hydrateTerminalFontSizes,
+  setTerminalFontSize,
+  subscribeTerminalFontSizes,
+  TERMINAL_DEFAULT_FONT_SIZE,
+  TERMINAL_MIN_FONT_SIZE,
+  TERMINAL_MAX_FONT_SIZE
+} from '../app/terminal-font-size-store'
 
 function localizeTerminalText(value: string) {
   return value
@@ -82,9 +91,6 @@ const TERMINAL_RESIZE_SETTLE_MS = 140
 const TERMINAL_RESIZE_OUTPUT_QUIET_MS = 260
 // Bound one xterm parse pass without serializing the native input path.
 const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
-const TERMINAL_DEFAULT_FONT_SIZE = 12
-const TERMINAL_MIN_FONT_SIZE = 8
-const TERMINAL_MAX_FONT_SIZE = 28
 // Some IMEs can emit the committed composition once through xterm's normal
 // input path and then emit the same text again when the user switches back to
 // an ASCII keyboard layout. Keep this window narrow so this is not a general
@@ -629,10 +635,12 @@ function describeTerminalInput(event: KeyboardEvent | WheelEvent) {
 }
 
 export const TerminalView = memo(function TerminalView({
+  profileId,
   tabId,
   bootText,
   connected = false,
   connecting = false,
+  autoReconnect = false,
   isActive = true,
   onStatus,
   onReconnect,
@@ -644,10 +652,12 @@ export const TerminalView = memo(function TerminalView({
   closedMessage = t.terminalConnectionClosed,
   reconnectHint = t.pressEnterToReconnect
 }: {
+  profileId: string
   tabId: string
   bootText: string
   connected?: boolean
   connecting?: boolean
+  autoReconnect?: boolean
   isActive?: boolean
   onStatus?(message: string | null): void
   onReconnect?(): void | Promise<void>
@@ -662,6 +672,7 @@ export const TerminalView = memo(function TerminalView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalLogColorizerRef = useRef<TerminalLogColorizer | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
@@ -696,6 +707,9 @@ export const TerminalView = memo(function TerminalView({
   // tab from swallowing keystrokes after this tab is brought back.
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
+  const autoReconnectRef = useRef(Boolean(autoReconnect))
+  const autoReconnectTimerRef = useRef<number | null>(null)
+  const autoReconnectAttemptRef = useRef(0)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{
     left: number
@@ -709,6 +723,7 @@ export const TerminalView = memo(function TerminalView({
   const lastTerminalOutputAtRef = useRef(0)
   const awaitingCommandCompletionRef = useRef(false)
   const pendingPromptResizeRef = useRef(false)
+  const profileIdRef = useRef(profileId)
   const tabIdRef = useRef(tabId)
   const onStatusRef = useRef(onStatus)
   const onReconnectRef = useRef(onReconnect)
@@ -721,9 +736,11 @@ export const TerminalView = memo(function TerminalView({
   const isReconnectingRef = useRef(false)
   const reconnectHintShownRef = useRef(false)
   const activeTerminalTabIdRef = useRef<string | null>(null)
+  profileIdRef.current = profileId
   tabIdRef.current = tabId
   connectedRef.current = Boolean(connected)
   connectingRef.current = Boolean(connecting)
+  autoReconnectRef.current = Boolean(autoReconnect)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
   closedMessageRef.current = closedMessage
@@ -782,6 +799,10 @@ export const TerminalView = memo(function TerminalView({
       canceled = true
       unsubscribe()
     }
+  }, [])
+
+  useEffect(() => {
+    void hydrateTerminalFontSizes()
   }, [])
 
   const shortcuts = {
@@ -1003,6 +1024,22 @@ export const TerminalView = memo(function TerminalView({
     terminal.focus()
   }
 
+  const runSaveSessionLog = async () => {
+    const desktopApi = window.fileterm
+    if (!desktopApi) {
+      return
+    }
+
+    try {
+      const savedPath = await desktopApi.saveSessionLog(tabIdRef.current)
+      if (savedPath) {
+        onStatusRef.current?.(`${t.sessionLogSaved}: ${savedPath}`)
+      }
+    } catch (error) {
+      onStatusRef.current?.(`${t.sessionLogSaveFailed}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   const runSplitPane = (direction: SplitPaneDirection) => {
     onSplitPaneRef.current?.(direction)
   }
@@ -1204,6 +1241,29 @@ export const TerminalView = memo(function TerminalView({
     )
   }
 
+  const applyTerminalFontSize = (fontSize: number) => {
+    const terminal = terminalRef.current
+    if (!terminal) {
+      return false
+    }
+
+    const nextSize = Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, fontSize))
+    if (terminal.options.fontSize === nextSize) {
+      return false
+    }
+
+    terminal.options.fontSize = nextSize
+    terminal.clearTextureAtlas()
+    // Font metrics change the visible grid, so keep the remote PTY's size in
+    // lockstep with this terminal rather than applying WebView zoom.
+    lastSyncedSizeRef.current = null
+    const fitAddon = fitAddonRef.current
+    if (fitAddon) {
+      syncTerminalSize(fitAddon, terminal, { force: true })
+    }
+    return true
+  }
+
   useEffect(() => {
     if (!hostRef.current) {
       return
@@ -1211,7 +1271,7 @@ export const TerminalView = memo(function TerminalView({
 
     const terminal = new Terminal({
       fontFamily: getConfiguredMonoFontFamily(),
-      fontSize: TERMINAL_DEFAULT_FONT_SIZE,
+      fontSize: getTerminalFontSize(profileIdRef.current),
       letterSpacing: 0.5,
       lineHeight: 1.05,
       cursorBlink: true,
@@ -1236,6 +1296,7 @@ export const TerminalView = memo(function TerminalView({
       theme: buildTerminalTheme()
     })
     const fitAddon = new FitAddon()
+    fitAddonRef.current = fitAddon
     const searchAddon = new SearchAddon({ highlightLimit: 2000 })
     const unicode11Addon = new Unicode11Addon()
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
@@ -1293,11 +1354,8 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
-      terminal.options.fontSize = nextSize
-      terminal.clearTextureAtlas()
-      // Font metrics change the visible grid, so keep the remote PTY's size
-      // in lockstep with this terminal rather than applying webview zoom.
-      syncTerminalSize(fitAddon, terminal, { force: true })
+      setTerminalFontSize(profileIdRef.current, nextSize)
+      applyTerminalFontSize(nextSize)
       logTerminalZoom(terminal, 'font-size-applied', {
         currentSize,
         nextSize: terminal.options.fontSize,
@@ -1344,6 +1402,53 @@ export const TerminalView = memo(function TerminalView({
       reconnectHintShownRef.current = true
       terminal.write(`\r\n${reconnectHintRef.current}\r\n`)
     }
+    const clearAutoReconnect = (resetAttempts = false) => {
+      if (autoReconnectTimerRef.current !== null) {
+        window.clearTimeout(autoReconnectTimerRef.current)
+        autoReconnectTimerRef.current = null
+      }
+      if (resetAttempts) {
+        autoReconnectAttemptRef.current = 0
+      }
+    }
+    const scheduleAutoReconnect = () => {
+      if (
+        !autoReconnectRef.current ||
+        !onReconnectRef.current ||
+        autoReconnectTimerRef.current !== null ||
+        connectedRef.current
+      ) {
+        return
+      }
+
+      const attempt = autoReconnectAttemptRef.current
+      const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5))
+      autoReconnectAttemptRef.current = Math.min(attempt + 1, 5)
+      const seconds = Math.ceil(delayMs / 1_000)
+      terminal.write(`\r\n${t.terminalAutoReconnectIn.replace('{seconds}', String(seconds))}\r\n`)
+      autoReconnectTimerRef.current = window.setTimeout(() => {
+        autoReconnectTimerRef.current = null
+        if (!autoReconnectRef.current || connectedRef.current) {
+          return
+        }
+        const reconnect = onReconnectRef.current
+        if (!reconnect) {
+          return
+        }
+        isReconnectingRef.current = true
+        void Promise.resolve(reconnect())
+          .catch((cause) => {
+            const message = cause instanceof Error ? cause.message : String(cause)
+            terminal.write(`\r\n${t.connectionFailedPrefix}${message}\r\n`)
+            writeReconnectHint()
+          })
+          .finally(() => {
+            if (!connectedRef.current) {
+              isReconnectingRef.current = false
+            }
+          })
+      }, delayMs)
+    }
     const requestReconnect = () => {
       if (wasConnectedRef.current || connectingRef.current || isReconnectingRef.current) {
         return false
@@ -1354,6 +1459,7 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
+      clearAutoReconnect(true)
       isReconnectingRef.current = true
       reconnectHintShownRef.current = false
       // Give immediate feedback before the IPC call starts. The connection
@@ -1792,7 +1898,11 @@ export const TerminalView = memo(function TerminalView({
       ({ tabId: nextTabId, summary, transcript, connected, status }) => {
         if (nextTabId === tabIdRef.current) {
           onStatusRef.current?.(localizeTerminalText(summary))
+          connectedRef.current = connected
+          connectingRef.current = status === 'connecting'
           const isDisconnecting = wasConnectedRef.current && !connected
+          const isIntentionalDisconnect =
+            summary === '连接已断开' || summary === 'Connection closed' || summary === '串口已断开'
           if (isDisconnecting) {
             preserveVisibleBufferRef.current = true
           }
@@ -1818,14 +1928,23 @@ export const TerminalView = memo(function TerminalView({
                 : `${closedMessageRef.current}${reconnectHint}\r\n`
               replaceTerminalWithTranscript(terminal, disconnectedTranscript)
             })
+            if (isIntentionalDisconnect) {
+              clearAutoReconnect(true)
+            } else {
+              scheduleAutoReconnect()
+            }
           } else if (!connected && status === 'error') {
             // A reconnect command only starts the worker, so its Promise resolves
             // before a failed TCP/SSH handshake is known. The terminal state is
             // the authoritative failure signal for both initial and retry attempts.
             writeReconnectHint()
+            if (!isIntentionalDisconnect) {
+              scheduleAutoReconnect()
+            }
           }
           wasConnectedRef.current = connected
           if (connected) {
+            clearAutoReconnect(true)
             isReconnectingRef.current = false
             inputSendFailedRef.current = false
             reconnectHintShownRef.current = false
@@ -2315,6 +2434,7 @@ export const TerminalView = memo(function TerminalView({
     }
 
     return () => {
+      clearAutoReconnect(true)
       offFocusTerminal()
       offTerminalCopy()
       offTerminalPaste()
@@ -2387,6 +2507,7 @@ export const TerminalView = memo(function TerminalView({
       terminalLogColorizer.dispose()
       terminalLogColorizerRef.current = null
       searchAddonRef.current = null
+      fitAddonRef.current = null
       terminalRef.current = null
       terminal.dispose()
     }
@@ -2443,6 +2564,19 @@ export const TerminalView = memo(function TerminalView({
       void window.fileterm?.resizeTerminal(tabId, terminal.cols, terminal.rows, Math.floor(width), Math.floor(height))
     }
   }, [bootText, connected, tabId])
+
+  useEffect(() => {
+    const applyCurrentProfileFontSize = () => {
+      if (profileIdRef.current !== profileId) {
+        return
+      }
+
+      applyTerminalFontSize(getTerminalFontSize(profileId))
+    }
+
+    applyCurrentProfileFontSize()
+    return subscribeTerminalFontSizes(applyCurrentProfileFontSize)
+  }, [profileId])
 
   useEffect(() => {
     bootTextRef.current = bootText
@@ -2638,6 +2772,8 @@ export const TerminalView = memo(function TerminalView({
               : []),
             { separator: true },
             { label: t.find, shortcut: shortcuts.find, action: runFind },
+            { separator: true },
+            { label: t.saveSessionLog, action: () => void runSaveSessionLog() },
             { label: t.clearScreen, action: runClear }
           ]}
           onClose={() => setContextMenu(null)}

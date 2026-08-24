@@ -46,6 +46,7 @@ fn truncate_transcript(value: &mut String) {
 pub async fn emit_terminal_data(app: &AppHandle, tab_id: &str, chunk: &str) {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     state.publish_terminal_output(tab_id, chunk);
+    crate::services::session_logs::append_chunk(app, tab_id, chunk).await;
     let mut sessions = state.sessions.write().await;
     if let Some(session) = sessions.get_mut(tab_id) {
         session.terminal_transcript.push_str(chunk);

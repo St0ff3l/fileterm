@@ -13,7 +13,13 @@ export type OrderedTabEntry =
 
 export type TabContextTarget =
   | { kind: 'local'; id: string; title: string }
-  | { kind: 'session'; id: string; title: string; status: WorkspaceTab['status'] }
+  | {
+      kind: 'session'
+      id: string
+      title: string
+      status: WorkspaceTab['status']
+      sessionType: WorkspaceTab['sessionType']
+    }
 
 function getSessionTabTitle(tab: WorkspaceTab) {
   return tab.title || (tab.sessionType === 'local' ? t.localTerminal : t.untitledTab)
@@ -185,7 +191,8 @@ export function TabBar({
                     kind: 'session',
                     id: entry.tab.id,
                     title: getSessionTabTitle(entry.tab),
-                    status: entry.tab.status
+                    status: entry.tab.status,
+                    sessionType: entry.tab.sessionType
                   })
                 }}
                 onPointerDown={(event) => startPointerSort(event, entry.key)}

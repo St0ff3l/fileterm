@@ -562,8 +562,9 @@ export function SessionWorkspace({
     }
   }
 
+  const reconnectMode = terminalActiveSession.reconnectMode ?? 'none'
   const reconnectOnEnter =
-    terminalActiveSession.reconnectMode === 'enter'
+    reconnectMode === 'enter' || reconnectMode === 'auto'
       ? async () => {
           await window.fileterm?.reconnectTab(terminalActiveTab.id)
         }
@@ -591,10 +592,12 @@ export function SessionWorkspace({
             />
           ) : (
             <TerminalView
+              profileId={terminalActiveTab.profileId}
               tabId={terminalActiveTab.id}
               bootText={terminalActiveSession.terminalTranscript ?? ''}
               connected={terminalActiveSession.connected === true}
               connecting={terminalActiveTab.status === 'connecting'}
+              autoReconnect={reconnectMode === 'auto'}
               onReconnect={reconnectOnEnter}
               onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
               onCloseTab={onCloseTab}

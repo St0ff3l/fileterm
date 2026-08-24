@@ -2290,6 +2290,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 canCloseCurrent:
                   tabContextMenu.target.kind === 'session' ? true : localTabs.length + visibleWorkspaceTabs.length > 1,
                 canCloseOthers: localTabs.length + visibleWorkspaceTabs.length > 1,
+                canSaveSessionLog:
+                  tabContextMenu.target.kind === 'session' && tabContextMenu.target.sessionType !== 'ftp',
                 isSessionTab: tabContextMenu.target.kind === 'session',
                 onAction: (action) => {
                   void handleTabContextAction(action)

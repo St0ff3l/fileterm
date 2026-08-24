@@ -87,6 +87,10 @@ export interface BaseProfile extends BaseEntity {
   remotePath: string
   group: string
   lastUsedAt?: number
+  /** Persisted per-device terminal output logging preference. */
+  sessionLogEnabled?: boolean
+  /** Absolute directory for automatic session logs; empty uses FileTerm's default folder. */
+  sessionLogDirectory?: string
   /** Non-secret indicator for redacted desktop snapshots. */
   hasSavedPassword?: boolean
   /** Non-secret indicator for a saved privileged-command password. */
@@ -302,8 +306,21 @@ export interface SerialProfile extends BaseProfile {
   parity: 'none' | 'odd' | 'even' | 'mark' | 'space'
   flowControl: 'none' | 'hardware' | 'software'
   encoding?: string
+  /** How line endings typed into a serial terminal are sent to the device. */
+  newlineMode?: SerialNewlineMode
+  /** Whether typed input is encoded as text or hexadecimal bytes. */
+  inputMode?: SerialInputMode
+  /** Whether received bytes are rendered as text or hexadecimal bytes. */
+  outputMode?: SerialOutputMode
+  /** Echo transmitted bytes locally before a device echo arrives. */
+  localEcho?: boolean
+  reconnectMode?: 'none' | 'enter' | 'auto'
   note?: string
 }
+
+export type SerialNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
+export type SerialInputMode = 'text' | 'hex'
+export type SerialOutputMode = 'text' | 'hex'
 
 export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
 
@@ -916,6 +933,8 @@ export interface CreateProfileInput {
   group: string
   remotePath: string
   note?: string
+  sessionLogEnabled?: boolean
+  sessionLogDirectory?: string
   password?: string | null
   /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
   useEmptyPassword?: boolean
@@ -955,6 +974,10 @@ export interface CreateProfileInput {
   stopBits?: 1 | 2
   parity?: SerialProfile['parity']
   flowControl?: SerialProfile['flowControl']
+  newlineMode?: SerialProfile['newlineMode']
+  inputMode?: SerialProfile['inputMode']
+  outputMode?: SerialProfile['outputMode']
+  localEcho?: boolean
 }
 
 export interface SshHostVerificationRequest {
@@ -1943,6 +1966,18 @@ export interface AiCommandError {
   httpStatus?: number
 }
 
+export type SerialPortType = 'usb' | 'pci' | 'bluetooth' | 'unknown'
+
+export interface SerialPortInfo {
+  portName: string
+  portType: SerialPortType
+  manufacturer?: string
+  product?: string
+  serialNumber?: string
+  vendorId?: number
+  productId?: number
+}
+
 export interface FileTermDesktopApi {
   platform: string
   arch: string
@@ -1994,6 +2029,8 @@ export interface FileTermDesktopApi {
   openFileEditorWindow(input: FileEditorWindowInput): Promise<void>
   openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>
+  listSerialPorts(): Promise<SerialPortInfo[]>
+  saveSessionLog(tabId: string): Promise<string | null>
   minimizeCurrentWindow(): Promise<void>
   showCurrentWindow(): Promise<void>
   isCurrentWindowMaximized(): Promise<boolean>

@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type {
   ConnectionFormMode,
   CreateProfileInput,
   FtpSecurityMode,
   ResourceMonitoringMetric,
+  SerialPortInfo,
   SessionType,
   SshConnectionDefaults,
   SshForwardRule
@@ -131,7 +132,11 @@ export function ConnectionModal({
   standalone?: boolean
   profiles?: import('@fileterm/core').ConnectionProfile[]
 }) {
-  const [section, setSection] = useState<'ssh' | 'terminal' | 'proxy' | 'tunnel'>('ssh')
+  const [section, setSection] = useState<'ssh' | 'terminal' | 'session-log' | 'proxy' | 'tunnel'>('ssh')
+  const [isSelectingSessionLogDirectory, setIsSelectingSessionLogDirectory] = useState(false)
+  const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([])
+  const [isLoadingSerialPorts, setIsLoadingSerialPorts] = useState(false)
+  const [serialPortLoadError, setSerialPortLoadError] = useState<string | null>(null)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet'
   const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
@@ -147,6 +152,61 @@ export function ConnectionModal({
     { value: '30', label: t.resourceMonitoringEvery30Seconds },
     { value: '60', label: t.resourceMonitoringEvery60Seconds }
   ]
+
+  const refreshSerialPorts = useCallback(async () => {
+    const desktopApi = window.fileterm
+    if (!desktopApi || form.type !== 'serial') {
+      return
+    }
+
+    setIsLoadingSerialPorts(true)
+    setSerialPortLoadError(null)
+    try {
+      const ports = await desktopApi.listSerialPorts()
+      setSerialPorts(
+        [...ports].sort((left, right) => left.portName.localeCompare(right.portName, undefined, { numeric: true }))
+      )
+    } catch (error) {
+      setSerialPorts([])
+      setSerialPortLoadError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsLoadingSerialPorts(false)
+    }
+  }, [form.type])
+
+  useEffect(() => {
+    if (form.type !== 'serial') {
+      setSerialPorts([])
+      setSerialPortLoadError(null)
+      return
+    }
+    void refreshSerialPorts()
+  }, [form.type, refreshSerialPorts])
+
+  const serialPortOptions = serialPorts.map((port) => {
+    const identity = [port.product, port.manufacturer].filter(Boolean).join(' · ')
+    return {
+      value: port.portName,
+      label: identity ? `${port.portName} — ${identity}` : port.portName
+    }
+  })
+
+  const chooseSessionLogDirectory = async () => {
+    const desktopApi = window.fileterm
+    if (!desktopApi || isSelectingSessionLogDirectory) {
+      return
+    }
+
+    setIsSelectingSessionLogDirectory(true)
+    try {
+      const directory = await desktopApi.selectLocalDirectory(form.sessionLogDirectory || undefined)
+      if (directory) {
+        setForm((previous) => ({ ...previous, sessionLogDirectory: directory }))
+      }
+    } finally {
+      setIsSelectingSessionLogDirectory(false)
+    }
+  }
 
   const content = (
     <div className={`modal-card ssh-modal ${standalone ? 'standalone' : ''}`}>
@@ -170,6 +230,13 @@ export function ConnectionModal({
             onClick={() => setSection('terminal')}
           >
             {t.terminal}
+          </button>
+          <button
+            className={section === 'session-log' ? 'active' : ''}
+            type="button"
+            onClick={() => setSection('session-log')}
+          >
+            {t.sessionLogs}
           </button>
           {supportsProxy ? (
             <button className={section === 'proxy' ? 'active' : ''} type="button" onClick={() => setSection('proxy')}>
@@ -201,7 +268,7 @@ export function ConnectionModal({
                           { value: 'ssh', label: 'SSH / SFTP' },
                           { value: 'ftp', label: 'FTP / FTPS' },
                           { value: 'telnet', label: 'Telnet' },
-                          { value: 'serial', label: 'Serial' }
+                          { value: 'serial', label: t.serial }
                         ]}
                         onChange={(value) => {
                           const nextType = value as SessionType
@@ -236,15 +303,46 @@ export function ConnectionModal({
                       />
                     </label>
                     {form.type === 'serial' ? (
-                      <label className="span-2">
-                        Device path:
-                        <input
-                          placeholder="COM3 / /dev/ttyUSB0 / /dev/cu.usbserial"
-                          spellCheck={false}
-                          value={form.devicePath ?? ''}
-                          onChange={(event) => setForm((prev) => ({ ...prev, devicePath: event.target.value }))}
-                        />
-                      </label>
+                      <>
+                        <label className="span-2">
+                          {t.devicePath}:
+                          <input
+                            placeholder="COM3 / /dev/ttyUSB0 / /dev/cu.usbserial"
+                            spellCheck={false}
+                            value={form.devicePath ?? ''}
+                            onChange={(event) => setForm((prev) => ({ ...prev, devicePath: event.target.value }))}
+                          />
+                        </label>
+                        <div className="span-2 serial-port-picker">
+                          <DropdownSelect
+                            ariaLabel={t.serialPortSelect}
+                            disabled={isLoadingSerialPorts || serialPorts.length === 0}
+                            options={
+                              serialPortOptions.length
+                                ? serialPortOptions
+                                : [{ value: '', label: t.serialPortNoDevices, disabled: true }]
+                            }
+                            placeholder={t.serialPortSelect}
+                            value={form.devicePath ?? ''}
+                            onChange={(value) => setForm((prev) => ({ ...prev, devicePath: value }))}
+                          />
+                          <button
+                            className="flat-button serial-port-picker__refresh"
+                            disabled={isLoadingSerialPorts}
+                            title={isLoadingSerialPorts ? t.serialPortRefreshing : t.serialPortRefresh}
+                            type="button"
+                            onClick={() => void refreshSerialPorts()}
+                          >
+                            <AppIcon name="refresh" size={14} />
+                            <span>{isLoadingSerialPorts ? t.serialPortRefreshing : t.serialPortRefresh}</span>
+                          </button>
+                        </div>
+                        {serialPortLoadError ? (
+                          <div className="span-2 ssh-field-hint serial-port-picker__error">
+                            {t.serialPortScanFailed}: {serialPortLoadError}
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
                       <label className="span-2">
                         {t.host}:
@@ -287,7 +385,7 @@ export function ConnectionModal({
                     {form.type === 'serial' ? (
                       <div className="span-2 ssh-grid">
                         <label>
-                          Baud rate:
+                          {t.baudRate}:
                           <input
                             inputMode="numeric"
                             value={form.baudRate ?? 115200}
@@ -297,7 +395,7 @@ export function ConnectionModal({
                           />
                         </label>
                         <label>
-                          Data bits:
+                          {t.dataBits}:
                           <DropdownSelect
                             value={String(form.dataBits ?? 8)}
                             options={[
@@ -312,7 +410,7 @@ export function ConnectionModal({
                           />
                         </label>
                         <label>
-                          Stop bits:
+                          {t.stopBits}:
                           <DropdownSelect
                             value={String(form.stopBits ?? 1)}
                             options={[
@@ -323,15 +421,15 @@ export function ConnectionModal({
                           />
                         </label>
                         <label>
-                          Parity:
+                          {t.parity}:
                           <DropdownSelect
                             value={form.parity ?? 'none'}
                             options={[
-                              { value: 'none', label: 'None' },
-                              { value: 'odd', label: 'Odd' },
-                              { value: 'even', label: 'Even' },
-                              { value: 'mark', label: 'Mark' },
-                              { value: 'space', label: 'Space' }
+                              { value: 'none', label: t.none },
+                              { value: 'odd', label: t.oddParity },
+                              { value: 'even', label: t.evenParity },
+                              { value: 'mark', label: t.markParity, disabled: true },
+                              { value: 'space', label: t.spaceParity, disabled: true }
                             ]}
                             onChange={(value) =>
                               setForm((prev) => ({ ...prev, parity: value as CreateProfileInput['parity'] }))
@@ -339,13 +437,13 @@ export function ConnectionModal({
                           />
                         </label>
                         <label>
-                          Flow control:
+                          {t.flowControl}:
                           <DropdownSelect
                             value={form.flowControl ?? 'none'}
                             options={[
-                              { value: 'none', label: 'None' },
-                              { value: 'hardware', label: 'Hardware' },
-                              { value: 'software', label: 'Software' }
+                              { value: 'none', label: t.none },
+                              { value: 'hardware', label: t.hardwareFlowControl },
+                              { value: 'software', label: t.softwareFlowControl }
                             ]}
                             onChange={(value) =>
                               setForm((prev) => ({
@@ -723,31 +821,181 @@ export function ConnectionModal({
                         onChange={(value) => setForm((prev) => ({ ...prev, encoding: value }))}
                       />
                     </label>
-                    <div className="terminal-key-box">
-                      <strong>{t.keySequence}</strong>
-                      <label>
-                        {t.backspaceKey}
-                        <DropdownSelect
-                          value={form.backspaceKey ?? 'ASCII'}
-                          options={[
-                            { value: 'ASCII', label: 'ASCII - Backspace' },
-                            { value: 'DEL', label: 'DEL - Backspace' }
-                          ]}
-                          onChange={(value) => setForm((prev) => ({ ...prev, backspaceKey: value }))}
+                    {form.type === 'serial' ? (
+                      <>
+                        <label>
+                          {t.serialNewline}:
+                          <DropdownSelect
+                            value={form.newlineMode ?? 'none'}
+                            options={[
+                              { value: 'none', label: t.serialNewlineNone },
+                              { value: 'lf', label: t.serialNewlineLf },
+                              { value: 'cr', label: t.serialNewlineCr },
+                              { value: 'crlf', label: t.serialNewlineCrlf }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                newlineMode: value as CreateProfileInput['newlineMode']
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.serialInputMode}:
+                          <DropdownSelect
+                            value={form.inputMode ?? 'text'}
+                            options={[
+                              { value: 'text', label: t.serialTextMode },
+                              { value: 'hex', label: t.serialHexMode }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({ ...prev, inputMode: value as CreateProfileInput['inputMode'] }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.serialOutputMode}:
+                          <DropdownSelect
+                            value={form.outputMode ?? 'text'}
+                            options={[
+                              { value: 'text', label: t.serialTextMode },
+                              { value: 'hex', label: t.serialHexMode }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({ ...prev, outputMode: value as CreateProfileInput['outputMode'] }))
+                            }
+                          />
+                        </label>
+                        <div className="advanced-toggle-row serial-local-echo-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={form.localEcho === true}
+                              type="checkbox"
+                              onChange={(event) => setForm((prev) => ({ ...prev, localEcho: event.target.checked }))}
+                            />
+                            <span className="advanced-toggle-name">{t.serialLocalEcho}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.serialLocalEchoHint}</p>
+                        </div>
+                        <div className="reconnect-mode-group serial-reconnect-mode-group">
+                          <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
+                          <div className="advanced-toggle-list">
+                            <div className="advanced-toggle-row">
+                              <label className="ssh-checkbox advanced-toggle-label">
+                                <input
+                                  checked={(form.reconnectMode ?? 'none') === 'none'}
+                                  name="serial-reconnect-mode"
+                                  type="radio"
+                                  onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'none' }))}
+                                />
+                                <span className="advanced-toggle-name">{t.reconnectNone}</span>
+                              </label>
+                              <p className="advanced-toggle-hint">{t.reconnectNoneHint}</p>
+                            </div>
+                            <div className="advanced-toggle-row">
+                              <label className="ssh-checkbox advanced-toggle-label">
+                                <input
+                                  checked={form.reconnectMode === 'enter'}
+                                  name="serial-reconnect-mode"
+                                  type="radio"
+                                  onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'enter' }))}
+                                />
+                                <span className="advanced-toggle-name">{t.reconnectEnter}</span>
+                              </label>
+                              <p className="advanced-toggle-hint">{t.reconnectEnterHint}</p>
+                            </div>
+                            <div className="advanced-toggle-row">
+                              <label className="ssh-checkbox advanced-toggle-label">
+                                <input
+                                  checked={form.reconnectMode === 'auto'}
+                                  name="serial-reconnect-mode"
+                                  type="radio"
+                                  onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'auto' }))}
+                                />
+                                <span className="advanced-toggle-name">{t.autoReconnect}</span>
+                              </label>
+                              <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="terminal-key-box">
+                        <strong>{t.keySequence}</strong>
+                        <label>
+                          {t.backspaceKey}
+                          <DropdownSelect
+                            value={form.backspaceKey ?? 'ASCII'}
+                            options={[
+                              { value: 'ASCII', label: 'ASCII - Backspace' },
+                              { value: 'DEL', label: 'DEL - Backspace' }
+                            ]}
+                            onChange={(value) => setForm((prev) => ({ ...prev, backspaceKey: value }))}
+                          />
+                        </label>
+                        <label>
+                          {t.deleteKey}
+                          <DropdownSelect
+                            value={form.deleteKey ?? 'VT220'}
+                            options={[
+                              { value: 'VT220', label: 'VT220 - Delete' },
+                              { value: 'ASCII', label: 'ASCII - Delete' }
+                            ]}
+                            onChange={(value) => setForm((prev) => ({ ...prev, deleteKey: value }))}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </fieldset>
+              </div>
+            ) : null}
+            {section === 'session-log' ? (
+              <div className="ssh-form-page">
+                <fieldset className="ssh-fieldset narrow">
+                  <legend>{t.sessionLogs}</legend>
+                  <div className="ssh-grid single">
+                    <label className="ssh-checkbox advanced-toggle-label">
+                      <input
+                        checked={form.sessionLogEnabled === true}
+                        onChange={(event) =>
+                          setForm((previous) => ({ ...previous, sessionLogEnabled: event.target.checked }))
+                        }
+                        type="checkbox"
+                      />
+                      <span className="advanced-toggle-name">{t.autoSaveSessionLog}</span>
+                    </label>
+                    <p className="ssh-field-hint">{t.autoSaveSessionLogHint}</p>
+                    <label>
+                      {t.sessionLogDirectory}:
+                      <div className="session-log-directory-control">
+                        <input
+                          readOnly
+                          placeholder={t.sessionLogDefaultDirectory}
+                          spellCheck={false}
+                          value={form.sessionLogDirectory ?? ''}
                         />
-                      </label>
-                      <label>
-                        {t.deleteKey}
-                        <DropdownSelect
-                          value={form.deleteKey ?? 'VT220'}
-                          options={[
-                            { value: 'VT220', label: 'VT220 - Delete' },
-                            { value: 'ASCII', label: 'ASCII - Delete' }
-                          ]}
-                          onChange={(value) => setForm((prev) => ({ ...prev, deleteKey: value }))}
-                        />
-                      </label>
-                    </div>
+                        <button
+                          className="flat-button compact"
+                          disabled={isSelectingSessionLogDirectory}
+                          onClick={() => void chooseSessionLogDirectory()}
+                          type="button"
+                        >
+                          {isSelectingSessionLogDirectory ? t.choosingDirectory : t.chooseDirectory}
+                        </button>
+                        {form.sessionLogDirectory ? (
+                          <button
+                            className="flat-button compact"
+                            onClick={() => setForm((previous) => ({ ...previous, sessionLogDirectory: '' }))}
+                            type="button"
+                          >
+                            {t.clear}
+                          </button>
+                        ) : null}
+                      </div>
+                    </label>
+                    <p className="ssh-field-hint">{t.sessionLogPrivacyHint}</p>
                   </div>
                 </fieldset>
               </div>

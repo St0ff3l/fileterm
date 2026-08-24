@@ -51,6 +51,7 @@ export function LocalTerminalWorkspace({
           />
         ) : (
           <TerminalView
+            profileId={activeTab.profileId}
             bootText={activeSession.terminalTranscript ?? ''}
             closedMessage={t.localTerminalExited}
             connected={activeSession.connected}

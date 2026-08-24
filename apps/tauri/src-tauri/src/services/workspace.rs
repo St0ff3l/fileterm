@@ -338,10 +338,11 @@ pub struct SessionSnapshot {
     pub reconnect_mode: Option<String>,
 }
 
-/// Return the reconnect policy that belongs to a persisted connection
-/// profile. Non-SSH sessions do not expose terminal reconnect actions.
+/// Return the reconnect policy that belongs to a persisted terminal profile.
+/// FTP and other file-only sessions do not expose terminal reconnect actions.
 pub fn reconnect_mode_for_profile(profile: &serde_json::Value) -> Option<String> {
-    if profile.get("type").and_then(serde_json::Value::as_str) != Some("ssh") {
+    let profile_type = profile.get("type").and_then(serde_json::Value::as_str);
+    if profile_type != Some("ssh") && profile_type != Some("serial") {
         return None;
     }
 
@@ -423,6 +424,9 @@ pub struct WorkspaceState {
     pub active_tab_id: Arc<RwLock<Option<String>>>,
     pub sessions: Arc<RwLock<HashMap<String, SessionSnapshot>>>,
     pub workers: Arc<RwLock<HashMap<String, tokio::sync::mpsc::Sender<WorkerCmd>>>>,
+    /// Async writers for opt-in per-device terminal output logs.
+    pub session_log_writers:
+        Arc<RwLock<HashMap<String, crate::services::session_logs::SessionLogHandle>>>,
     /// High-frequency SSH keystrokes bypass the general worker command queue.
     /// The SSH worker drains and coalesces this channel before writing to the
     /// PTY, so file commands cannot fill the bounded queue and reject input.
@@ -527,6 +531,7 @@ impl Default for WorkspaceState {
             active_tab_id: Arc::new(RwLock::new(None)),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             workers: Arc::new(RwLock::new(HashMap::new())),
+            session_log_writers: Arc::new(RwLock::new(HashMap::new())),
             terminal_inputs: Arc::new(RwLock::new(HashMap::new())),
             terminal_output_channels: Arc::new(StdMutex::new(HashMap::new())),
             worker_controls: Arc::new(RwLock::new(HashMap::new())),
@@ -755,7 +760,7 @@ mod tests {
     }
 
     #[test]
-    fn reconnect_mode_is_present_only_for_ssh_profiles() {
+    fn reconnect_mode_is_present_for_terminal_profiles_only() {
         assert_eq!(
             reconnect_mode_for_profile(&serde_json::json!({
                 "type": "ssh",
@@ -772,6 +777,13 @@ mod tests {
                 &serde_json::json!({ "type": "ftp", "reconnectMode": "auto" })
             ),
             None
+        );
+        assert_eq!(
+            reconnect_mode_for_profile(&serde_json::json!({
+                "type": "serial",
+                "reconnectMode": "auto"
+            })),
+            Some("auto".to_string())
         );
     }
 

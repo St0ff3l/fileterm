@@ -53,6 +53,7 @@ export function SplitPaneLayout({
         node={rootTab.paneRoot}
         sessions={sessions}
         rootTabId={rootTab.id}
+        rootTabProfileId={rootTab.profileId}
         panePath={[]}
         activePaneTabId={activePaneTabId}
         onClosePane={onClosePane}
@@ -80,6 +81,7 @@ interface PaneRendererProps {
   node: PaneNode
   sessions: Record<string, SessionSnapshot>
   rootTabId: string
+  rootTabProfileId: string
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
@@ -97,6 +99,7 @@ function PaneRenderer({
   node,
   sessions,
   rootTabId,
+  rootTabProfileId,
   panePath,
   activePaneTabId,
   onClosePane,
@@ -116,6 +119,7 @@ function PaneRenderer({
       <div className={`split-pane-leaf ${isActive ? 'split-pane-leaf--active' : ''}`}>
         <div className="split-pane-terminal">
           <TerminalView
+            profileId={session?.profileId ?? rootTabProfileId}
             tabId={node.tabId}
             bootText={session?.terminalTranscript ?? ''}
             connected={session?.connected ?? false}
@@ -158,6 +162,7 @@ function PaneRenderer({
       initialWeights={weights}
       sessions={sessions}
       rootTabId={rootTabId}
+      rootTabProfileId={rootTabProfileId}
       panePath={panePath}
       activePaneTabId={activePaneTabId}
       onClosePane={onClosePane}
@@ -179,6 +184,7 @@ interface SplitContainerProps {
   initialWeights: number[]
   sessions: Record<string, SessionSnapshot>
   rootTabId: string
+  rootTabProfileId: string
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
@@ -198,6 +204,7 @@ function SplitContainer({
   initialWeights,
   sessions,
   rootTabId,
+  rootTabProfileId,
   panePath,
   activePaneTabId,
   onClosePane,
@@ -271,6 +278,7 @@ function SplitContainer({
           node={child}
           sessions={sessions}
           rootTabId={rootTabId}
+          rootTabProfileId={rootTabProfileId}
           panePath={[...panePath, idx]}
           activePaneTabId={activePaneTabId}
           onClosePane={onClosePane}

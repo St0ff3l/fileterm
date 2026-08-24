@@ -49,7 +49,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - 工作区焦点模式，可同时收起侧栏和底部文件面板
 - macOS 菜单栏 template 托盘图标资源
 - 单一连接导入入口同时支持 `~/.ssh/config`、SSH 配置文本和外部 JSON；导入统一采用 main-process preview plan，renderer 不接收导入 secret。
-- Telnet（RFC 854 基础协商）和 Serial（main-process device handle）终端会话；两者不进入 SFTP、CWD、sudo 或系统指标链路。
+- Telnet（RFC 854 基础协商）和 Serial（Rust device handle）终端会话；Serial 设备枚举通过 `app_list_serial_ports` 经 Tauri bridge 暴露，连接表单同时保留手动设备路径。Serial 的换行、Text/Hex 收发、本地回显和断线策略随 profile 持久化；两者不进入 SFTP、CWD、sudo 或系统指标链路。
 - 设置页的 WebDAV 手动配置同步：完整包包含连接密码、私钥口令和代理密码，上传使用 ETag 检测冲突；renderer 仍不接触明文 payload，界面明确要求仅使用可信 HTTPS WebDAV。
 - 设置页的 S3 兼容配置备份：完整包复用 WebDAV 的安全导入、hash 校验和 ETag 冲突策略；S3 签名、Access Key、Secret Access Key 与含凭据 payload 全部停留在 Rust 服务层。Cloudflare R2 作为预设，固定使用 `region=auto` 与 path-style 地址。
 
@@ -150,7 +150,7 @@ Renderer UI
   - SFTP
   - FTP
   - Telnet (RFC 854 基础协商)
-  - Serial (main process device handles)
+  - Serial (Rust device handles and Tauri bridge)
 
 ## 4.1 系统信息能力边界
 
@@ -208,7 +208,8 @@ platform probe
 - SSH 可见终端中，只有在明确检测到 `sudo -i` 或 `su -` 的密码提示后，才允许从对应的 profile 凭据自动填充；未出现密码提示时不得盲写密码，也不得把密码写入 transcript 或日志。文件区工具栏切换 root 访问模式时始终打开方法选择窗口；用户选择 `sudo` 或 `su` 后，空密码提交由后端自动使用对应的已保存凭据，不向 renderer 回显密码，手动填写的密码只用于本次验证并按既有规则缓存。验证失败必须回滚当前权限状态。
 - Rust backend 在 Tauri userData 缺少迁移 marker 时，最多一次导入旧 Electron 用户目录中的应用自有 JSON/SSH key 数据；Tauri 当前数据按 ID 优先，legacy 只补缺失记录，整批 staging/commit 失败会回滚且不写 marker。迁移成功后不再 live merge，Chromium session、缓存与日志始终不迁移。
 - 本地凭据字段（AI API Key、SSH 私钥口令、profile 密码/代理密码、sudo/su 密码、WebDAV 密码及 S3 Access/Secret Key）在 Rust 存储层以 AES-256-GCM 加密后再写入 JSON；密钥由每安装随机 seed 与当前设备稳定标识经 HMAC-SHA256 派生，并以字段用途/记录 ID 作为 AAD 绑定，旧版明文在首次读取后原子迁移。该实现不接入 macOS safeStorage/钥匙串、Windows DPAPI 或 Linux credential store，不触发系统授权弹窗；Unix seed/secret/key 文件在创建、迁移和读取自愈时收紧为 `0600`，Windows 依赖应用数据目录的用户 ACL。它防止静态文件被直接读取或被单独误传，不对获得当前用户运行权限的本机主动攻击者提供保护。WebDAV/S3 的远程备份包和用户显式导出的 JSON 仍是跨设备迁移载体，按既有行为可包含连接凭据；它们仅在 main/Rust 服务层序列化，不进入公开 snapshot、renderer 预览或日志。
-- Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入日志。
+- Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入诊断日志。
+- 用户主动开启设备配置中的“自动保存会话日志”后，`services/session_logs.rs` 独立按 tab 写入终端收到的输出；它不采集键盘输入，远端回显内容仍可能出现在日志中。默认目录为应用数据目录下的 `session-logs`，也可按设备指定目录；关闭标签、重连或退出应用前会刷新写入队列。手动保存通过 `app_save_session_log` 和系统保存对话框导出当前 transcript，FTP 不提供该能力。
 
 ## 4.3 传输暂停与恢复边界
 
