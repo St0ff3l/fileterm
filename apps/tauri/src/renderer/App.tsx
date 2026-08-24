@@ -68,7 +68,7 @@ import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
 import { WorkspaceStage } from './features/workspace/WorkspaceStage'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
-import { defaultLocale, localizeErrorScope, setLocale, t, type AppLocale } from './i18n'
+import { defaultLocale, localizeErrorScope, localizeLocalTerminalText, setLocale, t, type AppLocale } from './i18n'
 import { resolveRendererPlatform } from './lib/renderer-platform'
 
 import { useWorkspaceIpcSync } from './hooks/useWorkspaceIpcSync'
@@ -1204,7 +1204,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
   const normalizeErrorMessage = (err: unknown) => {
     const rawMessage = err instanceof Error ? err.message : String(err)
-    return rawMessage.replace(REMOTE_METHOD_ERROR_PREFIX, '').trim()
+    return localizeLocalTerminalText(rawMessage.replace(REMOTE_METHOD_ERROR_PREFIX, '').trim())
   }
 
   const formatAppError = (scope: string, err: unknown, details?: ErrorDetails) => {

@@ -347,6 +347,33 @@ const zhCN = {
   localTerminalStarting: '正在启动本地 Shell…',
   localTerminalStopped: '本地 Shell 已停止',
   localTerminalExited: '[本地 Shell 已退出]',
+  localTerminalRestarted: '--- 本地 Shell 已重新启动 ---',
+  localTerminalInputFailedPrefix: '本地 Shell 输入失败：',
+  localTerminalObserveFailedPrefix: '无法监控本地 Shell：',
+  localTerminalExitedWithCode: '本地 Shell 已退出，退出码 {code}',
+  localTerminalExitedPrefix: '本地 Shell 已退出：',
+  localTerminalPtyAllocateFailedPrefix: '无法分配本地 PTY：',
+  localTerminalStartFailed: '无法启动本地 Shell {shell}：',
+  localTerminalReadFailedPrefix: '无法读取本地 PTY 输出：',
+  localTerminalWriteFailedPrefix: '无法写入本地 PTY：',
+  localTerminalReaderStartFailedPrefix: '无法启动本地 PTY 读取器：',
+  localTerminalWorkerStartFailedPrefix: '无法启动本地 PTY 工作线程：',
+  localTerminalWorkingDirectoryMissingPrefix: '本地终端工作目录不存在：',
+  localTerminalWorkingDirectoryEmpty: '本地终端工作目录为空',
+  localTerminalWorkingDirectoryNul: '本地终端工作目录包含 NUL 字节',
+  localTerminalShellEmpty: '本地终端 Shell 为空',
+  localTerminalShellNul: '本地终端 Shell 包含 NUL 字节',
+  localTerminalShellMissingPrefix: '本地终端 Shell 不存在：',
+  localTerminalTitleInvalid: '本地终端标题无效或超过 {bytes} 字节',
+  localTerminalShellArgumentsLimit: '本地终端最多接受 {count} 个 Shell 参数',
+  localTerminalShellArgumentInvalid: '本地终端 Shell 参数 {index} 无效或过大',
+  localTerminalEnvironmentLimit: '本地终端最多接受 {count} 个环境变量覆盖',
+  localTerminalEnvironmentInvalid: '本地终端环境变量覆盖 {name} 无效或过大',
+  localTerminalOutputDropped: '[FileTerm: 本地终端输出繁忙期间丢弃了 {bytes} 字节]',
+  localTerminalOutputDroppedHint:
+    '[FileTerm: 丢弃的输出可能包含备用屏幕切换；终端状态可能不一致——运行 `reset` 或按 Ctrl+L 重新同步]',
+  localTerminalLaunchSettingsUnavailable: '本地终端启动配置不可用',
+  localTerminalSplitUnsupported: '仅支持 SSH 和本地终端分屏。',
   localTerminalStart: '启动本地 Shell',
   localTerminalWorkingDirectory: '工作目录',
   localTerminalUnavailable: '本地终端仅在桌面应用中可用。',
@@ -1610,6 +1637,33 @@ const enUS: typeof zhCN = {
   localTerminalStarting: 'Starting local shell…',
   localTerminalStopped: 'Local shell stopped',
   localTerminalExited: '[local shell exited]',
+  localTerminalRestarted: '--- Local shell restarted ---',
+  localTerminalInputFailedPrefix: 'Local shell input failed: ',
+  localTerminalObserveFailedPrefix: 'Unable to observe local shell: ',
+  localTerminalExitedWithCode: 'Local shell exited with code {code}',
+  localTerminalExitedPrefix: 'Local shell exited: ',
+  localTerminalPtyAllocateFailedPrefix: 'Unable to allocate local PTY: ',
+  localTerminalStartFailed: 'Unable to start local shell {shell}: ',
+  localTerminalReadFailedPrefix: 'Unable to read local PTY output: ',
+  localTerminalWriteFailedPrefix: 'Unable to write to local PTY: ',
+  localTerminalReaderStartFailedPrefix: 'Unable to start local PTY reader: ',
+  localTerminalWorkerStartFailedPrefix: 'Unable to start local PTY worker: ',
+  localTerminalWorkingDirectoryMissingPrefix: 'Local terminal working directory does not exist: ',
+  localTerminalWorkingDirectoryEmpty: 'Local terminal working directory is empty',
+  localTerminalWorkingDirectoryNul: 'Local terminal working directory contains a NUL byte',
+  localTerminalShellEmpty: 'Local terminal shell is empty',
+  localTerminalShellNul: 'Local terminal shell contains a NUL byte',
+  localTerminalShellMissingPrefix: 'Local terminal shell does not exist: ',
+  localTerminalTitleInvalid: 'Local terminal title is invalid or longer than {bytes} bytes',
+  localTerminalShellArgumentsLimit: 'Local terminal accepts at most {count} shell arguments',
+  localTerminalShellArgumentInvalid: 'Local terminal shell argument {index} is invalid or too large',
+  localTerminalEnvironmentLimit: 'Local terminal accepts at most {count} environment overrides',
+  localTerminalEnvironmentInvalid: 'Local terminal environment override {name} is invalid or too large',
+  localTerminalOutputDropped: '[FileTerm: local terminal output dropped {bytes} bytes while the renderer was busy]',
+  localTerminalOutputDroppedHint:
+    '[FileTerm: dropped output may include alternate screen transitions; terminal state may be inconsistent — run `reset` or Ctrl+L to resync]',
+  localTerminalLaunchSettingsUnavailable: 'Local terminal launch settings are unavailable',
+  localTerminalSplitUnsupported: 'Split panes are only supported for SSH and local terminal sessions.',
   localTerminalStart: 'Start local shell',
   localTerminalWorkingDirectory: 'Working directory',
   localTerminalUnavailable: 'Local Terminal is only available in the desktop app.',
@@ -2643,6 +2697,8 @@ const errorScopeTranslations: Record<string, string> = {
   退出应用: 'Exit application',
   发送终端命令: 'Send terminal command',
   打开连接: 'Open connection',
+  '启动本地 Agent': 'Start local Agent',
+  打开本地终端: 'Open local terminal',
   激活标签页: 'Activate tab',
   重新连接标签页: 'Reconnect tab',
   断开标签页: 'Disconnect tab',
@@ -2692,3 +2748,56 @@ export const t = new Proxy({} as LocaleMessages, {
     return messages[activeLocale][property]
   }
 })
+
+export function localizeLocalTerminalText(value: string) {
+  return value
+    .replaceAll('Starting local shell...', t.localTerminalStarting)
+    .replaceAll('Local shell started', t.localTerminalRunning)
+    .replaceAll('Local shell stopped', t.localTerminalStopped)
+    .replaceAll('--- Local shell restarted ---', t.localTerminalRestarted)
+    .replace(/Local shell exited with code (\d+)/g, (_match, code: string) =>
+      formatMessage(t.localTerminalExitedWithCode, { code })
+    )
+    .replace(/Local shell exited:\s*/g, t.localTerminalExitedPrefix)
+    .replace(/Local shell input failed:\s*/g, t.localTerminalInputFailedPrefix)
+    .replace(/Unable to observe local shell:\s*/g, t.localTerminalObserveFailedPrefix)
+    .replace(/Unable to allocate local PTY:\s*/g, t.localTerminalPtyAllocateFailedPrefix)
+    .replace(/Unable to start local shell (.*):\s*/g, (_match, shell: string) =>
+      formatMessage(t.localTerminalStartFailed, { shell })
+    )
+    .replace(/Unable to read local PTY output:\s*/g, t.localTerminalReadFailedPrefix)
+    .replace(/Unable to write to local PTY:\s*/g, t.localTerminalWriteFailedPrefix)
+    .replace(/Unable to start local PTY reader:\s*/g, t.localTerminalReaderStartFailedPrefix)
+    .replace(/Unable to start local PTY worker:\s*/g, t.localTerminalWorkerStartFailedPrefix)
+    .replace(/Local terminal working directory does not exist:\s*/g, t.localTerminalWorkingDirectoryMissingPrefix)
+    .replaceAll('Local terminal working directory is empty', t.localTerminalWorkingDirectoryEmpty)
+    .replaceAll('Local terminal working directory contains a NUL byte', t.localTerminalWorkingDirectoryNul)
+    .replaceAll('Local terminal shell is empty', t.localTerminalShellEmpty)
+    .replaceAll('Local terminal shell contains a NUL byte', t.localTerminalShellNul)
+    .replace(/Local terminal shell does not exist:\s*/g, t.localTerminalShellMissingPrefix)
+    .replace(/Local terminal title is invalid or longer than (\d+) bytes/g, (_match, bytes: string) =>
+      formatMessage(t.localTerminalTitleInvalid, { bytes })
+    )
+    .replace(/Local terminal accepts at most (\d+) shell arguments/g, (_match, count: string) =>
+      formatMessage(t.localTerminalShellArgumentsLimit, { count })
+    )
+    .replace(/Local terminal shell argument (\d+) is invalid or too large/g, (_match, index: string) =>
+      formatMessage(t.localTerminalShellArgumentInvalid, { index })
+    )
+    .replace(/Local terminal accepts at most (\d+) environment overrides/g, (_match, count: string) =>
+      formatMessage(t.localTerminalEnvironmentLimit, { count })
+    )
+    .replace(/Local terminal environment override (.+) is invalid or too large/g, (_match, name: string) =>
+      formatMessage(t.localTerminalEnvironmentInvalid, { name })
+    )
+    .replace(
+      /\[FileTerm: local terminal output dropped (\d+) bytes while the renderer was busy\]/g,
+      (_match, bytes: string) => formatMessage(t.localTerminalOutputDropped, { bytes })
+    )
+    .replaceAll(
+      '[FileTerm: dropped output may include alternate screen transitions; terminal state may be inconsistent — run `reset` or Ctrl+L to resync]',
+      t.localTerminalOutputDroppedHint
+    )
+    .replaceAll('Local terminal launch settings are unavailable', t.localTerminalLaunchSettingsUnavailable)
+    .replaceAll('Split pane is only supported for SSH and local sessions', t.localTerminalSplitUnsupported)
+}

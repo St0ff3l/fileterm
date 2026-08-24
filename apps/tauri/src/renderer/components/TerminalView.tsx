@@ -13,7 +13,7 @@ import {
   trimHydratedTerminalChunk
 } from '../app/terminal-transcript'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
-import { t } from '../i18n'
+import { localizeLocalTerminalText, t } from '../i18n'
 import { ContextMenu } from '../features/common/ContextMenu'
 import { CloseButton } from '../features/common/CloseButton'
 import { AppIcon } from '../features/common/AppIcon'
@@ -31,7 +31,7 @@ import {
 } from '../app/terminal-font-size-store'
 
 function localizeTerminalText(value: string) {
-  return value
+  return localizeLocalTerminalText(value)
     .replaceAll('连接主机成功', t.terminalConnected)
     .replaceAll('连接主机...', t.terminalConnecting)
     .replaceAll('连接已断开', t.terminalDisconnected)

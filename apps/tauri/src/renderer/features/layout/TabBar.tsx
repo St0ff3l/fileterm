@@ -22,7 +22,10 @@ export type TabContextTarget =
     }
 
 function getSessionTabTitle(tab: WorkspaceTab) {
-  return tab.title || (tab.sessionType === 'local' ? t.localTerminal : t.untitledTab)
+  if (tab.sessionType === 'local' && (!tab.title || tab.title === 'Local Terminal')) {
+    return t.localTerminal
+  }
+  return tab.title || t.untitledTab
 }
 
 export interface TabBarProps {

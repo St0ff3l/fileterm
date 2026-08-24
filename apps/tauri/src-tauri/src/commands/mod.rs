@@ -34,12 +34,10 @@ const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 /// `cmd_rx.recv()` 会返回 None，自然走清理路径。
 const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// The first local PTY batch must be reflected in the snapshot returned by
-/// `app_open_local_terminal` when possible. Without this short readiness
-/// window, the renderer can mount with only "Starting local shell..." while
-/// the first Windows PowerShell prompt was emitted before its global terminal
-/// data channel subscribed. Shells that intentionally stay silent are still
-/// allowed to connect after the timeout.
+/// A silent shell must not leave a local tab in `connecting` forever. The
+/// startup task uses this bounded window to publish the first prompt when it
+/// arrives; the main open command itself does not wait for the window, so the
+/// workspace can switch immediately.
 const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Let a child-window close command resolve its IPC callback before destroying
@@ -3088,6 +3086,7 @@ async fn spawn_local_terminal_tab(
     state: &crate::services::workspace::WorkspaceState,
     launch: crate::sessions::local_terminal::LocalTerminalLaunch,
     pane_root_tab_id: Option<String>,
+    wait_for_startup: bool,
 ) -> String {
     let tab_id = format!("local-{}", uuid::Uuid::new_v4());
     let is_split_pane = pane_root_tab_id.is_some();
@@ -3138,25 +3137,15 @@ async fn spawn_local_terminal_tab(
     }
 
     match start_local_terminal_for_tab(app, state, &tab_id, launch).await {
-        Ok(startup_ready) => {
-            let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup_ready).await;
-            if is_split_pane {
-                crate::sessions::terminal::set_terminal_state_without_snapshot(
-                    app,
-                    &tab_id,
-                    "Local shell started".to_string(),
-                    crate::services::WorkspaceTabStatus::Connected,
-                )
-                .await;
-            } else {
-                crate::sessions::terminal::set_terminal_state(
-                    app,
-                    &tab_id,
-                    "Local shell started".to_string(),
-                    crate::services::WorkspaceTabStatus::Connected,
-                )
-                .await;
-            }
+        Ok(startup) if wait_for_startup => {
+            finish_local_terminal_startup(app, &tab_id, startup, !is_split_pane).await;
+        }
+        Ok(startup) => {
+            let startup_app = app.clone();
+            let startup_tab_id = tab_id.clone();
+            tauri::async_runtime::spawn(async move {
+                finish_local_terminal_startup(&startup_app, &startup_tab_id, startup, true).await;
+            });
         }
         Err(error) => {
             if is_split_pane {
@@ -3182,12 +3171,54 @@ async fn spawn_local_terminal_tab(
     tab_id
 }
 
+struct LocalTerminalStartup {
+    runtime_id: String,
+    ready: oneshot::Receiver<()>,
+}
+
+async fn finish_local_terminal_startup(
+    app: &AppHandle,
+    tab_id: &str,
+    startup: LocalTerminalStartup,
+    emit_snapshot: bool,
+) {
+    let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup.ready).await;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let is_current_runtime = state
+        .local_terminal_runtime_ids
+        .read()
+        .await
+        .get(tab_id)
+        .is_some_and(|runtime_id| runtime_id == &startup.runtime_id);
+    if !is_current_runtime {
+        return;
+    }
+
+    if emit_snapshot {
+        crate::sessions::terminal::set_terminal_state(
+            app,
+            tab_id,
+            "Local shell started".to_string(),
+            crate::services::WorkspaceTabStatus::Connected,
+        )
+        .await;
+    } else {
+        crate::sessions::terminal::set_terminal_state_without_snapshot(
+            app,
+            tab_id,
+            "Local shell started".to_string(),
+            crate::services::WorkspaceTabStatus::Connected,
+        )
+        .await;
+    }
+}
+
 async fn start_local_terminal_for_tab(
     app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
     tab_id: &str,
     launch: crate::sessions::local_terminal::LocalTerminalLaunch,
-) -> Result<oneshot::Receiver<()>, String> {
+) -> Result<LocalTerminalStartup, String> {
     let (worker_tx, worker_rx) = mpsc::channel(16);
     let (terminal_input_tx, terminal_input_rx) = mpsc::unbounded_channel();
     let worker_control = CancellationToken::new();
@@ -3226,7 +3257,7 @@ async fn start_local_terminal_for_tab(
 
     let startup_ready = match crate::sessions::local_terminal::start_local_terminal_worker(
         tab_id.to_string(),
-        runtime_id,
+        runtime_id.clone(),
         worker_rx,
         terminal_input_rx,
         app.clone(),
@@ -3249,7 +3280,10 @@ async fn start_local_terminal_for_tab(
         }
     };
 
-    Ok(startup_ready)
+    Ok(LocalTerminalStartup {
+        runtime_id,
+        ready: startup_ready,
+    })
 }
 
 fn supports_split_panes(session_type: &str) -> bool {
@@ -3497,7 +3531,7 @@ pub async fn app_split_tab(
             {
                 launch.cwd = cwd;
             }
-            spawn_local_terminal_tab(&app, &state, launch, Some(pane_root_tab_id)).await
+            spawn_local_terminal_tab(&app, &state, launch, Some(pane_root_tab_id), true).await
         }
         _ => unreachable!("session type is checked before creating a split pane"),
     };
@@ -3866,15 +3900,13 @@ pub async fn app_reconnect_tab(
                 launch.cwd = cwd;
             }
             match start_local_terminal_for_tab(&app, &state, &tab_id, launch).await {
-                Ok(startup_ready) => {
-                    let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup_ready).await;
-                    crate::sessions::terminal::set_terminal_state(
-                        &app,
-                        &tab_id,
-                        "Local shell started".to_string(),
-                        crate::services::WorkspaceTabStatus::Connected,
-                    )
-                    .await;
+                Ok(startup) => {
+                    let startup_app = app.clone();
+                    let startup_tab_id = tab_id.clone();
+                    tauri::async_runtime::spawn(async move {
+                        finish_local_terminal_startup(&startup_app, &startup_tab_id, startup, true)
+                            .await;
+                    });
                 }
                 Err(error) => {
                     crate::sessions::terminal::set_terminal_state(
@@ -4220,7 +4252,7 @@ pub async fn app_open_local_terminal(
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let launch =
         crate::sessions::local_terminal::resolve_launch(options).map_err(AppError::Command)?;
-    let tab_id = spawn_local_terminal_tab(&app, &state, launch, None).await;
+    let tab_id = spawn_local_terminal_tab(&app, &state, launch, None, false).await;
     {
         let mut active = state.active_tab_id.write().await;
         *active = Some(tab_id);
