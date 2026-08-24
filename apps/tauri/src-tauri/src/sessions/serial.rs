@@ -1,7 +1,8 @@
 use std::fmt::Write as _;
+use std::time::Duration;
 
 use serde_json::Value;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_serial::{DataBits, FlowControl, Parity, SerialPortBuilderExt, StopBits};
@@ -11,6 +12,11 @@ use super::terminal::{decode_terminal, emit_terminal_data, encode_terminal, set_
 use super::WorkerCmd;
 use crate::services::WorkspaceTabStatus;
 
+enum SerialWorkerExit {
+    Requested,
+    DeviceDisconnected,
+}
+
 pub fn start_serial_worker(
     tab_id: String,
     profile: Value,
@@ -19,16 +25,34 @@ pub fn start_serial_worker(
 ) {
     crate::services::logging::session(&app, "INFO", "serial", &tab_id, "worker starting");
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = run_serial_worker(&tab_id, &profile, command_rx, &app).await {
-            crate::services::logging::session(&app, "ERROR", "serial", &tab_id, &error);
-            emit_terminal_data(&app, &tab_id, &format!("\r\n[串口] {error}\r\n")).await;
-            set_terminal_state(
-                &app,
-                &tab_id,
-                format!("串口错误：{error}"),
-                WorkspaceTabStatus::Error,
-            )
-            .await;
+        let should_schedule_reconnect =
+            match run_serial_worker(&tab_id, &profile, command_rx, &app).await {
+                Ok(SerialWorkerExit::Requested) => false,
+                Ok(SerialWorkerExit::DeviceDisconnected) => {
+                    crate::services::logging::session(
+                        &app,
+                        "WARN",
+                        "serial",
+                        &tab_id,
+                        "worker exited because the device disconnected",
+                    );
+                    true
+                }
+                Err(error) => {
+                    crate::services::logging::session(&app, "ERROR", "serial", &tab_id, &error);
+                    emit_terminal_data(&app, &tab_id, &format!("\r\n[串口] {error}\r\n")).await;
+                    set_terminal_state(
+                        &app,
+                        &tab_id,
+                        format!("串口错误：{error}"),
+                        WorkspaceTabStatus::Error,
+                    )
+                    .await;
+                    true
+                }
+            };
+        if should_schedule_reconnect {
+            schedule_auto_reconnect(&app, &tab_id, &profile).await;
         }
     });
 }
@@ -38,7 +62,7 @@ async fn run_serial_worker(
     profile: &Value,
     mut command_rx: mpsc::Receiver<WorkerCmd>,
     app: &AppHandle,
-) -> Result<(), String> {
+) -> Result<SerialWorkerExit, String> {
     let device_path = profile
         .get("devicePath")
         .and_then(Value::as_str)
@@ -112,6 +136,7 @@ async fn run_serial_worker(
     emit_terminal_data(app, tab_id, "串口已连接\r\n").await;
     let mut buffer = vec![0_u8; 32 * 1024];
     let mut hex_input_buffer = String::new();
+    let mut text_decoder = SerialTextDecoder::new(&encoding);
 
     loop {
         tokio::select! {
@@ -133,8 +158,14 @@ async fn run_serial_worker(
                                         continue;
                                     }
                                 };
-                                writer.write_all(&encoded).await.map_err(|error| error.to_string())?;
-                                writer.flush().await.map_err(|error| error.to_string())?;
+                                writer
+                                    .write_all(&encoded)
+                                    .await
+                                    .map_err(|error| serial_error(device_path, error))?;
+                                writer
+                                    .flush()
+                                    .await
+                                    .map_err(|error| serial_error(device_path, error))?;
                                 if local_echo && !encoded.is_empty() {
                                     let echoed = serial_display(&encoded, &encoding, &output_mode)?;
                                     emit_terminal_data(app, tab_id, &echoed).await;
@@ -142,8 +173,14 @@ async fn run_serial_worker(
                             }
                         } else {
                             let encoded = encode_serial_input(&data, &encoding, &input_mode, &newline_mode)?;
-                            writer.write_all(&encoded).await.map_err(|error| error.to_string())?;
-                            writer.flush().await.map_err(|error| error.to_string())?;
+                            writer
+                                .write_all(&encoded)
+                                .await
+                                .map_err(|error| serial_error(device_path, error))?;
+                            writer
+                                .flush()
+                                .await
+                                .map_err(|error| serial_error(device_path, error))?;
                             if local_echo && !encoded.is_empty() {
                                 let echoed = serial_display(&encoded, &encoding, &output_mode)?;
                                 emit_terminal_data(app, tab_id, &echoed).await;
@@ -157,7 +194,7 @@ async fn run_serial_worker(
                         crate::services::logging::session(app, "INFO", "serial", tab_id, "disconnecting");
                         let _ = writer.shutdown().await;
                         set_terminal_state(app, tab_id, "串口已断开".to_string(), WorkspaceTabStatus::Closed).await;
-                        return Ok(());
+                        return Ok(SerialWorkerExit::Requested);
                     }
                     Some(command) => reject_unsupported(command, "Serial 不支持此文件或隧道操作"),
                 }
@@ -166,13 +203,78 @@ async fn run_serial_worker(
                 let count = read.map_err(|error| serial_error(device_path, error))?;
                 if count == 0 {
                     crate::services::logging::session(app, "WARN", "serial", tab_id, "device disconnected");
+                    let trailing = text_decoder.finish();
+                    if !trailing.is_empty() {
+                        emit_terminal_data(app, tab_id, &trailing).await;
+                    }
                     set_terminal_state(app, tab_id, "串口设备已断开".to_string(), WorkspaceTabStatus::Closed).await;
-                    return Ok(());
+                    return Ok(SerialWorkerExit::DeviceDisconnected);
                 }
-                let output = serial_display(&buffer[..count], &encoding, &output_mode)?;
-                emit_terminal_data(app, tab_id, &output).await;
+                let output = serial_stream_display(&mut text_decoder, &buffer[..count], &output_mode)?;
+                if !output.is_empty() {
+                    emit_terminal_data(app, tab_id, &output).await;
+                }
             }
         }
+    }
+}
+
+async fn schedule_auto_reconnect(app: &AppHandle, tab_id: &str, profile: &Value) {
+    let reconnect_mode = {
+        let state = app.state::<crate::services::workspace::WorkspaceState>();
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(tab_id)
+            .and_then(|session| session.reconnect_mode.clone())
+            .or_else(|| crate::services::workspace::reconnect_mode_for_profile(profile))
+            .unwrap_or_else(|| "none".to_string())
+    };
+    if reconnect_mode != "auto" {
+        return;
+    }
+
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "serial",
+        tab_id,
+        "auto-reconnect scheduled delay_ms=2000",
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let should_reconnect = {
+        let tabs = state.tabs.read().await;
+        let sessions = state.sessions.read().await;
+        let Some(tab) = tabs.iter().find(|tab| tab.id == tab_id) else {
+            return;
+        };
+        let Some(session) = sessions.get(tab_id) else {
+            return;
+        };
+        let mode = session
+            .reconnect_mode
+            .as_deref()
+            .or_else(|| profile.get("reconnectMode").and_then(Value::as_str))
+            .unwrap_or("none");
+        tab.status != WorkspaceTabStatus::Connecting
+            && !session.connected
+            && mode == "auto"
+            && session.summary != "连接已断开"
+            && session.summary != "串口已断开"
+    };
+
+    if should_reconnect {
+        crate::services::logging::session(app, "INFO", "serial", tab_id, "auto-reconnect firing");
+        let _ = crate::commands::app_reconnect_tab(app.clone(), tab_id.to_string()).await;
+    } else {
+        crate::services::logging::session(
+            app,
+            "DEBUG",
+            "serial",
+            tab_id,
+            "auto-reconnect canceled",
+        );
     }
 }
 
@@ -278,6 +380,49 @@ fn parse_hex_input(value: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+struct SerialTextDecoder {
+    decoder: encoding_rs::Decoder,
+}
+
+impl SerialTextDecoder {
+    fn new(encoding: &str) -> Self {
+        let encoding = encoding_rs::Encoding::for_label(encoding.trim().as_bytes())
+            .unwrap_or(encoding_rs::UTF_8);
+        Self {
+            decoder: encoding.new_decoder_without_bom_handling(),
+        }
+    }
+
+    fn decode(&mut self, bytes: &[u8]) -> String {
+        let capacity = self
+            .decoder
+            .max_utf8_buffer_length(bytes.len())
+            .unwrap_or(4)
+            .max(4);
+        let mut output = String::with_capacity(capacity);
+        let _ = self.decoder.decode_to_string(bytes, &mut output, false);
+        output
+    }
+
+    fn finish(&mut self) -> String {
+        let mut output = String::with_capacity(4);
+        let _ = self.decoder.decode_to_string(&[], &mut output, true);
+        output
+    }
+}
+
+fn serial_stream_display(
+    decoder: &mut SerialTextDecoder,
+    bytes: &[u8],
+    output_mode: &str,
+) -> Result<String, String> {
+    match output_mode {
+        "text" => Ok(decoder.decode(bytes)),
+        "hex" => Ok(format_serial_hex(bytes)),
+        _ => Err("串口输出模式无效".to_string()),
+    }
+}
+
 fn serial_display(bytes: &[u8], encoding: &str, output_mode: &str) -> Result<String, String> {
     match output_mode {
         "text" => Ok(decode_terminal(bytes, encoding)),
@@ -335,15 +480,28 @@ fn flow_control(value: &str) -> Result<FlowControl, String> {
 
 fn serial_error(device_path: &str, error: impl std::fmt::Display) -> String {
     let message = error.to_string();
-    if message.contains("Permission denied") || message.contains("EACCES") {
+    let normalized = message.to_ascii_lowercase();
+    if normalized.contains("permission denied")
+        || normalized.contains("access is denied")
+        || normalized.contains("operation not permitted")
+        || normalized.contains("eacces")
+    {
         return format!(
-            "无法打开串口 {device_path}：权限不足。Linux 请将当前用户加入 dialout 组。"
+            "无法访问串口 {device_path}：权限不足。Linux 请将当前用户加入 dialout 组；Windows/macOS 请确认驱动和设备访问权限。"
         );
     }
-    if message.contains("No such file") || message.contains("ENOENT") {
+    if normalized.contains("no such file")
+        || normalized.contains("cannot find the file")
+        || normalized.contains("system cannot find")
+        || normalized.contains("enoent")
+    {
         return format!("串口设备 {device_path} 不存在、不可用或已断开。");
     }
-    if message.contains("busy") || message.contains("EBUSY") {
+    if normalized.contains("busy")
+        || normalized.contains("in use")
+        || normalized.contains("resource is in use")
+        || normalized.contains("ebusy")
+    {
         return format!("串口设备 {device_path} 已被其他程序占用。");
     }
     format!("串口 {device_path}：{message}")
@@ -353,7 +511,8 @@ fn serial_error(device_path: &str, error: impl std::fmt::Display) -> String {
 mod tests {
     use super::{
         consume_serial_hex_input, data_bits, encode_serial_input, flow_control, format_serial_hex,
-        normalize_serial_newlines, parity, parse_hex_input, serial_display, stop_bits, FlowControl,
+        normalize_serial_newlines, parity, parse_hex_input, serial_display, serial_error,
+        stop_bits, FlowControl, SerialTextDecoder,
     };
 
     #[test]
@@ -427,6 +586,29 @@ mod tests {
             serial_display(&[0x00, 0x0a, 0xff], "UTF-8", "hex").unwrap(),
             "00 0A FF"
         );
+    }
+
+    #[test]
+    fn preserves_multibyte_text_when_serial_reads_split_a_character() {
+        let mut decoder = SerialTextDecoder::new("UTF-8");
+        assert_eq!(decoder.decode(&[0xe4]), "");
+        assert_eq!(decoder.decode(&[0xb8]), "");
+        assert_eq!(decoder.decode(&[0xad]), "中");
+        assert_eq!(decoder.finish(), "");
+
+        let mut decoder = SerialTextDecoder::new("GBK");
+        assert_eq!(decoder.decode(&[0xd6]), "");
+        assert_eq!(decoder.decode(&[0xd0]), "中");
+        assert_eq!(decoder.finish(), "");
+    }
+
+    #[test]
+    fn maps_common_windows_and_unix_serial_errors() {
+        assert!(serial_error("COM3", "Access is denied").contains("权限不足"));
+        assert!(
+            serial_error("COM3", "The system cannot find the file specified").contains("不存在")
+        );
+        assert!(serial_error("/dev/cu.usbserial", "resource is in use").contains("占用"));
     }
 
     #[cfg(target_os = "linux")]

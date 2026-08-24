@@ -295,6 +295,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
       username: '',
       remotePath: '',
       group: input.group,
+      sessionLogEnabled: input.sessionLogEnabled,
+      sessionLogDirectory: input.sessionLogDirectory,
       devicePath: input.devicePath ?? '',
       baudRate: input.baudRate ?? 115200,
       dataBits: input.dataBits ?? 8,
@@ -302,6 +304,11 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
       parity: input.parity ?? 'none',
       flowControl: input.flowControl ?? 'none',
       encoding: input.encoding ?? 'UTF-8',
+      newlineMode: input.newlineMode ?? 'none',
+      inputMode: input.inputMode ?? 'text',
+      outputMode: input.outputMode ?? 'text',
+      localEcho: input.localEcho ?? false,
+      reconnectMode: input.reconnectMode ?? 'none',
       note: input.note
     }
   }
@@ -322,6 +329,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         trustedHostFingerprint: input.trustedHostFingerprint,
         useEmptyPassword: input.useEmptyPassword,
         group: input.group,
+        sessionLogEnabled: input.sessionLogEnabled,
+        sessionLogDirectory: input.sessionLogDirectory,
         sftpEnabled: true,
         remotePath: input.remotePath,
         encoding: input.encoding ?? 'UTF-8',
@@ -350,6 +359,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
           username: '',
           remotePath: '',
           group: input.group,
+          sessionLogEnabled: input.sessionLogEnabled,
+          sessionLogDirectory: input.sessionLogDirectory,
           note: input.note,
           encoding: input.encoding ?? 'UTF-8',
           proxy: input.proxy ? { ...input.proxy, password: input.proxyPassword ?? input.proxy.password } : undefined
@@ -362,6 +373,8 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
           port: input.port,
           username: input.username,
           note: input.note,
+          sessionLogEnabled: input.sessionLogEnabled,
+          sessionLogDirectory: input.sessionLogDirectory,
           password: input.password ?? undefined,
           secure: (input.securityMode ?? (input.secure ? 'explicit' : 'none')) !== 'none',
           securityMode: input.securityMode ?? (input.secure ? 'explicit' : 'none'),

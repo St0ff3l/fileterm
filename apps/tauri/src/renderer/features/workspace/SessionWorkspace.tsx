@@ -597,7 +597,6 @@ export function SessionWorkspace({
               bootText={terminalActiveSession.terminalTranscript ?? ''}
               connected={terminalActiveSession.connected === true}
               connecting={terminalActiveTab.status === 'connecting'}
-              autoReconnect={reconnectMode === 'auto'}
               onReconnect={reconnectOnEnter}
               onSplitPane={canSplitTerminal ? (direction) => onSplitPane(terminalActiveTab.id, direction) : undefined}
               onCloseTab={onCloseTab}

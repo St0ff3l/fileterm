@@ -640,7 +640,6 @@ export const TerminalView = memo(function TerminalView({
   bootText,
   connected = false,
   connecting = false,
-  autoReconnect = false,
   isActive = true,
   onStatus,
   onReconnect,
@@ -657,7 +656,6 @@ export const TerminalView = memo(function TerminalView({
   bootText: string
   connected?: boolean
   connecting?: boolean
-  autoReconnect?: boolean
   isActive?: boolean
   onStatus?(message: string | null): void
   onReconnect?(): void | Promise<void>
@@ -707,9 +705,6 @@ export const TerminalView = memo(function TerminalView({
   // tab from swallowing keystrokes after this tab is brought back.
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
-  const autoReconnectRef = useRef(Boolean(autoReconnect))
-  const autoReconnectTimerRef = useRef<number | null>(null)
-  const autoReconnectAttemptRef = useRef(0)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{
     left: number
@@ -740,7 +735,6 @@ export const TerminalView = memo(function TerminalView({
   tabIdRef.current = tabId
   connectedRef.current = Boolean(connected)
   connectingRef.current = Boolean(connecting)
-  autoReconnectRef.current = Boolean(autoReconnect)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
   closedMessageRef.current = closedMessage
@@ -1402,53 +1396,6 @@ export const TerminalView = memo(function TerminalView({
       reconnectHintShownRef.current = true
       terminal.write(`\r\n${reconnectHintRef.current}\r\n`)
     }
-    const clearAutoReconnect = (resetAttempts = false) => {
-      if (autoReconnectTimerRef.current !== null) {
-        window.clearTimeout(autoReconnectTimerRef.current)
-        autoReconnectTimerRef.current = null
-      }
-      if (resetAttempts) {
-        autoReconnectAttemptRef.current = 0
-      }
-    }
-    const scheduleAutoReconnect = () => {
-      if (
-        !autoReconnectRef.current ||
-        !onReconnectRef.current ||
-        autoReconnectTimerRef.current !== null ||
-        connectedRef.current
-      ) {
-        return
-      }
-
-      const attempt = autoReconnectAttemptRef.current
-      const delayMs = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5))
-      autoReconnectAttemptRef.current = Math.min(attempt + 1, 5)
-      const seconds = Math.ceil(delayMs / 1_000)
-      terminal.write(`\r\n${t.terminalAutoReconnectIn.replace('{seconds}', String(seconds))}\r\n`)
-      autoReconnectTimerRef.current = window.setTimeout(() => {
-        autoReconnectTimerRef.current = null
-        if (!autoReconnectRef.current || connectedRef.current) {
-          return
-        }
-        const reconnect = onReconnectRef.current
-        if (!reconnect) {
-          return
-        }
-        isReconnectingRef.current = true
-        void Promise.resolve(reconnect())
-          .catch((cause) => {
-            const message = cause instanceof Error ? cause.message : String(cause)
-            terminal.write(`\r\n${t.connectionFailedPrefix}${message}\r\n`)
-            writeReconnectHint()
-          })
-          .finally(() => {
-            if (!connectedRef.current) {
-              isReconnectingRef.current = false
-            }
-          })
-      }, delayMs)
-    }
     const requestReconnect = () => {
       if (wasConnectedRef.current || connectingRef.current || isReconnectingRef.current) {
         return false
@@ -1459,7 +1406,6 @@ export const TerminalView = memo(function TerminalView({
         return false
       }
 
-      clearAutoReconnect(true)
       isReconnectingRef.current = true
       reconnectHintShownRef.current = false
       // Give immediate feedback before the IPC call starts. The connection
@@ -1901,8 +1847,6 @@ export const TerminalView = memo(function TerminalView({
           connectedRef.current = connected
           connectingRef.current = status === 'connecting'
           const isDisconnecting = wasConnectedRef.current && !connected
-          const isIntentionalDisconnect =
-            summary === '连接已断开' || summary === 'Connection closed' || summary === '串口已断开'
           if (isDisconnecting) {
             preserveVisibleBufferRef.current = true
           }
@@ -1928,23 +1872,14 @@ export const TerminalView = memo(function TerminalView({
                 : `${closedMessageRef.current}${reconnectHint}\r\n`
               replaceTerminalWithTranscript(terminal, disconnectedTranscript)
             })
-            if (isIntentionalDisconnect) {
-              clearAutoReconnect(true)
-            } else {
-              scheduleAutoReconnect()
-            }
           } else if (!connected && status === 'error') {
             // A reconnect command only starts the worker, so its Promise resolves
             // before a failed TCP/SSH handshake is known. The terminal state is
             // the authoritative failure signal for both initial and retry attempts.
             writeReconnectHint()
-            if (!isIntentionalDisconnect) {
-              scheduleAutoReconnect()
-            }
           }
           wasConnectedRef.current = connected
           if (connected) {
-            clearAutoReconnect(true)
             isReconnectingRef.current = false
             inputSendFailedRef.current = false
             reconnectHintShownRef.current = false
@@ -2434,7 +2369,6 @@ export const TerminalView = memo(function TerminalView({
     }
 
     return () => {
-      clearAutoReconnect(true)
       offFocusTerminal()
       offTerminalCopy()
       offTerminalPaste()

@@ -407,7 +407,19 @@ pub fn start_ssh_worker(
                 &tid,
                 "auto-reconnect scheduled delay_ms=2000",
             );
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+                _ = cancellation.cancelled() => {
+                    crate::services::logging::session(
+                        &app,
+                        "DEBUG",
+                        "ssh",
+                        &tid,
+                        "auto-reconnect canceled by session shutdown",
+                    );
+                    return;
+                }
+            }
 
             // Re-check: tab may have been closed or already reconnected by
             // the user during the delay.
@@ -415,9 +427,22 @@ pub fn start_ssh_worker(
             let should_reconnect = {
                 let tabs = state.tabs.read().await;
                 let sessions = state.sessions.read().await;
-                let tab_exists = tabs.iter().any(|t| t.id == tid);
-                let session_connected = sessions.get(&tid).map(|s| s.connected).unwrap_or(false);
-                tab_exists && !session_connected
+                match (tabs.iter().find(|tab| tab.id == tid), sessions.get(&tid)) {
+                    (Some(tab), Some(session)) => {
+                        let mode = session
+                            .reconnect_mode
+                            .as_deref()
+                            .or_else(|| profile.get("reconnectMode").and_then(Value::as_str))
+                            .unwrap_or("none");
+                        !cancellation.is_cancelled()
+                            && tab.status != WorkspaceTabStatus::Connecting
+                            && !session.connected
+                            && mode == "auto"
+                            && session.summary != "连接已断开"
+                            && session.summary != "Connection closed"
+                    }
+                    _ => false,
+                }
             };
 
             if should_reconnect {
