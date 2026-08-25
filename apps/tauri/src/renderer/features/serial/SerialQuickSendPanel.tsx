@@ -8,6 +8,10 @@ function storageKey(profileId: string) {
   return `fileterm.serial.quick-send.${profileId}`
 }
 
+function historyStorageKey(profileId: string) {
+  return `fileterm.serial.quick-send-history.${profileId}`
+}
+
 function loadMacros(profileId: string): SerialMacro[] {
   try {
     const value: unknown = JSON.parse(window.localStorage.getItem(storageKey(profileId)) ?? '[]')
@@ -26,6 +30,16 @@ function loadMacros(profileId: string): SerialMacro[] {
   }
 }
 
+function loadHistory(profileId: string): string[] {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(historyStorageKey(profileId)) ?? '[]')
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0).slice(0, 30)
+  } catch {
+    return []
+  }
+}
+
 export function SerialQuickSendPanel({
   profileId,
   tabId,
@@ -39,7 +53,7 @@ export function SerialQuickSendPanel({
   const [appendNewline, setAppendNewline] = useState(true)
   const [macroName, setMacroName] = useState('')
   const [macros, setMacros] = useState<SerialMacro[]>(() => loadMacros(profileId))
-  const [history, setHistory] = useState<string[]>([])
+  const [history, setHistory] = useState<string[]>(() => loadHistory(profileId))
   const [loopInterval, setLoopInterval] = useState(1000)
   const [looping, setLooping] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -47,7 +61,7 @@ export function SerialQuickSendPanel({
 
   useEffect(() => {
     setMacros(loadMacros(profileId))
-    setHistory([])
+    setHistory(loadHistory(profileId))
     setDraft('')
     setLooping(false)
   }, [profileId])
@@ -77,7 +91,15 @@ export function SerialQuickSendPanel({
     if (!connected || !window.fileterm?.writeTerminal || !value) return
     try {
       await window.fileterm.writeTerminal(tabId, appendNewline ? `${value}\r` : value)
-      setHistory((previous) => [value, ...previous.filter((item) => item !== value)].slice(0, 30))
+      setHistory((previous) => {
+        const next = [value, ...previous.filter((item) => item !== value)].slice(0, 30)
+        try {
+          window.localStorage.setItem(historyStorageKey(profileId), JSON.stringify(next))
+        } catch {
+          // History is a convenience; sending must still succeed if storage is unavailable.
+        }
+        return next
+      })
       setMessage(null)
     } catch (error) {
       setMessage(localizeSerialTerminalText(String(error)))

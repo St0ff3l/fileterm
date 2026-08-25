@@ -139,6 +139,8 @@ export function ConnectionModal({
   const [serialPortLoadError, setSerialPortLoadError] = useState<string | null>(null)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet'
+  const supportsBuiltInRs485 = window.fileterm?.platform === 'linux' && form.flowControl !== 'hardware'
+  const supportsExtendedParity = ['linux', 'win32'].includes(window.fileterm?.platform ?? '')
   const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
 
   const setSshConnectionSetting = <K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]) => {
@@ -181,6 +183,8 @@ export function ConnectionModal({
       return
     }
     void refreshSerialPorts()
+    const timer = window.setInterval(() => void refreshSerialPorts(), 3000)
+    return () => window.clearInterval(timer)
   }, [form.type, refreshSerialPorts])
 
   const serialPortOptions = serialPorts.map((port) => {
@@ -310,7 +314,16 @@ export function ConnectionModal({
                             placeholder="COM3 / /dev/ttyUSB0 / /dev/cu.usbserial"
                             spellCheck={false}
                             value={form.devicePath ?? ''}
-                            onChange={(event) => setForm((prev) => ({ ...prev, devicePath: event.target.value }))}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                devicePath: event.target.value,
+                                deviceSerialNumber: '',
+                                deviceVendorId: undefined,
+                                deviceProductId: undefined,
+                                devicePortType: undefined
+                              }))
+                            }
                           />
                         </label>
                         <div className="span-2 serial-port-picker">
@@ -324,7 +337,17 @@ export function ConnectionModal({
                             }
                             placeholder={t.serialPortSelect}
                             value={form.devicePath ?? ''}
-                            onChange={(value) => setForm((prev) => ({ ...prev, devicePath: value }))}
+                            onChange={(value) => {
+                              const selected = serialPorts.find((port) => port.portName === value)
+                              setForm((prev) => ({
+                                ...prev,
+                                devicePath: value,
+                                deviceSerialNumber: selected?.serialNumber ?? '',
+                                deviceVendorId: selected?.vendorId,
+                                deviceProductId: selected?.productId,
+                                devicePortType: selected?.portType
+                              }))
+                            }}
                           />
                           <button
                             className="flat-button serial-port-picker__refresh"
@@ -341,6 +364,11 @@ export function ConnectionModal({
                           <div className="span-2 ssh-field-hint serial-port-picker__error">
                             {t.serialPortScanFailed}: {localizeSerialTerminalText(serialPortLoadError)}
                           </div>
+                        ) : null}
+                        {form.deviceSerialNumber ||
+                        form.deviceVendorId !== undefined ||
+                        form.deviceProductId !== undefined ? (
+                          <div className="span-2 ssh-field-hint">{t.serialPortIdentitySaved}</div>
                         ) : null}
                       </>
                     ) : (
@@ -428,8 +456,8 @@ export function ConnectionModal({
                               { value: 'none', label: t.none },
                               { value: 'odd', label: t.oddParity },
                               { value: 'even', label: t.evenParity },
-                              { value: 'mark', label: t.markParity },
-                              { value: 'space', label: t.spaceParity }
+                              { value: 'mark', label: t.markParity, disabled: !supportsExtendedParity },
+                              { value: 'space', label: t.spaceParity, disabled: !supportsExtendedParity }
                             ]}
                             onChange={(value) =>
                               setForm((prev) => ({ ...prev, parity: value as CreateProfileInput['parity'] }))
@@ -453,7 +481,88 @@ export function ConnectionModal({
                             }
                           />
                         </label>
+                        <label>
+                          {t.serialRs485Mode}:
+                          <DropdownSelect
+                            value={form.rs485Mode ?? 'none'}
+                            options={[
+                              { value: 'none', label: t.serialRs485None },
+                              {
+                                value: 'half-duplex',
+                                label: t.serialRs485HalfDuplex,
+                                disabled: !supportsBuiltInRs485
+                              }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                rs485Mode: value as CreateProfileInput['rs485Mode']
+                              }))
+                            }
+                          />
+                        </label>
+                        {form.rs485Mode === 'half-duplex' ? (
+                          <>
+                            <label className="ssh-checkbox advanced-toggle-label">
+                              <input
+                                checked={form.rs485RtsOnSend !== false}
+                                type="checkbox"
+                                onChange={(event) =>
+                                  setForm((prev) => ({ ...prev, rs485RtsOnSend: event.target.checked }))
+                                }
+                              />
+                              <span className="advanced-toggle-name">{t.serialRs485RtsOnSend}</span>
+                            </label>
+                            <label>
+                              {t.serialRs485DelayBefore}:
+                              <input
+                                inputMode="numeric"
+                                min={0}
+                                max={60000}
+                                type="number"
+                                value={form.rs485DelayRtsBeforeSendMs ?? 0}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    rs485DelayRtsBeforeSendMs: Math.max(
+                                      0,
+                                      Math.min(60000, Number(event.target.value) || 0)
+                                    )
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label>
+                              {t.serialRs485DelayAfter}:
+                              <input
+                                inputMode="numeric"
+                                min={0}
+                                max={60000}
+                                type="number"
+                                value={form.rs485DelayRtsAfterSendMs ?? 0}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    rs485DelayRtsAfterSendMs: Math.max(
+                                      0,
+                                      Math.min(60000, Number(event.target.value) || 0)
+                                    )
+                                  }))
+                                }
+                              />
+                            </label>
+                          </>
+                        ) : null}
                         <p className="ssh-field-hint span-2">{t.serialParityHint}</p>
+                        {!supportsExtendedParity && (form.parity === 'mark' || form.parity === 'space') ? (
+                          <p className="ssh-field-hint span-2">{t.serialParityUnsupported}</p>
+                        ) : null}
+                        <p className="ssh-field-hint span-2">{t.serialRs485Hint}</p>
+                        {form.rs485Mode === 'half-duplex' && form.flowControl === 'hardware' ? (
+                          <p className="ssh-field-hint span-2">{t.serialRs485FlowConflict}</p>
+                        ) : !supportsBuiltInRs485 && form.rs485Mode === 'half-duplex' ? (
+                          <p className="ssh-field-hint span-2">{t.serialRs485Unsupported}</p>
+                        ) : null}
                       </div>
                     ) : null}
                     <label className="full">
@@ -904,10 +1013,28 @@ export function ConnectionModal({
                             <label className="ssh-checkbox advanced-toggle-label">
                               <input
                                 checked={form.rtsOnOpen === true}
+                                disabled={form.flowControl === 'hardware' || form.rs485Mode === 'half-duplex'}
                                 type="checkbox"
                                 onChange={(event) => setForm((prev) => ({ ...prev, rtsOnOpen: event.target.checked }))}
                               />
                               <span className="advanced-toggle-name">{t.serialRtsOnOpen}</span>
+                            </label>
+                            <label className="ssh-checkbox advanced-toggle-label">
+                              <input
+                                checked={form.dtrOnClose === true}
+                                type="checkbox"
+                                onChange={(event) => setForm((prev) => ({ ...prev, dtrOnClose: event.target.checked }))}
+                              />
+                              <span className="advanced-toggle-name">{t.serialDtrOnClose}</span>
+                            </label>
+                            <label className="ssh-checkbox advanced-toggle-label">
+                              <input
+                                checked={form.rtsOnClose === true}
+                                disabled={form.flowControl === 'hardware' || form.rs485Mode === 'half-duplex'}
+                                type="checkbox"
+                                onChange={(event) => setForm((prev) => ({ ...prev, rtsOnClose: event.target.checked }))}
+                              />
+                              <span className="advanced-toggle-name">{t.serialRtsOnClose}</span>
                             </label>
                           </div>
                           <p className="advanced-toggle-hint">{t.serialLineControlHint}</p>
@@ -945,6 +1072,42 @@ export function ConnectionModal({
                           />
                         </label>
                         <p className="ssh-field-hint span-2">{t.serialPacingHint}</p>
+                        <label>
+                          {t.serialReceiveIdleTimeout}:
+                          <input
+                            inputMode="numeric"
+                            min={250}
+                            max={600000}
+                            type="number"
+                            value={form.serialReceiveIdleTimeoutMs ?? 5000}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                serialReceiveIdleTimeoutMs: Math.max(
+                                  250,
+                                  Math.min(600000, Number(event.target.value) || 250)
+                                )
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.serialWriteTimeoutSetting}:
+                          <input
+                            inputMode="numeric"
+                            min={250}
+                            max={600000}
+                            type="number"
+                            value={form.serialWriteTimeoutMs ?? 30000}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                serialWriteTimeoutMs: Math.max(250, Math.min(600000, Number(event.target.value) || 250))
+                              }))
+                            }
+                          />
+                        </label>
+                        <p className="ssh-field-hint span-2">{t.serialTimeoutHint}</p>
                         <div className="reconnect-mode-group serial-reconnect-mode-group">
                           <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
                           <div className="advanced-toggle-list">

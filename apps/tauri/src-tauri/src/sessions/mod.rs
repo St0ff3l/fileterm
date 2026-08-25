@@ -156,6 +156,8 @@ pub enum WorkerCmd {
 pub enum SerialControlAction {
     SetDtr,
     SetRts,
+    PulseDtr,
+    PulseRts,
     SendBreak,
     ClearBuffers,
     Reset,
@@ -167,6 +169,9 @@ pub enum SerialControlAction {
 pub struct SerialLineStatus {
     pub dtr: Option<bool>,
     pub rts: Option<bool>,
+    pub dtr_readback: bool,
+    pub rts_readback: bool,
+    pub rts_manual: bool,
     pub cts: Option<bool>,
     pub dsr: Option<bool>,
     pub ring: Option<bool>,
@@ -192,6 +197,8 @@ pub struct SerialTransferRequest {
     pub mode: SerialTransferMode,
     /// Send: the source file. Receive: the exact target file.
     pub local_path: String,
+    /// YMODEM send can negotiate multiple files; other modes use the first path.
+    pub local_paths: Vec<String>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -199,6 +206,21 @@ pub struct SerialTransferRequest {
 pub struct SerialTransferResult {
     pub bytes_transferred: u64,
     pub local_path: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialTransferProgress {
+    pub tab_id: String,
+    pub direction: String,
+    pub mode: String,
+    pub local_path: String,
+    pub status: String,
+    pub bytes_transferred: u64,
+    pub total_bytes: Option<u64>,
+    pub speed_bytes_per_second: Option<u64>,
+    pub block: Option<u64>,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug)]

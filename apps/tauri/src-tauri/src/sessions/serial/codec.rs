@@ -59,12 +59,24 @@ pub(super) fn encode_input(
     match input_mode {
         "text" => Ok(encode_terminal(&transformed, encoding)),
         "hex" => {
-            // xterm sends Enter as CR. In hex mode it terminates the input
-            // editor, so it is removed before parsing and added as wire data.
+            // In hex mode Enter terminates the editor. Keep the actual line
+            // ending when newlineMode is `none`; dropping it made Hex line
+            // mode silently send no terminator at all.
             let content = transformed.replace(['\r', '\n'], "");
             let mut bytes = parse_hex(&content)?;
             if has_line_break {
-                bytes.extend_from_slice(newline_bytes(newline_mode));
+                let line_ending = if newline_mode == "none" {
+                    if value.contains("\r\n") {
+                        b"\r\n".as_slice()
+                    } else if value.contains('\r') {
+                        b"\r".as_slice()
+                    } else {
+                        b"\n".as_slice()
+                    }
+                } else {
+                    newline_bytes(newline_mode)
+                };
+                bytes.extend_from_slice(line_ending);
             }
             Ok(bytes)
         }
@@ -72,27 +84,57 @@ pub(super) fn encode_input(
     }
 }
 
-pub(super) fn consume_hex_input(
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum SerialInputChunk {
+    Line { value: String, terminator: String },
+    LineContinuation(String),
+    Immediate(u8),
+}
+
+fn consume_input(
     buffer: &mut String,
     data: &str,
     pending_lf_after_cr: &mut bool,
-) -> Vec<String> {
+) -> Vec<SerialInputChunk> {
     let mut ready_lines = Vec::new();
     for character in data.chars() {
         if *pending_lf_after_cr {
             *pending_lf_after_cr = false;
             if character == '\n' {
+                if let Some(SerialInputChunk::Line { terminator, .. }) = ready_lines.last_mut() {
+                    *terminator = "\r\n".to_string();
+                } else {
+                    // CR and LF can arrive in separate renderer input events.
+                    // Keep the second byte instead of dropping it; the worker
+                    // decides whether newline normalization should apply.
+                    ready_lines.push(SerialInputChunk::LineContinuation("\n".to_string()));
+                }
                 continue;
             }
         }
         match character {
             '\r' => {
-                ready_lines.push(std::mem::take(buffer));
+                ready_lines.push(SerialInputChunk::Line {
+                    value: std::mem::take(buffer),
+                    terminator: "\r".to_string(),
+                });
                 *pending_lf_after_cr = true;
             }
-            '\n' => ready_lines.push(std::mem::take(buffer)),
+            '\n' => ready_lines.push(SerialInputChunk::Line {
+                value: std::mem::take(buffer),
+                terminator: "\n".to_string(),
+            }),
             '\u{8}' | '\u{7f}' => {
                 buffer.pop();
+            }
+            character if character.is_ascii_control() && character != '\t' => {
+                // Ctrl+C is the conventional line-cancel key. Send the byte
+                // immediately, but do not leave the canceled command in the
+                // local line editor for the next Enter press.
+                if character == '\u{3}' {
+                    buffer.clear();
+                }
+                ready_lines.push(SerialInputChunk::Immediate(character as u8));
             }
             _ => buffer.push(character),
         }
@@ -100,32 +142,20 @@ pub(super) fn consume_hex_input(
     ready_lines
 }
 
+pub(super) fn consume_hex_input(
+    buffer: &mut String,
+    data: &str,
+    pending_lf_after_cr: &mut bool,
+) -> Vec<SerialInputChunk> {
+    consume_input(buffer, data, pending_lf_after_cr)
+}
+
 pub(super) fn consume_line_input(
     buffer: &mut String,
     data: &str,
     pending_lf_after_cr: &mut bool,
-) -> Vec<String> {
-    let mut ready_lines = Vec::new();
-    for character in data.chars() {
-        if *pending_lf_after_cr {
-            *pending_lf_after_cr = false;
-            if character == '\n' {
-                continue;
-            }
-        }
-        match character {
-            '\r' => {
-                ready_lines.push(std::mem::take(buffer));
-                *pending_lf_after_cr = true;
-            }
-            '\n' => ready_lines.push(std::mem::take(buffer)),
-            '\u{8}' | '\u{7f}' => {
-                buffer.pop();
-            }
-            _ => buffer.push(character),
-        }
-    }
-    ready_lines
+) -> Vec<SerialInputChunk> {
+    consume_input(buffer, data, pending_lf_after_cr)
 }
 
 pub(super) fn parse_hex(value: &str) -> Result<Vec<u8>, String> {
@@ -242,6 +272,10 @@ mod tests {
             encode_input("48 65 0x6C6C6F\r", "UTF-8", "hex", "crlf").unwrap(),
             b"Hello\r\n"
         );
+        assert_eq!(
+            encode_input("41\r", "UTF-8", "hex", "none").unwrap(),
+            b"A\r"
+        );
         assert!(encode_input("ABC", "UTF-8", "hex", "none").is_err());
     }
 
@@ -254,15 +288,27 @@ mod tests {
         assert_eq!(buffer, "48");
         assert_eq!(
             consume_hex_input(&mut buffer, "\u{7f}8\r", &mut pending_lf),
-            vec!["48".to_string()]
+            vec![SerialInputChunk::Line {
+                value: "48".to_string(),
+                terminator: "\r".to_string()
+            }]
         );
         assert_eq!(
             consume_hex_input(&mut buffer, "48\r", &mut pending_lf),
-            vec!["48".to_string()]
+            vec![SerialInputChunk::Line {
+                value: "48".to_string(),
+                terminator: "\r".to_string()
+            }]
         );
         assert_eq!(
             consume_hex_input(&mut buffer, "\n69\r\n", &mut pending_lf),
-            vec!["69".to_string()]
+            vec![
+                SerialInputChunk::LineContinuation("\n".to_string()),
+                SerialInputChunk::Line {
+                    value: "69".to_string(),
+                    terminator: "\r\n".to_string()
+                }
+            ]
         );
         assert!(!pending_lf);
     }
@@ -274,9 +320,40 @@ mod tests {
         assert!(consume_line_input(&mut buffer, "pi", &mut pending_lf).is_empty());
         assert_eq!(
             consume_line_input(&mut buffer, "n\u{8}ng\r\n", &mut pending_lf),
-            vec!["ping"]
+            vec![SerialInputChunk::Line {
+                value: "ping".to_string(),
+                terminator: "\r\n".to_string()
+            }]
         );
         assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn emits_control_bytes_immediately_in_line_mode() {
+        let mut buffer = String::from("pending");
+        let mut pending_lf = false;
+        assert_eq!(
+            consume_line_input(&mut buffer, "\u{3}", &mut pending_lf),
+            vec![SerialInputChunk::Immediate(3)]
+        );
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn keeps_a_split_lf_for_newline_none_mode() {
+        let mut buffer = String::new();
+        let mut pending_lf = false;
+        assert_eq!(
+            consume_line_input(&mut buffer, "ok\r", &mut pending_lf),
+            vec![SerialInputChunk::Line {
+                value: "ok".to_string(),
+                terminator: "\r".to_string()
+            }]
+        );
+        assert_eq!(
+            consume_line_input(&mut buffer, "\n", &mut pending_lf),
+            vec![SerialInputChunk::LineContinuation("\n".to_string())]
+        );
     }
 
     #[test]

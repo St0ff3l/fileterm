@@ -12,6 +12,91 @@ pub(super) fn apply_parity(stream: &SerialStream, parity: SerialParity) -> Resul
     }
 }
 
+pub(super) fn apply_rs485(
+    stream: &SerialStream,
+    mode: &str,
+    rts_on_send: bool,
+    delay_before_send_ms: u32,
+    delay_after_send_ms: u32,
+) -> Result<(), String> {
+    match mode {
+        "none" => apply_rs485_platform(stream, false, rts_on_send, 0, 0),
+        "half-duplex" => apply_rs485_platform(
+            stream,
+            true,
+            rts_on_send,
+            delay_before_send_ms,
+            delay_after_send_ms,
+        ),
+        _ => Err("串口 RS-485 模式无效".to_string()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn apply_rs485_platform(
+    stream: &SerialStream,
+    enabled: bool,
+    rts_on_send: bool,
+    delay_before_send_ms: u32,
+    delay_after_send_ms: u32,
+) -> Result<(), String> {
+    use std::os::fd::AsRawFd;
+
+    // Linux's serial_rs485 layout is five u32 fields followed by padding for
+    // ABI compatibility. libc exposes the ioctl numbers but not this struct.
+    #[repr(C)]
+    struct SerialRs485 {
+        flags: u32,
+        delay_rts_before_send: u32,
+        delay_rts_after_send: u32,
+        padding: [u32; 5],
+    }
+
+    const SER_RS485_ENABLED: u32 = 1;
+    const SER_RS485_RTS_ON_SEND: u32 = 1 << 1;
+    const SER_RS485_RTS_AFTER_SEND: u32 = 1 << 2;
+
+    let flags = if enabled {
+        SER_RS485_ENABLED
+            | if rts_on_send {
+                SER_RS485_RTS_ON_SEND
+            } else {
+                SER_RS485_RTS_AFTER_SEND
+            }
+    } else {
+        0
+    };
+    let options = SerialRs485 {
+        flags,
+        delay_rts_before_send: delay_before_send_ms,
+        delay_rts_after_send: delay_after_send_ms,
+        padding: [0; 5],
+    };
+    let result = unsafe { libc::ioctl(stream.as_raw_fd(), libc::TIOCSRS485, &options) };
+    if result != 0 {
+        return Err(format!(
+            "应用 Linux RS-485 配置失败：{}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_rs485_platform(
+    _stream: &SerialStream,
+    enabled: bool,
+    _rts_on_send: bool,
+    _delay_before_send_ms: u32,
+    _delay_after_send_ms: u32,
+) -> Result<(), String> {
+    if enabled {
+        Err("当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器".to_string())
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn apply_extended_parity(stream: &SerialStream, parity: SerialParity) -> Result<(), String> {
     use std::mem::MaybeUninit;
@@ -115,7 +200,15 @@ fn read_output_lines_platform(stream: &SerialStream) -> (Option<bool>, Option<bo
     )
 }
 
-#[cfg(not(unix))]
+#[cfg(target_os = "windows")]
+fn read_output_lines_platform(_stream: &SerialStream) -> (Option<bool>, Option<bool>) {
+    // Windows GetCommState reports the DCB's requested control mode, not the
+    // electrical output level. Keep the fallback in control.rs so the UI says
+    // "remembered" instead of presenting configuration as physical readback.
+    (None, None)
+}
+
+#[cfg(all(not(unix), not(target_os = "windows")))]
 fn read_output_lines_platform(_stream: &SerialStream) -> (Option<bool>, Option<bool>) {
     // Windows exposes modem input lines through GetCommModemStatus, but not
     // the current DTR/RTS output levels. Keep the last requested values as the

@@ -63,6 +63,7 @@ import type {
   SerialLineStatus,
   SerialTransferDirection,
   SerialTransferMode,
+  SerialTransferProgress,
   SerialTransferResult,
   SerialPortInfo,
   StartAiChatInput,
@@ -461,14 +462,16 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       direction: SerialTransferDirection,
       mode: SerialTransferMode,
       localPath: string,
-      fileName?: string
+      fileName?: string,
+      localPaths?: string[]
     ) =>
       invoke<SerialTransferResult>('app_serial_transfer', {
         tabId,
         direction,
         mode,
         localPath,
-        fileName: fileName ?? null
+        fileName: fileName ?? null,
+        localPaths: localPaths ?? null
       }),
     serialTransferCancel: (tabId: string) => invoke<void>('app_serial_cancel_transfer', { tabId }),
     saveSessionLog: (tabId: string) => invoke<string | null>('app_save_session_log', { tabId }),
@@ -744,6 +747,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onTerminalData: subscribeTerminalData,
     onTerminalState: (listener: (payload: TerminalStatePayload) => void) => subscribe('terminal:state', listener),
     onTransferUpdate: (listener: (transfer: TransferTask) => void) => subscribe('transfer:update', listener),
+    onSerialTransferProgress: (listener: (progress: SerialTransferProgress) => void) =>
+      subscribe('serial:transfer-progress', listener),
     onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) => subscribe('workspace:snapshot', listener),
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),

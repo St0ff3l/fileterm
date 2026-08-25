@@ -440,9 +440,18 @@ const zhCN = {
   serialParityUnsupported: '当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验',
   serialParityHint: '标记/空格校验使用系统串口后端：Windows 通常可用，Linux 需驱动支持 CMSPAR，macOS 通常不支持。',
   serialFlowControlInvalid: '串口流控必须是无、软件或硬件流控',
+  serialRtsHardwareManaged: '已启用硬件流控，RTS 由驱动自动管理。',
+  serialRtsRs485Managed: '已启用 RS-485 半双工，RTS 由驱动自动管理。',
+  serialRs485FlowConflict: 'RS-485 半双工不能与硬件流控同时启用。',
+  serialWriteTimeout: '串口写入等待硬件流控超时。',
+  serialWriteTimeoutInvalid: '串口写入超时必须在 250 到 600000 毫秒之间。',
   serialPermissionError: '无法访问串口 {path}：请确认设备驱动和系统访问权限。',
   serialUnavailable: '串口设备 {path} 不存在、不可用或已断开。',
   serialBusy: '串口设备 {path} 已被其他程序占用。',
+  serialIdentityScanTimeout: '串口设备身份扫描超时。',
+  serialIdentityScanFailed: '串口设备身份扫描失败：',
+  serialIdentityNotFound: '未找到匹配已保存身份的串口设备（当前配置：{path}）。',
+  serialIdentityAmbiguous: '已保存身份匹配到多个串口设备，请重新选择：{ports}',
   serialGenericPrefix: '串口 {path}：',
   serialScanFailedPrefix: '串口设备扫描失败：',
   serialScanTimeout: '串口设备扫描超时，请稍后重试或手动输入设备路径。',
@@ -451,6 +460,7 @@ const zhCN = {
   devicePath: '设备路径',
   serialPortSelect: '选择已检测到的串口设备',
   serialPortNoDevices: '未检测到串口设备，可手动输入路径',
+  serialPortIdentitySaved: '已记住设备身份；端口名称变化时会尝试自动匹配。',
   serialPortRefresh: '刷新设备列表',
   serialPortRefreshing: '正在扫描串口设备',
   serialPortScanFailed: '串口设备扫描失败',
@@ -469,20 +479,41 @@ const zhCN = {
   serialLocalEchoHint: '立即显示已发送内容；如果设备也会回显，可能会看到重复内容。',
   serialDtrOnOpen: '打开时 DTR',
   serialRtsOnOpen: '打开时 RTS',
+  serialDtrOnClose: '关闭时 DTR',
+  serialRtsOnClose: '关闭时 RTS',
   serialLineControlHint:
     'DTR/RTS 用于复位、供电或硬件握手；Unix 会尽量读回实际输出线，Windows 显示最近请求状态；设备不支持时可关闭。',
   serialCharDelay: '逐字符延迟（毫秒）',
   serialLineDelay: '逐行延迟（毫秒）',
   serialPacingHint: '慢速设备可设置发送节流；0 表示不延迟。',
+  serialReceiveIdleTimeout: 'Raw 接收空闲超时（毫秒）',
+  serialReceiveIdleTimeoutInvalid: '串口接收空闲超时必须在 250 到 600000 毫秒之间。',
+  serialWriteTimeoutSetting: '写入/CTS 等待超时（毫秒）',
+  serialTimeoutHint: '低波特率或硬件流控设备可适当增大；范围 250–600000 毫秒。',
+  serialRs485Mode: 'RS-485 模式',
+  serialRs485None: '关闭',
+  serialRs485HalfDuplex: '半双工（Linux）',
+  serialRs485RtsOnSend: '发送时 RTS 有效',
+  serialRs485DelayBefore: '发送前 RTS 延迟（毫秒）',
+  serialRs485DelayAfter: '发送后 RTS 延迟（毫秒）',
+  serialRs485Hint: 'RS-485 半双工由 Linux 驱动控制 DE/RE；macOS 和 Windows 暂不启用内置 ioctl。',
+  serialRs485Invalid: '串口 RS-485 模式无效。',
+  serialRs485Unsupported: '当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器。',
+  serialRs485ApplyFailed: '应用 Linux RS-485 配置失败：',
+  serialRs485DelayInvalid: '串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间。',
   serialReconnectMaxAttempts: '最大自动重连次数（0 不限）',
   serialReconnectMaxAttemptsHint: '自动重连使用 2、4、8…秒退避，最多等待 30 秒。',
   serialReconnectScheduled: '将在 {seconds} 秒后自动重连（第 {attempt} 次）',
   serialReconnectLimit: '自动重连已达到上限（{maximum} 次）',
   serialControlDtr: 'DTR',
   serialControlRts: 'RTS',
+  serialControlPulseDtr: '脉冲 DTR',
+  serialControlPulseRts: '脉冲 RTS',
   serialControlBreak: 'Break',
   serialControlClear: '清空串口',
   serialControlReset: '复位串口',
+  serialControlClearConfirm: '确认清空串口接收和发送缓冲区？',
+  serialControlResetConfirm: '确认复位串口并恢复打开时线路状态？',
   serialControlStatus: '刷新线路状态',
   serialControlCanceled: '串口控制已取消。',
   serialStatusDtr: 'DTR',
@@ -491,6 +522,8 @@ const zhCN = {
   serialStatusDsr: 'DSR',
   serialStatusRing: 'RING',
   serialStatusCarrier: 'DCD',
+  serialStatusRemembered: '记忆值',
+  serialStatusRtsHardware: 'RTS 自动',
   serialStatusUnavailable: '不可用',
   serialTransfer: '文件传输',
   serialTransferSend: '发送文件',
@@ -501,11 +534,25 @@ const zhCN = {
   serialTransferChooseFile: '选择文件',
   serialTransferChooseDirectory: '选择目录',
   serialTransferDirectoryMissing: '请选择接收目录',
+  serialTransferDirectoryInvalid: '串口 YMODEM 接收目录不存在。',
+  serialTransferPathRequired: '串口传输路径不能为空。',
+  serialTransferNameRequired: '串口接收文件名不能为空。',
+  serialTransferNameInvalid: '串口接收文件名无效。',
+  serialTransferDuplicateFilename: 'YMODEM 文件名重复，无法安全接收。',
   serialTransferName: '文件名',
   serialTransferNamePlaceholder: 'received.bin',
+  serialTransferYmodemBatchHint: 'YMODEM 将使用发送方提供的文件名，可一次接收多个文件。',
   serialTransferCompleted: '传输完成：{bytes} 字节',
   serialTransferFailed: '传输失败：',
-  serialTransferHint: 'Raw 适合连续字节，接收端连续 2 秒无数据后结束；XMODEM/YMODEM 需要对端同时进入对应协议。',
+  serialTransferHint:
+    'Raw 适合连续字节；接收空闲超时和协议帧超时会按串口参数自动调整。YMODEM 支持一次发送或接收多个文件；XMODEM/YMODEM 需要对端同时进入对应协议。',
+  serialTransferXmodemWarning: 'XMODEM 没有文件大小字段，末尾 0x1A 可能被当作填充移除；二进制文件优先使用 YMODEM。',
+  serialTransferProgressRunning: '传输中',
+  serialTransferProgressCompleted: '已完成',
+  serialTransferProgressFailed: '失败',
+  serialTransferProgressCanceled: '已取消',
+  serialTransferProgressBlock: '数据块 {block}',
+  serialTransferWriteTimeout: '串口文件传输等待硬件流控超时。',
   serialTransferTargetExists: '接收目标文件已存在，请更换文件名。',
   serialTransferAlreadyRunning: '当前串口会话已有文件传输正在进行。',
   serialTransferNoneRunning: '当前没有进行中的串口文件传输。',
@@ -520,6 +567,19 @@ const zhCN = {
   serialTransferCancel: '取消传输',
   serialTransferCanceling: '正在取消…',
   serialTransferYmodemHeaderTooLong: 'YMODEM 文件头过长，请缩短文件名。',
+  serialTransferHeaderInvalid: 'YMODEM 文件头格式无效。',
+  serialTransferHeaderChecksumInvalid: 'YMODEM 文件头校验失败。',
+  serialTransferHeaderSequenceInvalid: 'YMODEM 文件头序号无效。',
+  serialTransferNextHeaderInvalid: 'YMODEM 下一个文件头格式无效。',
+  serialTransferFilenameInvalid: 'YMODEM 文件名无效。',
+  serialTransferFilenameUnsafe: 'YMODEM 文件名无效，不允许写出接收目录。',
+  serialTransferSizeMissing: 'YMODEM 文件头缺少文件大小。',
+  serialTransferSizeTextInvalid: 'YMODEM 文件大小不是有效文本。',
+  serialTransferSizeInvalid: 'YMODEM 文件大小无效。',
+  serialTransferSizeMismatch: 'YMODEM 文件大小与接收数据不一致。',
+  serialTransferFrameIncomplete: '串口文件传输数据帧不完整。',
+  serialTransferFrameSequenceInvalid: '串口文件传输数据块序号校验无效，无法安全重试。',
+  serialTransferReadFailedPrefix: '读取串口文件传输数据失败：',
   serialQuickSend: '快捷发送',
   serialQuickSendPlaceholder: '输入要发送的文本或命令',
   serialQuickSendNow: '发送',
@@ -1830,9 +1890,18 @@ const enUS: typeof zhCN = {
   serialParityHint:
     'Mark/space parity uses the native serial backend: usually available on Windows, requires CMSPAR driver support on Linux, and is usually unavailable on macOS.',
   serialFlowControlInvalid: 'Serial flow control must be none, software, or hardware',
+  serialRtsHardwareManaged: 'Hardware flow control is enabled; RTS is managed by the driver.',
+  serialRtsRs485Managed: 'RS-485 half duplex is enabled; RTS is managed by the driver.',
+  serialRs485FlowConflict: 'RS-485 half duplex cannot be combined with hardware flow control.',
+  serialWriteTimeout: 'Timed out waiting for hardware flow control while writing to the serial port.',
+  serialWriteTimeoutInvalid: 'Serial write timeout must be between 250 and 600000 milliseconds.',
   serialPermissionError: 'Unable to access serial port {path}: check the device driver and system permissions.',
   serialUnavailable: 'Serial device {path} does not exist, is unavailable, or has been disconnected.',
   serialBusy: 'Serial device {path} is already in use by another program.',
+  serialIdentityScanTimeout: 'Serial device identity scan timed out.',
+  serialIdentityScanFailed: 'Serial device identity scan failed: ',
+  serialIdentityNotFound: 'No serial device matches the saved identity (configured path: {path}).',
+  serialIdentityAmbiguous: 'The saved identity matches multiple serial devices; choose one again: {ports}',
   serialGenericPrefix: 'Serial {path}: ',
   serialScanFailedPrefix: 'Unable to scan serial ports: ',
   serialScanTimeout: 'Serial port scanning timed out. Try again later or enter the device path manually.',
@@ -1841,6 +1910,7 @@ const enUS: typeof zhCN = {
   devicePath: 'Device path',
   serialPortSelect: 'Select a detected serial port',
   serialPortNoDevices: 'No serial ports detected; enter a path manually',
+  serialPortIdentitySaved: 'The device identity is saved; a changed port name can be matched automatically.',
   serialPortRefresh: 'Refresh device list',
   serialPortRefreshing: 'Scanning serial ports',
   serialPortScanFailed: 'Unable to scan serial ports',
@@ -1859,20 +1929,43 @@ const enUS: typeof zhCN = {
   serialLocalEchoHint: 'Show transmitted bytes immediately; device echo can make the content appear twice.',
   serialDtrOnOpen: 'DTR on open',
   serialRtsOnOpen: 'RTS on open',
+  serialDtrOnClose: 'DTR on close',
+  serialRtsOnClose: 'RTS on close',
   serialLineControlHint:
     'DTR/RTS can reset, power, or handshake a device; Unix reads back output lines when supported, while Windows shows the last requested state; disable them when unsupported.',
   serialCharDelay: 'Per-character delay (ms)',
   serialLineDelay: 'Per-line delay (ms)',
   serialPacingHint: 'Use pacing for slow devices; 0 means no delay.',
+  serialReceiveIdleTimeout: 'Raw receive idle timeout (ms)',
+  serialReceiveIdleTimeoutInvalid: 'Serial receive idle timeout must be between 250 and 600000 milliseconds.',
+  serialWriteTimeoutSetting: 'Write/CTS wait timeout (ms)',
+  serialTimeoutHint: 'Increase these for low baud rates or hardware-flow-control devices; range 250–600000 ms.',
+  serialRs485Mode: 'RS-485 mode',
+  serialRs485None: 'Off',
+  serialRs485HalfDuplex: 'Half duplex (Linux)',
+  serialRs485RtsOnSend: 'RTS active while sending',
+  serialRs485DelayBefore: 'RTS delay before send (ms)',
+  serialRs485DelayAfter: 'RTS delay after send (ms)',
+  serialRs485Hint:
+    'RS-485 half-duplex DE/RE control uses the Linux driver; built-in ioctl is not enabled on macOS or Windows.',
+  serialRs485Invalid: 'The serial RS-485 mode is invalid.',
+  serialRs485Unsupported:
+    'Built-in RS-485 half-duplex control is not supported on this platform; use the driver or an external converter.',
+  serialRs485ApplyFailed: 'Unable to apply Linux RS-485 settings: ',
+  serialRs485DelayInvalid: 'Serial RS-485 RTS delays must be between 0 and 60000 milliseconds.',
   serialReconnectMaxAttempts: 'Max auto-reconnect attempts (0 unlimited)',
   serialReconnectMaxAttemptsHint: 'Automatic reconnect backs off at 2, 4, 8… seconds and caps at 30 seconds.',
   serialReconnectScheduled: 'Automatic reconnect in {seconds} seconds (attempt {attempt})',
   serialReconnectLimit: 'Automatic reconnect stopped after {maximum} attempts',
   serialControlDtr: 'DTR',
   serialControlRts: 'RTS',
+  serialControlPulseDtr: 'Pulse DTR',
+  serialControlPulseRts: 'Pulse RTS',
   serialControlBreak: 'Break',
   serialControlClear: 'Clear serial',
   serialControlReset: 'Reset serial',
+  serialControlClearConfirm: 'Clear the serial input and output buffers?',
+  serialControlResetConfirm: 'Reset the serial port and restore the line states used on open?',
   serialControlStatus: 'Refresh line status',
   serialControlCanceled: 'Serial control was canceled.',
   serialStatusDtr: 'DTR',
@@ -1881,6 +1974,8 @@ const enUS: typeof zhCN = {
   serialStatusDsr: 'DSR',
   serialStatusRing: 'RING',
   serialStatusCarrier: 'DCD',
+  serialStatusRemembered: 'remembered',
+  serialStatusRtsHardware: 'RTS automatic',
   serialStatusUnavailable: 'N/A',
   serialTransfer: 'File transfer',
   serialTransferSend: 'Send file',
@@ -1891,12 +1986,26 @@ const enUS: typeof zhCN = {
   serialTransferChooseFile: 'Choose file',
   serialTransferChooseDirectory: 'Choose folder',
   serialTransferDirectoryMissing: 'Choose a receive folder first',
+  serialTransferDirectoryInvalid: 'The YMODEM receive folder does not exist.',
+  serialTransferPathRequired: 'A serial transfer path is required.',
+  serialTransferNameRequired: 'A serial receive file name is required.',
+  serialTransferNameInvalid: 'The serial receive file name is invalid.',
+  serialTransferDuplicateFilename: 'YMODEM contains duplicate file names and cannot be received safely.',
   serialTransferName: 'File name',
   serialTransferNamePlaceholder: 'received.bin',
+  serialTransferYmodemBatchHint: 'YMODEM uses the sender-provided file names and can receive multiple files.',
   serialTransferCompleted: 'Transfer complete: {bytes} bytes',
   serialTransferFailed: 'Transfer failed: ',
   serialTransferHint:
-    'Raw sends a byte stream and ends after 2 seconds without data; XMODEM/YMODEM require the peer to use the same protocol.',
+    'Raw sends a byte stream; idle and protocol timeouts are derived from the serial settings. YMODEM supports sending or receiving multiple files; XMODEM/YMODEM require the peer to use the same protocol.',
+  serialTransferXmodemWarning:
+    'XMODEM has no file-size field, so trailing 0x1A bytes may be treated as padding; prefer YMODEM for binary files.',
+  serialTransferProgressRunning: 'Transferring',
+  serialTransferProgressCompleted: 'Completed',
+  serialTransferProgressFailed: 'Failed',
+  serialTransferProgressCanceled: 'Canceled',
+  serialTransferProgressBlock: 'Block {block}',
+  serialTransferWriteTimeout: 'Timed out waiting for hardware flow control during the serial file transfer.',
   serialTransferTargetExists: 'The receive target already exists; choose another file name.',
   serialTransferAlreadyRunning: 'A serial file transfer is already in progress.',
   serialTransferNoneRunning: 'No serial file transfer is currently running.',
@@ -1911,6 +2020,20 @@ const enUS: typeof zhCN = {
   serialTransferCancel: 'Cancel transfer',
   serialTransferCanceling: 'Canceling…',
   serialTransferYmodemHeaderTooLong: 'The YMODEM header is too long; shorten the file name.',
+  serialTransferHeaderInvalid: 'The YMODEM header format is invalid.',
+  serialTransferHeaderChecksumInvalid: 'The YMODEM header checksum is invalid.',
+  serialTransferHeaderSequenceInvalid: 'The YMODEM header sequence is invalid.',
+  serialTransferNextHeaderInvalid: 'The next YMODEM header format is invalid.',
+  serialTransferFilenameInvalid: 'The YMODEM file name is invalid.',
+  serialTransferFilenameUnsafe: 'The YMODEM file name cannot escape the receive folder.',
+  serialTransferSizeMissing: 'The YMODEM header does not contain a file size.',
+  serialTransferSizeTextInvalid: 'The YMODEM file size is not valid text.',
+  serialTransferSizeInvalid: 'The YMODEM file size is invalid.',
+  serialTransferSizeMismatch: 'The YMODEM file size does not match the received data.',
+  serialTransferFrameIncomplete: 'The serial file-transfer frame is incomplete.',
+  serialTransferFrameSequenceInvalid:
+    'The serial file-transfer block sequence check is invalid; it cannot be retried safely.',
+  serialTransferReadFailedPrefix: 'Unable to read serial file-transfer data: ',
   serialQuickSend: 'Quick send',
   serialQuickSendPlaceholder: 'Text or command to send',
   serialQuickSendNow: 'Send',
@@ -3024,6 +3147,17 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('串口校验位必须是无、奇、偶、标记或空格校验', t.serialParityInvalid)
     .replaceAll('当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验', t.serialParityUnsupported)
     .replaceAll('串口流控必须是无、软件或硬件流控', t.serialFlowControlInvalid)
+    .replaceAll('串口启用硬件流控时不能手动控制 RTS', t.serialRtsHardwareManaged)
+    .replaceAll('串口启用 RS-485 半双工时不能手动控制 RTS', t.serialRtsRs485Managed)
+    .replaceAll('串口 RS-485 半双工不能与硬件流控同时启用', t.serialRs485FlowConflict)
+    .replaceAll('串口写入等待硬件流控超时', t.serialWriteTimeout)
+    .replaceAll('串口刷新等待硬件流控超时', t.serialWriteTimeout)
+    .replace(/串口写入超时必须在 250 到 600000 毫秒之间/g, t.serialWriteTimeoutInvalid)
+    .replace(/串口接收空闲超时必须在 250 到 600000 毫秒之间/g, t.serialReceiveIdleTimeoutInvalid)
+    .replaceAll('串口 RS-485 模式无效', t.serialRs485Invalid)
+    .replaceAll('当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器', t.serialRs485Unsupported)
+    .replaceAll('串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间', t.serialRs485DelayInvalid)
+    .replace(/应用 Linux RS-485 配置失败：/g, t.serialRs485ApplyFailed)
     .replace(
       /无法访问串口 (.*)：权限不足。Linux 请将当前用户加入 dialout 组；Windows\/macOS 请确认驱动和设备访问权限。/g,
       (_match, path: string) => formatMessage(t.serialPermissionError, { path })
@@ -3032,6 +3166,14 @@ export function localizeSerialTerminalText(value: string) {
       formatMessage(t.serialUnavailable, { path })
     )
     .replace(/串口设备 (.*) 已被其他程序占用。/g, (_match, path: string) => formatMessage(t.serialBusy, { path }))
+    .replaceAll('串口设备身份扫描超时', t.serialIdentityScanTimeout)
+    .replace(/串口设备身份扫描失败：/g, t.serialIdentityScanFailed)
+    .replace(/串口设备身份未找到匹配端口（当前配置：(.*)）/g, (_match, path: string) =>
+      formatMessage(t.serialIdentityNotFound, { path })
+    )
+    .replace(/串口设备身份匹配到多个端口，请在连接设置中重新选择（(.*)）/g, (_match, ports: string) =>
+      formatMessage(t.serialIdentityAmbiguous, { ports })
+    )
     .replace(/串口 (.*)：/g, (_match, path: string) => formatMessage(t.serialGenericPrefix, { path }))
     .replace(/将在 (\d+) 秒后自动重连（第 (\d+) 次）/g, (_match, seconds: string, attempt: string) =>
       formatMessage(t.serialReconnectScheduled, { seconds, attempt })
@@ -3040,6 +3182,13 @@ export function localizeSerialTerminalText(value: string) {
       formatMessage(t.serialReconnectLimit, { maximum })
     )
     .replaceAll('串口接收目标文件已存在，请更换文件名', t.serialTransferTargetExists)
+    .replaceAll('串口传输路径不能为空', t.serialTransferPathRequired)
+    .replaceAll('串口接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('串口 YMODEM 接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('串口接收文件名不能为空', t.serialTransferNameRequired)
+    .replaceAll('串口接收文件名无效', t.serialTransferNameInvalid)
+    .replaceAll('串口 YMODEM 文件名无效', t.serialTransferFilenameInvalid)
+    .replaceAll('串口 YMODEM 文件名重复，无法安全接收', t.serialTransferDuplicateFilename)
     .replaceAll('当前串口会话已有文件传输正在进行', t.serialTransferAlreadyRunning)
     .replaceAll('当前没有进行中的串口文件传输', t.serialTransferNoneRunning)
     .replaceAll('串口接收已取消', t.serialTransferCanceled)
@@ -3052,9 +3201,29 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('等待 YMODEM 数据超时', t.serialTransferDataTimeout)
     .replaceAll('等待串口文件接收端启动超时', t.serialTransferSenderStartTimeout)
     .replaceAll('串口文件传输结束确认超时', t.serialTransferEndTimeout)
+    .replaceAll('YMODEM 文件头格式无效', t.serialTransferHeaderInvalid)
+    .replaceAll('YMODEM 文件头校验失败', t.serialTransferHeaderChecksumInvalid)
+    .replaceAll('YMODEM 文件头序号无效', t.serialTransferHeaderSequenceInvalid)
+    .replaceAll('YMODEM 下一个文件头格式无效', t.serialTransferNextHeaderInvalid)
+    .replaceAll('YMODEM 文件名无效，不允许包含路径或控制字符', t.serialTransferFilenameInvalid)
+    .replaceAll('YMODEM 文件名无效，不允许写出接收目录', t.serialTransferFilenameUnsafe)
+    .replaceAll('YMODEM 文件头缺少文件名', t.serialTransferHeaderInvalid)
+    .replaceAll('YMODEM 文件头缺少文件大小', t.serialTransferSizeMissing)
+    .replaceAll('YMODEM 文件大小不是有效文本', t.serialTransferSizeTextInvalid)
+    .replaceAll('YMODEM 文件大小无效', t.serialTransferSizeInvalid)
+    .replaceAll('YMODEM 文件大小与接收数据不一致', t.serialTransferSizeMismatch)
+    .replaceAll('串口文件传输数据块序号校验无效，无法安全重试', t.serialTransferFrameSequenceInvalid)
+    .replaceAll('串口文件传输数据块序号读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输数据块序号校验读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输数据块内容读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输 CRC 校验读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输校验和读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('读取串口文件传输数据失败：', t.serialTransferReadFailedPrefix)
     .replaceAll('XMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
     .replaceAll('YMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
     .replaceAll('YMODEM 接收数据超过文件头声明的大小', t.serialTransferDataTooLarge)
+    .replaceAll('串口文件传输写入等待硬件流控超时', t.serialTransferWriteTimeout)
+    .replaceAll('串口文件传输刷新等待硬件流控超时', t.serialTransferWriteTimeout)
     .replaceAll('串口控制已取消', t.serialControlCanceled)
     .replaceAll('串口 YMODEM 文件头过长，请缩短文件名', t.serialTransferYmodemHeaderTooLong)
     .replaceAll('[串口] ', '[Serial] ')

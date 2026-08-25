@@ -1,4 +1,5 @@
 use serde_json::Value;
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -15,20 +16,26 @@ mod config;
 mod control;
 mod pacing;
 mod platform;
+mod progress;
 mod reconnect;
+mod timing;
 mod transfer;
 
 use self::codec::{
     baud_rate as serial_baud_rate, consume_hex_input as consume_serial_hex_input,
     consume_line_input as consume_serial_line_input, display as serial_display,
     encode_input as encode_serial_input, stream_display as serial_stream_display,
-    validate_modes as validate_serial_modes, TextDecoder as SerialTextDecoder,
+    validate_modes as validate_serial_modes, SerialInputChunk, TextDecoder as SerialTextDecoder,
 };
 use self::config::{data_bits, flow_control, parity, serial_error, stop_bits};
-use self::control::{apply_initial_lines, execute as execute_serial_control, SerialControlState};
+use self::control::{
+    apply_close_lines, apply_initial_lines, execute as execute_serial_control, SerialControlState,
+};
 use self::pacing::{write_serial_bytes, SerialPacing};
-use self::platform::apply_parity as apply_platform_parity;
+use self::platform::{apply_parity as apply_platform_parity, apply_rs485};
+use self::progress::SerialTransferReporter;
 use self::reconnect::ReconnectPolicy;
+use self::timing::SerialTransferTiming;
 
 enum SerialWorkerExit {
     Requested,
@@ -60,6 +67,124 @@ impl SerialWorkerError {
 impl std::fmt::Display for SerialWorkerError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(&self.message)
+    }
+}
+
+async fn resolve_serial_device(
+    profile: &Value,
+    configured_path: &str,
+) -> Result<String, SerialWorkerError> {
+    let serial_number = profile
+        .get("deviceSerialNumber")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let vendor_id = profile
+        .get("deviceVendorId")
+        .and_then(Value::as_u64)
+        .and_then(|value| u16::try_from(value).ok());
+    let product_id = profile
+        .get("deviceProductId")
+        .and_then(Value::as_u64)
+        .and_then(|value| u16::try_from(value).ok());
+    let port_type = profile
+        .get("devicePortType")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty());
+
+    if serial_number.is_none() && vendor_id.is_none() && product_id.is_none() {
+        return Ok(configured_path.to_string());
+    }
+
+    let scan = tokio::time::timeout(
+        Duration::from_secs(3),
+        tauri::async_runtime::spawn_blocking(tokio_serial::available_ports),
+    )
+    .await
+    .map_err(|_| SerialWorkerError::retryable("串口设备身份扫描超时".to_string()))?
+    .map_err(|error| SerialWorkerError::retryable(format!("串口设备身份扫描失败：{error}")))?
+    .map_err(|error| SerialWorkerError::retryable(format!("串口设备身份扫描失败：{error}")))?;
+
+    let configured = scan.iter().find(|port| port.port_name == configured_path);
+    if let Some(port) = configured {
+        if serial_port_matches_identity(port, serial_number, vendor_id, product_id, port_type) {
+            return Ok(configured_path.to_string());
+        }
+    }
+
+    let matches = scan
+        .iter()
+        .filter(|port| {
+            serial_port_matches_identity(port, serial_number, vendor_id, product_id, port_type)
+        })
+        .map(|port| port.port_name.clone())
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [path] => Ok(path.clone()),
+        [] => Err(SerialWorkerError::retryable(format!(
+            "串口设备身份未找到匹配端口（当前配置：{configured_path}）"
+        ))),
+        _ => Err(SerialWorkerError::fatal(format!(
+            "串口设备身份匹配到多个端口，请在连接设置中重新选择（{}）",
+            matches.join("、")
+        ))),
+    }
+}
+
+async fn close_serial_stream(
+    stream: &mut tokio_serial::SerialStream,
+    state: SerialControlState,
+    app: &AppHandle,
+    tab_id: &str,
+) {
+    if let Err(error) = apply_close_lines(stream, state) {
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "serial",
+            tab_id,
+            format!("close line update failed: {error}"),
+        );
+    }
+    let _ = stream.shutdown().await;
+}
+
+async fn close_serial_halves(
+    reader: tokio::io::ReadHalf<tokio_serial::SerialStream>,
+    writer: tokio::io::WriteHalf<tokio_serial::SerialStream>,
+    state: SerialControlState,
+    app: &AppHandle,
+    tab_id: &str,
+) {
+    let mut stream = reader.unsplit(writer);
+    close_serial_stream(&mut stream, state, app, tab_id).await;
+}
+
+fn serial_port_matches_identity(
+    port: &tokio_serial::SerialPortInfo,
+    serial_number: Option<&str>,
+    vendor_id: Option<u16>,
+    product_id: Option<u16>,
+    port_type: Option<&str>,
+) -> bool {
+    if let Some(expected) = port_type {
+        let actual = match &port.port_type {
+            tokio_serial::SerialPortType::UsbPort(_) => "usb",
+            tokio_serial::SerialPortType::PciPort => "pci",
+            tokio_serial::SerialPortType::BluetoothPort => "bluetooth",
+            tokio_serial::SerialPortType::Unknown => "unknown",
+        };
+        if actual != expected {
+            return false;
+        }
+    }
+    match &port.port_type {
+        tokio_serial::SerialPortType::UsbPort(info) => {
+            serial_number.is_none_or(|expected| info.serial_number.as_deref() == Some(expected))
+                && vendor_id.is_none_or(|expected| info.vid == expected)
+                && product_id.is_none_or(|expected| info.pid == expected)
+        }
+        _ => serial_number.is_none() && vendor_id.is_none() && product_id.is_none(),
     }
 }
 
@@ -129,11 +254,12 @@ async fn run_serial_worker(
     app: &AppHandle,
     cancellation: CancellationToken,
 ) -> Result<SerialWorkerExit, SerialWorkerError> {
-    let device_path = profile
+    let configured_device_path = profile
         .get("devicePath")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| SerialWorkerError::fatal("串口设备路径不能为空"))?;
+    let device_path = resolve_serial_device(profile, configured_device_path).await?;
     let baud_rate_value = profile
         .get("baudRate")
         .and_then(Value::as_u64)
@@ -181,41 +307,88 @@ async fn run_serial_worker(
             .unwrap_or("none"),
     )
     .map_err(SerialWorkerError::fatal)?;
-    let mut builder = tokio_serial::new(device_path, baud_rate)
-        .data_bits(
-            data_bits(profile.get("dataBits").and_then(Value::as_u64).unwrap_or(8))
-                .map_err(SerialWorkerError::fatal)?,
-        )
-        .stop_bits(
-            stop_bits(profile.get("stopBits").and_then(Value::as_u64).unwrap_or(1))
-                .map_err(SerialWorkerError::fatal)?,
-        )
+    let data_bits_value = profile.get("dataBits").and_then(Value::as_u64).unwrap_or(8);
+    let stop_bits_value = profile.get("stopBits").and_then(Value::as_u64).unwrap_or(1);
+    let data_bits_value_u8 = u8::try_from(data_bits_value)
+        .map_err(|_| SerialWorkerError::fatal("串口数据位超出支持范围"))?;
+    let stop_bits_value_u8 = u8::try_from(stop_bits_value)
+        .map_err(|_| SerialWorkerError::fatal("串口停止位超出支持范围"))?;
+    let transfer_timing = SerialTransferTiming::from_profile(
+        profile,
+        baud_rate,
+        data_bits_value_u8,
+        stop_bits_value_u8,
+        !matches!(
+            serial_parity,
+            crate::sessions::serial::config::SerialParity::None
+        ),
+    )
+    .map_err(SerialWorkerError::fatal)?;
+    let configured_flow_control = profile
+        .get("flowControl")
+        .and_then(Value::as_str)
+        .unwrap_or("none");
+    let configured_rs485_mode = profile
+        .get("rs485Mode")
+        .and_then(Value::as_str)
+        .unwrap_or("none");
+    if configured_flow_control == "hardware" && configured_rs485_mode == "half-duplex" {
+        return Err(SerialWorkerError::fatal(
+            "串口 RS-485 半双工不能与硬件流控同时启用",
+        ));
+    }
+    let mut builder = tokio_serial::new(&device_path, baud_rate)
+        .data_bits(data_bits(data_bits_value).map_err(SerialWorkerError::fatal)?)
+        .stop_bits(stop_bits(stop_bits_value).map_err(SerialWorkerError::fatal)?)
         .parity(serial_parity.tokio_value())
-        .flow_control(
-            flow_control(
-                profile
-                    .get("flowControl")
-                    .and_then(Value::as_str)
-                    .unwrap_or("none"),
-            )
-            .map_err(SerialWorkerError::fatal)?,
-        );
+        .flow_control(flow_control(configured_flow_control).map_err(SerialWorkerError::fatal)?);
     if let Some(dtr_on_open) = control_state.dtr {
         builder = builder.dtr_on_open(dtr_on_open);
     }
     let mut stream = builder
         .open_native_async()
-        .map_err(|error| SerialWorkerError::retryable(serial_error(device_path, error)))?;
-    apply_platform_parity(&stream, serial_parity).map_err(SerialWorkerError::fatal)?;
-    app.state::<crate::services::workspace::WorkspaceState>()
-        .serial_reconnect_attempts
-        .write()
-        .await
-        .remove(tab_id);
+        .map_err(|error| SerialWorkerError::retryable(serial_error(&device_path, error)))?;
+    if let Err(error) = apply_platform_parity(&stream, serial_parity) {
+        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err(SerialWorkerError::fatal(error));
+    }
+    let rs485_delay_before_send = profile
+        .get("rs485DelayRtsBeforeSendMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let rs485_delay_after_send = profile
+        .get("rs485DelayRtsAfterSendMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if rs485_delay_before_send > 60_000 || rs485_delay_after_send > 60_000 {
+        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err(SerialWorkerError::fatal(
+            "串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间",
+        ));
+    }
+    if let Err(error) = apply_rs485(
+        &stream,
+        configured_rs485_mode,
+        profile
+            .get("rs485RtsOnSend")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        rs485_delay_before_send as u32,
+        rs485_delay_after_send as u32,
+    ) {
+        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err(SerialWorkerError::fatal(error));
+    }
     let mut control_state = control_state;
-    apply_initial_lines(&mut stream, control_state)
-        .map_err(|error| SerialWorkerError::retryable(serial_error(device_path, error)))?;
+    if let Err(error) = apply_initial_lines(&mut stream, control_state) {
+        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err(SerialWorkerError::retryable(serial_error(
+            &device_path,
+            error,
+        )));
+    }
     if cancellation.is_cancelled() {
+        close_serial_stream(&mut stream, control_state, app, tab_id).await;
         return Ok(SerialWorkerExit::Requested);
     }
     let (mut reader, mut writer) = tokio::io::split(stream);
@@ -234,8 +407,15 @@ async fn run_serial_worker(
     )
     .await;
     if cancellation.is_cancelled() {
+        let mut stream = reader.unsplit(writer);
+        close_serial_stream(&mut stream, control_state, app, tab_id).await;
         return Ok(SerialWorkerExit::Requested);
     }
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .serial_reconnect_attempts
+        .write()
+        .await
+        .remove(tab_id);
     emit_terminal_data(app, tab_id, "串口已连接\r\n").await;
     let mut buffer = vec![0_u8; 32 * 1024];
     let mut hex_input_buffer = String::new();
@@ -248,6 +428,8 @@ async fn run_serial_worker(
         tokio::select! {
             _ = cancellation.cancelled() => {
                 crate::services::logging::session(app, "INFO", "serial", tab_id, "worker canceled");
+                let mut stream = reader.unsplit(writer);
+                close_serial_stream(&mut stream, control_state, app, tab_id).await;
                 return Ok(SerialWorkerExit::Requested);
             }
             command = command_rx.recv() => {
@@ -259,51 +441,98 @@ async fn run_serial_worker(
                                 &data,
                                 &mut hex_input_pending_lf,
                             )
-                            .into_iter()
-                            .map(|line| format!("{line}\n"))
-                            .collect::<Vec<_>>()
                         } else if line_mode {
                             consume_serial_line_input(
                                 &mut line_input_buffer,
                                 &data,
                                 &mut line_input_pending_lf,
                             )
-                            .into_iter()
-                            .map(|line| format!("{line}\n"))
-                            .collect::<Vec<_>>()
                         } else {
-                            vec![data]
+                            vec![SerialInputChunk::Line {
+                                value: data,
+                                terminator: String::new(),
+                            }]
                         };
                         for input in inputs {
-                            let encoded = match encode_serial_input(
-                                &input,
-                                &encoding,
-                                &input_mode,
-                                &newline_mode,
-                            ) {
-                                Ok(encoded) => encoded,
-                                Err(error) if input_mode == "hex" => {
-                                    emit_terminal_data(
-                                        app,
-                                        tab_id,
-                                        &format!("\r\n[Hex] {error}\r\n"),
-                                    )
-                                    .await;
-                                    continue;
+                            let encoded = match input {
+                                SerialInputChunk::Immediate(byte) => vec![byte],
+                                SerialInputChunk::LineContinuation(terminator) => {
+                                    if newline_mode == "none" {
+                                        terminator.into_bytes()
+                                    } else {
+                                        Vec::new()
+                                    }
                                 }
-                                Err(error) => return Err(SerialWorkerError::fatal(error)),
+                                SerialInputChunk::Line { value, terminator } => {
+                                    let input = format!("{value}{terminator}");
+                                    match encode_serial_input(
+                                        &input,
+                                        &encoding,
+                                        &input_mode,
+                                        &newline_mode,
+                                    ) {
+                                        Ok(encoded) => encoded,
+                                        Err(error) if input_mode == "hex" => {
+                                            emit_terminal_data(
+                                                app,
+                                                tab_id,
+                                                &format!("\r\n[Hex] {error}\r\n"),
+                                            )
+                                            .await;
+                                            continue;
+                                        }
+                                        Err(error) => {
+                                            close_serial_halves(
+                                                reader,
+                                                writer,
+                                                control_state,
+                                                app,
+                                                tab_id,
+                                            )
+                                            .await;
+                                            return Err(SerialWorkerError::fatal(error));
+                                        }
+                                    }
+                                }
                             };
-                            let written = write_serial_bytes(
+                            let written = match write_serial_bytes(
                                 &mut writer,
                                 &encoded,
                                 &cancellation,
                                 pacing,
                             )
-                                .await
-                                .map_err(|error| {
-                                    SerialWorkerError::retryable(serial_error(device_path, error))
-                                })?;
+                            .await
+                            {
+                                Ok(written) => written,
+                                Err(error)
+                                    if error.kind() == std::io::ErrorKind::TimedOut =>
+                                {
+                                    emit_terminal_data(
+                                        app,
+                                        tab_id,
+                                        "\r\n[串口] 发送等待 CTS/硬件流控超时，当前数据未继续发送\r\n",
+                                    )
+                                    .await;
+                                    continue;
+                                }
+                                Err(error) => {
+                                    let worker_error = SerialWorkerError::retryable(
+                                        serial_error(&device_path, error),
+                                    );
+                                    close_serial_halves(
+                                        reader,
+                                        writer,
+                                        control_state,
+                                        app,
+                                        tab_id,
+                                    )
+                                    .await;
+                                    return Err(worker_error);
+                                }
+                            };
                             if !written {
+                                close_serial_halves(reader, writer, control_state, app, tab_id)
+                                    .await;
                                 return Ok(SerialWorkerExit::Requested);
                             }
                             crate::services::session_logs::append_serial_bytes(
@@ -316,8 +545,21 @@ async fn run_serial_worker(
                             )
                                 .await;
                             if local_echo && !encoded.is_empty() {
-                                let echoed = serial_display(&encoded, &encoding, &output_mode)
-                                    .map_err(SerialWorkerError::fatal)?;
+                                let echoed = match serial_display(&encoded, &encoding, &output_mode)
+                                {
+                                    Ok(echoed) => echoed,
+                                    Err(error) => {
+                                        close_serial_halves(
+                                            reader,
+                                            writer,
+                                            control_state,
+                                            app,
+                                            tab_id,
+                                        )
+                                        .await;
+                                        return Err(SerialWorkerError::fatal(error));
+                                    }
+                                };
                                 emit_terminal_data(app, tab_id, &echoed).await;
                             }
                         }
@@ -348,8 +590,23 @@ async fn run_serial_worker(
                         cancellation: transfer_cancellation,
                         respond_to,
                     }) => {
+                        let mut reporter = SerialTransferReporter::new(
+                            app,
+                            tab_id,
+                            request.direction,
+                            request.mode,
+                            &request.local_path,
+                            None,
+                        );
                         let mut stream = reader.unsplit(writer);
-                        let result = transfer::execute(&mut stream, request, transfer_cancellation).await;
+                        let result = transfer::execute(
+                            &mut stream,
+                            request,
+                            transfer_timing,
+                            &mut reporter,
+                            transfer_cancellation,
+                        )
+                        .await;
                         let (next_reader, next_writer) = tokio::io::split(stream);
                         reader = next_reader;
                         writer = next_writer;
@@ -359,11 +616,9 @@ async fn run_serial_worker(
                         // Raw serial links have no terminal-size negotiation.
                     }
                     Some(WorkerCmd::Disconnect) | None => {
-                        if cancellation.is_cancelled() {
-                            return Ok(SerialWorkerExit::Requested);
-                        }
                         crate::services::logging::session(app, "INFO", "serial", tab_id, "disconnecting");
-                        let _ = writer.shutdown().await;
+                        let mut stream = reader.unsplit(writer);
+                        close_serial_stream(&mut stream, control_state, app, tab_id).await;
                         set_terminal_state(app, tab_id, "串口已断开".to_string(), WorkspaceTabStatus::Closed).await;
                         return Ok(SerialWorkerExit::Requested);
                     }
@@ -372,12 +627,25 @@ async fn run_serial_worker(
             }
             read = reader.read(&mut buffer) => {
                 if cancellation.is_cancelled() {
+                    let mut stream = reader.unsplit(writer);
+                    close_serial_stream(&mut stream, control_state, app, tab_id).await;
                     return Ok(SerialWorkerExit::Requested);
                 }
-                let count = read
-                    .map_err(|error| SerialWorkerError::retryable(serial_error(device_path, error)))?;
+                let count = match read {
+                    Ok(count) => count,
+                    Err(error) => {
+                        let worker_error = SerialWorkerError::retryable(serial_error(
+                            &device_path,
+                            error,
+                        ));
+                        close_serial_halves(reader, writer, control_state, app, tab_id).await;
+                        return Err(worker_error);
+                    }
+                };
                 if count == 0 {
                     if cancellation.is_cancelled() {
+                        let mut stream = reader.unsplit(writer);
+                        close_serial_stream(&mut stream, control_state, app, tab_id).await;
                         return Ok(SerialWorkerExit::Requested);
                     }
                     crate::services::logging::session(app, "WARN", "serial", tab_id, "device disconnected");
@@ -385,11 +653,21 @@ async fn run_serial_worker(
                     if !trailing.is_empty() {
                         emit_terminal_data(app, tab_id, &trailing).await;
                     }
+                    close_serial_halves(reader, writer, control_state, app, tab_id).await;
                     set_terminal_state(app, tab_id, "串口设备已断开".to_string(), WorkspaceTabStatus::Closed).await;
                     return Ok(SerialWorkerExit::DeviceDisconnected);
                 }
-                let output = serial_stream_display(&mut text_decoder, &buffer[..count], &output_mode)
-                    .map_err(SerialWorkerError::fatal)?;
+                let output = match serial_stream_display(
+                    &mut text_decoder,
+                    &buffer[..count],
+                    &output_mode,
+                ) {
+                    Ok(output) => output,
+                    Err(error) => {
+                        close_serial_halves(reader, writer, control_state, app, tab_id).await;
+                        return Err(SerialWorkerError::fatal(error));
+                    }
+                };
                 crate::services::session_logs::append_serial_bytes(
                     app,
                     tab_id,
@@ -533,12 +811,34 @@ async fn schedule_auto_reconnect(
 
 #[cfg(test)]
 mod tests {
-    use super::SerialWorkerError;
+    use super::{serial_port_matches_identity, SerialWorkerError};
 
     #[test]
     fn exposes_retryable_worker_errors_for_reconnect() {
         assert!(!SerialWorkerError::fatal("invalid configuration").retryable);
         assert!(SerialWorkerError::retryable("device unavailable").retryable);
+    }
+
+    #[test]
+    fn matches_non_usb_identity_by_port_type_without_guessing_a_device() {
+        let port = tokio_serial::SerialPortInfo {
+            port_name: "/dev/ttyS0".to_string(),
+            port_type: tokio_serial::SerialPortType::PciPort,
+        };
+        assert!(serial_port_matches_identity(
+            &port,
+            None,
+            None,
+            None,
+            Some("pci")
+        ));
+        assert!(!serial_port_matches_identity(
+            &port,
+            None,
+            None,
+            None,
+            Some("usb")
+        ));
     }
 
     #[cfg(target_os = "linux")]

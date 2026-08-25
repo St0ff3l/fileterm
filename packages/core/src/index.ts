@@ -300,6 +300,11 @@ export interface TelnetProfile extends NetworkProfile {
 export interface SerialProfile extends BaseProfile {
   type: 'serial'
   devicePath: string
+  /** Stable USB identity used to recover from a changed /dev/tty path. */
+  deviceSerialNumber?: string
+  deviceVendorId?: number
+  deviceProductId?: number
+  devicePortType?: SerialPortType
   baudRate: number
   dataBits: 5 | 6 | 7 | 8
   stopBits: 1 | 2
@@ -319,14 +324,26 @@ export interface SerialProfile extends BaseProfile {
   /** Initial modem-control line levels applied after opening the port. */
   dtrOnOpen?: boolean
   rtsOnOpen?: boolean
+  /** Optional modem-control levels applied before the port is closed. */
+  dtrOnClose?: boolean
+  rtsOnClose?: boolean
   /** Delay between transmitted bytes and completed lines, in milliseconds. */
   serialCharDelayMs?: number
   serialLineDelayMs?: number
+  /** Idle timeout for Raw receive mode, in milliseconds. */
+  serialReceiveIdleTimeoutMs?: number
+  /** Timeout for a blocked serial write/flush, in milliseconds. */
+  serialWriteTimeoutMs?: number
+  /** Linux RS-485 transceiver mode; unsupported platforms fail closed. */
+  rs485Mode?: 'none' | 'half-duplex'
+  rs485RtsOnSend?: boolean
+  rs485DelayRtsBeforeSendMs?: number
+  rs485DelayRtsAfterSendMs?: number
   /** Maximum automatic reconnect attempts; undefined keeps retrying. */
   reconnectMaxAttempts?: number
   /** Include TX bytes in automatic serial session logs. */
   sessionLogIncludeInput?: boolean
-  /** Prefix automatic session-log records with Unix-millisecond timestamps. */
+  /** Prefix automatic session-log records with unambiguous UTC timestamps. */
   sessionLogTimestamps?: boolean
   /** Capture serial RX/TX records as raw uppercase hexadecimal bytes. */
   sessionLogRaw?: boolean
@@ -337,11 +354,15 @@ export interface SerialProfile extends BaseProfile {
 export type SerialNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
 export type SerialInputMode = 'text' | 'hex'
 export type SerialOutputMode = 'text' | 'hex'
-export type SerialControlAction = 'set-dtr' | 'set-rts' | 'send-break' | 'clear-buffers' | 'reset' | 'status'
+export type SerialControlAction =
+  'set-dtr' | 'set-rts' | 'pulse-dtr' | 'pulse-rts' | 'send-break' | 'clear-buffers' | 'reset' | 'status'
 
 export interface SerialLineStatus {
   dtr: boolean | null
   rts: boolean | null
+  dtrReadback: boolean
+  rtsReadback: boolean
+  rtsManual: boolean
   cts: boolean | null
   dsr: boolean | null
   ring: boolean | null
@@ -354,6 +375,19 @@ export type SerialTransferMode = 'raw' | 'xmodem' | 'ymodem'
 export interface SerialTransferResult {
   bytesTransferred: number
   localPath: string
+}
+
+export interface SerialTransferProgress {
+  tabId: string
+  direction: SerialTransferDirection
+  mode: SerialTransferMode
+  localPath: string
+  status: 'running' | 'completed' | 'failed' | 'canceled'
+  bytesTransferred: number
+  totalBytes?: number
+  speedBytesPerSecond?: number
+  block?: number
+  message?: string
 }
 
 export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
@@ -1003,6 +1037,10 @@ export interface CreateProfileInput {
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
   devicePath?: string
+  deviceSerialNumber?: string
+  deviceVendorId?: number
+  deviceProductId?: number
+  devicePortType?: SerialPortType
   baudRate?: number
   dataBits?: 5 | 6 | 7 | 8
   stopBits?: 1 | 2
@@ -1015,8 +1053,16 @@ export interface CreateProfileInput {
   localEcho?: boolean
   dtrOnOpen?: boolean
   rtsOnOpen?: boolean
+  dtrOnClose?: boolean
+  rtsOnClose?: boolean
   serialCharDelayMs?: number
   serialLineDelayMs?: number
+  serialReceiveIdleTimeoutMs?: number
+  serialWriteTimeoutMs?: number
+  rs485Mode?: SerialProfile['rs485Mode']
+  rs485RtsOnSend?: boolean
+  rs485DelayRtsBeforeSendMs?: number
+  rs485DelayRtsAfterSendMs?: number
   reconnectMaxAttempts?: number
   sessionLogIncludeInput?: boolean
   sessionLogTimestamps?: boolean
@@ -2084,7 +2130,8 @@ export interface FileTermDesktopApi {
     direction: SerialTransferDirection,
     mode: SerialTransferMode,
     localPath: string,
-    fileName?: string
+    fileName?: string,
+    localPaths?: string[]
   ): Promise<SerialTransferResult>
   serialTransferCancel(tabId: string): Promise<void>
   saveSessionLog(tabId: string): Promise<string | null>
@@ -2269,6 +2316,7 @@ export interface FileTermDesktopApi {
   onTerminalData(listener: (payload: TerminalDataPayload) => void): () => void
   onTerminalState(listener: (payload: TerminalStatePayload) => void): () => void
   onTransferUpdate(listener: (transfer: TransferTask) => void): () => void
+  onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
