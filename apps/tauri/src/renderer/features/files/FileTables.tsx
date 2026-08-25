@@ -4,6 +4,7 @@ import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { formatMessage, t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { getDisplayFileIconName, getDisplayFileTypeLabel } from './file-kind'
+import { formatFileModified } from './file-time'
 
 import type { FileFilterConfig } from './file-filter'
 
@@ -357,7 +358,7 @@ export function FileTable({
                   </td>
                   {!compact ? <td>{row.size}</td> : null}
                   {!compact ? <td>{typeLabel}</td> : null}
-                  {!compact ? <td>{row.modified}</td> : null}
+                  {!compact ? <td>{formatFileModified(row.modified)}</td> : null}
                   {!compact ? <td>{row.permission ?? ''}</td> : null}
                   {!compact ? <td>{row.ownerGroup ?? ''}</td> : null}
                 </tr>

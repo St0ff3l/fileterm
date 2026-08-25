@@ -39,6 +39,7 @@ import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
 import { getDisplayFileIconName, getDisplayFileTypeSortKey } from './file-kind'
 import { matchesFileFilter, type FileFilterConfig } from './file-filter'
+import { parseFileModified } from './file-time'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
 
 const VIEW_TRANSITION_LOADING_MS = 180
@@ -112,16 +113,6 @@ function parseSortableSize(value: string) {
   return amount * (units[unit] ?? 1)
 }
 
-function parseSortableTimestamp(value: string) {
-  if (!value) {
-    return 0
-  }
-
-  const normalized = value.replace(/\//g, '-')
-  const parsed = Date.parse(normalized)
-  return Number.isNaN(parsed) ? 0 : parsed
-}
-
 function compareRemoteFilesByField(left: RemoteFileItem, right: RemoteFileItem, sort: RemoteFileSortState) {
   const direction = sort.direction === 'asc' ? 1 : -1
 
@@ -131,7 +122,7 @@ function compareRemoteFilesByField(left: RemoteFileItem, right: RemoteFileItem, 
     case 'type':
       return compareText(getDisplayFileTypeSortKey(left), getDisplayFileTypeSortKey(right)) * direction
     case 'modified':
-      return (parseSortableTimestamp(left.modified) - parseSortableTimestamp(right.modified)) * direction
+      return ((parseFileModified(left.modified) ?? 0) - (parseFileModified(right.modified) ?? 0)) * direction
     case 'permission':
       return compareText(left.permission ?? '', right.permission ?? '') * direction
     case 'ownerGroup':
