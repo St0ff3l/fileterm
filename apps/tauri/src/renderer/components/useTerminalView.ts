@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
-import { copyText } from '../app/app-utils'
+import { readClipboardText, writeClipboardText } from '../app/app-utils'
 import { t } from '../i18n'
 import { getConfiguredMonoFontFamily } from '../app/font-metrics'
 import {
@@ -333,19 +333,14 @@ export function useTerminalView({
       source: vimVisualSelection ? 'vim-visual' : 'xterm',
       vimVisualMode: vimVisualSelection?.mode
     })
-    if (window.fileterm?.writeClipboardText) {
-      void window.fileterm.writeClipboardText(selection).then(
-        () => logTerminalClipboard(terminal, 'copy-succeeded'),
-        (error: unknown) => {
-          if (import.meta.env.DEV) {
-            console.warn('[TerminalView][clipboard] copy-failed', error)
-          }
+    void writeClipboardText(selection).then(
+      () => logTerminalClipboard(terminal, 'copy-succeeded'),
+      (error: unknown) => {
+        if (import.meta.env.DEV) {
+          console.warn('[TerminalView][clipboard] copy-failed', error)
         }
-      )
-    } else {
-      copyText(selection)
-      logTerminalClipboard(terminal, 'copy-requested-browser-fallback')
-    }
+      }
+    )
     terminal.focus()
   }
 
@@ -355,9 +350,7 @@ export function useTerminalView({
       return
     }
     try {
-      const value = window.fileterm?.readClipboardText
-        ? await window.fileterm.readClipboardText()
-        : await navigator.clipboard?.readText?.()
+      const value = await readClipboardText()
       if (value) {
         clearEphemeralHighlight()
         terminal.paste(value)

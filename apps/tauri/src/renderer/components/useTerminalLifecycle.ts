@@ -5,7 +5,7 @@ import { SearchAddon } from '@xterm/addon-search'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { TerminalZoomOperation } from '@fileterm/core'
-import { copyText } from '../app/app-utils'
+import { readClipboardText, writeClipboardText } from '../app/app-utils'
 import { isClinkAutosuggestHelpUrl, trimHydratedTerminalChunk } from '../app/terminal-transcript'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
 import { t } from '../i18n'
@@ -563,9 +563,7 @@ export function useTerminalLifecycle({
       if (parsed.data === '?') {
         let clipboardText = ''
         try {
-          clipboardText = window.fileterm?.readClipboardText
-            ? await window.fileterm.readClipboardText()
-            : ((await navigator.clipboard?.readText?.()) ?? '')
+          clipboardText = await readClipboardText()
         } catch {
           clipboardText = ''
         }
@@ -579,11 +577,7 @@ export function useTerminalLifecycle({
         return false
       }
 
-      if (window.fileterm?.writeClipboardText) {
-        await window.fileterm.writeClipboardText(decoded)
-      } else {
-        copyText(decoded)
-      }
+      await writeClipboardText(decoded)
       return true
     })
 

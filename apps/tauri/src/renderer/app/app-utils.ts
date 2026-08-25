@@ -7,6 +7,116 @@ export const localFileDragType = 'application/x-fileterm-local-file'
 export const remoteFileDragType = 'application/x-fileterm-remote-file'
 export const WINDOWS_DRIVES_PATH = 'fileterm://windows-drives'
 
+function clipboardError(lastError: unknown) {
+  return lastError instanceof Error ? lastError : new Error('Clipboard is unavailable')
+}
+
+function browserReadClipboard(): Promise<string> | null {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+    return null
+  }
+
+  return navigator.clipboard.readText()
+}
+
+function nativeReadClipboard(): Promise<string> | null {
+  return window.fileterm?.readClipboardText?.() ?? null
+}
+
+function browserWriteClipboard(value: string): Promise<void> | null {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+    return null
+  }
+
+  return navigator.clipboard.writeText(value)
+}
+
+function nativeWriteClipboard(value: string): Promise<void> | null {
+  return window.fileterm?.writeClipboardText?.(value) ?? null
+}
+
+function legacyWriteClipboard(value: string): boolean {
+  if (typeof document === 'undefined' || !document.execCommand) {
+    return false
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.setAttribute('aria-hidden', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '-9999px'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    return document.execCommand('copy')
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
+/**
+ * GNOME/Wayland may not expose either data-control protocol required by
+ * arboard. Prefer the WebView clipboard there, while retaining native and
+ * legacy fallbacks for other desktop/runtime combinations.
+ */
+export async function readClipboardText(): Promise<string> {
+  let lastError: unknown = null
+  const readers =
+    window.fileterm?.platform === 'linux'
+      ? [browserReadClipboard, nativeReadClipboard]
+      : [nativeReadClipboard, browserReadClipboard]
+
+  for (const read of readers) {
+    try {
+      const attempt = read()
+      if (!attempt) {
+        continue
+      }
+
+      return await attempt
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw clipboardError(lastError)
+}
+
+export async function writeClipboardText(value: string): Promise<void> {
+  let lastError: unknown = null
+  const writers =
+    window.fileterm?.platform === 'linux'
+      ? [browserWriteClipboard, nativeWriteClipboard]
+      : [nativeWriteClipboard, browserWriteClipboard]
+
+  for (const write of writers) {
+    try {
+      const attempt = write(value)
+      if (!attempt) {
+        continue
+      }
+
+      await attempt
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  try {
+    if (legacyWriteClipboard(value)) {
+      return
+    }
+  } catch (error) {
+    lastError = error
+  }
+
+  throw clipboardError(lastError)
+}
+
 export function isActiveTransfer(transfer: TransferTask) {
   return (
     transfer.status === 'running' ||
@@ -21,25 +131,7 @@ export function isCompletedTransfer(transfer: TransferTask) {
 }
 
 export function copyText(value: string) {
-  if (window.fileterm?.writeClipboardText) {
-    void window.fileterm.writeClipboardText(value)
-    return
-  }
-
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(value)
-    return
-  }
-
-  const textarea = document.createElement('textarea')
-  textarea.value = value
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  document.execCommand('copy')
-  document.body.removeChild(textarea)
+  void writeClipboardText(value).catch(() => undefined)
 }
 
 export function hasSelectedText() {
