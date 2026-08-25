@@ -61,6 +61,135 @@ impl Utf8StreamDecoder {
     }
 }
 
+/// Local shells can ask the terminal to report its device status or cursor
+/// position before they print their first prompt.  A real terminal emulator
+/// answers these queries internally; a PTY-backed desktop terminal must do the
+/// same on the PTY boundary or the shell can remain blocked before the
+/// renderer has subscribed to output.
+struct LocalTerminalQueryScanner {
+    active: bool,
+    saw_query: bool,
+    state: LocalTerminalQueryScanState,
+    pending: Vec<u8>,
+}
+
+impl Default for LocalTerminalQueryScanner {
+    fn default() -> Self {
+        Self {
+            active: true,
+            saw_query: false,
+            state: LocalTerminalQueryScanState::Ground,
+            pending: Vec::new(),
+        }
+    }
+}
+
+#[derive(Default)]
+enum LocalTerminalQueryScanState {
+    #[default]
+    Ground,
+    Escape,
+    Csi,
+}
+
+impl LocalTerminalQueryScanner {
+    fn consume(&mut self, input: &str) -> (String, Vec<String>) {
+        if !self.active {
+            return (input.to_string(), Vec::new());
+        }
+
+        let mut display = Vec::with_capacity(input.len());
+        let mut replies = Vec::new();
+        let bytes = input.as_bytes();
+        let mut index = 0;
+
+        while index < bytes.len() {
+            if !self.active {
+                display.extend_from_slice(&bytes[index..]);
+                break;
+            }
+
+            let byte = bytes[index];
+            match self.state {
+                LocalTerminalQueryScanState::Ground => {
+                    if byte == 0x1b {
+                        self.pending.clear();
+                        self.pending.push(byte);
+                        self.state = LocalTerminalQueryScanState::Escape;
+                    } else {
+                        self.emit_non_query_byte(byte, &mut display);
+                    }
+                }
+                LocalTerminalQueryScanState::Escape => {
+                    if byte == b'[' {
+                        self.pending.push(byte);
+                        self.state = LocalTerminalQueryScanState::Csi;
+                    } else {
+                        self.flush_pending(&mut display);
+                        if byte == 0x1b {
+                            self.pending.push(byte);
+                            self.state = LocalTerminalQueryScanState::Escape;
+                        } else {
+                            self.emit_non_query_byte(byte, &mut display);
+                            self.state = LocalTerminalQueryScanState::Ground;
+                        }
+                    }
+                }
+                LocalTerminalQueryScanState::Csi => {
+                    self.pending.push(byte);
+                    if (0x40..=0x7e).contains(&byte) {
+                        if let Some(reply) = Self::reply_for_query(&self.pending) {
+                            self.saw_query = true;
+                            replies.push(reply.to_string());
+                            self.pending.clear();
+                            self.state = LocalTerminalQueryScanState::Ground;
+                        } else {
+                            self.flush_pending(&mut display);
+                        }
+                    } else if self.pending.len() > 64 {
+                        self.flush_pending(&mut display);
+                    }
+                }
+            }
+            index += 1;
+        }
+
+        (String::from_utf8_lossy(&display).into_owned(), replies)
+    }
+
+    fn finish(&mut self) -> (String, Vec<String>) {
+        let mut display = Vec::new();
+        self.flush_pending(&mut display);
+        (String::from_utf8_lossy(&display).into_owned(), Vec::new())
+    }
+
+    fn reply_for_query(sequence: &[u8]) -> Option<&'static str> {
+        match sequence {
+            b"\x1b[5n" => Some("\x1b[0n"),
+            b"\x1b[6n" => Some("\x1b[1;1R"),
+            b"\x1b[?6n" => Some("\x1b[?1;1R"),
+            b"\x1b[c" | b"\x1b[0c" => Some("\x1b[?1;2c"),
+            _ => None,
+        }
+    }
+
+    fn emit_non_query_byte(&mut self, byte: u8, display: &mut Vec<u8>) {
+        if self.saw_query {
+            self.active = false;
+        }
+        display.push(byte);
+    }
+
+    fn flush_pending(&mut self, display: &mut Vec<u8>) {
+        if self.saw_query {
+            self.active = false;
+        }
+        display.extend_from_slice(&self.pending);
+        self.pending.clear();
+        self.state = LocalTerminalQueryScanState::Ground;
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct LocalTerminalLaunch {
     pub shell: String,
@@ -488,6 +617,7 @@ pub fn start_local_terminal_worker(
     // The bounded queue prevents a command such as `yes` or a verbose CLI
     // from growing an unbounded native-thread backlog, while the control
     // channel remains available for Ctrl+C and resize commands.
+    let (control_tx, control_rx) = std_mpsc::channel::<LocalPtyCommand>();
     let (output_tx, mut output_rx) =
         mpsc::channel::<LocalOutputChunk>(LOCAL_OUTPUT_CHANNEL_CAPACITY);
     let (startup_ready_tx, startup_ready_rx) = oneshot::channel();
@@ -496,7 +626,6 @@ pub fn start_local_terminal_worker(
     let pump_tab_id = tab_id.clone();
     let pump_runtime_id = runtime_id.clone();
     let pump_gate = runtime_gate.clone();
-    let mut startup_ready_tx = Some(startup_ready_tx);
     tauri::async_runtime::spawn(async move {
         let mut cwd_tracker = LocalOsc7CwdTracker::default();
         let mut pending_chunk = None;
@@ -548,29 +677,6 @@ pub fn start_local_terminal_worker(
                 );
                 break;
             }
-            // Signal readiness only after the first PTY batch has been
-            // appended to the authoritative session transcript. The initial
-            // local-terminal snapshot can then carry the prompt even when
-            // the renderer has not subscribed to the global data channel yet.
-            if let Some(sender) = startup_ready_tx.take() {
-                crate::services::logging::info(
-                    &pump_app,
-                    "local",
-                    format!(
-                        "first PTY output persisted tab={} runtime={} bytes={}",
-                        pump_tab_id,
-                        pump_runtime_id,
-                        batch.len()
-                    ),
-                );
-                if sender.send(()).is_err() {
-                    crate::services::logging::debug(
-                        &pump_app,
-                        "local",
-                        format!("startup readiness receiver dropped tab={}", pump_tab_id),
-                    );
-                }
-            }
             if let Some(cwd) = cwd_tracker.observe(&batch) {
                 let _ = update_local_terminal_cwd(
                     &pump_app,
@@ -593,7 +699,6 @@ pub fn start_local_terminal_worker(
         let _ = output_done_tx.send(());
     });
 
-    let (control_tx, control_rx) = std_mpsc::channel::<LocalPtyCommand>();
     let relay_tx = control_tx.clone();
     tauri::async_runtime::spawn(async move {
         forward_terminal_commands(worker_rx, terminal_input_rx, cancellation, relay_tx).await;
@@ -603,13 +708,22 @@ pub fn start_local_terminal_worker(
     let reader_tab_id = tab_id.clone();
     let reader_gate = runtime_gate.clone();
     let reader_output_tx = output_tx.clone();
+    let reader_control_tx = control_tx.clone();
     thread::Builder::new()
         .name("fileterm-local-pty-reader".to_string())
         .spawn(move || {
             let mut reader = reader;
             let mut buffer = [0_u8; 8 * 1024];
             let mut decoder = Utf8StreamDecoder::default();
+            let mut query_scanner = LocalTerminalQueryScanner::default();
             let mut output_drop_state = LocalOutputDropState::default();
+            let send_query_replies = |replies: Vec<String>| {
+                replies.into_iter().all(|reply| {
+                    reader_control_tx
+                        .send(LocalPtyCommand::Input(reply))
+                        .is_ok()
+                })
+            };
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
@@ -618,7 +732,9 @@ pub fn start_local_terminal_worker(
                             "local",
                             format!("PTY reader reached EOF tab={}", reader_tab_id),
                         );
-                        let tail = decoder.finish();
+                        let decoded_tail = decoder.finish();
+                        let (tail, replies) = query_scanner.consume(&decoded_tail);
+                        let replies_sent = send_query_replies(replies);
                         if !tail.is_empty() {
                             let _ = queue_local_terminal_output(
                                 &reader_app,
@@ -629,11 +745,55 @@ pub fn start_local_terminal_worker(
                                 &mut output_drop_state,
                             );
                         }
+                        let (pending_tail, _) = query_scanner.finish();
+                        if !pending_tail.is_empty() {
+                            let _ = queue_local_terminal_output(
+                                &reader_app,
+                                &reader_tab_id,
+                                &reader_gate,
+                                &reader_output_tx,
+                                pending_tail,
+                                &mut output_drop_state,
+                            );
+                        }
+                        if !replies_sent {
+                            crate::services::logging::debug(
+                                &reader_app,
+                                "local",
+                                format!(
+                                    "local terminal query reply channel closed tab={}",
+                                    reader_tab_id
+                                ),
+                            );
+                        }
                         flush_local_output_drop_notice(&reader_output_tx, &mut output_drop_state);
                         break;
                     }
                     Ok(size) => {
-                        let chunk = decoder.decode(&buffer[..size]);
+                        let decoded_chunk = decoder.decode(&buffer[..size]);
+                        let (chunk, replies) = query_scanner.consume(&decoded_chunk);
+                        let reply_count = replies.len();
+                        if !send_query_replies(replies) {
+                            crate::services::logging::debug(
+                                &reader_app,
+                                "local",
+                                format!(
+                                    "local terminal query reply channel closed tab={}",
+                                    reader_tab_id
+                                ),
+                            );
+                            break;
+                        }
+                        if reply_count > 0 {
+                            crate::services::logging::debug(
+                                &reader_app,
+                                "local",
+                                format!(
+                                    "automatic terminal query responses tab={} count={}",
+                                    reader_tab_id, reply_count
+                                ),
+                            );
+                        }
                         if !chunk.is_empty()
                             && !queue_local_terminal_output(
                                 &reader_app,
@@ -659,7 +819,9 @@ pub fn start_local_terminal_worker(
                             "local",
                             format!("PTY reader failed tab={} error={error}", reader_tab_id),
                         );
-                        let tail = decoder.finish();
+                        let decoded_tail = decoder.finish();
+                        let (tail, replies) = query_scanner.consume(&decoded_tail);
+                        let replies_sent = send_query_replies(replies);
                         if !tail.is_empty() {
                             let _ = queue_local_terminal_output(
                                 &reader_app,
@@ -668,6 +830,27 @@ pub fn start_local_terminal_worker(
                                 &reader_output_tx,
                                 tail,
                                 &mut output_drop_state,
+                            );
+                        }
+                        let (pending_tail, _) = query_scanner.finish();
+                        if !pending_tail.is_empty() {
+                            let _ = queue_local_terminal_output(
+                                &reader_app,
+                                &reader_tab_id,
+                                &reader_gate,
+                                &reader_output_tx,
+                                pending_tail,
+                                &mut output_drop_state,
+                            );
+                        }
+                        if !replies_sent {
+                            crate::services::logging::debug(
+                                &reader_app,
+                                "local",
+                                format!(
+                                    "local terminal query reply channel closed tab={}",
+                                    reader_tab_id
+                                ),
                             );
                         }
                         flush_local_output_drop_notice(&reader_output_tx, &mut output_drop_state);
@@ -745,6 +928,22 @@ pub fn start_local_terminal_worker(
             );
             message
         })?;
+
+    crate::services::logging::info(
+        &app,
+        "local",
+        format!(
+            "PTY transport ready tab={} runtime={} (reader, worker, and output pump started)",
+            tab_id, runtime_id
+        ),
+    );
+    if startup_ready_tx.send(()).is_err() {
+        crate::services::logging::debug(
+            &app,
+            "local",
+            format!("startup readiness receiver dropped tab={}", tab_id),
+        );
+    }
 
     crate::services::logging::debug(
         &app,
@@ -1555,7 +1754,7 @@ mod tests {
         powershell_args_have_explicit_command, resolve_launch, scan_alt_screen_transition,
         shell_name, validate_launch, AltScreenTransitionScanner, LocalOsc7CwdTracker,
         LocalOutputChunk, LocalProcessTree, LocalTerminalLaunch, LocalTerminalLaunchOptions,
-        Utf8StreamDecoder,
+        LocalTerminalQueryScanner, Utf8StreamDecoder,
     };
     #[cfg(unix)]
     use super::{run_pty_loop, LocalPtyCommand};
@@ -1963,6 +2162,46 @@ mod tests {
             tracker.observe("7;file:///tmp/next\u{7}"),
             Some("/tmp/next".to_string())
         );
+    }
+
+    #[test]
+    fn local_terminal_query_scanner_replies_to_startup_queries_and_hides_them() {
+        let mut scanner = LocalTerminalQueryScanner::default();
+
+        let (display, replies) = scanner.consume("\u{1b}[6n");
+        assert_eq!(display, "");
+        assert_eq!(replies, vec!["\u{1b}[1;1R"]);
+
+        let (display, replies) = scanner.consume("PS> ");
+        assert_eq!(display, "PS> ");
+        assert!(replies.is_empty());
+
+        // Once the first prompt has arrived, later queries remain visible to
+        // the renderer so xterm.js can answer them with the real cursor.
+        let (display, replies) = scanner.consume("\u{1b}[6n");
+        assert_eq!(display, "\u{1b}[6n");
+        assert!(replies.is_empty());
+    }
+
+    #[test]
+    fn local_terminal_query_scanner_handles_split_queries_and_device_status() {
+        let mut scanner = LocalTerminalQueryScanner::default();
+
+        let (display, replies) = scanner.consume("prefix\u{1b}[");
+        assert_eq!(display, "prefix");
+        assert!(replies.is_empty());
+
+        let (display, replies) = scanner.consume("5n");
+        assert_eq!(display, "");
+        assert_eq!(replies, vec!["\u{1b}[0n"]);
+
+        let (display, replies) = scanner.consume("prompt");
+        assert_eq!(display, "prompt");
+        assert!(replies.is_empty());
+
+        let (display, replies) = scanner.consume("\u{1b}[c");
+        assert_eq!(display, "\u{1b}[c");
+        assert!(replies.is_empty());
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2373,9 +2612,9 @@ mod tests {
             .take_writer()
             .expect("ConPTY writer should be available");
         // cmd.exe under ConPTY emits ESC[6n (cursor position request) at
-        // startup and blocks until the terminal replies. In the real app
-        // xterm.js answers automatically; this test has to emulate that
-        // reply, otherwise cmd.exe never runs the command.
+        // startup and blocks until the terminal replies. The production local
+        // PTY reader answers this at the transport boundary; this standalone
+        // test has to emulate that reply itself.
         let mut replied_cpr = false;
         let mut output = Vec::new();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);

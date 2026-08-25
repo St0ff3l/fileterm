@@ -82,6 +82,7 @@ export const TERMINAL_WRITE_FRAME_BUDGET = 16 * 1024
 // an ASCII keyboard layout. Keep this window narrow so this is not a general
 // purpose input de-duplicator for fast, intentional typing.
 export const TERMINAL_IME_DUPLICATE_WINDOW_MS = 75
+export const LOCAL_TERMINAL_STARTUP_TRANSCRIPT = 'Starting local shell...\r\n'
 // WebView2 and WebKitGTK report high-resolution touchpad input in small pixel
 // deltas, while a traditional mouse wheel commonly reports a large line/pixel
 // delta in one event. Normalize and cap each event before accumulating so both
@@ -109,6 +110,24 @@ export function trimTranscript(transcript: string) {
   }
 
   return transcript.slice(transcript.length - TERMINAL_TRANSCRIPT_LIMIT)
+}
+
+/**
+ * Keep local startup text stable across the reused TerminalView tab-switch
+ * path. Windows deliberately omits the notice; other desktop platforms use
+ * it as a race guard when the first PTY prompt arrives before hydration.
+ * Remote transcripts must never use this fallback.
+ */
+export function normalizeLocalTerminalStartupTranscript(transcript: string, platform?: string) {
+  if (platform === 'win32') {
+    return transcript.startsWith(LOCAL_TERMINAL_STARTUP_TRANSCRIPT)
+      ? transcript.slice(LOCAL_TERMINAL_STARTUP_TRANSCRIPT.length)
+      : transcript
+  }
+  if (transcript.includes('Starting local shell...')) {
+    return transcript
+  }
+  return `${LOCAL_TERMINAL_STARTUP_TRANSCRIPT}${transcript}`
 }
 
 export function getLastVisibleTerminalLine(terminal: Terminal) {
@@ -174,12 +193,12 @@ export function readHydrationControlSequence(data: string, start: number, escape
   return end >= 0 ? data.slice(start, end) : null
 }
 
-export function isHydrationResponseSequence(sequence: string, escape: string) {
-  // A transcript is a recording of PTY output, not a live terminal state.
-  // When it is replayed after a tab switch, xterm can answer historical
-  // terminal queries (CPR/DA/mode/color/window reports) and emit those
-  // answers through onData. Forwarding the synthetic answers to the now-idle
-  // shell makes it echo fragments such as `;201R` or `2RR0;276;0c`.
+export function isTerminalResponseSequence(sequence: string, escape: string) {
+  // xterm emits these sequences as answers to terminal queries (CPR/DA/mode/
+  // color/window reports). The same classifier is used for two different
+  // boundaries: discard synthetic answers produced while replaying history,
+  // but allow a real response through while a newly spawned PTY is still
+  // connecting.
   const csiPrefix = `${escape}[`
   if (sequence.startsWith(csiPrefix)) {
     const csi = sequence.slice(csiPrefix.length)
@@ -212,6 +231,14 @@ export function isHydrationResponseSequence(sequence: string, escape: string) {
   }
 
   return false
+}
+
+export function isHydrationResponseSequence(sequence: string, escape: string) {
+  // A transcript is a recording of PTY output, not a live terminal state.
+  // When it is replayed after a tab switch, xterm can answer historical
+  // terminal queries. Forwarding those synthetic answers to the now-idle
+  // shell makes it echo fragments such as `;201R` or `2RR0;276;0c`.
+  return isTerminalResponseSequence(sequence, escape)
 }
 
 export function stripHydratedTerminalResponses(data: string) {

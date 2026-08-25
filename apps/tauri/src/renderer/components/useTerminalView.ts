@@ -16,6 +16,7 @@ import {
 import {
   getVimVisualSelection,
   logTerminalClipboard,
+  normalizeLocalTerminalStartupTranscript,
   splitPaneShortcutsForPlatform,
   toDisplayTerminalText,
   trimTranscript,
@@ -63,6 +64,8 @@ export function useTerminalView({
   closedMessage = t.terminalConnectionClosed,
   reconnectHint = t.pressEnterToReconnect
 }: TerminalViewProps) {
+  const hydratedBootText =
+    sessionType === 'local' ? normalizeLocalTerminalStartupTranscript(bootText, window.fileterm?.platform) : bootText
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -70,7 +73,7 @@ export function useTerminalView({
   const terminalLogColorizerRef = useRef<TerminalLogColorizer | null>(null)
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
-  const bootTextRef = useRef(bootText)
+  const bootTextRef = useRef(hydratedBootText)
   const renderedTranscriptRef = useRef('')
   const pendingWriteRef = useRef('')
   const writeFrameRef = useRef<number | null>(null)
@@ -670,7 +673,7 @@ export function useTerminalView({
   useTerminalLifecycle({
     isMac,
     isWin,
-    bootText,
+    bootText: hydratedBootText,
     hostRef,
     setViewportElement,
     terminalRef,
@@ -754,7 +757,7 @@ export function useTerminalView({
   }, [isActive])
 
   useEffect(() => {
-    bootTextRef.current = bootText
+    bootTextRef.current = hydratedBootText
 
     // connected 提升必须放在提前 return 之前。
     //
@@ -788,14 +791,14 @@ export function useTerminalView({
     preserveVisibleBufferRef.current = false
     awaitingCommandCompletionRef.current = false
     pendingPromptResizeRef.current = false
-    replaceTerminalWithTranscript(terminal, bootText)
+    replaceTerminalWithTranscript(terminal, hydratedBootText)
     lastSyncedSizeRef.current = null
 
     const { width, height } = host.getBoundingClientRect()
     if (width > 0 && height > 0) {
       void window.fileterm?.resizeTerminal(tabId, terminal.cols, terminal.rows, Math.floor(width), Math.floor(height))
     }
-  }, [bootText, connected, tabId])
+  }, [connected, hydratedBootText, tabId])
 
   useEffect(() => {
     const applyCurrentProfileFontSize = () => {
@@ -811,18 +814,18 @@ export function useTerminalView({
   }, [profileId])
 
   useEffect(() => {
-    bootTextRef.current = bootText
+    bootTextRef.current = hydratedBootText
     const terminal = terminalRef.current
     if (
       !terminal ||
       connected ||
-      !shouldHydrateTranscript(renderedTranscriptRef.current, bootText, wasConnectedRef.current)
+      !shouldHydrateTranscript(renderedTranscriptRef.current, hydratedBootText, wasConnectedRef.current)
     ) {
       return
     }
 
-    replaceTerminalWithTranscript(terminal, bootText)
-  }, [bootText, connected])
+    replaceTerminalWithTranscript(terminal, hydratedBootText)
+  }, [connected, hydratedBootText])
 
   useEffect(() => {
     if (!terminalRef.current) {

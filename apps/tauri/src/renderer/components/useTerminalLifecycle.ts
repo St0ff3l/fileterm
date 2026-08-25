@@ -26,6 +26,7 @@ import {
   getVimVisualSelection,
   isFocusTrackingSequence,
   isOsc52TargetSupported,
+  isTerminalResponseSequence,
   logTerminalClipboard,
   logTerminalZoom,
   looksLikeShellPrompt,
@@ -588,10 +589,6 @@ export function useTerminalLifecycle({
 
     syncTerminalSize(fitAddon, terminal)
 
-    bootTextRef.current = bootText
-    if (bootText) {
-      replaceTerminalWithTranscript(terminal, bootText)
-    }
     activeTerminalTabIdRef.current = tabIdRef.current
 
     const resize = (force = false, freezeCols = false, preserveVisibleBuffer = false) => {
@@ -657,8 +654,25 @@ export function useTerminalLifecycle({
     }
 
     const onDataDispose = terminal.onData((data) => {
+      // Windows ConPTY may ask for the cursor position (`ESC[6n`) before the
+      // renderer has finished mounting. xterm answers with a terminal
+      // response, but the normal disconnected guard below would discard it.
+      // Forward only protocol responses while the PTY is still connecting;
+      // ordinary user input remains blocked until the backend reports ready.
+      const rawTerminalData = data
+      const isStartupTerminalResponse =
+        !connectedRef.current &&
+        connectingRef.current &&
+        isTerminalResponseSequence(rawTerminalData, String.fromCharCode(27))
       if (replayingTranscriptRef.current) {
         data = stripHydratedTerminalResponses(data)
+      }
+      if (isStartupTerminalResponse) {
+        const responseWrite = window.fileterm?.writeTerminal(tabIdRef.current, rawTerminalData)
+        responseWrite?.catch((error: unknown) => {
+          console.debug('[TerminalView] startup terminal response was not accepted', error)
+        })
+        return
       }
       if (!data) {
         return
@@ -768,6 +782,15 @@ export function useTerminalLifecycle({
         writeReconnectHint()
       })
     })
+
+    // Register onData before replaying the initial snapshot. A Windows
+    // ConPTY shell can put its cursor-position query in that first transcript
+    // before the renderer mounts; replaying it earlier would make xterm emit
+    // the response before the PTY input boundary was listening.
+    bootTextRef.current = bootText
+    if (bootText) {
+      replaceTerminalWithTranscript(terminal, bootText)
+    }
 
     const onSelectionDispose = terminal.onSelectionChange(() => {
       const nextHasSelection = terminal.hasSelection() || Boolean(getVimVisualSelection(terminal))

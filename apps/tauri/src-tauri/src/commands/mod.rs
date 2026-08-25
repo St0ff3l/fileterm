@@ -37,10 +37,10 @@ const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
 const SERIAL_TRANSFER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
-/// A silent shell must not leave a local tab in `connecting` forever. The
-/// background startup task uses this bounded window to publish the first
-/// prompt when it arrives; a shell that stays silent is still allowed to
-/// connect after timeout. The opening command itself remains non-blocking.
+/// A local tab should become connected once its PTY transport is ready. The
+/// background startup task keeps this bounded window as a guard for a failed
+/// readiness signal; the shell's first visible prompt is not a prerequisite
+/// for a usable terminal.
 const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Let a child-window close command resolve its IPC callback before destroying
@@ -3485,7 +3485,8 @@ async fn spawn_local_terminal_tab(
                 ai_session_revision: "0".to_string(),
                 access_host: launch.cwd.clone(),
                 summary: launch.shell.clone(),
-                terminal_transcript: "Starting local shell...\r\n".to_string(),
+                terminal_transcript: crate::sessions::terminal::local_terminal_startup_transcript()
+                    .to_string(),
                 remote_path: launch.cwd.clone(),
                 shell_cwd: Some(launch.cwd.clone()),
                 follow_shell_cwd: false,
@@ -3561,7 +3562,7 @@ async fn finish_local_terminal_startup(
 ) {
     let startup_started_at = Instant::now();
     let readiness = match timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup.ready).await {
-        Ok(Ok(())) => "first-output",
+        Ok(Ok(())) => "transport-ready",
         Ok(Err(_)) => "ready-channel-closed",
         Err(_) => "timeout",
     };
@@ -4327,7 +4328,7 @@ pub async fn app_reconnect_tab(
                     }
                     session
                         .terminal_transcript
-                        .push_str("Starting local shell...\r\n");
+                        .push_str(crate::sessions::terminal::local_terminal_startup_transcript());
                 }
             }
             state.touch_ai_session_revision(&tab_id).await;

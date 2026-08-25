@@ -54,6 +54,7 @@ export function SplitPaneLayout({
         sessions={sessions}
         rootTabId={rootTab.id}
         rootTabProfileId={rootTab.profileId}
+        rootTabSessionType={rootTab.sessionType}
         panePath={[]}
         activePaneTabId={activePaneTabId}
         onClosePane={onClosePane}
@@ -82,6 +83,7 @@ interface PaneRendererProps {
   sessions: Record<string, SessionSnapshot>
   rootTabId: string
   rootTabProfileId: string
+  rootTabSessionType: WorkspaceTab['sessionType']
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
@@ -100,6 +102,7 @@ function PaneRenderer({
   sessions,
   rootTabId,
   rootTabProfileId,
+  rootTabSessionType,
   panePath,
   activePaneTabId,
   onClosePane,
@@ -122,6 +125,7 @@ function PaneRenderer({
             profileId={session?.profileId ?? rootTabProfileId}
             tabId={node.tabId}
             bootText={session?.terminalTranscript ?? ''}
+            sessionType={rootTabSessionType}
             connected={session?.connected ?? false}
             connecting={session?.connected === false}
             isActive={isActive}
@@ -163,6 +167,7 @@ function PaneRenderer({
       sessions={sessions}
       rootTabId={rootTabId}
       rootTabProfileId={rootTabProfileId}
+      rootTabSessionType={rootTabSessionType}
       panePath={panePath}
       activePaneTabId={activePaneTabId}
       onClosePane={onClosePane}
@@ -185,6 +190,7 @@ interface SplitContainerProps {
   sessions: Record<string, SessionSnapshot>
   rootTabId: string
   rootTabProfileId: string
+  rootTabSessionType: WorkspaceTab['sessionType']
   panePath: number[]
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
@@ -205,6 +211,7 @@ function SplitContainer({
   sessions,
   rootTabId,
   rootTabProfileId,
+  rootTabSessionType,
   panePath,
   activePaneTabId,
   onClosePane,
@@ -279,6 +286,7 @@ function SplitContainer({
           sessions={sessions}
           rootTabId={rootTabId}
           rootTabProfileId={rootTabProfileId}
+          rootTabSessionType={rootTabSessionType}
           panePath={[...panePath, idx]}
           activePaneTabId={activePaneTabId}
           onClosePane={onClosePane}

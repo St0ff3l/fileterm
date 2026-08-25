@@ -2,6 +2,16 @@ use std::sync::{atomic::Ordering, Arc};
 
 use tauri::{AppHandle, Emitter, Manager};
 
+pub const LOCAL_TERMINAL_STARTUP_TRANSCRIPT: &str = "Starting local shell...\r\n";
+
+pub fn local_terminal_startup_transcript() -> &'static str {
+    if cfg!(target_os = "windows") {
+        ""
+    } else {
+        LOCAL_TERMINAL_STARTUP_TRANSCRIPT
+    }
+}
+
 pub fn decode_terminal(bytes: &[u8], encoding: &str) -> String {
     match encoding.trim().to_lowercase().as_str() {
         "gbk" | "gb18030" => encoding_rs::GB18030.decode(bytes).0.into_owned(),
@@ -104,12 +114,12 @@ pub async fn emit_local_terminal_data(
         return false;
     }
 
-    state.publish_terminal_output(tab_id, chunk);
     let mut sessions = state.sessions.write().await;
     if let Some(session) = sessions.get_mut(tab_id) {
         session.terminal_transcript.push_str(chunk);
         truncate_transcript(&mut session.terminal_transcript);
     }
+    state.publish_terminal_output(tab_id, chunk);
     true
 }
 
