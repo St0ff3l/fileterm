@@ -132,5 +132,7 @@ fn mode_name(mode: SerialTransferMode) -> &'static str {
         SerialTransferMode::Raw => "raw",
         SerialTransferMode::Xmodem => "xmodem",
         SerialTransferMode::Ymodem => "ymodem",
+        SerialTransferMode::Zmodem => "zmodem",
+        SerialTransferMode::Kermit => "kermit",
     }
 }

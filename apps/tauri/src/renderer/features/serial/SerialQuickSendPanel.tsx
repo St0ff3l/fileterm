@@ -16,15 +16,17 @@ function loadMacros(profileId: string): SerialMacro[] {
   try {
     const value: unknown = JSON.parse(window.localStorage.getItem(storageKey(profileId)) ?? '[]')
     if (!Array.isArray(value)) return []
-    return value.filter(
-      (item): item is SerialMacro =>
-        Boolean(item) &&
-        typeof item === 'object' &&
-        'name' in item &&
-        'value' in item &&
-        typeof item.name === 'string' &&
-        typeof item.value === 'string'
-    )
+    return value
+      .filter(
+        (item): item is SerialMacro =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          'name' in item &&
+          'value' in item &&
+          typeof item.name === 'string' &&
+          typeof item.value === 'string'
+      )
+      .slice(-20)
   } catch {
     return []
   }

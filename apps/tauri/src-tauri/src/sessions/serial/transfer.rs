@@ -88,6 +88,18 @@ where
         (SerialTransferDirection::Receive, SerialTransferMode::Ymodem) => {
             receive_ymodem(stream, Path::new(&path), timing, reporter, &cancellation).await
         }
+        (SerialTransferDirection::Send, SerialTransferMode::Zmodem) => {
+            super::zmodem::send(stream, &request, timing, reporter, &cancellation).await
+        }
+        (SerialTransferDirection::Receive, SerialTransferMode::Zmodem) => {
+            super::zmodem::receive(stream, Path::new(&path), timing, reporter, &cancellation).await
+        }
+        (SerialTransferDirection::Send, SerialTransferMode::Kermit) => {
+            super::kermit::send(stream, &request, timing, reporter, &cancellation).await
+        }
+        (SerialTransferDirection::Receive, SerialTransferMode::Kermit) => {
+            super::kermit::receive(stream, Path::new(&path), timing, reporter, &cancellation).await
+        }
     };
     match &result {
         Ok(bytes) => reporter.finish("completed", *bytes, None, None),
@@ -448,7 +460,15 @@ where
         let Some((sequence, header)) =
             read_packet_tail(stream, 128, use_crc, timing, cancellation).await?
         else {
-            return Err("YMODEM 文件头校验失败".to_string());
+            // The complete frame was consumed (or its partial tail was
+            // drained), so NAK is safe and the sender can retransmit a fresh
+            // block-0 without leaving bytes from the old frame in front of it.
+            write_all(stream, &[NAK], timing.write_timeout, cancellation).await?;
+            control = read_next_protocol_byte(stream, timing, cancellation).await?;
+            if control == CAN {
+                return Err("对端取消了 YMODEM 传输".to_string());
+            }
+            continue;
         };
         if sequence != 0 {
             return Err("YMODEM 文件头序号无效".to_string());
@@ -730,31 +750,65 @@ where
     S: AsyncRead + Unpin,
 {
     let packet_timeout = timing.packet_timeout(block_size, if use_crc { 2 } else { 1 });
-    let sequence = read_byte(stream, packet_timeout, cancellation)
-        .await?
-        .ok_or_else(|| "串口文件传输数据块序号读取超时，数据帧不完整".to_string())?;
-    let inverse = read_byte(stream, packet_timeout, cancellation)
-        .await?
-        .ok_or_else(|| "串口文件传输数据块序号校验读取超时，数据帧不完整".to_string())?;
+    read_packet_tail_with_timeout(stream, block_size, use_crc, packet_timeout, cancellation).await
+}
+
+/// Read everything after SOH/STX as one frame. If a frame times out after
+/// consuming only part of it, make one second bounded drain attempt before
+/// asking the sender to retry. This is important on slow UARTs: cancelling a
+/// `read_exact` future can leave the rest of the old frame in the driver
+/// buffer, and the next retry would otherwise interpret those bytes as a new
+/// sequence number.
+async fn read_packet_tail_with_timeout<S>(
+    stream: &mut S,
+    block_size: usize,
+    use_crc: bool,
+    packet_timeout: Duration,
+    cancellation: &CancellationToken,
+) -> Result<Option<(u8, Vec<u8>)>, String>
+where
+    S: AsyncRead + Unpin,
+{
+    let trailer_len = if use_crc { 2 } else { 1 };
+    let mut frame = vec![0_u8; 2 + block_size + trailer_len];
+    let filled =
+        match read_exact_with_timeout(stream, &mut frame, packet_timeout, cancellation).await? {
+            ReadExactResult::Complete => frame.len(),
+            ReadExactResult::Partial(filled) => {
+                // The first timeout may have consumed a prefix. Continue draining
+                // the *same* expected frame, but never let a broken sender block a
+                // retry indefinitely. All bytes consumed by this second attempt
+                // are discarded if the frame still cannot be completed.
+                match read_exact_with_timeout(
+                    stream,
+                    &mut frame[filled..],
+                    packet_timeout,
+                    cancellation,
+                )
+                .await?
+                {
+                    ReadExactResult::Complete => frame.len(),
+                    ReadExactResult::Partial(_) => return Ok(None),
+                }
+            }
+        };
+
+    debug_assert_eq!(filled, frame.len());
+    let sequence = frame[0];
+    let inverse = frame[1];
     if sequence ^ inverse != 0xff {
-        return Err("串口文件传输数据块序号校验无效，无法安全重试".to_string());
+        // The complete malformed frame has already been consumed, so the
+        // caller can safely NAK and wait for a fresh SOH/STX marker.
+        return Ok(None);
     }
-    let mut payload = vec![0_u8; block_size];
-    if !read_exact_with_timeout(stream, &mut payload, packet_timeout, cancellation).await? {
-        return Err("串口文件传输数据块内容读取超时，数据帧不完整".to_string());
-    }
+    let payload_end = 2 + block_size;
+    let payload = frame[2..payload_end].to_vec();
     if use_crc {
-        let mut trailer = [0_u8; 2];
-        if !read_exact_with_timeout(stream, &mut trailer, packet_timeout, cancellation).await? {
-            return Err("串口文件传输 CRC 校验读取超时，数据帧不完整".to_string());
-        }
-        if crc16(&payload) != u16::from_be_bytes(trailer) {
+        if crc16(&payload) != u16::from_be_bytes([frame[payload_end], frame[payload_end + 1]]) {
             return Ok(None);
         }
     } else {
-        let value = read_byte(stream, packet_timeout, cancellation)
-            .await?
-            .ok_or_else(|| "串口文件传输校验和读取超时，数据帧不完整".to_string())?;
+        let value = frame[payload_end];
         if checksum(&payload) != value {
             return Ok(None);
         }
@@ -806,7 +860,7 @@ fn ymodem_target(directory: &Path, file_name: &str) -> Result<std::path::PathBuf
     Ok(directory.join(file_name))
 }
 
-fn is_safe_transfer_file_name(file_name: &str) -> bool {
+pub(super) fn is_safe_transfer_file_name(file_name: &str) -> bool {
     if file_name.is_empty()
         || file_name == "."
         || file_name == ".."
@@ -847,10 +901,15 @@ where
     S: AsyncRead + Unpin,
 {
     let mut byte = [0_u8; 1];
-    if !read_exact_with_timeout(stream, &mut byte, wait, cancellation).await? {
-        return Ok(None);
+    match read_exact_with_timeout(stream, &mut byte, wait, cancellation).await? {
+        ReadExactResult::Complete => Ok(Some(byte[0])),
+        ReadExactResult::Partial(_) => Ok(None),
     }
-    Ok(Some(byte[0]))
+}
+
+enum ReadExactResult {
+    Complete,
+    Partial(usize),
 }
 
 async fn read_exact_with_timeout<S>(
@@ -858,18 +917,29 @@ async fn read_exact_with_timeout<S>(
     buffer: &mut [u8],
     wait: Duration,
     cancellation: &CancellationToken,
-) -> Result<bool, String>
+) -> Result<ReadExactResult, String>
 where
     S: AsyncRead + Unpin,
 {
-    tokio::select! {
-        _ = cancellation.cancelled() => Err("串口文件传输已取消".to_string()),
-        result = timeout(wait, stream.read_exact(buffer)) => match result {
-            Ok(Ok(_)) => Ok(true),
-            Ok(Err(error)) => Err(format!("读取串口文件传输数据失败：{error}")),
-            Err(_) => Ok(false),
+    let deadline = tokio::time::Instant::now() + wait;
+    let mut filled = 0;
+    while filled < buffer.len() {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Ok(ReadExactResult::Partial(filled));
+        }
+        let result = tokio::select! {
+            _ = cancellation.cancelled() => return Err("串口文件传输已取消".to_string()),
+            result = timeout(remaining, stream.read(&mut buffer[filled..])) => result,
+        };
+        match result {
+            Ok(Ok(0)) => return Err("读取串口文件传输数据失败：串口流提前结束".to_string()),
+            Ok(Ok(count)) => filled += count,
+            Ok(Err(error)) => return Err(format!("读取串口文件传输数据失败：{error}")),
+            Err(_) => return Ok(ReadExactResult::Partial(filled)),
         }
     }
+    Ok(ReadExactResult::Complete)
 }
 
 async fn read_file(
@@ -883,7 +953,7 @@ async fn read_file(
     }
 }
 
-async fn write_all<S>(
+pub(super) async fn write_all<S>(
     stream: &mut S,
     buffer: &[u8],
     wait: Duration,
@@ -901,7 +971,7 @@ where
     }
 }
 
-async fn flush<S>(
+pub(super) async fn flush<S>(
     stream: &mut S,
     wait: Duration,
     cancellation: &CancellationToken,
@@ -918,7 +988,7 @@ where
     }
 }
 
-async fn create_target(path: &Path) -> Result<File, String> {
+pub(super) async fn create_target(path: &Path) -> Result<File, String> {
     OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -981,8 +1051,9 @@ mod tests {
     use super::super::timing::SerialTransferTiming;
     use super::{
         checksum, crc16, create_target, is_safe_transfer_file_name, parse_ymodem_header,
-        parse_ymodem_size, read_packet_tail, receive_raw, receive_xmodem, receive_ymodem,
-        receive_ymodem_file, send_xmodem, send_ymodem, YmodemFileOptions,
+        parse_ymodem_size, read_byte, read_packet_tail, read_packet_tail_with_timeout, receive_raw,
+        receive_xmodem, receive_ymodem, receive_ymodem_file, send_xmodem, send_ymodem,
+        YmodemFileOptions, SOH,
     };
 
     #[test]
@@ -1314,6 +1385,58 @@ mod tests {
             error.contains("数据帧不完整") || error.contains("读取串口文件传输数据失败"),
             "unexpected incomplete-frame error: {error}"
         );
+    }
+
+    #[tokio::test]
+    async fn partial_packet_is_drained_before_a_fresh_retry_marker() {
+        let cancellation = CancellationToken::new();
+        let (mut writer, mut reader) = duplex(512);
+        let payload = vec![0x42_u8; 128];
+        let mut packet = vec![1_u8, 254_u8];
+        packet.extend_from_slice(&payload);
+        packet.extend_from_slice(&crc16(&payload).to_be_bytes());
+        let retry_packet = packet.clone();
+        let writer_task = tokio::spawn(async move {
+            // Only a prefix of the first frame reaches the receiver. The
+            // sender later retransmits a complete frame after the receiver's
+            // bounded drain window has elapsed.
+            writer.write_all(&packet[..9]).await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            writer.write_all(&[SOH]).await.unwrap();
+            writer.write_all(&retry_packet).await.unwrap();
+        });
+
+        let first = read_packet_tail_with_timeout(
+            &mut reader,
+            128,
+            true,
+            std::time::Duration::from_millis(5),
+            &cancellation,
+        )
+        .await
+        .unwrap();
+        assert!(first.is_none());
+
+        let marker = read_byte(
+            &mut reader,
+            std::time::Duration::from_millis(100),
+            &cancellation,
+        )
+        .await
+        .unwrap();
+        assert_eq!(marker, Some(SOH));
+        let retry = read_packet_tail_with_timeout(
+            &mut reader,
+            128,
+            true,
+            std::time::Duration::from_millis(100),
+            &cancellation,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(retry, (1, payload));
+        writer_task.await.unwrap();
     }
 
     fn temporary_path(label: &str) -> PathBuf {

@@ -14,12 +14,14 @@ use crate::services::WorkspaceTabStatus;
 mod codec;
 mod config;
 mod control;
+mod kermit;
 mod pacing;
 mod platform;
 mod progress;
 mod reconnect;
 mod timing;
 mod transfer;
+mod zmodem;
 
 use self::codec::{
     baud_rate as serial_baud_rate, consume_hex_input as consume_serial_hex_input,

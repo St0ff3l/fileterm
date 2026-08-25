@@ -1666,6 +1666,7 @@ pub fn run() {
                 ),
             );
             app.manage(crate::services::WorkspaceState::default());
+            crate::services::serial_ports::start_watcher(app.handle());
             crate::services::mcp::start_runtime(app.handle())?;
             app.manage(FileEditorCloseRegistry::default());
             app.manage(QuitPreparationRegistry::default());

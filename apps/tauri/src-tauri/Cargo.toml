@@ -38,6 +38,7 @@ sha2 = "0.10"
 hmac = "0.12"
 subtle = "2.6"
 base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 aes-gcm = "0.11"
 argon2 = "0.6.0-rc.8"
 zeroize = "1.8"
@@ -45,6 +46,7 @@ flate2 = "1"
 log = "0.4"
 tokio-socks = "0.5"
 tokio-serial = "5.5"
+zmodem2 = "0.7.2"
 suppaftp = { version = "10", default-features = false, features = ["tokio-async-native-tls", "deprecated"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 portable-pty = "0.9"

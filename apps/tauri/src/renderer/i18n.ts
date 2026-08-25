@@ -531,10 +531,12 @@ const zhCN = {
   serialTransferRaw: 'Raw',
   serialTransferXmodem: 'XMODEM',
   serialTransferYmodem: 'YMODEM',
+  serialTransferZmodem: 'ZMODEM',
+  serialTransferKermit: 'Kermit',
   serialTransferChooseFile: '选择文件',
   serialTransferChooseDirectory: '选择目录',
   serialTransferDirectoryMissing: '请选择接收目录',
-  serialTransferDirectoryInvalid: '串口 YMODEM 接收目录不存在。',
+  serialTransferDirectoryInvalid: '串口文件传输接收目录不存在。',
   serialTransferPathRequired: '串口传输路径不能为空。',
   serialTransferNameRequired: '串口接收文件名不能为空。',
   serialTransferNameInvalid: '串口接收文件名无效。',
@@ -542,10 +544,12 @@ const zhCN = {
   serialTransferName: '文件名',
   serialTransferNamePlaceholder: 'received.bin',
   serialTransferYmodemBatchHint: 'YMODEM 将使用发送方提供的文件名，可一次接收多个文件。',
+  serialTransferZmodemBatchHint: 'ZMODEM 支持批量发送或接收多个文件。',
+  serialTransferKermitBatchHint: 'Kermit 使用经典短包和逐包确认，可一次发送或接收多个文件。',
   serialTransferCompleted: '传输完成：{bytes} 字节',
   serialTransferFailed: '传输失败：',
   serialTransferHint:
-    'Raw 适合连续字节；接收空闲超时和协议帧超时会按串口参数自动调整。YMODEM 支持一次发送或接收多个文件；XMODEM/YMODEM 需要对端同时进入对应协议。',
+    'Raw 适合连续字节；接收空闲超时和协议帧超时会按串口参数自动调整。YMODEM、ZMODEM 和 Kermit 支持批量文件；X/Y/ZMODEM/Kermit 需要对端同时进入对应协议。',
   serialTransferXmodemWarning: 'XMODEM 没有文件大小字段，末尾 0x1A 可能被当作填充移除；二进制文件优先使用 YMODEM。',
   serialTransferProgressRunning: '传输中',
   serialTransferProgressCompleted: '已完成',
@@ -577,6 +581,10 @@ const zhCN = {
   serialTransferSizeTextInvalid: 'YMODEM 文件大小不是有效文本。',
   serialTransferSizeInvalid: 'YMODEM 文件大小无效。',
   serialTransferSizeMismatch: 'YMODEM 文件大小与接收数据不一致。',
+  serialTransferKermitBinaryUnsupported: 'Kermit 对端未协商 8 位数据转义，无法安全传输二进制文件。',
+  serialTransferKermitAckTimeout: 'Kermit 等待确认超时，重试次数过多。',
+  serialTransferKermitChecksumInvalid: 'Kermit 数据包校验失败。',
+  serialTransferZmodemFileTooLarge: 'ZMODEM 单个文件不能超过 4 GiB。',
   serialTransferFrameIncomplete: '串口文件传输数据帧不完整。',
   serialTransferFrameSequenceInvalid: '串口文件传输数据块序号校验无效，无法安全重试。',
   serialTransferReadFailedPrefix: '读取串口文件传输数据失败：',
@@ -618,6 +626,7 @@ const zhCN = {
   serialSessionLogTimestamps: '记录时间戳',
   serialSessionLogRaw: '记录原始字节（Hex）',
   serialSessionLogOptionsHint: '串口日志可按 RX/TX、时间戳和原始字节保存；开启 TX 前请确认不会写入敏感信息。',
+  sessionLogWriteFailedPrefix: '会话日志写入失败：',
   sessionLogSaved: '会话日志已保存',
   sessionLogSaveFailed: '会话日志保存失败',
   file: '文件',
@@ -1983,10 +1992,12 @@ const enUS: typeof zhCN = {
   serialTransferRaw: 'Raw',
   serialTransferXmodem: 'XMODEM',
   serialTransferYmodem: 'YMODEM',
+  serialTransferZmodem: 'ZMODEM',
+  serialTransferKermit: 'Kermit',
   serialTransferChooseFile: 'Choose file',
   serialTransferChooseDirectory: 'Choose folder',
   serialTransferDirectoryMissing: 'Choose a receive folder first',
-  serialTransferDirectoryInvalid: 'The YMODEM receive folder does not exist.',
+  serialTransferDirectoryInvalid: 'The serial transfer receive folder does not exist.',
   serialTransferPathRequired: 'A serial transfer path is required.',
   serialTransferNameRequired: 'A serial receive file name is required.',
   serialTransferNameInvalid: 'The serial receive file name is invalid.',
@@ -1994,10 +2005,13 @@ const enUS: typeof zhCN = {
   serialTransferName: 'File name',
   serialTransferNamePlaceholder: 'received.bin',
   serialTransferYmodemBatchHint: 'YMODEM uses the sender-provided file names and can receive multiple files.',
+  serialTransferZmodemBatchHint: 'ZMODEM can send or receive multiple files in one batch.',
+  serialTransferKermitBatchHint:
+    'Kermit uses classic short packets with per-packet acknowledgements and supports batches.',
   serialTransferCompleted: 'Transfer complete: {bytes} bytes',
   serialTransferFailed: 'Transfer failed: ',
   serialTransferHint:
-    'Raw sends a byte stream; idle and protocol timeouts are derived from the serial settings. YMODEM supports sending or receiving multiple files; XMODEM/YMODEM require the peer to use the same protocol.',
+    'Raw sends a byte stream; idle and protocol timeouts are derived from the serial settings. YMODEM, ZMODEM, and Kermit support batches; X/Y/ZMODEM/Kermit require the peer to use the same protocol.',
   serialTransferXmodemWarning:
     'XMODEM has no file-size field, so trailing 0x1A bytes may be treated as padding; prefer YMODEM for binary files.',
   serialTransferProgressRunning: 'Transferring',
@@ -2030,6 +2044,11 @@ const enUS: typeof zhCN = {
   serialTransferSizeTextInvalid: 'The YMODEM file size is not valid text.',
   serialTransferSizeInvalid: 'The YMODEM file size is invalid.',
   serialTransferSizeMismatch: 'The YMODEM file size does not match the received data.',
+  serialTransferKermitBinaryUnsupported:
+    'The Kermit peer did not negotiate 8-bit quoting; the binary file cannot be transferred safely.',
+  serialTransferKermitAckTimeout: 'Kermit acknowledgements timed out after too many retries.',
+  serialTransferKermitChecksumInvalid: 'The Kermit packet checksum is invalid.',
+  serialTransferZmodemFileTooLarge: 'A ZMODEM file cannot exceed 4 GiB.',
   serialTransferFrameIncomplete: 'The serial file-transfer frame is incomplete.',
   serialTransferFrameSequenceInvalid:
     'The serial file-transfer block sequence check is invalid; it cannot be retried safely.',
@@ -2075,6 +2094,7 @@ const enUS: typeof zhCN = {
   serialSessionLogRaw: 'Record raw bytes (Hex)',
   serialSessionLogOptionsHint:
     'Serial logs can include RX/TX direction, timestamps, and raw bytes; confirm no secrets are sent before enabling TX.',
+  sessionLogWriteFailedPrefix: 'Session log write failed: ',
   sessionLogSaved: 'Session log saved',
   sessionLogSaveFailed: 'Unable to save the session log',
   localComputer: 'Local',
@@ -3122,6 +3142,8 @@ export function localizeLocalTerminalText(value: string) {
       t.localTerminalOutputDroppedHint
     )
     .replaceAll('Local terminal launch settings are unavailable', t.localTerminalLaunchSettingsUnavailable)
+    .replaceAll('[会话日志] ', `[${t.sessionLogs}] `)
+    .replace(/会话日志写入失败：\s*/g, t.sessionLogWriteFailedPrefix)
     .replaceAll('Split pane is only supported for SSH and local sessions', t.localTerminalSplitUnsupported)
 }
 
@@ -3193,6 +3215,7 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('当前没有进行中的串口文件传输', t.serialTransferNoneRunning)
     .replaceAll('串口接收已取消', t.serialTransferCanceled)
     .replaceAll('串口文件传输已取消', t.serialTransferCanceled)
+    .replaceAll('串口文件传输接收目录不存在', t.serialTransferDirectoryInvalid)
     .replaceAll('对端取消了 XMODEM 传输', t.serialTransferPeerCanceled)
     .replaceAll('对端取消了 YMODEM 传输', t.serialTransferPeerCanceled)
     .replaceAll('对端取消了串口文件传输', t.serialTransferPeerCanceled)
@@ -3212,6 +3235,14 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('YMODEM 文件大小不是有效文本', t.serialTransferSizeTextInvalid)
     .replaceAll('YMODEM 文件大小无效', t.serialTransferSizeInvalid)
     .replaceAll('YMODEM 文件大小与接收数据不一致', t.serialTransferSizeMismatch)
+    .replaceAll('ZMODEM 接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('Kermit 接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('ZMODEM 文件名无效，不允许写出接收目录', t.serialTransferFilenameUnsafe)
+    .replaceAll('Kermit 文件名无效，不允许写出接收目录', t.serialTransferFilenameUnsafe)
+    .replaceAll('Kermit 对端未协商 8 位数据转义，无法安全传输二进制文件', t.serialTransferKermitBinaryUnsupported)
+    .replaceAll('Kermit 等待确认超时，重试次数过多', t.serialTransferKermitAckTimeout)
+    .replaceAll('Kermit 数据包校验失败', t.serialTransferKermitChecksumInvalid)
+    .replaceAll('ZMODEM 单个文件不能超过 4 GiB', t.serialTransferZmodemFileTooLarge)
     .replaceAll('串口文件传输数据块序号校验无效，无法安全重试', t.serialTransferFrameSequenceInvalid)
     .replaceAll('串口文件传输数据块序号读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
     .replaceAll('串口文件传输数据块序号校验读取超时，数据帧不完整', t.serialTransferFrameIncomplete)

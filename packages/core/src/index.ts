@@ -343,7 +343,7 @@ export interface SerialProfile extends BaseProfile {
   reconnectMaxAttempts?: number
   /** Include TX bytes in automatic serial session logs. */
   sessionLogIncludeInput?: boolean
-  /** Prefix automatic session-log records with unambiguous UTC timestamps. */
+  /** Prefix automatic session-log records with unambiguous local timestamps and offset. */
   sessionLogTimestamps?: boolean
   /** Capture serial RX/TX records as raw uppercase hexadecimal bytes. */
   sessionLogRaw?: boolean
@@ -370,7 +370,7 @@ export interface SerialLineStatus {
 }
 
 export type SerialTransferDirection = 'send' | 'receive'
-export type SerialTransferMode = 'raw' | 'xmodem' | 'ymodem'
+export type SerialTransferMode = 'raw' | 'xmodem' | 'ymodem' | 'zmodem' | 'kermit'
 
 export interface SerialTransferResult {
   bytesTransferred: number
@@ -2119,6 +2119,7 @@ export interface FileTermDesktopApi {
   openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>
   listSerialPorts(): Promise<SerialPortInfo[]>
+  onSerialPortsChanged(listener: (ports: SerialPortInfo[]) => void): () => void
   serialControl(
     tabId: string,
     action: SerialControlAction,

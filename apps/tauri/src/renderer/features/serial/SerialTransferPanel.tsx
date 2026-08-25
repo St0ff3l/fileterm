@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import type { SerialTransferMode, SerialTransferProgress } from '@fileterm/core'
 import { formatMessage, localizeSerialTerminalText, t } from '../../i18n'
 
-const MODES: SerialTransferMode[] = ['raw', 'xmodem', 'ymodem']
+const MODES: SerialTransferMode[] = ['raw', 'xmodem', 'ymodem', 'zmodem', 'kermit']
 
 function modeLabel(mode: SerialTransferMode) {
   if (mode === 'raw') return t.serialTransferRaw
   if (mode === 'xmodem') return t.serialTransferXmodem
-  return t.serialTransferYmodem
+  if (mode === 'ymodem') return t.serialTransferYmodem
+  if (mode === 'zmodem') return t.serialTransferZmodem
+  return t.serialTransferKermit
 }
 
 function progressStatusLabel(status: SerialTransferProgress['status']) {
@@ -62,7 +64,7 @@ export function SerialTransferPanel({
         mode,
         path,
         undefined,
-        mode === 'ymodem' ? paths : undefined
+        mode === 'xmodem' || mode === 'raw' ? undefined : paths
       )
       setMessage(formatMessage(t.serialTransferCompleted, { bytes: result.bytesTransferred }))
     } catch (error) {
@@ -94,7 +96,7 @@ export function SerialTransferPanel({
         'receive',
         mode,
         receiveDirectory,
-        mode === 'ymodem' ? undefined : receiveName
+        mode === 'ymodem' || mode === 'zmodem' || mode === 'kermit' ? undefined : receiveName
       )
       setMessage(formatMessage(t.serialTransferCompleted, { bytes: result.bytesTransferred }))
     } catch (error) {
@@ -141,8 +143,14 @@ export function SerialTransferPanel({
           <button disabled={busy} type="button" onClick={() => void chooseReceiveDirectory()}>
             {t.serialTransferChooseDirectory}
           </button>
-          {mode === 'ymodem' ? (
-            <span className="serial-transfer-panel__sender-name-hint">{t.serialTransferYmodemBatchHint}</span>
+          {mode === 'ymodem' || mode === 'zmodem' || mode === 'kermit' ? (
+            <span className="serial-transfer-panel__sender-name-hint">
+              {mode === 'ymodem'
+                ? t.serialTransferYmodemBatchHint
+                : mode === 'zmodem'
+                  ? t.serialTransferZmodemBatchHint
+                  : t.serialTransferKermitBatchHint}
+            </span>
           ) : (
             <label>
               {t.serialTransferName}

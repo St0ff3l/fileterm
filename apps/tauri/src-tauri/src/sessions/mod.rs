@@ -189,15 +189,17 @@ pub enum SerialTransferMode {
     Raw,
     Xmodem,
     Ymodem,
+    Zmodem,
+    Kermit,
 }
 
 #[derive(Clone, Debug)]
 pub struct SerialTransferRequest {
     pub direction: SerialTransferDirection,
     pub mode: SerialTransferMode,
-    /// Send: the source file. Receive: the exact target file.
+    /// Send: the source file. Receive: the exact target file or destination directory.
     pub local_path: String,
-    /// YMODEM send can negotiate multiple files; other modes use the first path.
+    /// Y/ZMODEM and Kermit sends can negotiate multiple files; other modes use the first path.
     pub local_paths: Vec<String>,
 }
 

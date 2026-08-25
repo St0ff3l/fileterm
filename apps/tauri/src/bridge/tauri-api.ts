@@ -455,6 +455,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     openExternalUrl: (url: string) => invoke<void>('app_open_external_url', { url }),
     openLogsDirectory: () => invoke<void>('app_open_logs_directory'),
     listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
+    onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),
     serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
       invoke<SerialLineStatus>('app_serial_control', { tabId, action, value, durationMs }),
     serialTransfer: (

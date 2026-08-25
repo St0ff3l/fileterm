@@ -35,11 +35,6 @@ const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 /// `cmd_rx.recv()` 会返回 None，自然走清理路径。
 const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// Device enumeration can block inside platform APIs, especially for stale
-/// Bluetooth entries. Keep refresh bounded so the connection dialog can
-/// recover and still allow manual device-path entry.
-const SERIAL_PORT_SCAN_TIMEOUT: Duration = Duration::from_secs(5);
-
 const SERIAL_TRANSFER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 /// A silent shell must not leave a local tab in `connecting` forever. The
@@ -1545,59 +1540,13 @@ pub fn app_open_logs_directory(app: AppHandle) -> Result<(), AppError> {
     open::that(log_directory).map_err(|error| AppError::Command(error.to_string()))
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SerialPortListItem {
-    pub port_name: String,
-    pub port_type: String,
-    pub manufacturer: Option<String>,
-    pub product: Option<String>,
-    pub serial_number: Option<String>,
-    pub vendor_id: Option<u16>,
-    pub product_id: Option<u16>,
-}
-
-fn map_serial_port_info(port: tokio_serial::SerialPortInfo) -> SerialPortListItem {
-    let (port_type, manufacturer, product, serial_number, vendor_id, product_id) = match port
-        .port_type
-    {
-        tokio_serial::SerialPortType::UsbPort(info) => (
-            "usb",
-            info.manufacturer,
-            info.product,
-            info.serial_number,
-            Some(info.vid),
-            Some(info.pid),
-        ),
-        tokio_serial::SerialPortType::PciPort => ("pci", None, None, None, None, None),
-        tokio_serial::SerialPortType::BluetoothPort => ("bluetooth", None, None, None, None, None),
-        tokio_serial::SerialPortType::Unknown => ("unknown", None, None, None, None, None),
-    };
-
-    SerialPortListItem {
-        port_name: port.port_name,
-        port_type: port_type.to_string(),
-        manufacturer,
-        product,
-        serial_number,
-        vendor_id,
-        product_id,
-    }
-}
+pub use crate::services::serial_ports::SerialPortSnapshot as SerialPortListItem;
 
 #[tauri::command]
 pub async fn app_list_serial_ports() -> Result<Vec<SerialPortListItem>, AppError> {
-    let scan_result = timeout(
-        SERIAL_PORT_SCAN_TIMEOUT,
-        tauri::async_runtime::spawn_blocking(tokio_serial::available_ports),
-    )
-    .await
-    .map_err(|_| AppError::Command("串口设备扫描超时".to_string()))?;
-    let ports = scan_result
-        .map_err(|error| AppError::Command(format!("串口设备扫描失败：{error}")))?
-        .map_err(|error| AppError::Command(format!("串口设备扫描失败：{error}")))?;
-
-    Ok(ports.into_iter().map(map_serial_port_info).collect())
+    crate::services::serial_ports::list()
+        .await
+        .map_err(AppError::Command)
 }
 
 fn parse_serial_control_action(
@@ -1631,6 +1580,8 @@ fn parse_serial_transfer_mode(mode: &str) -> Result<crate::sessions::SerialTrans
         "raw" => Ok(crate::sessions::SerialTransferMode::Raw),
         "xmodem" => Ok(crate::sessions::SerialTransferMode::Xmodem),
         "ymodem" => Ok(crate::sessions::SerialTransferMode::Ymodem),
+        "zmodem" => Ok(crate::sessions::SerialTransferMode::Zmodem),
+        "kermit" => Ok(crate::sessions::SerialTransferMode::Kermit),
         _ => Err(AppError::Command("串口传输协议无效".to_string())),
     }
 }
@@ -1713,7 +1664,7 @@ fn resolve_serial_transfer_directory(local_path: &str) -> Result<String, AppErro
     }
     let path = Path::new(local_path);
     if !path.is_dir() {
-        return Err(AppError::Command("串口 YMODEM 接收目录不存在".to_string()));
+        return Err(AppError::Command("串口文件传输接收目录不存在".to_string()));
     }
     Ok(path.to_string_lossy().into_owned())
 }
@@ -1763,7 +1714,9 @@ pub async fn app_serial_transfer(
     let resolved_paths = match (direction, mode) {
         (
             crate::sessions::SerialTransferDirection::Send,
-            crate::sessions::SerialTransferMode::Ymodem,
+            crate::sessions::SerialTransferMode::Ymodem
+            | crate::sessions::SerialTransferMode::Zmodem
+            | crate::sessions::SerialTransferMode::Kermit,
         ) => {
             let candidates = local_paths
                 .filter(|paths| !paths.is_empty())
@@ -1775,7 +1728,9 @@ pub async fn app_serial_transfer(
         }
         (
             crate::sessions::SerialTransferDirection::Receive,
-            crate::sessions::SerialTransferMode::Ymodem,
+            crate::sessions::SerialTransferMode::Ymodem
+            | crate::sessions::SerialTransferMode::Zmodem
+            | crate::sessions::SerialTransferMode::Kermit,
         ) => vec![resolve_serial_transfer_directory(&local_path)?],
         _ => vec![resolve_serial_transfer_path(
             direction,
@@ -6593,7 +6548,7 @@ mod permission_contract_tests {
 
 #[cfg(test)]
 mod serial_port_contract_tests {
-    use super::map_serial_port_info;
+    use crate::services::serial_ports::map_serial_port_info;
 
     #[test]
     fn maps_usb_metadata_without_accessing_hardware() {

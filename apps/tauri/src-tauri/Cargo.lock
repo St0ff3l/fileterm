@@ -1360,6 +1360,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "block2",
+ "chrono",
  "encoding_rs",
  "flate2",
  "gdk",
@@ -1403,6 +1404,7 @@ dependencies = [
  "windows-core 0.61.2",
  "windows-sys 0.61.2",
  "zeroize",
+ "zmodem2",
 ]
 
 [[package]]
@@ -3274,7 +3276,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7160,6 +7162,17 @@ name = "zmij"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd2f034a4bebf216c9e4b7083603e024cf930873fd67830cfb083c9fa33129d9"
+
+[[package]]
+name = "zmodem2"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2ac5e85856f619f7d6c15cbf915448147607f31d028f54b08a0a3ea7ff632e5"
+dependencies = [
+ "bitflags 2.13.0",
+ "hex",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "zune-core"

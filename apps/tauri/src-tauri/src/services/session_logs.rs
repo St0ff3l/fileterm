@@ -12,6 +12,7 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use chrono::{Local, SecondsFormat};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 use tokio::fs::{self, OpenOptions};
@@ -98,7 +99,7 @@ pub async fn start_for_tab(
             .and_then(Value::as_bool)
             .unwrap_or(false),
     };
-    let timestamp = unix_millis();
+    let timestamp = local_filename_timestamp();
     let path = directory.join(format!(
         "{}-{}-{}.log",
         sanitize_filename(name),
@@ -113,7 +114,7 @@ pub async fn start_for_tab(
         .map_err(|error| AppError::Storage(format!("无法打开会话日志文件: {error}")))?;
     let header = if options.serial {
         format!(
-            "# FileTerm 会话日志\r\n# 连接: {name}\r\n# 串口日志包含 RX{}，原始字节: {}，时间戳: {}（UTC）\r\n\r\n",
+            "# FileTerm 会话日志\r\n# 连接: {name}\r\n# 串口日志包含 RX{}，原始字节: {}，时间戳: {}（本机时区）\r\n\r\n",
             if options.include_input { " / TX" } else { "" },
             if options.raw { "Hex" } else { "否" },
             if options.timestamps { "是" } else { "否" },
@@ -381,11 +382,8 @@ async fn run_writer(
                         bytes_written = size;
                     }
                     Err(error) => {
-                        crate::services::logging::warn(
-                            app,
-                            "session-log",
-                            format!("轮转会话日志失败 tab={tab_id}: {error}"),
-                        );
+                        notify_writer_failure(app, tab_id, format!("轮转会话日志失败：{error}"))
+                            .await;
                         break;
                     }
                 }
@@ -394,11 +392,8 @@ async fn run_writer(
                 break;
             };
             if let Err(error) = file_ref.write_all(notice.as_bytes()).await {
-                crate::services::logging::warn(
-                    app,
-                    "session-log",
-                    format!("写入会话日志丢弃提示失败 tab={tab_id}: {error}"),
-                );
+                notify_writer_failure(app, tab_id, format!("写入日志队列丢弃提示失败：{error}"))
+                    .await;
                 break;
             }
             bytes_written = bytes_written.saturating_add(notice.len() as u64);
@@ -412,11 +407,12 @@ async fn run_writer(
                             bytes_written = size;
                         }
                         Err(error) => {
-                            crate::services::logging::warn(
+                            notify_writer_failure(
                                 app,
-                                "session-log",
-                                format!("轮转会话日志失败 tab={tab_id}: {error}"),
-                            );
+                                tab_id,
+                                format!("轮转会话日志失败：{error}"),
+                            )
+                            .await;
                             break;
                         }
                     }
@@ -425,11 +421,7 @@ async fn run_writer(
                     break;
                 };
                 if let Err(error) = file_ref.write_all(chunk.as_bytes()).await {
-                    crate::services::logging::warn(
-                        app,
-                        "session-log",
-                        format!("写入会话日志失败 tab={tab_id}: {error}"),
-                    );
+                    notify_writer_failure(app, tab_id, format!("写入会话日志失败：{error}")).await;
                     break;
                 }
                 bytes_written = bytes_written.saturating_add(chunk.len() as u64);
@@ -452,14 +444,12 @@ async fn run_writer(
 
     if let Some(mut file) = file {
         if let Err(error) = file.flush().await {
-            crate::services::logging::warn(
+            notify_writer_failure(
                 app,
-                "session-log",
-                format!(
-                    "刷新会话日志失败 tab={tab_id} path={}: {error}",
-                    path.display()
-                ),
-            );
+                tab_id,
+                format!("刷新会话日志失败（{}）：{error}", path.display()),
+            )
+            .await;
         }
     }
     let state = app.state::<WorkspaceState>();
@@ -470,6 +460,23 @@ async fn run_writer(
     {
         writers.remove(tab_id);
     }
+}
+
+async fn notify_writer_failure(app: &AppHandle, tab_id: &str, message: String) {
+    crate::services::logging::warn(
+        app,
+        "session-log",
+        format!("session log writer failed tab={tab_id}: {message}"),
+    );
+    // A failed automatic writer must be visible in the active tab. The
+    // diagnostic log is useful for developers, but otherwise the user can
+    // keep working while assuming that the file is still being saved.
+    crate::sessions::terminal::emit_terminal_data(
+        app,
+        tab_id,
+        &format!("\r\n[会话日志] 会话日志写入失败：{message}\r\n"),
+    )
+    .await;
 }
 
 async fn rotate_log(
@@ -488,7 +495,7 @@ async fn rotate_log(
         .open(path)
         .await?;
     let header = format!(
-        "# FileTerm 会话日志继续写入\r\n# 轮转时间（UTC）: {}\r\n\r\n",
+        "# FileTerm 会话日志继续写入\r\n# 轮转时间（本机时区）: {}\r\n\r\n",
         timestamp_rfc3339()
     );
     next.write_all(header.as_bytes()).await?;
@@ -528,38 +535,12 @@ fn unix_millis() -> u128 {
         .as_millis()
 }
 
-fn timestamp_rfc3339() -> String {
-    let millis = unix_millis();
-    let total_seconds = (millis / 1000) as i64;
-    let milliseconds = millis % 1000;
-    let days = total_seconds.div_euclid(86_400);
-    let seconds_of_day = total_seconds.rem_euclid(86_400);
-    let (year, month, day) = civil_from_days(days);
-    let hour = seconds_of_day / 3_600;
-    let minute = (seconds_of_day % 3_600) / 60;
-    let second = seconds_of_day % 60;
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{milliseconds:03}Z")
+fn local_filename_timestamp() -> String {
+    Local::now().format("%Y%m%d-%H%M%S%.3f%z").to_string()
 }
 
-// Proleptic Gregorian calendar conversion from Unix days. Keeping this local
-// avoids a timezone dependency while making the log's UTC offset explicit.
-fn civil_from_days(days_since_epoch: i64) -> (i64, i64, i64) {
-    let shifted = days_since_epoch + 719_468;
-    let era = if shifted >= 0 {
-        shifted / 146_097
-    } else {
-        (shifted - 146_096) / 146_097
-    };
-    let day_of_era = shifted - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_part = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_part + 2) / 5 + 1;
-    let month = month_part + if month_part < 10 { 3 } else { -9 };
-    let year = year + if month <= 2 { 1 } else { 0 };
-    (year, month, day)
+fn timestamp_rfc3339() -> String {
+    Local::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 fn short_tab_id(tab_id: &str) -> String {
@@ -600,7 +581,7 @@ fn sanitize_filename(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{civil_from_days, sanitize_filename, short_tab_id, timestamp_rfc3339};
+    use super::{local_filename_timestamp, sanitize_filename, short_tab_id, timestamp_rfc3339};
 
     #[test]
     fn sanitizes_cross_platform_filename_characters() {
@@ -616,8 +597,10 @@ mod tests {
     }
 
     #[test]
-    fn formats_utc_timestamp_with_an_explicit_offset() {
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert!(timestamp_rfc3339().ends_with('Z'));
+    fn formats_local_timestamp_with_an_explicit_offset() {
+        let timestamp = timestamp_rfc3339();
+        assert!(chrono::DateTime::parse_from_rfc3339(&timestamp).is_ok());
+        assert!(timestamp.contains('T'));
+        assert!(local_filename_timestamp().contains('-'));
     }
 }

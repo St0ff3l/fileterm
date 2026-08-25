@@ -182,9 +182,18 @@ export function ConnectionModal({
       setSerialPortLoadError(null)
       return
     }
+    const stopWatching = window.fileterm?.onSerialPortsChanged((ports) => {
+      setSerialPorts(
+        [...ports].sort((left, right) => left.portName.localeCompare(right.portName, undefined, { numeric: true }))
+      )
+      setSerialPortLoadError(null)
+    })
     void refreshSerialPorts()
     const timer = window.setInterval(() => void refreshSerialPorts(), 3000)
-    return () => window.clearInterval(timer)
+    return () => {
+      stopWatching?.()
+      window.clearInterval(timer)
+    }
   }, [form.type, refreshSerialPorts])
 
   const serialPortOptions = serialPorts.map((port) => {
