@@ -173,7 +173,7 @@ pub(super) fn parse_hex(value: &str) -> Result<Vec<u8>, String> {
         if digits.is_empty() || digits.len() % 2 != 0 {
             return Err(format!("Hex 输入必须按两个字符表示一个字节：{token}"));
         }
-        for pair in digits.as_bytes().chunks_exact(2) {
+        for pair in digits.as_bytes().chunks(2) {
             let pair = std::str::from_utf8(pair).expect("hex input is ASCII-compatible");
             let byte = u8::from_str_radix(pair, 16)
                 .map_err(|_| format!("Hex 输入包含无效字节：{pair}"))?;
