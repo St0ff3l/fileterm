@@ -157,6 +157,11 @@
   font-size: 11px;
 }
 
+.serial-transfer-panel__option input {
+  width: auto;
+  min-height: auto;
+}
+
 .serial-transfer-panel__path,
 .serial-transfer-panel__hint,
 .serial-transfer-panel__sender-name-hint,

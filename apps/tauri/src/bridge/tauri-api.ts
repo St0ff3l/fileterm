@@ -464,7 +464,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       mode: SerialTransferMode,
       localPath: string,
       fileName?: string,
-      localPaths?: string[]
+      localPaths?: string[],
+      xmodemPreservePadding?: boolean
     ) =>
       invoke<SerialTransferResult>('app_serial_transfer', {
         tabId,
@@ -472,7 +473,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         mode,
         localPath,
         fileName: fileName ?? null,
-        localPaths: localPaths ?? null
+        localPaths: localPaths ?? null,
+        xmodemPreservePadding: xmodemPreservePadding ?? null
       }),
     serialTransferCancel: (tabId: string) => invoke<void>('app_serial_cancel_transfer', { tabId }),
     saveSessionLog: (tabId: string) => invoke<string | null>('app_save_session_log', { tabId }),

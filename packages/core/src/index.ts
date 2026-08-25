@@ -2132,7 +2132,8 @@ export interface FileTermDesktopApi {
     mode: SerialTransferMode,
     localPath: string,
     fileName?: string,
-    localPaths?: string[]
+    localPaths?: string[],
+    xmodemPreservePadding?: boolean
   ): Promise<SerialTransferResult>
   serialTransferCancel(tabId: string): Promise<void>
   saveSessionLog(tabId: string): Promise<string | null>

@@ -31,6 +31,7 @@ export function SerialTransferPanel({
   const [mode, setMode] = useState<SerialTransferMode>('ymodem')
   const [receiveDirectory, setReceiveDirectory] = useState('')
   const [receiveName, setReceiveName] = useState(t.serialTransferNamePlaceholder)
+  const [preserveXmodemPadding, setPreserveXmodemPadding] = useState(true)
   const [busy, setBusy] = useState(false)
   const [cancelRequested, setCancelRequested] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -96,7 +97,9 @@ export function SerialTransferPanel({
         'receive',
         mode,
         receiveDirectory,
-        mode === 'ymodem' || mode === 'zmodem' || mode === 'kermit' ? undefined : receiveName
+        mode === 'ymodem' || mode === 'zmodem' || mode === 'kermit' ? undefined : receiveName,
+        undefined,
+        mode === 'xmodem' ? preserveXmodemPadding : undefined
       )
       setMessage(formatMessage(t.serialTransferCompleted, { bytes: result.bytesTransferred }))
     } catch (error) {
@@ -175,7 +178,18 @@ export function SerialTransferPanel({
         {receiveDirectory ? <div className="serial-transfer-panel__path">{receiveDirectory}</div> : null}
         <div className="serial-transfer-panel__hint">{t.serialTransferHint}</div>
         {mode === 'xmodem' ? (
-          <div className="serial-transfer-panel__warning">{t.serialTransferXmodemWarning}</div>
+          <>
+            <div className="serial-transfer-panel__warning">{t.serialTransferXmodemWarning}</div>
+            <label className="serial-transfer-panel__option">
+              <input
+                checked={preserveXmodemPadding}
+                disabled={busy}
+                type="checkbox"
+                onChange={(event) => setPreserveXmodemPadding(event.target.checked)}
+              />
+              {t.serialTransferXmodemPreservePadding}
+            </label>
+          </>
         ) : null}
         {progress ? (
           <div className="serial-transfer-panel__progress" aria-live="polite">

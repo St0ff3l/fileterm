@@ -61,6 +61,7 @@ where
         request.local_paths.clone()
     };
     let mode = request.mode;
+    let xmodem_preserve_padding = request.xmodem_preserve_padding;
     let result: Result<u64, String> = match (request.direction, mode) {
         (SerialTransferDirection::Send, SerialTransferMode::Raw) => {
             send_raw(stream, Path::new(&path), timing, reporter, &cancellation).await
@@ -80,7 +81,15 @@ where
             .await
         }
         (SerialTransferDirection::Receive, SerialTransferMode::Xmodem) => {
-            receive_xmodem(stream, Path::new(&path), timing, reporter, &cancellation).await
+            receive_xmodem(
+                stream,
+                Path::new(&path),
+                timing,
+                xmodem_preserve_padding,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Send, SerialTransferMode::Ymodem) => {
             send_ymodem(stream, &paths, timing, reporter, &cancellation).await
@@ -361,6 +370,7 @@ async fn receive_xmodem<S>(
     stream: &mut S,
     path: &Path,
     timing: SerialTransferTiming,
+    preserve_padding: bool,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -385,9 +395,7 @@ where
                     }
                     write_all(stream, &[ACK], timing.write_timeout, cancellation).await?;
                     if let Some(mut last) = pending_last.take() {
-                        while last.last() == Some(&PAD) {
-                            last.pop();
-                        }
+                        last = finalize_xmodem_payload(last, preserve_padding);
                         write_file(&mut file, &last, cancellation).await?;
                         total += last.len() as u64;
                     }
@@ -435,6 +443,15 @@ where
         cleanup_failed_receive(path).await;
     }
     result
+}
+
+fn finalize_xmodem_payload(mut payload: Vec<u8>, preserve_padding: bool) -> Vec<u8> {
+    if !preserve_padding {
+        while payload.last() == Some(&PAD) {
+            payload.pop();
+        }
+    }
+    payload
 }
 
 async fn receive_ymodem<S>(
@@ -1050,10 +1067,10 @@ mod tests {
     use super::super::progress::SerialTransferReporter;
     use super::super::timing::SerialTransferTiming;
     use super::{
-        checksum, crc16, create_target, is_safe_transfer_file_name, parse_ymodem_header,
-        parse_ymodem_size, read_byte, read_packet_tail, read_packet_tail_with_timeout, receive_raw,
-        receive_xmodem, receive_ymodem, receive_ymodem_file, send_xmodem, send_ymodem,
-        YmodemFileOptions, SOH,
+        checksum, crc16, create_target, finalize_xmodem_payload, is_safe_transfer_file_name,
+        parse_ymodem_header, parse_ymodem_size, read_byte, read_packet_tail,
+        read_packet_tail_with_timeout, receive_raw, receive_xmodem, receive_ymodem,
+        receive_ymodem_file, send_xmodem, send_ymodem, YmodemFileOptions, SOH,
     };
 
     #[test]
@@ -1094,6 +1111,13 @@ mod tests {
             );
         }
         assert!(is_safe_transfer_file_name("report.bin"));
+    }
+
+    #[test]
+    fn xmodem_padding_is_only_trimmed_when_explicitly_requested() {
+        let payload = vec![0x41, 0x1a, 0x1a];
+        assert_eq!(finalize_xmodem_payload(payload.clone(), true), payload);
+        assert_eq!(finalize_xmodem_payload(payload, false), vec![0x41]);
     }
 
     #[tokio::test]
@@ -1138,6 +1162,7 @@ mod tests {
                 &mut receiver_stream,
                 &receiver_target,
                 timing,
+                false,
                 &mut receiver_reporter,
                 &receiver_cancellation,
             )

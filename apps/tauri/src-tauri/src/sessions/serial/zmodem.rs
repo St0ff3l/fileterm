@@ -394,6 +394,7 @@ mod tests {
                 mode: SerialTransferMode::Zmodem,
                 local_path: sender_source.to_string_lossy().into_owned(),
                 local_paths: Vec::new(),
+                xmodem_preserve_padding: true,
             };
             let mut reporter = SerialTransferReporter::disabled(
                 SerialTransferDirection::Send,

@@ -201,6 +201,9 @@ pub struct SerialTransferRequest {
     pub local_path: String,
     /// Y/ZMODEM and Kermit sends can negotiate multiple files; other modes use the first path.
     pub local_paths: Vec<String>,
+    /// XMODEM has no file-size field. Preserve final-block padding by default so a binary
+    /// receive never silently drops trailing 0x1A bytes; legacy trimming remains opt-in.
+    pub xmodem_preserve_padding: bool,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]

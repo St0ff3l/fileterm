@@ -1700,6 +1700,7 @@ pub async fn app_serial_control(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn app_serial_transfer(
     app: AppHandle,
     tab_id: String,
@@ -1708,6 +1709,7 @@ pub async fn app_serial_transfer(
     local_path: String,
     file_name: Option<String>,
     local_paths: Option<Vec<String>>,
+    xmodem_preserve_padding: Option<bool>,
 ) -> Result<crate::sessions::SerialTransferResult, AppError> {
     let direction = parse_serial_transfer_direction(&direction)?;
     let mode = parse_serial_transfer_mode(&mode)?;
@@ -1781,6 +1783,7 @@ pub async fn app_serial_transfer(
                 mode,
                 local_path,
                 local_paths: resolved_paths,
+                xmodem_preserve_padding: xmodem_preserve_padding.unwrap_or(true),
             },
             cancellation: cancellation.clone(),
             respond_to,

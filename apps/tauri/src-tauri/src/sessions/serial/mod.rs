@@ -34,7 +34,10 @@ use self::control::{
     apply_close_lines, apply_initial_lines, execute as execute_serial_control, SerialControlState,
 };
 use self::pacing::{write_serial_bytes, SerialPacing};
-use self::platform::{apply_parity as apply_platform_parity, apply_rs485};
+use self::platform::{
+    apply_parity as apply_platform_parity, apply_rs485,
+    parity_wire_mode as serial_parity_wire_mode, wire_data_bits, SerialIo, SerialParityWireMode,
+};
 use self::progress::SerialTransferReporter;
 use self::reconnect::ReconnectPolicy;
 use self::timing::SerialTransferTiming;
@@ -133,7 +136,7 @@ async fn resolve_serial_device(
     }
 }
 
-async fn close_serial_stream(
+async fn close_native_serial_stream(
     stream: &mut tokio_serial::SerialStream,
     state: SerialControlState,
     app: &AppHandle,
@@ -151,9 +154,36 @@ async fn close_serial_stream(
     let _ = stream.shutdown().await;
 }
 
+async fn close_serial_stream(
+    stream: &mut SerialIo,
+    state: SerialControlState,
+    app: &AppHandle,
+    tab_id: &str,
+) {
+    if let Err(error) = stream.release_rs485() {
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "serial",
+            tab_id,
+            format!("release RS-485 line failed: {error}"),
+        );
+    }
+    if let Err(error) = apply_close_lines(stream.serial_mut(), state) {
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "serial",
+            tab_id,
+            format!("close line update failed: {error}"),
+        );
+    }
+    let _ = stream.shutdown().await;
+}
+
 async fn close_serial_halves(
-    reader: tokio::io::ReadHalf<tokio_serial::SerialStream>,
-    writer: tokio::io::WriteHalf<tokio_serial::SerialStream>,
+    reader: tokio::io::ReadHalf<SerialIo>,
+    writer: tokio::io::WriteHalf<SerialIo>,
     state: SerialControlState,
     app: &AppHandle,
     tab_id: &str,
@@ -315,6 +345,8 @@ async fn run_serial_worker(
         .map_err(|_| SerialWorkerError::fatal("串口数据位超出支持范围"))?;
     let stop_bits_value_u8 = u8::try_from(stop_bits_value)
         .map_err(|_| SerialWorkerError::fatal("串口停止位超出支持范围"))?;
+    let parity_wire_mode = serial_parity_wire_mode(serial_parity, data_bits_value_u8)
+        .map_err(SerialWorkerError::fatal)?;
     let transfer_timing = SerialTransferTiming::from_profile(
         profile,
         baud_rate,
@@ -339,8 +371,9 @@ async fn run_serial_worker(
             "串口 RS-485 半双工不能与硬件流控同时启用",
         ));
     }
+    let wire_data_bits_value = wire_data_bits(data_bits_value, parity_wire_mode);
     let mut builder = tokio_serial::new(&device_path, baud_rate)
-        .data_bits(data_bits(data_bits_value).map_err(SerialWorkerError::fatal)?)
+        .data_bits(data_bits(wire_data_bits_value).map_err(SerialWorkerError::fatal)?)
         .stop_bits(stop_bits(stop_bits_value).map_err(SerialWorkerError::fatal)?)
         .parity(serial_parity.tokio_value())
         .flow_control(flow_control(configured_flow_control).map_err(SerialWorkerError::fatal)?);
@@ -350,9 +383,11 @@ async fn run_serial_worker(
     let mut stream = builder
         .open_native_async()
         .map_err(|error| SerialWorkerError::retryable(serial_error(&device_path, error)))?;
-    if let Err(error) = apply_platform_parity(&stream, serial_parity) {
-        close_serial_stream(&mut stream, control_state, app, tab_id).await;
-        return Err(SerialWorkerError::fatal(error));
+    if matches!(parity_wire_mode, SerialParityWireMode::Native) {
+        if let Err(error) = apply_platform_parity(&stream, serial_parity) {
+            close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+            return Err(SerialWorkerError::fatal(error));
+        }
     }
     let rs485_delay_before_send = profile
         .get("rs485DelayRtsBeforeSendMs")
@@ -363,13 +398,13 @@ async fn run_serial_worker(
         .and_then(Value::as_u64)
         .unwrap_or(0);
     if rs485_delay_before_send > 60_000 || rs485_delay_after_send > 60_000 {
-        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
         return Err(SerialWorkerError::fatal(
             "串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间",
         ));
     }
-    if let Err(error) = apply_rs485(
-        &stream,
+    let rs485_mode = match apply_rs485(
+        &mut stream,
         configured_rs485_mode,
         profile
             .get("rs485RtsOnSend")
@@ -378,21 +413,25 @@ async fn run_serial_worker(
         rs485_delay_before_send as u32,
         rs485_delay_after_send as u32,
     ) {
-        close_serial_stream(&mut stream, control_state, app, tab_id).await;
-        return Err(SerialWorkerError::fatal(error));
-    }
+        Ok(mode) => mode,
+        Err(error) => {
+            close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+            return Err(SerialWorkerError::fatal(error));
+        }
+    };
     let mut control_state = control_state;
     if let Err(error) = apply_initial_lines(&mut stream, control_state) {
-        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
         return Err(SerialWorkerError::retryable(serial_error(
             &device_path,
             error,
         )));
     }
     if cancellation.is_cancelled() {
-        close_serial_stream(&mut stream, control_state, app, tab_id).await;
+        close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
         return Ok(SerialWorkerExit::Requested);
     }
+    let stream = SerialIo::new(stream, parity_wire_mode, rs485_mode);
     let (mut reader, mut writer) = tokio::io::split(stream);
     crate::services::logging::session(
         app,
@@ -574,7 +613,7 @@ async fn run_serial_worker(
                     }) => {
                         let mut stream = reader.unsplit(writer);
                         let result = execute_serial_control(
-                            &mut stream,
+                            stream.serial_mut(),
                             action,
                             value,
                             duration_ms,

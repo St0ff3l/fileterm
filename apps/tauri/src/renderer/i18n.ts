@@ -438,10 +438,12 @@ const zhCN = {
   serialStopBitsInvalid: '串口停止位必须是 1 或 2',
   serialParityInvalid: '串口校验位必须是无、奇、偶、标记或空格校验',
   serialParityUnsupported: '当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验',
-  serialParityHint: '标记/空格校验使用系统串口后端：Windows 通常可用，Linux 需驱动支持 CMSPAR，macOS 通常不支持。',
+  serialParityMacRequirement: 'macOS 的标记/空格校验模拟仅支持 7 数据位，请将数据位设为 7。',
+  serialParityHint:
+    '标记/空格校验：Windows 通常由系统原生支持，Linux 需要驱动支持 CMSPAR，macOS 使用 7 数据位的软件模拟。',
   serialFlowControlInvalid: '串口流控必须是无、软件或硬件流控',
   serialRtsHardwareManaged: '已启用硬件流控，RTS 由驱动自动管理。',
-  serialRtsRs485Managed: '已启用 RS-485 半双工，RTS 由驱动自动管理。',
+  serialRtsRs485Managed: '已启用 RS-485 半双工，RTS 由驱动或软件自动管理。',
   serialRs485FlowConflict: 'RS-485 半双工不能与硬件流控同时启用。',
   serialWriteTimeout: '串口写入等待硬件流控超时。',
   serialWriteTimeoutInvalid: '串口写入超时必须在 250 到 600000 毫秒之间。',
@@ -492,14 +494,18 @@ const zhCN = {
   serialTimeoutHint: '低波特率或硬件流控设备可适当增大；范围 250–600000 毫秒。',
   serialRs485Mode: 'RS-485 模式',
   serialRs485None: '关闭',
-  serialRs485HalfDuplex: '半双工（Linux）',
+  serialRs485HalfDuplex: '半双工（RTS）',
   serialRs485RtsOnSend: '发送时 RTS 有效',
   serialRs485DelayBefore: '发送前 RTS 延迟（毫秒）',
   serialRs485DelayAfter: '发送后 RTS 延迟（毫秒）',
-  serialRs485Hint: 'RS-485 半双工由 Linux 驱动控制 DE/RE；macOS 和 Windows 暂不启用内置 ioctl。',
+  serialRs485Hint:
+    'Linux 使用串口驱动控制 RS-485 的 DE/RE；macOS 使用 RTS 软件控制外部收发器，Windows 暂不启用内置控制。',
+  serialRs485MacHint:
+    'macOS 使用软件 RTS 控制外部 RS-485 收发器；请确认适配器的 DE/RE 接到 RTS，并按需设置发送前/后延迟。',
   serialRs485Invalid: '串口 RS-485 模式无效。',
   serialRs485Unsupported: '当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器。',
   serialRs485ApplyFailed: '应用 Linux RS-485 配置失败：',
+  serialRs485SoftwareApplyFailed: '配置 macOS RS-485 软件 RTS 失败：',
   serialRs485DelayInvalid: '串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间。',
   serialReconnectMaxAttempts: '最大自动重连次数（0 不限）',
   serialReconnectMaxAttemptsHint: '自动重连使用 2、4、8…秒退避，最多等待 30 秒。',
@@ -550,7 +556,9 @@ const zhCN = {
   serialTransferFailed: '传输失败：',
   serialTransferHint:
     'Raw 适合连续字节；接收空闲超时和协议帧超时会按串口参数自动调整。YMODEM、ZMODEM 和 Kermit 支持批量文件；X/Y/ZMODEM/Kermit 需要对端同时进入对应协议。',
-  serialTransferXmodemWarning: 'XMODEM 没有文件大小字段，末尾 0x1A 可能被当作填充移除；二进制文件优先使用 YMODEM。',
+  serialTransferXmodemWarning:
+    'XMODEM 没有文件大小字段；勾选保留填充可避免丢失末尾 0x1A，但可能留下填充字节，精确二进制文件请使用 YMODEM/ZMODEM。',
+  serialTransferXmodemPreservePadding: '接收时保留末尾 0x1A 填充（避免二进制字节丢失）',
   serialTransferProgressRunning: '传输中',
   serialTransferProgressCompleted: '已完成',
   serialTransferProgressFailed: '失败',
@@ -1896,11 +1904,12 @@ const enUS: typeof zhCN = {
   serialParityInvalid: 'Serial parity must be none, odd, even, mark, or space',
   serialParityUnsupported:
     'This platform or serial driver does not support mark/space parity; choose none, odd, or even',
+  serialParityMacRequirement: 'macOS mark/space parity emulation only supports 7 data bits; set data bits to 7.',
   serialParityHint:
-    'Mark/space parity uses the native serial backend: usually available on Windows, requires CMSPAR driver support on Linux, and is usually unavailable on macOS.',
+    'Mark/space parity: usually native on Windows, requires CMSPAR driver support on Linux, and uses 7-bit software emulation on macOS.',
   serialFlowControlInvalid: 'Serial flow control must be none, software, or hardware',
   serialRtsHardwareManaged: 'Hardware flow control is enabled; RTS is managed by the driver.',
-  serialRtsRs485Managed: 'RS-485 half duplex is enabled; RTS is managed by the driver.',
+  serialRtsRs485Managed: 'RS-485 half duplex is enabled; RTS is managed by the driver or software.',
   serialRs485FlowConflict: 'RS-485 half duplex cannot be combined with hardware flow control.',
   serialWriteTimeout: 'Timed out waiting for hardware flow control while writing to the serial port.',
   serialWriteTimeoutInvalid: 'Serial write timeout must be between 250 and 600000 milliseconds.',
@@ -1951,16 +1960,19 @@ const enUS: typeof zhCN = {
   serialTimeoutHint: 'Increase these for low baud rates or hardware-flow-control devices; range 250–600000 ms.',
   serialRs485Mode: 'RS-485 mode',
   serialRs485None: 'Off',
-  serialRs485HalfDuplex: 'Half duplex (Linux)',
+  serialRs485HalfDuplex: 'Half duplex (RTS)',
   serialRs485RtsOnSend: 'RTS active while sending',
   serialRs485DelayBefore: 'RTS delay before send (ms)',
   serialRs485DelayAfter: 'RTS delay after send (ms)',
   serialRs485Hint:
-    'RS-485 half-duplex DE/RE control uses the Linux driver; built-in ioctl is not enabled on macOS or Windows.',
+    'Linux uses the serial driver for RS-485 DE/RE control; macOS uses software RTS control, while Windows has no built-in control.',
+  serialRs485MacHint:
+    'macOS uses software RTS to control an external RS-485 transceiver; connect DE/RE to RTS and tune the before/after delays if needed.',
   serialRs485Invalid: 'The serial RS-485 mode is invalid.',
   serialRs485Unsupported:
     'Built-in RS-485 half-duplex control is not supported on this platform; use the driver or an external converter.',
   serialRs485ApplyFailed: 'Unable to apply Linux RS-485 settings: ',
+  serialRs485SoftwareApplyFailed: 'Unable to configure macOS software RTS for RS-485: ',
   serialRs485DelayInvalid: 'Serial RS-485 RTS delays must be between 0 and 60000 milliseconds.',
   serialReconnectMaxAttempts: 'Max auto-reconnect attempts (0 unlimited)',
   serialReconnectMaxAttemptsHint: 'Automatic reconnect backs off at 2, 4, 8… seconds and caps at 30 seconds.',
@@ -2013,7 +2025,8 @@ const enUS: typeof zhCN = {
   serialTransferHint:
     'Raw sends a byte stream; idle and protocol timeouts are derived from the serial settings. YMODEM, ZMODEM, and Kermit support batches; X/Y/ZMODEM/Kermit require the peer to use the same protocol.',
   serialTransferXmodemWarning:
-    'XMODEM has no file-size field, so trailing 0x1A bytes may be treated as padding; prefer YMODEM for binary files.',
+    'XMODEM has no file-size field. Preserving padding avoids losing trailing 0x1A bytes but may leave filler; use YMODEM/ZMODEM for exact binary files.',
+  serialTransferXmodemPreservePadding: 'Preserve trailing 0x1A padding while receiving (prevents binary byte loss)',
   serialTransferProgressRunning: 'Transferring',
   serialTransferProgressCompleted: 'Completed',
   serialTransferProgressFailed: 'Failed',
@@ -3168,6 +3181,10 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('串口停止位必须是 1 或 2', t.serialStopBitsInvalid)
     .replaceAll('串口校验位必须是无、奇、偶、标记或空格校验', t.serialParityInvalid)
     .replaceAll('当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验', t.serialParityUnsupported)
+    .replaceAll('macOS 的标记/空格校验模拟仅支持 7 数据位，请将数据位设为 7', t.serialParityMacRequirement)
+    .replaceAll('macOS 标记/空格校验模拟只能发送 7 位数据，请使用 ASCII 或关闭该校验', t.serialParityMacRequirement)
+    .replaceAll('macOS 标记校验收到校验位错误的数据', t.serialParityUnsupported)
+    .replaceAll('macOS 空格校验收到校验位错误的数据', t.serialParityUnsupported)
     .replaceAll('串口流控必须是无、软件或硬件流控', t.serialFlowControlInvalid)
     .replaceAll('串口启用硬件流控时不能手动控制 RTS', t.serialRtsHardwareManaged)
     .replaceAll('串口启用 RS-485 半双工时不能手动控制 RTS', t.serialRtsRs485Managed)
@@ -3180,6 +3197,10 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器', t.serialRs485Unsupported)
     .replaceAll('串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间', t.serialRs485DelayInvalid)
     .replace(/应用 Linux RS-485 配置失败：/g, t.serialRs485ApplyFailed)
+    .replace(/配置 macOS RS-485 软件 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(/释放 macOS RS-485 软件 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(/设置 RS-485 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(/释放 RS-485 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
     .replace(
       /无法访问串口 (.*)：权限不足。Linux 请将当前用户加入 dialout 组；Windows\/macOS 请确认驱动和设备访问权限。/g,
       (_match, path: string) => formatMessage(t.serialPermissionError, { path })

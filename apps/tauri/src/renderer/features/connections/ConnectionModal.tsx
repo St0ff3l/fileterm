@@ -139,8 +139,10 @@ export function ConnectionModal({
   const [serialPortLoadError, setSerialPortLoadError] = useState<string | null>(null)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet'
-  const supportsBuiltInRs485 = window.fileterm?.platform === 'linux' && form.flowControl !== 'hardware'
-  const supportsExtendedParity = ['linux', 'win32'].includes(window.fileterm?.platform ?? '')
+  const platform = window.fileterm?.platform
+  const isMacOs = platform === 'darwin'
+  const supportsBuiltInRs485 = ['linux', 'darwin'].includes(platform ?? '') && form.flowControl !== 'hardware'
+  const supportsExtendedParity = ['linux', 'win32'].includes(platform ?? '') || (isMacOs && form.dataBits === 7)
   const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
 
   const setSshConnectionSetting = <K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]) => {
@@ -564,9 +566,13 @@ export function ConnectionModal({
                         ) : null}
                         <p className="ssh-field-hint span-2">{t.serialParityHint}</p>
                         {!supportsExtendedParity && (form.parity === 'mark' || form.parity === 'space') ? (
-                          <p className="ssh-field-hint span-2">{t.serialParityUnsupported}</p>
+                          <p className="ssh-field-hint span-2">
+                            {isMacOs ? t.serialParityMacRequirement : t.serialParityUnsupported}
+                          </p>
                         ) : null}
-                        <p className="ssh-field-hint span-2">{t.serialRs485Hint}</p>
+                        <p className="ssh-field-hint span-2">
+                          {isMacOs && form.rs485Mode === 'half-duplex' ? t.serialRs485MacHint : t.serialRs485Hint}
+                        </p>
                         {form.rs485Mode === 'half-duplex' && form.flowControl === 'hardware' ? (
                           <p className="ssh-field-hint span-2">{t.serialRs485FlowConflict}</p>
                         ) : !supportsBuiltInRs485 && form.rs485Mode === 'half-duplex' ? (
