@@ -2012,6 +2012,8 @@ pub fn run() {
             crate::commands::app_install_update,
             crate::commands::app_open_logs_directory,
             crate::commands::app_list_serial_ports,
+            crate::commands::app_serial_control,
+            crate::commands::app_serial_transfer,
             crate::commands::app_save_session_log,
             crate::commands::app_get_ui_preferences,
             crate::commands::app_set_ui_preferences,

@@ -315,6 +315,12 @@ async fn run_ftp_worker(
             | Some(WorkerCmd::DeleteSshTunnel { respond_to, .. }) => {
                 let _ = respond_to.send(Err("FTP 不支持 SSH 隧道".to_string()));
             }
+            Some(WorkerCmd::SerialControl { respond_to, .. }) => {
+                let _ = respond_to.send(Err("FTP 不支持串口控制".to_string()));
+            }
+            Some(WorkerCmd::SerialTransfer { respond_to, .. }) => {
+                let _ = respond_to.send(Err("FTP 不支持串口文件传输".to_string()));
+            }
             Some(WorkerCmd::WriteTerminal(_)) | Some(WorkerCmd::ResizeTerminal { .. }) => {}
             Some(WorkerCmd::Disconnect) | None => {
                 crate::services::logging::session(app, "INFO", "ftp", tab_id, "disconnecting");

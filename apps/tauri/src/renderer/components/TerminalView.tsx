@@ -13,11 +13,12 @@ import {
   trimHydratedTerminalChunk
 } from '../app/terminal-transcript'
 import { APP_EVENT, onAppEvent } from '../lib/app-events'
-import { localizeLocalTerminalText, t } from '../i18n'
+import { localizeLocalTerminalText, localizeSerialTerminalText, t } from '../i18n'
 import { ContextMenu } from '../features/common/ContextMenu'
 import { CloseButton } from '../features/common/CloseButton'
 import { AppIcon } from '../features/common/AppIcon'
 import { VerticalScrollbar } from '../features/common/VerticalScrollbar'
+import { SerialToolbar } from '../features/serial/SerialToolbar'
 import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../app/font-metrics'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
 import {
@@ -31,7 +32,7 @@ import {
 } from '../app/terminal-font-size-store'
 
 function localizeTerminalText(value: string) {
-  return localizeLocalTerminalText(value)
+  return localizeSerialTerminalText(localizeLocalTerminalText(value))
     .replaceAll('连接主机成功', t.terminalConnected)
     .replaceAll('连接主机...', t.terminalConnecting)
     .replaceAll('连接已断开', t.terminalDisconnected)
@@ -638,6 +639,7 @@ export const TerminalView = memo(function TerminalView({
   profileId,
   tabId,
   bootText,
+  sessionType,
   connected = false,
   connecting = false,
   isActive = true,
@@ -654,6 +656,7 @@ export const TerminalView = memo(function TerminalView({
   profileId: string
   tabId: string
   bootText: string
+  sessionType?: 'ssh' | 'ftp' | 'telnet' | 'serial' | 'local'
   connected?: boolean
   connecting?: boolean
   isActive?: boolean
@@ -2607,7 +2610,12 @@ export const TerminalView = memo(function TerminalView({
   }, [findCaseSensitive, findOpen, findQuery, findRegex])
 
   return (
-    <div className="terminal-view" onFocusCapture={onActivate} onMouseDown={onActivate}>
+    <div
+      className={`terminal-view ${sessionType === 'serial' ? 'terminal-view--serial' : ''}`}
+      onFocusCapture={onActivate}
+      onMouseDown={onActivate}
+    >
+      {sessionType === 'serial' ? <SerialToolbar connected={connected} profileId={profileId} tabId={tabId} /> : null}
       <div className="terminal-host">
         <div className="terminal-inner" ref={hostRef} />
       </div>

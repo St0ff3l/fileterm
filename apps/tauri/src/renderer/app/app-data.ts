@@ -74,8 +74,17 @@ export const defaultForm: CreateProfileInput = {
   flowControl: 'none',
   newlineMode: 'none',
   inputMode: 'text',
+  lineMode: false,
   outputMode: 'text',
-  localEcho: false
+  localEcho: false,
+  dtrOnOpen: true,
+  rtsOnOpen: false,
+  serialCharDelayMs: 0,
+  serialLineDelayMs: 0,
+  reconnectMaxAttempts: 0,
+  sessionLogIncludeInput: false,
+  sessionLogTimestamps: false,
+  sessionLogRaw: false
 }
 
 function connectionOverridesForProfile(profile: SshProfile): SshConnectionOverrides {
@@ -185,7 +194,16 @@ export function profileToForm(
     flowControl: profile.type === 'serial' ? (profile.flowControl ?? 'none') : 'none',
     newlineMode: profile.type === 'serial' ? (profile.newlineMode ?? 'none') : 'none',
     inputMode: profile.type === 'serial' ? (profile.inputMode ?? 'text') : 'text',
+    lineMode: profile.type === 'serial' ? (profile.lineMode ?? false) : false,
     outputMode: profile.type === 'serial' ? (profile.outputMode ?? 'text') : 'text',
-    localEcho: profile.type === 'serial' ? (profile.localEcho ?? false) : false
+    localEcho: profile.type === 'serial' ? (profile.localEcho ?? false) : false,
+    dtrOnOpen: profile.type === 'serial' ? (profile.dtrOnOpen ?? true) : true,
+    rtsOnOpen: profile.type === 'serial' ? (profile.rtsOnOpen ?? false) : false,
+    serialCharDelayMs: profile.type === 'serial' ? (profile.serialCharDelayMs ?? 0) : 0,
+    serialLineDelayMs: profile.type === 'serial' ? (profile.serialLineDelayMs ?? 0) : 0,
+    reconnectMaxAttempts: profile.type === 'serial' ? (profile.reconnectMaxAttempts ?? 0) : 0,
+    sessionLogIncludeInput: profile.type === 'serial' ? (profile.sessionLogIncludeInput ?? false) : false,
+    sessionLogTimestamps: profile.type === 'serial' ? (profile.sessionLogTimestamps ?? false) : false,
+    sessionLogRaw: profile.type === 'serial' ? (profile.sessionLogRaw ?? false) : false
   }
 }

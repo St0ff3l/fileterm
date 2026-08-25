@@ -303,17 +303,33 @@ export interface SerialProfile extends BaseProfile {
   baudRate: number
   dataBits: 5 | 6 | 7 | 8
   stopBits: 1 | 2
-  parity: 'none' | 'odd' | 'even' | 'mark' | 'space'
+  parity: 'none' | 'odd' | 'even'
   flowControl: 'none' | 'hardware' | 'software'
   encoding?: string
   /** How line endings typed into a serial terminal are sent to the device. */
   newlineMode?: SerialNewlineMode
   /** Whether typed input is encoded as text or hexadecimal bytes. */
   inputMode?: SerialInputMode
+  /** Buffer text until Enter before writing it to the serial device. */
+  lineMode?: boolean
   /** Whether received bytes are rendered as text or hexadecimal bytes. */
   outputMode?: SerialOutputMode
   /** Echo transmitted bytes locally before a device echo arrives. */
   localEcho?: boolean
+  /** Initial modem-control line levels applied after opening the port. */
+  dtrOnOpen?: boolean
+  rtsOnOpen?: boolean
+  /** Delay between transmitted bytes and completed lines, in milliseconds. */
+  serialCharDelayMs?: number
+  serialLineDelayMs?: number
+  /** Maximum automatic reconnect attempts; undefined keeps retrying. */
+  reconnectMaxAttempts?: number
+  /** Include TX bytes in automatic serial session logs. */
+  sessionLogIncludeInput?: boolean
+  /** Prefix automatic session-log records with Unix-millisecond timestamps. */
+  sessionLogTimestamps?: boolean
+  /** Capture serial RX/TX records as raw uppercase hexadecimal bytes. */
+  sessionLogRaw?: boolean
   reconnectMode?: 'none' | 'enter' | 'auto'
   note?: string
 }
@@ -321,6 +337,24 @@ export interface SerialProfile extends BaseProfile {
 export type SerialNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
 export type SerialInputMode = 'text' | 'hex'
 export type SerialOutputMode = 'text' | 'hex'
+export type SerialControlAction = 'set-dtr' | 'set-rts' | 'send-break' | 'clear-buffers' | 'reset' | 'status'
+
+export interface SerialLineStatus {
+  dtr: boolean | null
+  rts: boolean | null
+  cts: boolean | null
+  dsr: boolean | null
+  ring: boolean | null
+  carrierDetect: boolean | null
+}
+
+export type SerialTransferDirection = 'send' | 'receive'
+export type SerialTransferMode = 'raw' | 'xmodem' | 'ymodem'
+
+export interface SerialTransferResult {
+  bytesTransferred: number
+  localPath: string
+}
 
 export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
 
@@ -976,8 +1010,17 @@ export interface CreateProfileInput {
   flowControl?: SerialProfile['flowControl']
   newlineMode?: SerialProfile['newlineMode']
   inputMode?: SerialProfile['inputMode']
+  lineMode?: boolean
   outputMode?: SerialProfile['outputMode']
   localEcho?: boolean
+  dtrOnOpen?: boolean
+  rtsOnOpen?: boolean
+  serialCharDelayMs?: number
+  serialLineDelayMs?: number
+  reconnectMaxAttempts?: number
+  sessionLogIncludeInput?: boolean
+  sessionLogTimestamps?: boolean
+  sessionLogRaw?: boolean
 }
 
 export interface SshHostVerificationRequest {
@@ -2030,6 +2073,19 @@ export interface FileTermDesktopApi {
   openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>
   listSerialPorts(): Promise<SerialPortInfo[]>
+  serialControl(
+    tabId: string,
+    action: SerialControlAction,
+    value?: boolean,
+    durationMs?: number
+  ): Promise<SerialLineStatus>
+  serialTransfer(
+    tabId: string,
+    direction: SerialTransferDirection,
+    mode: SerialTransferMode,
+    localPath: string,
+    fileName?: string
+  ): Promise<SerialTransferResult>
   saveSessionLog(tabId: string): Promise<string | null>
   minimizeCurrentWindow(): Promise<void>
   showCurrentWindow(): Promise<void>

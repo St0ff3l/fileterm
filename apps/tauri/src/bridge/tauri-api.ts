@@ -59,6 +59,11 @@ import type {
   SetAiContextAttachInput,
   SetAiCopilotModeInput,
   SetAiDangerousCommandRestrictionsInput,
+  SerialControlAction,
+  SerialLineStatus,
+  SerialTransferDirection,
+  SerialTransferMode,
+  SerialTransferResult,
   SerialPortInfo,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
@@ -449,6 +454,22 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     openExternalUrl: (url: string) => invoke<void>('app_open_external_url', { url }),
     openLogsDirectory: () => invoke<void>('app_open_logs_directory'),
     listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
+    serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
+      invoke<SerialLineStatus>('app_serial_control', { tabId, action, value, durationMs }),
+    serialTransfer: (
+      tabId: string,
+      direction: SerialTransferDirection,
+      mode: SerialTransferMode,
+      localPath: string,
+      fileName?: string
+    ) =>
+      invoke<SerialTransferResult>('app_serial_transfer', {
+        tabId,
+        direction,
+        mode,
+        localPath,
+        fileName: fileName ?? null
+      }),
     saveSessionLog: (tabId: string) => invoke<string | null>('app_save_session_log', { tabId }),
     minimizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'minimize' }),
     showCurrentWindow: () => invoke<void>('app_window_action', { action: 'show' }),

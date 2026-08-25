@@ -495,6 +495,12 @@ pub(crate) fn reject_unsupported(command: WorkerCmd, message: &str) {
         | WorkerCmd::DeleteSshTunnel { respond_to, .. } => {
             let _ = respond_to.send(Err(message.to_string()));
         }
+        WorkerCmd::SerialControl { respond_to, .. } => {
+            let _ = respond_to.send(Err(message.to_string()));
+        }
+        WorkerCmd::SerialTransfer { respond_to, .. } => {
+            let _ = respond_to.send(Err(message.to_string()));
+        }
         WorkerCmd::WriteTerminal(_) | WorkerCmd::ResizeTerminal { .. } | WorkerCmd::Disconnect => {}
     }
 }

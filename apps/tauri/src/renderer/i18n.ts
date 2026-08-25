@@ -422,6 +422,30 @@ const zhCN = {
   openConnection: '打开连接',
   terminal: '终端',
   serial: 'Serial (串口)',
+  serialConnected: '串口已连接',
+  serialDisconnected: '串口已断开',
+  serialDeviceDisconnected: '串口设备已断开',
+  serialEndpoint: '串口 {path} @ {baud}',
+  serialErrorPrefix: '串口错误：',
+  serialUnsupportedOperation: '串口不支持文件或隧道操作',
+  serialDevicePathRequired: '串口设备路径不能为空',
+  serialBaudInvalid: '串口波特率必须大于 0',
+  serialBaudOutOfRange: '串口波特率超出支持范围',
+  serialNewlineInvalid: '串口换行模式无效',
+  serialInputInvalid: '串口输入模式无效',
+  serialOutputInvalid: '串口输出模式无效',
+  serialDataBitsInvalid: '串口数据位必须是 5、6、7 或 8',
+  serialStopBitsInvalid: '串口停止位必须是 1 或 2',
+  serialParityInvalid: '当前平台的串口校验位必须是无、奇或偶校验',
+  serialFlowControlInvalid: '串口流控必须是无、软件或硬件流控',
+  serialPermissionError: '无法访问串口 {path}：请确认设备驱动和系统访问权限。',
+  serialUnavailable: '串口设备 {path} 不存在、不可用或已断开。',
+  serialBusy: '串口设备 {path} 已被其他程序占用。',
+  serialGenericPrefix: '串口 {path}：',
+  serialScanFailedPrefix: '串口设备扫描失败：',
+  serialScanTimeout: '串口设备扫描超时，请稍后重试或手动输入设备路径。',
+  serialHexFormatPrefix: 'Hex 输入必须按两个字符表示一个字节：',
+  serialHexInvalidBytePrefix: 'Hex 输入包含无效字节：',
   devicePath: '设备路径',
   serialPortSelect: '选择已检测到的串口设备',
   serialPortNoDevices: '未检测到串口设备，可手动输入路径',
@@ -435,10 +459,63 @@ const zhCN = {
   serialNewlineCrlf: 'CRLF（\\r\\n）',
   serialInputMode: '输入模式',
   serialOutputMode: '输出模式',
+  serialLineMode: '行模式',
+  serialLineModeHint: '缓存键盘输入，按 Enter 后整行发送；适合命令行设备。',
   serialTextMode: 'Text（文本）',
   serialHexMode: 'Hex（十六进制）',
   serialLocalEcho: '本地回显',
   serialLocalEchoHint: '立即显示已发送内容；如果设备也会回显，可能会看到重复内容。',
+  serialDtrOnOpen: '打开时 DTR',
+  serialRtsOnOpen: '打开时 RTS',
+  serialLineControlHint: 'DTR/RTS 用于复位、供电或硬件握手；设备不支持时可关闭。',
+  serialCharDelay: '逐字符延迟（毫秒）',
+  serialLineDelay: '逐行延迟（毫秒）',
+  serialPacingHint: '慢速设备可设置发送节流；0 表示不延迟。',
+  serialReconnectMaxAttempts: '最大自动重连次数（0 不限）',
+  serialReconnectMaxAttemptsHint: '自动重连使用 2、4、8…秒退避，最多等待 30 秒。',
+  serialReconnectScheduled: '将在 {seconds} 秒后自动重连（第 {attempt} 次）',
+  serialReconnectLimit: '自动重连已达到上限（{maximum} 次）',
+  serialControlDtr: 'DTR',
+  serialControlRts: 'RTS',
+  serialControlBreak: 'Break',
+  serialControlClear: '清空串口',
+  serialControlReset: '复位串口',
+  serialControlStatus: '刷新线路状态',
+  serialStatusDtr: 'DTR',
+  serialStatusRts: 'RTS',
+  serialStatusCts: 'CTS',
+  serialStatusDsr: 'DSR',
+  serialStatusRing: 'RING',
+  serialStatusCarrier: 'DCD',
+  serialStatusUnavailable: '不可用',
+  serialTransfer: '文件传输',
+  serialTransferSend: '发送文件',
+  serialTransferReceive: '接收文件',
+  serialTransferRaw: 'Raw',
+  serialTransferXmodem: 'XMODEM',
+  serialTransferYmodem: 'YMODEM',
+  serialTransferChooseFile: '选择文件',
+  serialTransferChooseDirectory: '选择目录',
+  serialTransferDirectoryMissing: '请选择接收目录',
+  serialTransferName: '文件名',
+  serialTransferNamePlaceholder: 'received.bin',
+  serialTransferCompleted: '传输完成：{bytes} 字节',
+  serialTransferFailed: '传输失败：',
+  serialTransferHint: 'Raw 适合连续字节；XMODEM/YMODEM 需要对端同时进入对应协议。',
+  serialTransferTargetExists: '接收目标文件已存在，请更换文件名。',
+  serialQuickSend: '快捷发送',
+  serialQuickSendPlaceholder: '输入要发送的文本或命令',
+  serialQuickSendNow: '发送',
+  serialQuickSendNewline: '发送换行',
+  serialQuickSendMacroName: '宏名称',
+  serialQuickSendSaveMacro: '保存宏',
+  serialQuickSendMacros: '已保存宏',
+  serialQuickSendHistory: '历史',
+  serialQuickSendLoopInterval: '循环间隔（毫秒）',
+  serialQuickSendLoopStart: '开始循环',
+  serialQuickSendLoopStop: '停止循环',
+  serialQuickSendLoopHint: '循环发送当前输入；请确认设备能承受发送频率。',
+  serialQuickSendSaveFailed: '无法保存宏',
   baudRate: '波特率',
   dataBits: '数据位',
   stopBits: '停止位',
@@ -460,6 +537,10 @@ const zhCN = {
   chooseDirectory: '选择目录',
   choosingDirectory: '选择中…',
   sessionLogPrivacyHint: '每次打开连接会生成一个新的 .log 文件；只记录终端输出，请按需启用。',
+  serialSessionLogIncludeInput: '记录发送内容（TX）',
+  serialSessionLogTimestamps: '记录时间戳',
+  serialSessionLogRaw: '记录原始字节（Hex）',
+  serialSessionLogOptionsHint: '串口日志可按 RX/TX、时间戳和原始字节保存；开启 TX 前请确认不会写入敏感信息。',
   sessionLogSaved: '会话日志已保存',
   sessionLogSaveFailed: '会话日志保存失败',
   file: '文件',
@@ -1712,6 +1793,30 @@ const enUS: typeof zhCN = {
   newConnection: 'New Connection',
   openConnection: 'Open Connection',
   serial: 'Serial',
+  serialConnected: 'Serial connected',
+  serialDisconnected: 'Serial disconnected',
+  serialDeviceDisconnected: 'Serial device disconnected',
+  serialEndpoint: 'Serial {path} @ {baud}',
+  serialErrorPrefix: 'Serial error: ',
+  serialUnsupportedOperation: 'Serial does not support file or tunnel operations',
+  serialDevicePathRequired: 'A serial device path is required',
+  serialBaudInvalid: 'Serial baud rate must be greater than 0',
+  serialBaudOutOfRange: 'Serial baud rate is outside the supported range',
+  serialNewlineInvalid: 'Serial newline mode is invalid',
+  serialInputInvalid: 'Serial input mode is invalid',
+  serialOutputInvalid: 'Serial output mode is invalid',
+  serialDataBitsInvalid: 'Serial data bits must be 5, 6, 7, or 8',
+  serialStopBitsInvalid: 'Serial stop bits must be 1 or 2',
+  serialParityInvalid: 'This platform only supports none, odd, or even serial parity',
+  serialFlowControlInvalid: 'Serial flow control must be none, software, or hardware',
+  serialPermissionError: 'Unable to access serial port {path}: check the device driver and system permissions.',
+  serialUnavailable: 'Serial device {path} does not exist, is unavailable, or has been disconnected.',
+  serialBusy: 'Serial device {path} is already in use by another program.',
+  serialGenericPrefix: 'Serial {path}: ',
+  serialScanFailedPrefix: 'Unable to scan serial ports: ',
+  serialScanTimeout: 'Serial port scanning timed out. Try again later or enter the device path manually.',
+  serialHexFormatPrefix: 'Hex input must use two characters per byte: ',
+  serialHexInvalidBytePrefix: 'Hex input contains an invalid byte: ',
   devicePath: 'Device path',
   serialPortSelect: 'Select a detected serial port',
   serialPortNoDevices: 'No serial ports detected; enter a path manually',
@@ -1725,10 +1830,63 @@ const enUS: typeof zhCN = {
   serialNewlineCrlf: 'CRLF (\\r\\n)',
   serialInputMode: 'Input mode',
   serialOutputMode: 'Output mode',
+  serialLineMode: 'Line mode',
+  serialLineModeHint: 'Buffer keyboard input and send the whole line on Enter; useful for command-line devices.',
   serialTextMode: 'Text',
   serialHexMode: 'Hex',
   serialLocalEcho: 'Local echo',
   serialLocalEchoHint: 'Show transmitted bytes immediately; device echo can make the content appear twice.',
+  serialDtrOnOpen: 'DTR on open',
+  serialRtsOnOpen: 'RTS on open',
+  serialLineControlHint: 'DTR/RTS can reset, power, or handshake with a device; disable them when unsupported.',
+  serialCharDelay: 'Per-character delay (ms)',
+  serialLineDelay: 'Per-line delay (ms)',
+  serialPacingHint: 'Use pacing for slow devices; 0 means no delay.',
+  serialReconnectMaxAttempts: 'Max auto-reconnect attempts (0 unlimited)',
+  serialReconnectMaxAttemptsHint: 'Automatic reconnect backs off at 2, 4, 8… seconds and caps at 30 seconds.',
+  serialReconnectScheduled: 'Automatic reconnect in {seconds} seconds (attempt {attempt})',
+  serialReconnectLimit: 'Automatic reconnect stopped after {maximum} attempts',
+  serialControlDtr: 'DTR',
+  serialControlRts: 'RTS',
+  serialControlBreak: 'Break',
+  serialControlClear: 'Clear serial',
+  serialControlReset: 'Reset serial',
+  serialControlStatus: 'Refresh line status',
+  serialStatusDtr: 'DTR',
+  serialStatusRts: 'RTS',
+  serialStatusCts: 'CTS',
+  serialStatusDsr: 'DSR',
+  serialStatusRing: 'RING',
+  serialStatusCarrier: 'DCD',
+  serialStatusUnavailable: 'N/A',
+  serialTransfer: 'File transfer',
+  serialTransferSend: 'Send file',
+  serialTransferReceive: 'Receive file',
+  serialTransferRaw: 'Raw',
+  serialTransferXmodem: 'XMODEM',
+  serialTransferYmodem: 'YMODEM',
+  serialTransferChooseFile: 'Choose file',
+  serialTransferChooseDirectory: 'Choose folder',
+  serialTransferDirectoryMissing: 'Choose a receive folder first',
+  serialTransferName: 'File name',
+  serialTransferNamePlaceholder: 'received.bin',
+  serialTransferCompleted: 'Transfer complete: {bytes} bytes',
+  serialTransferFailed: 'Transfer failed: ',
+  serialTransferHint: 'Raw sends a byte stream; XMODEM/YMODEM require the peer to use the same protocol.',
+  serialTransferTargetExists: 'The receive target already exists; choose another file name.',
+  serialQuickSend: 'Quick send',
+  serialQuickSendPlaceholder: 'Text or command to send',
+  serialQuickSendNow: 'Send',
+  serialQuickSendNewline: 'Append newline',
+  serialQuickSendMacroName: 'Macro name',
+  serialQuickSendSaveMacro: 'Save macro',
+  serialQuickSendMacros: 'Saved macros',
+  serialQuickSendHistory: 'History',
+  serialQuickSendLoopInterval: 'Loop interval (ms)',
+  serialQuickSendLoopStart: 'Start loop',
+  serialQuickSendLoopStop: 'Stop loop',
+  serialQuickSendLoopHint: 'Repeats the current input; confirm the device can handle the rate.',
+  serialQuickSendSaveFailed: 'Unable to save macro',
   baudRate: 'Baud rate',
   dataBits: 'Data bits',
   stopBits: 'Stop bits',
@@ -1752,6 +1910,11 @@ const enUS: typeof zhCN = {
   choosingDirectory: 'Choosing…',
   sessionLogPrivacyHint:
     'A new .log file is created for each connection tab; only terminal output is written, so enable it as needed.',
+  serialSessionLogIncludeInput: 'Include transmitted data (TX)',
+  serialSessionLogTimestamps: 'Include timestamps',
+  serialSessionLogRaw: 'Record raw bytes (Hex)',
+  serialSessionLogOptionsHint:
+    'Serial logs can include RX/TX direction, timestamps, and raw bytes; confirm no secrets are sent before enabling TX.',
   sessionLogSaved: 'Session log saved',
   sessionLogSaveFailed: 'Unable to save the session log',
   localComputer: 'Local',
@@ -2800,4 +2963,48 @@ export function localizeLocalTerminalText(value: string) {
     )
     .replaceAll('Local terminal launch settings are unavailable', t.localTerminalLaunchSettingsUnavailable)
     .replaceAll('Split pane is only supported for SSH and local sessions', t.localTerminalSplitUnsupported)
+}
+
+export function localizeSerialTerminalText(value: string) {
+  return value
+    .replaceAll('串口已连接', t.serialConnected)
+    .replaceAll('串口已断开', t.serialDisconnected)
+    .replaceAll('串口设备已断开', t.serialDeviceDisconnected)
+    .replace(/串口 (.*) @ (\d+)/g, (_match, path: string, baud: string) =>
+      formatMessage(t.serialEndpoint, { path, baud })
+    )
+    .replace(/串口错误：\s*/g, t.serialErrorPrefix)
+    .replaceAll('Serial 不支持此文件或隧道操作', t.serialUnsupportedOperation)
+    .replaceAll('串口不支持此文件或隧道操作', t.serialUnsupportedOperation)
+    .replaceAll('串口设备路径不能为空', t.serialDevicePathRequired)
+    .replaceAll('串口波特率必须大于 0', t.serialBaudInvalid)
+    .replaceAll('串口波特率超出支持范围', t.serialBaudOutOfRange)
+    .replaceAll('串口换行模式无效', t.serialNewlineInvalid)
+    .replaceAll('串口输入模式无效', t.serialInputInvalid)
+    .replaceAll('串口输出模式无效', t.serialOutputInvalid)
+    .replaceAll('串口数据位必须是 5、6、7 或 8', t.serialDataBitsInvalid)
+    .replaceAll('串口停止位必须是 1 或 2', t.serialStopBitsInvalid)
+    .replaceAll('当前平台的串口校验位必须是无、奇或偶校验', t.serialParityInvalid)
+    .replaceAll('串口流控必须是无、软件或硬件流控', t.serialFlowControlInvalid)
+    .replace(
+      /无法访问串口 (.*)：权限不足。Linux 请将当前用户加入 dialout 组；Windows\/macOS 请确认驱动和设备访问权限。/g,
+      (_match, path: string) => formatMessage(t.serialPermissionError, { path })
+    )
+    .replace(/串口设备 (.*) 不存在、不可用或已断开。/g, (_match, path: string) =>
+      formatMessage(t.serialUnavailable, { path })
+    )
+    .replace(/串口设备 (.*) 已被其他程序占用。/g, (_match, path: string) => formatMessage(t.serialBusy, { path }))
+    .replace(/串口 (.*)：/g, (_match, path: string) => formatMessage(t.serialGenericPrefix, { path }))
+    .replace(/将在 (\d+) 秒后自动重连（第 (\d+) 次）/g, (_match, seconds: string, attempt: string) =>
+      formatMessage(t.serialReconnectScheduled, { seconds, attempt })
+    )
+    .replace(/自动重连已达到上限（(∞|\d+) 次）/g, (_match, maximum: string) =>
+      formatMessage(t.serialReconnectLimit, { maximum })
+    )
+    .replaceAll('串口接收目标文件已存在，请更换文件名', t.serialTransferTargetExists)
+    .replaceAll('[串口] ', '[Serial] ')
+    .replace(/串口设备扫描失败：\s*/g, t.serialScanFailedPrefix)
+    .replaceAll('串口设备扫描超时', t.serialScanTimeout)
+    .replace(/Hex 输入必须按两个字符表示一个字节：\s*/g, t.serialHexFormatPrefix)
+    .replace(/Hex 输入包含无效字节：\s*/g, t.serialHexInvalidBytePrefix)
 }

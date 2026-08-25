@@ -189,6 +189,7 @@ See [docs/roadmap.md](./docs/roadmap.md) for the full plan.
 
 - [xterm.js](https://xtermjs.org/) for SSH terminal rendering, input/output, and resize handling.
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) for file editing, syntax highlighting, and search/replace.
+- Bundled fonts and icon fonts: see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for their licenses and sources.
 
 ## Contributing
 
@@ -245,6 +246,6 @@ If FileTerm helps you, please consider starring the project on [GitHub](https://
 
 ## License
 
-FileTerm is open-sourced under the [MIT License](./LICENSE).
+FileTerm source code is open-sourced under the [MIT License](./LICENSE). Bundled fonts and icon fonts remain under their respective licenses; see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
 
 <p align="right"><a href="#readme-top">Back to top</a></p>

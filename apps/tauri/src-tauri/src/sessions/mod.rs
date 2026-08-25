@@ -10,6 +10,17 @@ pub mod terminal;
 
 pub enum WorkerCmd {
     WriteTerminal(String),
+    SerialControl {
+        action: SerialControlAction,
+        value: Option<bool>,
+        duration_ms: Option<u64>,
+        respond_to: tokio::sync::oneshot::Sender<Result<SerialLineStatus, String>>,
+    },
+    SerialTransfer {
+        request: SerialTransferRequest,
+        cancellation: tokio_util::sync::CancellationToken,
+        respond_to: tokio::sync::oneshot::Sender<Result<SerialTransferResult, String>>,
+    },
     ResizeTerminal {
         cols: u32,
         rows: u32,
@@ -139,6 +150,55 @@ pub enum WorkerCmd {
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     Disconnect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SerialControlAction {
+    SetDtr,
+    SetRts,
+    SendBreak,
+    ClearBuffers,
+    Reset,
+    Status,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialLineStatus {
+    pub dtr: Option<bool>,
+    pub rts: Option<bool>,
+    pub cts: Option<bool>,
+    pub dsr: Option<bool>,
+    pub ring: Option<bool>,
+    pub carrier_detect: Option<bool>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SerialTransferDirection {
+    Send,
+    Receive,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SerialTransferMode {
+    Raw,
+    Xmodem,
+    Ymodem,
+}
+
+#[derive(Clone, Debug)]
+pub struct SerialTransferRequest {
+    pub direction: SerialTransferDirection,
+    pub mode: SerialTransferMode,
+    /// Send: the source file. Receive: the exact target file.
+    pub local_path: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerialTransferResult {
+    pub bytes_transferred: u64,
+    pub local_path: String,
 }
 
 #[derive(Clone, Debug)]

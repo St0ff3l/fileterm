@@ -15,6 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::services::workspace::WorkspaceState;
+use crate::sessions::terminal::decode_terminal;
 use crate::AppError;
 
 const DEFAULT_DIRECTORY_NAME: &str = "session-logs";
@@ -22,12 +23,29 @@ const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
 
 enum SessionLogMessage {
     Chunk(String),
+    Sync(oneshot::Sender<()>),
     Flush(oneshot::Sender<()>),
 }
 
 #[derive(Clone)]
 pub struct SessionLogHandle {
     sender: mpsc::UnboundedSender<SessionLogMessage>,
+    options: SessionLogOptions,
+    path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct SessionLogOptions {
+    serial: bool,
+    include_input: bool,
+    timestamps: bool,
+    raw: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SerialLogDirection {
+    Rx,
+    Tx,
 }
 
 /// Start or stop the automatic writer for one profile-backed terminal tab.
@@ -58,6 +76,21 @@ pub async fn start_for_tab(
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .unwrap_or("session");
+    let options = SessionLogOptions {
+        serial: session_type == "serial",
+        include_input: profile
+            .get("sessionLogIncludeInput")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        timestamps: profile
+            .get("sessionLogTimestamps")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        raw: profile
+            .get("sessionLogRaw")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    };
     let timestamp = unix_millis();
     let path = directory.join(format!(
         "{}-{}-{}.log",
@@ -71,9 +104,18 @@ pub async fn start_for_tab(
         .open(&path)
         .await
         .map_err(|error| AppError::Storage(format!("无法打开会话日志文件: {error}")))?;
-    let header = format!(
-        "# FileTerm 会话日志\r\n# 连接: {name}\r\n# 只记录终端输出，不记录键盘输入\r\n\r\n"
-    );
+    let header = if options.serial {
+        format!(
+            "# FileTerm 会话日志\r\n# 连接: {name}\r\n# 串口日志包含 RX{}，原始字节: {}，时间戳: {}\r\n\r\n",
+            if options.include_input { " / TX" } else { "" },
+            if options.raw { "Hex" } else { "否" },
+            if options.timestamps { "是" } else { "否" },
+        )
+    } else {
+        "# FileTerm 会话日志\r\n# 连接: ".to_string()
+            + name
+            + "\r\n# 只记录终端输出，不记录键盘输入\r\n\r\n"
+    };
     file.write_all(header.as_bytes())
         .await
         .map_err(|error| AppError::Storage(format!("无法写入会话日志文件: {error}")))?;
@@ -84,6 +126,8 @@ pub async fn start_for_tab(
     let (sender, receiver) = mpsc::unbounded_channel();
     let handle = SessionLogHandle {
         sender: sender.clone(),
+        options,
+        path: path.clone(),
     };
     state
         .session_log_writers
@@ -107,11 +151,55 @@ pub async fn append_chunk(app: &AppHandle, tab_id: &str, chunk: &str) {
     }
     let state = app.state::<WorkspaceState>();
     let handle = state.session_log_writers.read().await.get(tab_id).cloned();
-    if let Some(handle) = handle {
+    if let Some(handle) = handle.filter(|handle| !handle.options.serial) {
         let _ = handle
             .sender
             .send(SessionLogMessage::Chunk(chunk.to_string()));
     }
+}
+
+/// Append a serial RX/TX record. The byte-level path is intentionally
+/// separate from `append_chunk`: it can preserve raw bytes and direction
+/// without making SSH/Telnet logs collect keyboard input.
+pub async fn append_serial_bytes(
+    app: &AppHandle,
+    tab_id: &str,
+    direction: SerialLogDirection,
+    bytes: &[u8],
+    decoded: Option<&str>,
+    encoding: &str,
+) {
+    if bytes.is_empty() {
+        return;
+    }
+    let state = app.state::<WorkspaceState>();
+    let handle = state.session_log_writers.read().await.get(tab_id).cloned();
+    let Some(handle) = handle.filter(|handle| {
+        handle.options.serial
+            && (direction == SerialLogDirection::Rx || handle.options.include_input)
+    }) else {
+        return;
+    };
+
+    let payload = if handle.options.raw {
+        format_hex(bytes)
+    } else {
+        decoded
+            .map(str::to_string)
+            .unwrap_or_else(|| decode_terminal(bytes, encoding))
+    };
+    let timestamp = if handle.options.timestamps {
+        format!("[{}] ", unix_millis())
+    } else {
+        String::new()
+    };
+    let direction = match direction {
+        SerialLogDirection::Rx => "RX",
+        SerialLogDirection::Tx => "TX",
+    };
+    let _ = handle.sender.send(SessionLogMessage::Chunk(format!(
+        "{timestamp}{direction}: {payload}\r\n"
+    )));
 }
 
 /// Flush and remove the writer for a tab. It is safe to call this for tabs
@@ -169,6 +257,13 @@ pub async fn save_current_session(
             session.terminal_transcript.clone(),
         )
     };
+    let automatic_serial_log = state
+        .session_log_writers
+        .read()
+        .await
+        .get(tab_id)
+        .cloned()
+        .filter(|handle| handle.options.serial);
 
     if session_type == "ftp" {
         return Err(AppError::Command("FTP 会话没有终端日志".to_string()));
@@ -204,16 +299,30 @@ pub async fn save_current_session(
     let header = format!(
         "# FileTerm 会话日志\r\n# 连接: {title}\r\n# 只记录终端输出，不记录键盘输入\r\n\r\n"
     );
-    let content = format!("{header}{transcript}");
-    tokio::fs::write(target.path(), content.as_bytes())
-        .await
-        .map_err(|error| AppError::Storage(format!("无法保存会话日志: {error}")))?;
+    if let Some(handle) = automatic_serial_log {
+        sync_handle(&handle).await;
+        tokio::fs::copy(&handle.path, target.path())
+            .await
+            .map_err(|error| AppError::Storage(format!("无法保存会话日志: {error}")))?;
+    } else {
+        let content = format!("{header}{transcript}");
+        tokio::fs::write(target.path(), content.as_bytes())
+            .await
+            .map_err(|error| AppError::Storage(format!("无法保存会话日志: {error}")))?;
+    }
     Ok(Some(target.path().to_string_lossy().into_owned()))
 }
 
 async fn flush_handle(handle: SessionLogHandle) {
     let (sender, receiver) = oneshot::channel();
     if handle.sender.send(SessionLogMessage::Flush(sender)).is_ok() {
+        let _ = tokio::time::timeout(FLUSH_TIMEOUT, receiver).await;
+    }
+}
+
+async fn sync_handle(handle: &SessionLogHandle) {
+    let (sender, receiver) = oneshot::channel();
+    if handle.sender.send(SessionLogMessage::Sync(sender)).is_ok() {
         let _ = tokio::time::timeout(FLUSH_TIMEOUT, receiver).await;
     }
 }
@@ -236,6 +345,10 @@ async fn run_writer(
                     );
                     break;
                 }
+            }
+            SessionLogMessage::Sync(sender) => {
+                let _ = file.flush().await;
+                let _ = sender.send(());
             }
             SessionLogMessage::Flush(sender) => {
                 let _ = file.flush().await;
@@ -267,6 +380,18 @@ fn configured_directory(app: &AppHandle, profile: &Value) -> Result<PathBuf, App
         return Ok(PathBuf::from(path));
     }
     Ok(crate::storage::state_path(app)?.with_file_name(DEFAULT_DIRECTORY_NAME))
+}
+
+fn format_hex(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len().saturating_mul(3));
+    for (index, byte) in bytes.iter().enumerate() {
+        if index > 0 {
+            output.push(' ');
+        }
+        use std::fmt::Write as _;
+        let _ = write!(output, "{byte:02X}");
+    }
+    output
 }
 
 fn unix_millis() -> u128 {

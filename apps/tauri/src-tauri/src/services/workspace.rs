@@ -439,6 +439,10 @@ pub struct WorkspaceState {
     /// alone cannot interrupt a worker that is currently parsing a large
     /// remote metrics payload or waiting on an SSH operation.
     pub worker_controls: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    /// Number of consecutive automatic serial reconnect attempts per tab.
+    /// This is runtime-only state; a successful connection or an explicit
+    /// disconnect clears it so a later outage starts with the initial delay.
+    pub serial_reconnect_attempts: Arc<RwLock<HashMap<String, u32>>>,
     /// Identifies the live local PTY for each local tab. Native-thread cleanup
     /// must never remove a newer shell restarted in the same tab.
     pub local_terminal_runtime_ids: Arc<RwLock<HashMap<String, String>>>,
@@ -535,6 +539,7 @@ impl Default for WorkspaceState {
             terminal_inputs: Arc::new(RwLock::new(HashMap::new())),
             terminal_output_channels: Arc::new(StdMutex::new(HashMap::new())),
             worker_controls: Arc::new(RwLock::new(HashMap::new())),
+            serial_reconnect_attempts: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_runtime_ids: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_runtime_gates: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_launches: Arc::new(RwLock::new(HashMap::new())),

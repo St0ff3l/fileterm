@@ -5625,6 +5625,14 @@ async fn handle_worker_cmd_without_sftp(
             write_shell_data(shell_writer, data.into_bytes()).await?;
             Ok(false)
         }
+        WorkerCmd::SerialControl { respond_to, .. } => {
+            let _ = respond_to.send(Err("SSH 不支持串口控制".to_string()));
+            Ok(false)
+        }
+        WorkerCmd::SerialTransfer { respond_to, .. } => {
+            let _ = respond_to.send(Err("SSH 不支持串口文件传输".to_string()));
+            Ok(false)
+        }
         WorkerCmd::ResizeTerminal { cols, rows, .. } => {
             // Best-effort resize, mirroring handle_worker_cmd. Without a
             // timeout a stuck SSH transport would freeze the worker loop and
@@ -5887,6 +5895,14 @@ async fn handle_worker_cmd(
     match cmd {
         WorkerCmd::WriteTerminal(data) => {
             write_shell_data(shell_writer, data.into_bytes()).await?;
+            Ok(false)
+        }
+        WorkerCmd::SerialControl { respond_to, .. } => {
+            let _ = respond_to.send(Err("SSH 不支持串口控制".to_string()));
+            Ok(false)
+        }
+        WorkerCmd::SerialTransfer { respond_to, .. } => {
+            let _ = respond_to.send(Err("SSH 不支持串口文件传输".to_string()));
             Ok(false)
         }
         WorkerCmd::ResizeTerminal { cols, rows, .. } => {

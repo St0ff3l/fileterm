@@ -10,7 +10,7 @@ import type {
   SshForwardRule
 } from '@fileterm/core'
 import { normalizeConnectionHost } from '@fileterm/shared'
-import { t } from '../../i18n'
+import { localizeSerialTerminalText, t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
@@ -339,7 +339,7 @@ export function ConnectionModal({
                         </div>
                         {serialPortLoadError ? (
                           <div className="span-2 ssh-field-hint serial-port-picker__error">
-                            {t.serialPortScanFailed}: {serialPortLoadError}
+                            {t.serialPortScanFailed}: {localizeSerialTerminalText(serialPortLoadError)}
                           </div>
                         ) : null}
                       </>
@@ -427,9 +427,7 @@ export function ConnectionModal({
                             options={[
                               { value: 'none', label: t.none },
                               { value: 'odd', label: t.oddParity },
-                              { value: 'even', label: t.evenParity },
-                              { value: 'mark', label: t.markParity, disabled: true },
-                              { value: 'space', label: t.spaceParity, disabled: true }
+                              { value: 'even', label: t.evenParity }
                             ]}
                             onChange={(value) =>
                               setForm((prev) => ({ ...prev, parity: value as CreateProfileInput['parity'] }))
@@ -854,6 +852,17 @@ export function ConnectionModal({
                             }
                           />
                         </label>
+                        <div className="advanced-toggle-row serial-local-echo-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={form.lineMode === true}
+                              type="checkbox"
+                              onChange={(event) => setForm((prev) => ({ ...prev, lineMode: event.target.checked }))}
+                            />
+                            <span className="advanced-toggle-name">{t.serialLineMode}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.serialLineModeHint}</p>
+                        </div>
                         <label>
                           {t.serialOutputMode}:
                           <DropdownSelect
@@ -878,6 +887,61 @@ export function ConnectionModal({
                           </label>
                           <p className="advanced-toggle-hint">{t.serialLocalEchoHint}</p>
                         </div>
+                        <div className="serial-line-control-box">
+                          <div className="reconnect-mode-group__label">{t.serialControlStatus}</div>
+                          <div className="advanced-toggle-list">
+                            <label className="ssh-checkbox advanced-toggle-label">
+                              <input
+                                checked={form.dtrOnOpen !== false}
+                                type="checkbox"
+                                onChange={(event) => setForm((prev) => ({ ...prev, dtrOnOpen: event.target.checked }))}
+                              />
+                              <span className="advanced-toggle-name">{t.serialDtrOnOpen}</span>
+                            </label>
+                            <label className="ssh-checkbox advanced-toggle-label">
+                              <input
+                                checked={form.rtsOnOpen === true}
+                                type="checkbox"
+                                onChange={(event) => setForm((prev) => ({ ...prev, rtsOnOpen: event.target.checked }))}
+                              />
+                              <span className="advanced-toggle-name">{t.serialRtsOnOpen}</span>
+                            </label>
+                          </div>
+                          <p className="advanced-toggle-hint">{t.serialLineControlHint}</p>
+                        </div>
+                        <label>
+                          {t.serialCharDelay}:
+                          <input
+                            inputMode="numeric"
+                            min={0}
+                            max={60000}
+                            type="number"
+                            value={form.serialCharDelayMs ?? 0}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                serialCharDelayMs: Math.max(0, Math.min(60000, Number(event.target.value) || 0))
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.serialLineDelay}:
+                          <input
+                            inputMode="numeric"
+                            min={0}
+                            max={60000}
+                            type="number"
+                            value={form.serialLineDelayMs ?? 0}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                serialLineDelayMs: Math.max(0, Math.min(60000, Number(event.target.value) || 0))
+                              }))
+                            }
+                          />
+                        </label>
+                        <p className="ssh-field-hint span-2">{t.serialPacingHint}</p>
                         <div className="reconnect-mode-group serial-reconnect-mode-group">
                           <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
                           <div className="advanced-toggle-list">
@@ -918,6 +982,26 @@ export function ConnectionModal({
                               <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
                             </div>
                           </div>
+                          <label className="serial-reconnect-limit">
+                            {t.serialReconnectMaxAttempts}:
+                            <input
+                              inputMode="numeric"
+                              min={0}
+                              max={4294967295}
+                              type="number"
+                              value={form.reconnectMaxAttempts ?? 0}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  reconnectMaxAttempts: Math.max(
+                                    0,
+                                    Math.min(4294967295, Number(event.target.value) || 0)
+                                  )
+                                }))
+                              }
+                            />
+                          </label>
+                          <p className="advanced-toggle-hint">{t.serialReconnectMaxAttemptsHint}</p>
                         </div>
                       </>
                     ) : (
@@ -996,6 +1080,41 @@ export function ConnectionModal({
                       </div>
                     </label>
                     <p className="ssh-field-hint">{t.sessionLogPrivacyHint}</p>
+                    {form.type === 'serial' ? (
+                      <>
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={form.sessionLogIncludeInput === true}
+                            onChange={(event) =>
+                              setForm((previous) => ({ ...previous, sessionLogIncludeInput: event.target.checked }))
+                            }
+                            type="checkbox"
+                          />
+                          <span className="advanced-toggle-name">{t.serialSessionLogIncludeInput}</span>
+                        </label>
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={form.sessionLogTimestamps === true}
+                            onChange={(event) =>
+                              setForm((previous) => ({ ...previous, sessionLogTimestamps: event.target.checked }))
+                            }
+                            type="checkbox"
+                          />
+                          <span className="advanced-toggle-name">{t.serialSessionLogTimestamps}</span>
+                        </label>
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={form.sessionLogRaw === true}
+                            onChange={(event) =>
+                              setForm((previous) => ({ ...previous, sessionLogRaw: event.target.checked }))
+                            }
+                            type="checkbox"
+                          />
+                          <span className="advanced-toggle-name">{t.serialSessionLogRaw}</span>
+                        </label>
+                        <p className="ssh-field-hint">{t.serialSessionLogOptionsHint}</p>
+                      </>
+                    ) : null}
                   </div>
                 </fieldset>
               </div>

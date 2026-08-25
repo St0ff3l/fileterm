@@ -5,6 +5,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
@@ -33,6 +34,13 @@ const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 /// 退出链路 hang 住，用户只能强制杀进程。drop sender 后 worker 的
 /// `cmd_rx.recv()` 会返回 None，自然走清理路径。
 const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
+
+/// Device enumeration can block inside platform APIs, especially for stale
+/// Bluetooth entries. Keep refresh bounded so the connection dialog can
+/// recover and still allow manual device-path entry.
+const SERIAL_PORT_SCAN_TIMEOUT: Duration = Duration::from_secs(5);
+
+const SERIAL_TRANSFER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 /// A silent shell must not leave a local tab in `connecting` forever. The
 /// startup task uses this bounded window to publish the first prompt when it
@@ -1579,12 +1587,172 @@ fn map_serial_port_info(port: tokio_serial::SerialPortInfo) -> SerialPortListIte
 
 #[tauri::command]
 pub async fn app_list_serial_ports() -> Result<Vec<SerialPortListItem>, AppError> {
-    let ports = tauri::async_runtime::spawn_blocking(tokio_serial::available_ports)
-        .await
+    let scan_result = timeout(
+        SERIAL_PORT_SCAN_TIMEOUT,
+        tauri::async_runtime::spawn_blocking(tokio_serial::available_ports),
+    )
+    .await
+    .map_err(|_| AppError::Command("串口设备扫描超时".to_string()))?;
+    let ports = scan_result
         .map_err(|error| AppError::Command(format!("串口设备扫描失败：{error}")))?
         .map_err(|error| AppError::Command(format!("串口设备扫描失败：{error}")))?;
 
     Ok(ports.into_iter().map(map_serial_port_info).collect())
+}
+
+fn parse_serial_control_action(
+    action: &str,
+) -> Result<crate::sessions::SerialControlAction, AppError> {
+    match action {
+        "set-dtr" => Ok(crate::sessions::SerialControlAction::SetDtr),
+        "set-rts" => Ok(crate::sessions::SerialControlAction::SetRts),
+        "send-break" => Ok(crate::sessions::SerialControlAction::SendBreak),
+        "clear-buffers" => Ok(crate::sessions::SerialControlAction::ClearBuffers),
+        "reset" => Ok(crate::sessions::SerialControlAction::Reset),
+        "status" => Ok(crate::sessions::SerialControlAction::Status),
+        _ => Err(AppError::Command("串口控制操作无效".to_string())),
+    }
+}
+
+fn parse_serial_transfer_direction(
+    direction: &str,
+) -> Result<crate::sessions::SerialTransferDirection, AppError> {
+    match direction {
+        "send" => Ok(crate::sessions::SerialTransferDirection::Send),
+        "receive" => Ok(crate::sessions::SerialTransferDirection::Receive),
+        _ => Err(AppError::Command("串口传输方向无效".to_string())),
+    }
+}
+
+fn parse_serial_transfer_mode(mode: &str) -> Result<crate::sessions::SerialTransferMode, AppError> {
+    match mode {
+        "raw" => Ok(crate::sessions::SerialTransferMode::Raw),
+        "xmodem" => Ok(crate::sessions::SerialTransferMode::Xmodem),
+        "ymodem" => Ok(crate::sessions::SerialTransferMode::Ymodem),
+        _ => Err(AppError::Command("串口传输协议无效".to_string())),
+    }
+}
+
+fn resolve_serial_transfer_path(
+    direction: crate::sessions::SerialTransferDirection,
+    local_path: &str,
+    file_name: Option<&str>,
+) -> Result<String, AppError> {
+    let path = Path::new(local_path);
+    if local_path.trim().is_empty() {
+        return Err(AppError::Command("串口传输路径不能为空".to_string()));
+    }
+    match direction {
+        crate::sessions::SerialTransferDirection::Send => {
+            if !path.is_file() {
+                return Err(AppError::Command(
+                    "串口发送文件不存在或不是文件".to_string(),
+                ));
+            }
+            Ok(path.to_string_lossy().into_owned())
+        }
+        crate::sessions::SerialTransferDirection::Receive => {
+            if !path.is_dir() {
+                return Err(AppError::Command("串口接收目录不存在".to_string()));
+            }
+            let file_name = file_name
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| AppError::Command("串口接收文件名不能为空".to_string()))?;
+            if file_name == "."
+                || file_name == ".."
+                || file_name.contains('/')
+                || file_name.contains('\\')
+                || file_name.chars().any(char::is_control)
+            {
+                return Err(AppError::Command("串口接收文件名无效".to_string()));
+            }
+            let target = path.join(file_name);
+            if target.exists() {
+                return Err(AppError::Command(
+                    "串口接收目标文件已存在，请更换文件名".to_string(),
+                ));
+            }
+            Ok(target.to_string_lossy().into_owned())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn app_serial_control(
+    app: AppHandle,
+    tab_id: String,
+    action: String,
+    value: Option<bool>,
+    duration_ms: Option<u64>,
+) -> Result<crate::sessions::SerialLineStatus, AppError> {
+    let control = parse_serial_control_action(&action)?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let is_serial = state
+        .tabs
+        .read()
+        .await
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .is_some_and(|tab| tab.session_type == "serial");
+    if !is_serial {
+        return Err(AppError::Command("当前会话不是串口会话".to_string()));
+    }
+
+    send_worker_cmd(&app, &tab_id, |respond_to| WorkerCmd::SerialControl {
+        action: control,
+        value,
+        duration_ms,
+        respond_to,
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn app_serial_transfer(
+    app: AppHandle,
+    tab_id: String,
+    direction: String,
+    mode: String,
+    local_path: String,
+    file_name: Option<String>,
+) -> Result<crate::sessions::SerialTransferResult, AppError> {
+    let direction = parse_serial_transfer_direction(&direction)?;
+    let mode = parse_serial_transfer_mode(&mode)?;
+    let local_path = resolve_serial_transfer_path(direction, &local_path, file_name.as_deref())?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let is_serial = state
+        .tabs
+        .read()
+        .await
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .is_some_and(|tab| tab.session_type == "serial");
+    if !is_serial {
+        return Err(AppError::Command("当前会话不是串口会话".to_string()));
+    }
+    let cancellation = state
+        .worker_controls
+        .read()
+        .await
+        .get(&tab_id)
+        .cloned()
+        .ok_or_else(|| AppError::Storage("串口会话未运行".to_string()))?;
+    send_worker_cmd_with_response_timeout(
+        &app,
+        &tab_id,
+        SERIAL_TRANSFER_RESPONSE_TIMEOUT,
+        |respond_to| WorkerCmd::SerialTransfer {
+            request: crate::sessions::SerialTransferRequest {
+                direction,
+                mode,
+                local_path,
+            },
+            cancellation,
+            respond_to,
+        },
+    )
+    .await
 }
 
 #[tauri::command]
@@ -2842,7 +3010,13 @@ fn start_session_worker(
     match profile.get("type").and_then(Value::as_str).unwrap_or("ssh") {
         "ftp" => crate::sessions::ftp::start_ftp_worker(tab_id, profile, receiver, app),
         "telnet" => crate::sessions::telnet::start_telnet_worker(tab_id, profile, receiver, app),
-        "serial" => crate::sessions::serial::start_serial_worker(tab_id, profile, receiver, app),
+        "serial" => crate::sessions::serial::start_serial_worker(
+            tab_id,
+            profile,
+            receiver,
+            app,
+            cancellation,
+        ),
         _ => crate::sessions::ssh::start_ssh_worker(
             tab_id,
             profile,
@@ -2892,6 +3066,7 @@ async fn cleanup_unattached_session(
 ) {
     stop_session_worker(state, tab_id).await;
     crate::services::session_logs::stop_for_tab(state, tab_id).await;
+    state.serial_reconnect_attempts.write().await.remove(tab_id);
 
     state.tabs.write().await.retain(|tab| tab.id != tab_id);
     state.sessions.write().await.remove(tab_id);
@@ -3731,6 +3906,11 @@ pub async fn app_close_pane(
     .await;
     stop_session_worker(&state, &pane_tab_id).await;
     crate::services::session_logs::stop_for_tab(&state, &pane_tab_id).await;
+    state
+        .serial_reconnect_attempts
+        .write()
+        .await
+        .remove(&pane_tab_id);
 
     let outcome = {
         let mut tabs = state.tabs.write().await;
@@ -4088,6 +4268,11 @@ pub async fn app_disconnect_tab(
         .map(|session| session.connected)
         .unwrap_or(false);
     stop_session_worker(&state, &tab_id).await;
+    state
+        .serial_reconnect_attempts
+        .write()
+        .await
+        .remove(&tab_id);
     {
         let mut tabs = state.tabs.write().await;
         if let Some(tab) = tabs.iter_mut().find(|t| t.id == tab_id) {
@@ -4163,6 +4348,11 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
         .await;
         stop_session_worker(&state, &tab_id).await;
         crate::services::session_logs::stop_for_tab(&state, &tab_id).await;
+        state
+            .serial_reconnect_attempts
+            .write()
+            .await
+            .remove(&tab_id);
         {
             let mut tabs = state.tabs.write().await;
             let root_idx = tabs
@@ -4218,6 +4408,7 @@ pub async fn app_close_tab(app: AppHandle, tab_id: String) -> Result<serde_json:
             .await?;
             stop_session_worker(&state, id).await;
             crate::services::session_logs::stop_for_tab(&state, id).await;
+            state.serial_reconnect_attempts.write().await.remove(id);
         }
         {
             let mut tabs = state.tabs.write().await;

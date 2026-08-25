@@ -306,8 +306,17 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
       encoding: input.encoding ?? 'UTF-8',
       newlineMode: input.newlineMode ?? 'none',
       inputMode: input.inputMode ?? 'text',
+      lineMode: input.lineMode ?? false,
       outputMode: input.outputMode ?? 'text',
       localEcho: input.localEcho ?? false,
+      dtrOnOpen: input.dtrOnOpen,
+      rtsOnOpen: input.rtsOnOpen,
+      serialCharDelayMs: input.serialCharDelayMs,
+      serialLineDelayMs: input.serialLineDelayMs,
+      reconnectMaxAttempts: input.reconnectMaxAttempts,
+      sessionLogIncludeInput: input.sessionLogIncludeInput,
+      sessionLogTimestamps: input.sessionLogTimestamps,
+      sessionLogRaw: input.sessionLogRaw,
       reconnectMode: input.reconnectMode ?? 'none',
       note: input.note
     }

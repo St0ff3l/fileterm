@@ -595,6 +595,7 @@ export function SessionWorkspace({
               profileId={terminalActiveTab.profileId}
               tabId={terminalActiveTab.id}
               bootText={terminalActiveSession.terminalTranscript ?? ''}
+              sessionType={terminalActiveTab.sessionType}
               connected={terminalActiveSession.connected === true}
               connecting={terminalActiveTab.status === 'connecting'}
               onReconnect={reconnectOnEnter}
