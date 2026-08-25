@@ -303,7 +303,7 @@ export interface SerialProfile extends BaseProfile {
   baudRate: number
   dataBits: 5 | 6 | 7 | 8
   stopBits: 1 | 2
-  parity: 'none' | 'odd' | 'even'
+  parity: 'none' | 'odd' | 'even' | 'mark' | 'space'
   flowControl: 'none' | 'hardware' | 'software'
   encoding?: string
   /** How line endings typed into a serial terminal are sent to the device. */
@@ -2086,6 +2086,7 @@ export interface FileTermDesktopApi {
     localPath: string,
     fileName?: string
   ): Promise<SerialTransferResult>
+  serialTransferCancel(tabId: string): Promise<void>
   saveSessionLog(tabId: string): Promise<string | null>
   minimizeCurrentWindow(): Promise<void>
   showCurrentWindow(): Promise<void>

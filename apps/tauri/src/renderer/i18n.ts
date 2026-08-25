@@ -436,7 +436,9 @@ const zhCN = {
   serialOutputInvalid: '串口输出模式无效',
   serialDataBitsInvalid: '串口数据位必须是 5、6、7 或 8',
   serialStopBitsInvalid: '串口停止位必须是 1 或 2',
-  serialParityInvalid: '当前平台的串口校验位必须是无、奇或偶校验',
+  serialParityInvalid: '串口校验位必须是无、奇、偶、标记或空格校验',
+  serialParityUnsupported: '当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验',
+  serialParityHint: '标记/空格校验使用系统串口后端：Windows 通常可用，Linux 需驱动支持 CMSPAR，macOS 通常不支持。',
   serialFlowControlInvalid: '串口流控必须是无、软件或硬件流控',
   serialPermissionError: '无法访问串口 {path}：请确认设备驱动和系统访问权限。',
   serialUnavailable: '串口设备 {path} 不存在、不可用或已断开。',
@@ -467,7 +469,8 @@ const zhCN = {
   serialLocalEchoHint: '立即显示已发送内容；如果设备也会回显，可能会看到重复内容。',
   serialDtrOnOpen: '打开时 DTR',
   serialRtsOnOpen: '打开时 RTS',
-  serialLineControlHint: 'DTR/RTS 用于复位、供电或硬件握手；设备不支持时可关闭。',
+  serialLineControlHint:
+    'DTR/RTS 用于复位、供电或硬件握手；Unix 会尽量读回实际输出线，Windows 显示最近请求状态；设备不支持时可关闭。',
   serialCharDelay: '逐字符延迟（毫秒）',
   serialLineDelay: '逐行延迟（毫秒）',
   serialPacingHint: '慢速设备可设置发送节流；0 表示不延迟。',
@@ -481,6 +484,7 @@ const zhCN = {
   serialControlClear: '清空串口',
   serialControlReset: '复位串口',
   serialControlStatus: '刷新线路状态',
+  serialControlCanceled: '串口控制已取消。',
   serialStatusDtr: 'DTR',
   serialStatusRts: 'RTS',
   serialStatusCts: 'CTS',
@@ -501,8 +505,21 @@ const zhCN = {
   serialTransferNamePlaceholder: 'received.bin',
   serialTransferCompleted: '传输完成：{bytes} 字节',
   serialTransferFailed: '传输失败：',
-  serialTransferHint: 'Raw 适合连续字节；XMODEM/YMODEM 需要对端同时进入对应协议。',
+  serialTransferHint: 'Raw 适合连续字节，接收端连续 2 秒无数据后结束；XMODEM/YMODEM 需要对端同时进入对应协议。',
   serialTransferTargetExists: '接收目标文件已存在，请更换文件名。',
+  serialTransferAlreadyRunning: '当前串口会话已有文件传输正在进行。',
+  serialTransferNoneRunning: '当前没有进行中的串口文件传输。',
+  serialTransferCanceled: '串口文件传输已取消。',
+  serialTransferPeerCanceled: '对端取消了串口文件传输。',
+  serialTransferStartTimeout: '等待串口文件传输启动超时。',
+  serialTransferDataTimeout: '等待串口文件传输数据超时。',
+  serialTransferSenderStartTimeout: '等待串口文件接收端启动超时。',
+  serialTransferEndTimeout: '串口文件传输结束确认超时。',
+  serialTransferSequenceInvalid: '串口文件传输数据块序号不连续。',
+  serialTransferDataTooLarge: 'YMODEM 接收数据超过文件头声明的大小。',
+  serialTransferCancel: '取消传输',
+  serialTransferCanceling: '正在取消…',
+  serialTransferYmodemHeaderTooLong: 'YMODEM 文件头过长，请缩短文件名。',
   serialQuickSend: '快捷发送',
   serialQuickSendPlaceholder: '输入要发送的文本或命令',
   serialQuickSendNow: '发送',
@@ -1807,7 +1824,11 @@ const enUS: typeof zhCN = {
   serialOutputInvalid: 'Serial output mode is invalid',
   serialDataBitsInvalid: 'Serial data bits must be 5, 6, 7, or 8',
   serialStopBitsInvalid: 'Serial stop bits must be 1 or 2',
-  serialParityInvalid: 'This platform only supports none, odd, or even serial parity',
+  serialParityInvalid: 'Serial parity must be none, odd, even, mark, or space',
+  serialParityUnsupported:
+    'This platform or serial driver does not support mark/space parity; choose none, odd, or even',
+  serialParityHint:
+    'Mark/space parity uses the native serial backend: usually available on Windows, requires CMSPAR driver support on Linux, and is usually unavailable on macOS.',
   serialFlowControlInvalid: 'Serial flow control must be none, software, or hardware',
   serialPermissionError: 'Unable to access serial port {path}: check the device driver and system permissions.',
   serialUnavailable: 'Serial device {path} does not exist, is unavailable, or has been disconnected.',
@@ -1838,7 +1859,8 @@ const enUS: typeof zhCN = {
   serialLocalEchoHint: 'Show transmitted bytes immediately; device echo can make the content appear twice.',
   serialDtrOnOpen: 'DTR on open',
   serialRtsOnOpen: 'RTS on open',
-  serialLineControlHint: 'DTR/RTS can reset, power, or handshake with a device; disable them when unsupported.',
+  serialLineControlHint:
+    'DTR/RTS can reset, power, or handshake a device; Unix reads back output lines when supported, while Windows shows the last requested state; disable them when unsupported.',
   serialCharDelay: 'Per-character delay (ms)',
   serialLineDelay: 'Per-line delay (ms)',
   serialPacingHint: 'Use pacing for slow devices; 0 means no delay.',
@@ -1852,6 +1874,7 @@ const enUS: typeof zhCN = {
   serialControlClear: 'Clear serial',
   serialControlReset: 'Reset serial',
   serialControlStatus: 'Refresh line status',
+  serialControlCanceled: 'Serial control was canceled.',
   serialStatusDtr: 'DTR',
   serialStatusRts: 'RTS',
   serialStatusCts: 'CTS',
@@ -1872,8 +1895,22 @@ const enUS: typeof zhCN = {
   serialTransferNamePlaceholder: 'received.bin',
   serialTransferCompleted: 'Transfer complete: {bytes} bytes',
   serialTransferFailed: 'Transfer failed: ',
-  serialTransferHint: 'Raw sends a byte stream; XMODEM/YMODEM require the peer to use the same protocol.',
+  serialTransferHint:
+    'Raw sends a byte stream and ends after 2 seconds without data; XMODEM/YMODEM require the peer to use the same protocol.',
   serialTransferTargetExists: 'The receive target already exists; choose another file name.',
+  serialTransferAlreadyRunning: 'A serial file transfer is already in progress.',
+  serialTransferNoneRunning: 'No serial file transfer is currently running.',
+  serialTransferCanceled: 'Serial file transfer canceled.',
+  serialTransferPeerCanceled: 'The peer canceled the serial file transfer.',
+  serialTransferStartTimeout: 'Timed out waiting for the serial file transfer to start.',
+  serialTransferDataTimeout: 'Timed out waiting for serial file transfer data.',
+  serialTransferSenderStartTimeout: 'Timed out waiting for the serial receiver to start.',
+  serialTransferEndTimeout: 'Timed out waiting for the serial file transfer to finish.',
+  serialTransferSequenceInvalid: 'Serial file-transfer block sequence is invalid.',
+  serialTransferDataTooLarge: 'YMODEM received more data than declared in the file header.',
+  serialTransferCancel: 'Cancel transfer',
+  serialTransferCanceling: 'Canceling…',
+  serialTransferYmodemHeaderTooLong: 'The YMODEM header is too long; shorten the file name.',
   serialQuickSend: 'Quick send',
   serialQuickSendPlaceholder: 'Text or command to send',
   serialQuickSendNow: 'Send',
@@ -2984,7 +3021,8 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('串口输出模式无效', t.serialOutputInvalid)
     .replaceAll('串口数据位必须是 5、6、7 或 8', t.serialDataBitsInvalid)
     .replaceAll('串口停止位必须是 1 或 2', t.serialStopBitsInvalid)
-    .replaceAll('当前平台的串口校验位必须是无、奇或偶校验', t.serialParityInvalid)
+    .replaceAll('串口校验位必须是无、奇、偶、标记或空格校验', t.serialParityInvalid)
+    .replaceAll('当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验', t.serialParityUnsupported)
     .replaceAll('串口流控必须是无、软件或硬件流控', t.serialFlowControlInvalid)
     .replace(
       /无法访问串口 (.*)：权限不足。Linux 请将当前用户加入 dialout 组；Windows\/macOS 请确认驱动和设备访问权限。/g,
@@ -3002,6 +3040,23 @@ export function localizeSerialTerminalText(value: string) {
       formatMessage(t.serialReconnectLimit, { maximum })
     )
     .replaceAll('串口接收目标文件已存在，请更换文件名', t.serialTransferTargetExists)
+    .replaceAll('当前串口会话已有文件传输正在进行', t.serialTransferAlreadyRunning)
+    .replaceAll('当前没有进行中的串口文件传输', t.serialTransferNoneRunning)
+    .replaceAll('串口接收已取消', t.serialTransferCanceled)
+    .replaceAll('串口文件传输已取消', t.serialTransferCanceled)
+    .replaceAll('对端取消了 XMODEM 传输', t.serialTransferPeerCanceled)
+    .replaceAll('对端取消了 YMODEM 传输', t.serialTransferPeerCanceled)
+    .replaceAll('对端取消了串口文件传输', t.serialTransferPeerCanceled)
+    .replaceAll('等待串口文件传输启动超时', t.serialTransferStartTimeout)
+    .replaceAll('等待串口文件传输数据超时', t.serialTransferDataTimeout)
+    .replaceAll('等待 YMODEM 数据超时', t.serialTransferDataTimeout)
+    .replaceAll('等待串口文件接收端启动超时', t.serialTransferSenderStartTimeout)
+    .replaceAll('串口文件传输结束确认超时', t.serialTransferEndTimeout)
+    .replaceAll('XMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
+    .replaceAll('YMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
+    .replaceAll('YMODEM 接收数据超过文件头声明的大小', t.serialTransferDataTooLarge)
+    .replaceAll('串口控制已取消', t.serialControlCanceled)
+    .replaceAll('串口 YMODEM 文件头过长，请缩短文件名', t.serialTransferYmodemHeaderTooLong)
     .replaceAll('[串口] ', '[Serial] ')
     .replace(/串口设备扫描失败：\s*/g, t.serialScanFailedPrefix)
     .replaceAll('串口设备扫描超时', t.serialScanTimeout)

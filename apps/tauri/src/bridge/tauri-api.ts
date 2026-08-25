@@ -470,6 +470,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         localPath,
         fileName: fileName ?? null
       }),
+    serialTransferCancel: (tabId: string) => invoke<void>('app_serial_cancel_transfer', { tabId }),
     saveSessionLog: (tabId: string) => invoke<string | null>('app_save_session_log', { tabId }),
     minimizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'minimize' }),
     showCurrentWindow: () => invoke<void>('app_window_action', { action: 'show' }),

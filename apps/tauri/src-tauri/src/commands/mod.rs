@@ -1731,14 +1731,25 @@ pub async fn app_serial_transfer(
     if !is_serial {
         return Err(AppError::Command("当前会话不是串口会话".to_string()));
     }
-    let cancellation = state
+    let worker_cancellation = state
         .worker_controls
         .read()
         .await
         .get(&tab_id)
         .cloned()
         .ok_or_else(|| AppError::Storage("串口会话未运行".to_string()))?;
-    send_worker_cmd_with_response_timeout(
+    let cancellation = worker_cancellation.child_token();
+    {
+        let mut active_transfers = state.serial_transfer_cancellations.write().await;
+        if active_transfers.contains_key(&tab_id) {
+            return Err(AppError::Command(
+                "当前串口会话已有文件传输正在进行".to_string(),
+            ));
+        }
+        active_transfers.insert(tab_id.clone(), cancellation.clone());
+    }
+
+    let result = send_worker_cmd_with_response_timeout(
         &app,
         &tab_id,
         SERIAL_TRANSFER_RESPONSE_TIMEOUT,
@@ -1748,11 +1759,34 @@ pub async fn app_serial_transfer(
                 mode,
                 local_path,
             },
-            cancellation,
+            cancellation: cancellation.clone(),
             respond_to,
         },
     )
-    .await
+    .await;
+    if result.is_err() {
+        cancellation.cancel();
+    }
+    state
+        .serial_transfer_cancellations
+        .write()
+        .await
+        .remove(&tab_id);
+    result
+}
+
+#[tauri::command]
+pub async fn app_serial_cancel_transfer(app: AppHandle, tab_id: String) -> Result<(), AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let cancellation = state
+        .serial_transfer_cancellations
+        .read()
+        .await
+        .get(&tab_id)
+        .cloned()
+        .ok_or_else(|| AppError::Command("当前没有进行中的串口文件传输".to_string()))?;
+    cancellation.cancel();
+    Ok(())
 }
 
 #[tauri::command]
@@ -3030,6 +3064,14 @@ fn start_session_worker(
 
 async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState, tab_id: &str) {
     crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
+    if let Some(cancellation) = state
+        .serial_transfer_cancellations
+        .write()
+        .await
+        .remove(tab_id)
+    {
+        cancellation.cancel();
+    }
     if let Some(control) = state.worker_controls.write().await.remove(tab_id) {
         // Cancel first: a command sender cannot wake a worker which is inside
         // an SSH read/metrics parse. This also prevents a stale worker from
@@ -3082,6 +3124,16 @@ async fn cleanup_unattached_session(
 
 pub async fn shutdown_session_workers(app: &AppHandle) {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let transfer_cancellations = state
+        .serial_transfer_cancellations
+        .write()
+        .await
+        .drain()
+        .map(|(_, cancellation)| cancellation)
+        .collect::<Vec<_>>();
+    for cancellation in transfer_cancellations {
+        cancellation.cancel();
+    }
     let controls = state
         .worker_controls
         .write()

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppIcon } from '../common/AppIcon'
-import { t } from '../../i18n'
+import { localizeSerialTerminalText, t } from '../../i18n'
 
 type SerialMacro = { name: string; value: string }
 
@@ -43,6 +43,7 @@ export function SerialQuickSendPanel({
   const [loopInterval, setLoopInterval] = useState(1000)
   const [looping, setLooping] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const loopWriteInFlight = useRef(false)
 
   useEffect(() => {
     setMacros(loadMacros(profileId))
@@ -52,12 +53,22 @@ export function SerialQuickSendPanel({
   }, [profileId])
 
   useEffect(() => {
-    if (!looping || !connected || !draft.trim() || !window.fileterm?.writeTerminal) return
+    const writeTerminal = window.fileterm?.writeTerminal
+    if (!looping || !connected || !draft.trim() || !writeTerminal) return
     const timer = window.setInterval(
       () => {
-        void window.fileterm?.writeTerminal(tabId, appendNewline ? `${draft}\r` : draft)
+        if (loopWriteInFlight.current) return
+        loopWriteInFlight.current = true
+        void writeTerminal(tabId, appendNewline ? `${draft}\r` : draft)
+          .catch((error) => {
+            setMessage(localizeSerialTerminalText(String(error)))
+            setLooping(false)
+          })
+          .finally(() => {
+            loopWriteInFlight.current = false
+          })
       },
-      Math.max(50, loopInterval)
+      Math.min(3_600_000, Math.max(50, loopInterval))
     )
     return () => window.clearInterval(timer)
   }, [appendNewline, connected, draft, loopInterval, looping, tabId])
@@ -69,7 +80,7 @@ export function SerialQuickSendPanel({
       setHistory((previous) => [value, ...previous.filter((item) => item !== value)].slice(0, 30))
       setMessage(null)
     } catch (error) {
-      setMessage(String(error))
+      setMessage(localizeSerialTerminalText(String(error)))
     }
   }
 
@@ -166,9 +177,10 @@ export function SerialQuickSendPanel({
               disabled={looping}
               inputMode="numeric"
               min={50}
+              max={3_600_000}
               type="number"
               value={loopInterval}
-              onChange={(event) => setLoopInterval(Math.max(50, Number(event.target.value) || 50))}
+              onChange={(event) => setLoopInterval(Math.min(3_600_000, Math.max(50, Number(event.target.value) || 50)))}
             />
           </label>
           {looping ? (

@@ -14,6 +14,7 @@ mod codec;
 mod config;
 mod control;
 mod pacing;
+mod platform;
 mod reconnect;
 mod transfer;
 
@@ -26,6 +27,7 @@ use self::codec::{
 use self::config::{data_bits, flow_control, parity, serial_error, stop_bits};
 use self::control::{apply_initial_lines, execute as execute_serial_control, SerialControlState};
 use self::pacing::{write_serial_bytes, SerialPacing};
+use self::platform::apply_parity as apply_platform_parity;
 use self::reconnect::ReconnectPolicy;
 
 enum SerialWorkerExit {
@@ -172,6 +174,13 @@ async fn run_serial_worker(
         .unwrap_or(false);
     let pacing = SerialPacing::from_profile(profile).map_err(SerialWorkerError::fatal)?;
     let control_state = SerialControlState::from_profile(profile);
+    let serial_parity = parity(
+        profile
+            .get("parity")
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+    )
+    .map_err(SerialWorkerError::fatal)?;
     let mut builder = tokio_serial::new(device_path, baud_rate)
         .data_bits(
             data_bits(profile.get("dataBits").and_then(Value::as_u64).unwrap_or(8))
@@ -181,15 +190,7 @@ async fn run_serial_worker(
             stop_bits(profile.get("stopBits").and_then(Value::as_u64).unwrap_or(1))
                 .map_err(SerialWorkerError::fatal)?,
         )
-        .parity(
-            parity(
-                profile
-                    .get("parity")
-                    .and_then(Value::as_str)
-                    .unwrap_or("none"),
-            )
-            .map_err(SerialWorkerError::fatal)?,
-        )
+        .parity(serial_parity.tokio_value())
         .flow_control(
             flow_control(
                 profile
@@ -205,6 +206,7 @@ async fn run_serial_worker(
     let mut stream = builder
         .open_native_async()
         .map_err(|error| SerialWorkerError::retryable(serial_error(device_path, error)))?;
+    apply_platform_parity(&stream, serial_parity).map_err(SerialWorkerError::fatal)?;
     app.state::<crate::services::workspace::WorkspaceState>()
         .serial_reconnect_attempts
         .write()
@@ -333,6 +335,7 @@ async fn run_serial_worker(
                             value,
                             duration_ms,
                             &mut control_state,
+                            &cancellation,
                         )
                         .await;
                         let (next_reader, next_writer) = tokio::io::split(stream);

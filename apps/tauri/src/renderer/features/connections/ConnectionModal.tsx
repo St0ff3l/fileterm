@@ -427,7 +427,9 @@ export function ConnectionModal({
                             options={[
                               { value: 'none', label: t.none },
                               { value: 'odd', label: t.oddParity },
-                              { value: 'even', label: t.evenParity }
+                              { value: 'even', label: t.evenParity },
+                              { value: 'mark', label: t.markParity },
+                              { value: 'space', label: t.spaceParity }
                             ]}
                             onChange={(value) =>
                               setForm((prev) => ({ ...prev, parity: value as CreateProfileInput['parity'] }))
@@ -451,6 +453,7 @@ export function ConnectionModal({
                             }
                           />
                         </label>
+                        <p className="ssh-field-hint span-2">{t.serialParityHint}</p>
                       </div>
                     ) : null}
                     <label className="full">

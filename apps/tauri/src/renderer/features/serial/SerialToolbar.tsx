@@ -32,10 +32,12 @@ export function SerialToolbar({
 }) {
   const [status, setStatus] = useState<SerialLineStatus>(INITIAL_STATUS)
   const [busy, setBusy] = useState(false)
+  const [transferBusy, setTransferBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const serialBusy = busy || transferBusy
 
   const refreshStatus = useCallback(async () => {
-    if (!connected || !window.fileterm?.serialControl) {
+    if (!connected || transferBusy || !window.fileterm?.serialControl) {
       return
     }
     try {
@@ -44,21 +46,21 @@ export function SerialToolbar({
     } catch {
       setStatus(INITIAL_STATUS)
     }
-  }, [connected, tabId])
+  }, [connected, tabId, transferBusy])
 
   useEffect(() => {
-    if (!connected) {
+    if (!connected || transferBusy) {
       setStatus(INITIAL_STATUS)
       return
     }
     void refreshStatus()
     const timer = window.setInterval(() => void refreshStatus(), 1000)
     return () => window.clearInterval(timer)
-  }, [connected, refreshStatus])
+  }, [connected, refreshStatus, transferBusy])
 
   const runControl = useCallback(
     async (action: 'set-dtr' | 'set-rts' | 'send-break' | 'clear-buffers' | 'reset', value?: boolean) => {
-      if (!connected || !window.fileterm?.serialControl) {
+      if (!connected || transferBusy || !window.fileterm?.serialControl) {
         return
       }
       setBusy(true)
@@ -77,7 +79,7 @@ export function SerialToolbar({
         setBusy(false)
       }
     },
-    [connected, tabId]
+    [connected, tabId, transferBusy]
   )
 
   return (
@@ -86,7 +88,7 @@ export function SerialToolbar({
         <button
           aria-pressed={status.dtr === true}
           className={status.dtr === true ? 'is-active' : undefined}
-          disabled={!connected || busy}
+          disabled={!connected || serialBusy}
           title={t.serialControlDtr}
           type="button"
           onClick={() => void runControl('set-dtr', status.dtr !== true)}
@@ -96,7 +98,7 @@ export function SerialToolbar({
         <button
           aria-pressed={status.rts === true}
           className={status.rts === true ? 'is-active' : undefined}
-          disabled={!connected || busy}
+          disabled={!connected || serialBusy}
           title={t.serialControlRts}
           type="button"
           onClick={() => void runControl('set-rts', status.rts !== true)}
@@ -104,7 +106,7 @@ export function SerialToolbar({
           {t.serialControlRts}
         </button>
         <button
-          disabled={!connected || busy}
+          disabled={!connected || serialBusy}
           title={t.serialControlBreak}
           type="button"
           onClick={() => void runControl('send-break')}
@@ -113,7 +115,7 @@ export function SerialToolbar({
           {t.serialControlBreak}
         </button>
         <button
-          disabled={!connected || busy}
+          disabled={!connected || serialBusy}
           title={t.serialControlClear}
           type="button"
           onClick={() => void runControl('clear-buffers')}
@@ -121,7 +123,7 @@ export function SerialToolbar({
           {t.serialControlClear}
         </button>
         <button
-          disabled={!connected || busy}
+          disabled={!connected || serialBusy}
           title={t.serialControlReset}
           type="button"
           onClick={() => void runControl('reset')}
@@ -131,7 +133,7 @@ export function SerialToolbar({
         <button
           aria-label={t.serialControlStatus}
           className="serial-toolbar__refresh"
-          disabled={!connected || busy}
+          disabled={!connected || serialBusy}
           title={t.serialControlStatus}
           type="button"
           onClick={() => void refreshStatus()}
@@ -160,8 +162,8 @@ export function SerialToolbar({
         </span>
       </div>
       {error ? <div className="serial-toolbar__error">{error}</div> : null}
-      <SerialTransferPanel connected={connected} tabId={tabId} />
-      <SerialQuickSendPanel connected={connected} profileId={profileId} tabId={tabId} />
+      <SerialTransferPanel connected={connected} onBusyChange={setTransferBusy} tabId={tabId} />
+      <SerialQuickSendPanel connected={connected && !transferBusy} profileId={profileId} tabId={tabId} />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { SerialTransferMode } from '@fileterm/core'
 import { formatMessage, localizeSerialTerminalText, t } from '../../i18n'
 
@@ -10,18 +10,32 @@ function modeLabel(mode: SerialTransferMode) {
   return t.serialTransferYmodem
 }
 
-export function SerialTransferPanel({ tabId, connected }: { tabId: string; connected: boolean }) {
+export function SerialTransferPanel({
+  tabId,
+  connected,
+  onBusyChange
+}: {
+  tabId: string
+  connected: boolean
+  onBusyChange?: (busy: boolean) => void
+}) {
   const [mode, setMode] = useState<SerialTransferMode>('xmodem')
   const [receiveDirectory, setReceiveDirectory] = useState('')
   const [receiveName, setReceiveName] = useState(t.serialTransferNamePlaceholder)
   const [busy, setBusy] = useState(false)
+  const [cancelRequested, setCancelRequested] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    onBusyChange?.(busy)
+  }, [busy, onBusyChange])
 
   const runSend = async () => {
     const paths = await window.fileterm?.selectLocalFiles()
     const path = paths?.[0]
     if (!path || !window.fileterm?.serialTransfer) return
     setBusy(true)
+    setCancelRequested(false)
     setMessage(null)
     try {
       const result = await window.fileterm.serialTransfer(tabId, 'send', mode, path)
@@ -30,6 +44,7 @@ export function SerialTransferPanel({ tabId, connected }: { tabId: string; conne
       setMessage(`${t.serialTransferFailed}${localizeSerialTerminalText(String(error))}`)
     } finally {
       setBusy(false)
+      setCancelRequested(false)
     }
   }
 
@@ -45,6 +60,7 @@ export function SerialTransferPanel({ tabId, connected }: { tabId: string; conne
     }
     if (!window.fileterm?.serialTransfer) return
     setBusy(true)
+    setCancelRequested(false)
     setMessage(null)
     try {
       const result = await window.fileterm.serialTransfer(tabId, 'receive', mode, receiveDirectory, receiveName)
@@ -53,6 +69,18 @@ export function SerialTransferPanel({ tabId, connected }: { tabId: string; conne
       setMessage(`${t.serialTransferFailed}${localizeSerialTerminalText(String(error))}`)
     } finally {
       setBusy(false)
+      setCancelRequested(false)
+    }
+  }
+
+  const cancelTransfer = async () => {
+    if (!window.fileterm?.serialTransferCancel) return
+    setCancelRequested(true)
+    try {
+      await window.fileterm.serialTransferCancel(tabId)
+    } catch (error) {
+      setCancelRequested(false)
+      setMessage(`${t.serialTransferFailed}${localizeSerialTerminalText(String(error))}`)
     }
   }
 
@@ -94,6 +122,11 @@ export function SerialTransferPanel({ tabId, connected }: { tabId: string; conne
           <button disabled={!connected || busy} type="button" onClick={() => void runReceive()}>
             {t.serialTransferReceive}
           </button>
+          {busy ? (
+            <button disabled={cancelRequested} type="button" onClick={() => void cancelTransfer()}>
+              {cancelRequested ? t.serialTransferCanceling : t.serialTransferCancel}
+            </button>
+          ) : null}
         </div>
         {receiveDirectory ? <div className="serial-transfer-panel__path">{receiveDirectory}</div> : null}
         <div className="serial-transfer-panel__hint">{t.serialTransferHint}</div>

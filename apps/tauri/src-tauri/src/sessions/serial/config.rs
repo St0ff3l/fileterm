@@ -1,5 +1,24 @@
 use tokio_serial::{DataBits, FlowControl, Parity, StopBits};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SerialParity {
+    None,
+    Odd,
+    Even,
+    Mark,
+    Space,
+}
+
+impl SerialParity {
+    pub(super) fn tokio_value(self) -> Parity {
+        match self {
+            Self::None | Self::Mark | Self::Space => Parity::None,
+            Self::Odd => Parity::Odd,
+            Self::Even => Parity::Even,
+        }
+    }
+}
+
 pub(super) fn data_bits(value: u64) -> Result<DataBits, String> {
     match value {
         5 => Ok(DataBits::Five),
@@ -18,12 +37,14 @@ pub(super) fn stop_bits(value: u64) -> Result<StopBits, String> {
     }
 }
 
-pub(super) fn parity(value: &str) -> Result<Parity, String> {
+pub(super) fn parity(value: &str) -> Result<SerialParity, String> {
     match value {
-        "none" => Ok(Parity::None),
-        "odd" => Ok(Parity::Odd),
-        "even" => Ok(Parity::Even),
-        _ => Err("当前平台的串口校验位必须是无、奇或偶校验".to_string()),
+        "none" => Ok(SerialParity::None),
+        "odd" => Ok(SerialParity::Odd),
+        "even" => Ok(SerialParity::Even),
+        "mark" => Ok(SerialParity::Mark),
+        "space" => Ok(SerialParity::Space),
+        _ => Err("串口校验位必须是无、奇、偶、标记或空格校验".to_string()),
     }
 }
 
@@ -74,10 +95,11 @@ mod tests {
         assert!(data_bits(8).is_ok());
         assert!(stop_bits(2).is_ok());
         assert!(parity("even").is_ok());
+        assert_eq!(parity("mark").unwrap(), SerialParity::Mark);
+        assert_eq!(parity("space").unwrap(), SerialParity::Space);
         assert!(flow_control("hardware").is_ok());
         assert_eq!(flow_control("software").unwrap(), FlowControl::Software);
-        assert!(parity("mark").is_err());
-        assert!(parity("space").is_err());
+        assert!(parity("invalid").is_err());
     }
 
     #[test]

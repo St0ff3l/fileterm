@@ -1,8 +1,10 @@
 use std::time::Duration;
 
 use tokio_serial::{ClearBuffer, SerialPort, SerialStream};
+use tokio_util::sync::CancellationToken;
 
 use super::super::{SerialControlAction, SerialLineStatus};
+use super::platform::read_output_lines;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct SerialControlState {
@@ -43,6 +45,7 @@ pub(super) async fn execute(
     value: Option<bool>,
     duration_ms: Option<u64>,
     state: &mut SerialControlState,
+    cancellation: &CancellationToken,
 ) -> Result<SerialLineStatus, String> {
     match action {
         SerialControlAction::SetDtr => {
@@ -64,7 +67,16 @@ pub(super) async fn execute(
             stream
                 .set_break()
                 .map_err(|error| format!("发送串口 Break 失败：{error}"))?;
-            tokio::time::sleep(duration).await;
+            let canceled = tokio::select! {
+                _ = cancellation.cancelled() => true,
+                _ = tokio::time::sleep(duration) => false,
+            };
+            if canceled {
+                stream
+                    .clear_break()
+                    .map_err(|error| format!("结束串口 Break 失败：{error}"))?;
+                return Err("串口控制已取消".to_string());
+            }
             stream
                 .clear_break()
                 .map_err(|error| format!("结束串口 Break 失败：{error}"))?;
@@ -96,9 +108,10 @@ pub(super) async fn execute(
 }
 
 fn read_status(stream: &mut SerialStream, state: SerialControlState) -> SerialLineStatus {
+    let (actual_dtr, actual_rts) = read_output_lines(stream);
     SerialLineStatus {
-        dtr: state.dtr,
-        rts: state.rts,
+        dtr: actual_dtr.or(state.dtr),
+        rts: actual_rts.or(state.rts),
         cts: stream.read_clear_to_send().ok(),
         dsr: stream.read_data_set_ready().ok(),
         ring: stream.read_ring_indicator().ok(),
