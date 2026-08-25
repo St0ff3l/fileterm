@@ -7,28 +7,31 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::time::Duration;
+use std::pin::Pin;
 
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::fs::File;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 use super::super::{
     SerialTransferDirection, SerialTransferMode, SerialTransferRequest, SerialTransferResult,
 };
+pub(super) use super::file_safety::is_safe_transfer_file_name;
+use super::file_safety::StagedReceiveFile;
+#[path = "frame.rs"]
+mod frame;
+use super::limits::{SerialTransferLimits, TransferBudget};
 use super::progress::SerialTransferReporter;
 use super::timing::SerialTransferTiming;
+use crate::services::session_logs::{SerialLogDirection, SerialLogSink};
 
-const SOH: u8 = 0x01;
-const STX: u8 = 0x02;
-const EOT: u8 = 0x04;
-const ACK: u8 = 0x06;
-const NAK: u8 = 0x15;
-const CAN: u8 = 0x18;
-const CRC_REQUEST: u8 = b'C';
-const PAD: u8 = 0x1a;
-const MAX_RETRIES: usize = 10;
+use self::frame::{
+    cancel_protocol, parse_ymodem_header, read_byte, read_file, read_next_protocol_byte,
+    read_packet_tail, receive_protocol_start, send_eot, send_packet, wait_for_sender_start,
+    ymodem_target, ACK, CAN, CRC_REQUEST, EOT, NAK, PAD, SOH, STX,
+};
+pub(super) use self::frame::{create_target, flush, write_all};
 
 #[derive(Clone, Copy, Debug)]
 struct BlockTransferOptions {
@@ -44,16 +47,36 @@ struct YmodemFileOptions {
     offset: u64,
 }
 
+pub(super) struct TransferContext<'a> {
+    pub(super) timing: SerialTransferTiming,
+    pub(super) limits: SerialTransferLimits,
+    pub(super) log_sink: Option<SerialLogSink>,
+    pub(super) encoding: &'a str,
+    pub(super) reporter: &'a mut SerialTransferReporter,
+    pub(super) cancellation: CancellationToken,
+}
+
 pub(super) async fn execute<S>(
     stream: &mut S,
     request: SerialTransferRequest,
-    timing: SerialTransferTiming,
-    reporter: &mut SerialTransferReporter,
-    cancellation: CancellationToken,
+    context: TransferContext<'_>,
 ) -> Result<SerialTransferResult, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    let TransferContext {
+        timing,
+        limits,
+        log_sink,
+        encoding,
+        reporter,
+        cancellation,
+    } = context;
+    let mut stream = TransferLogStream {
+        inner: stream,
+        log_sink,
+        encoding,
+    };
     let path = request.local_path.clone();
     let paths = if request.local_paths.is_empty() {
         vec![path.clone()]
@@ -62,19 +85,37 @@ where
     };
     let mode = request.mode;
     let xmodem_preserve_padding = request.xmodem_preserve_padding;
+    let mut budget = TransferBudget::new(limits);
     let result: Result<u64, String> = match (request.direction, mode) {
         (SerialTransferDirection::Send, SerialTransferMode::Raw) => {
-            send_raw(stream, Path::new(&path), timing, reporter, &cancellation).await
+            send_raw(
+                &mut stream,
+                Path::new(&path),
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Receive, SerialTransferMode::Raw) => {
-            receive_raw(stream, Path::new(&path), timing, reporter, &cancellation).await
+            receive_raw(
+                &mut stream,
+                Path::new(&path),
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Send, SerialTransferMode::Xmodem) => {
             send_xmodem(
-                stream,
+                &mut stream,
                 Path::new(&path),
                 false,
                 timing,
+                &mut budget,
                 reporter,
                 &cancellation,
             )
@@ -82,32 +123,81 @@ where
         }
         (SerialTransferDirection::Receive, SerialTransferMode::Xmodem) => {
             receive_xmodem(
-                stream,
+                &mut stream,
                 Path::new(&path),
                 timing,
                 xmodem_preserve_padding,
+                &mut budget,
                 reporter,
                 &cancellation,
             )
             .await
         }
         (SerialTransferDirection::Send, SerialTransferMode::Ymodem) => {
-            send_ymodem(stream, &paths, timing, reporter, &cancellation).await
+            send_ymodem(
+                &mut stream,
+                &paths,
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Receive, SerialTransferMode::Ymodem) => {
-            receive_ymodem(stream, Path::new(&path), timing, reporter, &cancellation).await
+            receive_ymodem(
+                &mut stream,
+                Path::new(&path),
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Send, SerialTransferMode::Zmodem) => {
-            super::zmodem::send(stream, &request, timing, reporter, &cancellation).await
+            super::zmodem::send(
+                &mut stream,
+                &request,
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Receive, SerialTransferMode::Zmodem) => {
-            super::zmodem::receive(stream, Path::new(&path), timing, reporter, &cancellation).await
+            super::zmodem::receive(
+                &mut stream,
+                Path::new(&path),
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Send, SerialTransferMode::Kermit) => {
-            super::kermit::send(stream, &request, timing, reporter, &cancellation).await
+            super::kermit::send(
+                &mut stream,
+                &request,
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
         (SerialTransferDirection::Receive, SerialTransferMode::Kermit) => {
-            super::kermit::receive(stream, Path::new(&path), timing, reporter, &cancellation).await
+            super::kermit::receive(
+                &mut stream,
+                Path::new(&path),
+                timing,
+                &mut budget,
+                reporter,
+                &cancellation,
+            )
+            .await
         }
     };
     match &result {
@@ -124,7 +214,7 @@ where
         ),
     }
     if result.is_err() && mode != SerialTransferMode::Raw {
-        cancel_protocol(stream).await;
+        cancel_protocol(&mut stream).await;
     }
     let bytes_transferred = result?;
     Ok(SerialTransferResult {
@@ -133,22 +223,102 @@ where
     })
 }
 
+/// Records logical transfer bytes without putting async log IO on the serial
+/// worker. `SerialIo` separately records physical wire bytes for raw logs.
+struct TransferLogStream<'a, S> {
+    inner: &'a mut S,
+    log_sink: Option<SerialLogSink>,
+    encoding: &'a str,
+}
+
+impl<S> Unpin for TransferLogStream<'_, S> {}
+
+impl<S> AsyncRead for TransferLogStream<'_, S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        let before = buffer.filled().len();
+        let result = Pin::new(&mut *this.inner).poll_read(cx, buffer);
+        if let std::task::Poll::Ready(Ok(())) = &result {
+            if let Some(sink) = &this.log_sink {
+                sink.append(
+                    SerialLogDirection::Rx,
+                    &buffer.filled()[before..],
+                    None,
+                    this.encoding,
+                );
+            }
+        }
+        result
+    }
+}
+
+impl<S> AsyncWrite for TransferLogStream<'_, S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buffer: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let this = self.get_mut();
+        match Pin::new(&mut *this.inner).poll_write(cx, buffer) {
+            std::task::Poll::Ready(Ok(written)) => {
+                if let Some(sink) = &this.log_sink {
+                    sink.append(
+                        SerialLogDirection::Tx,
+                        &buffer[..written],
+                        None,
+                        this.encoding,
+                    );
+                }
+                std::task::Poll::Ready(Ok(written))
+            }
+            result => result,
+        }
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        Pin::new(&mut *self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        Pin::new(&mut *self.get_mut().inner).poll_shutdown(cx)
+    }
+}
+
 async fn send_raw<S>(
     stream: &mut S,
     path: &Path,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
 where
     S: AsyncWrite + Unpin,
 {
+    let metadata = tokio::fs::metadata(path)
+        .await
+        .map_err(|error| format!("无法读取串口发送文件信息：{error}"))?;
+    budget.begin_file(Some(metadata.len()))?;
     let mut file = File::open(path)
         .await
         .map_err(|error| format!("无法读取串口发送文件：{error}"))?;
-    if let Ok(metadata) = file.metadata().await {
-        reporter.set_total(Some(metadata.len()));
-    }
+    reporter.set_total(Some(metadata.len()));
     let mut buffer = vec![0_u8; 32 * 1024];
     let mut total = 0_u64;
     loop {
@@ -168,14 +338,14 @@ async fn receive_raw<S>(
     stream: &mut S,
     path: &Path,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
 where
     S: AsyncRead + Unpin,
 {
-    let mut file = None;
-    let mut created = false;
+    let mut file: Option<StagedReceiveFile> = None;
     let mut buffer = vec![0_u8; 32 * 1024];
     let result: Result<u64, String> = async {
         let mut total = 0_u64;
@@ -192,25 +362,26 @@ where
                 break;
             }
             if file.is_none() {
-                file = Some(create_target(path).await?);
-                created = true;
+                budget.begin_file(None)?;
+                file = Some(StagedReceiveFile::create(path, budget.max_file_bytes()).await?);
             }
             let target = file.as_mut().expect("file was created above");
-            write_file(target, &buffer[..count], cancellation).await?;
+            target
+                .write_all(&buffer[..count], cancellation, Some(budget))
+                .await?;
             total += count as u64;
             reporter.report(total, None);
         }
-        if let Some(mut file) = file.take() {
-            file.flush()
-                .await
-                .map_err(|error| format!("无法保存串口接收文件：{error}"))?;
+        if let Some(file) = file.take() {
+            file.commit().await?;
         }
         Ok(total)
     }
     .await;
-    if result.is_err() && created {
-        drop(file.take());
-        cleanup_failed_receive(path).await;
+    if result.is_err() {
+        if let Some(file) = file.take() {
+            file.cleanup().await;
+        }
     }
     result
 }
@@ -220,6 +391,7 @@ async fn send_xmodem<S>(
     path: &Path,
     use_crc: bool,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -231,6 +403,7 @@ where
     let metadata = tokio::fs::metadata(path)
         .await
         .map_err(|error| format!("无法读取串口发送文件信息：{error}"))?;
+    budget.begin_file(Some(metadata.len()))?;
     reporter.set_total(Some(metadata.len()));
     send_blocks(
         stream,
@@ -251,6 +424,7 @@ async fn send_ymodem<S>(
     stream: &mut S,
     paths: &[String],
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -283,6 +457,7 @@ where
         if !seen_names.insert(file_name.to_lowercase()) {
             return Err("串口 YMODEM 文件名重复，无法安全接收".to_string());
         }
+        budget.begin_file(Some(metadata.len()))?;
         total_size = total_size.saturating_add(metadata.len());
         files.push((path.to_path_buf(), metadata.len(), file_name.to_string()));
     }
@@ -371,6 +546,7 @@ async fn receive_xmodem<S>(
     path: &Path,
     timing: SerialTransferTiming,
     preserve_padding: bool,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -378,7 +554,8 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let (mut control, use_crc) = receive_protocol_start(stream, timing, cancellation).await?;
-    let mut file = create_target(path).await?;
+    budget.begin_file(None)?;
+    let mut file = Some(StagedReceiveFile::create(path, budget.max_file_bytes()).await?);
     let result: Result<u64, String> = async {
         let mut expected = 1_u8;
         let mut pending_last: Option<Vec<u8>> = None;
@@ -396,7 +573,10 @@ where
                     write_all(stream, &[ACK], timing.write_timeout, cancellation).await?;
                     if let Some(mut last) = pending_last.take() {
                         last = finalize_xmodem_payload(last, preserve_padding);
-                        write_file(&mut file, &last, cancellation).await?;
+                        file.as_mut()
+                            .expect("XMODEM receive file exists")
+                            .write_all(&last, cancellation, Some(budget))
+                            .await?;
                         total += last.len() as u64;
                     }
                     break;
@@ -412,7 +592,10 @@ where
                     };
                     if sequence == expected {
                         if let Some(previous) = pending_last.replace(payload) {
-                            write_file(&mut file, &previous, cancellation).await?;
+                            file.as_mut()
+                                .expect("XMODEM receive file exists")
+                                .write_all(&previous, cancellation, Some(budget))
+                                .await?;
                             total += previous.len() as u64;
                             reporter.report(total, Some(u64::from(sequence.wrapping_sub(1))));
                         }
@@ -432,15 +615,15 @@ where
             }
             control = read_next_protocol_byte(stream, timing, cancellation).await?;
         }
-        file.flush()
-            .await
-            .map_err(|error| format!("无法保存 XMODEM 文件：{error}"))?;
+        let file = file.take().expect("XMODEM receive file exists");
+        file.commit().await?;
         Ok(total)
     }
     .await;
     if result.is_err() {
-        drop(file);
-        cleanup_failed_receive(path).await;
+        if let Some(file) = file.take() {
+            file.cleanup().await;
+        }
     }
     result
 }
@@ -458,6 +641,7 @@ async fn receive_ymodem<S>(
     stream: &mut S,
     directory: &Path,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -505,6 +689,7 @@ where
                 offset: total,
             },
             timing,
+            budget,
             reporter,
             cancellation,
         )
@@ -541,13 +726,15 @@ async fn receive_ymodem_file<S>(
     path: &Path,
     options: YmodemFileOptions,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let mut file = create_target(path).await?;
+    budget.begin_file(Some(options.size))?;
+    let mut file = Some(StagedReceiveFile::create(path, budget.max_file_bytes()).await?);
     let result: Result<u64, String> = async {
         write_all(
             stream,
@@ -597,7 +784,10 @@ where
                         return Err("YMODEM 接收数据超过文件头声明的大小".to_string());
                     }
                     let count = remaining.min(payload.len() as u64) as usize;
-                    write_file(&mut file, &payload[..count], cancellation).await?;
+                    file.as_mut()
+                        .expect("YMODEM receive file exists")
+                        .write_all(&payload[..count], cancellation, None)
+                        .await?;
                     remaining -= count as u64;
                     total += count as u64;
                     reporter.report(
@@ -614,446 +804,17 @@ where
         if remaining != 0 {
             return Err("YMODEM 文件大小与接收数据不一致".to_string());
         }
-        file.flush()
-            .await
-            .map_err(|error| format!("无法保存 YMODEM 文件：{error}"))?;
+        let file = file.take().expect("YMODEM receive file exists");
+        file.commit().await?;
         Ok(total)
     }
     .await;
     if result.is_err() {
-        drop(file);
-        cleanup_failed_receive(path).await;
+        if let Some(file) = file.take() {
+            file.cleanup().await;
+        }
     }
     result
-}
-
-async fn receive_protocol_start<S>(
-    stream: &mut S,
-    timing: SerialTransferTiming,
-    cancellation: &CancellationToken,
-) -> Result<(u8, bool), String>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    // X/YMODEM receivers conventionally try CRC first and fall back to the
-    // original checksum handshake for bootloaders that do not understand C.
-    for attempt in 0..MAX_RETRIES {
-        let use_crc = attempt < 3;
-        write_all(
-            stream,
-            &[if use_crc { CRC_REQUEST } else { NAK }],
-            timing.write_timeout,
-            cancellation,
-        )
-        .await?;
-        flush(stream, timing.write_timeout, cancellation).await?;
-        if let Some(value) = read_byte(stream, timing.control_timeout(), cancellation).await? {
-            match value {
-                SOH | STX => return Ok((value, use_crc)),
-                CAN => return Err("对端取消了串口文件传输".to_string()),
-                _ => {}
-            }
-        }
-    }
-    Err("等待串口文件传输启动超时".to_string())
-}
-
-async fn read_next_protocol_byte<S>(
-    stream: &mut S,
-    timing: SerialTransferTiming,
-    cancellation: &CancellationToken,
-) -> Result<u8, String>
-where
-    S: AsyncRead + Unpin,
-{
-    read_byte(stream, timing.control_timeout(), cancellation)
-        .await?
-        .ok_or_else(|| "等待串口文件传输数据超时".to_string())
-}
-
-async fn wait_for_sender_start<S>(
-    stream: &mut S,
-    timing: SerialTransferTiming,
-    cancellation: &CancellationToken,
-) -> Result<bool, String>
-where
-    S: AsyncRead + Unpin,
-{
-    for _ in 0..3 {
-        if let Some(value) = read_byte(stream, timing.control_timeout(), cancellation).await? {
-            match value {
-                CRC_REQUEST => return Ok(true),
-                NAK => return Ok(false),
-                CAN => return Err("对端取消了串口文件传输".to_string()),
-                _ => {}
-            }
-        }
-    }
-    Err("等待串口文件接收端启动超时".to_string())
-}
-
-async fn send_packet<S>(
-    stream: &mut S,
-    sequence: u8,
-    payload: &[u8],
-    use_crc: bool,
-    timing: SerialTransferTiming,
-    cancellation: &CancellationToken,
-) -> Result<(), String>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let marker = if payload.len() == 1024 { STX } else { SOH };
-    let mut packet = Vec::with_capacity(payload.len() + 5);
-    packet.extend_from_slice(&[marker, sequence, 255_u8.wrapping_sub(sequence)]);
-    packet.extend_from_slice(payload);
-    if use_crc {
-        packet.extend_from_slice(&crc16(payload).to_be_bytes());
-    } else {
-        packet.push(checksum(payload));
-    }
-
-    for _ in 0..MAX_RETRIES {
-        write_all(stream, &packet, timing.write_timeout, cancellation).await?;
-        flush(stream, timing.write_timeout, cancellation).await?;
-        match read_byte(stream, timing.control_timeout(), cancellation).await? {
-            Some(ACK) => return Ok(()),
-            Some(CAN) => return Err("对端取消了串口文件传输".to_string()),
-            Some(NAK) | Some(_) | None => {}
-        }
-    }
-    Err(format!("串口数据块 {sequence} 重试次数过多"))
-}
-
-async fn send_eot<S>(
-    stream: &mut S,
-    timing: SerialTransferTiming,
-    cancellation: &CancellationToken,
-) -> Result<(), String>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    for _ in 0..MAX_RETRIES {
-        write_all(stream, &[EOT], timing.write_timeout, cancellation).await?;
-        flush(stream, timing.write_timeout, cancellation).await?;
-        match read_byte(stream, timing.control_timeout(), cancellation).await? {
-            Some(ACK) => return Ok(()),
-            Some(CAN) => return Err("对端取消了串口文件传输".to_string()),
-            Some(NAK) | Some(_) | None => {}
-        }
-    }
-    Err("串口文件传输结束确认超时".to_string())
-}
-
-async fn cancel_protocol<S>(stream: &mut S)
-where
-    S: AsyncWrite + Unpin,
-{
-    let _ = timeout(Duration::from_millis(100), async {
-        let _ = stream.write_all(&[CAN, CAN]).await;
-        let _ = stream.flush().await;
-    })
-    .await;
-}
-
-async fn read_packet_tail<S>(
-    stream: &mut S,
-    block_size: usize,
-    use_crc: bool,
-    timing: SerialTransferTiming,
-    cancellation: &CancellationToken,
-) -> Result<Option<(u8, Vec<u8>)>, String>
-where
-    S: AsyncRead + Unpin,
-{
-    let packet_timeout = timing.packet_timeout(block_size, if use_crc { 2 } else { 1 });
-    read_packet_tail_with_timeout(stream, block_size, use_crc, packet_timeout, cancellation).await
-}
-
-/// Read everything after SOH/STX as one frame. If a frame times out after
-/// consuming only part of it, make one second bounded drain attempt before
-/// asking the sender to retry. This is important on slow UARTs: cancelling a
-/// `read_exact` future can leave the rest of the old frame in the driver
-/// buffer, and the next retry would otherwise interpret those bytes as a new
-/// sequence number.
-async fn read_packet_tail_with_timeout<S>(
-    stream: &mut S,
-    block_size: usize,
-    use_crc: bool,
-    packet_timeout: Duration,
-    cancellation: &CancellationToken,
-) -> Result<Option<(u8, Vec<u8>)>, String>
-where
-    S: AsyncRead + Unpin,
-{
-    let trailer_len = if use_crc { 2 } else { 1 };
-    let mut frame = vec![0_u8; 2 + block_size + trailer_len];
-    let filled =
-        match read_exact_with_timeout(stream, &mut frame, packet_timeout, cancellation).await? {
-            ReadExactResult::Complete => frame.len(),
-            ReadExactResult::Partial(filled) => {
-                // The first timeout may have consumed a prefix. Continue draining
-                // the *same* expected frame, but never let a broken sender block a
-                // retry indefinitely. All bytes consumed by this second attempt
-                // are discarded if the frame still cannot be completed.
-                match read_exact_with_timeout(
-                    stream,
-                    &mut frame[filled..],
-                    packet_timeout,
-                    cancellation,
-                )
-                .await?
-                {
-                    ReadExactResult::Complete => frame.len(),
-                    ReadExactResult::Partial(_) => return Ok(None),
-                }
-            }
-        };
-
-    debug_assert_eq!(filled, frame.len());
-    let sequence = frame[0];
-    let inverse = frame[1];
-    if sequence ^ inverse != 0xff {
-        // The complete malformed frame has already been consumed, so the
-        // caller can safely NAK and wait for a fresh SOH/STX marker.
-        return Ok(None);
-    }
-    let payload_end = 2 + block_size;
-    let payload = frame[2..payload_end].to_vec();
-    if use_crc {
-        if crc16(&payload) != u16::from_be_bytes([frame[payload_end], frame[payload_end + 1]]) {
-            return Ok(None);
-        }
-    } else {
-        let value = frame[payload_end];
-        if checksum(&payload) != value {
-            return Ok(None);
-        }
-    }
-    Ok(Some((sequence, payload)))
-}
-
-fn parse_ymodem_header(header: &[u8]) -> Result<Option<(String, u64)>, String> {
-    let end = header
-        .iter()
-        .position(|value| *value == 0)
-        .ok_or_else(|| "YMODEM 文件头缺少文件名".to_string())?;
-    if end == 0 {
-        return Ok(None);
-    }
-    let file_name =
-        std::str::from_utf8(&header[..end]).map_err(|_| "YMODEM 文件名不是有效文本".to_string())?;
-    if !is_safe_transfer_file_name(file_name) {
-        return Err("YMODEM 文件名无效，不允许包含路径或控制字符".to_string());
-    }
-    let size = parse_ymodem_size(header)?;
-    Ok(Some((file_name.to_string(), size)))
-}
-
-fn parse_ymodem_size(header: &[u8]) -> Result<u64, String> {
-    let end = header
-        .iter()
-        .position(|value| *value == 0)
-        .ok_or_else(|| "YMODEM 文件头缺少文件名".to_string())?;
-    let size_start = end + 1;
-    let size_end = header[size_start..]
-        .iter()
-        .position(|value| *value == 0)
-        .map(|offset| size_start + offset)
-        .unwrap_or(header.len());
-    if size_start == size_end {
-        return Err("YMODEM 文件头缺少文件大小".to_string());
-    }
-    std::str::from_utf8(&header[size_start..size_end])
-        .map_err(|_| "YMODEM 文件大小不是有效文本".to_string())?
-        .parse::<u64>()
-        .map_err(|_| "YMODEM 文件大小无效".to_string())
-}
-
-fn ymodem_target(directory: &Path, file_name: &str) -> Result<std::path::PathBuf, String> {
-    if !is_safe_transfer_file_name(file_name) {
-        return Err("YMODEM 文件名无效，不允许写出接收目录".to_string());
-    }
-    Ok(directory.join(file_name))
-}
-
-pub(super) fn is_safe_transfer_file_name(file_name: &str) -> bool {
-    if file_name.is_empty()
-        || file_name == "."
-        || file_name == ".."
-        || file_name.contains('/')
-        || file_name.contains('\\')
-        || file_name.chars().any(|character| {
-            character.is_control() || matches!(character, ':' | '*' | '?' | '"' | '<' | '>' | '|')
-        })
-        || file_name.ends_with('.')
-        || file_name.ends_with(' ')
-    {
-        return false;
-    }
-
-    let stem = file_name
-        .trim_end_matches(['.', ' '])
-        .split('.')
-        .next()
-        .unwrap_or_default()
-        .to_ascii_uppercase();
-    !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        && !is_windows_numbered_device_name(&stem, "COM")
-        && !is_windows_numbered_device_name(&stem, "LPT")
-}
-
-fn is_windows_numbered_device_name(stem: &str, prefix: &str) -> bool {
-    stem.strip_prefix(prefix).is_some_and(|suffix| {
-        suffix.len() == 1 && suffix.as_bytes()[0].is_ascii_digit() && suffix != "0"
-    })
-}
-
-async fn read_byte<S>(
-    stream: &mut S,
-    wait: Duration,
-    cancellation: &CancellationToken,
-) -> Result<Option<u8>, String>
-where
-    S: AsyncRead + Unpin,
-{
-    let mut byte = [0_u8; 1];
-    match read_exact_with_timeout(stream, &mut byte, wait, cancellation).await? {
-        ReadExactResult::Complete => Ok(Some(byte[0])),
-        ReadExactResult::Partial(_) => Ok(None),
-    }
-}
-
-enum ReadExactResult {
-    Complete,
-    Partial(usize),
-}
-
-async fn read_exact_with_timeout<S>(
-    stream: &mut S,
-    buffer: &mut [u8],
-    wait: Duration,
-    cancellation: &CancellationToken,
-) -> Result<ReadExactResult, String>
-where
-    S: AsyncRead + Unpin,
-{
-    let deadline = tokio::time::Instant::now() + wait;
-    let mut filled = 0;
-    while filled < buffer.len() {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            return Ok(ReadExactResult::Partial(filled));
-        }
-        let result = tokio::select! {
-            _ = cancellation.cancelled() => return Err("串口文件传输已取消".to_string()),
-            result = timeout(remaining, stream.read(&mut buffer[filled..])) => result,
-        };
-        match result {
-            Ok(Ok(0)) => return Err("读取串口文件传输数据失败：串口流提前结束".to_string()),
-            Ok(Ok(count)) => filled += count,
-            Ok(Err(error)) => return Err(format!("读取串口文件传输数据失败：{error}")),
-            Err(_) => return Ok(ReadExactResult::Partial(filled)),
-        }
-    }
-    Ok(ReadExactResult::Complete)
-}
-
-async fn read_file(
-    file: &mut File,
-    buffer: &mut [u8],
-    cancellation: &CancellationToken,
-) -> Result<usize, String> {
-    tokio::select! {
-        _ = cancellation.cancelled() => Err("串口文件传输已取消".to_string()),
-        result = file.read(buffer) => result.map_err(|error| format!("读取串口发送文件失败：{error}")),
-    }
-}
-
-pub(super) async fn write_all<S>(
-    stream: &mut S,
-    buffer: &[u8],
-    wait: Duration,
-    cancellation: &CancellationToken,
-) -> Result<(), String>
-where
-    S: AsyncWrite + Unpin,
-{
-    tokio::select! {
-        _ = cancellation.cancelled() => Err("串口文件传输已取消".to_string()),
-        result = timeout(wait, stream.write_all(buffer)) => match result {
-            Ok(result) => result.map_err(|error| format!("写入串口文件传输数据失败：{error}")),
-            Err(_) => Err("串口文件传输写入等待硬件流控超时".to_string()),
-        },
-    }
-}
-
-pub(super) async fn flush<S>(
-    stream: &mut S,
-    wait: Duration,
-    cancellation: &CancellationToken,
-) -> Result<(), String>
-where
-    S: AsyncWrite + Unpin,
-{
-    tokio::select! {
-        _ = cancellation.cancelled() => Err("串口文件传输已取消".to_string()),
-        result = timeout(wait, stream.flush()) => match result {
-            Ok(result) => result.map_err(|error| format!("刷新串口文件传输数据失败：{error}")),
-            Err(_) => Err("串口文件传输刷新等待硬件流控超时".to_string()),
-        },
-    }
-}
-
-pub(super) async fn create_target(path: &Path) -> Result<File, String> {
-    OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(path)
-        .await
-        .map_err(|error| {
-            if error.kind() == std::io::ErrorKind::AlreadyExists {
-                "串口接收目标文件已存在，请更换文件名".to_string()
-            } else {
-                format!("无法创建串口接收文件：{error}")
-            }
-        })
-}
-
-async fn cleanup_failed_receive(path: &Path) {
-    let _ = tokio::fs::remove_file(path).await;
-}
-
-async fn write_file(
-    file: &mut File,
-    buffer: &[u8],
-    cancellation: &CancellationToken,
-) -> Result<(), String> {
-    tokio::select! {
-        _ = cancellation.cancelled() => Err("串口文件传输已取消".to_string()),
-        result = file.write_all(buffer) => result.map_err(|error| format!("保存串口接收文件失败：{error}")),
-    }
-}
-
-fn checksum(payload: &[u8]) -> u8 {
-    payload
-        .iter()
-        .fold(0_u8, |sum, byte| sum.wrapping_add(*byte))
-}
-
-fn crc16(payload: &[u8]) -> u16 {
-    let mut crc = 0_u16;
-    for byte in payload {
-        crc ^= u16::from(*byte) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 {
-                (crc << 1) ^ 0x1021
-            } else {
-                crc << 1
-            };
-        }
-    }
-    crc
 }
 
 #[cfg(test)]
@@ -1064,12 +825,13 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::super::super::{SerialTransferDirection, SerialTransferMode};
+    use super::super::limits::{SerialTransferLimits, TransferBudget};
     use super::super::progress::SerialTransferReporter;
     use super::super::timing::SerialTransferTiming;
+    use super::frame::{checksum, crc16, parse_ymodem_size, read_packet_tail_with_timeout};
     use super::{
-        checksum, crc16, create_target, finalize_xmodem_payload, is_safe_transfer_file_name,
-        parse_ymodem_header, parse_ymodem_size, read_byte, read_packet_tail,
-        read_packet_tail_with_timeout, receive_raw, receive_xmodem, receive_ymodem,
+        create_target, finalize_xmodem_payload, is_safe_transfer_file_name, parse_ymodem_header,
+        read_byte, read_packet_tail, receive_raw, receive_xmodem, receive_ymodem,
         receive_ymodem_file, send_xmodem, send_ymodem, YmodemFileOptions, SOH,
     };
 
@@ -1147,22 +909,26 @@ mod tests {
         let receiver_target = target.clone();
         let (mut sender_stream, mut receiver_stream) = duplex(4096);
         let sender = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             send_xmodem(
                 &mut sender_stream,
                 &sender_source,
                 false,
                 timing,
+                &mut budget,
                 &mut sender_reporter,
                 &cancellation,
             )
             .await
         });
         let receiver = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             receive_xmodem(
                 &mut receiver_stream,
                 &receiver_target,
                 timing,
                 false,
+                &mut budget,
                 &mut receiver_reporter,
                 &receiver_cancellation,
             )
@@ -1205,20 +971,24 @@ mod tests {
         let receiver_directory = target_directory.clone();
         let (mut sender_stream, mut receiver_stream) = duplex(4096);
         let sender = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             send_ymodem(
                 &mut sender_stream,
                 &sender_paths,
                 timing,
+                &mut budget,
                 &mut sender_reporter,
                 &cancellation,
             )
             .await
         });
         let receiver = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             receive_ymodem(
                 &mut receiver_stream,
                 &receiver_directory,
                 timing,
+                &mut budget,
                 &mut receiver_reporter,
                 &receiver_cancellation,
             )
@@ -1267,20 +1037,24 @@ mod tests {
         let receiver_directory = target_directory.clone();
         let (mut sender_stream, mut receiver_stream) = duplex(4096);
         let sender = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             send_ymodem(
                 &mut sender_stream,
                 &sender_paths,
                 timing,
+                &mut budget,
                 &mut sender_reporter,
                 &cancellation,
             )
             .await
         });
         let receiver = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             receive_ymodem(
                 &mut receiver_stream,
                 &receiver_directory,
                 timing,
+                &mut budget,
                 &mut receiver_reporter,
                 &receiver_cancellation,
             )
@@ -1316,7 +1090,9 @@ mod tests {
         let target = temporary_path("existing-target");
         let original = b"keep this file";
         tokio::fs::write(&target, original).await.unwrap();
-        let error = create_target(&target).await.unwrap_err();
+        let error = create_target(&target, SerialTransferLimits::default().max_file_bytes)
+            .await
+            .unwrap_err();
         assert!(error.contains("已存在"));
         assert_eq!(tokio::fs::read(&target).await.unwrap(), original);
         let _ = tokio::fs::remove_file(target).await;
@@ -1337,6 +1113,7 @@ mod tests {
             target.to_str().unwrap(),
         );
         let (_writer, mut reader) = duplex(64);
+        let mut budget = TransferBudget::new(SerialTransferLimits::default());
         let error = receive_ymodem_file(
             &mut reader,
             &target,
@@ -1346,6 +1123,7 @@ mod tests {
                 offset: 0,
             },
             timing,
+            &mut budget,
             &mut reporter,
             &cancellation,
         )
@@ -1372,23 +1150,23 @@ mod tests {
         );
         let (mut sender_stream, mut receiver_stream) = duplex(64);
         let receiver = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             receive_raw(
                 &mut receiver_stream,
                 &receiver_target,
                 timing,
+                &mut budget,
                 &mut receiver_reporter,
                 &receiver_cancellation,
             )
             .await
         });
         sender_stream.write_all(b"partial").await.unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(1), async {
-            while !target.exists() {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap();
+        // The receive path intentionally keeps the final target absent while
+        // bytes are staged. Give the duplex worker a chance to consume the
+        // bytes, then cancel and verify that no partial final file is
+        // published.
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         cancellation.cancel();
         assert!(receiver.await.unwrap().is_err());
         assert!(!target.exists());

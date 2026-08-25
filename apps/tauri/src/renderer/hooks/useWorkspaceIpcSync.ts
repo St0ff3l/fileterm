@@ -266,12 +266,21 @@ export function useWorkspaceIpcSync({
   const onErrorRef = useLatestRef(onError)
   const onStatusMessageRef = useLatestRef(onStatusMessage)
   const lastPersistedUiPreferencesRef = useRef<SyncedUiPreferences | null>(null)
+  const latestWorkspaceRevisionRef = useRef<number | null>(null)
   const nextWindowCloseRequestIdRef = useRef(0)
   const nextSplitPaneRequestIdRef = useRef(0)
   const nextPaneFocusRequestIdRef = useRef(0)
   const notifiedTransferFailuresRef = useRef(new Map<string, string>())
 
   const applySnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
+    const incomingRevision = snapshot.workspaceRevision
+    const latestRevision = latestWorkspaceRevisionRef.current
+    if (typeof incomingRevision === 'number' && latestRevision !== null && incomingRevision < latestRevision) {
+      return
+    }
+    if (typeof incomingRevision === 'number') {
+      latestWorkspaceRevisionRef.current = incomingRevision
+    }
     setWorkspace(snapshot)
   }, [])
 

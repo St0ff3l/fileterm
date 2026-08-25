@@ -11,14 +11,17 @@ use super::terminal::{emit_terminal_data, set_terminal_state};
 use super::WorkerCmd;
 use crate::services::WorkspaceTabStatus;
 
+const SERIAL_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+
 mod codec;
 mod config;
 mod control;
+mod file_safety;
 mod kermit;
+mod limits;
 mod pacing;
 mod platform;
 mod progress;
-mod reconnect;
 mod timing;
 mod transfer;
 mod zmodem;
@@ -33,14 +36,15 @@ use self::config::{data_bits, flow_control, parity, serial_error, stop_bits};
 use self::control::{
     apply_close_lines, apply_initial_lines, execute as execute_serial_control, SerialControlState,
 };
+use self::limits::SerialTransferLimits;
 use self::pacing::{write_serial_bytes, SerialPacing};
 use self::platform::{
     apply_parity as apply_platform_parity, apply_rs485,
     parity_wire_mode as serial_parity_wire_mode, wire_data_bits, SerialIo, SerialParityWireMode,
 };
 use self::progress::SerialTransferReporter;
-use self::reconnect::ReconnectPolicy;
 use self::timing::SerialTransferTiming;
+use super::reconnect::ReconnectPolicy;
 
 enum SerialWorkerExit {
     Requested,
@@ -142,6 +146,24 @@ async fn close_native_serial_stream(
     app: &AppHandle,
     tab_id: &str,
 ) {
+    let shutdown_result = tokio::time::timeout(SERIAL_CLOSE_TIMEOUT, stream.shutdown()).await;
+    match shutdown_result {
+        Err(error) => crate::services::logging::session(
+            app,
+            "WARN",
+            "serial",
+            tab_id,
+            format!("serial flush before close timed out: {error}"),
+        ),
+        Ok(Err(error)) => crate::services::logging::session(
+            app,
+            "WARN",
+            "serial",
+            tab_id,
+            format!("serial flush before close failed: {error}"),
+        ),
+        Ok(Ok(())) => {}
+    }
     if let Err(error) = apply_close_lines(stream, state) {
         crate::services::logging::session(
             app,
@@ -151,7 +173,6 @@ async fn close_native_serial_stream(
             format!("close line update failed: {error}"),
         );
     }
-    let _ = stream.shutdown().await;
 }
 
 async fn close_serial_stream(
@@ -160,14 +181,49 @@ async fn close_serial_stream(
     app: &AppHandle,
     tab_id: &str,
 ) {
-    if let Err(error) = stream.release_rs485() {
-        crate::services::logging::session(
-            app,
-            "WARN",
-            "serial",
-            tab_id,
-            format!("release RS-485 line failed: {error}"),
-        );
+    // SerialIo::poll_shutdown drains the driver queue and releases software
+    // RTS only after that drain. Releasing RTS before shutdown can truncate
+    // the final byte on macOS software RS-485 adapters. If the bounded drain
+    // fails, release is still attempted as a safe fallback before closing.
+    let shutdown_result = tokio::time::timeout(SERIAL_CLOSE_TIMEOUT, stream.shutdown()).await;
+    match shutdown_result {
+        Err(error) => {
+            crate::services::logging::session(
+                app,
+                "WARN",
+                "serial",
+                tab_id,
+                format!("serial flush before close timed out: {error}"),
+            );
+            if let Err(release_error) = stream.release_rs485() {
+                crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "serial",
+                    tab_id,
+                    format!("release RS-485 line failed: {release_error}"),
+                );
+            }
+        }
+        Ok(Err(error)) => {
+            crate::services::logging::session(
+                app,
+                "WARN",
+                "serial",
+                tab_id,
+                format!("serial flush before close failed: {error}"),
+            );
+            if let Err(release_error) = stream.release_rs485() {
+                crate::services::logging::session(
+                    app,
+                    "WARN",
+                    "serial",
+                    tab_id,
+                    format!("release RS-485 line failed: {release_error}"),
+                );
+            }
+        }
+        Ok(Ok(())) => {}
     }
     if let Err(error) = apply_close_lines(stream.serial_mut(), state) {
         crate::services::logging::session(
@@ -178,7 +234,6 @@ async fn close_serial_stream(
             format!("close line update failed: {error}"),
         );
     }
-    let _ = stream.shutdown().await;
 }
 
 async fn close_serial_halves(
@@ -292,6 +347,29 @@ async fn run_serial_worker(
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| SerialWorkerError::fatal("串口设备路径不能为空"))?;
     let device_path = resolve_serial_device(profile, configured_device_path).await?;
+    let has_saved_identity = profile
+        .get("deviceSerialNumber")
+        .and_then(Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty())
+        || profile
+            .get("deviceVendorId")
+            .and_then(Value::as_u64)
+            .is_some()
+        || profile
+            .get("deviceProductId")
+            .and_then(Value::as_u64)
+            .is_some();
+    if !has_saved_identity {
+        crate::services::logging::session(
+            app,
+            "WARN",
+            "serial",
+            tab_id,
+            format!(
+                "serial device is path-bound; select a detected USB port to persist VID/PID/serial (path={configured_device_path})"
+            ),
+        );
+    }
     let baud_rate_value = profile
         .get("baudRate")
         .and_then(Value::as_u64)
@@ -358,6 +436,8 @@ async fn run_serial_worker(
         ),
     )
     .map_err(SerialWorkerError::fatal)?;
+    let transfer_limits =
+        SerialTransferLimits::from_profile(profile).map_err(SerialWorkerError::fatal)?;
     let configured_flow_control = profile
         .get("flowControl")
         .and_then(Value::as_str)
@@ -431,7 +511,11 @@ async fn run_serial_worker(
         close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
         return Ok(SerialWorkerExit::Requested);
     }
-    let stream = SerialIo::new(stream, parity_wire_mode, rs485_mode);
+    let mut stream = SerialIo::new(stream, parity_wire_mode, rs485_mode);
+    // Keep the physical-byte logger attached for the whole session. This is
+    // important on macOS mark/space emulation, where the logical byte seen by
+    // the terminal is not the 8-bit value placed on the wire.
+    stream.set_wire_log(crate::services::session_logs::serial_log_sink(app, tab_id).await);
     let (mut reader, mut writer) = tokio::io::split(stream);
     crate::services::logging::session(
         app,
@@ -548,13 +632,24 @@ async fn run_serial_worker(
                                 Err(error)
                                     if error.kind() == std::io::ErrorKind::TimedOut =>
                                 {
+                                    let worker_error = SerialWorkerError::retryable(format!(
+                                        "串口 {device_path} 写入等待硬件流控超时，可能已发送部分数据；连接已重置"
+                                    ));
                                     emit_terminal_data(
                                         app,
                                         tab_id,
-                                        "\r\n[串口] 发送等待 CTS/硬件流控超时，当前数据未继续发送\r\n",
+                                        "\r\n[串口] 发送等待 CTS/硬件流控超时，可能已发送部分数据，连接将重置\r\n",
                                     )
                                     .await;
-                                    continue;
+                                    close_serial_halves(
+                                        reader,
+                                        writer,
+                                        control_state,
+                                        app,
+                                        tab_id,
+                                    )
+                                    .await;
+                                    return Err(worker_error);
                                 }
                                 Err(error) => {
                                     let worker_error = SerialWorkerError::retryable(
@@ -631,6 +726,20 @@ async fn run_serial_worker(
                         cancellation: transfer_cancellation,
                         respond_to,
                     }) => {
+                        if parity_wire_mode.is_emulated() {
+                            let _ = respond_to.send(Err(
+                                "macOS 标记/空格校验模拟是 7 位数据通道，不能用于二进制串口文件传输，请改用无校验或原生支持的平台"
+                                    .to_string(),
+                            ));
+                            continue;
+                        }
+                        if configured_flow_control == "software" {
+                            let _ = respond_to.send(Err(
+                                "软件流控可能吞掉串口文件传输的二进制控制字节，请改用无流控或硬件流控"
+                                    .to_string(),
+                            ));
+                            continue;
+                        }
                         let mut reporter = SerialTransferReporter::new(
                             app,
                             tab_id,
@@ -639,19 +748,42 @@ async fn run_serial_worker(
                             &request.local_path,
                             None,
                         );
+                        let transfer_log =
+                            crate::services::session_logs::serial_log_sink(app, tab_id).await;
                         let mut stream = reader.unsplit(writer);
+                        stream.set_wire_log(transfer_log.clone());
                         let result = transfer::execute(
                             &mut stream,
                             request,
-                            transfer_timing,
-                            &mut reporter,
-                            transfer_cancellation,
+                            transfer::TransferContext {
+                                timing: transfer_timing,
+                                limits: transfer_limits,
+                                log_sink: transfer_log,
+                                encoding: &encoding,
+                                reporter: &mut reporter,
+                                cancellation: transfer_cancellation,
+                            },
                         )
                         .await;
+                        let failure = result.as_ref().err().cloned();
+                        let _ = respond_to.send(result);
+                        if let Some(error) = failure {
+                            close_serial_stream(&mut stream, control_state, app, tab_id).await;
+                            return Err(SerialWorkerError::retryable(format!(
+                                "串口文件传输失败，连接已重置：{error}"
+                            )));
+                        }
+                        // Transfer logging is temporary. Restore the current
+                        // session sink so raw RX/TX logging continues after a
+                        // successful file transfer; clearing it here would
+                        // silently disable physical-byte logging for the rest
+                        // of the tab's lifetime.
+                        stream.set_wire_log(
+                            crate::services::session_logs::serial_log_sink(app, tab_id).await,
+                        );
                         let (next_reader, next_writer) = tokio::io::split(stream);
                         reader = next_reader;
                         writer = next_writer;
-                        let _ = respond_to.send(result);
                     }
                     Some(WorkerCmd::ResizeTerminal { .. }) => {
                         // Raw serial links have no terminal-size negotiation.

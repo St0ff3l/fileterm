@@ -267,6 +267,26 @@ pub struct ConnectionCapabilities {
     pub tunnels: bool,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteDiskSpace {
+    pub available_bytes: u64,
+    pub total_bytes: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteFileCapabilities {
+    pub protocol: String,
+    pub protocol_version: Option<String>,
+    pub extensions: Vec<String>,
+    pub checksum_algorithms: Vec<String>,
+    pub disk_space: Option<RemoteDiskSpace>,
+    pub server_copy: bool,
+    pub symlink: bool,
+    pub hardlink: bool,
+}
+
 impl ConnectionCapabilities {
     pub fn for_session_type(session_type: &str) -> Self {
         match session_type {
@@ -334,15 +354,17 @@ pub struct SessionSnapshot {
     pub connected: bool,
     pub system_metrics: Option<serde_json::Value>,
     pub capabilities: ConnectionCapabilities,
+    pub remote_capabilities: Option<RemoteFileCapabilities>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reconnect_mode: Option<String>,
 }
 
-/// Return the reconnect policy that belongs to a persisted terminal profile.
-/// FTP and other file-only sessions do not expose terminal reconnect actions.
+/// Return the reconnect policy that belongs to a persisted network/device
+/// profile. The runtime uses this for the status snapshot as well as for the
+/// reconnect action; local sessions deliberately have no network policy.
 pub fn reconnect_mode_for_profile(profile: &serde_json::Value) -> Option<String> {
     let profile_type = profile.get("type").and_then(serde_json::Value::as_str);
-    if profile_type != Some("ssh") && profile_type != Some("serial") {
+    if !matches!(profile_type, Some("ssh" | "ftp" | "telnet" | "serial")) {
         return None;
     }
 
@@ -446,7 +468,7 @@ pub struct WorkspaceState {
     /// Cancellation tokens for the one active serial transfer per tab.
     /// Keeping this separate from the worker token lets the renderer cancel a
     /// transfer without tearing down the serial session itself.
-    pub serial_transfer_cancellations: Arc<RwLock<HashMap<String, CancellationToken>>>,
+    pub serial_transfer_cancellations: Arc<RwLock<HashMap<String, (String, CancellationToken)>>>,
     /// Identifies the live local PTY for each local tab. Native-thread cleanup
     /// must never remove a newer shell restarted in the same tab.
     pub local_terminal_runtime_ids: Arc<RwLock<HashMap<String, String>>>,
@@ -517,6 +539,14 @@ pub struct WorkspaceState {
     /// Serializes updater downloads and installation so a double click cannot
     /// start competing installers or overwrite a verified package in memory.
     pub update_operation: Arc<Mutex<()>>,
+    /// Serializes snapshot assembly so the revision assigned to a snapshot
+    /// follows the order in which snapshots are captured, even when multiple
+    /// Tauri commands and background workers request one concurrently.
+    pub workspace_snapshot_lock: Arc<Mutex<()>>,
+    /// Monotonic revision carried by every workspace snapshot. The renderer
+    /// uses it to ignore a late IPC response that was captured before a newer
+    /// workspace event.
+    pub next_workspace_snapshot_revision: Arc<AtomicU64>,
     /// 分屏 root tabId -> 当前活跃 leaf tabId。用于终端输入/文件操作/命令发送定位。
     pub active_pane_tab_id_by_root: Arc<RwLock<HashMap<String, String>>>,
     /// Monotonic identity revision for terminal targets exposed to the AI
@@ -568,6 +598,8 @@ impl Default for WorkspaceState {
             update_status: Arc::new(RwLock::new(None)),
             update_check: Arc::new(Mutex::new(())),
             update_operation: Arc::new(Mutex::new(())),
+            workspace_snapshot_lock: Arc::new(Mutex::new(())),
+            next_workspace_snapshot_revision: Arc::new(AtomicU64::new(0)),
             active_pane_tab_id_by_root: Arc::new(RwLock::new(HashMap::new())),
             ai_session_revisions: Arc::new(RwLock::new(HashMap::new())),
             #[cfg(target_os = "windows")]
@@ -770,7 +802,7 @@ mod tests {
     }
 
     #[test]
-    fn reconnect_mode_is_present_for_terminal_profiles_only() {
+    fn reconnect_mode_is_present_for_network_profiles() {
         assert_eq!(
             reconnect_mode_for_profile(&serde_json::json!({
                 "type": "ssh",
@@ -786,7 +818,7 @@ mod tests {
             reconnect_mode_for_profile(
                 &serde_json::json!({ "type": "ftp", "reconnectMode": "auto" })
             ),
-            None
+            Some("auto".to_string())
         );
         assert_eq!(
             reconnect_mode_for_profile(&serde_json::json!({

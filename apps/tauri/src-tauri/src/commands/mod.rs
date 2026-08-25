@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
@@ -38,9 +38,9 @@ const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 const SERIAL_TRANSFER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 /// A silent shell must not leave a local tab in `connecting` forever. The
-/// startup task uses this bounded window to publish the first prompt when it
-/// arrives; the main open command itself does not wait for the window, so the
-/// workspace can switch immediately.
+/// background startup task uses this bounded window to publish the first
+/// prompt when it arrives; a shell that stays silent is still allowed to
+/// connect after timeout. The opening command itself remains non-blocking.
 const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Let a child-window close command resolve its IPC callback before destroying
@@ -53,6 +53,14 @@ async fn send_terminal_input(
     tab_id: &str,
     data: String,
 ) -> Result<(), AppError> {
+    if state
+        .serial_transfer_cancellations
+        .read()
+        .await
+        .contains_key(tab_id)
+    {
+        return Err(AppError::Command("serial transfer active".to_string()));
+    }
     if let Some(sender) = state.terminal_inputs.read().await.get(tab_id).cloned() {
         return sender
             .send(data)
@@ -1763,6 +1771,7 @@ pub async fn app_serial_transfer(
         .cloned()
         .ok_or_else(|| AppError::Storage("串口会话未运行".to_string()))?;
     let cancellation = worker_cancellation.child_token();
+    let transfer_id = uuid::Uuid::new_v4().to_string();
     {
         let mut active_transfers = state.serial_transfer_cancellations.write().await;
         if active_transfers.contains_key(&tab_id) {
@@ -1770,7 +1779,7 @@ pub async fn app_serial_transfer(
                 "当前串口会话已有文件传输正在进行".to_string(),
             ));
         }
-        active_transfers.insert(tab_id.clone(), cancellation.clone());
+        active_transfers.insert(tab_id.clone(), (transfer_id.clone(), cancellation.clone()));
     }
 
     let result = send_worker_cmd_with_response_timeout(
@@ -1793,11 +1802,13 @@ pub async fn app_serial_transfer(
     if result.is_err() {
         cancellation.cancel();
     }
-    state
-        .serial_transfer_cancellations
-        .write()
-        .await
-        .remove(&tab_id);
+    let mut active_transfers = state.serial_transfer_cancellations.write().await;
+    if active_transfers
+        .get(&tab_id)
+        .is_some_and(|(active_id, _)| active_id == &transfer_id)
+    {
+        active_transfers.remove(&tab_id);
+    }
     result
 }
 
@@ -1809,7 +1820,7 @@ pub async fn app_serial_cancel_transfer(app: AppHandle, tab_id: String) -> Resul
         .read()
         .await
         .get(&tab_id)
-        .cloned()
+        .map(|(_, cancellation)| cancellation.clone())
         .ok_or_else(|| AppError::Command("当前没有进行中的串口文件传输".to_string()))?;
     cancellation.cancel();
     Ok(())
@@ -2856,6 +2867,11 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
     app: AppHandle,
 ) -> Result<serde_json::Value, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _snapshot_guard = state.workspace_snapshot_lock.lock().await;
+    let workspace_revision = state
+        .next_workspace_snapshot_revision
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        .saturating_add(1);
 
     let tabs = state.tabs.read().await.clone();
     let active_tab_id = state.active_tab_id.read().await.clone();
@@ -2882,6 +2898,7 @@ pub(crate) async fn get_workspace_snapshot_unlocked(
         crate::services::profile_ops::read_and_heal_command_library(&app)?;
 
     Ok(serde_json::json!({
+        "workspaceRevision": workspace_revision,
         "profiles": profiles,
         "folders": folders,
         "commandFolders": command_folders,
@@ -2922,6 +2939,68 @@ async fn send_worker_cmd<T>(
     send_worker_cmd_with_response_timeout(app, tab_id, WORKER_FILE_RESPONSE_TIMEOUT, make_cmd).await
 }
 
+/// Send a file operation with a command-scoped cancellation token. The SSH
+/// worker runs file operations in detached tasks so its terminal input loop
+/// stays responsive; dropping the renderer response alone therefore cannot
+/// stop a timed-out write/delete/rename. Keep the token in the WorkerCmd and
+/// cancel it whenever the IPC boundary times out or the send cannot complete.
+async fn send_worker_file_cmd<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    make_cmd: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
+) -> Result<T, AppError> {
+    send_worker_file_cmd_with_response_timeout(app, tab_id, WORKER_FILE_RESPONSE_TIMEOUT, make_cmd)
+        .await
+}
+
+async fn send_worker_file_cmd_with_response_timeout<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    response_timeout: Duration,
+    make_cmd: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
+) -> Result<T, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let sender = state
+        .workers
+        .read()
+        .await
+        .get(tab_id)
+        .cloned()
+        .ok_or_else(|| AppError::Storage("Session not found".to_string()))?;
+    let (tx, rx) = oneshot::channel();
+    let cancellation = CancellationToken::new();
+    let cmd = make_cmd(tx, cancellation.clone());
+    let send_result = timeout(WORKER_FILE_CMD_SEND_TIMEOUT, sender.send(cmd)).await;
+    match send_result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            cancellation.cancel();
+            return Err(AppError::Storage(error.to_string()));
+        }
+        Err(_) => {
+            cancellation.cancel();
+            return Err(AppError::Storage(
+                "Worker busy: command send timeout".to_string(),
+            ));
+        }
+    }
+
+    match timeout(response_timeout, rx).await {
+        Ok(Ok(Ok(result))) => Ok(result),
+        Ok(Ok(Err(error))) => Err(AppError::Storage(error)),
+        Ok(Err(error)) => {
+            cancellation.cancel();
+            Err(AppError::Storage(error.to_string()))
+        }
+        Err(_) => {
+            cancellation.cancel();
+            Err(AppError::Storage(
+                "远程操作超时，后台操作已取消，请检查连接后重试".to_string(),
+            ))
+        }
+    }
+}
+
 pub(crate) async fn send_worker_cmd_with_response_timeout<T>(
     app: &AppHandle,
     tab_id: &str,
@@ -2954,8 +3033,9 @@ pub(crate) async fn send_worker_cmd_with_response_timeout<T>(
 }
 
 async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Result<(), AppError> {
-    let files = send_worker_cmd(app, tab_id, |tx| WorkerCmd::ListRemoteFiles {
+    let files = send_worker_file_cmd(app, tab_id, |tx, cancellation| WorkerCmd::ListRemoteFiles {
         path: path.to_string(),
+        cancellation,
         respond_to: tx,
     })
     .await?;
@@ -3068,8 +3148,16 @@ fn start_session_worker(
     cancellation: CancellationToken,
 ) {
     match profile.get("type").and_then(Value::as_str).unwrap_or("ssh") {
-        "ftp" => crate::sessions::ftp::start_ftp_worker(tab_id, profile, receiver, app),
-        "telnet" => crate::sessions::telnet::start_telnet_worker(tab_id, profile, receiver, app),
+        "ftp" => {
+            crate::sessions::ftp::start_ftp_worker(tab_id, profile, receiver, app, cancellation)
+        }
+        "telnet" => crate::sessions::telnet::start_telnet_worker(
+            tab_id,
+            profile,
+            receiver,
+            app,
+            cancellation,
+        ),
         "serial" => crate::sessions::serial::start_serial_worker(
             tab_id,
             profile,
@@ -3090,7 +3178,7 @@ fn start_session_worker(
 
 async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState, tab_id: &str) {
     crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
-    if let Some(cancellation) = state
+    if let Some((_, cancellation)) = state
         .serial_transfer_cancellations
         .write()
         .await
@@ -3155,7 +3243,7 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
         .write()
         .await
         .drain()
-        .map(|(_, cancellation)| cancellation)
+        .map(|(_, (_, cancellation))| cancellation)
         .collect::<Vec<_>>();
     for cancellation in transfer_cancellations {
         cancellation.cancel();
@@ -3246,7 +3334,21 @@ async fn spawn_session_for_profile(
         .filter(|value| !value.trim().is_empty())
         .or_else(|| profile.get("devicePath").and_then(Value::as_str))
         .unwrap_or("127.0.0.1");
-    let port = profile.get("port").and_then(|p| p.as_i64()).unwrap_or(22) as u16;
+    let port = match profile_type {
+        "ssh" => crate::sessions::reconnect::port_from_profile(profile, 22, "SSH")
+            .map_err(AppError::Command)?,
+        "ftp" => crate::sessions::reconnect::port_from_profile(profile, 21, "FTP")
+            .map_err(AppError::Command)?,
+        "telnet" => crate::sessions::reconnect::port_from_profile(profile, 23, "Telnet")
+            .map_err(AppError::Command)?,
+        // Serial profiles do not use the network port field. Keep the legacy
+        // snapshot value for display without allowing it to affect opening.
+        _ => profile
+            .get("port")
+            .and_then(Value::as_u64)
+            .and_then(|port| u16::try_from(port).ok())
+            .unwrap_or(0),
+    };
     let username = profile
         .get("username")
         .and_then(|u| u.as_str())
@@ -3279,6 +3381,7 @@ async fn spawn_session_for_profile(
                 connected: false,
                 system_metrics: None,
                 capabilities,
+                remote_capabilities: None,
                 reconnect_mode: crate::services::workspace::reconnect_mode_for_profile(profile),
             },
         );
@@ -3339,10 +3442,23 @@ async fn spawn_local_terminal_tab(
     state: &crate::services::workspace::WorkspaceState,
     launch: crate::sessions::local_terminal::LocalTerminalLaunch,
     pane_root_tab_id: Option<String>,
-    wait_for_startup: bool,
 ) -> String {
     let tab_id = format!("local-{}", uuid::Uuid::new_v4());
     let is_split_pane = pane_root_tab_id.is_some();
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "local",
+        &tab_id,
+        format!(
+            "open requested split={} shell={} cwd={} args={} env_entries={}",
+            is_split_pane,
+            launch.shell,
+            launch.cwd,
+            launch.args.len(),
+            launch.env.len()
+        ),
+    );
     let capabilities =
         crate::services::workspace::ConnectionCapabilities::for_session_type("local");
 
@@ -3384,14 +3500,15 @@ async fn spawn_local_terminal_tab(
                 connected: false,
                 system_metrics: None,
                 capabilities,
+                remote_capabilities: None,
                 reconnect_mode: None,
             },
         );
     }
 
     match start_local_terminal_for_tab(app, state, &tab_id, launch).await {
-        Ok(startup) if wait_for_startup => {
-            finish_local_terminal_startup(app, &tab_id, startup, !is_split_pane).await;
+        Ok(startup) if is_split_pane => {
+            finish_local_terminal_startup(app, &tab_id, startup, false).await;
         }
         Ok(startup) => {
             let startup_app = app.clone();
@@ -3401,6 +3518,13 @@ async fn spawn_local_terminal_tab(
             });
         }
         Err(error) => {
+            crate::services::logging::session(
+                app,
+                "ERROR",
+                "local",
+                &tab_id,
+                format!("PTY worker start failed error={error}"),
+            );
             if is_split_pane {
                 crate::sessions::terminal::set_terminal_state_without_snapshot(
                     app,
@@ -3435,7 +3559,23 @@ async fn finish_local_terminal_startup(
     startup: LocalTerminalStartup,
     emit_snapshot: bool,
 ) {
-    let _ = timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup.ready).await;
+    let startup_started_at = Instant::now();
+    let readiness = match timeout(LOCAL_TERMINAL_STARTUP_READY_TIMEOUT, startup.ready).await {
+        Ok(Ok(())) => "first-output",
+        Ok(Err(_)) => "ready-channel-closed",
+        Err(_) => "timeout",
+    };
+    let wait_ms = startup_started_at.elapsed().as_millis();
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "local",
+        tab_id,
+        format!(
+            "startup readiness={} wait_ms={} runtime={} emit_snapshot={}",
+            readiness, wait_ms, startup.runtime_id, emit_snapshot
+        ),
+    );
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let is_current_runtime = state
         .local_terminal_runtime_ids
@@ -3444,6 +3584,26 @@ async fn finish_local_terminal_startup(
         .get(tab_id)
         .is_some_and(|runtime_id| runtime_id == &startup.runtime_id);
     if !is_current_runtime {
+        crate::services::logging::debug(
+            app,
+            "local",
+            format!(
+                "startup state update skipped tab={} runtime={} reason=runtime-replaced",
+                tab_id, startup.runtime_id
+            ),
+        );
+        return;
+    }
+
+    if readiness == "ready-channel-closed" {
+        crate::services::logging::warn(
+            app,
+            "local",
+            format!(
+                "startup state update skipped tab={} runtime={} reason=worker-closed-before-ready",
+                tab_id, startup.runtime_id
+            ),
+        );
         return;
     }
 
@@ -3464,6 +3624,14 @@ async fn finish_local_terminal_startup(
         )
         .await;
     }
+    crate::services::logging::info(
+        app,
+        "local",
+        format!(
+            "startup state connected tab={} runtime={} snapshot_emitted={}",
+            tab_id, startup.runtime_id, emit_snapshot
+        ),
+    );
 }
 
 async fn start_local_terminal_for_tab(
@@ -3508,6 +3676,21 @@ async fn start_local_terminal_for_tab(
         .await
         .insert(tab_id.to_string(), launch.clone());
 
+    crate::services::logging::session(
+        app,
+        "DEBUG",
+        "local",
+        tab_id,
+        format!(
+            "runtime registered runtime={} shell={} cwd={} args={} env_entries={}",
+            runtime_id,
+            launch.shell,
+            launch.cwd,
+            launch.args.len(),
+            launch.env.len()
+        ),
+    );
+
     let startup_ready = match crate::sessions::local_terminal::start_local_terminal_worker(
         tab_id.to_string(),
         runtime_id.clone(),
@@ -3532,6 +3715,14 @@ async fn start_local_terminal_for_tab(
             return Err(error);
         }
     };
+
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "local",
+        tab_id,
+        format!("PTY worker started runtime={runtime_id}"),
+    );
 
     Ok(LocalTerminalStartup {
         runtime_id,
@@ -3784,7 +3975,7 @@ pub async fn app_split_tab(
             {
                 launch.cwd = cwd;
             }
-            spawn_local_terminal_tab(&app, &state, launch, Some(pane_root_tab_id), true).await
+            spawn_local_terminal_tab(&app, &state, launch, Some(pane_root_tab_id)).await
         }
         _ => unreachable!("session type is checked before creating a split pane"),
     };
@@ -4518,10 +4709,31 @@ pub async fn app_open_local_terminal(
     app: AppHandle,
     options: Option<crate::sessions::local_terminal::LocalTerminalLaunchOptions>,
 ) -> Result<serde_json::Value, AppError> {
+    crate::services::logging::info(
+        &app,
+        "local",
+        format!(
+            "open command received options_present={}",
+            options.is_some()
+        ),
+    );
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let launch =
-        crate::sessions::local_terminal::resolve_launch(options).map_err(AppError::Command)?;
-    let tab_id = spawn_local_terminal_tab(&app, &state, launch, None, false).await;
+    let launch = match crate::sessions::local_terminal::resolve_launch(options) {
+        Ok(launch) => launch,
+        Err(error) => {
+            crate::services::logging::error(
+                &app,
+                "local",
+                format!("launch resolution failed error={error}"),
+            );
+            return Err(AppError::Command(error));
+        }
+    };
+    // Start the PTY asynchronously so opening a local terminal does not block
+    // the button for the readiness timeout. Every snapshot carries a
+    // monotonic revision, so a connected workspace event cannot be overwritten
+    // by this command's earlier connecting response when IPC delivery crosses.
+    let tab_id = spawn_local_terminal_tab(&app, &state, launch, None).await;
     {
         let mut active = state.active_tab_id.write().await;
         *active = Some(tab_id);
@@ -4529,7 +4741,24 @@ pub async fn app_open_local_terminal(
     // The renderer replaces the active home tab with the returned session in
     // the same turn. Emitting here races that replacement and briefly exposes
     // the new session as an additional tab before the old placeholder closes.
-    get_workspace_snapshot(app).await
+    let snapshot = get_workspace_snapshot(app.clone()).await;
+    if let Ok(snapshot) = &snapshot {
+        let workspace_revision = snapshot
+            .get("workspaceRevision")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        crate::services::logging::session(
+            &app,
+            "INFO",
+            "local",
+            snapshot
+                .get("activeTabId")
+                .and_then(Value::as_str)
+                .unwrap_or("<unknown>"),
+            format!("open completed with current workspace snapshot revision={workspace_revision}"),
+        );
+    }
+    snapshot
 }
 
 #[tauri::command]
@@ -4539,13 +4768,31 @@ pub async fn app_write_terminal(
     data: String,
 ) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    send_terminal_input(&state, &tab_id, data).await
+    let data_len = data.len();
+    let result = send_terminal_input(&state, &tab_id, data).await;
+    if let Err(error) = &result {
+        crate::services::logging::warn(
+            &app,
+            "terminal",
+            format!(
+                "write failed tab={} bytes={} error={error}",
+                tab_id, data_len
+            ),
+        );
+    }
+    result
 }
 
 #[tauri::command]
 pub fn app_subscribe_terminal_data(app: AppHandle, channel: Channel<serde_json::Value>) {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let channel_id = channel.id();
     state.register_terminal_output_channel(channel);
+    crate::services::logging::debug(
+        &app,
+        "terminal",
+        format!("terminal output channel registered id={channel_id}"),
+    );
 }
 
 #[tauri::command]
@@ -4558,9 +4805,9 @@ pub async fn app_resize_terminal(
     height: u32,
 ) -> Result<(), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let workers = state.workers.read().await;
-    if let Some(sender) = workers.get(&tab_id) {
-        let _ = timeout(
+    let sender = state.workers.read().await.get(&tab_id).cloned();
+    if let Some(sender) = sender {
+        match timeout(
             WORKER_CMD_SEND_TIMEOUT,
             sender.send(WorkerCmd::ResizeTerminal {
                 cols,
@@ -4569,7 +4816,35 @@ pub async fn app_resize_terminal(
                 height,
             }),
         )
-        .await;
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => crate::services::logging::warn(
+                &app,
+                "terminal",
+                format!("resize delivery failed tab={} error={error}", tab_id),
+            ),
+            Err(_) => crate::services::logging::warn(
+                &app,
+                "terminal",
+                format!(
+                    "resize delivery timed out tab={} cols={} rows={}",
+                    tab_id, cols, rows
+                ),
+            ),
+        }
+    } else if state
+        .tabs
+        .read()
+        .await
+        .iter()
+        .any(|tab| tab.id == tab_id && tab.session_type == "local")
+    {
+        crate::services::logging::warn(
+            &app,
+            "local",
+            format!("resize dropped because PTY worker is missing tab={tab_id}"),
+        );
     }
     Ok(())
 }
@@ -4682,10 +4957,13 @@ pub async fn app_read_remote_file(
     encoding: Option<String>,
 ) -> Result<String, AppError> {
     let enc = encoding.unwrap_or_else(|| "utf-8".to_string());
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::ReadRemoteFile {
-        path: target_path,
-        encoding: enc,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::ReadRemoteFile {
+            path: target_path,
+            encoding: enc,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await
 }
@@ -4699,11 +4977,14 @@ pub async fn app_write_remote_file(
     encoding: Option<String>,
 ) -> Result<serde_json::Value, AppError> {
     let enc = encoding.unwrap_or_else(|| "utf-8".to_string());
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::WriteRemoteFile {
-        path: target_path.clone(),
-        content,
-        encoding: enc,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::WriteRemoteFile {
+            path: target_path.clone(),
+            content,
+            encoding: enc,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4722,10 +5003,13 @@ pub async fn app_create_remote_directory(
     parent_path: String,
     name: String,
 ) -> Result<serde_json::Value, AppError> {
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::CreateRemoteDirectory {
-        parent_path: parent_path.clone(),
-        name,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::CreateRemoteDirectory {
+            parent_path: parent_path.clone(),
+            name,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4740,10 +5024,13 @@ pub async fn app_create_remote_file(
     parent_path: String,
     name: String,
 ) -> Result<serde_json::Value, AppError> {
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::CreateRemoteFile {
-        parent_path: parent_path.clone(),
-        name,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::CreateRemoteFile {
+            parent_path: parent_path.clone(),
+            name,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4759,11 +5046,14 @@ pub async fn app_copy_remote_path(
     destination_path: String,
     target_type: String,
 ) -> Result<serde_json::Value, AppError> {
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::CopyRemotePath {
-        target_path,
-        destination_path: destination_path.clone(),
-        target_type,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::CopyRemotePath {
+            target_path,
+            destination_path: destination_path.clone(),
+            target_type,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4782,10 +5072,13 @@ pub async fn app_move_remote_path(
     target_path: String,
     destination_path: String,
 ) -> Result<serde_json::Value, AppError> {
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::MoveRemotePath {
-        target_path: target_path.clone(),
-        destination_path: destination_path.clone(),
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::MoveRemotePath {
+            target_path: target_path.clone(),
+            destination_path: destination_path.clone(),
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4812,10 +5105,13 @@ pub async fn app_rename_remote_path(
     target_path: String,
     new_name: String,
 ) -> Result<serde_json::Value, AppError> {
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::RenameRemotePath {
-        target_path: target_path.clone(),
-        new_name,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::RenameRemotePath {
+            target_path: target_path.clone(),
+            new_name,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4833,11 +5129,16 @@ pub async fn app_delete_remote_path(
     tab_id: String,
     target_path: String,
     target_type: String,
+    target_is_symlink: bool,
 ) -> Result<serde_json::Value, AppError> {
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::DeleteRemotePath {
-        target_path: target_path.clone(),
-        target_type,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::DeleteRemotePath {
+            target_path: target_path.clone(),
+            target_type,
+            target_is_symlink,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 
@@ -4905,12 +5206,15 @@ pub async fn app_change_remote_permissions(
         .unwrap_or(PermissionApplyTarget::All)
         .as_str()
         .to_string();
-    send_worker_cmd(&app, &tab_id, |tx| WorkerCmd::ChangeRemotePermissions {
-        target_path: target_path.clone(),
-        permissions,
-        recursive,
-        apply_to,
-        respond_to: tx,
+    send_worker_file_cmd(&app, &tab_id, |tx, cancellation| {
+        WorkerCmd::ChangeRemotePermissions {
+            target_path: target_path.clone(),
+            permissions,
+            recursive,
+            apply_to,
+            cancellation,
+            respond_to: tx,
+        }
     })
     .await?;
 

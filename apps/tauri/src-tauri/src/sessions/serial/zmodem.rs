@@ -9,12 +9,14 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use zmodem2::{Action, Event, FileInfo, Position, Receiver, Sender};
 
 use super::super::SerialTransferRequest;
+use super::file_safety::StagedReceiveFile;
+use super::limits::TransferBudget;
 use super::progress::SerialTransferReporter;
 use super::timing::SerialTransferTiming;
 use super::transfer::{create_target, flush, is_safe_transfer_file_name, write_all};
@@ -28,14 +30,16 @@ struct SendFile {
 }
 
 struct ReceiveFile {
-    file: File,
-    path: PathBuf,
+    file: StagedReceiveFile,
+    declared_size: Option<u64>,
+    bytes_written: u64,
 }
 
 pub(super) async fn send<S>(
     stream: &mut S,
     request: &SerialTransferRequest,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -60,6 +64,7 @@ where
         if metadata.len() > u64::from(u32::MAX) {
             return Err("ZMODEM 单个文件不能超过 4 GiB".to_string());
         }
+        budget.begin_file(Some(metadata.len()))?;
         let name = path
             .file_name()
             .and_then(|value| value.to_str())
@@ -178,6 +183,7 @@ pub(super) async fn receive<S>(
     stream: &mut S,
     directory: &Path,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -212,11 +218,34 @@ where
             }
             Action::WriteFile(bytes) => {
                 let bytes = bytes.to_vec();
+                let count = bytes.len() as u64;
                 let write_result = {
                     let file = current_file
                         .as_mut()
                         .ok_or_else(|| "ZMODEM 收到文件数据前没有文件头".to_string())?;
-                    file.file.write_all(&bytes).await
+                    let next_size = file
+                        .bytes_written
+                        .checked_add(count)
+                        .ok_or_else(|| "ZMODEM 接收文件大小超出支持范围".to_string())?;
+                    if file
+                        .declared_size
+                        .is_some_and(|declared_size| next_size > declared_size)
+                    {
+                        Err("ZMODEM 接收数据超过文件头声明的大小".to_string())
+                    } else {
+                        let result = file
+                            .file
+                            .write_all(
+                                &bytes,
+                                cancellation,
+                                file.declared_size.is_none().then_some(budget),
+                            )
+                            .await;
+                        if result.is_ok() {
+                            file.bytes_written = next_size;
+                        }
+                        result
+                    }
                 };
                 if let Err(error) = write_result {
                     cleanup_receive_file(&mut current_file).await;
@@ -240,22 +269,37 @@ where
                     return Err("ZMODEM 文件名无效，不允许写出接收目录".to_string());
                 }
                 let path = directory.join(name);
-                let file = create_target(&path).await?;
-                let declared_size = info.size.map(|size| u64::from(size.get())).unwrap_or(0);
-                reporter.set_total(Some(bytes_transferred.saturating_add(declared_size)));
+                let declared_size = info.size.map(|size| u64::from(size.get()));
+                budget.begin_file(declared_size)?;
+                let file = create_target(&path, budget.max_file_bytes()).await?;
+                reporter.set_total(Some(
+                    bytes_transferred.saturating_add(declared_size.unwrap_or(0)),
+                ));
                 if let Err(error) = protocol.accept_file_at(0) {
-                    drop(file);
-                    let _ = tokio::fs::remove_file(&path).await;
+                    file.cleanup().await;
                     return Err(format!("接受 ZMODEM 文件失败：{error}"));
                 }
-                current_file = Some(ReceiveFile { file, path });
+                current_file = Some(ReceiveFile {
+                    file,
+                    declared_size,
+                    bytes_written: 0,
+                });
             }
             Action::Event(Event::FileCompleted) => {
-                let Some(mut file) = current_file.take() else {
+                let Some(receive_file) = current_file.as_ref() else {
                     return Err("ZMODEM 文件结束时没有打开的接收文件".to_string());
                 };
-                if let Err(error) = file.file.flush().await {
-                    let _ = tokio::fs::remove_file(&file.path).await;
+                if receive_file
+                    .declared_size
+                    .is_some_and(|declared_size| receive_file.bytes_written != declared_size)
+                {
+                    cleanup_receive_file(&mut current_file).await;
+                    return Err("ZMODEM 文件大小与接收数据不一致".to_string());
+                }
+                let file = current_file
+                    .take()
+                    .expect("ZMODEM receive file exists after completion check");
+                if let Err(error) = file.file.commit().await {
                     return Err(format!("刷新 ZMODEM 接收文件失败：{error}"));
                 }
             }
@@ -317,9 +361,7 @@ async fn cleanup_receive_file(file: &mut Option<ReceiveFile>) {
     let Some(file) = file.take() else {
         return;
     };
-    let path = file.path;
-    drop(file.file);
-    let _ = tokio::fs::remove_file(path).await;
+    file.file.cleanup().await;
 }
 
 fn file_info(file: &SendFile) -> FileInfo<'_> {
@@ -367,6 +409,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::super::super::{SerialTransferDirection, SerialTransferMode, SerialTransferRequest};
+    use super::super::limits::{SerialTransferLimits, TransferBudget};
     use super::super::progress::SerialTransferReporter;
     use super::super::timing::SerialTransferTiming;
     use super::{receive, send};
@@ -389,6 +432,7 @@ mod tests {
         let receiver_directory = target_directory.clone();
         let (mut sender_stream, mut receiver_stream) = duplex(64 * 1024);
         let sender = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             let request = SerialTransferRequest {
                 direction: SerialTransferDirection::Send,
                 mode: SerialTransferMode::Zmodem,
@@ -405,12 +449,14 @@ mod tests {
                 &mut sender_stream,
                 &request,
                 timing,
+                &mut budget,
                 &mut reporter,
                 &cancellation,
             )
             .await
         });
         let receiver = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             let mut reporter = SerialTransferReporter::disabled(
                 SerialTransferDirection::Receive,
                 SerialTransferMode::Zmodem,
@@ -420,6 +466,7 @@ mod tests {
                 &mut receiver_stream,
                 &receiver_directory,
                 timing,
+                &mut budget,
                 &mut reporter,
                 &receiver_cancellation,
             )

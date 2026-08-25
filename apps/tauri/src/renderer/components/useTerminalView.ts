@@ -50,6 +50,7 @@ export function useTerminalView({
   profileId,
   tabId,
   bootText,
+  sessionType = 'ssh',
   connected = false,
   connecting = false,
   isActive = true,
@@ -100,6 +101,7 @@ export function useTerminalView({
   // tab from swallowing keystrokes after this tab is brought back.
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
+  const serialTransferBusyRef = useRef(false)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{
     left: number
@@ -138,6 +140,18 @@ export function useTerminalView({
   onClosePaneRef.current = onClosePane
   onCloseTabRef.current = onCloseTab
   canClosePaneRef.current = canClosePane
+
+  useEffect(() => {
+    serialTransferBusyRef.current = false
+    if (sessionType !== 'serial' || !window.fileterm?.onSerialTransferProgress) {
+      return
+    }
+    return window.fileterm.onSerialTransferProgress((progress) => {
+      if (progress.tabId === tabId) {
+        serialTransferBusyRef.current = progress.status === 'running'
+      }
+    })
+  }, [sessionType, tabId])
   const [hasSelection, setHasSelection] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [findOpen, setFindOpen] = useState(false)
@@ -685,6 +699,7 @@ export function useTerminalView({
     transcriptReplayGenerationRef,
     connectedRef,
     connectingRef,
+    serialTransferBusyRef,
     lastSyncedSizeRef,
     lastObservedHostRectRef,
     isHorizontalResizeActiveRef,

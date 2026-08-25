@@ -94,6 +94,19 @@ function effectiveConnectionSetting<K extends SshConnectionSettingKey>(
   return (value ?? defaults[key]) as SshConnectionDefaults[K]
 }
 
+function isValidFtpCertificateFingerprint(value: string): boolean {
+  const normalized = value
+    .trim()
+    .replace(/^sha256:/i, '')
+    .replace(/[\s:]/g, '')
+  if (/^[0-9a-f]{64}$/i.test(normalized)) {
+    return true
+  }
+  // A SHA-256 digest encoded as Base64 is 43 characters without padding or
+  // 44 characters with the usual trailing '='.
+  return /^[A-Za-z0-9+/]{43}={0,1}$/.test(normalized)
+}
+
 export function ConnectionModal({
   errorMessage,
   groupOptions,
@@ -111,7 +124,8 @@ export function ConnectionModal({
   onSubmit,
   onClose,
   standalone = false,
-  profiles = []
+  profiles = [],
+  editingProfileId = null
 }: {
   errorMessage: string | null
   groupOptions: string[]
@@ -131,19 +145,21 @@ export function ConnectionModal({
   onClose(): void
   standalone?: boolean
   profiles?: import('@fileterm/core').ConnectionProfile[]
+  editingProfileId?: string | null
 }) {
   const [section, setSection] = useState<'ssh' | 'terminal' | 'session-log' | 'proxy' | 'tunnel'>('ssh')
   const [isSelectingSessionLogDirectory, setIsSelectingSessionLogDirectory] = useState(false)
   const [serialPorts, setSerialPorts] = useState<SerialPortInfo[]>([])
   const [isLoadingSerialPorts, setIsLoadingSerialPorts] = useState(false)
   const [serialPortLoadError, setSerialPortLoadError] = useState<string | null>(null)
+  const [serialValidationError, setSerialValidationError] = useState<string | null>(null)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
-  const supportsProxy = form.type === 'ssh' || form.type === 'telnet'
+  const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
   const platform = window.fileterm?.platform
   const isMacOs = platform === 'darwin'
   const supportsBuiltInRs485 = ['linux', 'darwin'].includes(platform ?? '') && form.flowControl !== 'hardware'
   const supportsExtendedParity = ['linux', 'win32'].includes(platform ?? '') || (isMacOs && form.dataBits === 7)
-  const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== form.name)
+  const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== editingProfileId)
 
   const setSshConnectionSetting = <K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -206,6 +222,50 @@ export function ConnectionModal({
     }
   })
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (form.type === 'ftp' && form.securityMode === 'implicit' && form.proxy?.type && form.proxy.type !== 'none') {
+      event.preventDefault()
+      setSection('proxy')
+      setSerialValidationError(t.ftpImplicitProxyUnsupported)
+      return
+    }
+    if (
+      form.type === 'ftp' &&
+      form.securityMode !== 'none' &&
+      form.certificateFingerprint?.trim() &&
+      !isValidFtpCertificateFingerprint(form.certificateFingerprint)
+    ) {
+      event.preventDefault()
+      setSection('ssh')
+      setSerialValidationError(t.ftpCertificateFingerprintInvalid)
+      return
+    }
+    if (form.type === 'serial') {
+      if (form.parity === 'mark' || form.parity === 'space') {
+        if (!supportsExtendedParity) {
+          event.preventDefault()
+          setSection('ssh')
+          setSerialValidationError(isMacOs ? t.serialParityMacRequirement : t.serialParityUnsupported)
+          return
+        }
+      }
+      if (form.rs485Mode === 'half-duplex' && form.flowControl === 'hardware') {
+        event.preventDefault()
+        setSection('ssh')
+        setSerialValidationError(t.serialRs485FlowConflict)
+        return
+      }
+      if (form.rs485Mode === 'half-duplex' && !supportsBuiltInRs485) {
+        event.preventDefault()
+        setSection('ssh')
+        setSerialValidationError(t.serialRs485Unsupported)
+        return
+      }
+    }
+    setSerialValidationError(null)
+    onSubmit(event)
+  }
+
   const chooseSessionLogDirectory = async () => {
     const desktopApi = window.fileterm
     if (!desktopApi || isSelectingSessionLogDirectory) {
@@ -264,7 +324,7 @@ export function ConnectionModal({
             </button>
           ) : null}
         </aside>
-        <form aria-busy={isSubmitting} className="ssh-form-shell" onSubmit={onSubmit}>
+        <form aria-busy={isSubmitting} className="ssh-form-shell" onSubmit={handleSubmit}>
           <fieldset
             className="connection-form-submit-lock"
             disabled={isSubmitting}
@@ -380,7 +440,9 @@ export function ConnectionModal({
                         form.deviceVendorId !== undefined ||
                         form.deviceProductId !== undefined ? (
                           <div className="span-2 ssh-field-hint">{t.serialPortIdentitySaved}</div>
-                        ) : null}
+                        ) : (
+                          <div className="span-2 ssh-field-hint">{t.serialPortIdentityMissing}</div>
+                        )}
                       </>
                     ) : (
                       <label className="span-2">
@@ -512,6 +574,9 @@ export function ConnectionModal({
                             }
                           />
                         </label>
+                        {form.flowControl === 'software' ? (
+                          <p className="ssh-field-hint span-2">{t.serialTransferSoftwareFlowControl}</p>
+                        ) : null}
                         {form.rs485Mode === 'half-duplex' ? (
                           <>
                             <label className="ssh-checkbox advanced-toggle-label">
@@ -543,6 +608,7 @@ export function ConnectionModal({
                                 }
                               />
                             </label>
+                            <p className="ssh-field-hint full">{t.telnetTerminalTypeHint}</p>
                             <label>
                               {t.serialRs485DelayAfter}:
                               <input
@@ -663,6 +729,7 @@ export function ConnectionModal({
                                 ...prev,
                                 securityMode,
                                 secure: securityMode !== 'none',
+                                certificateFingerprint: securityMode === 'none' ? '' : prev.certificateFingerprint,
                                 port:
                                   securityMode === 'implicit' && prev.port === 21
                                     ? 990
@@ -672,6 +739,36 @@ export function ConnectionModal({
                               }))
                             }}
                           />
+                        </label>
+                        {form.securityMode !== 'none' ? (
+                          <label className="span-2">
+                            {t.ftpCertificateFingerprint}:
+                            <input
+                              value={form.certificateFingerprint ?? ''}
+                              placeholder="sha256:..."
+                              onChange={(event) =>
+                                setForm((prev) => ({ ...prev, certificateFingerprint: event.target.value }))
+                              }
+                            />
+                            <span className="ssh-field-hint">{t.ftpCertificateFingerprintHint}</span>
+                          </label>
+                        ) : null}
+                        <label className="span-2">
+                          {t.ftpTransferMode}:
+                          <DropdownSelect
+                            value={form.transferMode ?? 'passive'}
+                            options={[
+                              { value: 'passive', label: t.ftpTransferPassive },
+                              { value: 'active', label: t.ftpTransferActive }
+                            ]}
+                            onChange={(value) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                transferMode: value as CreateProfileInput['transferMode']
+                              }))
+                            }
+                          />
+                          <span className="ssh-field-hint">{t.ftpTransferModeHint}</span>
                         </label>
                         <div className="span-2 ssh-auth-hint">{t.ftpAuthHint}</div>
                       </>
@@ -812,6 +909,17 @@ export function ConnectionModal({
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
                           <input
+                            checked={form.sftpEnabled !== false}
+                            type="checkbox"
+                            onChange={(event) => setForm((prev) => ({ ...prev, sftpEnabled: event.target.checked }))}
+                          />
+                          <span className="advanced-toggle-name">{t.sftpEnabled}</span>
+                        </label>
+                        <p className="advanced-toggle-hint">{t.sftpEnabledHint}</p>
+                      </div>
+                      <div className="advanced-toggle-row">
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
                             checked={effectiveConnectionSetting(form, connectionDefaults, 'legacyAlgorithms')}
                             type="checkbox"
                             onChange={(event) => setSshConnectionSetting('legacyAlgorithms', event.target.checked)}
@@ -863,6 +971,100 @@ export function ConnectionModal({
                           <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
                         </div>
                       </div>
+                      <label className="serial-reconnect-limit">
+                        {t.reconnectMaxAttempts}:
+                        <input
+                          inputMode="numeric"
+                          min={0}
+                          max={4294967295}
+                          type="number"
+                          value={form.reconnectMaxAttempts ?? 0}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
+                            }))
+                          }
+                        />
+                      </label>
+                      <p className="advanced-toggle-hint">{t.reconnectMaxAttemptsHint}</p>
+                    </div>
+                    <div className="ssh-grid">
+                      <label>
+                        {t.connectionTimeout}:
+                        <input
+                          inputMode="numeric"
+                          min={5}
+                          max={300}
+                          type="number"
+                          value={form.connectTimeoutSeconds ?? 30}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              connectTimeoutSeconds: Math.max(5, Math.min(300, Number(event.target.value) || 5))
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.operationTimeout}:
+                        <input
+                          inputMode="numeric"
+                          min={5}
+                          max={3600}
+                          type="number"
+                          value={form.operationTimeoutSeconds ?? 60}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              operationTimeoutSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="ssh-checkbox advanced-toggle-label">
+                        <input
+                          checked={form.keepaliveEnabled !== false}
+                          type="checkbox"
+                          onChange={(event) => setForm((prev) => ({ ...prev, keepaliveEnabled: event.target.checked }))}
+                        />
+                        <span className="advanced-toggle-name">{t.keepalive}</span>
+                      </label>
+                      <label>
+                        {t.keepaliveInterval}:
+                        <input
+                          disabled={form.keepaliveEnabled === false}
+                          inputMode="numeric"
+                          min={5}
+                          max={3600}
+                          type="number"
+                          value={form.keepaliveIntervalSeconds ?? 30}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.keepaliveMaxMisses}:
+                        <input
+                          disabled={form.keepaliveEnabled === false}
+                          inputMode="numeric"
+                          min={1}
+                          max={32}
+                          type="number"
+                          value={form.keepaliveMaxMisses ?? 3}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
+                            }))
+                          }
+                        />
+                      </label>
+                      <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
                     </div>
                     <div className="reconnect-mode-group network-routing-group">
                       <div className="reconnect-mode-group__label network-routing-group__label">
@@ -925,6 +1127,146 @@ export function ConnectionModal({
                           <p className="network-routing-empty">{t.noAvailableJumpHost}</p>
                         ) : null}
                       </div>
+                    </div>
+                  </fieldset>
+                ) : null}
+                {form.type === 'ftp' || form.type === 'telnet' ? (
+                  <fieldset className="ssh-fieldset">
+                    <legend>{t.advanced}</legend>
+                    <div className="reconnect-mode-group">
+                      <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
+                      <div className="advanced-toggle-list">
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={(form.reconnectMode ?? 'none') === 'none'}
+                              name="network-reconnect-mode"
+                              type="radio"
+                              onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'none' }))}
+                            />
+                            <span className="advanced-toggle-name">{t.reconnectNone}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.reconnectNoneHint}</p>
+                        </div>
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={form.reconnectMode === 'enter'}
+                              name="network-reconnect-mode"
+                              type="radio"
+                              onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'enter' }))}
+                            />
+                            <span className="advanced-toggle-name">{t.reconnectEnter}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.reconnectEnterHint}</p>
+                        </div>
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
+                            <input
+                              checked={form.reconnectMode === 'auto'}
+                              name="network-reconnect-mode"
+                              type="radio"
+                              onChange={() => setForm((prev) => ({ ...prev, reconnectMode: 'auto' }))}
+                            />
+                            <span className="advanced-toggle-name">{t.autoReconnect}</span>
+                          </label>
+                          <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
+                        </div>
+                      </div>
+                      <label className="serial-reconnect-limit">
+                        {t.reconnectMaxAttempts}:
+                        <input
+                          inputMode="numeric"
+                          min={0}
+                          max={4294967295}
+                          type="number"
+                          value={form.reconnectMaxAttempts ?? 0}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
+                            }))
+                          }
+                        />
+                      </label>
+                      <p className="advanced-toggle-hint">{t.reconnectMaxAttemptsHint}</p>
+                    </div>
+                    <div className="ssh-grid">
+                      <label>
+                        {t.connectionTimeout}:
+                        <input
+                          inputMode="numeric"
+                          min={5}
+                          max={300}
+                          type="number"
+                          value={form.connectTimeoutSeconds ?? 30}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              connectTimeoutSeconds: Math.max(5, Math.min(300, Number(event.target.value) || 5))
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.operationTimeout}:
+                        <input
+                          inputMode="numeric"
+                          min={5}
+                          max={3600}
+                          type="number"
+                          value={form.operationTimeoutSeconds ?? 60}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              operationTimeoutSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="ssh-checkbox advanced-toggle-label">
+                        <input
+                          checked={form.keepaliveEnabled !== false}
+                          type="checkbox"
+                          onChange={(event) => setForm((prev) => ({ ...prev, keepaliveEnabled: event.target.checked }))}
+                        />
+                        <span className="advanced-toggle-name">{t.keepalive}</span>
+                      </label>
+                      <label>
+                        {t.keepaliveInterval}:
+                        <input
+                          disabled={form.keepaliveEnabled === false}
+                          inputMode="numeric"
+                          min={5}
+                          max={3600}
+                          type="number"
+                          value={form.keepaliveIntervalSeconds ?? 30}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.keepaliveMaxMisses}:
+                        <input
+                          disabled={form.keepaliveEnabled === false}
+                          inputMode="numeric"
+                          min={1}
+                          max={32}
+                          type="number"
+                          value={form.keepaliveMaxMisses ?? 3}
+                          onChange={(event) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
+                            }))
+                          }
+                        />
+                      </label>
+                      <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
                     </div>
                   </fieldset>
                 ) : null}
@@ -1123,6 +1465,65 @@ export function ConnectionModal({
                           />
                         </label>
                         <p className="ssh-field-hint span-2">{t.serialTimeoutHint}</p>
+                        <label>
+                          {t.serialTransferMaxFileBytes}:
+                          <input
+                            inputMode="numeric"
+                            min={1024 * 1024}
+                            max={64 * 1024 * 1024 * 1024}
+                            type="number"
+                            value={form.serialTransferMaxFileBytes ?? 4 * 1024 * 1024 * 1024}
+                            onChange={(event) =>
+                              setForm((prev) => {
+                                const value = Math.max(
+                                  1024 * 1024,
+                                  Math.min(64 * 1024 * 1024 * 1024, Number(event.target.value) || 1024 * 1024)
+                                )
+                                return {
+                                  ...prev,
+                                  serialTransferMaxFileBytes: value,
+                                  serialTransferMaxBatchBytes: Math.max(prev.serialTransferMaxBatchBytes ?? 0, value)
+                                }
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.serialTransferMaxBatchBytes}:
+                          <input
+                            inputMode="numeric"
+                            min={form.serialTransferMaxFileBytes ?? 1024 * 1024}
+                            max={256 * 1024 * 1024 * 1024}
+                            type="number"
+                            value={form.serialTransferMaxBatchBytes ?? 16 * 1024 * 1024 * 1024}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                serialTransferMaxBatchBytes: Math.max(
+                                  prev.serialTransferMaxFileBytes ?? 1024 * 1024,
+                                  Math.min(256 * 1024 * 1024 * 1024, Number(event.target.value) || 1024 * 1024)
+                                )
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.serialTransferMaxFiles}:
+                          <input
+                            inputMode="numeric"
+                            min={1}
+                            max={4096}
+                            type="number"
+                            value={form.serialTransferMaxFiles ?? 128}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                serialTransferMaxFiles: Math.max(1, Math.min(4096, Number(event.target.value) || 1))
+                              }))
+                            }
+                          />
+                        </label>
+                        <p className="ssh-field-hint span-2">{t.serialTransferLimitsHint}</p>
                         <div className="reconnect-mode-group serial-reconnect-mode-group">
                           <div className="reconnect-mode-group__label">{t.disconnectBehavior}</div>
                           <div className="advanced-toggle-list">
@@ -1210,6 +1611,67 @@ export function ConnectionModal({
                             onChange={(value) => setForm((prev) => ({ ...prev, deleteKey: value }))}
                           />
                         </label>
+                        {form.type === 'telnet' ? (
+                          <>
+                            <label>
+                              {t.telnetTerminalType}:
+                              <DropdownSelect
+                                value={form.terminalType ?? 'xterm-256color'}
+                                options={[
+                                  { value: 'xterm-256color', label: 'xterm-256color' },
+                                  { value: 'vt100', label: 'vt100' },
+                                  { value: 'vt220', label: 'vt220' },
+                                  { value: 'ansi', label: 'ansi' }
+                                ]}
+                                onChange={(value) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    terminalType: value as CreateProfileInput['terminalType']
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label>
+                              {t.telnetNewline}:
+                              <DropdownSelect
+                                value={form.newlineMode ?? 'crlf'}
+                                options={[
+                                  { value: 'none', label: t.telnetNewlineNone },
+                                  { value: 'lf', label: t.telnetNewlineLf },
+                                  { value: 'cr', label: t.telnetNewlineCr },
+                                  { value: 'crlf', label: t.telnetNewlineCrlf }
+                                ]}
+                                onChange={(value) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    newlineMode: value as CreateProfileInput['newlineMode']
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="ssh-checkbox advanced-toggle-label">
+                              <input
+                                checked={form.crNul !== false}
+                                type="checkbox"
+                                onChange={(event) => setForm((prev) => ({ ...prev, crNul: event.target.checked }))}
+                              />
+                              <span className="advanced-toggle-name">{t.telnetCrNul}</span>
+                            </label>
+                            <p className="advanced-toggle-hint">{t.telnetCrNulHint}</p>
+                            <label className="full">
+                              {t.telnetLoginScript}:
+                              <textarea
+                                rows={4}
+                                spellCheck={false}
+                                value={form.loginScript ?? ''}
+                                onChange={(event) => setForm((prev) => ({ ...prev, loginScript: event.target.value }))}
+                              />
+                            </label>
+                            <p className="ssh-field-hint full">{t.telnetLoginScriptHint}</p>
+                            <p className="ssh-field-hint full">{t.telnetInsecureHint}</p>
+                            <p className="ssh-field-hint full">{t.telnetTunnelHint}</p>
+                          </>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1428,6 +1890,7 @@ export function ConnectionModal({
                 </fieldset>
               </div>
             ) : null}
+            {serialValidationError ? <div className="modal-error">{serialValidationError}</div> : null}
             {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
             <div className="form-actions ssh-actions">
               <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">

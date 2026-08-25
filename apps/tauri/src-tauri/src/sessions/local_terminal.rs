@@ -379,13 +379,40 @@ pub fn start_local_terminal_worker(
     launch: LocalTerminalLaunch,
     runtime_gate: Arc<LocalTerminalRuntimeGate>,
 ) -> Result<oneshot::Receiver<()>, String> {
-    validate_launch(&launch)?;
+    crate::services::logging::session(
+        &app,
+        "INFO",
+        "local",
+        &tab_id,
+        format!(
+            "worker starting runtime={} shell={} cwd={} args={} env_entries={}",
+            runtime_id,
+            launch.shell,
+            launch.cwd,
+            launch.args.len(),
+            launch.env.len()
+        ),
+    );
+    if let Err(error) = validate_launch(&launch) {
+        crate::services::logging::error(
+            &app,
+            "local",
+            format!("launch validation failed tab={} error={error}", tab_id),
+        );
+        return Err(error);
+    }
     let cwd = PathBuf::from(&launch.cwd);
     if !cwd.is_dir() {
-        return Err(format!(
+        let error = format!(
             "Local terminal working directory does not exist: {}",
             launch.cwd
-        ));
+        );
+        crate::services::logging::error(
+            &app,
+            "local",
+            format!("launch rejected tab={} error={error}", tab_id),
+        );
+        return Err(error);
     }
 
     let pty_system = native_pty_system();
@@ -396,7 +423,15 @@ pub fn start_local_terminal_worker(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|error| format!("Unable to allocate local PTY: {error}"))?;
+        .map_err(|error| {
+            let message = format!("Unable to allocate local PTY: {error}");
+            crate::services::logging::error(
+                &app,
+                "local",
+                format!("PTY allocation failed tab={} error={message}", tab_id),
+            );
+            message
+        })?;
     let portable_pty::PtyPair { master, slave } = pair;
 
     let mut command = CommandBuilder::new(&launch.shell);
@@ -406,18 +441,46 @@ pub fn start_local_terminal_worker(
     }
     configure_shell_command(&mut command, &launch.shell, &launch.args, &launch.env);
 
-    let mut child = slave
-        .spawn_command(command)
-        .map_err(|error| format!("Unable to start local shell {}: {error}", launch.shell))?;
+    let mut child = slave.spawn_command(command).map_err(|error| {
+        let message = format!("Unable to start local shell {}: {error}", launch.shell);
+        crate::services::logging::error(
+            &app,
+            "local",
+            format!("shell spawn failed tab={} error={message}", tab_id),
+        );
+        message
+    })?;
+    crate::services::logging::info(
+        &app,
+        "local",
+        format!(
+            "shell spawned tab={} runtime={} pid={:?}",
+            tab_id,
+            runtime_id,
+            child.process_id()
+        ),
+    );
     let process_tree = LocalProcessTree::attach(child.as_ref());
-    let reader = master
-        .try_clone_reader()
-        .map_err(|error| format!("Unable to read local PTY output: {error}"))?;
+    let reader = master.try_clone_reader().map_err(|error| {
+        let message = format!("Unable to read local PTY output: {error}");
+        crate::services::logging::error(
+            &app,
+            "local",
+            format!("PTY reader setup failed tab={} error={message}", tab_id),
+        );
+        message
+    })?;
     let writer = match master.take_writer() {
         Ok(writer) => writer,
         Err(error) => {
             let _ = child.kill();
-            return Err(format!("Unable to write to local PTY: {error}"));
+            let message = format!("Unable to write to local PTY: {error}");
+            crate::services::logging::error(
+                &app,
+                "local",
+                format!("PTY writer setup failed tab={} error={message}", tab_id),
+            );
+            return Err(message);
         }
     };
 
@@ -473,6 +536,16 @@ pub fn start_local_terminal_worker(
             )
             .await
             {
+                crate::services::logging::warn(
+                    &pump_app,
+                    "local",
+                    format!(
+                        "output publication stopped tab={} runtime={} bytes={}",
+                        pump_tab_id,
+                        pump_runtime_id,
+                        batch.len()
+                    ),
+                );
                 break;
             }
             // Signal readiness only after the first PTY batch has been
@@ -480,7 +553,23 @@ pub fn start_local_terminal_worker(
             // local-terminal snapshot can then carry the prompt even when
             // the renderer has not subscribed to the global data channel yet.
             if let Some(sender) = startup_ready_tx.take() {
-                let _ = sender.send(());
+                crate::services::logging::info(
+                    &pump_app,
+                    "local",
+                    format!(
+                        "first PTY output persisted tab={} runtime={} bytes={}",
+                        pump_tab_id,
+                        pump_runtime_id,
+                        batch.len()
+                    ),
+                );
+                if sender.send(()).is_err() {
+                    crate::services::logging::debug(
+                        &pump_app,
+                        "local",
+                        format!("startup readiness receiver dropped tab={}", pump_tab_id),
+                    );
+                }
             }
             if let Some(cwd) = cwd_tracker.observe(&batch) {
                 let _ = update_local_terminal_cwd(
@@ -493,6 +582,14 @@ pub fn start_local_terminal_worker(
                 .await;
             }
         }
+        crate::services::logging::debug(
+            &pump_app,
+            "local",
+            format!(
+                "output pump stopped tab={} runtime={}",
+                pump_tab_id, pump_runtime_id
+            ),
+        );
         let _ = output_done_tx.send(());
     });
 
@@ -516,6 +613,11 @@ pub fn start_local_terminal_worker(
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
+                        crate::services::logging::info(
+                            &reader_app,
+                            "local",
+                            format!("PTY reader reached EOF tab={}", reader_tab_id),
+                        );
                         let tail = decoder.finish();
                         if !tail.is_empty() {
                             let _ = queue_local_terminal_output(
@@ -542,11 +644,21 @@ pub fn start_local_terminal_worker(
                                 &mut output_drop_state,
                             )
                         {
+                            crate::services::logging::debug(
+                                &reader_app,
+                                "local",
+                                format!("PTY output queue closed tab={}", reader_tab_id),
+                            );
                             break;
                         }
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                    Err(_) => {
+                    Err(error) => {
+                        crate::services::logging::warn(
+                            &reader_app,
+                            "local",
+                            format!("PTY reader failed tab={} error={error}", reader_tab_id),
+                        );
                         let tail = decoder.finish();
                         if !tail.is_empty() {
                             let _ = queue_local_terminal_output(
@@ -566,22 +678,82 @@ pub fn start_local_terminal_worker(
         })
         .map_err(|error| {
             process_tree.terminate(child.as_mut());
-            format!("Unable to start local PTY reader: {error}")
+            let message = format!("Unable to start local PTY reader: {error}");
+            crate::services::logging::error(
+                &app,
+                "local",
+                format!(
+                    "PTY reader thread setup failed tab={} error={message}",
+                    tab_id
+                ),
+            );
+            message
         })?;
 
+    let worker_app = app.clone();
+    let worker_tab_id = tab_id.clone();
+    let worker_runtime_id = runtime_id.clone();
     thread::Builder::new()
         .name("fileterm-local-pty".to_string())
         .spawn(move || {
             let (summary, status) =
                 run_pty_loop(control_rx, &mut child, master, writer, &process_tree);
+            crate::services::logging::info(
+                &worker_app,
+                "local",
+                format!(
+                    "PTY worker finished tab={} runtime={} status={status:?} summary={summary}",
+                    worker_tab_id, worker_runtime_id
+                ),
+            );
             tauri::async_runtime::block_on(async move {
-                let _ = tokio::time::timeout(LOCAL_OUTPUT_DRAIN_TIMEOUT, output_done_rx).await;
-                if cleanup_local_terminal_runtime(&app, &tab_id, &runtime_id).await {
-                    set_terminal_state(&app, &tab_id, summary, status).await;
+                if tokio::time::timeout(LOCAL_OUTPUT_DRAIN_TIMEOUT, output_done_rx)
+                    .await
+                    .is_err()
+                {
+                    crate::services::logging::warn(
+                        &worker_app,
+                        "local",
+                        format!(
+                            "output drain timed out tab={} runtime={}",
+                            worker_tab_id, worker_runtime_id
+                        ),
+                    );
+                }
+                if cleanup_local_terminal_runtime(&worker_app, &worker_tab_id, &worker_runtime_id)
+                    .await
+                {
+                    set_terminal_state(&worker_app, &worker_tab_id, summary, status).await;
+                } else {
+                    crate::services::logging::debug(
+                        &worker_app,
+                        "local",
+                        format!(
+                            "PTY worker state update skipped tab={} runtime={} reason=runtime-replaced",
+                            worker_tab_id, worker_runtime_id
+                        ),
+                    );
                 }
             });
         })
-        .map_err(|error| format!("Unable to start local PTY worker: {error}"))?;
+        .map_err(|error| {
+            let message = format!("Unable to start local PTY worker: {error}");
+            crate::services::logging::error(
+                &app,
+                "local",
+                format!("PTY worker thread setup failed tab={} error={message}", tab_id),
+            );
+            message
+        })?;
+
+    crate::services::logging::debug(
+        &app,
+        "local",
+        format!(
+            "PTY reader and worker threads started tab={} runtime={}",
+            tab_id, runtime_id
+        ),
+    );
 
     Ok(startup_ready_rx)
 }
@@ -595,6 +767,14 @@ fn queue_local_terminal_output(
     output_drop_state: &mut LocalOutputDropState,
 ) -> bool {
     if !gate.active.load(Ordering::Acquire) {
+        crate::services::logging::debug(
+            app,
+            "local",
+            format!(
+                "discarding PTY output tab={} reason=runtime-inactive",
+                tab_id
+            ),
+        );
         return false;
     }
 
@@ -627,14 +807,21 @@ fn queue_local_terminal_output(
                 crate::services::logging::session(
                     app,
                     "WARN",
-                    "local-terminal",
+                    "local",
                     tab_id,
                     "terminal output pump saturated; dropping local PTY output",
                 );
             }
             true
         }
-        Err(mpsc::error::TrySendError::Closed(_)) => false,
+        Err(mpsc::error::TrySendError::Closed(_)) => {
+            crate::services::logging::debug(
+                app,
+                "local",
+                format!("PTY output queue closed tab={tab_id}"),
+            );
+            false
+        }
     }
 }
 
@@ -927,6 +1114,14 @@ async fn cleanup_local_terminal_runtime(app: &AppHandle, tab_id: &str, runtime_i
             .get(tab_id)
             .is_none_or(|current_id| current_id != runtime_id)
         {
+            crate::services::logging::debug(
+                app,
+                "local",
+                format!(
+                    "runtime cleanup skipped tab={} runtime={} reason=runtime-replaced",
+                    tab_id, runtime_id
+                ),
+            );
             return false;
         }
         runtime_ids.remove(tab_id);
@@ -942,6 +1137,11 @@ async fn cleanup_local_terminal_runtime(app: &AppHandle, tab_id: &str, runtime_i
     state.terminal_inputs.write().await.remove(tab_id);
     state.workers.write().await.remove(tab_id);
     state.worker_controls.write().await.remove(tab_id);
+    crate::services::logging::debug(
+        app,
+        "local",
+        format!("runtime cleaned up tab={} runtime={}", tab_id, runtime_id),
+    );
     true
 }
 

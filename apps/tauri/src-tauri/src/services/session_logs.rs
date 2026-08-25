@@ -1,9 +1,10 @@
 //! Per-session terminal transcript logging.
 //!
 //! Session logs are deliberately separate from the diagnostic logger. They
-//! contain decoded terminal output only, never terminal input, passwords, or
-//! other renderer-side secrets. Automatic logging uses a small async writer
-//! queue so a slow disk cannot block an SSH/serial worker.
+//! contain decoded terminal output by default. Serial logs can explicitly opt
+//! into TX bytes and raw wire records; passwords and other renderer-side
+//! secrets are never added by this service. Automatic logging uses a small
+//! async writer queue so a slow disk cannot block an SSH/serial worker.
 
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -42,6 +43,14 @@ pub struct SessionLogHandle {
     dropped_chunks: Arc<AtomicU64>,
 }
 
+/// A non-blocking sink used by serial transport adapters. It lets protocol
+/// traffic be recorded from `poll_read`/`poll_write` without awaiting disk IO
+/// on the serial worker.
+#[derive(Clone)]
+pub struct SerialLogSink {
+    handle: SessionLogHandle,
+}
+
 #[derive(Clone, Debug)]
 struct SessionLogOptions {
     serial: bool,
@@ -54,6 +63,80 @@ struct SessionLogOptions {
 pub enum SerialLogDirection {
     Rx,
     Tx,
+}
+
+impl SerialLogSink {
+    pub fn append(
+        &self,
+        direction: SerialLogDirection,
+        bytes: &[u8],
+        decoded: Option<&str>,
+        encoding: &str,
+    ) {
+        if bytes.is_empty()
+            || (direction == SerialLogDirection::Tx && !self.handle.options.include_input)
+        {
+            return;
+        }
+        let payload = if self.handle.options.raw {
+            format_hex(bytes)
+        } else {
+            decoded
+                .map(str::to_string)
+                .unwrap_or_else(|| decode_terminal(bytes, encoding))
+        };
+        let timestamp = if self.handle.options.timestamps {
+            format!("[{}] ", timestamp_rfc3339())
+        } else {
+            String::new()
+        };
+        let direction = match direction {
+            SerialLogDirection::Rx => "RX",
+            SerialLogDirection::Tx => "TX",
+        };
+        enqueue_chunk(
+            &self.handle,
+            format!("{timestamp}{direction}: {payload}\r\n"),
+        );
+    }
+
+    /// Append bytes as they appeared on the configured serial wire. This is
+    /// intentionally emitted only for raw logs so parity bits and protocol
+    /// control bytes are never mistaken for decoded terminal text.
+    pub fn append_wire(&self, direction: SerialLogDirection, bytes: &[u8]) {
+        if bytes.is_empty()
+            || !self.handle.options.raw
+            || (direction == SerialLogDirection::Tx && !self.handle.options.include_input)
+        {
+            return;
+        }
+        let timestamp = if self.handle.options.timestamps {
+            format!("[{}] ", timestamp_rfc3339())
+        } else {
+            String::new()
+        };
+        let direction = match direction {
+            SerialLogDirection::Rx => "WIRE RX",
+            SerialLogDirection::Tx => "WIRE TX",
+        };
+        enqueue_chunk(
+            &self.handle,
+            format!("{timestamp}{direction}: {}\r\n", format_hex(bytes)),
+        );
+    }
+}
+
+pub async fn serial_log_sink(app: &AppHandle, tab_id: &str) -> Option<SerialLogSink> {
+    let state = app.state::<WorkspaceState>();
+    let sink = state
+        .session_log_writers
+        .read()
+        .await
+        .get(tab_id)
+        .cloned()
+        .filter(|handle| handle.options.serial)
+        .map(|handle| SerialLogSink { handle });
+    sink
 }
 
 /// Start or stop the automatic writer for one profile-backed terminal tab.
@@ -177,35 +260,9 @@ pub async fn append_serial_bytes(
     decoded: Option<&str>,
     encoding: &str,
 ) {
-    if bytes.is_empty() {
-        return;
+    if let Some(sink) = serial_log_sink(app, tab_id).await {
+        sink.append(direction, bytes, decoded, encoding);
     }
-    let state = app.state::<WorkspaceState>();
-    let handle = state.session_log_writers.read().await.get(tab_id).cloned();
-    let Some(handle) = handle.filter(|handle| {
-        handle.options.serial
-            && (direction == SerialLogDirection::Rx || handle.options.include_input)
-    }) else {
-        return;
-    };
-
-    let payload = if handle.options.raw {
-        format_hex(bytes)
-    } else {
-        decoded
-            .map(str::to_string)
-            .unwrap_or_else(|| decode_terminal(bytes, encoding))
-    };
-    let timestamp = if handle.options.timestamps {
-        format!("[{}] ", timestamp_rfc3339())
-    } else {
-        String::new()
-    };
-    let direction = match direction {
-        SerialLogDirection::Rx => "RX",
-        SerialLogDirection::Tx => "TX",
-    };
-    enqueue_chunk(&handle, format!("{timestamp}{direction}: {payload}\r\n"));
 }
 
 fn enqueue_chunk(handle: &SessionLogHandle, chunk: String) {
@@ -317,7 +374,18 @@ pub async fn save_current_session(
     );
     if let Some(handle) = automatic_serial_log {
         sync_handle(&handle).await;
-        tokio::fs::copy(&handle.path, target.path())
+        let backup = PathBuf::from(format!("{}.1", handle.path.to_string_lossy()));
+        let mut snapshot = Vec::new();
+        match fs::read(&backup).await {
+            Ok(previous) => snapshot.extend(previous),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(AppError::Storage(format!("无法读取轮转会话日志: {error}"))),
+        }
+        let current = fs::read(&handle.path)
+            .await
+            .map_err(|error| AppError::Storage(format!("无法读取会话日志: {error}")))?;
+        snapshot.extend(current);
+        fs::write(target.path(), snapshot)
             .await
             .map_err(|error| AppError::Storage(format!("无法保存会话日志: {error}")))?;
     } else {

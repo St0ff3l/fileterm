@@ -306,6 +306,8 @@ const zhCN = {
   terminalConnected: '连接主机成功',
   terminalDisconnected: '连接已断开',
   terminalConnectionClosed: '[连接已关闭]',
+  telnetReconnectScheduled: '[Telnet] 将在 {seconds} 秒后自动重连（第 {attempt} 次）',
+  telnetReconnectLimit: '[Telnet] 自动重连已停止：{error}',
   pressEnterToReconnect: '按回车重新连接…',
   connectionFailedPrefix: '连接失败: ',
   disconnected: '已断开',
@@ -427,6 +429,9 @@ const zhCN = {
   serialDeviceDisconnected: '串口设备已断开',
   serialEndpoint: '串口 {path} @ {baud}',
   serialErrorPrefix: '串口错误：',
+  serialUnknownError: '串口操作失败，请查看会话日志获取详细信息。',
+  serialTransferActive: '串口文件传输正在进行，请等待传输结束。',
+  serialTransferSoftwareFlowControl: '软件流控不能用于串口文件传输的二进制字节，请改用无流控或硬件流控。',
   serialUnsupportedOperation: '串口不支持文件或隧道操作',
   serialDevicePathRequired: '串口设备路径不能为空',
   serialBaudInvalid: '串口波特率必须大于 0',
@@ -463,6 +468,7 @@ const zhCN = {
   serialPortSelect: '选择已检测到的串口设备',
   serialPortNoDevices: '未检测到串口设备，可手动输入路径',
   serialPortIdentitySaved: '已记住设备身份；端口名称变化时会尝试自动匹配。',
+  serialPortIdentityMissing: '当前仅按设备路径保存；USB 串口重连可能匹配到另一设备，建议从设备列表选择。',
   serialPortRefresh: '刷新设备列表',
   serialPortRefreshing: '正在扫描串口设备',
   serialPortScanFailed: '串口设备扫描失败',
@@ -492,6 +498,10 @@ const zhCN = {
   serialReceiveIdleTimeoutInvalid: '串口接收空闲超时必须在 250 到 600000 毫秒之间。',
   serialWriteTimeoutSetting: '写入/CTS 等待超时（毫秒）',
   serialTimeoutHint: '低波特率或硬件流控设备可适当增大；范围 250–600000 毫秒。',
+  serialTransferMaxFileBytes: '单文件接收上限（字节）',
+  serialTransferMaxBatchBytes: '批量接收总上限（字节）',
+  serialTransferMaxFiles: '批量接收文件数上限',
+  serialTransferLimitsHint: '接收先写入临时文件，完成并校验后才会提交；达到任一上限会中止传输。',
   serialRs485Mode: 'RS-485 模式',
   serialRs485None: '关闭',
   serialRs485HalfDuplex: '半双工（RTS）',
@@ -505,6 +515,7 @@ const zhCN = {
   serialRs485Invalid: '串口 RS-485 模式无效。',
   serialRs485Unsupported: '当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器。',
   serialRs485ApplyFailed: '应用 Linux RS-485 配置失败：',
+  serialRs485ReadbackFailed: '读取 Linux RS-485 生效配置失败：',
   serialRs485SoftwareApplyFailed: '配置 macOS RS-485 软件 RTS 失败：',
   serialRs485DelayInvalid: '串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间。',
   serialReconnectMaxAttempts: '最大自动重连次数（0 不限）',
@@ -575,7 +586,7 @@ const zhCN = {
   serialTransferSenderStartTimeout: '等待串口文件接收端启动超时。',
   serialTransferEndTimeout: '串口文件传输结束确认超时。',
   serialTransferSequenceInvalid: '串口文件传输数据块序号不连续。',
-  serialTransferDataTooLarge: 'YMODEM 接收数据超过文件头声明的大小。',
+  serialTransferDataTooLarge: '串口接收数据超过文件头声明的大小。',
   serialTransferCancel: '取消传输',
   serialTransferCanceling: '正在取消…',
   serialTransferYmodemHeaderTooLong: 'YMODEM 文件头过长，请缩短文件名。',
@@ -588,7 +599,7 @@ const zhCN = {
   serialTransferSizeMissing: 'YMODEM 文件头缺少文件大小。',
   serialTransferSizeTextInvalid: 'YMODEM 文件大小不是有效文本。',
   serialTransferSizeInvalid: 'YMODEM 文件大小无效。',
-  serialTransferSizeMismatch: 'YMODEM 文件大小与接收数据不一致。',
+  serialTransferSizeMismatch: '串口接收文件大小与协议声明不一致。',
   serialTransferKermitBinaryUnsupported: 'Kermit 对端未协商 8 位数据转义，无法安全传输二进制文件。',
   serialTransferKermitAckTimeout: 'Kermit 等待确认超时，重试次数过多。',
   serialTransferKermitChecksumInvalid: 'Kermit 数据包校验失败。',
@@ -842,6 +853,50 @@ const zhCN = {
   ftpSecurityExplicit: 'FTPS（显式 TLS，推荐）',
   ftpSecurityImplicit: 'FTPS（隐式 TLS，兼容旧服务器）',
   ftpAuthHint: 'FTP/FTPS 与 SSH/SFTP 是不同协议。若服务器只开了 SSH 或 SFTP，请选择 SSH / SFTP，不要选 FTP / FTPS。',
+  ftpTransferMode: '数据通道模式',
+  ftpTransferPassive: '被动模式（推荐）',
+  ftpTransferActive: '主动模式',
+  ftpTransferModeHint: '被动模式更适合 NAT、防火墙和云服务器；主动模式要求服务器能反向连接本机。',
+  ftpCertificateFingerprint: 'FTPS 证书指纹（可选）',
+  ftpCertificateFingerprintHint:
+    '填写 SHA-256 指纹后，除系统证书校验外还会强制匹配该证书。支持 sha256: 前缀、冒号分隔十六进制或 Base64。',
+  ftpCertificateFingerprintInvalid: 'FTPS 证书指纹格式无效，请填写 32 字节 SHA-256 指纹。',
+  ftpImplicitProxyUnsupported: '当前实现不支持“隐式 FTPS + 代理”，请改用显式 FTPS 或关闭代理。',
+  telnetTerminalType: '终端类型',
+  telnetTerminalTypeHint: '仅在服务器请求 Telnet TERMINAL-TYPE 时发送；不代表本地终端外观。',
+  telnetNewline: '发送换行',
+  telnetNewlineNone: '原样发送',
+  telnetNewlineLf: 'LF（\\n）',
+  telnetNewlineCr: 'CR（\\r）',
+  telnetNewlineCrlf: 'CRLF（\\r\\n）',
+  telnetCrNul: 'CR 后追加 NUL',
+  telnetCrNulHint: 'NVT 文本模式下将 CR 编码为 CR NUL，适用于要求严格 Telnet 换行的旧设备。',
+  telnetLoginScript: '连接后发送脚本',
+  telnetLoginScriptHint: '每行作为一条命令发送，最多 64 行。不要在这里保存密码；脚本会随连接配置一起处理。',
+  telnetInsecureHint: 'Telnet 不加密传输，用户名、命令和输出都可能被网络中的其他人看到。能用 SSH 时请优先 SSH。',
+  telnetTunnelHint:
+    '如需加密传输，请先通过 SSH 隧道或代理把远端端口转发到本机，再将 Telnet 连接到本地端口。Telnet 本身不会提供加密。',
+  connectionTimeout: '连接超时（秒）',
+  operationTimeout: '操作超时（秒）',
+  keepalive: '启用保活',
+  keepaliveHint: '定期发送协议保活包，及时发现半开连接；失败达到上限后才触发断线处理。',
+  keepaliveInterval: '保活间隔（秒）',
+  keepaliveMaxMisses: '最大连续失败次数',
+  reconnectMaxAttempts: '最大重连次数',
+  reconnectMaxAttemptsHint: '填 0 表示不限次数；每次等待时间按指数退避增长。',
+  sftpEnabled: '启用 SFTP 文件通道',
+  sftpEnabledHint: '关闭后仍可使用 SSH 终端和隧道，但不会打开远程文件窗口。',
+  remoteCapabilities: '远程能力',
+  remoteCapabilityProtocol: '协议',
+  remoteCapabilityDiskSpace: '磁盘空间',
+  remoteCapabilityChecksums: '校验和',
+  remoteCapabilityExtensions: '扩展',
+  remoteCapabilityServerCopy: '服务端复制',
+  remoteCapabilitySymlink: '符号链接',
+  remoteCapabilityHardlink: '硬链接',
+  remoteCapabilityAvailable: '可用',
+  remoteCapabilityUnavailable: '不可用',
+  remoteCapabilityNone: '无',
   enableExecChannel: '启用后台命令通道（Exec）',
   enableExecChannelHint:
     '用于读取系统信息、root 文件视图、终端目录跟随和用户状态同步。它会额外建立一条 SSH 命令连接；仅在连接后立即断开时才建议关闭。',
@@ -1776,6 +1831,8 @@ const enUS: typeof zhCN = {
   terminalConnected: 'Connected to host',
   terminalDisconnected: 'Connection closed',
   terminalConnectionClosed: '[connection closed]',
+  telnetReconnectScheduled: '[Telnet] Automatic reconnect in {seconds} seconds (attempt {attempt})',
+  telnetReconnectLimit: '[Telnet] Automatic reconnect stopped: {error}',
   pressEnterToReconnect: 'Press Enter to reconnect…',
   connectionFailedPrefix: 'Connection failed: ',
   disconnected: 'Disconnected',
@@ -1892,6 +1949,10 @@ const enUS: typeof zhCN = {
   serialDeviceDisconnected: 'Serial device disconnected',
   serialEndpoint: 'Serial {path} @ {baud}',
   serialErrorPrefix: 'Serial error: ',
+  serialUnknownError: 'The serial operation failed. Check the session log for details.',
+  serialTransferActive: 'A serial file transfer is in progress; wait for it to finish.',
+  serialTransferSoftwareFlowControl:
+    'Software flow control cannot safely carry binary serial file transfers; use no flow control or hardware flow control.',
   serialUnsupportedOperation: 'Serial does not support file or tunnel operations',
   serialDevicePathRequired: 'A serial device path is required',
   serialBaudInvalid: 'Serial baud rate must be greater than 0',
@@ -1929,6 +1990,8 @@ const enUS: typeof zhCN = {
   serialPortSelect: 'Select a detected serial port',
   serialPortNoDevices: 'No serial ports detected; enter a path manually',
   serialPortIdentitySaved: 'The device identity is saved; a changed port name can be matched automatically.',
+  serialPortIdentityMissing:
+    'Only the device path is saved; reconnecting a USB serial port may select another device. Select a detected port to bind its identity.',
   serialPortRefresh: 'Refresh device list',
   serialPortRefreshing: 'Scanning serial ports',
   serialPortScanFailed: 'Unable to scan serial ports',
@@ -1958,6 +2021,11 @@ const enUS: typeof zhCN = {
   serialReceiveIdleTimeoutInvalid: 'Serial receive idle timeout must be between 250 and 600000 milliseconds.',
   serialWriteTimeoutSetting: 'Write/CTS wait timeout (ms)',
   serialTimeoutHint: 'Increase these for low baud rates or hardware-flow-control devices; range 250–600000 ms.',
+  serialTransferMaxFileBytes: 'Max received file size (bytes)',
+  serialTransferMaxBatchBytes: 'Max received batch size (bytes)',
+  serialTransferMaxFiles: 'Max files per received batch',
+  serialTransferLimitsHint:
+    'Received data is staged and committed only after completion; hitting any limit aborts the transfer.',
   serialRs485Mode: 'RS-485 mode',
   serialRs485None: 'Off',
   serialRs485HalfDuplex: 'Half duplex (RTS)',
@@ -1972,6 +2040,7 @@ const enUS: typeof zhCN = {
   serialRs485Unsupported:
     'Built-in RS-485 half-duplex control is not supported on this platform; use the driver or an external converter.',
   serialRs485ApplyFailed: 'Unable to apply Linux RS-485 settings: ',
+  serialRs485ReadbackFailed: 'Unable to read back effective Linux RS-485 settings: ',
   serialRs485SoftwareApplyFailed: 'Unable to configure macOS software RTS for RS-485: ',
   serialRs485DelayInvalid: 'Serial RS-485 RTS delays must be between 0 and 60000 milliseconds.',
   serialReconnectMaxAttempts: 'Max auto-reconnect attempts (0 unlimited)',
@@ -2043,7 +2112,7 @@ const enUS: typeof zhCN = {
   serialTransferSenderStartTimeout: 'Timed out waiting for the serial receiver to start.',
   serialTransferEndTimeout: 'Timed out waiting for the serial file transfer to finish.',
   serialTransferSequenceInvalid: 'Serial file-transfer block sequence is invalid.',
-  serialTransferDataTooLarge: 'YMODEM received more data than declared in the file header.',
+  serialTransferDataTooLarge: 'The serial transfer received more data than declared in the file header.',
   serialTransferCancel: 'Cancel transfer',
   serialTransferCanceling: 'Canceling…',
   serialTransferYmodemHeaderTooLong: 'The YMODEM header is too long; shorten the file name.',
@@ -2056,7 +2125,7 @@ const enUS: typeof zhCN = {
   serialTransferSizeMissing: 'The YMODEM header does not contain a file size.',
   serialTransferSizeTextInvalid: 'The YMODEM file size is not valid text.',
   serialTransferSizeInvalid: 'The YMODEM file size is invalid.',
-  serialTransferSizeMismatch: 'The YMODEM file size does not match the received data.',
+  serialTransferSizeMismatch: 'The received serial file size does not match the protocol declaration.',
   serialTransferKermitBinaryUnsupported:
     'The Kermit peer did not negotiate 8-bit quoting; the binary file cannot be transferred safely.',
   serialTransferKermitAckTimeout: 'Kermit acknowledgements timed out after too many retries.',
@@ -2321,6 +2390,57 @@ const enUS: typeof zhCN = {
   ftpSecurityImplicit: 'FTPS (implicit TLS, legacy)',
   ftpAuthHint:
     'FTP/FTPS is a separate protocol from SSH/SFTP. If the server only exposes SSH or SFTP, choose SSH / SFTP instead of FTP / FTPS.',
+  ftpTransferMode: 'Data channel mode',
+  ftpTransferPassive: 'Passive (recommended)',
+  ftpTransferActive: 'Active',
+  ftpTransferModeHint:
+    'Passive mode works better with NAT, firewalls, and cloud servers; active mode requires the server to connect back to this computer.',
+  ftpCertificateFingerprint: 'FTPS certificate fingerprint (optional)',
+  ftpCertificateFingerprintHint:
+    'When set, the SHA-256 certificate pin must match in addition to normal system certificate validation. Accepts sha256:, colon-separated hex, or Base64.',
+  ftpCertificateFingerprintInvalid: 'Invalid FTPS certificate fingerprint. Enter a 32-byte SHA-256 fingerprint.',
+  ftpImplicitProxyUnsupported:
+    'Implicit FTPS through a proxy is not supported yet. Use explicit FTPS or disable the proxy.',
+  telnetTerminalType: 'Terminal type',
+  telnetTerminalTypeHint:
+    'Sent only when the server requests Telnet TERMINAL-TYPE; it does not change the local terminal appearance.',
+  telnetNewline: 'Send newline',
+  telnetNewlineNone: 'Send as entered',
+  telnetNewlineLf: 'LF (\\n)',
+  telnetNewlineCr: 'CR (\\r)',
+  telnetNewlineCrlf: 'CRLF (\\r\\n)',
+  telnetCrNul: 'Append NUL after CR',
+  telnetCrNulHint:
+    'In NVT text mode, encode CR as CR NUL for older devices that require strict Telnet newline handling.',
+  telnetLoginScript: 'Post-connect script',
+  telnetLoginScriptHint:
+    'Each line is sent as one command, up to 64 lines. Do not store passwords here; the script is handled with the connection profile.',
+  telnetInsecureHint:
+    'Telnet is unencrypted: usernames, commands, and output may be visible to others on the network. Prefer SSH whenever possible.',
+  telnetTunnelHint:
+    'For encryption, first forward the remote port to a local port through an SSH tunnel or proxy, then connect Telnet to that local port. Telnet itself does not encrypt traffic.',
+  connectionTimeout: 'Connect timeout (seconds)',
+  operationTimeout: 'Operation timeout (seconds)',
+  keepalive: 'Enable keepalive',
+  keepaliveHint:
+    'Send periodic protocol keepalives to detect half-open connections; disconnect handling starts only after the failure limit is reached.',
+  keepaliveInterval: 'Keepalive interval (seconds)',
+  keepaliveMaxMisses: 'Maximum consecutive failures',
+  reconnectMaxAttempts: 'Maximum reconnect attempts',
+  reconnectMaxAttemptsHint: 'Use 0 for unlimited attempts; the wait grows with exponential backoff.',
+  sftpEnabled: 'Enable SFTP file channel',
+  sftpEnabledHint: 'When disabled, SSH terminal and tunnels remain available but the remote file pane is not opened.',
+  remoteCapabilities: 'Remote capabilities',
+  remoteCapabilityProtocol: 'Protocol',
+  remoteCapabilityDiskSpace: 'Disk space',
+  remoteCapabilityChecksums: 'Checksums',
+  remoteCapabilityExtensions: 'Extensions',
+  remoteCapabilityServerCopy: 'Server-side copy',
+  remoteCapabilitySymlink: 'Symbolic links',
+  remoteCapabilityHardlink: 'Hard links',
+  remoteCapabilityAvailable: 'Available',
+  remoteCapabilityUnavailable: 'Unavailable',
+  remoteCapabilityNone: 'None',
   savedHostFingerprint: 'Saved host identity',
   clearSavedFingerprint: 'Verify again',
   clearSavedFingerprintHint:
@@ -3160,8 +3280,16 @@ export function localizeLocalTerminalText(value: string) {
     .replaceAll('Split pane is only supported for SSH and local sessions', t.localTerminalSplitUnsupported)
 }
 
-export function localizeSerialTerminalText(value: string) {
-  return value
+export function localizeSerialTerminalText(value: string, options: { preserveUnknownTerminalOutput?: boolean } = {}) {
+  const isInternalSerialNotice =
+    /^\s*(?:\[串口\]|\[Hex\]|串口(?:已连接|已断开|设备已断开|错误：)|串口设备(?:扫描失败|扫描超时|身份)|串口 [^\r\n]+ @ \d+)/.test(
+      value
+    )
+  if (options.preserveUnknownTerminalOutput && !isInternalSerialNotice) {
+    return value
+  }
+
+  const localized = value
     .replaceAll('串口已连接', t.serialConnected)
     .replaceAll('串口已断开', t.serialDisconnected)
     .replaceAll('串口设备已断开', t.serialDeviceDisconnected)
@@ -3197,6 +3325,7 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器', t.serialRs485Unsupported)
     .replaceAll('串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间', t.serialRs485DelayInvalid)
     .replace(/应用 Linux RS-485 配置失败：/g, t.serialRs485ApplyFailed)
+    .replace(/读取 Linux RS-485 生效配置失败：/g, t.serialRs485ReadbackFailed)
     .replace(/配置 macOS RS-485 软件 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
     .replace(/释放 macOS RS-485 软件 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
     .replace(/设置 RS-485 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
@@ -3274,8 +3403,14 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('XMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
     .replaceAll('YMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
     .replaceAll('YMODEM 接收数据超过文件头声明的大小', t.serialTransferDataTooLarge)
+    .replaceAll('ZMODEM 接收数据超过文件头声明的大小', t.serialTransferDataTooLarge)
     .replaceAll('串口文件传输写入等待硬件流控超时', t.serialTransferWriteTimeout)
     .replaceAll('串口文件传输刷新等待硬件流控超时', t.serialTransferWriteTimeout)
+    .replaceAll('serial transfer active', t.serialTransferActive)
+    .replaceAll(
+      '软件流控可能吞掉串口文件传输的二进制控制字节，请改用无流控或硬件流控',
+      t.serialTransferSoftwareFlowControl
+    )
     .replaceAll('串口控制已取消', t.serialControlCanceled)
     .replaceAll('串口 YMODEM 文件头过长，请缩短文件名', t.serialTransferYmodemHeaderTooLong)
     .replaceAll('[串口] ', '[Serial] ')
@@ -3283,4 +3418,18 @@ export function localizeSerialTerminalText(value: string) {
     .replaceAll('串口设备扫描超时', t.serialScanTimeout)
     .replace(/Hex 输入必须按两个字符表示一个字节：\s*/g, t.serialHexFormatPrefix)
     .replace(/Hex 输入包含无效字节：\s*/g, t.serialHexInvalidBytePrefix)
+
+  // Terminal data is also passed through this helper. Only replace an
+  // untranslated Chinese string when it is an internal FileTerm serial
+  // notice, or when the caller explicitly treats the value as an error. A
+  // serial device is allowed to print Chinese application data in English
+  // UI mode and that output must not be hidden by the generic error message.
+  if (
+    activeLocale === 'enUS' &&
+    /[\u4e00-\u9fff]/.test(localized) &&
+    (!options.preserveUnknownTerminalOutput || isInternalSerialNotice)
+  ) {
+    return t.serialUnknownError
+  }
+  return localized
 }

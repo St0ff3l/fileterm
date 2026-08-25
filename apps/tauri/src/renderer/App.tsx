@@ -1543,6 +1543,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               fallbackResourceMonitoringMetricOrder={resourceMonitoringMetricOrder}
               mode={editingProfileId ? 'edit' : 'create'}
               form={form}
+              editingProfileId={editingProfileId}
+              profiles={workspace.profiles}
               hasSavedPassword={
                 editingProfileId
                   ? workspace.profiles.find((profile) => profile.id === editingProfileId)?.hasSavedPassword === true

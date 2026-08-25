@@ -1021,6 +1021,26 @@
   overflow: hidden;
 }
 
+.remote-capability-panel {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.remote-capability-panel summary {
+  cursor: pointer;
+  padding: 4px 10px;
+  user-select: none;
+}
+
+.remote-capability-panel__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 3px 12px;
+  padding: 0 10px 6px;
+}
+
 .file-split-resizer {
   min-width: 6px;
   cursor: col-resize;

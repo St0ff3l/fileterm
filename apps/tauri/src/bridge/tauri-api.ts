@@ -701,8 +701,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_move_remote_path', { tabId, targetPath, destinationPath }),
     renameRemotePath: (tabId: string, targetPath: string, newName: string) =>
       invoke<WorkspaceSnapshot>('app_rename_remote_path', { tabId, targetPath, newName }),
-    deleteRemotePath: (tabId: string, targetPath: string, targetType: 'file' | 'folder') =>
-      invoke<WorkspaceSnapshot>('app_delete_remote_path', { tabId, targetPath, targetType }),
+    deleteRemotePath: (tabId: string, targetPath: string, targetType: 'file' | 'folder', isSymlink = false) =>
+      invoke<WorkspaceSnapshot>('app_delete_remote_path', {
+        tabId,
+        targetPath,
+        targetType,
+        targetIsSymlink: isSymlink
+      }),
     changeRemotePermissions: (tabId: string, targetPath: string, options: PermissionChangeOptions) =>
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>

@@ -1,9 +1,15 @@
 import type { Terminal } from '@xterm/xterm'
 import { stripClinkAutosuggestPrompt } from '../app/terminal-transcript'
-import { localizeLocalTerminalText, localizeSerialTerminalText, t } from '../i18n'
+import { formatMessage, localizeLocalTerminalText, localizeSerialTerminalText, t } from '../i18n'
 
-export function localizeTerminalText(value: string) {
-  return localizeSerialTerminalText(localizeLocalTerminalText(value))
+export function localizeTerminalText(value: string, options: { preserveUnknownTerminalOutput?: boolean } = {}) {
+  return localizeSerialTerminalText(localizeLocalTerminalText(value), {
+    ...options,
+    // Terminal state summaries can contain remote/SSH text too. Preserve
+    // unknown content by default; internal serial notices still fall back via
+    // their explicit `[串口]` / `串口错误：` markers.
+    preserveUnknownTerminalOutput: options.preserveUnknownTerminalOutput ?? true
+  })
     .replaceAll('连接主机成功', t.terminalConnected)
     .replaceAll('连接主机...', t.terminalConnecting)
     .replaceAll('连接已断开', t.terminalDisconnected)
@@ -13,11 +19,19 @@ export function localizeTerminalText(value: string) {
     .replace(/Connection error:\s*/g, t.connectionFailedPrefix)
     .replace(/Disconnected from\s*/g, t.disconnectedFromPrefix)
     .replace(/\bDisconnected\b/g, t.disconnected)
+    .replace(/\[Telnet\] reconnect-scheduled: (\d+) (\d+)/g, (_match, seconds: string, attempt: string) =>
+      formatMessage(t.telnetReconnectScheduled, { seconds, attempt })
+    )
+    .replace(/\[Telnet\] reconnect-limit: ([^\r\n]*)/g, (_match, error: string) =>
+      formatMessage(t.telnetReconnectLimit, { error })
+    )
 }
 
 export function toDisplayTerminalText(value: string) {
   // Localize fixed FileTerm notices before preserving terminal control semantics later.
-  return localizeTerminalText(stripClinkAutosuggestPrompt(value))
+  return localizeTerminalText(stripClinkAutosuggestPrompt(value), {
+    preserveUnknownTerminalOutput: true
+  })
 }
 
 export function splitOscPayload(payload: string) {

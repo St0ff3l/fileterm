@@ -70,6 +70,16 @@ pub async fn emit_local_terminal_data(
 
     let _emit_guard = gate.emit_lock.lock().await;
     if !gate.active.load(Ordering::Acquire) {
+        crate::services::logging::debug(
+            app,
+            "local",
+            format!(
+                "discarding PTY batch tab={} runtime={} bytes={} reason=runtime-inactive",
+                tab_id,
+                runtime_id,
+                chunk.len()
+            ),
+        );
         return false;
     }
 
@@ -81,6 +91,16 @@ pub async fn emit_local_terminal_data(
         .get(tab_id)
         .is_some_and(|current_id| current_id == runtime_id);
     if !owns_runtime {
+        crate::services::logging::warn(
+            app,
+            "local",
+            format!(
+                "discarding PTY batch tab={} runtime={} bytes={} reason=runtime-not-owner",
+                tab_id,
+                runtime_id,
+                chunk.len()
+            ),
+        );
         return false;
     }
 

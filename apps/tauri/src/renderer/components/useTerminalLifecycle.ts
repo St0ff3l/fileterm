@@ -82,6 +82,7 @@ type TerminalLifecycleOptions = {
   transcriptReplayGenerationRef: MutableRef<number>
   connectedRef: MutableRef<boolean>
   connectingRef: MutableRef<boolean>
+  serialTransferBusyRef: MutableRef<boolean>
   lastSyncedSizeRef: MutableRef<TerminalSize | null>
   lastObservedHostRectRef: MutableRef<TerminalHostRect | null>
   isHorizontalResizeActiveRef: MutableRef<boolean>
@@ -162,6 +163,7 @@ export function useTerminalLifecycle({
   transcriptReplayGenerationRef,
   connectedRef,
   connectingRef,
+  serialTransferBusyRef,
   lastSyncedSizeRef,
   lastObservedHostRectRef,
   isHorizontalResizeActiveRef,
@@ -712,6 +714,13 @@ export function useTerminalLifecycle({
         }
       }
 
+      // The serial transfer worker owns the port while a protocol is active.
+      // Drop xterm input before it reaches the backend so quick sends, paste,
+      // and ordinary terminal typing cannot interleave protocol frames.
+      if (serialTransferBusyRef.current) {
+        return
+      }
+
       // When disconnected, intercept Enter to trigger reconnect instead of
       // forwarding to the (dead) PTY. Ignore while a reconnect is in flight.
       if (!connectedRef.current) {
@@ -736,6 +745,9 @@ export function useTerminalLifecycle({
       // 静默吞掉会让终端看起来"卡死且 Ctrl+C 无效"。降级为未连接状态并
       // 给出重连提示，Enter 重连路径随之可用。
       window.fileterm?.writeTerminal(tabIdRef.current, data)?.catch((error: unknown) => {
+        if (String(error).includes('serial transfer active')) {
+          return
+        }
         if (inputSendFailedRef.current) {
           return
         }

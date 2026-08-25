@@ -29,6 +29,7 @@ export type FileDialogTarget = {
   path: string
   name: string
   type: 'file' | 'folder'
+  isSymlink?: boolean
 }
 
 export type FileClipboardState = {
@@ -123,7 +124,8 @@ export function areClipboardItemsEqual(left: FileDialogTarget[], right: FileDial
       leftItem.pane !== rightItem.pane ||
       leftItem.path !== rightItem.path ||
       leftItem.name !== rightItem.name ||
-      leftItem.type !== rightItem.type
+      leftItem.type !== rightItem.type ||
+      leftItem.isSymlink !== rightItem.isSymlink
     ) {
       return false
     }
@@ -682,7 +684,8 @@ export function useFileOperations({
         pane,
         path: item.path,
         name: item.name,
-        type: item.type
+        type: item.type,
+        isSymlink: item.isSymlink
       }))
 
     if (!normalizedItems.length) {
@@ -820,7 +823,12 @@ export function useFileOperations({
             )
             onApplySnapshot(snapshot)
             if (fileClipboard.operation === 'cut') {
-              const deleteSnapshot = await desktopApi.deleteRemotePath(fileClipboard.tabId!, item.path, item.type)
+              const deleteSnapshot = await desktopApi.deleteRemotePath(
+                fileClipboard.tabId!,
+                item.path,
+                item.type,
+                item.isSymlink
+              )
               onApplySnapshot(deleteSnapshot)
             }
           }
@@ -900,7 +908,7 @@ export function useFileOperations({
           }
         } else if (activeTab) {
           for (const target of dialog.targets) {
-            const snapshot = await desktopApi.deleteRemotePath(activeTab.id, target.path, target.type)
+            const snapshot = await desktopApi.deleteRemotePath(activeTab.id, target.path, target.type, target.isSymlink)
             onApplySnapshot(snapshot)
           }
         }
@@ -981,7 +989,13 @@ export function useFileOperations({
     setIsFileActionSubmitting(false)
     setFileActionDialog({
       kind: 'delete',
-      targets: items.map((item) => ({ pane, path: item.path, name: item.name, type: item.type }))
+      targets: items.map((item) => ({
+        pane,
+        path: item.path,
+        name: item.name,
+        type: item.type,
+        isSymlink: item.isSymlink
+      }))
     })
   }
 
@@ -1056,7 +1070,7 @@ export function useFileOperations({
       try {
         onBusyChange(true)
         for (const item of items) {
-          const snapshot = await desktopApi.deleteRemotePath(activeTab.id, item.path, item.type)
+          const snapshot = await desktopApi.deleteRemotePath(activeTab.id, item.path, item.type, item.isSymlink)
           onApplySnapshot(snapshot)
         }
         await refreshCurrentPane('remote')

@@ -69,6 +69,16 @@ export function SerialQuickSendPanel({
   }, [profileId])
 
   useEffect(() => {
+    if (!connected) {
+      // A reconnect must never silently resume a macro that was running on a
+      // different serial session. Require an explicit user action after the
+      // port is available again.
+      setLooping(false)
+      loopWriteInFlight.current = false
+    }
+  }, [connected])
+
+  useEffect(() => {
     const writeTerminal = window.fileterm?.writeTerminal
     if (!looping || !connected || !draft.trim() || !writeTerminal) return
     const timer = window.setInterval(

@@ -1,6 +1,8 @@
+pub(crate) mod file_integrity;
 pub mod ftp;
 pub mod local_files;
 pub mod local_terminal;
+pub(crate) mod reconnect;
 pub mod serial;
 pub mod ssh;
 pub mod system_metrics;
@@ -37,48 +39,58 @@ pub enum WorkerCmd {
     },
     ListRemoteFiles {
         path: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<Vec<serde_json::Value>, String>>,
     },
     ReadRemoteFile {
         path: String,
         encoding: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<String, String>>,
     },
     WriteRemoteFile {
         path: String,
         content: String,
         encoding: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     CreateRemoteDirectory {
         parent_path: String,
         name: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     CreateRemoteFile {
         parent_path: String,
         name: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     CopyRemotePath {
         target_path: String,
         destination_path: String,
         target_type: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     MoveRemotePath {
         target_path: String,
         destination_path: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     RenameRemotePath {
         target_path: String,
         new_name: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     DeleteRemotePath {
         target_path: String,
         target_type: String,
+        target_is_symlink: bool,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     ChangeRemotePermissions {
@@ -86,6 +98,7 @@ pub enum WorkerCmd {
         permissions: u32,
         recursive: bool,
         apply_to: String, // "all" | "files" | "directories"
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     SetRemoteFileAccessMode {
@@ -117,6 +130,7 @@ pub enum WorkerCmd {
     },
     StatRemoteFile {
         path: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<Option<TransferFileStat>, String>>,
     },
     UploadLocalFile {
@@ -138,15 +152,18 @@ pub enum WorkerCmd {
     ReplaceRemoteFile {
         partial_path: String,
         destination_path: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     CommitRemoteStaging {
         staging_path: String,
         partial_path: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     RemoveRemoteFile {
         path: String,
+        cancellation: tokio_util::sync::CancellationToken,
         respond_to: tokio::sync::oneshot::Sender<Result<(), String>>,
     },
     Disconnect,

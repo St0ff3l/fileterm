@@ -11,11 +11,13 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
 use super::super::SerialTransferRequest;
+use super::file_safety::StagedReceiveFile;
+use super::limits::TransferBudget;
 use super::progress::SerialTransferReporter;
 use super::timing::SerialTransferTiming;
 use super::transfer::{create_target, flush, is_safe_transfer_file_name, write_all};
@@ -36,14 +38,14 @@ struct Packet {
 }
 
 struct ReceiveFile {
-    file: File,
-    path: PathBuf,
+    file: StagedReceiveFile,
 }
 
 pub(super) async fn send<S>(
     stream: &mut S,
     request: &SerialTransferRequest,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -65,6 +67,7 @@ where
         if !metadata.is_file() {
             return Err("Kermit 发送路径不是文件".to_string());
         }
+        budget.begin_file(Some(metadata.len()))?;
         let name = path
             .file_name()
             .and_then(|value| value.to_str())
@@ -125,6 +128,7 @@ pub(super) async fn receive<S>(
     stream: &mut S,
     directory: &Path,
     timing: SerialTransferTiming,
+    budget: &mut TransferBudget,
     reporter: &mut SerialTransferReporter,
     cancellation: &CancellationToken,
 ) -> Result<u64, String>
@@ -222,9 +226,9 @@ where
                     return Err("Kermit 文件名无效，不允许写出接收目录".to_string());
                 }
                 let path = directory.join(name);
+                budget.begin_file(None)?;
                 file = Some(ReceiveFile {
-                    file: create_target(&path).await?,
-                    path,
+                    file: create_target(&path, budget.max_file_bytes()).await?,
                 });
                 let ack = make_packet(packet.sequence, b'Y', &[], false, false)?;
                 if let Err(error) =
@@ -249,7 +253,10 @@ where
                         return Err(error);
                     }
                 };
-                let write_result = target.file.write_all(&bytes).await;
+                let write_result = target
+                    .file
+                    .write_all(&bytes, cancellation, Some(budget))
+                    .await;
                 if let Err(error) = write_result {
                     cleanup_received_file(&mut file).await;
                     return Err(format!("保存 Kermit 接收文件失败：{error}"));
@@ -269,13 +276,10 @@ where
                 }
             }
             b'Z' => {
-                let Some(mut target) = file.take() else {
+                let Some(target) = file.take() else {
                     return Err("Kermit 收到文件结束包前没有文件头".to_string());
                 };
-                if let Err(error) = target.file.flush().await {
-                    let path = target.path.clone();
-                    drop(target.file);
-                    let _ = tokio::fs::remove_file(path).await;
+                if let Err(error) = target.file.commit().await {
                     return Err(format!("刷新 Kermit 接收文件失败：{error}"));
                 }
                 let ack = make_packet(packet.sequence, b'Y', &[], false, false)?;
@@ -534,9 +538,7 @@ async fn cleanup_received_file(file: &mut Option<ReceiveFile>) {
     let Some(target) = file.take() else {
         return;
     };
-    let path = target.path;
-    drop(target.file);
-    let _ = tokio::fs::remove_file(path).await;
+    target.file.cleanup().await;
 }
 
 async fn read_packet<S>(
@@ -615,6 +617,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::super::super::{SerialTransferDirection, SerialTransferMode, SerialTransferRequest};
+    use super::super::limits::{SerialTransferLimits, TransferBudget};
     use super::super::progress::SerialTransferReporter;
     use super::super::timing::SerialTransferTiming;
     use super::{decode_data, encode_data, receive, send};
@@ -644,6 +647,7 @@ mod tests {
         let receiver_directory = target_directory.clone();
         let (mut sender_stream, mut receiver_stream) = duplex(4096);
         let sender = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             let request = SerialTransferRequest {
                 direction: SerialTransferDirection::Send,
                 mode: SerialTransferMode::Kermit,
@@ -660,12 +664,14 @@ mod tests {
                 &mut sender_stream,
                 &request,
                 timing,
+                &mut budget,
                 &mut reporter,
                 &cancellation,
             )
             .await
         });
         let receiver = tokio::spawn(async move {
+            let mut budget = TransferBudget::new(SerialTransferLimits::default());
             let mut reporter = SerialTransferReporter::disabled(
                 SerialTransferDirection::Receive,
                 SerialTransferMode::Kermit,
@@ -675,6 +681,7 @@ mod tests {
                 &mut receiver_stream,
                 &receiver_directory,
                 timing,
+                &mut budget,
                 &mut reporter,
                 &receiver_cancellation,
             )

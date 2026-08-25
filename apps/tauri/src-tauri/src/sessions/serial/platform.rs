@@ -9,6 +9,7 @@ use tokio::time::Sleep;
 use tokio_serial::{SerialPort, SerialStream};
 
 use super::config::SerialParity;
+use crate::services::session_logs::{SerialLogDirection, SerialLogSink};
 
 const UNSUPPORTED_EXTENDED_PARITY: &str =
     "当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验";
@@ -25,7 +26,7 @@ pub(super) enum SerialParityWireMode {
 }
 
 impl SerialParityWireMode {
-    fn is_emulated(self) -> bool {
+    pub(super) fn is_emulated(self) -> bool {
         !matches!(self, Self::Native)
     }
 }
@@ -135,6 +136,7 @@ fn apply_rs485_platform(
     delay_before_send_ms: u32,
     delay_after_send_ms: u32,
 ) -> Result<(), String> {
+    use std::mem::MaybeUninit;
     use std::os::fd::AsRawFd;
 
     // Linux's serial_rs485 layout is five u32 fields followed by padding for
@@ -172,6 +174,40 @@ fn apply_rs485_platform(
         return Err(format!(
             "应用 Linux RS-485 配置失败：{}",
             std::io::Error::last_os_error()
+        ));
+    }
+
+    // TIOCSRS485 can be accepted by a driver while silently normalizing or
+    // dropping unsupported flags. Read the effective value back before the
+    // worker starts; otherwise a profile can claim half-duplex while the
+    // adapter remains in ordinary UART mode.
+    let mut effective = MaybeUninit::<SerialRs485>::zeroed();
+    let result =
+        unsafe { libc::ioctl(stream.as_raw_fd(), libc::TIOCGRS485, effective.as_mut_ptr()) };
+    if result != 0 {
+        return Err(format!(
+            "读取 Linux RS-485 生效配置失败：{}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let effective = unsafe { effective.assume_init() };
+    let direction_mask = SER_RS485_RTS_ON_SEND | SER_RS485_RTS_AFTER_SEND;
+    let effective_enabled = effective.flags & SER_RS485_ENABLED != 0;
+    if effective_enabled != enabled {
+        return Err(format!(
+            "Linux RS-485 驱动未接受启用状态（请求：{enabled}，实际：{effective_enabled}）"
+        ));
+    }
+    if enabled && effective.flags & direction_mask != flags & direction_mask {
+        return Err("Linux RS-485 驱动未接受 RTS 方向配置".to_string());
+    }
+    if enabled
+        && (effective.delay_rts_before_send != delay_before_send_ms
+            || effective.delay_rts_after_send != delay_after_send_ms)
+    {
+        return Err(format!(
+            "Linux RS-485 驱动未接受延迟配置（实际：{}ms/{}ms）",
+            effective.delay_rts_before_send, effective.delay_rts_after_send
         ));
     }
     Ok(())
@@ -350,6 +386,7 @@ pub(super) struct SerialIo {
     inner: SerialStream,
     parity: SerialParityWireMode,
     rs485: SerialRs485Mode,
+    wire_log: Option<SerialLogSink>,
     tx_active: bool,
     before_sleep: Option<Pin<Box<Sleep>>>,
     after_sleep: Option<Pin<Box<Sleep>>>,
@@ -365,6 +402,7 @@ impl SerialIo {
             inner,
             parity,
             rs485,
+            wire_log: None,
             tx_active: false,
             before_sleep: None,
             after_sleep: None,
@@ -373,6 +411,10 @@ impl SerialIo {
 
     pub(super) fn serial_mut(&mut self) -> &mut SerialStream {
         &mut self.inner
+    }
+
+    pub(super) fn set_wire_log(&mut self, sink: Option<SerialLogSink>) {
+        self.wire_log = sink;
     }
 
     pub(super) fn release_rs485(&mut self) -> Result<(), String> {
@@ -481,7 +523,14 @@ impl AsyncRead for SerialIo {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
         if !self.parity.is_emulated() {
-            return Pin::new(&mut self.inner).poll_read(cx, buf);
+            let before = buf.filled().len();
+            let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+            if let Poll::Ready(Ok(())) = &result {
+                if let Some(sink) = &self.wire_log {
+                    sink.append_wire(SerialLogDirection::Rx, &buf.filled()[before..]);
+                }
+            }
+            return result;
         }
 
         if buf.remaining() == 0 {
@@ -492,13 +541,20 @@ impl AsyncRead for SerialIo {
         match Pin::new(&mut self.inner).poll_read(cx, &mut wire_buf) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
-            Poll::Ready(Ok(())) => match decode_wire_bytes(self.parity, wire_buf.filled()) {
-                Ok(decoded) => {
-                    buf.put_slice(&decoded);
-                    Poll::Ready(Ok(()))
+            Poll::Ready(Ok(())) => {
+                if let Some(sink) = &self.wire_log {
+                    sink.append_wire(SerialLogDirection::Rx, wire_buf.filled());
                 }
-                Err(error) => Poll::Ready(Err(serial_io_error(io::ErrorKind::InvalidData, error))),
-            },
+                match decode_wire_bytes(self.parity, wire_buf.filled()) {
+                    Ok(decoded) => {
+                        buf.put_slice(&decoded);
+                        Poll::Ready(Ok(()))
+                    }
+                    Err(error) => {
+                        Poll::Ready(Err(serial_io_error(io::ErrorKind::InvalidData, error)))
+                    }
+                }
+            }
         }
     }
 }
@@ -522,11 +578,17 @@ impl AsyncWrite for SerialIo {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
             Poll::Ready(Ok(())) => match Pin::new(&mut self.inner).poll_write(cx, &wire) {
+                Poll::Ready(Ok(written)) => {
+                    if let Some(sink) = &self.wire_log {
+                        sink.append_wire(SerialLogDirection::Tx, &wire[..written]);
+                    }
+                    Poll::Ready(Ok(written))
+                }
                 Poll::Ready(Err(error)) => {
                     let _ = self.release_rs485();
                     Poll::Ready(Err(error))
                 }
-                result => result,
+                Poll::Pending => Poll::Pending,
             },
         }
     }

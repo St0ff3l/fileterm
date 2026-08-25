@@ -41,6 +41,7 @@ import { getDisplayFileIconName, getDisplayFileTypeSortKey } from './file-kind'
 import { matchesFileFilter, type FileFilterConfig } from './file-filter'
 import { parseFileModified } from './file-time'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
+import { RemoteCapabilityPanel } from './RemoteCapabilityPanel'
 
 const VIEW_TRANSITION_LOADING_MS = 180
 
@@ -1144,6 +1145,7 @@ export function FileManager({
                 onChange={setRemotePathInput}
                 onSubmit={submitRemotePath}
               />
+              <RemoteCapabilityPanel capabilities={activeSession.remoteCapabilities} />
               <PaneFilterBar
                 disabled={!canUseRemoteFiles}
                 filter={remoteFilter}
