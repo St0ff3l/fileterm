@@ -249,7 +249,7 @@ function resolveCompactUiVariables(
     '--dialog-title': ink,
     '--dialog-description': secondaryText,
     '--dialog-footer-border': border,
-    '--dialog-focus-ring': `0 0 0 2px ${blend(card, 'transparent', 12)}, 0 0 0 4px ${alpha(accent, isLight ? 24 : 28)}`,
+    '--dialog-focus-ring': `0 0 0 2px ${blend(card, 'transparent', 12)}, 0 0 0 4px ${alpha(secondaryAccent, isLight ? 24 : 28)}`,
     '--dialog-warning-text': danger,
     '--dialog-button-secondary-bg': 'transparent',
     '--dialog-button-secondary-border': strongBorder,
