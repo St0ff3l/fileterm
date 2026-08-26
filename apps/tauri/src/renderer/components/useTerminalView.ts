@@ -322,6 +322,10 @@ export function useTerminalView({
     if (!terminal) {
       return
     }
+    // Dock/context-menu actions can move focus to a WebView button before
+    // reaching this handler. Restore the terminal first so Linux clipboard
+    // providers and xterm selection stay associated with this pane.
+    terminal.focus()
     const xtermSelection = terminal.getSelection()
     const vimVisualSelection = xtermSelection ? null : getVimVisualSelection(terminal, true)
     const selection = xtermSelection || vimVisualSelection?.text || ''
@@ -341,7 +345,6 @@ export function useTerminalView({
         }
       }
     )
-    terminal.focus()
   }
 
   const runPaste = async () => {
@@ -349,9 +352,14 @@ export function useTerminalView({
     if (!terminal) {
       return
     }
+    // Focus before the asynchronous clipboard read. This is important for
+    // Debian/WebKitGTK where the paste target is otherwise the Dock button or
+    // the portal context-menu surface when the native read resolves.
+    terminal.focus()
     try {
       const value = await readClipboardText()
       if (value) {
+        terminal.focus()
         clearEphemeralHighlight()
         terminal.paste(value)
       }

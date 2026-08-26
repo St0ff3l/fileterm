@@ -26,6 +26,7 @@ import {
   getVimVisualSelection,
   isFocusTrackingSequence,
   isOsc52TargetSupported,
+  isTerminalClipboardShortcut,
   isTerminalResponseSequence,
   logTerminalClipboard,
   logTerminalZoom,
@@ -432,12 +433,8 @@ export function useTerminalLifecycle({
         return false
       }
 
-      const matchesCopy = isMac
-        ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'c'
-        : event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'c'
-      const matchesPaste = isMac
-        ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'v'
-        : event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'v'
+      const matchesCopy = isTerminalClipboardShortcut(event, isMac, 'copy')
+      const matchesPaste = isTerminalClipboardShortcut(event, isMac, 'paste')
       const matchesFind = isMac
         ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'f'
         : event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f'
@@ -916,6 +913,10 @@ export function useTerminalLifecycle({
       // Read selection state when the menu is about to show: xterm.js finishes
       // its selection on pointerup, so at contextmenu time terminal.hasSelection()
       // is authoritative. Pointerdown/mousedown are too early.
+      // Keep the terminal as the focus owner while the portal menu is open so
+      // a menu click cannot make a paste target ambiguous on WebKitGTK.
+      markTerminalFocused()
+      terminal.focus()
       const vimVisualSelection = getVimVisualSelection(terminal, true)
       const nextHasSelection = terminal.hasSelection() || Boolean(vimVisualSelection)
       setHasSelection(nextHasSelection)
@@ -1222,15 +1223,22 @@ export function useTerminalLifecycle({
       }
 
       const key = event.key.toLowerCase()
-      const matchesCopy = isMac
-        ? event.metaKey && !event.shiftKey && key === 'c'
-        : event.ctrlKey && event.shiftKey && key === 'c'
+      const matchesCopy = isTerminalClipboardShortcut(event, isMac, 'copy')
+      const matchesPaste = isTerminalClipboardShortcut(event, isMac, 'paste')
+      const isFocusedTerminal = isTerminalShortcutTarget(event)
 
-      if (matchesCopy && (terminal.hasSelection() || Boolean(getVimVisualSelection(terminal, true)))) {
+      if (
+        isFocusedTerminal &&
+        matchesCopy &&
+        (terminal.hasSelection() || Boolean(getVimVisualSelection(terminal, true)))
+      ) {
         const target = event.target
         const editableTarget =
           target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ? target : null
-        const editableSelection = editableTarget ? editableTarget.selectionStart !== editableTarget.selectionEnd : false
+        const editableSelection =
+          editableTarget && editableTarget !== terminalTextarea
+            ? editableTarget.selectionStart !== editableTarget.selectionEnd
+            : false
         const documentSelection = window.getSelection()
         const hasDocumentSelection = Boolean(
           documentSelection && !documentSelection.isCollapsed && documentSelection.toString()
@@ -1238,9 +1246,24 @@ export function useTerminalLifecycle({
 
         if (!editableSelection && !hasDocumentSelection) {
           event.preventDefault()
-          event.stopPropagation()
+          event.stopImmediatePropagation()
           logTerminalClipboard(terminal, 'copy-shortcut-window', { key: event.key })
           runCopy()
+        }
+        return
+      }
+
+      if (isFocusedTerminal && matchesPaste) {
+        const target = event.target
+        const isExternalEditableTarget =
+          target instanceof HTMLInputElement ||
+          (target instanceof HTMLTextAreaElement && target !== terminalTextarea) ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        if (!isExternalEditableTarget) {
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          logTerminalClipboard(terminal, 'paste-shortcut-window', { key: event.key })
+          void runPaste()
         }
         return
       }
@@ -1267,12 +1290,19 @@ export function useTerminalLifecycle({
       if (targetTabId && targetTabId !== tabIdRef.current) {
         return
       }
+      markTerminalFocused()
       terminal.focus()
     }
     const handleTerminalCopy = () => {
+      if (lastFocusedTerminal !== terminal) {
+        return
+      }
       runCopy()
     }
     const handleTerminalPaste = () => {
+      if (lastFocusedTerminal !== terminal) {
+        return
+      }
       void runPaste()
     }
     const handleTerminalFind = () => {

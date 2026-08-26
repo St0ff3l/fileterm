@@ -1125,27 +1125,29 @@ export function FileManager({
                 label={t.remoteHost}
                 value={remotePathInput}
                 action={
-                  isSshSession ? (
-                    <button
-                      aria-pressed={activeSession.followShellCwd !== false}
-                      className={`follow-shell-cwd-toggle ${activeSession.followShellCwd !== false ? 'is-active' : ''}`}
-                      disabled={!canUseRemoteFiles}
-                      onClick={onToggleFollowShellCwd}
-                      title={
-                        activeSession.shellCwd
-                          ? `${t.shellCwd}: ${activeSession.shellCwd}`
-                          : t.followShellCwdUnavailable
-                      }
-                      type="button"
-                    >
-                      {t.followShellCwd}
-                    </button>
-                  ) : null
+                  <div className="pane-path-bar-actions">
+                    {isSshSession ? (
+                      <button
+                        aria-pressed={activeSession.followShellCwd !== false}
+                        className={`follow-shell-cwd-toggle ${activeSession.followShellCwd !== false ? 'is-active' : ''}`}
+                        disabled={!canUseRemoteFiles}
+                        onClick={onToggleFollowShellCwd}
+                        title={
+                          activeSession.shellCwd
+                            ? `${t.shellCwd}: ${activeSession.shellCwd}`
+                            : t.followShellCwdUnavailable
+                        }
+                        type="button"
+                      >
+                        {t.followShellCwd}
+                      </button>
+                    ) : null}
+                    <RemoteCapabilityPanel capabilities={activeSession.remoteCapabilities} />
+                  </div>
                 }
                 onChange={setRemotePathInput}
                 onSubmit={submitRemotePath}
               />
-              <RemoteCapabilityPanel capabilities={activeSession.remoteCapabilities} />
               <PaneFilterBar
                 disabled={!canUseRemoteFiles}
                 filter={remoteFilter}

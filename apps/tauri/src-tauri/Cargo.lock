@@ -1352,7 +1352,7 @@ dependencies = [
 
 [[package]]
 name = "fileterm"
-version = "2.2.3"
+version = "2.2.4"
 dependencies = [
  "aes-gcm",
  "arboard",

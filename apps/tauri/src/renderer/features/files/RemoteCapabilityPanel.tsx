@@ -1,5 +1,6 @@
 import type { RemoteFileCapabilities } from '@fileterm/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes < 0) {
@@ -24,6 +25,7 @@ export function RemoteCapabilityPanel({ capabilities }: { capabilities?: RemoteF
     return null
   }
 
+  const protocol = `${capabilities.protocol.toUpperCase()}${capabilities.protocolVersion ? ` ${capabilities.protocolVersion}` : ''}`
   const diskSpace = capabilities.diskSpace
     ? `${formatBytes(capabilities.diskSpace.availableBytes)} / ${formatBytes(capabilities.diskSpace.totalBytes)}`
     : t.remoteCapabilityUnavailable
@@ -34,31 +36,41 @@ export function RemoteCapabilityPanel({ capabilities }: { capabilities?: RemoteF
 
   return (
     <details className="remote-capability-panel">
-      <summary>{t.remoteCapabilities}</summary>
-      <div className="remote-capability-panel__body">
-        <span>
-          {t.remoteCapabilityProtocol}: {capabilities.protocol.toUpperCase()}
-          {capabilities.protocolVersion ? ` ${capabilities.protocolVersion}` : ''}
-        </span>
-        <span>
-          {t.remoteCapabilityDiskSpace}: {diskSpace}
-        </span>
-        <span>
-          {t.remoteCapabilityChecksums}: {checksums}
-        </span>
-        <span>
-          {t.remoteCapabilityExtensions}: {extensions}
-        </span>
-        <span>
-          {t.remoteCapabilityServerCopy}: {capabilityLabel(capabilities.serverCopy)}
-        </span>
-        <span>
-          {t.remoteCapabilitySymlink}: {capabilityLabel(capabilities.symlink)}
-        </span>
-        <span>
-          {t.remoteCapabilityHardlink}: {capabilityLabel(capabilities.hardlink)}
-        </span>
-      </div>
+      <summary aria-label={t.remoteCapabilities} title={t.remoteCapabilities}>
+        <AppIcon name="server" size={13} />
+        <span>{protocol}</span>
+        <AppIcon className="remote-capability-panel__chevron" name="chevron-down" size={11} />
+      </summary>
+      <dl className="remote-capability-panel__body">
+        <div>
+          <dt>{t.remoteCapabilityProtocol}</dt>
+          <dd>{protocol}</dd>
+        </div>
+        <div>
+          <dt>{t.remoteCapabilityDiskSpace}</dt>
+          <dd>{diskSpace}</dd>
+        </div>
+        <div>
+          <dt>{t.remoteCapabilityChecksums}</dt>
+          <dd>{checksums}</dd>
+        </div>
+        <div className="remote-capability-panel__extensions">
+          <dt>{t.remoteCapabilityExtensions}</dt>
+          <dd>{extensions}</dd>
+        </div>
+        <div>
+          <dt>{t.remoteCapabilityServerCopy}</dt>
+          <dd>{capabilityLabel(capabilities.serverCopy)}</dd>
+        </div>
+        <div>
+          <dt>{t.remoteCapabilitySymlink}</dt>
+          <dd>{capabilityLabel(capabilities.symlink)}</dd>
+        </div>
+        <div>
+          <dt>{t.remoteCapabilityHardlink}</dt>
+          <dd>{capabilityLabel(capabilities.hardlink)}</dd>
+        </div>
+      </dl>
     </details>
   )
 }

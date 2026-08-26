@@ -104,6 +104,21 @@ export function splitPaneShortcutsForPlatform(platform: string | undefined) {
   return { vertical: 'Ctrl+Shift+D', horizontal: 'Ctrl+Alt+Shift+D', closePane: 'Ctrl+Shift+W' }
 }
 
+/**
+ * Terminal copy/paste shortcuts intentionally differ from ordinary text
+ * inputs on Linux and Windows: Ctrl+C/V belong to the remote shell, so the
+ * desktop terminal convention is Ctrl+Shift+C/V. Use `code` as a fallback
+ * because WebKitGTK can report a layout-dependent `key` for these physical
+ * letter keys while still preserving the hardware code.
+ */
+export function isTerminalClipboardShortcut(event: KeyboardEvent, isMac: boolean, action: 'copy' | 'paste') {
+  const expectedKey = action === 'copy' ? 'c' : 'v'
+  const expectedCode = action === 'copy' ? 'KeyC' : 'KeyV'
+  const matchesKey = event.key.toLowerCase() === expectedKey || event.code === expectedCode
+
+  return isMac ? event.metaKey && !event.shiftKey && matchesKey : event.ctrlKey && event.shiftKey && matchesKey
+}
+
 export function trimTranscript(transcript: string) {
   if (transcript.length <= TERMINAL_TRANSCRIPT_LIMIT) {
     return transcript
