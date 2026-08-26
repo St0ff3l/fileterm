@@ -8,6 +8,7 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
@@ -87,7 +88,10 @@ export function CommandCenter({
     [commandTemplates]
   )
   const [activeFolderId, setActiveFolderId] = useState<string>('all')
-  const [selectedCommandId, setSelectedCommandId] = useState<string | null>(commandTemplates[0]?.id ?? null)
+  const [selectedCommandId, setSelectedCommandId] = useState<string | null>(() => {
+    const initialSorted = sortByOrder(commandTemplates)
+    return initialSorted[0]?.id ?? null
+  })
   const [temporaryCommand, setTemporaryCommand] = useState('')
   const [isSendingTemporary, setIsSendingTemporary] = useState(false)
   const [temporaryHistory, setTemporaryHistory] = useState<TemporaryHistoryEntry[]>([])
@@ -135,7 +139,23 @@ export function CommandCenter({
     )
   }, [commandTemplates, isTemporaryEditor, selectedCommandId, visibleTemplates])
   const paramIndexes = selectedTemplate ? extractCommandParams(selectedTemplate.command) : []
-  const previewCommand = isEditingTemplate ? templateDraftCommand : (selectedTemplate?.command ?? '')
+  const previewCommand = useMemo(() => {
+    if (isEditingTemplate) {
+      return templateDraftCommand
+    }
+    const rawCommand = selectedTemplate?.command ?? ''
+    if (!paramIndexes.length) {
+      return rawCommand
+    }
+    let interpolated = rawCommand
+    for (const index of paramIndexes) {
+      const value = paramValues[index]
+      if (value !== undefined && value !== '') {
+        interpolated = interpolated.replaceAll(`[p#${index}]`, value)
+      }
+    }
+    return interpolated
+  }, [isEditingTemplate, templateDraftCommand, selectedTemplate?.command, paramIndexes, paramValues])
   const selectedTemporaryHistory = useMemo(
     () => temporaryHistory.find((entry) => temporaryHistoryKey(entry) === selectedTemporaryHistoryKey) ?? null,
     [selectedTemporaryHistoryKey, temporaryHistory]
@@ -158,10 +178,15 @@ export function CommandCenter({
   )
 
   useEffect(() => {
-    if (!isTemporaryEditor && !selectedTemplate && commandTemplates[0]) {
-      setSelectedCommandId(commandTemplates[0].id)
+    if (isTemporaryEditor) return
+    if (!visibleTemplates.length) {
+      setSelectedCommandId(null)
+      return
     }
-  }, [commandTemplates, isTemporaryEditor, selectedTemplate])
+    if (!selectedCommandId || !visibleTemplates.some((template) => template.id === selectedCommandId)) {
+      setSelectedCommandId(visibleTemplates[0].id)
+    }
+  }, [isTemporaryEditor, visibleTemplates, selectedCommandId])
 
   useEffect(() => {
     if (isTemporaryEditor) {
@@ -835,24 +860,56 @@ export function CommandCenter({
                         ariaLabel={t.commandTemplate}
                       />
                     </div>
+                    {paramIndexes.length ? (
+                      <div className="command-param-docked-bar" role="toolbar" aria-label={t.commandParam}>
+                        <div className="command-param-docked-lead" title={`${t.commandParam} (${paramIndexes.length})`}>
+                          <AppIcon name="code" size={11} />
+                        </div>
+                        <div className="command-param-scroll-track" onWheel={handleHorizontalWheelScroll}>
+                          {paramIndexes.map((index) => (
+                            <div key={index} className="command-param-chip">
+                              <span className="command-param-chip-prefix">
+                                <span className="command-param-chip-tag">{`p#${index}`}</span>
+                              </span>
+                              <input
+                                type="text"
+                                value={paramValues[index] ?? ''}
+                                placeholder={`[p#${index}]`}
+                                title={
+                                  paramValues[index]
+                                    ? `${t.commandParam} ${index}: ${paramValues[index]}`
+                                    : `[p#${index}]`
+                                }
+                                aria-label={`${t.commandParam} ${index}`}
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value
+                                  setParamValues((prev) => ({ ...prev, [index]: value }))
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' && !event.shiftKey) {
+                                    event.preventDefault()
+                                    handleRun()
+                                  }
+                                }}
+                              />
+                              {paramValues[index] ? (
+                                <button
+                                  type="button"
+                                  className="command-param-chip-clear"
+                                  title={t.clear}
+                                  aria-label={t.clear}
+                                  tabIndex={-1}
+                                  onClick={() => setParamValues((prev) => ({ ...prev, [index]: '' }))}
+                                >
+                                  <AppIcon name="close" size={9} />
+                                </button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                  {paramIndexes.length ? (
-                    <div className="command-param-grid">
-                      {paramIndexes.map((index) => (
-                        <label key={index}>
-                          <span>{`${t.commandParam} ${index}`}</span>
-                          <input
-                            type="text"
-                            value={paramValues[index] ?? ''}
-                            onChange={(event) => {
-                              const value = event.currentTarget.value
-                              setParamValues((prev) => ({ ...prev, [index]: value }))
-                            }}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  ) : null}
                 </>
               ) : (
                 <div className="command-empty-state">
