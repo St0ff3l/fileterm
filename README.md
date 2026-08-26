@@ -144,7 +144,7 @@ npm run release:linux
 ### 发布与更新
 
 - 推送位于 `release/*` 分支提交上的 `vX.Y.Z` tag，会运行 Tauri 专用 Release Action，发布 macOS arm64/x64 DMG、Windows x64 NSIS 安装包以及 Linux x64 `.deb` / `.AppImage` 包。
-- Windows Action 同时生成带签名的 NSIS 安装器、免安装 `*-windows-x64-portable.exe`、`.sig` 签名文件和 `latest.json`；已安装 Windows 客户端从该清单验签后更新。portable 版本不写入安装器注册信息，运行前仍需系统已有 WebView2 Runtime。
+- Windows Action 同时生成带签名的 NSIS 安装器、免安装 `*-windows-x64-portable.exe`、`.sig` 签名文件和 `latest.json`；已安装 Windows 客户端从该清单验签后更新。portable 版本不写入安装器注册信息，配置保存到可执行文件旁的 `config/` 文件夹，首次运行空目录时会迁移已有安装版配置，运行前仍需系统已有 WebView2 Runtime。凭据加密仍绑定当前 Windows 设备，复制到另一台电脑后需重新配置凭据。
 - 仓库需要配置 GitHub Actions Secret `TAURI_SIGNING_PRIVATE_KEY`。它是 Tauri updater 私钥内容，只能保存为 GitHub Secret，绝不能提交到仓库。
 - macOS 发行包使用 ad hoc 签名（不使用 Apple Developer 证书或公证），不使用应用内 updater：检查到新版本后跳转 GitHub Release，由用户选择下载包；首次下载运行仍可能需要在“隐私与安全性”中手动放行。
 
