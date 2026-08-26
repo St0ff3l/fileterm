@@ -598,6 +598,52 @@
   font-size: 13px;
 }
 
+.ssh-grid .ssh-checkbox {
+  display: flex;
+  grid-template-columns: none;
+}
+
+.session-log-directory-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-log-directory-control input {
+  min-width: 0;
+  flex: 1;
+}
+
+.session-log-directory-control button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.serial-port-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 82px;
+}
+
+.serial-port-picker > .ft-select-shell,
+.serial-port-picker > .dropdown-select-trigger {
+  min-width: 0;
+  flex: 1;
+}
+
+.serial-port-picker__refresh {
+  flex: 0 0 auto;
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.serial-port-picker__error {
+  margin-top: 0;
+}
+
 .ssh-inline-action {
   display: flex;
   justify-content: flex-start;

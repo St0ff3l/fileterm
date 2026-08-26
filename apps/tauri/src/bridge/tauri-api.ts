@@ -59,6 +59,13 @@ import type {
   SetAiContextAttachInput,
   SetAiCopilotModeInput,
   SetAiDangerousCommandRestrictionsInput,
+  SerialControlAction,
+  SerialLineStatus,
+  SerialTransferDirection,
+  SerialTransferMode,
+  SerialTransferProgress,
+  SerialTransferResult,
+  SerialPortInfo,
   StartAiChatInput,
   SummarizeAiConversationTitleInput,
   TestAiProviderInput,
@@ -447,6 +454,30 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       }),
     openExternalUrl: (url: string) => invoke<void>('app_open_external_url', { url }),
     openLogsDirectory: () => invoke<void>('app_open_logs_directory'),
+    listSerialPorts: () => invoke<SerialPortInfo[]>('app_list_serial_ports'),
+    onSerialPortsChanged: (listener: (ports: SerialPortInfo[]) => void) => subscribe('serial:ports-changed', listener),
+    serialControl: (tabId: string, action: SerialControlAction, value?: boolean, durationMs?: number) =>
+      invoke<SerialLineStatus>('app_serial_control', { tabId, action, value, durationMs }),
+    serialTransfer: (
+      tabId: string,
+      direction: SerialTransferDirection,
+      mode: SerialTransferMode,
+      localPath: string,
+      fileName?: string,
+      localPaths?: string[],
+      xmodemPreservePadding?: boolean
+    ) =>
+      invoke<SerialTransferResult>('app_serial_transfer', {
+        tabId,
+        direction,
+        mode,
+        localPath,
+        fileName: fileName ?? null,
+        localPaths: localPaths ?? null,
+        xmodemPreservePadding: xmodemPreservePadding ?? null
+      }),
+    serialTransferCancel: (tabId: string) => invoke<void>('app_serial_cancel_transfer', { tabId }),
+    saveSessionLog: (tabId: string) => invoke<string | null>('app_save_session_log', { tabId }),
     minimizeCurrentWindow: () => invoke<void>('app_window_action', { action: 'minimize' }),
     showCurrentWindow: () => invoke<void>('app_window_action', { action: 'show' }),
     isCurrentWindowMaximized: () => invoke<boolean>('app_is_window_maximized'),
@@ -670,8 +701,13 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_move_remote_path', { tabId, targetPath, destinationPath }),
     renameRemotePath: (tabId: string, targetPath: string, newName: string) =>
       invoke<WorkspaceSnapshot>('app_rename_remote_path', { tabId, targetPath, newName }),
-    deleteRemotePath: (tabId: string, targetPath: string, targetType: 'file' | 'folder') =>
-      invoke<WorkspaceSnapshot>('app_delete_remote_path', { tabId, targetPath, targetType }),
+    deleteRemotePath: (tabId: string, targetPath: string, targetType: 'file' | 'folder', isSymlink = false) =>
+      invoke<WorkspaceSnapshot>('app_delete_remote_path', {
+        tabId,
+        targetPath,
+        targetType,
+        targetIsSymlink: isSymlink
+      }),
     changeRemotePermissions: (tabId: string, targetPath: string, options: PermissionChangeOptions) =>
       invoke<WorkspaceSnapshot>('app_change_remote_permissions', { tabId, targetPath, options }),
     resolveSshInteraction: (requestId: string, response: SshInteractionResponse) =>
@@ -719,6 +755,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onTerminalData: subscribeTerminalData,
     onTerminalState: (listener: (payload: TerminalStatePayload) => void) => subscribe('terminal:state', listener),
     onTransferUpdate: (listener: (transfer: TransferTask) => void) => subscribe('transfer:update', listener),
+    onSerialTransferProgress: (listener: (progress: SerialTransferProgress) => void) =>
+      subscribe('serial:transfer-progress', listener),
     onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) => subscribe('workspace:snapshot', listener),
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),

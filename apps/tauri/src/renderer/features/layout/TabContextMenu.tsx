@@ -7,6 +7,7 @@ export function TabContextMenu({
   canCloseAll,
   canCloseCurrent,
   canCloseOthers,
+  canSaveSessionLog,
   isSessionTab,
   onAction,
   onClose,
@@ -17,9 +18,19 @@ export function TabContextMenu({
   canCloseAll: boolean
   canCloseCurrent: boolean
   canCloseOthers: boolean
+  canSaveSessionLog: boolean
   isSessionTab: boolean
   onAction(
-    action: 'copy' | 'clone' | 'connect' | 'connectAll' | 'disconnect' | 'close' | 'closeOthers' | 'closeAll'
+    action:
+      | 'copy'
+      | 'clone'
+      | 'connect'
+      | 'connectAll'
+      | 'disconnect'
+      | 'saveSessionLog'
+      | 'close'
+      | 'closeOthers'
+      | 'closeAll'
   ): void
   onClose(): void
   position: { x: number; y: number }
@@ -39,6 +50,8 @@ export function TabContextMenu({
         { label: t.connectAll, disabled: !isSessionTab || !canConnectAll, action: () => onAction('connectAll') },
         { separator: true },
         { label: t.disconnect, disabled: !canDisconnect, action: () => onAction('disconnect') },
+        { separator: true },
+        { label: t.saveSessionLog, disabled: !canSaveSessionLog, action: () => onAction('saveSessionLog') },
         { separator: true },
         { label: t.closeTab, disabled: !canCloseCurrent, action: () => onAction('close') },
         { separator: true },

@@ -37,7 +37,8 @@
 - Tauri FTPS：本地显式/隐式 TLS 夹具已验证控制与数据通道；仍需真实 FTPS 服务和受信任证书的发行候选验收。
 - WebDAV：本地 HTTP 夹具已验证 HEAD、成功 PUT、GET、ETag、`If-Match`/412 冲突和下载 hash；仍需真实 WebDAV 服务、认证与 TLS 证书验收。
 - Telnet：真实 TCP peer、HTTP CONNECT 与 SOCKS5 代理夹具已验证；真实设备与第三方代理服务仍待验收。
-- Serial：Linux kernel PTY 已纳入 CI；macOS 和 Windows 需要实体设备或已知可靠的虚拟串口。`mark`/`space` parity 受上游 `serialport` API 限制，必须保持“明确不支持”，不能降级成 `none`。
+- Serial：Linux kernel PTY 已纳入 CI；macOS 和 Windows 需要实体设备或已知可靠的虚拟串口。`mark`/`space` parity 在 Linux `termios2` 和 Windows DCB 上走原生配置，macOS 对 `7M/7S` 使用 8N{1,2} 字节级模拟（只允许 7 数据位，会校验并去除第 8 位），其他数据位和其他平台仍由后端 fail-closed，不能降级成 `none`。RS-485 在 Linux 使用驱动 ioctl，macOS 使用 RTS 软件控制外部 DE/RE 收发器；两者都需要实体/虚拟串口确认电气方向、极性和延迟。
+- Serial XMODEM：协议没有文件大小字段，接收默认保留末尾 `0x1A`，避免静默丢失二进制字节；兼容选项可显式恢复传统的末尾填充裁剪。需要精确文件大小时应使用 YMODEM/ZMODEM，并在两端选择同一协议。
 - 本机环境核查：macOS 仅发现已配对蓝牙 `cu.*` 端口，没有可安全用于自动化的 USB/虚拟串口；不会打开未知设备来伪造串口验收。Docker CLI 存在但 daemon 未运行，因此本轮未启动第三方 WebDAV/FTPS 容器来替代真实服务验收。
 - 三平台 socket lifecycle 与新增 Linux `tauri-real-protocols` workflow 仍只是配置，尚未推送运行；不能以 workflow 文件代替结果。
 - Tauri signed updater 需要发布方提供更新 endpoint、Ed25519 公钥/私钥与 macOS/Windows 签名、公证资产；当前实现安全地使用 GitHub Release 检查及发布页安装，不伪造 silent install。

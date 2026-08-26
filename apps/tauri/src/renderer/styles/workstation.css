@@ -3,6 +3,7 @@
 @import './features/overview.css';
 @import './features/quick-links.css';
 @import './features/session.css';
+@import './features/serial.css';
 @import './features/file-editor.css';
 @import './features/confirm-dialog.css';
 @import './features/modals.css';

@@ -1,0 +1,307 @@
+.terminal-view--serial {
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-view--serial .terminal-host {
+  flex: 1 1 auto;
+  height: auto;
+}
+
+.serial-toolbar {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 8px 14px 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 5px 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+}
+
+.serial-toolbar__controls,
+.serial-toolbar__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.serial-toolbar__controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.serial-toolbar__controls button:hover:not(:disabled),
+.serial-toolbar__controls button.is-active {
+  border-color: var(--focus-outline);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--focus-outline) 14%, transparent);
+}
+
+.serial-toolbar__controls button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.serial-toolbar__refresh {
+  width: 26px;
+  justify-content: center;
+  padding-inline: 4px !important;
+}
+
+.serial-toolbar__status {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.serial-toolbar__status span + span::before {
+  margin-right: 6px;
+  color: var(--border);
+  content: '·';
+}
+
+.serial-toolbar__error {
+  flex: 1 0 100%;
+  overflow: hidden;
+  color: var(--status-error, #d85858);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serial-transfer-panel {
+  flex: 1 0 100%;
+  min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  padding-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.serial-transfer-panel summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.serial-transfer-panel summary:hover {
+  color: var(--text-primary);
+}
+
+.serial-transfer-panel__body {
+  display: grid;
+  gap: 5px;
+  padding-top: 5px;
+}
+
+.serial-transfer-panel__modes,
+.serial-transfer-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.serial-transfer-panel button {
+  min-height: 23px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.serial-transfer-panel button:hover:not(:disabled),
+.serial-transfer-panel button.is-active {
+  border-color: var(--focus-outline);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--focus-outline) 14%, transparent);
+}
+
+.serial-transfer-panel button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.serial-transfer-panel label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.serial-transfer-panel input {
+  width: 130px;
+  min-height: 23px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  font-size: 11px;
+}
+
+.serial-transfer-panel__option input {
+  width: auto;
+  min-height: auto;
+}
+
+.serial-transfer-panel__path,
+.serial-transfer-panel__hint,
+.serial-transfer-panel__sender-name-hint,
+.serial-transfer-panel__message {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.serial-transfer-panel__message {
+  color: var(--text-primary);
+}
+
+.serial-transfer-panel__warning {
+  color: var(--status-warning, #d99b42);
+}
+
+.serial-transfer-panel__progress {
+  display: grid;
+  gap: 3px;
+  padding: 4px 0;
+}
+
+.serial-transfer-panel__progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.serial-transfer-panel__progress progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--focus-outline);
+}
+
+.serial-transfer-panel__progress-block {
+  color: var(--text-muted);
+}
+
+.serial-quick-panel {
+  flex: 1 0 100%;
+  min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  padding-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.serial-quick-panel summary {
+  cursor: pointer;
+}
+
+.serial-quick-panel summary:hover {
+  color: var(--text-primary);
+}
+
+.serial-quick-panel__body {
+  display: grid;
+  gap: 5px;
+  padding-top: 5px;
+}
+
+.serial-quick-panel__compose,
+.serial-quick-panel__items,
+.serial-quick-panel__loop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.serial-quick-panel__compose > input:first-child {
+  flex: 1 1 180px;
+}
+
+.serial-quick-panel button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 23px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.serial-quick-panel button:hover:not(:disabled) {
+  border-color: var(--focus-outline);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--focus-outline) 14%, transparent);
+}
+
+.serial-quick-panel button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.serial-quick-panel input {
+  min-height: 23px;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  font-size: 11px;
+}
+
+.serial-quick-panel__loop input {
+  width: 90px;
+}
+
+.serial-quick-panel__checkbox,
+.serial-quick-panel__loop label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.serial-quick-panel__items > span,
+.serial-quick-panel__loop > span,
+.serial-quick-panel__message {
+  color: var(--text-muted);
+}
+
+.serial-line-control-box,
+.serial-reconnect-limit {
+  grid-column: 1 / -1;
+}
+
+.serial-reconnect-limit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serial-reconnect-limit input {
+  max-width: 150px;
+}

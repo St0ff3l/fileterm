@@ -187,6 +187,7 @@ fileterm/
 
 - [xterm.js](https://xtermjs.org/)：用于 SSH 终端渲染、输入输出和窗口尺寸适配。
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/)：用于文件编辑、语法高亮和查找替换。
+- 随应用分发的字体和图标字体：许可证与来源见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 ## 参与贡献
 
@@ -243,6 +244,6 @@ fileterm/
 
 ## 开源协议
 
-FileTerm 使用 [MIT License](./LICENSE) 开源。
+FileTerm 源代码使用 [MIT License](./LICENSE) 开源；随应用分发的字体和图标字体遵循各自许可证，详见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 <p align="right"><a href="#readme-top">回到顶部</a></p>

@@ -1021,6 +1021,118 @@
   overflow: hidden;
 }
 
+.remote-capability-panel {
+  position: relative;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.remote-capability-panel summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 20px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.remote-capability-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.remote-capability-panel summary:hover,
+.remote-capability-panel[open] summary {
+  border-color: var(--focus-outline);
+  color: var(--accent-highlight);
+}
+
+.remote-capability-panel summary span {
+  max-width: 90px;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-capability-panel__chevron {
+  transition: transform 0.16s ease;
+}
+
+.remote-capability-panel[open] .remote-capability-panel__chevron {
+  transform: rotate(180deg);
+}
+
+.remote-capability-panel__body {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  min-width: 300px;
+  max-width: min(420px, calc(100vw - 24px));
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  background: var(--popover-bg);
+  box-shadow: var(--popover-shadow);
+  color: var(--text-secondary);
+}
+
+.remote-capability-panel__body > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.remote-capability-panel__extensions {
+  grid-column: 1 / -1;
+}
+
+.remote-capability-panel__body dt {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.remote-capability-panel__body dd {
+  min-width: 0;
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--text-main);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.pane-path-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  min-width: 0;
+  overflow: visible !important;
+  white-space: nowrap;
+}
+
+.pane-path-bar-actions > .remote-capability-panel {
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
 .file-split-resizer {
   min-width: 6px;
   cursor: col-resize;

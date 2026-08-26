@@ -306,6 +306,8 @@ const zhCN = {
   terminalConnected: '连接主机成功',
   terminalDisconnected: '连接已断开',
   terminalConnectionClosed: '[连接已关闭]',
+  telnetReconnectScheduled: '[Telnet] 将在 {seconds} 秒后自动重连（第 {attempt} 次）',
+  telnetReconnectLimit: '[Telnet] 自动重连已停止：{error}',
   pressEnterToReconnect: '按回车重新连接…',
   connectionFailedPrefix: '连接失败: ',
   disconnected: '已断开',
@@ -347,6 +349,33 @@ const zhCN = {
   localTerminalStarting: '正在启动本地 Shell…',
   localTerminalStopped: '本地 Shell 已停止',
   localTerminalExited: '[本地 Shell 已退出]',
+  localTerminalRestarted: '--- 本地 Shell 已重新启动 ---',
+  localTerminalInputFailedPrefix: '本地 Shell 输入失败：',
+  localTerminalObserveFailedPrefix: '无法监控本地 Shell：',
+  localTerminalExitedWithCode: '本地 Shell 已退出，退出码 {code}',
+  localTerminalExitedPrefix: '本地 Shell 已退出：',
+  localTerminalPtyAllocateFailedPrefix: '无法分配本地 PTY：',
+  localTerminalStartFailed: '无法启动本地 Shell {shell}：',
+  localTerminalReadFailedPrefix: '无法读取本地 PTY 输出：',
+  localTerminalWriteFailedPrefix: '无法写入本地 PTY：',
+  localTerminalReaderStartFailedPrefix: '无法启动本地 PTY 读取器：',
+  localTerminalWorkerStartFailedPrefix: '无法启动本地 PTY 工作线程：',
+  localTerminalWorkingDirectoryMissingPrefix: '本地终端工作目录不存在：',
+  localTerminalWorkingDirectoryEmpty: '本地终端工作目录为空',
+  localTerminalWorkingDirectoryNul: '本地终端工作目录包含 NUL 字节',
+  localTerminalShellEmpty: '本地终端 Shell 为空',
+  localTerminalShellNul: '本地终端 Shell 包含 NUL 字节',
+  localTerminalShellMissingPrefix: '本地终端 Shell 不存在：',
+  localTerminalTitleInvalid: '本地终端标题无效或超过 {bytes} 字节',
+  localTerminalShellArgumentsLimit: '本地终端最多接受 {count} 个 Shell 参数',
+  localTerminalShellArgumentInvalid: '本地终端 Shell 参数 {index} 无效或过大',
+  localTerminalEnvironmentLimit: '本地终端最多接受 {count} 个环境变量覆盖',
+  localTerminalEnvironmentInvalid: '本地终端环境变量覆盖 {name} 无效或过大',
+  localTerminalOutputDropped: '[FileTerm: 本地终端输出繁忙期间丢弃了 {bytes} 字节]',
+  localTerminalOutputDroppedHint:
+    '[FileTerm: 丢弃的输出可能包含备用屏幕切换；终端状态可能不一致——运行 `reset` 或按 Ctrl+L 重新同步]',
+  localTerminalLaunchSettingsUnavailable: '本地终端启动配置不可用',
+  localTerminalSplitUnsupported: '仅支持 SSH 和本地终端分屏。',
   localTerminalStart: '启动本地 Shell',
   localTerminalWorkingDirectory: '工作目录',
   localTerminalUnavailable: '本地终端仅在桌面应用中可用。',
@@ -394,6 +423,231 @@ const zhCN = {
   newConnection: '新建连接',
   openConnection: '打开连接',
   terminal: '终端',
+  serial: 'Serial (串口)',
+  serialConnected: '串口已连接',
+  serialDisconnected: '串口已断开',
+  serialDeviceDisconnected: '串口设备已断开',
+  serialEndpoint: '串口 {path} @ {baud}',
+  serialErrorPrefix: '串口错误：',
+  serialUnknownError: '串口操作失败，请查看会话日志获取详细信息。',
+  serialTransferActive: '串口文件传输正在进行，请等待传输结束。',
+  serialTransferSoftwareFlowControl: '软件流控不能用于串口文件传输的二进制字节，请改用无流控或硬件流控。',
+  serialUnsupportedOperation: '串口不支持文件或隧道操作',
+  serialDevicePathRequired: '串口设备路径不能为空',
+  serialBaudInvalid: '串口波特率必须大于 0',
+  serialBaudOutOfRange: '串口波特率超出支持范围',
+  serialNewlineInvalid: '串口换行模式无效',
+  serialInputInvalid: '串口输入模式无效',
+  serialOutputInvalid: '串口输出模式无效',
+  serialDataBitsInvalid: '串口数据位必须是 5、6、7 或 8',
+  serialStopBitsInvalid: '串口停止位必须是 1 或 2',
+  serialParityInvalid: '串口校验位必须是无、奇、偶、标记或空格校验',
+  serialParityUnsupported: '当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验',
+  serialParityMacRequirement: 'macOS 的标记/空格校验模拟仅支持 7 数据位，请将数据位设为 7。',
+  serialParityHint:
+    '标记/空格校验：Windows 通常由系统原生支持，Linux 需要驱动支持 CMSPAR，macOS 使用 7 数据位的软件模拟。',
+  serialFlowControlInvalid: '串口流控必须是无、软件或硬件流控',
+  serialRtsHardwareManaged: '已启用硬件流控，RTS 由驱动自动管理。',
+  serialRtsRs485Managed: '已启用 RS-485 半双工，RTS 由驱动或软件自动管理。',
+  serialRs485FlowConflict: 'RS-485 半双工不能与硬件流控同时启用。',
+  serialWriteTimeout: '串口写入等待硬件流控超时。',
+  serialWriteTimeoutInvalid: '串口写入超时必须在 250 到 600000 毫秒之间。',
+  serialPermissionError: '无法访问串口 {path}：请确认设备驱动和系统访问权限。',
+  serialUnavailable: '串口设备 {path} 不存在、不可用或已断开。',
+  serialBusy: '串口设备 {path} 已被其他程序占用。',
+  serialIdentityScanTimeout: '串口设备身份扫描超时。',
+  serialIdentityScanFailed: '串口设备身份扫描失败：',
+  serialIdentityNotFound: '未找到匹配已保存身份的串口设备（当前配置：{path}）。',
+  serialIdentityAmbiguous: '已保存身份匹配到多个串口设备，请重新选择：{ports}',
+  serialGenericPrefix: '串口 {path}：',
+  serialScanFailedPrefix: '串口设备扫描失败：',
+  serialScanTimeout: '串口设备扫描超时，请稍后重试或手动输入设备路径。',
+  serialHexFormatPrefix: 'Hex 输入必须按两个字符表示一个字节：',
+  serialHexInvalidBytePrefix: 'Hex 输入包含无效字节：',
+  devicePath: '设备路径',
+  serialPortSelect: '选择已检测到的串口设备',
+  serialPortNoDevices: '未检测到串口设备，可手动输入路径',
+  serialPortIdentitySaved: '已记住设备身份；端口名称变化时会尝试自动匹配。',
+  serialPortIdentityMissing: '当前仅按设备路径保存；USB 串口重连可能匹配到另一设备，建议从设备列表选择。',
+  serialPortRefresh: '刷新设备列表',
+  serialPortRefreshing: '正在扫描串口设备',
+  serialPortScanFailed: '串口设备扫描失败',
+  serialNewline: '发送换行',
+  serialNewlineNone: '不转换',
+  serialNewlineLf: 'LF（\\n）',
+  serialNewlineCr: 'CR（\\r）',
+  serialNewlineCrlf: 'CRLF（\\r\\n）',
+  serialInputMode: '输入模式',
+  serialOutputMode: '输出模式',
+  serialLineMode: '行模式',
+  serialLineModeHint: '缓存键盘输入，按 Enter 后整行发送；适合命令行设备。',
+  serialTextMode: 'Text（文本）',
+  serialHexMode: 'Hex（十六进制）',
+  serialLocalEcho: '本地回显',
+  serialLocalEchoHint: '立即显示已发送内容；如果设备也会回显，可能会看到重复内容。',
+  serialDtrOnOpen: '打开时 DTR',
+  serialRtsOnOpen: '打开时 RTS',
+  serialDtrOnClose: '关闭时 DTR',
+  serialRtsOnClose: '关闭时 RTS',
+  serialLineControlHint:
+    'DTR/RTS 用于复位、供电或硬件握手；Unix 会尽量读回实际输出线，Windows 显示最近请求状态；设备不支持时可关闭。',
+  serialCharDelay: '逐字符延迟（毫秒）',
+  serialLineDelay: '逐行延迟（毫秒）',
+  serialPacingHint: '慢速设备可设置发送节流；0 表示不延迟。',
+  serialReceiveIdleTimeout: 'Raw 接收空闲超时（毫秒）',
+  serialReceiveIdleTimeoutInvalid: '串口接收空闲超时必须在 250 到 600000 毫秒之间。',
+  serialWriteTimeoutSetting: '写入/CTS 等待超时（毫秒）',
+  serialTimeoutHint: '低波特率或硬件流控设备可适当增大；范围 250–600000 毫秒。',
+  serialTransferMaxFileBytes: '单文件接收上限（字节）',
+  serialTransferMaxBatchBytes: '批量接收总上限（字节）',
+  serialTransferMaxFiles: '批量接收文件数上限',
+  serialTransferLimitsHint: '接收先写入临时文件，完成并校验后才会提交；达到任一上限会中止传输。',
+  serialRs485Mode: 'RS-485 模式',
+  serialRs485None: '关闭',
+  serialRs485HalfDuplex: '半双工（RTS）',
+  serialRs485RtsOnSend: '发送时 RTS 有效',
+  serialRs485DelayBefore: '发送前 RTS 延迟（毫秒）',
+  serialRs485DelayAfter: '发送后 RTS 延迟（毫秒）',
+  serialRs485Hint:
+    'Linux 使用串口驱动控制 RS-485 的 DE/RE；macOS 使用 RTS 软件控制外部收发器，Windows 暂不启用内置控制。',
+  serialRs485MacHint:
+    'macOS 使用软件 RTS 控制外部 RS-485 收发器；请确认适配器的 DE/RE 接到 RTS，并按需设置发送前/后延迟。',
+  serialRs485Invalid: '串口 RS-485 模式无效。',
+  serialRs485Unsupported: '当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器。',
+  serialRs485ApplyFailed: '应用 Linux RS-485 配置失败：',
+  serialRs485ReadbackFailed: '读取 Linux RS-485 生效配置失败：',
+  serialRs485SoftwareApplyFailed: '配置 macOS RS-485 软件 RTS 失败：',
+  serialRs485DelayInvalid: '串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间。',
+  serialReconnectMaxAttempts: '最大自动重连次数（0 不限）',
+  serialReconnectMaxAttemptsHint: '自动重连使用 2、4、8…秒退避，最多等待 30 秒。',
+  serialReconnectScheduled: '将在 {seconds} 秒后自动重连（第 {attempt} 次）',
+  serialReconnectLimit: '自动重连已达到上限（{maximum} 次）',
+  serialControlDtr: 'DTR',
+  serialControlRts: 'RTS',
+  serialControlPulseDtr: '脉冲 DTR',
+  serialControlPulseRts: '脉冲 RTS',
+  serialControlBreak: 'Break',
+  serialControlClear: '清空串口',
+  serialControlReset: '复位串口',
+  serialControlClearConfirm: '确认清空串口接收和发送缓冲区？',
+  serialControlResetConfirm: '确认复位串口并恢复打开时线路状态？',
+  serialControlStatus: '刷新线路状态',
+  serialControlCanceled: '串口控制已取消。',
+  serialStatusDtr: 'DTR',
+  serialStatusRts: 'RTS',
+  serialStatusCts: 'CTS',
+  serialStatusDsr: 'DSR',
+  serialStatusRing: 'RING',
+  serialStatusCarrier: 'DCD',
+  serialStatusRemembered: '记忆值',
+  serialStatusRtsHardware: 'RTS 自动',
+  serialStatusUnavailable: '不可用',
+  serialTransfer: '文件传输',
+  serialTransferSend: '发送文件',
+  serialTransferReceive: '接收文件',
+  serialTransferRaw: 'Raw',
+  serialTransferXmodem: 'XMODEM',
+  serialTransferYmodem: 'YMODEM',
+  serialTransferZmodem: 'ZMODEM',
+  serialTransferKermit: 'Kermit',
+  serialTransferChooseFile: '选择文件',
+  serialTransferChooseDirectory: '选择目录',
+  serialTransferDirectoryMissing: '请选择接收目录',
+  serialTransferDirectoryInvalid: '串口文件传输接收目录不存在。',
+  serialTransferPathRequired: '串口传输路径不能为空。',
+  serialTransferNameRequired: '串口接收文件名不能为空。',
+  serialTransferNameInvalid: '串口接收文件名无效。',
+  serialTransferDuplicateFilename: 'YMODEM 文件名重复，无法安全接收。',
+  serialTransferName: '文件名',
+  serialTransferNamePlaceholder: 'received.bin',
+  serialTransferYmodemBatchHint: 'YMODEM 将使用发送方提供的文件名，可一次接收多个文件。',
+  serialTransferZmodemBatchHint: 'ZMODEM 支持批量发送或接收多个文件。',
+  serialTransferKermitBatchHint: 'Kermit 使用经典短包和逐包确认，可一次发送或接收多个文件。',
+  serialTransferCompleted: '传输完成：{bytes} 字节',
+  serialTransferFailed: '传输失败：',
+  serialTransferHint:
+    'Raw 适合连续字节；接收空闲超时和协议帧超时会按串口参数自动调整。YMODEM、ZMODEM 和 Kermit 支持批量文件；X/Y/ZMODEM/Kermit 需要对端同时进入对应协议。',
+  serialTransferXmodemWarning:
+    'XMODEM 没有文件大小字段；勾选保留填充可避免丢失末尾 0x1A，但可能留下填充字节，精确二进制文件请使用 YMODEM/ZMODEM。',
+  serialTransferXmodemPreservePadding: '接收时保留末尾 0x1A 填充（避免二进制字节丢失）',
+  serialTransferProgressRunning: '传输中',
+  serialTransferProgressCompleted: '已完成',
+  serialTransferProgressFailed: '失败',
+  serialTransferProgressCanceled: '已取消',
+  serialTransferProgressBlock: '数据块 {block}',
+  serialTransferWriteTimeout: '串口文件传输等待硬件流控超时。',
+  serialTransferTargetExists: '接收目标文件已存在，请更换文件名。',
+  serialTransferAlreadyRunning: '当前串口会话已有文件传输正在进行。',
+  serialTransferNoneRunning: '当前没有进行中的串口文件传输。',
+  serialTransferCanceled: '串口文件传输已取消。',
+  serialTransferPeerCanceled: '对端取消了串口文件传输。',
+  serialTransferStartTimeout: '等待串口文件传输启动超时。',
+  serialTransferDataTimeout: '等待串口文件传输数据超时。',
+  serialTransferSenderStartTimeout: '等待串口文件接收端启动超时。',
+  serialTransferEndTimeout: '串口文件传输结束确认超时。',
+  serialTransferSequenceInvalid: '串口文件传输数据块序号不连续。',
+  serialTransferDataTooLarge: '串口接收数据超过文件头声明的大小。',
+  serialTransferCancel: '取消传输',
+  serialTransferCanceling: '正在取消…',
+  serialTransferYmodemHeaderTooLong: 'YMODEM 文件头过长，请缩短文件名。',
+  serialTransferHeaderInvalid: 'YMODEM 文件头格式无效。',
+  serialTransferHeaderChecksumInvalid: 'YMODEM 文件头校验失败。',
+  serialTransferHeaderSequenceInvalid: 'YMODEM 文件头序号无效。',
+  serialTransferNextHeaderInvalid: 'YMODEM 下一个文件头格式无效。',
+  serialTransferFilenameInvalid: 'YMODEM 文件名无效。',
+  serialTransferFilenameUnsafe: 'YMODEM 文件名无效，不允许写出接收目录。',
+  serialTransferSizeMissing: 'YMODEM 文件头缺少文件大小。',
+  serialTransferSizeTextInvalid: 'YMODEM 文件大小不是有效文本。',
+  serialTransferSizeInvalid: 'YMODEM 文件大小无效。',
+  serialTransferSizeMismatch: '串口接收文件大小与协议声明不一致。',
+  serialTransferKermitBinaryUnsupported: 'Kermit 对端未协商 8 位数据转义，无法安全传输二进制文件。',
+  serialTransferKermitAckTimeout: 'Kermit 等待确认超时，重试次数过多。',
+  serialTransferKermitChecksumInvalid: 'Kermit 数据包校验失败。',
+  serialTransferZmodemFileTooLarge: 'ZMODEM 单个文件不能超过 4 GiB。',
+  serialTransferFrameIncomplete: '串口文件传输数据帧不完整。',
+  serialTransferFrameSequenceInvalid: '串口文件传输数据块序号校验无效，无法安全重试。',
+  serialTransferReadFailedPrefix: '读取串口文件传输数据失败：',
+  serialQuickSend: '快捷发送',
+  serialQuickSendPlaceholder: '输入要发送的文本或命令',
+  serialQuickSendNow: '发送',
+  serialQuickSendNewline: '发送换行',
+  serialQuickSendMacroName: '宏名称',
+  serialQuickSendSaveMacro: '保存宏',
+  serialQuickSendMacros: '已保存宏',
+  serialQuickSendHistory: '历史',
+  serialQuickSendLoopInterval: '循环间隔（毫秒）',
+  serialQuickSendLoopStart: '开始循环',
+  serialQuickSendLoopStop: '停止循环',
+  serialQuickSendLoopHint: '循环发送当前输入；请确认设备能承受发送频率。',
+  serialQuickSendSaveFailed: '无法保存宏',
+  baudRate: '波特率',
+  dataBits: '数据位',
+  stopBits: '停止位',
+  parity: '校验位',
+  flowControl: '流控',
+  none: '无',
+  oddParity: '奇校验',
+  evenParity: '偶校验',
+  markParity: '标记校验',
+  spaceParity: '空格校验',
+  hardwareFlowControl: '硬件流控',
+  softwareFlowControl: '软件流控',
+  sessionLogs: '会话日志',
+  saveSessionLog: '保存会话日志',
+  autoSaveSessionLog: '自动保存会话日志',
+  autoSaveSessionLogHint: '连接后持续保存终端收到的输出；不会单独采集键盘输入，但远端回显的内容可能出现在日志中。',
+  sessionLogDirectory: '保存目录',
+  sessionLogDefaultDirectory: '留空使用 FileTerm 默认目录',
+  chooseDirectory: '选择目录',
+  choosingDirectory: '选择中…',
+  sessionLogPrivacyHint: '每次打开连接会生成一个新的 .log 文件；只记录终端输出，请按需启用。',
+  serialSessionLogIncludeInput: '记录发送内容（TX）',
+  serialSessionLogTimestamps: '记录时间戳',
+  serialSessionLogRaw: '记录原始字节（Hex）',
+  serialSessionLogOptionsHint: '串口日志可按 RX/TX、时间戳和原始字节保存；开启 TX 前请确认不会写入敏感信息。',
+  sessionLogWriteFailedPrefix: '会话日志写入失败：',
+  sessionLogSaved: '会话日志已保存',
+  sessionLogSaveFailed: '会话日志保存失败',
   file: '文件',
   localComputer: '本地',
   backToThisPC: '回到此电脑',
@@ -599,6 +853,50 @@ const zhCN = {
   ftpSecurityExplicit: 'FTPS（显式 TLS，推荐）',
   ftpSecurityImplicit: 'FTPS（隐式 TLS，兼容旧服务器）',
   ftpAuthHint: 'FTP/FTPS 与 SSH/SFTP 是不同协议。若服务器只开了 SSH 或 SFTP，请选择 SSH / SFTP，不要选 FTP / FTPS。',
+  ftpTransferMode: '数据通道模式',
+  ftpTransferPassive: '被动模式（推荐）',
+  ftpTransferActive: '主动模式',
+  ftpTransferModeHint: '被动模式更适合 NAT、防火墙和云服务器；主动模式要求服务器能反向连接本机。',
+  ftpCertificateFingerprint: 'FTPS 证书指纹（可选）',
+  ftpCertificateFingerprintHint:
+    '填写 SHA-256 指纹后，除系统证书校验外还会强制匹配该证书。支持 sha256: 前缀、冒号分隔十六进制或 Base64。',
+  ftpCertificateFingerprintInvalid: 'FTPS 证书指纹格式无效，请填写 32 字节 SHA-256 指纹。',
+  ftpImplicitProxyUnsupported: '当前实现不支持“隐式 FTPS + 代理”，请改用显式 FTPS 或关闭代理。',
+  telnetTerminalType: '终端类型',
+  telnetTerminalTypeHint: '仅在服务器请求 Telnet TERMINAL-TYPE 时发送；不代表本地终端外观。',
+  telnetNewline: '发送换行',
+  telnetNewlineNone: '原样发送',
+  telnetNewlineLf: 'LF（\\n）',
+  telnetNewlineCr: 'CR（\\r）',
+  telnetNewlineCrlf: 'CRLF（\\r\\n）',
+  telnetCrNul: 'CR 后追加 NUL',
+  telnetCrNulHint: 'NVT 文本模式下将 CR 编码为 CR NUL，适用于要求严格 Telnet 换行的旧设备。',
+  telnetLoginScript: '连接后发送脚本',
+  telnetLoginScriptHint: '每行作为一条命令发送，最多 64 行。不要在这里保存密码；脚本会随连接配置一起处理。',
+  telnetInsecureHint: 'Telnet 不加密传输，用户名、命令和输出都可能被网络中的其他人看到。能用 SSH 时请优先 SSH。',
+  telnetTunnelHint:
+    '如需加密传输，请先通过 SSH 隧道或代理把远端端口转发到本机，再将 Telnet 连接到本地端口。Telnet 本身不会提供加密。',
+  connectionTimeout: '连接超时（秒）',
+  operationTimeout: '操作超时（秒）',
+  keepalive: '启用保活',
+  keepaliveHint: '定期发送协议保活包，及时发现半开连接；失败达到上限后才触发断线处理。',
+  keepaliveInterval: '保活间隔（秒）',
+  keepaliveMaxMisses: '最大连续失败次数',
+  reconnectMaxAttempts: '最大重连次数',
+  reconnectMaxAttemptsHint: '填 0 表示不限次数；每次等待时间按指数退避增长。',
+  sftpEnabled: '启用 SFTP 文件通道',
+  sftpEnabledHint: '关闭后仍可使用 SSH 终端和隧道，但不会打开远程文件窗口。',
+  remoteCapabilities: '远程能力',
+  remoteCapabilityProtocol: '协议',
+  remoteCapabilityDiskSpace: '磁盘空间',
+  remoteCapabilityChecksums: '校验和',
+  remoteCapabilityExtensions: '扩展',
+  remoteCapabilityServerCopy: '服务端复制',
+  remoteCapabilitySymlink: '符号链接',
+  remoteCapabilityHardlink: '硬链接',
+  remoteCapabilityAvailable: '可用',
+  remoteCapabilityUnavailable: '不可用',
+  remoteCapabilityNone: '无',
   enableExecChannel: '启用后台命令通道（Exec）',
   enableExecChannelHint:
     '用于读取系统信息、root 文件视图、终端目录跟随和用户状态同步。它会额外建立一条 SSH 命令连接；仅在连接后立即断开时才建议关闭。',
@@ -1533,6 +1831,8 @@ const enUS: typeof zhCN = {
   terminalConnected: 'Connected to host',
   terminalDisconnected: 'Connection closed',
   terminalConnectionClosed: '[connection closed]',
+  telnetReconnectScheduled: '[Telnet] Automatic reconnect in {seconds} seconds (attempt {attempt})',
+  telnetReconnectLimit: '[Telnet] Automatic reconnect stopped: {error}',
   pressEnterToReconnect: 'Press Enter to reconnect…',
   connectionFailedPrefix: 'Connection failed: ',
   disconnected: 'Disconnected',
@@ -1569,6 +1869,33 @@ const enUS: typeof zhCN = {
   localTerminalStarting: 'Starting local shell…',
   localTerminalStopped: 'Local shell stopped',
   localTerminalExited: '[local shell exited]',
+  localTerminalRestarted: '--- Local shell restarted ---',
+  localTerminalInputFailedPrefix: 'Local shell input failed: ',
+  localTerminalObserveFailedPrefix: 'Unable to observe local shell: ',
+  localTerminalExitedWithCode: 'Local shell exited with code {code}',
+  localTerminalExitedPrefix: 'Local shell exited: ',
+  localTerminalPtyAllocateFailedPrefix: 'Unable to allocate local PTY: ',
+  localTerminalStartFailed: 'Unable to start local shell {shell}: ',
+  localTerminalReadFailedPrefix: 'Unable to read local PTY output: ',
+  localTerminalWriteFailedPrefix: 'Unable to write to local PTY: ',
+  localTerminalReaderStartFailedPrefix: 'Unable to start local PTY reader: ',
+  localTerminalWorkerStartFailedPrefix: 'Unable to start local PTY worker: ',
+  localTerminalWorkingDirectoryMissingPrefix: 'Local terminal working directory does not exist: ',
+  localTerminalWorkingDirectoryEmpty: 'Local terminal working directory is empty',
+  localTerminalWorkingDirectoryNul: 'Local terminal working directory contains a NUL byte',
+  localTerminalShellEmpty: 'Local terminal shell is empty',
+  localTerminalShellNul: 'Local terminal shell contains a NUL byte',
+  localTerminalShellMissingPrefix: 'Local terminal shell does not exist: ',
+  localTerminalTitleInvalid: 'Local terminal title is invalid or longer than {bytes} bytes',
+  localTerminalShellArgumentsLimit: 'Local terminal accepts at most {count} shell arguments',
+  localTerminalShellArgumentInvalid: 'Local terminal shell argument {index} is invalid or too large',
+  localTerminalEnvironmentLimit: 'Local terminal accepts at most {count} environment overrides',
+  localTerminalEnvironmentInvalid: 'Local terminal environment override {name} is invalid or too large',
+  localTerminalOutputDropped: '[FileTerm: local terminal output dropped {bytes} bytes while the renderer was busy]',
+  localTerminalOutputDroppedHint:
+    '[FileTerm: dropped output may include alternate screen transitions; terminal state may be inconsistent — run `reset` or Ctrl+L to resync]',
+  localTerminalLaunchSettingsUnavailable: 'Local terminal launch settings are unavailable',
+  localTerminalSplitUnsupported: 'Split panes are only supported for SSH and local terminal sessions.',
   localTerminalStart: 'Start local shell',
   localTerminalWorkingDirectory: 'Working directory',
   localTerminalUnavailable: 'Local Terminal is only available in the desktop app.',
@@ -1616,6 +1943,242 @@ const enUS: typeof zhCN = {
   quickConnect: 'Quick Connect',
   newConnection: 'New Connection',
   openConnection: 'Open Connection',
+  serial: 'Serial',
+  serialConnected: 'Serial connected',
+  serialDisconnected: 'Serial disconnected',
+  serialDeviceDisconnected: 'Serial device disconnected',
+  serialEndpoint: 'Serial {path} @ {baud}',
+  serialErrorPrefix: 'Serial error: ',
+  serialUnknownError: 'The serial operation failed. Check the session log for details.',
+  serialTransferActive: 'A serial file transfer is in progress; wait for it to finish.',
+  serialTransferSoftwareFlowControl:
+    'Software flow control cannot safely carry binary serial file transfers; use no flow control or hardware flow control.',
+  serialUnsupportedOperation: 'Serial does not support file or tunnel operations',
+  serialDevicePathRequired: 'A serial device path is required',
+  serialBaudInvalid: 'Serial baud rate must be greater than 0',
+  serialBaudOutOfRange: 'Serial baud rate is outside the supported range',
+  serialNewlineInvalid: 'Serial newline mode is invalid',
+  serialInputInvalid: 'Serial input mode is invalid',
+  serialOutputInvalid: 'Serial output mode is invalid',
+  serialDataBitsInvalid: 'Serial data bits must be 5, 6, 7, or 8',
+  serialStopBitsInvalid: 'Serial stop bits must be 1 or 2',
+  serialParityInvalid: 'Serial parity must be none, odd, even, mark, or space',
+  serialParityUnsupported:
+    'This platform or serial driver does not support mark/space parity; choose none, odd, or even',
+  serialParityMacRequirement: 'macOS mark/space parity emulation only supports 7 data bits; set data bits to 7.',
+  serialParityHint:
+    'Mark/space parity: usually native on Windows, requires CMSPAR driver support on Linux, and uses 7-bit software emulation on macOS.',
+  serialFlowControlInvalid: 'Serial flow control must be none, software, or hardware',
+  serialRtsHardwareManaged: 'Hardware flow control is enabled; RTS is managed by the driver.',
+  serialRtsRs485Managed: 'RS-485 half duplex is enabled; RTS is managed by the driver or software.',
+  serialRs485FlowConflict: 'RS-485 half duplex cannot be combined with hardware flow control.',
+  serialWriteTimeout: 'Timed out waiting for hardware flow control while writing to the serial port.',
+  serialWriteTimeoutInvalid: 'Serial write timeout must be between 250 and 600000 milliseconds.',
+  serialPermissionError: 'Unable to access serial port {path}: check the device driver and system permissions.',
+  serialUnavailable: 'Serial device {path} does not exist, is unavailable, or has been disconnected.',
+  serialBusy: 'Serial device {path} is already in use by another program.',
+  serialIdentityScanTimeout: 'Serial device identity scan timed out.',
+  serialIdentityScanFailed: 'Serial device identity scan failed: ',
+  serialIdentityNotFound: 'No serial device matches the saved identity (configured path: {path}).',
+  serialIdentityAmbiguous: 'The saved identity matches multiple serial devices; choose one again: {ports}',
+  serialGenericPrefix: 'Serial {path}: ',
+  serialScanFailedPrefix: 'Unable to scan serial ports: ',
+  serialScanTimeout: 'Serial port scanning timed out. Try again later or enter the device path manually.',
+  serialHexFormatPrefix: 'Hex input must use two characters per byte: ',
+  serialHexInvalidBytePrefix: 'Hex input contains an invalid byte: ',
+  devicePath: 'Device path',
+  serialPortSelect: 'Select a detected serial port',
+  serialPortNoDevices: 'No serial ports detected; enter a path manually',
+  serialPortIdentitySaved: 'The device identity is saved; a changed port name can be matched automatically.',
+  serialPortIdentityMissing:
+    'Only the device path is saved; reconnecting a USB serial port may select another device. Select a detected port to bind its identity.',
+  serialPortRefresh: 'Refresh device list',
+  serialPortRefreshing: 'Scanning serial ports',
+  serialPortScanFailed: 'Unable to scan serial ports',
+  serialNewline: 'Send newline',
+  serialNewlineNone: 'No conversion',
+  serialNewlineLf: 'LF (\\n)',
+  serialNewlineCr: 'CR (\\r)',
+  serialNewlineCrlf: 'CRLF (\\r\\n)',
+  serialInputMode: 'Input mode',
+  serialOutputMode: 'Output mode',
+  serialLineMode: 'Line mode',
+  serialLineModeHint: 'Buffer keyboard input and send the whole line on Enter; useful for command-line devices.',
+  serialTextMode: 'Text',
+  serialHexMode: 'Hex',
+  serialLocalEcho: 'Local echo',
+  serialLocalEchoHint: 'Show transmitted bytes immediately; device echo can make the content appear twice.',
+  serialDtrOnOpen: 'DTR on open',
+  serialRtsOnOpen: 'RTS on open',
+  serialDtrOnClose: 'DTR on close',
+  serialRtsOnClose: 'RTS on close',
+  serialLineControlHint:
+    'DTR/RTS can reset, power, or handshake a device; Unix reads back output lines when supported, while Windows shows the last requested state; disable them when unsupported.',
+  serialCharDelay: 'Per-character delay (ms)',
+  serialLineDelay: 'Per-line delay (ms)',
+  serialPacingHint: 'Use pacing for slow devices; 0 means no delay.',
+  serialReceiveIdleTimeout: 'Raw receive idle timeout (ms)',
+  serialReceiveIdleTimeoutInvalid: 'Serial receive idle timeout must be between 250 and 600000 milliseconds.',
+  serialWriteTimeoutSetting: 'Write/CTS wait timeout (ms)',
+  serialTimeoutHint: 'Increase these for low baud rates or hardware-flow-control devices; range 250–600000 ms.',
+  serialTransferMaxFileBytes: 'Max received file size (bytes)',
+  serialTransferMaxBatchBytes: 'Max received batch size (bytes)',
+  serialTransferMaxFiles: 'Max files per received batch',
+  serialTransferLimitsHint:
+    'Received data is staged and committed only after completion; hitting any limit aborts the transfer.',
+  serialRs485Mode: 'RS-485 mode',
+  serialRs485None: 'Off',
+  serialRs485HalfDuplex: 'Half duplex (RTS)',
+  serialRs485RtsOnSend: 'RTS active while sending',
+  serialRs485DelayBefore: 'RTS delay before send (ms)',
+  serialRs485DelayAfter: 'RTS delay after send (ms)',
+  serialRs485Hint:
+    'Linux uses the serial driver for RS-485 DE/RE control; macOS uses software RTS control, while Windows has no built-in control.',
+  serialRs485MacHint:
+    'macOS uses software RTS to control an external RS-485 transceiver; connect DE/RE to RTS and tune the before/after delays if needed.',
+  serialRs485Invalid: 'The serial RS-485 mode is invalid.',
+  serialRs485Unsupported:
+    'Built-in RS-485 half-duplex control is not supported on this platform; use the driver or an external converter.',
+  serialRs485ApplyFailed: 'Unable to apply Linux RS-485 settings: ',
+  serialRs485ReadbackFailed: 'Unable to read back effective Linux RS-485 settings: ',
+  serialRs485SoftwareApplyFailed: 'Unable to configure macOS software RTS for RS-485: ',
+  serialRs485DelayInvalid: 'Serial RS-485 RTS delays must be between 0 and 60000 milliseconds.',
+  serialReconnectMaxAttempts: 'Max auto-reconnect attempts (0 unlimited)',
+  serialReconnectMaxAttemptsHint: 'Automatic reconnect backs off at 2, 4, 8… seconds and caps at 30 seconds.',
+  serialReconnectScheduled: 'Automatic reconnect in {seconds} seconds (attempt {attempt})',
+  serialReconnectLimit: 'Automatic reconnect stopped after {maximum} attempts',
+  serialControlDtr: 'DTR',
+  serialControlRts: 'RTS',
+  serialControlPulseDtr: 'Pulse DTR',
+  serialControlPulseRts: 'Pulse RTS',
+  serialControlBreak: 'Break',
+  serialControlClear: 'Clear serial',
+  serialControlReset: 'Reset serial',
+  serialControlClearConfirm: 'Clear the serial input and output buffers?',
+  serialControlResetConfirm: 'Reset the serial port and restore the line states used on open?',
+  serialControlStatus: 'Refresh line status',
+  serialControlCanceled: 'Serial control was canceled.',
+  serialStatusDtr: 'DTR',
+  serialStatusRts: 'RTS',
+  serialStatusCts: 'CTS',
+  serialStatusDsr: 'DSR',
+  serialStatusRing: 'RING',
+  serialStatusCarrier: 'DCD',
+  serialStatusRemembered: 'remembered',
+  serialStatusRtsHardware: 'RTS automatic',
+  serialStatusUnavailable: 'N/A',
+  serialTransfer: 'File transfer',
+  serialTransferSend: 'Send file',
+  serialTransferReceive: 'Receive file',
+  serialTransferRaw: 'Raw',
+  serialTransferXmodem: 'XMODEM',
+  serialTransferYmodem: 'YMODEM',
+  serialTransferZmodem: 'ZMODEM',
+  serialTransferKermit: 'Kermit',
+  serialTransferChooseFile: 'Choose file',
+  serialTransferChooseDirectory: 'Choose folder',
+  serialTransferDirectoryMissing: 'Choose a receive folder first',
+  serialTransferDirectoryInvalid: 'The serial transfer receive folder does not exist.',
+  serialTransferPathRequired: 'A serial transfer path is required.',
+  serialTransferNameRequired: 'A serial receive file name is required.',
+  serialTransferNameInvalid: 'The serial receive file name is invalid.',
+  serialTransferDuplicateFilename: 'YMODEM contains duplicate file names and cannot be received safely.',
+  serialTransferName: 'File name',
+  serialTransferNamePlaceholder: 'received.bin',
+  serialTransferYmodemBatchHint: 'YMODEM uses the sender-provided file names and can receive multiple files.',
+  serialTransferZmodemBatchHint: 'ZMODEM can send or receive multiple files in one batch.',
+  serialTransferKermitBatchHint:
+    'Kermit uses classic short packets with per-packet acknowledgements and supports batches.',
+  serialTransferCompleted: 'Transfer complete: {bytes} bytes',
+  serialTransferFailed: 'Transfer failed: ',
+  serialTransferHint:
+    'Raw sends a byte stream; idle and protocol timeouts are derived from the serial settings. YMODEM, ZMODEM, and Kermit support batches; X/Y/ZMODEM/Kermit require the peer to use the same protocol.',
+  serialTransferXmodemWarning:
+    'XMODEM has no file-size field. Preserving padding avoids losing trailing 0x1A bytes but may leave filler; use YMODEM/ZMODEM for exact binary files.',
+  serialTransferXmodemPreservePadding: 'Preserve trailing 0x1A padding while receiving (prevents binary byte loss)',
+  serialTransferProgressRunning: 'Transferring',
+  serialTransferProgressCompleted: 'Completed',
+  serialTransferProgressFailed: 'Failed',
+  serialTransferProgressCanceled: 'Canceled',
+  serialTransferProgressBlock: 'Block {block}',
+  serialTransferWriteTimeout: 'Timed out waiting for hardware flow control during the serial file transfer.',
+  serialTransferTargetExists: 'The receive target already exists; choose another file name.',
+  serialTransferAlreadyRunning: 'A serial file transfer is already in progress.',
+  serialTransferNoneRunning: 'No serial file transfer is currently running.',
+  serialTransferCanceled: 'Serial file transfer canceled.',
+  serialTransferPeerCanceled: 'The peer canceled the serial file transfer.',
+  serialTransferStartTimeout: 'Timed out waiting for the serial file transfer to start.',
+  serialTransferDataTimeout: 'Timed out waiting for serial file transfer data.',
+  serialTransferSenderStartTimeout: 'Timed out waiting for the serial receiver to start.',
+  serialTransferEndTimeout: 'Timed out waiting for the serial file transfer to finish.',
+  serialTransferSequenceInvalid: 'Serial file-transfer block sequence is invalid.',
+  serialTransferDataTooLarge: 'The serial transfer received more data than declared in the file header.',
+  serialTransferCancel: 'Cancel transfer',
+  serialTransferCanceling: 'Canceling…',
+  serialTransferYmodemHeaderTooLong: 'The YMODEM header is too long; shorten the file name.',
+  serialTransferHeaderInvalid: 'The YMODEM header format is invalid.',
+  serialTransferHeaderChecksumInvalid: 'The YMODEM header checksum is invalid.',
+  serialTransferHeaderSequenceInvalid: 'The YMODEM header sequence is invalid.',
+  serialTransferNextHeaderInvalid: 'The next YMODEM header format is invalid.',
+  serialTransferFilenameInvalid: 'The YMODEM file name is invalid.',
+  serialTransferFilenameUnsafe: 'The YMODEM file name cannot escape the receive folder.',
+  serialTransferSizeMissing: 'The YMODEM header does not contain a file size.',
+  serialTransferSizeTextInvalid: 'The YMODEM file size is not valid text.',
+  serialTransferSizeInvalid: 'The YMODEM file size is invalid.',
+  serialTransferSizeMismatch: 'The received serial file size does not match the protocol declaration.',
+  serialTransferKermitBinaryUnsupported:
+    'The Kermit peer did not negotiate 8-bit quoting; the binary file cannot be transferred safely.',
+  serialTransferKermitAckTimeout: 'Kermit acknowledgements timed out after too many retries.',
+  serialTransferKermitChecksumInvalid: 'The Kermit packet checksum is invalid.',
+  serialTransferZmodemFileTooLarge: 'A ZMODEM file cannot exceed 4 GiB.',
+  serialTransferFrameIncomplete: 'The serial file-transfer frame is incomplete.',
+  serialTransferFrameSequenceInvalid:
+    'The serial file-transfer block sequence check is invalid; it cannot be retried safely.',
+  serialTransferReadFailedPrefix: 'Unable to read serial file-transfer data: ',
+  serialQuickSend: 'Quick send',
+  serialQuickSendPlaceholder: 'Text or command to send',
+  serialQuickSendNow: 'Send',
+  serialQuickSendNewline: 'Append newline',
+  serialQuickSendMacroName: 'Macro name',
+  serialQuickSendSaveMacro: 'Save macro',
+  serialQuickSendMacros: 'Saved macros',
+  serialQuickSendHistory: 'History',
+  serialQuickSendLoopInterval: 'Loop interval (ms)',
+  serialQuickSendLoopStart: 'Start loop',
+  serialQuickSendLoopStop: 'Stop loop',
+  serialQuickSendLoopHint: 'Repeats the current input; confirm the device can handle the rate.',
+  serialQuickSendSaveFailed: 'Unable to save macro',
+  baudRate: 'Baud rate',
+  dataBits: 'Data bits',
+  stopBits: 'Stop bits',
+  parity: 'Parity',
+  flowControl: 'Flow control',
+  none: 'None',
+  oddParity: 'Odd',
+  evenParity: 'Even',
+  markParity: 'Mark',
+  spaceParity: 'Space',
+  hardwareFlowControl: 'Hardware',
+  softwareFlowControl: 'Software',
+  sessionLogs: 'Session logs',
+  saveSessionLog: 'Save session log',
+  autoSaveSessionLog: 'Automatically save session logs',
+  autoSaveSessionLogHint:
+    'Continuously saves output received by the terminal; keyboard input is not collected separately, but remote-echoed text may appear in the log.',
+  sessionLogDirectory: 'Save directory',
+  sessionLogDefaultDirectory: 'Leave empty to use FileTerm’s default folder',
+  chooseDirectory: 'Choose folder',
+  choosingDirectory: 'Choosing…',
+  sessionLogPrivacyHint:
+    'A new .log file is created for each connection tab; only terminal output is written, so enable it as needed.',
+  serialSessionLogIncludeInput: 'Include transmitted data (TX)',
+  serialSessionLogTimestamps: 'Include timestamps',
+  serialSessionLogRaw: 'Record raw bytes (Hex)',
+  serialSessionLogOptionsHint:
+    'Serial logs can include RX/TX direction, timestamps, and raw bytes; confirm no secrets are sent before enabling TX.',
+  sessionLogWriteFailedPrefix: 'Session log write failed: ',
+  sessionLogSaved: 'Session log saved',
+  sessionLogSaveFailed: 'Unable to save the session log',
   localComputer: 'Local',
   backToThisPC: 'Back to This PC',
   networkShare: 'Network share',
@@ -1827,6 +2390,57 @@ const enUS: typeof zhCN = {
   ftpSecurityImplicit: 'FTPS (implicit TLS, legacy)',
   ftpAuthHint:
     'FTP/FTPS is a separate protocol from SSH/SFTP. If the server only exposes SSH or SFTP, choose SSH / SFTP instead of FTP / FTPS.',
+  ftpTransferMode: 'Data channel mode',
+  ftpTransferPassive: 'Passive (recommended)',
+  ftpTransferActive: 'Active',
+  ftpTransferModeHint:
+    'Passive mode works better with NAT, firewalls, and cloud servers; active mode requires the server to connect back to this computer.',
+  ftpCertificateFingerprint: 'FTPS certificate fingerprint (optional)',
+  ftpCertificateFingerprintHint:
+    'When set, the SHA-256 certificate pin must match in addition to normal system certificate validation. Accepts sha256:, colon-separated hex, or Base64.',
+  ftpCertificateFingerprintInvalid: 'Invalid FTPS certificate fingerprint. Enter a 32-byte SHA-256 fingerprint.',
+  ftpImplicitProxyUnsupported:
+    'Implicit FTPS through a proxy is not supported yet. Use explicit FTPS or disable the proxy.',
+  telnetTerminalType: 'Terminal type',
+  telnetTerminalTypeHint:
+    'Sent only when the server requests Telnet TERMINAL-TYPE; it does not change the local terminal appearance.',
+  telnetNewline: 'Send newline',
+  telnetNewlineNone: 'Send as entered',
+  telnetNewlineLf: 'LF (\\n)',
+  telnetNewlineCr: 'CR (\\r)',
+  telnetNewlineCrlf: 'CRLF (\\r\\n)',
+  telnetCrNul: 'Append NUL after CR',
+  telnetCrNulHint:
+    'In NVT text mode, encode CR as CR NUL for older devices that require strict Telnet newline handling.',
+  telnetLoginScript: 'Post-connect script',
+  telnetLoginScriptHint:
+    'Each line is sent as one command, up to 64 lines. Do not store passwords here; the script is handled with the connection profile.',
+  telnetInsecureHint:
+    'Telnet is unencrypted: usernames, commands, and output may be visible to others on the network. Prefer SSH whenever possible.',
+  telnetTunnelHint:
+    'For encryption, first forward the remote port to a local port through an SSH tunnel or proxy, then connect Telnet to that local port. Telnet itself does not encrypt traffic.',
+  connectionTimeout: 'Connect timeout (seconds)',
+  operationTimeout: 'Operation timeout (seconds)',
+  keepalive: 'Enable keepalive',
+  keepaliveHint:
+    'Send periodic protocol keepalives to detect half-open connections; disconnect handling starts only after the failure limit is reached.',
+  keepaliveInterval: 'Keepalive interval (seconds)',
+  keepaliveMaxMisses: 'Maximum consecutive failures',
+  reconnectMaxAttempts: 'Maximum reconnect attempts',
+  reconnectMaxAttemptsHint: 'Use 0 for unlimited attempts; the wait grows with exponential backoff.',
+  sftpEnabled: 'Enable SFTP file channel',
+  sftpEnabledHint: 'When disabled, SSH terminal and tunnels remain available but the remote file pane is not opened.',
+  remoteCapabilities: 'Remote capabilities',
+  remoteCapabilityProtocol: 'Protocol',
+  remoteCapabilityDiskSpace: 'Disk space',
+  remoteCapabilityChecksums: 'Checksums',
+  remoteCapabilityExtensions: 'Extensions',
+  remoteCapabilityServerCopy: 'Server-side copy',
+  remoteCapabilitySymlink: 'Symbolic links',
+  remoteCapabilityHardlink: 'Hard links',
+  remoteCapabilityAvailable: 'Available',
+  remoteCapabilityUnavailable: 'Unavailable',
+  remoteCapabilityNone: 'None',
   savedHostFingerprint: 'Saved host identity',
   clearSavedFingerprint: 'Verify again',
   clearSavedFingerprintHint:
@@ -2559,6 +3173,8 @@ const errorScopeTranslations: Record<string, string> = {
   退出应用: 'Exit application',
   发送终端命令: 'Send terminal command',
   打开连接: 'Open connection',
+  '启动本地 Agent': 'Start local Agent',
+  打开本地终端: 'Open local terminal',
   激活标签页: 'Activate tab',
   重新连接标签页: 'Reconnect tab',
   断开标签页: 'Disconnect tab',
@@ -2608,3 +3224,212 @@ export const t = new Proxy({} as LocaleMessages, {
     return messages[activeLocale][property]
   }
 })
+
+export function localizeLocalTerminalText(value: string) {
+  return value
+    .replaceAll('Starting local shell...', t.localTerminalStarting)
+    .replaceAll('Local shell started', t.localTerminalRunning)
+    .replaceAll('Local shell stopped', t.localTerminalStopped)
+    .replaceAll('--- Local shell restarted ---', t.localTerminalRestarted)
+    .replace(/Local shell exited with code (\d+)/g, (_match, code: string) =>
+      formatMessage(t.localTerminalExitedWithCode, { code })
+    )
+    .replace(/Local shell exited:\s*/g, t.localTerminalExitedPrefix)
+    .replace(/Local shell input failed:\s*/g, t.localTerminalInputFailedPrefix)
+    .replace(/Unable to observe local shell:\s*/g, t.localTerminalObserveFailedPrefix)
+    .replace(/Unable to allocate local PTY:\s*/g, t.localTerminalPtyAllocateFailedPrefix)
+    .replace(/Unable to start local shell (.*):\s*/g, (_match, shell: string) =>
+      formatMessage(t.localTerminalStartFailed, { shell })
+    )
+    .replace(/Unable to read local PTY output:\s*/g, t.localTerminalReadFailedPrefix)
+    .replace(/Unable to write to local PTY:\s*/g, t.localTerminalWriteFailedPrefix)
+    .replace(/Unable to start local PTY reader:\s*/g, t.localTerminalReaderStartFailedPrefix)
+    .replace(/Unable to start local PTY worker:\s*/g, t.localTerminalWorkerStartFailedPrefix)
+    .replace(/Local terminal working directory does not exist:\s*/g, t.localTerminalWorkingDirectoryMissingPrefix)
+    .replaceAll('Local terminal working directory is empty', t.localTerminalWorkingDirectoryEmpty)
+    .replaceAll('Local terminal working directory contains a NUL byte', t.localTerminalWorkingDirectoryNul)
+    .replaceAll('Local terminal shell is empty', t.localTerminalShellEmpty)
+    .replaceAll('Local terminal shell contains a NUL byte', t.localTerminalShellNul)
+    .replace(/Local terminal shell does not exist:\s*/g, t.localTerminalShellMissingPrefix)
+    .replace(/Local terminal title is invalid or longer than (\d+) bytes/g, (_match, bytes: string) =>
+      formatMessage(t.localTerminalTitleInvalid, { bytes })
+    )
+    .replace(/Local terminal accepts at most (\d+) shell arguments/g, (_match, count: string) =>
+      formatMessage(t.localTerminalShellArgumentsLimit, { count })
+    )
+    .replace(/Local terminal shell argument (\d+) is invalid or too large/g, (_match, index: string) =>
+      formatMessage(t.localTerminalShellArgumentInvalid, { index })
+    )
+    .replace(/Local terminal accepts at most (\d+) environment overrides/g, (_match, count: string) =>
+      formatMessage(t.localTerminalEnvironmentLimit, { count })
+    )
+    .replace(/Local terminal environment override (.+) is invalid or too large/g, (_match, name: string) =>
+      formatMessage(t.localTerminalEnvironmentInvalid, { name })
+    )
+    .replace(
+      /\[FileTerm: local terminal output dropped (\d+) bytes while the renderer was busy\]/g,
+      (_match, bytes: string) => formatMessage(t.localTerminalOutputDropped, { bytes })
+    )
+    .replaceAll(
+      '[FileTerm: dropped output may include alternate screen transitions; terminal state may be inconsistent — run `reset` or Ctrl+L to resync]',
+      t.localTerminalOutputDroppedHint
+    )
+    .replaceAll('Local terminal launch settings are unavailable', t.localTerminalLaunchSettingsUnavailable)
+    .replaceAll('[会话日志] ', `[${t.sessionLogs}] `)
+    .replace(/会话日志写入失败：\s*/g, t.sessionLogWriteFailedPrefix)
+    .replaceAll('Split pane is only supported for SSH and local sessions', t.localTerminalSplitUnsupported)
+}
+
+export function localizeSerialTerminalText(value: string, options: { preserveUnknownTerminalOutput?: boolean } = {}) {
+  const isInternalSerialNotice =
+    /^\s*(?:\[串口\]|\[Hex\]|串口(?:已连接|已断开|设备已断开|错误：)|串口设备(?:扫描失败|扫描超时|身份)|串口 [^\r\n]+ @ \d+)/.test(
+      value
+    )
+  if (options.preserveUnknownTerminalOutput && !isInternalSerialNotice) {
+    return value
+  }
+
+  const localized = value
+    .replaceAll('串口已连接', t.serialConnected)
+    .replaceAll('串口已断开', t.serialDisconnected)
+    .replaceAll('串口设备已断开', t.serialDeviceDisconnected)
+    .replace(/串口 (.*) @ (\d+)/g, (_match, path: string, baud: string) =>
+      formatMessage(t.serialEndpoint, { path, baud })
+    )
+    .replace(/串口错误：\s*/g, t.serialErrorPrefix)
+    .replaceAll('Serial 不支持此文件或隧道操作', t.serialUnsupportedOperation)
+    .replaceAll('串口不支持此文件或隧道操作', t.serialUnsupportedOperation)
+    .replaceAll('串口设备路径不能为空', t.serialDevicePathRequired)
+    .replaceAll('串口波特率必须大于 0', t.serialBaudInvalid)
+    .replaceAll('串口波特率超出支持范围', t.serialBaudOutOfRange)
+    .replaceAll('串口换行模式无效', t.serialNewlineInvalid)
+    .replaceAll('串口输入模式无效', t.serialInputInvalid)
+    .replaceAll('串口输出模式无效', t.serialOutputInvalid)
+    .replaceAll('串口数据位必须是 5、6、7 或 8', t.serialDataBitsInvalid)
+    .replaceAll('串口停止位必须是 1 或 2', t.serialStopBitsInvalid)
+    .replaceAll('串口校验位必须是无、奇、偶、标记或空格校验', t.serialParityInvalid)
+    .replaceAll('当前平台或串口驱动不支持标记/空格校验，请选择无、奇或偶校验', t.serialParityUnsupported)
+    .replaceAll('macOS 的标记/空格校验模拟仅支持 7 数据位，请将数据位设为 7', t.serialParityMacRequirement)
+    .replaceAll('macOS 标记/空格校验模拟只能发送 7 位数据，请使用 ASCII 或关闭该校验', t.serialParityMacRequirement)
+    .replaceAll('macOS 标记校验收到校验位错误的数据', t.serialParityUnsupported)
+    .replaceAll('macOS 空格校验收到校验位错误的数据', t.serialParityUnsupported)
+    .replaceAll('串口流控必须是无、软件或硬件流控', t.serialFlowControlInvalid)
+    .replaceAll('串口启用硬件流控时不能手动控制 RTS', t.serialRtsHardwareManaged)
+    .replaceAll('串口启用 RS-485 半双工时不能手动控制 RTS', t.serialRtsRs485Managed)
+    .replaceAll('串口 RS-485 半双工不能与硬件流控同时启用', t.serialRs485FlowConflict)
+    .replaceAll('串口写入等待硬件流控超时', t.serialWriteTimeout)
+    .replaceAll('串口刷新等待硬件流控超时', t.serialWriteTimeout)
+    .replace(/串口写入超时必须在 250 到 600000 毫秒之间/g, t.serialWriteTimeoutInvalid)
+    .replace(/串口接收空闲超时必须在 250 到 600000 毫秒之间/g, t.serialReceiveIdleTimeoutInvalid)
+    .replaceAll('串口 RS-485 模式无效', t.serialRs485Invalid)
+    .replaceAll('当前平台暂不支持内置 RS-485 半双工控制，请使用驱动或外部转换器', t.serialRs485Unsupported)
+    .replaceAll('串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间', t.serialRs485DelayInvalid)
+    .replace(/应用 Linux RS-485 配置失败：/g, t.serialRs485ApplyFailed)
+    .replace(/读取 Linux RS-485 生效配置失败：/g, t.serialRs485ReadbackFailed)
+    .replace(/配置 macOS RS-485 软件 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(/释放 macOS RS-485 软件 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(/设置 RS-485 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(/释放 RS-485 RTS 失败：/g, t.serialRs485SoftwareApplyFailed)
+    .replace(
+      /无法访问串口 (.*)：权限不足。Linux 请将当前用户加入 dialout 组；Windows\/macOS 请确认驱动和设备访问权限。/g,
+      (_match, path: string) => formatMessage(t.serialPermissionError, { path })
+    )
+    .replace(/串口设备 (.*) 不存在、不可用或已断开。/g, (_match, path: string) =>
+      formatMessage(t.serialUnavailable, { path })
+    )
+    .replace(/串口设备 (.*) 已被其他程序占用。/g, (_match, path: string) => formatMessage(t.serialBusy, { path }))
+    .replaceAll('串口设备身份扫描超时', t.serialIdentityScanTimeout)
+    .replace(/串口设备身份扫描失败：/g, t.serialIdentityScanFailed)
+    .replace(/串口设备身份未找到匹配端口（当前配置：(.*)）/g, (_match, path: string) =>
+      formatMessage(t.serialIdentityNotFound, { path })
+    )
+    .replace(/串口设备身份匹配到多个端口，请在连接设置中重新选择（(.*)）/g, (_match, ports: string) =>
+      formatMessage(t.serialIdentityAmbiguous, { ports })
+    )
+    .replace(/串口 (.*)：/g, (_match, path: string) => formatMessage(t.serialGenericPrefix, { path }))
+    .replace(/将在 (\d+) 秒后自动重连（第 (\d+) 次）/g, (_match, seconds: string, attempt: string) =>
+      formatMessage(t.serialReconnectScheduled, { seconds, attempt })
+    )
+    .replace(/自动重连已达到上限（(∞|\d+) 次）/g, (_match, maximum: string) =>
+      formatMessage(t.serialReconnectLimit, { maximum })
+    )
+    .replaceAll('串口接收目标文件已存在，请更换文件名', t.serialTransferTargetExists)
+    .replaceAll('串口传输路径不能为空', t.serialTransferPathRequired)
+    .replaceAll('串口接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('串口 YMODEM 接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('串口接收文件名不能为空', t.serialTransferNameRequired)
+    .replaceAll('串口接收文件名无效', t.serialTransferNameInvalid)
+    .replaceAll('串口 YMODEM 文件名无效', t.serialTransferFilenameInvalid)
+    .replaceAll('串口 YMODEM 文件名重复，无法安全接收', t.serialTransferDuplicateFilename)
+    .replaceAll('当前串口会话已有文件传输正在进行', t.serialTransferAlreadyRunning)
+    .replaceAll('当前没有进行中的串口文件传输', t.serialTransferNoneRunning)
+    .replaceAll('串口接收已取消', t.serialTransferCanceled)
+    .replaceAll('串口文件传输已取消', t.serialTransferCanceled)
+    .replaceAll('串口文件传输接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('对端取消了 XMODEM 传输', t.serialTransferPeerCanceled)
+    .replaceAll('对端取消了 YMODEM 传输', t.serialTransferPeerCanceled)
+    .replaceAll('对端取消了串口文件传输', t.serialTransferPeerCanceled)
+    .replaceAll('等待串口文件传输启动超时', t.serialTransferStartTimeout)
+    .replaceAll('等待串口文件传输数据超时', t.serialTransferDataTimeout)
+    .replaceAll('等待 YMODEM 数据超时', t.serialTransferDataTimeout)
+    .replaceAll('等待串口文件接收端启动超时', t.serialTransferSenderStartTimeout)
+    .replaceAll('串口文件传输结束确认超时', t.serialTransferEndTimeout)
+    .replaceAll('YMODEM 文件头格式无效', t.serialTransferHeaderInvalid)
+    .replaceAll('YMODEM 文件头校验失败', t.serialTransferHeaderChecksumInvalid)
+    .replaceAll('YMODEM 文件头序号无效', t.serialTransferHeaderSequenceInvalid)
+    .replaceAll('YMODEM 下一个文件头格式无效', t.serialTransferNextHeaderInvalid)
+    .replaceAll('YMODEM 文件名无效，不允许包含路径或控制字符', t.serialTransferFilenameInvalid)
+    .replaceAll('YMODEM 文件名无效，不允许写出接收目录', t.serialTransferFilenameUnsafe)
+    .replaceAll('YMODEM 文件头缺少文件名', t.serialTransferHeaderInvalid)
+    .replaceAll('YMODEM 文件头缺少文件大小', t.serialTransferSizeMissing)
+    .replaceAll('YMODEM 文件大小不是有效文本', t.serialTransferSizeTextInvalid)
+    .replaceAll('YMODEM 文件大小无效', t.serialTransferSizeInvalid)
+    .replaceAll('YMODEM 文件大小与接收数据不一致', t.serialTransferSizeMismatch)
+    .replaceAll('ZMODEM 接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('Kermit 接收目录不存在', t.serialTransferDirectoryInvalid)
+    .replaceAll('ZMODEM 文件名无效，不允许写出接收目录', t.serialTransferFilenameUnsafe)
+    .replaceAll('Kermit 文件名无效，不允许写出接收目录', t.serialTransferFilenameUnsafe)
+    .replaceAll('Kermit 对端未协商 8 位数据转义，无法安全传输二进制文件', t.serialTransferKermitBinaryUnsupported)
+    .replaceAll('Kermit 等待确认超时，重试次数过多', t.serialTransferKermitAckTimeout)
+    .replaceAll('Kermit 数据包校验失败', t.serialTransferKermitChecksumInvalid)
+    .replaceAll('ZMODEM 单个文件不能超过 4 GiB', t.serialTransferZmodemFileTooLarge)
+    .replaceAll('串口文件传输数据块序号校验无效，无法安全重试', t.serialTransferFrameSequenceInvalid)
+    .replaceAll('串口文件传输数据块序号读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输数据块序号校验读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输数据块内容读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输 CRC 校验读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('串口文件传输校验和读取超时，数据帧不完整', t.serialTransferFrameIncomplete)
+    .replaceAll('读取串口文件传输数据失败：', t.serialTransferReadFailedPrefix)
+    .replaceAll('XMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
+    .replaceAll('YMODEM 数据块序号不连续', t.serialTransferSequenceInvalid)
+    .replaceAll('YMODEM 接收数据超过文件头声明的大小', t.serialTransferDataTooLarge)
+    .replaceAll('ZMODEM 接收数据超过文件头声明的大小', t.serialTransferDataTooLarge)
+    .replaceAll('串口文件传输写入等待硬件流控超时', t.serialTransferWriteTimeout)
+    .replaceAll('串口文件传输刷新等待硬件流控超时', t.serialTransferWriteTimeout)
+    .replaceAll('serial transfer active', t.serialTransferActive)
+    .replaceAll(
+      '软件流控可能吞掉串口文件传输的二进制控制字节，请改用无流控或硬件流控',
+      t.serialTransferSoftwareFlowControl
+    )
+    .replaceAll('串口控制已取消', t.serialControlCanceled)
+    .replaceAll('串口 YMODEM 文件头过长，请缩短文件名', t.serialTransferYmodemHeaderTooLong)
+    .replaceAll('[串口] ', '[Serial] ')
+    .replace(/串口设备扫描失败：\s*/g, t.serialScanFailedPrefix)
+    .replaceAll('串口设备扫描超时', t.serialScanTimeout)
+    .replace(/Hex 输入必须按两个字符表示一个字节：\s*/g, t.serialHexFormatPrefix)
+    .replace(/Hex 输入包含无效字节：\s*/g, t.serialHexInvalidBytePrefix)
+
+  // Terminal data is also passed through this helper. Only replace an
+  // untranslated Chinese string when it is an internal FileTerm serial
+  // notice, or when the caller explicitly treats the value as an error. A
+  // serial device is allowed to print Chinese application data in English
+  // UI mode and that output must not be hidden by the generic error message.
+  if (
+    activeLocale === 'enUS' &&
+    /[\u4e00-\u9fff]/.test(localized) &&
+    (!options.preserveUnknownTerminalOutput || isInternalSerialNotice)
+  ) {
+    return t.serialUnknownError
+  }
+  return localized
+}

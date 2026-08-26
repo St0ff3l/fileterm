@@ -10,6 +10,8 @@ pub mod mcp;
 pub mod profile_ops;
 pub mod s3_backup;
 pub mod secret_crypto;
+pub mod serial_ports;
+pub mod session_logs;
 pub mod ssh_keys;
 pub mod transfers;
 pub mod updates;

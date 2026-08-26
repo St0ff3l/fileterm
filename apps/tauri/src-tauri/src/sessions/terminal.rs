@@ -2,6 +2,16 @@ use std::sync::{atomic::Ordering, Arc};
 
 use tauri::{AppHandle, Emitter, Manager};
 
+pub const LOCAL_TERMINAL_STARTUP_TRANSCRIPT: &str = "Starting local shell...\r\n";
+
+pub fn local_terminal_startup_transcript() -> &'static str {
+    if cfg!(target_os = "windows") {
+        ""
+    } else {
+        LOCAL_TERMINAL_STARTUP_TRANSCRIPT
+    }
+}
+
 pub fn decode_terminal(bytes: &[u8], encoding: &str) -> String {
     match encoding.trim().to_lowercase().as_str() {
         "gbk" | "gb18030" => encoding_rs::GB18030.decode(bytes).0.into_owned(),
@@ -46,6 +56,7 @@ fn truncate_transcript(value: &mut String) {
 pub async fn emit_terminal_data(app: &AppHandle, tab_id: &str, chunk: &str) {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     state.publish_terminal_output(tab_id, chunk);
+    crate::services::session_logs::append_chunk(app, tab_id, chunk).await;
     let mut sessions = state.sessions.write().await;
     if let Some(session) = sessions.get_mut(tab_id) {
         session.terminal_transcript.push_str(chunk);
@@ -69,6 +80,16 @@ pub async fn emit_local_terminal_data(
 
     let _emit_guard = gate.emit_lock.lock().await;
     if !gate.active.load(Ordering::Acquire) {
+        crate::services::logging::debug(
+            app,
+            "local",
+            format!(
+                "discarding PTY batch tab={} runtime={} bytes={} reason=runtime-inactive",
+                tab_id,
+                runtime_id,
+                chunk.len()
+            ),
+        );
         return false;
     }
 
@@ -80,15 +101,25 @@ pub async fn emit_local_terminal_data(
         .get(tab_id)
         .is_some_and(|current_id| current_id == runtime_id);
     if !owns_runtime {
+        crate::services::logging::warn(
+            app,
+            "local",
+            format!(
+                "discarding PTY batch tab={} runtime={} bytes={} reason=runtime-not-owner",
+                tab_id,
+                runtime_id,
+                chunk.len()
+            ),
+        );
         return false;
     }
 
-    state.publish_terminal_output(tab_id, chunk);
     let mut sessions = state.sessions.write().await;
     if let Some(session) = sessions.get_mut(tab_id) {
         session.terminal_transcript.push_str(chunk);
         truncate_transcript(&mut session.terminal_transcript);
     }
+    state.publish_terminal_output(tab_id, chunk);
     true
 }
 

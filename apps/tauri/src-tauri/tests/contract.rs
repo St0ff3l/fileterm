@@ -408,7 +408,7 @@ fn protocol_workers_publish_connected_closed_and_error_states() {
         ("SSH", include_str!("../src/sessions/ssh.rs")),
         ("FTP", include_str!("../src/sessions/ftp.rs")),
         ("Telnet", include_str!("../src/sessions/telnet.rs")),
-        ("Serial", include_str!("../src/sessions/serial.rs")),
+        ("Serial", include_str!("../src/sessions/serial/mod.rs")),
     ];
     for (name, source) in protocols {
         for status in ["Connected", "Closed", "Error"] {

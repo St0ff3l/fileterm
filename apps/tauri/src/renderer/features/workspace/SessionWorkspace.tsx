@@ -562,8 +562,9 @@ export function SessionWorkspace({
     }
   }
 
+  const reconnectMode = terminalActiveSession.reconnectMode ?? 'none'
   const reconnectOnEnter =
-    terminalActiveSession.reconnectMode === 'enter'
+    reconnectMode === 'enter' || reconnectMode === 'auto'
       ? async () => {
           await window.fileterm?.reconnectTab(terminalActiveTab.id)
         }
@@ -591,8 +592,10 @@ export function SessionWorkspace({
             />
           ) : (
             <TerminalView
+              profileId={terminalActiveTab.profileId}
               tabId={terminalActiveTab.id}
               bootText={terminalActiveSession.terminalTranscript ?? ''}
+              sessionType={terminalActiveTab.sessionType}
               connected={terminalActiveSession.connected === true}
               connecting={terminalActiveTab.status === 'connecting'}
               onReconnect={reconnectOnEnter}

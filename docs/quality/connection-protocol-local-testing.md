@@ -32,11 +32,33 @@ python3 -m http.server 8080 --bind 127.0.0.1
 
 ## Serial
 
-- macOS：优先选择 `/dev/cu.*`，而不是 `/dev/tty.*`。
-- Linux：使用 `/dev/ttyUSB*` 或 `/dev/ttyACM*`；权限不足时将用户加入 `dialout` 后重新登录。
-- Windows：使用 `COM3`；两位数端口也直接填 `COM10`，不需要 `\\.\` 前缀。
+FileTerm 当前已经有串口连接，串口会话是终端型连接，不提供远程文件面板，但提供独立的 Raw、XMODEM、YMODEM、ZMODEM 和 Kermit 文件传输面板。连接配置会通过 Rust bridge 扫描系统串口并显示设备名/USB 信息，但扫描结果不代表设备一定能打开；仍然保留手动填写路径的能力。最容易验证终端和协议传输的方法是准备一个 USB 转串口模块，并把两个串口的 `TX` 与 `RX` 交叉连接、`GND` 对接；不要把电源脚直接短接。两端都使用 `115200 / 8 数据位 / 1 停止位 / 无校验 / 无流控`，传输协议两端必须选择相同模式。
 
-使用 USB 串口设备或虚拟串口对验证 115200/8N1；拔出设备后会话应明确断开而不会残留句柄。
+串口的「终端」页还支持以下设备侧常用选项：
+
+- 发送换行：不转换、`LF`、`CR` 或 `CRLF`。它只转换输入中的行结束符，不会凭空给普通文本追加换行。
+- 输入模式：`Text` 按当前字符编码发送；`Hex` 以一行作为发送单位，按回车发送，支持退格编辑，以及空格、冒号、逗号、下划线和 `0x` 前缀，例如 `0x41 42 43`。
+- 输出模式：`Text` 按当前编码显示；`Hex` 以大写字节显示，便于查看协议帧和不可见控制字节。
+- 本地回显：发送后立即在当前终端显示一份；设备自身也回显时会出现两份，这是预期行为。
+- 断线行为：不自动重连、按回车重连、断线后按 2/4/8/16/30 秒退避自动重连，并可设置最大尝试次数。主动点击断开或关闭标签不会触发自动重连。
+- 线路控制：DTR/RTS 可手动设置或脉冲，CTS/DSR/RING/DCD 显示当前可读状态；Break、清空缓冲区和复位串口会先经过确认。RS-485 半双工会接管 RTS，Linux 由驱动控制，macOS 用软件 RTS 控制外部转换器，不能再同时手动切 RTS。
+- `mark`/`space` parity：Linux/Windows 使用系统原生能力；macOS 仅支持 7 数据位的软件模拟，发送内容必须是 7 位字节，收到错误校验位会报错。它不能替代 8 位 mark/space 或真实电气验收。
+- 文件传输：XMODEM 没有文件大小字段，接收面板默认保留最后一个数据块的 `0x1A`；关闭“保留末尾填充”才会使用旧式裁剪。二进制文件优先使用 YMODEM/ZMODEM。
+
+- macOS：插入设备后运行 `ls /dev/cu.*`，在连接配置中优先填写 `/dev/cu.usbserial-*` 或 `/dev/cu.SLAB_USBtoUART`，不要优先使用 `/dev/tty.*`。打开两个串口标签，一个发送文字，另一个应收到文字。
+- Linux：使用 `/dev/ttyUSB*` 或 `/dev/ttyACM*`；权限不足时将当前用户加入 `dialout` 组并重新登录。没有实体设备时，可以用 Linux 虚拟串口对：
+
+  ```bash
+  socat -d -d pty,raw,echo=0,link=/tmp/fileterm-ttyA pty,raw,echo=0,link=/tmp/fileterm-ttyB
+  ```
+
+  然后在 FileTerm 连接 `/tmp/fileterm-ttyA`，用另一个终端或串口工具打开 `/tmp/fileterm-ttyB` 回显数据。仓库中的 `virtual_pty_round_trip_exercises_the_real_serial_stack` 也会在 Linux CI 中验证这一链路。
+
+- Windows：设备管理器中查看端口号，填写 `COM3`；两位数端口直接填写 `COM10`，不需要 `\\.\` 前缀。没有实体设备时，需要安装虚拟 COM 对软件，再把两个成对端口分别填入两个 FileTerm 标签。
+
+拔出设备或关闭虚拟串口后，会话应显示“串口设备已断开”，并且重新插入后可以重新连接，不应残留占用句柄。没有任何设备时，开发机仍可运行 `serial_port_contract_tests::maps_usb_metadata_without_accessing_hardware`，验证扫描结果的 bridge 数据结构；Linux CI 还会用 PTY 验证真实 `tokio-serial` 读写链路。macOS 的系统 PTY 不是实体串口，不能用它代替 `/dev/cu.*` 做最终验证；Windows/macOS 的最终打开、收发和拔插行为仍需要虚拟串口或实体设备做一次人工验收。
+
+没有设备时仍可验证大部分行为：Rust 单元测试覆盖 `Text/Hex` 编码、换行转换、Hex 分隔符和 Hex 输出；Linux CI 的 PTY 测试覆盖真实异步串口读写。最终发行前仍要在 macOS、Windows 各使用一次虚拟串口对或实体设备，确认系统枚举、设备占用、拔插和驱动权限提示。
 
 ## JSON 导入、隧道与 WebDAV
 

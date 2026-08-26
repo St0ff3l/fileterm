@@ -1434,11 +1434,16 @@ async fn delete_remote_path(app: &AppHandle, params: &Value) -> Result<Value, St
     let tab_id = required_string(params, "tab_id", 256)?;
     let target_path = required_string(params, "target_path", 4_096)?;
     let target_type = required_target_type(params)?;
+    let target_is_symlink = params
+        .get("target_is_symlink")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let snapshot = crate::commands::app_delete_remote_path(
         app.clone(),
         tab_id.clone(),
         target_path,
         target_type,
+        target_is_symlink,
     )
     .await
     .map_err(public_app_error)?;
@@ -2643,7 +2648,7 @@ fn tool_definitions() -> Vec<Value> {
         tool_definition("fileterm_copy_remote_path", "Copy a remote path", "Copy a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "destination_path": { "type": "string" }, "target_type": { "type": "string", "enum": ["file", "folder"] } }), &["tab_id", "target_path", "destination_path", "target_type"], false, true, false, true),
         tool_definition("fileterm_move_remote_path", "Move a remote path", "Move a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "destination_path": { "type": "string" } }), &["tab_id", "target_path", "destination_path"], false, true, false, true),
         tool_definition("fileterm_rename_remote_path", "Rename a remote path", "Rename a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "new_name": { "type": "string" } }), &["tab_id", "target_path", "new_name"], false, true, false, true),
-        tool_definition("fileterm_delete_remote_path", "Delete a remote path", "Delete a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "target_type": { "type": "string", "enum": ["file", "folder"] } }), &["tab_id", "target_path", "target_type"], false, true, false, true),
+        tool_definition("fileterm_delete_remote_path", "Delete a remote path", "Delete a remote file or directory after approval.", json!({ "tab_id": { "type": "string" }, "target_path": { "type": "string" }, "target_type": { "type": "string", "enum": ["file", "folder"] }, "target_is_symlink": { "type": "boolean" } }), &["tab_id", "target_path", "target_type"], false, true, false, true),
         tool_definition("fileterm_change_remote_permissions", "Change remote permissions", "Change remote mode bits after approval.", json!({ "tab_id": { "type": "string" }, "path": { "type": "string" }, "mode": { "type": "string", "pattern": "^[0-7]{3,4}$" }, "recursive": { "type": "boolean" }, "apply_to": { "type": "string", "enum": ["all", "files", "directories"] } }), &["tab_id", "path", "mode"], false, true, true, true),
         tool_definition("fileterm_set_remote_file_access_mode", "Set remote file access mode", "Switch the existing session's file view between user and root mode. Root credentials are never accepted from MCP; FileTerm must already have reusable authorization or the operation fails.", json!({ "tab_id": { "type": "string" }, "mode": { "type": "string", "enum": ["user", "root"] } }), &["tab_id", "mode"], false, true, true, true),
         tool_definition("fileterm_upload_file", "Upload a local file", "Queue a resumable upload through FileTerm's transfer service after approval.", json!({ "tab_id": { "type": "string" }, "local_path": { "type": "string" }, "remote_directory": { "type": "string" }, "target_name": { "type": "string" } }), &["tab_id", "local_path", "remote_directory"], false, false, false, true),

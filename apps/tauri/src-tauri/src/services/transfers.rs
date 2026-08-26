@@ -1,8 +1,10 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{oneshot, watch};
 use tokio_util::sync::CancellationToken;
@@ -15,6 +17,15 @@ const JOURNAL_MAX_TASKS: usize = 200;
 const UPDATE_INTERVAL: Duration = Duration::from_millis(200);
 const SPEED_SAMPLE_INTERVAL: Duration = Duration::from_millis(120);
 const TRANSFER_STOP_TIMEOUT: Duration = Duration::from_secs(15);
+const TRANSFER_WORKER_SEND_TIMEOUT: Duration = Duration::from_secs(5);
+const TRANSFER_WORKER_CONTROL_TIMEOUT: Duration = Duration::from_secs(20);
+// A data command may legitimately run for hours. Cancellation is the fast
+// path; this ceiling still prevents a lost worker reply from hanging the
+// transfer task forever when the connection never observes the token.
+const TRANSFER_WORKER_DATA_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const MAX_REMOTE_TREE_DEPTH: usize = 64;
+const MAX_REMOTE_TREE_ENTRIES: usize = 100_000;
+const MAX_REMOTE_TREE_BYTES: u64 = 1 << 40;
 const PARTIAL_SUFFIX: &str = ".fileterm-part";
 // /tmp is frequently mounted as tmpfs on small Linux hosts. Keep new root
 // upload staging on the disk-oriented temporary filesystem instead.
@@ -518,7 +529,56 @@ pub async fn report_progress(app: &AppHandle, transfer_id: &str, transferred: u6
 pub(crate) async fn worker_call<T>(
     app: &AppHandle,
     tab_id: &str,
-    make_command: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,
+    make_command: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
+) -> Result<T, AppError> {
+    worker_call_with_timeout(
+        app,
+        tab_id,
+        TRANSFER_WORKER_CONTROL_TIMEOUT,
+        None,
+        make_command,
+    )
+    .await
+}
+
+pub(crate) async fn worker_call_with_cancel<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    cancellation: &CancellationToken,
+    make_command: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
+) -> Result<T, AppError> {
+    worker_call_with_timeout(
+        app,
+        tab_id,
+        TRANSFER_WORKER_CONTROL_TIMEOUT,
+        Some(cancellation.clone()),
+        make_command,
+    )
+    .await
+}
+
+pub(crate) async fn worker_data_call_with_cancel<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    cancellation: &CancellationToken,
+    make_command: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
+) -> Result<T, AppError> {
+    worker_call_with_timeout(
+        app,
+        tab_id,
+        TRANSFER_WORKER_DATA_TIMEOUT,
+        Some(cancellation.clone()),
+        make_command,
+    )
+    .await
+}
+
+async fn worker_call_with_timeout<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    response_timeout: Duration,
+    cancellation: Option<CancellationToken>,
+    make_command: impl FnOnce(oneshot::Sender<Result<T, String>>, CancellationToken) -> WorkerCmd,
 ) -> Result<T, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let sender = state
@@ -529,14 +589,34 @@ pub(crate) async fn worker_call<T>(
         .cloned()
         .ok_or_else(|| transfer_error("传输会话未连接"))?;
     let (respond_to, result) = oneshot::channel();
-    sender
-        .send(make_command(respond_to))
-        .await
-        .map_err(|_| transfer_error("传输会话已关闭"))?;
-    result
-        .await
-        .map_err(|_| transfer_error("传输会话未返回结果"))?
-        .map_err(transfer_error)
+    let cancellation = cancellation.unwrap_or_default();
+    let command = make_command(respond_to, cancellation.clone());
+    let send_result = tokio::select! {
+        _ = cancellation.cancelled() => return Err(transfer_error("传输已取消")),
+        result = tokio::time::timeout(TRANSFER_WORKER_SEND_TIMEOUT, sender.send(command)) => result,
+    };
+    match send_result {
+        Ok(Ok(())) => {}
+        Ok(Err(_)) => return Err(transfer_error("传输会话已关闭")),
+        Err(_) => {
+            cancellation.cancel();
+            return Err(transfer_error("传输操作发送超时"));
+        }
+    }
+
+    let response = tokio::select! {
+        _ = cancellation.cancelled() => return Err(transfer_error("传输已取消")),
+        result = tokio::time::timeout(response_timeout, result) => result,
+    };
+    let response = match response {
+        Ok(Ok(response)) => response,
+        Ok(Err(_)) => return Err(transfer_error("传输会话未返回结果")),
+        Err(_) => {
+            cancellation.cancel();
+            return Err(transfer_error("传输操作响应超时，后台操作已取消"));
+        }
+    };
+    response.map_err(transfer_error)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -547,29 +627,47 @@ struct RemoteUploadPlan {
     partial_ready: bool,
 }
 
+struct RemoteUploadFinalize<'a> {
+    partial_path: &'a str,
+    staging_path: Option<&'a str>,
+    destination_path: &'a str,
+    source_size: u64,
+    partial_ready: bool,
+}
+
 async fn stat_remote_transfer_size(
     app: &AppHandle,
     tab_id: &str,
     path: &str,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<Option<u64>, AppError> {
-    worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
+    let call = |respond_to, token| WorkerCmd::StatRemoteFile {
         path: path.to_string(),
+        cancellation: token,
         respond_to,
-    })
-    .await
-    .map(|stat| stat.map(|value| value.size))
+    };
+    let stat = match cancellation {
+        Some(cancellation) => worker_call_with_cancel(app, tab_id, cancellation, call).await?,
+        None => worker_call(app, tab_id, call).await?,
+    };
+    Ok(stat.map(|value| value.size))
 }
 
 async fn remove_remote_transfer_file(
     app: &AppHandle,
     tab_id: &str,
     path: &str,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<(), AppError> {
-    worker_call(app, tab_id, |respond_to| WorkerCmd::RemoveRemoteFile {
+    let call = |respond_to, token| WorkerCmd::RemoveRemoteFile {
         path: path.to_string(),
+        cancellation: token,
         respond_to,
-    })
-    .await
+    };
+    match cancellation {
+        Some(cancellation) => worker_call_with_cancel(app, tab_id, cancellation, call).await,
+        None => worker_call(app, tab_id, call).await,
+    }
 }
 
 async fn stat_remote_upload_progress(
@@ -577,9 +675,10 @@ async fn stat_remote_upload_progress(
     tab_id: &str,
     partial_path: &str,
     staging_path: Option<&str>,
+    cancellation: Option<&CancellationToken>,
 ) -> Option<u64> {
     if let Some(staging_path) = staging_path {
-        if let Some(size) = stat_remote_transfer_size(app, tab_id, staging_path)
+        if let Some(size) = stat_remote_transfer_size(app, tab_id, staging_path, cancellation)
             .await
             .ok()
             .flatten()
@@ -587,7 +686,7 @@ async fn stat_remote_upload_progress(
             return Some(size);
         }
     }
-    stat_remote_transfer_size(app, tab_id, partial_path)
+    stat_remote_transfer_size(app, tab_id, partial_path, cancellation)
         .await
         .ok()
         .flatten()
@@ -598,10 +697,11 @@ async fn remove_remote_upload_artifacts(
     tab_id: &str,
     partial_path: &str,
     staging_path: Option<&str>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<(), AppError> {
-    remove_remote_transfer_file(app, tab_id, partial_path).await?;
+    remove_remote_transfer_file(app, tab_id, partial_path, cancellation).await?;
     if let Some(staging_path) = staging_path {
-        remove_remote_transfer_file(app, tab_id, staging_path).await?;
+        remove_remote_transfer_file(app, tab_id, staging_path, cancellation).await?;
     }
     Ok(())
 }
@@ -612,9 +712,11 @@ async fn prepare_remote_upload(
     partial_path: &str,
     staging_path: Option<&str>,
     source_size: u64,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<RemoteUploadPlan, AppError> {
     if let Some(staging_path) = staging_path {
-        let partial_size = stat_remote_transfer_size(app, tab_id, partial_path).await?;
+        let partial_size =
+            stat_remote_transfer_size(app, tab_id, partial_path, cancellation).await?;
         if partial_size == Some(source_size) {
             return Ok(RemoteUploadPlan {
                 upload_path: staging_path.to_string(),
@@ -624,10 +726,11 @@ async fn prepare_remote_upload(
             });
         }
         if partial_size.is_some() {
-            remove_remote_transfer_file(app, tab_id, partial_path).await?;
+            remove_remote_transfer_file(app, tab_id, partial_path, cancellation).await?;
         }
 
-        let staging_size = stat_remote_transfer_size(app, tab_id, staging_path).await?;
+        let staging_size =
+            stat_remote_transfer_size(app, tab_id, staging_path, cancellation).await?;
         let resume_offset = staging_size.unwrap_or(0);
         if resume_offset > source_size {
             return Err(transfer_error(
@@ -642,7 +745,7 @@ async fn prepare_remote_upload(
         });
     }
 
-    let partial_size = stat_remote_transfer_size(app, tab_id, partial_path).await?;
+    let partial_size = stat_remote_transfer_size(app, tab_id, partial_path, cancellation).await?;
     let resume_offset = partial_size.unwrap_or(0);
     if resume_offset > source_size {
         return Err(transfer_error("断点文件大于源文件，请丢弃断点后重新传输"));
@@ -658,37 +761,46 @@ async fn prepare_remote_upload(
 async fn finalize_remote_upload(
     app: &AppHandle,
     tab_id: &str,
-    partial_path: &str,
-    staging_path: Option<&str>,
-    destination_path: &str,
-    source_size: u64,
-    partial_ready: bool,
+    finalize: RemoteUploadFinalize<'_>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<(), AppError> {
-    if let Some(staging_path) = staging_path {
-        if !partial_ready {
-            worker_call(app, tab_id, |respond_to| WorkerCmd::CommitRemoteStaging {
+    if let Some(staging_path) = finalize.staging_path {
+        if !finalize.partial_ready {
+            let call = |respond_to, token| WorkerCmd::CommitRemoteStaging {
                 staging_path: staging_path.to_string(),
-                partial_path: partial_path.to_string(),
+                partial_path: finalize.partial_path.to_string(),
+                cancellation: token,
                 respond_to,
-            })
-            .await?;
+            };
+            match cancellation {
+                Some(cancellation) => {
+                    worker_call_with_cancel(app, tab_id, cancellation, call).await?
+                }
+                None => worker_call(app, tab_id, call).await?,
+            };
         }
-        let committed_size = stat_remote_transfer_size(app, tab_id, partial_path)
-            .await?
-            .unwrap_or(0);
-        if committed_size != source_size {
+        let committed_size =
+            stat_remote_transfer_size(app, tab_id, finalize.partial_path, cancellation)
+                .await?
+                .unwrap_or(0);
+        if committed_size != finalize.source_size {
             return Err(transfer_error(format!(
-                "root 目标目录断点校验失败：{committed_size} bytes，期望 {source_size}"
+                "root 目标目录断点校验失败：{} bytes，期望 {}",
+                committed_size, finalize.source_size
             )));
         }
     }
 
-    worker_call(app, tab_id, |respond_to| WorkerCmd::ReplaceRemoteFile {
-        partial_path: partial_path.to_string(),
-        destination_path: destination_path.to_string(),
+    let call = |respond_to, token| WorkerCmd::ReplaceRemoteFile {
+        partial_path: finalize.partial_path.to_string(),
+        destination_path: finalize.destination_path.to_string(),
+        cancellation: token,
         respond_to,
-    })
-    .await
+    };
+    match cancellation {
+        Some(cancellation) => worker_call_with_cancel(app, tab_id, cancellation, call).await,
+        None => worker_call(app, tab_id, call).await,
+    }
 }
 
 async fn find_connected_tab(app: &AppHandle, profile_id: &str) -> Option<String> {
@@ -724,6 +836,7 @@ async fn ensure_remote_directory(
     app: &AppHandle,
     tab_id: &str,
     directory: &str,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<(), AppError> {
     let normalized = directory.trim_end_matches('/');
     if normalized.is_empty() || normalized == "/" {
@@ -736,12 +849,16 @@ async fn ensure_remote_directory(
         .filter(|name| !name.is_empty())
         .ok_or_else(|| transfer_error("远端目录无效"))?
         .to_string();
-    worker_call(app, tab_id, |respond_to| WorkerCmd::CreateRemoteDirectory {
+    let call = |respond_to, token| WorkerCmd::CreateRemoteDirectory {
         parent_path: parent,
         name,
+        cancellation: token,
         respond_to,
-    })
-    .await
+    };
+    match cancellation {
+        Some(cancellation) => worker_call_with_cancel(app, tab_id, cancellation, call).await,
+        None => worker_call(app, tab_id, call).await,
+    }
 }
 
 fn parent_remote_path(path: &str) -> String {
@@ -806,14 +923,32 @@ async fn collect_remote_tree(
 ) -> Result<(Vec<String>, Vec<(String, TransferFileIdentity)>), AppError> {
     let mut directories = Vec::new();
     let mut files = Vec::new();
-    let mut pending = vec![root.to_string()];
-    while let Some(directory) = pending.pop() {
-        let entries = worker_call(app, tab_id, |respond_to| WorkerCmd::ListRemoteFiles {
-            path: directory.clone(),
-            respond_to,
+    let mut pending = vec![(root.to_string(), 0usize)];
+    let mut visited_directories = HashSet::new();
+    let mut entry_count = 0usize;
+    let mut total_bytes = 0u64;
+    while let Some((directory, depth)) = pending.pop() {
+        if !visited_directories.insert(directory.clone()) {
+            return Err(transfer_error(format!(
+                "远端目录传输检测到循环路径：{directory}"
+            )));
+        }
+        let entries = worker_call(app, tab_id, |respond_to, cancellation| {
+            WorkerCmd::ListRemoteFiles {
+                path: directory.clone(),
+                cancellation,
+                respond_to,
+            }
         })
         .await?;
         for entry in entries {
+            entry_count = entry_count.saturating_add(1);
+            if entry_count > MAX_REMOTE_TREE_ENTRIES {
+                return Err(transfer_error(format!(
+                    "远端目录传输超过 {} 个条目，已停止以保护本机资源",
+                    MAX_REMOTE_TREE_ENTRIES
+                )));
+            }
             let name = entry
                 .get("name")
                 .and_then(|value| value.as_str())
@@ -827,17 +962,42 @@ async fn collect_remote_tree(
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| transfer_error("远端目录返回了无效路径"))?
                 .to_string();
+            if entry
+                .get("isSymlink")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                return Err(transfer_error(format!("目录传输不跟随符号链接：{path}")));
+            }
             if entry.get("type").and_then(|value| value.as_str()) == Some("folder") {
+                if depth >= MAX_REMOTE_TREE_DEPTH {
+                    return Err(transfer_error(format!(
+                        "远端目录传输超过 {} 层，已停止以保护本机资源",
+                        MAX_REMOTE_TREE_DEPTH
+                    )));
+                }
                 directories.push(path.clone());
-                pending.push(path);
+                pending.push((path, depth + 1));
                 continue;
             }
-            let identity = worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                path: path.clone(),
-                respond_to,
+            let identity = worker_call(app, tab_id, |respond_to, cancellation| {
+                WorkerCmd::StatRemoteFile {
+                    path: path.clone(),
+                    cancellation,
+                    respond_to,
+                }
             })
             .await?
             .ok_or_else(|| transfer_error(format!("无法读取远端文件信息: {path}")))?;
+            total_bytes = total_bytes
+                .checked_add(identity.size)
+                .ok_or_else(|| transfer_error("远端目录总大小超出支持范围"))?;
+            if total_bytes > MAX_REMOTE_TREE_BYTES {
+                return Err(transfer_error(format!(
+                    "远端目录总大小超过 {} GiB，已停止以保护本机资源",
+                    MAX_REMOTE_TREE_BYTES / (1024 * 1024 * 1024)
+                )));
+            }
             files.push((
                 path,
                 TransferFileIdentity {
@@ -1098,9 +1258,12 @@ pub async fn create_download(
         .find(|tab| tab.id == tab_id)
         .cloned()
         .ok_or_else(|| transfer_error("目标标签页不存在"))?;
-    let size = worker_call(app, &tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-        path: remote_path.clone(),
-        respond_to,
+    let size = worker_call(app, &tab_id, |respond_to, cancellation| {
+        WorkerCmd::StatRemoteFile {
+            path: remote_path.clone(),
+            cancellation,
+            respond_to,
+        }
     })
     .await?
     .ok_or_else(|| transfer_error("远端下载文件不存在"))?;
@@ -1342,8 +1505,11 @@ async fn start(app: AppHandle, transfer_id: String) -> Result<(), AppError> {
     }
 
     tauri::async_runtime::spawn(async move {
+        let cancel_for_error = cancel.clone();
         if let Err(error) = run(app.clone(), transfer_id.clone(), cancel).await {
-            let _ = fail_if_running(&app, &transfer_id, error.to_string()).await;
+            if !cancel_for_error.is_cancelled() {
+                let _ = fail_if_running(&app, &transfer_id, error.to_string()).await;
+            }
         }
         clear_transfer_progress_runtime(&app, &transfer_id).await;
         let _ = settled_tx.send(true);
@@ -1469,12 +1635,16 @@ async fn run(
                 }
                 identity.size
             } else {
-                let source = worker_call(&app, &tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                    path: source_path.clone(),
-                    respond_to,
-                })
-                .await?
-                .ok_or_else(|| transfer_error("下载源文件不存在或无法读取"))?;
+                let source =
+                    worker_call_with_cancel(&app, &tab_id, &cancel, |respond_to, token| {
+                        WorkerCmd::StatRemoteFile {
+                            path: source_path.clone(),
+                            cancellation: token,
+                            respond_to,
+                        }
+                    })
+                    .await?
+                    .ok_or_else(|| transfer_error("下载源文件不存在或无法读取"))?;
                 let identity = TransferFileIdentity {
                     size: source.size,
                     modified_at: source.modified_at,
@@ -1493,16 +1663,29 @@ async fn run(
             };
             if !resume_requested {
                 if task.direction == "upload" {
-                    remove_remote_upload_artifacts(&app, &tab_id, &partial, staging.as_deref())
-                        .await?;
+                    remove_remote_upload_artifacts(
+                        &app,
+                        &tab_id,
+                        &partial,
+                        staging.as_deref(),
+                        Some(&cancel),
+                    )
+                    .await?;
                 } else {
                     let _ = tokio::fs::remove_file(&partial).await;
                 }
             }
             let upload_plan = if task.direction == "upload" {
                 Some(
-                    prepare_remote_upload(&app, &tab_id, &partial, staging.as_deref(), source_size)
-                        .await?,
+                    prepare_remote_upload(
+                        &app,
+                        &tab_id,
+                        &partial,
+                        staging.as_deref(),
+                        source_size,
+                        Some(&cancel),
+                    )
+                    .await?,
                 )
             } else {
                 None
@@ -1544,13 +1727,15 @@ async fn run(
                     .as_ref()
                     .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?;
                 if plan.upload_needed {
-                    worker_call(&app, &tab_id, |respond_to| WorkerCmd::UploadLocalFile {
-                        local_path: source_path,
-                        remote_path: plan.upload_path.clone(),
-                        resume_offset: offset,
-                        transfer_id: transfer_id.clone(),
-                        cancel: cancel.clone(),
-                        respond_to,
+                    worker_data_call_with_cancel(&app, &tab_id, &cancel, |respond_to, _token| {
+                        WorkerCmd::UploadLocalFile {
+                            local_path: source_path,
+                            remote_path: plan.upload_path.clone(),
+                            resume_offset: offset,
+                            transfer_id: transfer_id.clone(),
+                            cancel: cancel.clone(),
+                            respond_to,
+                        }
                     })
                     .await?;
                 }
@@ -1560,13 +1745,15 @@ async fn run(
                         .await
                         .map_err(|error| transfer_error(error.to_string()))?;
                 }
-                worker_call(&app, &tab_id, |respond_to| WorkerCmd::DownloadRemoteFile {
-                    remote_path: source_path,
-                    local_path: partial.clone(),
-                    resume_offset: offset,
-                    transfer_id: transfer_id.clone(),
-                    cancel: cancel.clone(),
-                    respond_to,
+                worker_data_call_with_cancel(&app, &tab_id, &cancel, |respond_to, _token| {
+                    WorkerCmd::DownloadRemoteFile {
+                        remote_path: source_path,
+                        local_path: partial.clone(),
+                        resume_offset: offset,
+                        transfer_id: transfer_id.clone(),
+                        cancel: cancel.clone(),
+                        respond_to,
+                    }
                 })
                 .await?;
             }
@@ -1592,7 +1779,7 @@ async fn run(
                 if plan.partial_ready {
                     source_size
                 } else {
-                    stat_remote_transfer_size(&app, &tab_id, &plan.upload_path)
+                    stat_remote_transfer_size(&app, &tab_id, &plan.upload_path, Some(&cancel))
                         .await?
                         .unwrap_or(0)
                 }
@@ -1621,14 +1808,17 @@ async fn run(
                 finalize_remote_upload(
                     &app,
                     &tab_id,
-                    &partial,
-                    staging.as_deref(),
-                    &destination_path,
-                    source_size,
-                    upload_plan
-                        .as_ref()
-                        .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?
-                        .partial_ready,
+                    RemoteUploadFinalize {
+                        partial_path: &partial,
+                        staging_path: staging.as_deref(),
+                        destination_path: &destination_path,
+                        source_size,
+                        partial_ready: upload_plan
+                            .as_ref()
+                            .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?
+                            .partial_ready,
+                    },
+                    Some(&cancel),
                 )
                 .await?;
             } else {
@@ -1752,9 +1942,12 @@ async fn refresh_remote_listing(app: &AppHandle, tab_id: &str) -> Result<(), App
         .get(tab_id)
         .map(|session| session.remote_path.clone())
         .unwrap_or_else(|| "/".to_string());
-    let files = worker_call(app, tab_id, |respond_to| WorkerCmd::ListRemoteFiles {
-        path,
-        respond_to,
+    let files = worker_call(app, tab_id, |respond_to, cancellation| {
+        WorkerCmd::ListRemoteFiles {
+            path,
+            cancellation,
+            respond_to,
+        }
     })
     .await?;
     if let Some(session) = app
@@ -1794,6 +1987,7 @@ async fn run_directory_transfer(
                     tab_id,
                     &entry.partial_path,
                     entry.staging_path.as_deref(),
+                    Some(&cancel),
                 )
                 .await?;
             } else {
@@ -1818,7 +2012,7 @@ async fn run_directory_transfer(
             return Ok(());
         }
         if task.direction == "upload" {
-            ensure_remote_directory(app, tab_id, directory).await?;
+            ensure_remote_directory(app, tab_id, directory, Some(&cancel)).await?;
         } else {
             tokio::fs::create_dir_all(directory)
                 .await
@@ -1843,9 +2037,12 @@ async fn run_directory_transfer(
                     ))
                 })?
         } else {
-            let stat = worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                path: entry.source_path.clone(),
-                respond_to,
+            let stat = worker_call_with_cancel(app, tab_id, &cancel, |respond_to, token| {
+                WorkerCmd::StatRemoteFile {
+                    path: entry.source_path.clone(),
+                    cancellation: token,
+                    respond_to,
+                }
             })
             .await?
             .ok_or_else(|| {
@@ -1868,9 +2065,12 @@ async fn run_directory_transfer(
 
         if entry.status == "done" {
             let destination = if task.direction == "upload" {
-                worker_call(app, tab_id, |respond_to| WorkerCmd::StatRemoteFile {
-                    path: entry.destination_path.clone(),
-                    respond_to,
+                worker_call_with_cancel(app, tab_id, &cancel, |respond_to, token| {
+                    WorkerCmd::StatRemoteFile {
+                        path: entry.destination_path.clone(),
+                        cancellation: token,
+                        respond_to,
+                    }
                 })
                 .await?
                 .map(|value| TransferFileIdentity {
@@ -1896,6 +2096,7 @@ async fn run_directory_transfer(
                     &entry.partial_path,
                     entry.staging_path.as_deref(),
                     entry.source_identity.size,
+                    Some(&cancel),
                 )
                 .await?,
             )
@@ -1938,13 +2139,15 @@ async fn run_directory_transfer(
                 .as_ref()
                 .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?;
             if plan.upload_needed {
-                worker_call(app, tab_id, |respond_to| WorkerCmd::UploadLocalFile {
-                    local_path: entry.source_path.clone(),
-                    remote_path: plan.upload_path.clone(),
-                    resume_offset: offset,
-                    transfer_id: transfer_id.to_string(),
-                    cancel: cancel.clone(),
-                    respond_to,
+                worker_data_call_with_cancel(app, tab_id, &cancel, |respond_to, _token| {
+                    WorkerCmd::UploadLocalFile {
+                        local_path: entry.source_path.clone(),
+                        remote_path: plan.upload_path.clone(),
+                        resume_offset: offset,
+                        transfer_id: transfer_id.to_string(),
+                        cancel: cancel.clone(),
+                        respond_to,
+                    }
                 })
                 .await?;
             }
@@ -1954,13 +2157,15 @@ async fn run_directory_transfer(
                     .await
                     .map_err(|error| transfer_error(error.to_string()))?;
             }
-            worker_call(app, tab_id, |respond_to| WorkerCmd::DownloadRemoteFile {
-                remote_path: entry.source_path.clone(),
-                local_path: entry.partial_path.clone(),
-                resume_offset: offset,
-                transfer_id: transfer_id.to_string(),
-                cancel: cancel.clone(),
-                respond_to,
+            worker_data_call_with_cancel(app, tab_id, &cancel, |respond_to, _token| {
+                WorkerCmd::DownloadRemoteFile {
+                    remote_path: entry.source_path.clone(),
+                    local_path: entry.partial_path.clone(),
+                    resume_offset: offset,
+                    transfer_id: transfer_id.to_string(),
+                    cancel: cancel.clone(),
+                    respond_to,
+                }
             })
             .await?;
         }
@@ -1975,7 +2180,7 @@ async fn run_directory_transfer(
             if plan.partial_ready {
                 entry.source_identity.size
             } else {
-                stat_remote_transfer_size(app, tab_id, &plan.upload_path)
+                stat_remote_transfer_size(app, tab_id, &plan.upload_path, Some(&cancel))
                     .await?
                     .unwrap_or(0)
             }
@@ -2007,14 +2212,17 @@ async fn run_directory_transfer(
             finalize_remote_upload(
                 app,
                 tab_id,
-                &entry.partial_path,
-                entry.staging_path.as_deref(),
-                &entry.destination_path,
-                entry.source_identity.size,
-                upload_plan
-                    .as_ref()
-                    .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?
-                    .partial_ready,
+                RemoteUploadFinalize {
+                    partial_path: &entry.partial_path,
+                    staging_path: entry.staging_path.as_deref(),
+                    destination_path: &entry.destination_path,
+                    source_size: entry.source_identity.size,
+                    partial_ready: upload_plan
+                        .as_ref()
+                        .ok_or_else(|| transfer_error("上传任务缺少 upload plan"))?
+                        .partial_ready,
+                },
+                Some(&cancel),
             )
             .await?;
         } else {
@@ -2105,6 +2313,7 @@ async fn fail_if_running(
                             tab_id,
                             &entry.partial_path,
                             entry.staging_path.as_deref(),
+                            None,
                         )
                         .await
                     }
@@ -2155,7 +2364,8 @@ async fn fail_if_running(
         if let (Some(tab_id), Some(partial)) =
             (task.tab_id.as_deref(), task.partial_path.as_deref())
         {
-            stat_remote_upload_progress(app, tab_id, partial, task.staging_path.as_deref()).await
+            stat_remote_upload_progress(app, tab_id, partial, task.staging_path.as_deref(), None)
+                .await
         } else {
             None
         }
@@ -2275,6 +2485,7 @@ async fn cleanup_transfer_partial(app: &AppHandle, task: &TransferTask) -> Resul
                             tab_id,
                             &entry.partial_path,
                             entry.staging_path.as_deref(),
+                            None,
                         )
                         .await
                     }
@@ -2297,8 +2508,14 @@ async fn cleanup_transfer_partial(app: &AppHandle, task: &TransferTask) -> Resul
     if task.direction == "upload" {
         return match (task.tab_id.as_deref(), task.partial_path.as_deref()) {
             (Some(tab_id), Some(path)) => {
-                remove_remote_upload_artifacts(app, tab_id, path, task.staging_path.as_deref())
-                    .await
+                remove_remote_upload_artifacts(
+                    app,
+                    tab_id,
+                    path,
+                    task.staging_path.as_deref(),
+                    None,
+                )
+                .await
             }
             (None, Some(_)) => Err(transfer_error("上传任务缺少连接标签，无法清理远端断点")),
             _ => Ok(()),

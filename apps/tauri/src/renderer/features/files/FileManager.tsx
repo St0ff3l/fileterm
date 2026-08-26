@@ -39,7 +39,9 @@ import { SshTunnelPanel } from '../workspace/SshTunnelPanel'
 import { FileContextMenu } from './FileContextMenu'
 import { getDisplayFileIconName, getDisplayFileTypeSortKey } from './file-kind'
 import { matchesFileFilter, type FileFilterConfig } from './file-filter'
+import { parseFileModified } from './file-time'
 import { FileTable, LocalFileTable, PaneFilterBar, PanePathBar, type RemoteFileSortState } from './FileTables'
+import { RemoteCapabilityPanel } from './RemoteCapabilityPanel'
 
 const VIEW_TRANSITION_LOADING_MS = 180
 
@@ -112,16 +114,6 @@ function parseSortableSize(value: string) {
   return amount * (units[unit] ?? 1)
 }
 
-function parseSortableTimestamp(value: string) {
-  if (!value) {
-    return 0
-  }
-
-  const normalized = value.replace(/\//g, '-')
-  const parsed = Date.parse(normalized)
-  return Number.isNaN(parsed) ? 0 : parsed
-}
-
 function compareRemoteFilesByField(left: RemoteFileItem, right: RemoteFileItem, sort: RemoteFileSortState) {
   const direction = sort.direction === 'asc' ? 1 : -1
 
@@ -131,7 +123,7 @@ function compareRemoteFilesByField(left: RemoteFileItem, right: RemoteFileItem, 
     case 'type':
       return compareText(getDisplayFileTypeSortKey(left), getDisplayFileTypeSortKey(right)) * direction
     case 'modified':
-      return (parseSortableTimestamp(left.modified) - parseSortableTimestamp(right.modified)) * direction
+      return ((parseFileModified(left.modified) ?? 0) - (parseFileModified(right.modified) ?? 0)) * direction
     case 'permission':
       return compareText(left.permission ?? '', right.permission ?? '') * direction
     case 'ownerGroup':
@@ -1133,22 +1125,25 @@ export function FileManager({
                 label={t.remoteHost}
                 value={remotePathInput}
                 action={
-                  isSshSession ? (
-                    <button
-                      aria-pressed={activeSession.followShellCwd !== false}
-                      className={`follow-shell-cwd-toggle ${activeSession.followShellCwd !== false ? 'is-active' : ''}`}
-                      disabled={!canUseRemoteFiles}
-                      onClick={onToggleFollowShellCwd}
-                      title={
-                        activeSession.shellCwd
-                          ? `${t.shellCwd}: ${activeSession.shellCwd}`
-                          : t.followShellCwdUnavailable
-                      }
-                      type="button"
-                    >
-                      {t.followShellCwd}
-                    </button>
-                  ) : null
+                  <div className="pane-path-bar-actions">
+                    {isSshSession ? (
+                      <button
+                        aria-pressed={activeSession.followShellCwd !== false}
+                        className={`follow-shell-cwd-toggle ${activeSession.followShellCwd !== false ? 'is-active' : ''}`}
+                        disabled={!canUseRemoteFiles}
+                        onClick={onToggleFollowShellCwd}
+                        title={
+                          activeSession.shellCwd
+                            ? `${t.shellCwd}: ${activeSession.shellCwd}`
+                            : t.followShellCwdUnavailable
+                        }
+                        type="button"
+                      >
+                        {t.followShellCwd}
+                      </button>
+                    ) : null}
+                    <RemoteCapabilityPanel capabilities={activeSession.remoteCapabilities} />
+                  </div>
                 }
                 onChange={setRemotePathInput}
                 onSubmit={submitRemotePath}

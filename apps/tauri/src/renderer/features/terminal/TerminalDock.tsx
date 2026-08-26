@@ -666,7 +666,10 @@ export function TerminalDock({
             className="terminal-dock-icon-btn terminal-dock-copy-btn"
             type="button"
             title={t.copy}
-            onClick={() => dispatchAppEvent(APP_EVENT.terminalCopy)}
+            onClick={() => {
+              focusTerminal()
+              dispatchAppEvent(APP_EVENT.terminalCopy)
+            }}
           >
             <AppIcon name="copy" size={15} strokeWidth={2} />
           </button>
@@ -674,7 +677,10 @@ export function TerminalDock({
             className="terminal-dock-icon-btn"
             type="button"
             title={t.paste}
-            onClick={() => dispatchAppEvent(APP_EVENT.terminalPaste)}
+            onClick={() => {
+              focusTerminal()
+              dispatchAppEvent(APP_EVENT.terminalPaste)
+            }}
           >
             <AppIcon name="paste" size={15} strokeWidth={2} />
           </button>

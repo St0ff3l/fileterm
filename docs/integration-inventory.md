@@ -51,12 +51,12 @@ FileTerm 当前采用“拖拽期间冻结列数，稳定后同步真实宽度�
 
 ### 未采用或已撤回项
 
-| 包 / 能力                | 当前状态           | 原因                                                                                                    |
-| ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `@xterm/addon-webgl`     | 已撤回，不默认加载 | 本轮验证中会放大 selection、resize、TUI 重绘问题。先保证 PTY 控制流和尺寸同步正确，再单独评估硬件加速。 |
-| `@xterm/addon-canvas`    | 未采用             | WebGL 未默认启用，因此暂不需要 Canvas fallback。                                                        |
-| `@xterm/addon-clipboard` | 未采用             | 当前复制/粘贴走 Electron preload 暴露的剪贴板 API 与 xterm 自身 paste/selection 行为。                  |
-| `xterm-addon-zmodem`     | 未采用             | FileTerm 文件传输已走 SFTP/FTP 文件面板，不把 `rz/sz` 二进制流混入终端通道。                            |
+| 包 / 能力                | 当前状态           | 原因                                                                                                                 |
+| ------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `@xterm/addon-webgl`     | 已撤回，不默认加载 | 本轮验证中会放大 selection、resize、TUI 重绘问题。先保证 PTY 控制流和尺寸同步正确，再单独评估硬件加速。              |
+| `@xterm/addon-canvas`    | 未采用             | WebGL 未默认启用，因此暂不需要 Canvas fallback。                                                                     |
+| `@xterm/addon-clipboard` | 未采用             | 当前复制/粘贴走 Electron preload 暴露的剪贴板 API 与 xterm 自身 paste/selection 行为。                               |
+| `xterm-addon-zmodem`     | 未采用             | SSH shell 仍不把 `rz/sz` 二进制流混入终端通道；串口文件传输由 Rust 的独立 `zmodem2` 适配器负责，不依赖 xterm addon。 |
 
 ### 回归文档
 
@@ -122,12 +122,12 @@ FileTerm 当前采用“拖拽期间冻结列数，稳定后同步真实宽度�
 
 ## 4. 远程协议与文件传输
 
-| 包           | 当前用途                                                      | 实现位置                                                             | 维护结论                                                                                                             |
-| ------------ | ------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ssh2`       | Electron SSH shell、SFTP、远程命令/文件能力、SFTP offset 续传 | `apps/electron/src/main/services/sessions/ssh-session-controller.ts` | Electron SSH/SFTP 只在 main process 运行；renderer 经 IPC 调用。Tauri 使用 `russh` / `russh-sftp` 的独立 Rust 实现。 |
-| `basic-ftp`  | Electron FTP/显式 FTPS/隐式 FTPS 会话、文件操作和断点续传     | `apps/electron/src/main/services/sessions/ftp-session-controller.ts` | Electron FTP 与 SSH/SFTP 在 controller/protocol 层保持分离；Tauri 使用 Rust `suppaftp` 实现。                        |
-| `iconv-lite` | 文件内容编码处理                                              | main / file service 相关链路                                         | 编码处理属于文件读写链路，不放进 UI 组件零散处理。                                                                   |
-| `serialport` | Windows COM、macOS/Linux `/dev/*` 串口打开与读写              | `main/services/sessions/serial-session-controller.ts`                | 设备参数、权限与句柄生命周期只在 main；renderer 仅接收终端字节流。                                                   |
+| 包             | 当前用途                                                         | 实现位置                                                             | 维护结论                                                                                                             |
+| -------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `ssh2`         | Electron SSH shell、SFTP、远程命令/文件能力、SFTP offset 续传    | `apps/electron/src/main/services/sessions/ssh-session-controller.ts` | Electron SSH/SFTP 只在 main process 运行；renderer 经 IPC 调用。Tauri 使用 `russh` / `russh-sftp` 的独立 Rust 实现。 |
+| `basic-ftp`    | Electron FTP/显式 FTPS/隐式 FTPS 会话、文件操作和断点续传        | `apps/electron/src/main/services/sessions/ftp-session-controller.ts` | Electron FTP 与 SSH/SFTP 在 controller/protocol 层保持分离；Tauri 使用 Rust `suppaftp` 实现。                        |
+| `iconv-lite`   | 文件内容编码处理                                                 | main / file service 相关链路                                         | 编码处理属于文件读写链路，不放进 UI 组件零散处理。                                                                   |
+| `tokio-serial` | Windows COM、macOS/Linux `/dev/*` 串口打开与读写、调制解调器状态 | `apps/tauri/src-tauri/src/sessions/serial/`                          | 设备参数、权限、句柄生命周期和 X/Y/ZMODEM、Kermit 传输都在 Rust；renderer 仅经 bridge 接收终端字节和传输进度。       |
 
 ### SSH 终端约定
 
@@ -141,7 +141,7 @@ term: 'xterm-256color'
 
 - 后端 PTY resize 需要和前端 xterm resize 保持同一套 `cols/rows`。
 - 如果后续补 `COLORTERM=truecolor`，应在 SSH shell / 会话环境边界统一处理，并记录到本文件。
-- 不要为了文件传输把 zmodem 二进制流塞进 shell 通道；优先使用已有 SFTP/FTP transfer system。
+- 不要为了 SSH 文件传输把 zmodem 二进制流塞进 shell 通道；SSH 优先使用已有 SFTP/FTP transfer system。串口文件传输只从 Serial 的专用传输面板进入。
 - Electron SOCKS5/HTTP CONNECT 代理 socket 由 `apps/electron/src/main/services/network/proxy-socket-factory.ts` 创建；Tauri 对应实现位于 Rust session 层。认证密码绝不进入 renderer snapshot。
 - Telnet/Serial 是 terminal-only session，不能接入 SFTP、exec、CWD、sudo 或资源监控。
 

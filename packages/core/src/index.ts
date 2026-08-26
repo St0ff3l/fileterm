@@ -18,6 +18,9 @@ export interface LocalTerminalLaunchOptions {
 }
 
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
+export type FtpTransferMode = 'passive' | 'active'
+export type TelnetTerminalType = 'xterm-256color' | 'vt100' | 'vt220' | 'ansi'
+export type TelnetNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
 
@@ -87,12 +90,28 @@ export interface BaseProfile extends BaseEntity {
   remotePath: string
   group: string
   lastUsedAt?: number
+  /** Persisted per-device terminal output logging preference. */
+  sessionLogEnabled?: boolean
+  /** Absolute directory for automatic session logs; empty uses FileTerm's default folder. */
+  sessionLogDirectory?: string
   /** Non-secret indicator for redacted desktop snapshots. */
   hasSavedPassword?: boolean
   /** Non-secret indicator for a saved privileged-command password. */
   hasSavedSudoPassword?: boolean
   /** Non-secret indicator for a saved `su` password. */
   hasSavedSuPassword?: boolean
+  /** Retry policy shared by network sessions. Zero/undefined means unlimited. */
+  reconnectMode?: 'none' | 'enter' | 'auto'
+  reconnectMaxAttempts?: number
+  reconnectInitialDelayMs?: number
+  reconnectMaxDelayMs?: number
+  /** Transport keepalive policy shared by SSH, Telnet and FTP. */
+  keepaliveEnabled?: boolean
+  keepaliveIntervalSeconds?: number
+  keepaliveMaxMisses?: number
+  /** Upper bounds for connection setup and one protocol operation. */
+  connectTimeoutSeconds?: number
+  operationTimeoutSeconds?: number
 }
 
 export type NetworkProfile = BaseProfile
@@ -131,6 +150,23 @@ export interface ConnectionCapabilities {
   shellIntegration: boolean
   fileAccess: boolean
   tunnels: boolean
+}
+
+export interface RemoteDiskSpace {
+  availableBytes: number
+  totalBytes: number
+}
+
+/** Protocol-level file features discovered from the current remote session. */
+export interface RemoteFileCapabilities {
+  protocol: 'sftp' | 'ftp'
+  protocolVersion?: string
+  extensions: string[]
+  checksumAlgorithms: string[]
+  diskSpace?: RemoteDiskSpace
+  serverCopy: boolean
+  symlink: boolean
+  hardlink: boolean
 }
 
 export type SshAuthType = 'password' | 'privateKey' | 'system' | 'keyboard-interactive'
@@ -254,7 +290,8 @@ export interface SshProfile extends NetworkProfile {
   privateKeyPath?: string
   passphrase?: string
   trustedHostFingerprint?: string
-  sftpEnabled: boolean
+  /** Whether the SFTP subsystem should be opened for this SSH session. */
+  sftpEnabled?: boolean
   remotePath: string
   encoding?: string
   backspaceKey?: string
@@ -283,6 +320,10 @@ export interface FtpProfile extends NetworkProfile {
   password?: string
   secure: boolean
   securityMode?: FtpSecurityMode
+  transferMode?: FtpTransferMode
+  proxy?: ProxyConfig
+  /** Optional SHA-256 pin for the FTPS server certificate. CA validation remains required. */
+  certificateFingerprint?: string
   remotePath: string
 }
 
@@ -290,19 +331,110 @@ export interface TelnetProfile extends NetworkProfile {
   type: 'telnet'
   note?: string
   encoding?: string
+  terminalType?: TelnetTerminalType
+  newlineMode?: TelnetNewlineMode
+  /** Send CR NUL instead of a bare CR when Telnet line mode requires it. */
+  crNul?: boolean
+  /** Optional command lines sent after Telnet negotiation completes. */
+  loginScript?: string
   proxy?: ProxyConfig
 }
 
 export interface SerialProfile extends BaseProfile {
   type: 'serial'
   devicePath: string
+  /** Stable USB identity used to recover from a changed /dev/tty path. */
+  deviceSerialNumber?: string
+  deviceVendorId?: number
+  deviceProductId?: number
+  devicePortType?: SerialPortType
   baudRate: number
   dataBits: 5 | 6 | 7 | 8
   stopBits: 1 | 2
   parity: 'none' | 'odd' | 'even' | 'mark' | 'space'
   flowControl: 'none' | 'hardware' | 'software'
   encoding?: string
+  /** How line endings typed into a serial terminal are sent to the device. */
+  newlineMode?: SerialNewlineMode
+  /** Whether typed input is encoded as text or hexadecimal bytes. */
+  inputMode?: SerialInputMode
+  /** Buffer text until Enter before writing it to the serial device. */
+  lineMode?: boolean
+  /** Whether received bytes are rendered as text or hexadecimal bytes. */
+  outputMode?: SerialOutputMode
+  /** Echo transmitted bytes locally before a device echo arrives. */
+  localEcho?: boolean
+  /** Initial modem-control line levels applied after opening the port. */
+  dtrOnOpen?: boolean
+  rtsOnOpen?: boolean
+  /** Optional modem-control levels applied before the port is closed. */
+  dtrOnClose?: boolean
+  rtsOnClose?: boolean
+  /** Delay between transmitted bytes and completed lines, in milliseconds. */
+  serialCharDelayMs?: number
+  serialLineDelayMs?: number
+  /** Idle timeout for Raw receive mode, in milliseconds. */
+  serialReceiveIdleTimeoutMs?: number
+  /** Timeout for a blocked serial write/flush, in milliseconds. */
+  serialWriteTimeoutMs?: number
+  /** Maximum size of one received serial-transfer file, in bytes. */
+  serialTransferMaxFileBytes?: number
+  /** Maximum aggregate size of one received serial-transfer batch, in bytes. */
+  serialTransferMaxBatchBytes?: number
+  /** Maximum number of files accepted in one received serial-transfer batch. */
+  serialTransferMaxFiles?: number
+  /** Linux RS-485 transceiver mode; unsupported platforms fail closed. */
+  rs485Mode?: 'none' | 'half-duplex'
+  rs485RtsOnSend?: boolean
+  rs485DelayRtsBeforeSendMs?: number
+  rs485DelayRtsAfterSendMs?: number
+  /** Include TX bytes in automatic serial session logs. */
+  sessionLogIncludeInput?: boolean
+  /** Prefix automatic session-log records with unambiguous local timestamps and offset. */
+  sessionLogTimestamps?: boolean
+  /** Capture serial RX/TX records as raw uppercase hexadecimal bytes. */
+  sessionLogRaw?: boolean
+  reconnectMode?: 'none' | 'enter' | 'auto'
   note?: string
+}
+
+export type SerialNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
+export type SerialInputMode = 'text' | 'hex'
+export type SerialOutputMode = 'text' | 'hex'
+export type SerialControlAction =
+  'set-dtr' | 'set-rts' | 'pulse-dtr' | 'pulse-rts' | 'send-break' | 'clear-buffers' | 'reset' | 'status'
+
+export interface SerialLineStatus {
+  dtr: boolean | null
+  rts: boolean | null
+  dtrReadback: boolean
+  rtsReadback: boolean
+  rtsManual: boolean
+  cts: boolean | null
+  dsr: boolean | null
+  ring: boolean | null
+  carrierDetect: boolean | null
+}
+
+export type SerialTransferDirection = 'send' | 'receive'
+export type SerialTransferMode = 'raw' | 'xmodem' | 'ymodem' | 'zmodem' | 'kermit'
+
+export interface SerialTransferResult {
+  bytesTransferred: number
+  localPath: string
+}
+
+export interface SerialTransferProgress {
+  tabId: string
+  direction: SerialTransferDirection
+  mode: SerialTransferMode
+  localPath: string
+  status: 'running' | 'completed' | 'failed' | 'canceled'
+  bytesTransferred: number
+  totalBytes?: number
+  speedBytesPerSecond?: number
+  block?: number
+  message?: string
 }
 
 export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
@@ -710,10 +842,13 @@ export interface SessionSnapshot {
   connected?: boolean
   systemMetrics?: SystemMetrics
   capabilities?: ConnectionCapabilities
+  remoteCapabilities?: RemoteFileCapabilities
   reconnectMode?: 'none' | 'enter' | 'auto'
 }
 
 export interface WorkspaceSnapshot {
+  /** Monotonic runtime revision used to discard late, stale IPC snapshots. */
+  workspaceRevision?: number
   profiles: ConnectionProfile[]
   folders: ConnectionFolder[]
   commandFolders: CommandFolder[]
@@ -916,6 +1051,8 @@ export interface CreateProfileInput {
   group: string
   remotePath: string
   note?: string
+  sessionLogEnabled?: boolean
+  sessionLogDirectory?: string
   password?: string | null
   /** Explicitly authenticate with an empty SSH password instead of using a saved password. */
   useEmptyPassword?: boolean
@@ -926,7 +1063,12 @@ export interface CreateProfileInput {
   trustedHostFingerprint?: string
   secure?: boolean
   securityMode?: FtpSecurityMode
+  transferMode?: FtpTransferMode
+  certificateFingerprint?: string
   encoding?: string
+  terminalType?: TelnetTerminalType
+  crNul?: boolean
+  loginScript?: string
   backspaceKey?: string
   deleteKey?: string
   enableExecChannel?: boolean
@@ -937,6 +1079,15 @@ export interface CreateProfileInput {
   /** Sidebar card order (including disabled cards) for this connection. */
   resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
   reconnectMode?: 'none' | 'enter' | 'auto'
+  reconnectMaxAttempts?: number
+  reconnectInitialDelayMs?: number
+  reconnectMaxDelayMs?: number
+  keepaliveEnabled?: boolean
+  keepaliveIntervalSeconds?: number
+  keepaliveMaxMisses?: number
+  connectTimeoutSeconds?: number
+  operationTimeoutSeconds?: number
+  sftpEnabled?: boolean
   connectionOverrides?: SshConnectionOverrides
   proxy?: ProxyConfig
   proxyPassword?: string
@@ -950,11 +1101,38 @@ export interface CreateProfileInput {
   /** 兼容老服务器：追加 SHA-1 类 MAC/KEX 算法到偏好列表末尾（SHA-2 仍优先） */
   legacyAlgorithms?: boolean
   devicePath?: string
+  deviceSerialNumber?: string
+  deviceVendorId?: number
+  deviceProductId?: number
+  devicePortType?: SerialPortType
   baudRate?: number
   dataBits?: 5 | 6 | 7 | 8
   stopBits?: 1 | 2
   parity?: SerialProfile['parity']
   flowControl?: SerialProfile['flowControl']
+  newlineMode?: SerialProfile['newlineMode'] | TelnetNewlineMode
+  inputMode?: SerialProfile['inputMode']
+  lineMode?: boolean
+  outputMode?: SerialProfile['outputMode']
+  localEcho?: boolean
+  dtrOnOpen?: boolean
+  rtsOnOpen?: boolean
+  dtrOnClose?: boolean
+  rtsOnClose?: boolean
+  serialCharDelayMs?: number
+  serialLineDelayMs?: number
+  serialReceiveIdleTimeoutMs?: number
+  serialWriteTimeoutMs?: number
+  serialTransferMaxFileBytes?: number
+  serialTransferMaxBatchBytes?: number
+  serialTransferMaxFiles?: number
+  rs485Mode?: SerialProfile['rs485Mode']
+  rs485RtsOnSend?: boolean
+  rs485DelayRtsBeforeSendMs?: number
+  rs485DelayRtsAfterSendMs?: number
+  sessionLogIncludeInput?: boolean
+  sessionLogTimestamps?: boolean
+  sessionLogRaw?: boolean
 }
 
 export interface SshHostVerificationRequest {
@@ -1943,6 +2121,18 @@ export interface AiCommandError {
   httpStatus?: number
 }
 
+export type SerialPortType = 'usb' | 'pci' | 'bluetooth' | 'unknown'
+
+export interface SerialPortInfo {
+  portName: string
+  portType: SerialPortType
+  manufacturer?: string
+  product?: string
+  serialNumber?: string
+  vendorId?: number
+  productId?: number
+}
+
 export interface FileTermDesktopApi {
   platform: string
   arch: string
@@ -1994,6 +2184,25 @@ export interface FileTermDesktopApi {
   openFileEditorWindow(input: FileEditorWindowInput): Promise<void>
   openExternalUrl(url: string): Promise<void>
   openLogsDirectory(): Promise<void>
+  listSerialPorts(): Promise<SerialPortInfo[]>
+  onSerialPortsChanged(listener: (ports: SerialPortInfo[]) => void): () => void
+  serialControl(
+    tabId: string,
+    action: SerialControlAction,
+    value?: boolean,
+    durationMs?: number
+  ): Promise<SerialLineStatus>
+  serialTransfer(
+    tabId: string,
+    direction: SerialTransferDirection,
+    mode: SerialTransferMode,
+    localPath: string,
+    fileName?: string,
+    localPaths?: string[],
+    xmodemPreservePadding?: boolean
+  ): Promise<SerialTransferResult>
+  serialTransferCancel(tabId: string): Promise<void>
+  saveSessionLog(tabId: string): Promise<string | null>
   minimizeCurrentWindow(): Promise<void>
   showCurrentWindow(): Promise<void>
   isCurrentWindowMaximized(): Promise<boolean>
@@ -2156,7 +2365,12 @@ export interface FileTermDesktopApi {
   ): Promise<WorkspaceSnapshot>
   moveRemotePath(tabId: string, targetPath: string, destinationPath: string): Promise<WorkspaceSnapshot>
   renameRemotePath(tabId: string, targetPath: string, newName: string): Promise<WorkspaceSnapshot>
-  deleteRemotePath(tabId: string, targetPath: string, targetType: RemoteFileItem['type']): Promise<WorkspaceSnapshot>
+  deleteRemotePath(
+    tabId: string,
+    targetPath: string,
+    targetType: RemoteFileItem['type'],
+    isSymlink?: boolean
+  ): Promise<WorkspaceSnapshot>
   resolveSshInteraction(requestId: string, response: SshInteractionResponse): Promise<void>
   resolveSudoPasswordPrompt(requestId: string, cancelled: boolean, value?: string, save?: boolean): Promise<void>
   setSudoPasswordPromptRendererReady(registrationId: string, ready: boolean): Promise<void>
@@ -2175,6 +2389,7 @@ export interface FileTermDesktopApi {
   onTerminalData(listener: (payload: TerminalDataPayload) => void): () => void
   onTerminalState(listener: (payload: TerminalStatePayload) => void): () => void
   onTransferUpdate(listener: (transfer: TransferTask) => void): () => void
+  onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
   onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
