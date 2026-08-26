@@ -260,6 +260,32 @@ fn contains_interrupt_byte(data: &str) -> bool {
     data.as_bytes().contains(&0x03)
 }
 
+/// Keep user keystrokes away from the interactive line editor while the
+/// internal shell hook is being installed. The shell echoes input through the
+/// same PTY, so prompt detection cannot safely distinguish a literal `#` typed
+/// by the user from a root prompt. Ctrl+C remains an emergency escape hatch:
+/// it must reach the remote shell immediately so a stuck setup can be
+/// cancelled.
+fn should_buffer_terminal_input_during_shell_setup(
+    waiting_for_initial_prompt: bool,
+    setup_echo_pending: bool,
+    data: &str,
+) -> bool {
+    (waiting_for_initial_prompt || setup_echo_pending) && !contains_interrupt_byte(data)
+}
+
+fn flush_deferred_terminal_input(
+    pending: &mut Vec<Vec<u8>>,
+    terminal_write_tx: &mpsc::UnboundedSender<Vec<u8>>,
+) -> Result<(), String> {
+    for data in pending.drain(..) {
+        terminal_write_tx
+            .send(data)
+            .map_err(|_| "Terminal writer stopped".to_string())?;
+    }
+    Ok(())
+}
+
 /// Trim a rolling string buffer to its last `keep` bytes without splitting a
 /// multi-byte UTF-8 character. Plain byte-index slicing (`s[len - keep..]`)
 /// panics when the cut lands inside a CJK character or a U+FFFD replacement
@@ -1873,6 +1899,26 @@ fn looks_like_root_prompt(value: &str) -> bool {
     visible_shell_text(value).trim_end().ends_with('#')
 }
 
+/// A root-style prompt is only a reason to re-install the hook after the
+/// terminal has explicitly sent an interactive `sudo`/`su` command. A normal
+/// user's literal `#` can be echoed as a one-character chunk, so prompt shape
+/// alone must never trigger another command write into the PTY.
+fn should_reinject_root_shell_setup(
+    shell_setup_available: bool,
+    setup_echo_pending: bool,
+    waiting_for_initial_prompt: bool,
+    interactive_root_transition_pending: bool,
+    shell_is_root: bool,
+    visible: &str,
+) -> bool {
+    shell_setup_available
+        && !setup_echo_pending
+        && !waiting_for_initial_prompt
+        && interactive_root_transition_pending
+        && !shell_is_root
+        && looks_like_root_prompt(visible)
+}
+
 fn looks_like_shell_prompt(value: &str) -> bool {
     let visible = visible_shell_text(value);
     let prompt = visible.trim_end();
@@ -2210,7 +2256,11 @@ impl ShellSetupEchoSuppression {
 }
 
 const SHELL_SETUP_SETTLE_DELAY: Duration = Duration::from_millis(200);
-const SHELL_SETUP_TIMEOUT: Duration = Duration::from_millis(1200);
+// The setup command is sent through the PTY and its echo/OSC response can be
+// delayed by a slow embedded SSH server. Keep the fail-open window long enough
+// not to release user input back into an unfinished line-editor command.
+const SHELL_SETUP_TIMEOUT: Duration = Duration::from_secs(5);
+const SHELL_SETUP_PROMPT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_SHELL_SETUP_BUFFER_BYTES: usize = 16 * 1024;
 
 fn shell_setup_release_deadline(pending: &Option<ShellSetupEchoSuppression>) -> Option<Instant> {
@@ -2227,16 +2277,16 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
         return String::new();
     };
     if !state.preserve_visible_prefix {
-        // setup 成功执行（检测到 OSC marker）后，shell 会输出新 prompt。
+        // setup 成功执行（检测到唯一的 ready OSC marker）后，shell 会输出新 prompt。
         // 第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存（不 forward），
         // 所以这里释放新 prompt——让用户看到一个完整 prompt，而不是空白。
         if state.marker_seen_at.is_some() {
-            // buffer 里同时含 setup echo、OSC marker 和新 prompt。用 OSC7 正则
-            // 找到最后一个 marker 的结束位置，释放它之后的部分（新 prompt），
+            // buffer 里同时含 setup echo、ready marker 和新 prompt。找到 marker
+            // 的结束位置，释放它之后的部分（新 prompt），
             // 吞掉 setup echo 和 marker。marker 后可能直接接 prompt（无换行），
             // 所以不能用 rfind('\n') 切分。
-            if let Some(mat) = SHELL_SETUP_OSC7_RE.find(&state.buffer) {
-                let after_marker = &state.buffer[mat.end()..];
+            if let Some(marker_end) = last_shell_setup_marker_end(&state.buffer) {
+                let after_marker = &state.buffer[marker_end..];
                 if looks_like_shell_prompt(after_marker) {
                     return after_marker.to_string();
                 }
@@ -2256,11 +2306,19 @@ fn finish_shell_setup_suppression(pending: &mut Option<ShellSetupEchoSuppression
         .unwrap_or_default()
 }
 
-// Pre-compiled OSC7 matcher used by `suppress_shell_setup_echo` while it
-// inspects buffered shell-setup output. Compiled once instead of per chunk.
-static SHELL_SETUP_OSC7_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
-    regex::Regex::new(r"\x1b\]7;file://[^\x07\x1b]*(?:\x07|\x1b\\)").expect("constant OSC7 regex")
+// Pre-compiled private ready marker used by `suppress_shell_setup_echo` while
+// it inspects buffered shell-setup output. Compiled once instead of per chunk.
+static SHELL_SETUP_READY_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"\x1b\]7777;FileTermReady(?:\x07|\x1b\\)")
+        .expect("constant shell setup ready regex")
 });
+
+fn last_shell_setup_marker_end(value: &str) -> Option<usize> {
+    SHELL_SETUP_READY_RE
+        .find_iter(value)
+        .last()
+        .map(|mat| mat.end())
+}
 
 /// Suppresses the echo and replacement prompt from an internal CWD-hook
 /// injection. The bounded timeout fails closed: a malformed shell must not
@@ -2285,7 +2343,7 @@ fn suppress_shell_setup_echo(
     state.buffer.push_str(chunk);
     const HOOK_MARKER: &str = "__tdcwd";
 
-    if SHELL_SETUP_OSC7_RE.is_match(&state.buffer) {
+    if let Some(marker_end) = last_shell_setup_marker_end(&state.buffer) {
         state.marker_seen_at.get_or_insert(now);
         if state.visible_prefix_length.is_none() {
             state.visible_prefix_length = Some(
@@ -2298,7 +2356,7 @@ fn suppress_shell_setup_echo(
             );
         }
         // marker 已看到后，setup 命令执行完 shell 会输出新 prompt。一旦新 prompt
-        // 到达（OSC marker 之后的部分匹配 prompt 结尾），立即结束 suppress 并
+        // 到达（ready marker 之后的部分匹配 prompt 结尾），立即结束 suppress 并
         // 释放新 prompt。第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存
         // （不 forward），所以这里释放新 prompt 让用户看到一个完整 prompt。
         // 慢设备（群晖）新 prompt 可能晚于 settle delay 到达，固定窗口兜不住；
@@ -2306,8 +2364,7 @@ fn suppress_shell_setup_echo(
         // 仅 preserve_visible_prefix == false（首次注入）路径生效；sudo 重注入
         // 路径需要保留 visible prefix，仍走 settle delay 释放。
         if !state.preserve_visible_prefix {
-            if let Some(mat) = SHELL_SETUP_OSC7_RE.find(&state.buffer) {
-                let after_marker = &state.buffer[mat.end()..];
+            if let Some(after_marker) = state.buffer.get(marker_end..) {
                 if looks_like_shell_prompt(after_marker) {
                     return finish_shell_setup_suppression(pending);
                 }
@@ -2345,12 +2402,32 @@ fn shell_cwd_setup_for_platform(platform: &str) -> Option<&'static str> {
 /// Linux shell CWD hook (bash / zsh / posix). Mirrors Electron's
 /// `SHELL_CWD_SETUP` constant. Uses `test -z "${FISH_VERSION-}"` as a fish
 /// guard so the hook is a no-op on fish (which has its own CWD reporting).
-const SHELL_CWD_SETUP: &str = "test -z \"${FISH_VERSION-}\" && eval '__tdcwd() { printf \"\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007\" \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\"; }; if [ -n \"${ZSH_VERSION-}\" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook -D precmd __tdcwd 2>/dev/null; add-zsh-hook precmd __tdcwd 2>/dev/null; elif [ -n \"${BASH_VERSION-}\" ]; then case \"${PROMPT_COMMAND-}\" in *\"__tdcwd\"*) ;; *) PROMPT_COMMAND=\"__tdcwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\" ;; esac; else case \"${PS1-}\" in *\"__tdcwd\"*) ;; *) PS1=\"\\$(__tdcwd)${PS1-}\" ;; esac; fi; __tdcwd'";
+const SHELL_CWD_SETUP: &str = concat!(
+    "test -z \"${FISH_VERSION-}\" && eval '",
+    "__tdcwd() { printf \"\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007\" \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\"; }; ",
+    "if [ -n \"${ZSH_VERSION-}\" ]; then autoload -Uz add-zsh-hook 2>/dev/null; add-zsh-hook -D precmd __tdcwd 2>/dev/null; add-zsh-hook precmd __tdcwd 2>/dev/null; ",
+    "elif [ -n \"${BASH_VERSION-}\" ]; then case \"${PROMPT_COMMAND-}\" in *\"__tdcwd\"*) ;; *) PROMPT_COMMAND=\"__tdcwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}\" ;; esac; ",
+    "else case \"${PS1-}\" in *\"__tdcwd\"*) ;; *) PS1=\"\\$(__tdcwd)${PS1-}\" ;; esac; fi; ",
+    "__tdcwd; ",
+    // A leading space is only a best-effort history guard. Bash users may
+    // have HISTCONTROL disabled, so remove this exact internal line by its
+    // marker after it has executed.
+    "if [ -n \"${BASH_VERSION-}\" ]; then ",
+    "__ft_hist_marker=\"__FILETERM_INTERNAL_SETUP_1\"; ",
+    "__ft_hist_line=$(HISTTIMEFORMAT= builtin history 1 2>/dev/null); ",
+    "case \"$__ft_hist_line\" in *\"__FILETERM_INTERNAL_SETUP_1\"*) ",
+    "__ft_hist_number=$(printf \"%s\\n\" \"$__ft_hist_line\" | sed -n \"s/^ *\\([0-9][0-9]*\\).*/\\1/p\"); ",
+    "case \"$__ft_hist_number\" in \"\"|*[!0-9]*) ;; *) builtin history -d \"$__ft_hist_number\" 2>/dev/null ;; esac; ",
+    ";; esac; ",
+    "unset __ft_hist_marker __ft_hist_line __ft_hist_number; ",
+    "fi; ",
+    "printf \"\\033]7777;FileTermReady\\007\"' || printf \"\\033]7777;FileTermReady\\007\"",
+);
 
 /// BusyBox ash CWD hook. Kept under 256 bytes to avoid truncation in the
 /// small interactive line-editing buffer. Mirrors Electron's
 /// `BUSYBOX_SHELL_CWD_SETUP` constant.
-const BUSYBOX_SHELL_CWD_SETUP: &str = "__tdcwd(){ printf '\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007' \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\";};PS1='$(__tdcwd)'\"${PS1-}\";__tdcwd";
+const BUSYBOX_SHELL_CWD_SETUP: &str = "__tdcwd(){ printf '\\033]7;file://%s\\007\\033]1337;RemoteUser=%s\\007' \"$(pwd -P 2>/dev/null)\" \"$(id -un 2>/dev/null)\";};PS1='$(__tdcwd)'\"${PS1-}\";__tdcwd;printf '\\033]7777;FileTermReady\\007'";
 
 /// Normalize an encoding label to a canonical name understood by
 /// `encoding_rs`. Mirrors Electron's `normalizeEncoding` alias table.
@@ -5079,6 +5156,11 @@ async fn run_worker_loop(
     let mut pending_cwd_marker_without_user: Option<String> = None;
     let mut batch_buffer: Vec<u8> = Vec::new();
     let mut last_emit = Instant::now();
+    // User input must not enter the PTY while the first prompt is being
+    // identified or while the internal setup command is executing. Otherwise
+    // the shell echoes a literal `#` into the same stream that the prompt
+    // heuristic inspects and the setup command races with that input.
+    let mut deferred_terminal_input: Vec<Vec<u8>> = Vec::new();
 
     // Terminal output pump: 解耦 worker 主循环与 renderer IPC 推送。
     // flush_batch 用 try_send 把 chunk 推到这个 bounded channel，独立的
@@ -5191,6 +5273,11 @@ async fn run_worker_loop(
         });
     }
 
+    // Start the prompt wait only after the worker has finished opening its
+    // auxiliary channels and is about to enter the fair terminal loop.
+    let mut shell_setup_prompt_deadline =
+        shell_setup_script.map(|_| Instant::now() + SHELL_SETUP_PROMPT_TIMEOUT);
+
     loop {
         // 16ms batch window for terminal output.
         let next_batch_deadline =
@@ -5209,6 +5296,20 @@ async fn run_worker_loop(
                     return Ok(());
                 };
                 let data = coalesce_terminal_input(data, terminal_input_rx);
+                if should_buffer_terminal_input_during_shell_setup(
+                    shell_setup_waiting_for_prompt,
+                    pending_shell_setup_echo.is_some(),
+                    &data,
+                ) {
+                    deferred_terminal_input.push(data.into_bytes());
+                    continue;
+                }
+                if contains_interrupt_byte(&data) {
+                    // Ctrl+C is the escape hatch for a setup command that is
+                    // taking too long. Discard text typed before it rather
+                    // than replaying a stale partial command after recovery.
+                    deferred_terminal_input.clear();
+                }
                 let previous_pending_command = pending_root_access_command.clone();
                 if capture_root_access_password_input(
                     &data,
@@ -5397,6 +5498,32 @@ async fn run_worker_loop(
                 }
             }
             _ = async {
+                if let Some(deadline) = shell_setup_prompt_deadline {
+                    tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            }, if shell_setup_waiting_for_prompt => {
+                // A server may expose a non-standard prompt or never emit one
+                // at all (for example a login shell that starts a full-screen
+                // program). Do not hold user keystrokes forever; abandon the
+                // optional integration and leave the PTY untouched.
+                shell_setup_waiting_for_prompt = false;
+                shell_setup_prompt_deadline = None;
+                shell_prompt_buffer.clear();
+                flush_deferred_terminal_input(
+                    &mut deferred_terminal_input,
+                    &terminal_write_tx,
+                )?;
+                crate::services::logging::session(
+                    app,
+                    "DEBUG",
+                    "ssh",
+                    tab_id,
+                    "shell setup prompt wait timed out; continuing without injection",
+                );
+            }
+            _ = async {
                 if let Some(deadline) = shell_setup_release_deadline(&pending_shell_setup_echo) {
                     tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
                 } else {
@@ -5407,6 +5534,10 @@ async fn run_worker_loop(
                 if !visible.is_empty() {
                     batch_buffer.extend_from_slice(visible.as_bytes());
                 }
+                flush_deferred_terminal_input(
+                    &mut deferred_terminal_input,
+                    &terminal_write_tx,
+                )?;
             }
             // 2. Drain shell channel output.
             msg = shell_reader.wait() => {
@@ -5670,7 +5801,14 @@ async fn run_worker_loop(
                             }
                         }
 
+                        let setup_echo_was_pending = pending_shell_setup_echo.is_some();
                         let mut visible = suppress_shell_setup_echo(&mut pending_shell_setup_echo, &text);
+                        if setup_echo_was_pending && pending_shell_setup_echo.is_none() {
+                            flush_deferred_terminal_input(
+                                &mut deferred_terminal_input,
+                                &terminal_write_tx,
+                            )?;
+                        }
                         // A newly-created root login shell prints its first
                         // prompt before FileTerm can inject the CWD hook. Do
                         // not forward that prompt yet: the hook intentionally
@@ -5678,11 +5816,28 @@ async fn run_worker_loop(
                         // forwarding both would render `root# root#` on one
                         // line. Keep the original as a fail-open fallback in
                         // case the injection cannot be completed.
-                        if pending_shell_setup_echo.is_none()
-                            && !shell_setup_waiting_for_prompt
-                            && shell_setup_script.is_some()
-                            && looks_like_root_prompt(&visible)
-                            && last_shell_setup_injection.elapsed() > Duration::from_secs(2)
+                        //
+                        // This path is deliberately tied to an explicit
+                        // interactive sudo/su transition. A normal user's
+                        // literal `#` is also echoed by the PTY and must not
+                        // be mistaken for a root prompt.
+                        if pending_root_access_command
+                            .as_ref()
+                            .is_some_and(|auth| auth.interactive_shell)
+                            && looks_like_shell_prompt(&visible)
+                            && !looks_like_root_prompt(&visible)
+                        {
+                            // The privilege command may fail without printing
+                            // one of the localized authentication errors we
+                            // recognize. Once the ordinary user prompt is back,
+                            // discard the stale transition so a later literal
+                            // `#` cannot trigger setup injection.
+                            pending_root_access_command = None;
+                        }
+                        if last_shell_setup_injection.elapsed() > Duration::from_secs(2)
+                            && pending_root_access_command
+                                .as_ref()
+                                .is_some_and(|auth| auth.interactive_shell)
                         {
                             let shell_is_root = state
                                 .sessions
@@ -5691,7 +5846,16 @@ async fn run_worker_loop(
                                 .get(tab_id)
                                 .and_then(|session| session.shell_user.as_deref())
                                 == Some("root");
-                            if !shell_is_root {
+                            if should_reinject_root_shell_setup(
+                                shell_setup_script.is_some(),
+                                pending_shell_setup_echo.is_some(),
+                                shell_setup_waiting_for_prompt,
+                                pending_root_access_command
+                                    .as_ref()
+                                    .is_some_and(|auth| auth.interactive_shell),
+                                shell_is_root,
+                                &visible,
+                            ) {
                                 if let Some(setup) = shell_setup_script {
                                     let (banner, prompt_tail) =
                                         split_prompt_tail_for_setup_wait(&visible);
@@ -5761,6 +5925,7 @@ async fn run_worker_loop(
                             && looks_like_shell_prompt(&shell_prompt_buffer)
                         {
                             shell_setup_waiting_for_prompt = false;
+                            shell_setup_prompt_deadline = None;
                             shell_prompt_buffer.clear();
                             if let Some(setup) = shell_setup_script {
                                 last_shell_setup_injection = Instant::now();
@@ -5777,6 +5942,11 @@ async fn run_worker_loop(
                                         if !prompt_tail.is_empty() {
                                             batch_buffer.extend_from_slice(prompt_tail.as_bytes());
                                         }
+                                        flush_deferred_terminal_input(
+                                            &mut deferred_terminal_input,
+                                            &terminal_write_tx,
+                                        )?;
+                                        shell_setup_prompt_deadline = None;
                                         crate::services::logging::session(app, "WARN", "ssh", tab_id, format!("shell setup write failed: {error}"));
                                     }
                                 }
@@ -9099,6 +9269,7 @@ mod tests {
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
         root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
         root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
+        should_buffer_terminal_input_during_shell_setup, should_reinject_root_shell_setup,
         spawn_cancellable_file_operation, split_prompt_tail_for_setup_wait, strip_su_exec_output,
         su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
         track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
@@ -9106,7 +9277,7 @@ mod tests {
         validate_root_download_completion, validate_tunnel_rule,
         wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, KeyboardInteractiveRequest,
         RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand,
-        SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
+        BUSYBOX_SHELL_CWD_SETUP, SHELL_CWD_SETUP, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
     use super::{forward_local_connection, forward_socks5_connection};
@@ -9786,7 +9957,7 @@ mod tests {
         assert_eq!(
             suppress_shell_setup_echo(
                 &mut pending,
-                " '\\033]7;file:///home/user\\007'; }; __tdcwd\r\n\u{1b}]7;file:///home/user\u{7}user@host:~$ ",
+                " '\\033]7;file:///home/user\\007'; }; __tdcwd\r\n\u{1b}]7;file:///home/user\u{7}\u{1b}]7777;FileTermReady\u{7}user@host:~$ ",
             ),
             ""
         );
@@ -9806,6 +9977,32 @@ mod tests {
         assert!(looks_like_shell_prompt("root@host:~# "));
         assert!(looks_like_shell_prompt("host% "));
         assert!(!looks_like_shell_prompt("Last login: today\r\n"));
+    }
+
+    #[test]
+    fn buffers_literal_hash_until_shell_setup_is_complete() {
+        assert!(should_buffer_terminal_input_during_shell_setup(
+            true, false, "#"
+        ));
+        assert!(should_buffer_terminal_input_during_shell_setup(
+            false,
+            true,
+            "echo ready\r"
+        ));
+        assert!(!should_buffer_terminal_input_during_shell_setup(
+            true, false, "\u{3}"
+        ));
+        assert!(!should_buffer_terminal_input_during_shell_setup(
+            false, false, "#"
+        ));
+    }
+
+    #[test]
+    fn shell_setup_uses_a_private_ready_marker_and_cleans_bash_history() {
+        assert!(SHELL_CWD_SETUP.contains("7777;FileTermReady"));
+        assert!(SHELL_CWD_SETUP.contains("history -d"));
+        assert!(SHELL_CWD_SETUP.contains("__FILETERM_INTERNAL_SETUP_1"));
+        assert!(BUSYBOX_SHELL_CWD_SETUP.contains("7777;FileTermReady"));
     }
 
     #[test]
@@ -9839,17 +10036,40 @@ mod tests {
     }
 
     #[test]
+    fn literal_hash_does_not_trigger_root_shell_setup_without_transition() {
+        assert!(!should_reinject_root_shell_setup(
+            true, false, false, false, false, "#"
+        ));
+        assert!(should_reinject_root_shell_setup(
+            true,
+            false,
+            false,
+            true,
+            false,
+            "root@host:~# "
+        ));
+        assert!(!should_reinject_root_shell_setup(
+            true,
+            false,
+            false,
+            true,
+            true,
+            "root@host:~# "
+        ));
+    }
+
+    #[test]
     fn suppress_releases_new_prompt_after_marker_on_slow_device() {
-        // 慢设备（群晖）：OSC marker 后新 prompt 在 settle delay 之后才到达。
+        // 慢设备（群晖）：ready marker 后新 prompt 在 settle delay 之后才到达。
         // 第一个 prompt 已被 split_prompt_tail_for_setup_wait 暂存（不 forward），
         // 所以 suppress 释放时只返回新 prompt（最后一个换行符之后的部分），
-        // 吞掉 setup echo 和 OSC marker。用户最终看到一个完整 prompt。
+        // 吞掉 setup echo 和 ready marker。用户最终看到一个完整 prompt。
         let mut pending = Some(ShellSetupEchoSuppression::new(false));
-        // 喂入 setup echo + OSC marker，suppress 仍在等待新 prompt
+        // 喂入 setup echo + ready marker，suppress 仍在等待新 prompt
         assert_eq!(
             suppress_shell_setup_echo(
                 &mut pending,
-                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7;file:///home/u\u{7}"
+                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7;file:///home/u\u{7}\u{1b}]7777;FileTermReady\u{7}"
             ),
             ""
         );
@@ -9862,14 +10082,14 @@ mod tests {
 
     #[test]
     fn finish_suppression_releases_newline_when_prompt_never_arrives() {
-        // marker 已看到但新 prompt 迟迟未到（settle/timeout 到期）：
+        // ready marker 已看到但新 prompt 迟迟未到（settle/timeout 到期）：
         // 补换行让晚到的新 prompt 从新行开始，避免粘在旧 prompt 后面。
         let mut pending = Some(ShellSetupEchoSuppression::new(false));
-        // 喂入 setup echo + OSC marker，但新 prompt 一直没来
+        // 喂入 setup echo + ready marker，但新 prompt 一直没来
         assert_eq!(
             suppress_shell_setup_echo(
                 &mut pending,
-                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7;file:///home/u\u{7}"
+                " __tdcwd(){ printf '\\033]7;file:///home/u\\007';};__tdcwd\r\n\u{1b}]7;file:///home/u\u{7}\u{1b}]7777;FileTermReady\u{7}"
             ),
             ""
         );
@@ -9918,7 +10138,7 @@ mod tests {
         assert_eq!(
             suppress_shell_setup_echo(
                 &mut pending,
-                " __tdcwd(){ printf '\\033]7;file:///root\\007';};__tdcwd\r\n\u{1b}]7;file:///root\u{7}"
+                " __tdcwd(){ printf '\\033]7;file:///root\\007';};__tdcwd\r\n\u{1b}]7;file:///root\u{7}\u{1b}]7777;FileTermReady\u{7}"
             ),
             ""
         );
