@@ -327,6 +327,7 @@ fn available_posix_shells() -> Vec<LocalTerminalShellOption> {
     options
 }
 
+#[cfg(not(target_os = "windows"))]
 fn format_shell_label(shell: &str) -> String {
     match shell_name(shell).as_str() {
         "bash" => "Bash".to_string(),

@@ -47,18 +47,8 @@ if grep -Fqx "$COAUTHOR_LINE" "$MSG_FILE"; then
   exit 0
 fi
 
-python3 - "$MSG_FILE" "$COAUTHOR_LINE" <<'PY'
-from pathlib import Path
-import sys
-
-msg_path = Path(sys.argv[1])
-coauthor = sys.argv[2]
-text = msg_path.read_text(encoding="utf-8")
-
-stripped = text.rstrip("\n")
-if not stripped:
-    msg_path.write_text(coauthor + "\n", encoding="utf-8")
-    raise SystemExit(0)
-
-msg_path.write_text(stripped + "\n\n" + coauthor + "\n", encoding="utf-8")
-PY
+if [[ -s "$MSG_FILE" ]]; then
+  printf '\n%s\n' "$COAUTHOR_LINE" >> "$MSG_FILE"
+else
+  printf '%s\n' "$COAUTHOR_LINE" > "$MSG_FILE"
+fi

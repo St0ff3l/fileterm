@@ -1,0 +1,32 @@
+# Keep repository text normalization explicit across Windows, WSL, macOS and Linux.
+# The working-tree EOL for unspecified text files still follows each user's Git
+# configuration (for example, core.autocrlf=true on a typical Windows checkout).
+* text=auto
+
+# Shell scripts are consumed by WSL and CI and must not receive CRLF.
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Native Windows script formats use CRLF in the working tree.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Do not run text/EOL conversion on binary assets.
+*.dll binary
+*.dmg binary
+*.exe binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.otf binary
+*.pdf binary
+*.png binary
+*.so binary
+*.ttf binary
+*.wasm binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.zip binary

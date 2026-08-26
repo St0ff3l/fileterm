@@ -37,13 +37,24 @@ async function updateJsonFile(relativePath, mutate) {
   const raw = await readFile(targetPath, 'utf8')
   const parsed = JSON.parse(raw)
   mutate(parsed)
-  await writeFile(targetPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
+  await writeFileWithExistingLineEndings(targetPath, raw, `${JSON.stringify(parsed, null, 2)}\n`)
 }
 
 async function updateTextFile(relativePath, mutate) {
   const targetPath = path.join(rootDir, relativePath)
   const raw = await readFile(targetPath, 'utf8')
-  await writeFile(targetPath, mutate(raw), 'utf8')
+  await writeFileWithExistingLineEndings(targetPath, raw, mutate(raw))
+}
+
+function normalizeLineEndings(value, lineEnding) {
+  // Git for Windows may check out CRLF while Linux/CI use LF; keep version
+  // synchronization idempotent in either worktree convention.
+  return value.replace(/\r\n?/g, '\n').replaceAll('\n', lineEnding)
+}
+
+async function writeFileWithExistingLineEndings(targetPath, raw, value) {
+  const lineEnding = raw.includes('\r\n') ? '\r\n' : '\n'
+  await writeFile(targetPath, normalizeLineEndings(value, lineEnding), 'utf8')
 }
 
 function updateCargoPackageVersion(raw) {

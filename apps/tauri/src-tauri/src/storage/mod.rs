@@ -11,6 +11,10 @@ use crate::AppError;
 
 const LEGACY_MIGRATION_VERSION: u32 = 1;
 const LEGACY_MIGRATION_MARKER: &str = "legacy-fileterm-migration.json";
+#[cfg(target_os = "windows")]
+const PORTABLE_CONFIG_DIRECTORY: &str = "config";
+#[cfg(target_os = "windows")]
+const PORTABLE_MARKER_FILE: &str = "portable";
 
 #[derive(Clone, Copy)]
 enum JsonMergeMode {
@@ -113,12 +117,52 @@ struct PendingFile {
     confidential: bool,
 }
 
-pub fn state_path(app: &AppHandle) -> Result<PathBuf, AppError> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| AppError::Storage(error.to_string()))?;
+#[cfg(target_os = "windows")]
+fn portable_config_directory_for_executable(executable: &Path) -> Option<PathBuf> {
+    let parent = executable.parent()?;
+    let executable_name = executable
+        .file_stem()?
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    let has_portable_name = executable_name == "portable"
+        || executable_name.ends_with("-portable")
+        || executable_name.ends_with("_portable");
+    let has_marker = parent.join(PORTABLE_MARKER_FILE).is_file();
+
+    has_portable_name
+        .then(|| parent.join(PORTABLE_CONFIG_DIRECTORY))
+        .or_else(|| has_marker.then(|| parent.join(PORTABLE_CONFIG_DIRECTORY)))
+}
+
+pub fn portable_config_directory() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::current_exe()
+            .ok()
+            .and_then(|executable| portable_config_directory_for_executable(&executable))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    None
+}
+
+pub fn storage_root(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let dir = if let Some(portable_directory) = portable_config_directory() {
+        // Portable mode must not silently fall back to a user directory. A
+        // read-only USB or network location should report the real problem so
+        // the user can move it to a writable directory.
+        portable_directory
+    } else {
+        app.path()
+            .app_data_dir()
+            .map_err(|error| AppError::Storage(error.to_string()))?
+    };
     fs::create_dir_all(&dir).map_err(|error| AppError::Storage(error.to_string()))?;
+    Ok(dir)
+}
+
+pub fn state_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let dir = storage_root(app)?;
     Ok(dir.join("ui-preferences.json"))
 }
 
@@ -132,10 +176,7 @@ pub fn workspace_file(app: &AppHandle, name: &str) -> Result<PathBuf, AppError> 
 /// boundary that prevents a later delete or clear in Tauri from being undone
 /// by another read of Electron's still-live store.
 pub fn migrate_legacy_data_once(app: &AppHandle) -> Result<(), AppError> {
-    let current_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| AppError::Storage(error.to_string()))?;
+    let current_dir = storage_root(app)?;
     let config_dir = app.path().app_config_dir().ok();
     let legacy_dir = select_legacy_directory(&current_dir, config_dir.as_deref())?;
     migrate_legacy_store(&current_dir, &legacy_dir).map(|_| ())
@@ -1026,6 +1067,9 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
+    #[cfg(target_os = "windows")]
+    use super::portable_config_directory_for_executable;
+
     fn test_dirs(name: &str) -> (PathBuf, PathBuf, PathBuf) {
         let root =
             std::env::temp_dir().join(format!("fileterm-storage-{name}-{}", uuid::Uuid::new_v4()));
@@ -1034,6 +1078,44 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
         fs::create_dir_all(&legacy).unwrap();
         (root, current, legacy)
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn portable_executable_uses_a_config_directory_next_to_the_binary() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-portable-path-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+
+        let portable_executable = root.join("FileTerm-2.2.4-windows-x64-portable.exe");
+        assert_eq!(
+            portable_config_directory_for_executable(&portable_executable),
+            Some(root.join("config"))
+        );
+
+        let regular_executable = root.join("FileTerm.exe");
+        assert_eq!(
+            portable_config_directory_for_executable(&regular_executable),
+            None
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn portable_marker_enables_local_config_for_a_renamed_binary() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-portable-marker-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("portable"), b"").unwrap();
+
+        assert_eq!(
+            portable_config_directory_for_executable(&root.join("FileTerm.exe")),
+            Some(root.join("config"))
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
