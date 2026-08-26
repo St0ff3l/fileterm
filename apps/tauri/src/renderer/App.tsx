@@ -2199,7 +2199,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                     ? t.closeShortcutActiveDescription
                     : t.closeShortcutLastActiveDescription
                 ).replace('{name}', shortcutCloseConfirm.title),
-                initialFocus: 'dialog' as const,
+                initialFocus: 'none' as const,
                 isSubmitting: isBusy,
                 onClose: dismissShortcutCloseConfirm,
                 onConfirm: () => {
