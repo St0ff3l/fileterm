@@ -70,6 +70,7 @@ import { WorkspaceStage } from './features/workspace/WorkspaceStage'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
 import {
   defaultLocale,
+  localizeConnectionErrorText,
   localizeErrorScope,
   localizeLocalTerminalText,
   localizeSerialTerminalText,
@@ -198,6 +199,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [error, setError] = useState<string | null>(null)
   const [isBusy, setIsBusy] = useState(false)
   const profileSaveInFlightRef = useRef(false)
+  const profileTestInFlightRef = useRef(false)
   const [isWorkspaceTransitionActive, setIsWorkspaceTransitionActive] = useState(true)
   const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false)
   const hasRenderedWorkspaceRef = useRef(false)
@@ -1212,8 +1214,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
   const normalizeErrorMessage = (err: unknown) => {
     const rawMessage = err instanceof Error ? err.message : String(err)
-    return localizeSerialTerminalText(
-      localizeLocalTerminalText(rawMessage.replace(REMOTE_METHOD_ERROR_PREFIX, '').trim())
+    return localizeConnectionErrorText(
+      localizeSerialTerminalText(localizeLocalTerminalText(rawMessage.replace(REMOTE_METHOD_ERROR_PREFIX, '').trim()))
     )
   }
 
@@ -1282,34 +1284,44 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     onCloseCurrentWindow: closeCurrentWindow
   })
 
+  const buildProfilePayload = (requireSaveFields: boolean): CreateProfileInput | null => {
+    const normalizedHost = normalizeConnectionHost(form.host)
+    const requiresHost = form.type !== 'serial'
+    const requiresRemotePath = form.type === 'ssh' || form.type === 'ftp'
+
+    if (
+      (requireSaveFields && (!form.name || !form.group)) ||
+      (requiresHost && !normalizedHost) ||
+      (requireSaveFields && requiresRemotePath && !form.remotePath) ||
+      (form.type === 'serial' && !form.devicePath?.trim())
+    ) {
+      setFormError(requireSaveFields ? t.fillRequired : t.connectionTestFillRequired)
+      return null
+    }
+
+    if (requiresHost && !validateConnectionHost(normalizedHost).valid) {
+      setFormError(t.invalidHost)
+      return null
+    }
+
+    if (form.type === 'ssh' && form.authType === 'privateKey' && !form.privateKeyId && !form.privateKeyPath) {
+      setFormError(t.missingPrivateKeyPath)
+      return null
+    }
+
+    const defaultPort = form.type === 'ftp' ? 21 : form.type === 'telnet' ? 23 : form.type === 'serial' ? 0 : 22
+    const finalPort = Number(form.port) || defaultPort
+    return { ...form, host: normalizedHost, port: finalPort }
+  }
+
   const handleSaveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (isBusy || profileSaveInFlightRef.current) {
       return
     }
 
-    const normalizedHost = normalizeConnectionHost(form.host)
-    const requiresHost = form.type !== 'serial'
-    const requiresRemotePath = form.type === 'ssh' || form.type === 'ftp'
-
-    if (
-      !form.name ||
-      !form.group ||
-      (requiresHost && !normalizedHost) ||
-      (requiresRemotePath && !form.remotePath) ||
-      (form.type === 'serial' && !form.devicePath?.trim())
-    ) {
-      setFormError(t.fillRequired)
-      return
-    }
-
-    if (requiresHost && !validateConnectionHost(normalizedHost).valid) {
-      setFormError(t.invalidHost)
-      return
-    }
-
-    if (form.type === 'ssh' && form.authType === 'privateKey' && !form.privateKeyId && !form.privateKeyPath) {
-      setFormError(t.missingPrivateKeyPath)
+    const payload = buildProfilePayload(true)
+    if (!payload) {
       return
     }
 
@@ -1321,9 +1333,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     try {
       profileSaveInFlightRef.current = true
       setIsBusy(true)
-      const defaultPort = form.type === 'ftp' ? 21 : form.type === 'telnet' ? 23 : form.type === 'serial' ? 0 : 22
-      const finalPort = Number(form.port) || defaultPort
-      const payload = { ...form, host: normalizedHost, port: finalPort }
       const snapshot = editingProfileId
         ? await desktopApi.updateProfile(editingProfileId, payload)
         : await desktopApi.createProfile(payload)
@@ -1337,6 +1346,36 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       reportError(setFormError, '保存连接', err)
     } finally {
       profileSaveInFlightRef.current = false
+      setIsBusy(false)
+    }
+  }
+
+  const handleTestConnection = async (): Promise<boolean> => {
+    if (isBusy || profileTestInFlightRef.current) {
+      return false
+    }
+
+    const payload = buildProfilePayload(false)
+    if (!payload) {
+      return false
+    }
+
+    if (!desktopApi) {
+      setFormError(t.desktopOnlyCreate)
+      return false
+    }
+
+    try {
+      profileTestInFlightRef.current = true
+      setIsBusy(true)
+      await desktopApi.testConnection(payload, editingProfileId ?? undefined)
+      setFormError(null)
+      return true
+    } catch (err) {
+      reportError(setFormError, '测试连接', err)
+      return false
+    } finally {
+      profileTestInFlightRef.current = false
       setIsBusy(false)
     }
   }
@@ -1571,6 +1610,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                   setForm((prev) => ({ ...prev, trustedHostFingerprint: '' }))
                 }
               }}
+              onTestConnection={handleTestConnection}
+              onDismissError={() => setFormError(null)}
               onSubmit={handleSaveProfile}
               onClose={closeConnectionForm}
             />
@@ -1663,6 +1704,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             void handleClearHostFingerprint(profile)
           }}
           standalone
+          onTestConnection={handleTestConnection}
+          onDismissError={() => setFormError(null)}
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
@@ -2052,6 +2095,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onClearHostFingerprint: (profile) => {
                   void handleClearHostFingerprint(profile)
                 },
+                onTestConnection: handleTestConnection,
+                onDismissError: () => setFormError(null),
                 onSubmit: handleSaveProfile,
                 onClose: closeConnectionForm
               }

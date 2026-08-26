@@ -22,8 +22,10 @@ import {
   decodeBase64Utf8,
   describeTerminalInput,
   encodeBase64Utf8,
+  getShiftedTerminalInput,
   getLastVisibleTerminalLine,
   getVimVisualSelection,
+  isShiftedTerminalInputData,
   isFocusTrackingSequence,
   isOsc52TargetSupported,
   isTerminalClipboardShortcut,
@@ -348,6 +350,32 @@ export function useTerminalLifecycle({
       reconnectHintShownRef.current = true
       terminal.write(`\r\n${reconnectHintRef.current}\r\n`)
     }
+    const handleTerminalWriteFailure = (error: unknown) => {
+      if (String(error).includes('serial transfer active')) {
+        return
+      }
+      if (inputSendFailedRef.current) {
+        return
+      }
+      inputSendFailedRef.current = true
+      // 一次性写入 devtools 控制台，便于和后端 app.log 里的 panic 行交叉
+      // 定位（后端 panic hook 写 scope=panic，前端这里写 tab id）。
+      console.warn(
+        `[TerminalView] writeTerminal rejected for tab ${tabIdRef.current}; worker likely dead, degrading to disconnected state`,
+        error
+      )
+      // Do not wait for the backend's terminal:state broadcast before
+      // allowing Enter to use the reconnect path. A dead worker cannot
+      // consume another input packet, so retaining `connected=true` here
+      // would make the first retry look swallowed.
+      connectedRef.current = false
+      wasConnectedRef.current = false
+      terminal.write(`\r\n${closedMessageRef.current}\r\n`)
+      writeReconnectHint()
+    }
+    const writeTerminalInput = (data: string) => {
+      window.fileterm?.writeTerminal(tabIdRef.current, data)?.catch(handleTerminalWriteFailure)
+    }
     const requestReconnect = () => {
       if (wasConnectedRef.current || connectingRef.current || isReconnectingRef.current) {
         return false
@@ -402,9 +430,169 @@ export function useTerminalLifecycle({
 
       return matchesZoomReset ? 'reset' : matchesZoomIn ? 'in' : matchesZoomOut ? 'out' : null
     }
+    let suppressShiftedTerminalKeypress = false
+    let shiftedTerminalInputSent = false
+    let activeShiftedTerminalInputCode: string | null = null
+    let lastCommittedShiftedInput: { data: string; at: number } | null = null
+    type PendingTerminalInputEvent = {
+      event: InputEvent
+      data: string
+      xtermEmitted: boolean
+      kind: 'shifted' | 'committed'
+      beforeKeydown: boolean
+    }
+    type TerminalKeydownRecord = {
+      data: string
+      at: number
+      xtermEmitted: boolean
+    }
+    let pendingTerminalInputEvent: PendingTerminalInputEvent | null = null
+    const recentTerminalKeydowns: TerminalKeydownRecord[] = []
+    const suppressedTerminalKeydowns: Array<{ data: string; at: number }> = []
+    const TERMINAL_INPUT_EVENT_WINDOW_MS = 250
+    const pruneTerminalInputEvents = (now = Date.now()) => {
+      const cutoff = now - TERMINAL_INPUT_EVENT_WINDOW_MS
+      while (recentTerminalKeydowns.length > 0 && recentTerminalKeydowns[0].at < cutoff) {
+        recentTerminalKeydowns.shift()
+      }
+      while (suppressedTerminalKeydowns.length > 0 && suppressedTerminalKeydowns[0].at < cutoff) {
+        suppressedTerminalKeydowns.shift()
+      }
+    }
+    const getPrintableTerminalKey = (event: KeyboardEvent) => {
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.isComposing ||
+        event.key === 'Dead' ||
+        event.key === 'Process' ||
+        event.key === 'Unidentified' ||
+        [...event.key].length !== 1
+      ) {
+        return null
+      }
+      const codePoint = event.key.codePointAt(0) ?? 0
+      return codePoint >= 0x20 && codePoint !== 0x7f ? event.key : null
+    }
+    const rememberTerminalKeydown = (event: KeyboardEvent) => {
+      const data = getPrintableTerminalKey(event)
+      if (!data) {
+        return
+      }
+      const now = Date.now()
+      pruneTerminalInputEvents(now)
+      recentTerminalKeydowns.push({ data, at: now, xtermEmitted: false })
+    }
+    const markTerminalKeydownEmitted = (data: string) => {
+      const now = Date.now()
+      pruneTerminalInputEvents(now)
+      const record = recentTerminalKeydowns.find(
+        (candidate) =>
+          candidate.data === data && !candidate.xtermEmitted && now - candidate.at <= TERMINAL_INPUT_EVENT_WINDOW_MS
+      )
+      if (record) {
+        record.xtermEmitted = true
+      }
+    }
+    const takeMatchingTerminalKeydown = (data: string) => {
+      const now = Date.now()
+      pruneTerminalInputEvents(now)
+      const index = recentTerminalKeydowns.findIndex(
+        (candidate) => candidate.data === data && now - candidate.at <= TERMINAL_INPUT_EVENT_WINDOW_MS
+      )
+      return index >= 0 ? recentTerminalKeydowns.splice(index, 1)[0] : null
+    }
+    const consumeSuppressedTerminalKeydown = (data: string) => {
+      const now = Date.now()
+      pruneTerminalInputEvents(now)
+      const index = suppressedTerminalKeydowns.findIndex(
+        (candidate) => candidate.data === data && now - candidate.at <= TERMINAL_INPUT_EVENT_WINDOW_MS
+      )
+      if (index < 0) {
+        return false
+      }
+      suppressedTerminalKeydowns.splice(index, 1)
+      return true
+    }
+    const resetShiftedTerminalInputState = () => {
+      shiftedTerminalInputSent = false
+      activeShiftedTerminalInputCode = null
+      lastCommittedShiftedInput = null
+      suppressShiftedTerminalKeypress = false
+    }
     terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type === 'keypress') {
+        if (!suppressShiftedTerminalKeypress) {
+          return true
+        }
+
+        // Some WebKit builds still dispatch keypress after a canceled
+        // keydown. The character was already sent by the compatibility path;
+        // suppress this legacy xterm route to avoid a duplicate byte.
+        suppressShiftedTerminalKeypress = false
+        event.preventDefault()
+        event.stopPropagation()
+        return false
+      }
+
       if (event.type !== 'keydown') {
         return true
+      }
+
+      // If WebKit drops the previous keyup, a normal number-row keydown is a
+      // safe boundary for the Shift-symbol compatibility state. Without this
+      // fallback, a later 4/5/6 can inherit the previous symbol's one-shot
+      // suppression flag and appear to be swallowed.
+      if (!event.shiftKey && /^Digit[0-9]$/.test(event.code)) {
+        resetShiftedTerminalInputState()
+      }
+
+      if (!shiftedTerminalInputSent) {
+        suppressShiftedTerminalKeypress = false
+      }
+
+      const shiftedTerminalInput = getShiftedTerminalInput(event)
+      if (shiftedTerminalInput && connectedRef.current) {
+        const hasRecentMatchingInput =
+          lastCommittedShiftedInput !== null &&
+          lastCommittedShiftedInput.data === shiftedTerminalInput &&
+          Date.now() - lastCommittedShiftedInput.at <= 100
+        const isNewPhysicalKey = event.repeat || activeShiftedTerminalInputCode !== event.code
+        if (isNewPhysicalKey && !hasRecentMatchingInput) {
+          shiftedTerminalInputSent = false
+          suppressShiftedTerminalKeypress = false
+        }
+        activeShiftedTerminalInputCode = event.code
+        lastCommittedShiftedInput = null
+
+        // WebKit can lose the first Shift+number character in xterm's hidden
+        // textarea path when the next key arrives quickly. Send the resolved
+        // character through the same PTY boundary while preventing xterm from
+        // processing this key a second time.
+        event.preventDefault()
+        event.stopPropagation()
+        suppressShiftedTerminalKeypress = true
+        if (!shiftedTerminalInputSent) {
+          clearEphemeralHighlight()
+          setContextMenu(null)
+          writeTerminalInput(shiftedTerminalInput)
+          shiftedTerminalInputSent = true
+        }
+        return false
+      }
+
+      const printableTerminalKey = getPrintableTerminalKey(event)
+      if (printableTerminalKey && !isShiftedTerminalInputData(printableTerminalKey)) {
+        if (consumeSuppressedTerminalKeydown(printableTerminalKey)) {
+          // The platform already committed this character through the input
+          // event before delivering keydown. Do not let xterm replay it via
+          // evaluateKeyboardEvent or CompositionHelper.
+          event.preventDefault()
+          event.stopPropagation()
+          return false
+        }
+        rememberTerminalKeydown(event)
       }
 
       // Let xterm's CompositionHelper receive IME key events. In particular,
@@ -645,6 +833,14 @@ export function useTerminalLifecycle({
     }
 
     const onDataDispose = terminal.onData((data) => {
+      markTerminalKeydownEmitted(data)
+      if (pendingTerminalInputEvent && data === pendingTerminalInputEvent.data) {
+        // The xterm input listener runs before our post-input listener. This
+        // marker lets the bridge distinguish a character xterm already
+        // committed from one that needs to be forwarded by FileTerm.
+        pendingTerminalInputEvent.xtermEmitted = true
+      }
+
       // Windows ConPTY may ask for the cursor position (`ESC[6n`) before the
       // renderer has finished mounting. xterm answers with a terminal
       // response, but the normal disconnected guard below would discard it.
@@ -669,9 +865,13 @@ export function useTerminalLifecycle({
         return
       }
 
-      if (imeCompositionActiveRef.current) {
+      const isStandaloneNumericInputDuringIme = /^[0-9]+$/.test(data) && imeCompositionTextRef.current.length === 0
+      if (imeCompositionActiveRef.current && !isStandaloneNumericInputDuringIme) {
         // Intermediate composition text is owned by the IME and must never
-        // reach the remote PTY before compositionend.
+        // reach the remote PTY before compositionend. A digit with no active
+        // composition text is different: macOS Chinese IMEs can route a
+        // standalone number through the composition/keyCode=229 path, and
+        // dropping it here loses digits during rapid input.
         return
       }
 
@@ -749,30 +949,116 @@ export function useTerminalLifecycle({
       // 发送失败必须可见：后端 worker 死亡（panic/断连）时 send 会 reject，
       // 静默吞掉会让终端看起来"卡死且 Ctrl+C 无效"。降级为未连接状态并
       // 给出重连提示，Enter 重连路径随之可用。
-      window.fileterm?.writeTerminal(tabIdRef.current, data)?.catch((error: unknown) => {
-        if (String(error).includes('serial transfer active')) {
-          return
-        }
-        if (inputSendFailedRef.current) {
-          return
-        }
-        inputSendFailedRef.current = true
-        // 一次性写入 devtools 控制台，便于和后端 app.log 里的 panic 行交叉
-        // 定位（后端 panic hook 写 scope=panic，前端这里写 tab id）。
-        console.warn(
-          `[TerminalView] writeTerminal rejected for tab ${tabIdRef.current}; worker likely dead, degrading to disconnected state`,
-          error
-        )
-        // Do not wait for the backend's terminal:state broadcast before
-        // allowing Enter to use the reconnect path. A dead worker cannot
-        // consume another input packet, so retaining `connected=true` here
-        // would make the first retry look swallowed.
-        connectedRef.current = false
-        wasConnectedRef.current = false
-        terminal.write(`\r\n${closedMessageRef.current}\r\n`)
-        writeReconnectHint()
-      })
+      writeTerminalInput(data)
     })
+
+    // Ghostty treats committed text from the platform input system as the
+    // authoritative character stream and keeps it separate from keyDown. In
+    // WebKit/xterm, an IME can deliver shifted punctuation or a standalone
+    // number through input before keydown, or after xterm has already seen
+    // keydown. Observe both sides of xterm's input listener so the character
+    // is committed once and the textarea diff fallback cannot replay it later.
+    const onTerminalInputCapture = (event: Event) => {
+      if (event.target !== terminalTextarea) {
+        return
+      }
+
+      const inputEvent = event as InputEvent
+      const data = inputEvent.data ?? ''
+      if (inputEvent.inputType !== 'insertText' || !data) {
+        return
+      }
+
+      const isShiftedInput =
+        isShiftedTerminalInputData(data) && !inputEvent.isComposing && !imeCompositionActiveRef.current
+      const isStandaloneNumericImeInput =
+        /^[0-9]+$/.test(data) &&
+        imeCompositionTextRef.current.length === 0 &&
+        (imeCompositionActiveRef.current || inputEvent.isComposing)
+      const isWithinCompositionWindow =
+        imeCompositionTextRef.current.length > 0 &&
+        Date.now() - imeCompositionEndedAtRef.current <= TERMINAL_IME_DUPLICATE_WINDOW_MS
+      const isActualCompositionInput =
+        (inputEvent.isComposing || imeCompositionActiveRef.current) && !isStandaloneNumericImeInput
+      const isCommittedAsciiInput =
+        /^[\x20-\x7e]+$/.test(data) && !isActualCompositionInput && !isWithinCompositionWindow
+      if (!isShiftedInput && !isCommittedAsciiInput) {
+        return
+      }
+
+      const keydownRecord = isShiftedInput ? null : takeMatchingTerminalKeydown(data)
+      if (keydownRecord?.xtermEmitted) {
+        // The normal keydown path already emitted this character. Prevent the
+        // platform input event from entering xterm a second time, while still
+        // clearing the textarea snapshot used by its 229 fallback.
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        terminalTextarea.value = ''
+        return
+      }
+      pendingTerminalInputEvent = {
+        event: inputEvent,
+        data,
+        xtermEmitted: false,
+        kind: isShiftedInput ? 'shifted' : 'committed',
+        beforeKeydown: !keydownRecord
+      }
+      if (isShiftedInput && shiftedTerminalInputSent) {
+        // The keydown path already committed this character. Stop xterm's
+        // input listener before it can emit a second copy (some WebKit builds
+        // report `composed=false` and bypass xterm's own dedupe check).
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        pendingTerminalInputEvent = null
+        terminalTextarea.value = ''
+      }
+    }
+    const onTerminalInputAfterXterm = (event: Event) => {
+      const inputEvent = event as InputEvent
+      if (pendingTerminalInputEvent?.event !== inputEvent) {
+        return
+      }
+
+      const committedInput = pendingTerminalInputEvent
+      pendingTerminalInputEvent = null
+      // xterm's CompositionHelper keeps a deferred snapshot of this textarea.
+      // Clear the committed character after xterm has observed it so a later
+      // 229 keydown cannot rediscover and emit the same character.
+      if (terminalTextarea) {
+        terminalTextarea.value = ''
+      }
+
+      if (committedInput.kind === 'shifted' && committedInput.xtermEmitted) {
+        shiftedTerminalInputSent = true
+        activeShiftedTerminalInputCode = null
+        lastCommittedShiftedInput = { data: committedInput.data, at: Date.now() }
+        suppressShiftedTerminalKeypress = true
+        return
+      }
+      if (committedInput.kind === 'shifted' && shiftedTerminalInputSent) {
+        return
+      }
+      if (committedInput.kind === 'committed' && committedInput.beforeKeydown) {
+        const now = Date.now()
+        pruneTerminalInputEvents(now)
+        suppressedTerminalKeydowns.push({ data: committedInput.data, at: now })
+      }
+      if (committedInput.xtermEmitted || !connectedRef.current || serialTransferBusyRef.current) {
+        return
+      }
+
+      clearEphemeralHighlight()
+      setContextMenu(null)
+      writeTerminalInput(committedInput.data)
+      if (committedInput.kind === 'shifted') {
+        shiftedTerminalInputSent = true
+        activeShiftedTerminalInputCode = null
+        lastCommittedShiftedInput = { data: committedInput.data, at: Date.now() }
+        suppressShiftedTerminalKeypress = true
+      }
+    }
+    window.addEventListener('input', onTerminalInputCapture, true)
+    terminalTextarea?.addEventListener('input', onTerminalInputAfterXterm, true)
 
     // Register onData before replaying the initial snapshot. A Windows
     // ConPTY shell can put its cursor-position query in that first transcript
@@ -1275,6 +1561,13 @@ export function useTerminalLifecycle({
     }
 
     const onKeyUp = (event: KeyboardEvent) => {
+      // WebKit can retarget keyup after an IME/textarea input event. These
+      // flags belong to this terminal instance, so reset them for the
+      // physical key regardless of the event target.
+      if (event.key === 'Shift' || /^Digit[0-9]$/.test(event.code)) {
+        resetShiftedTerminalInputState()
+      }
+
       if (event.key === 'Control') {
         controlKeyActive = false
       }
@@ -1284,6 +1577,10 @@ export function useTerminalLifecycle({
       // loses focus. Do not let a stale Ctrl state turn later touchpad scrolls
       // into zoom gestures.
       controlKeyActive = false
+      resetShiftedTerminalInputState()
+      pendingTerminalInputEvent = null
+      recentTerminalKeydowns.length = 0
+      suppressedTerminalKeydowns.length = 0
     }
 
     const handleFocusTerminal = (targetTabId: string) => {
@@ -1432,6 +1729,11 @@ export function useTerminalLifecycle({
       window.removeEventListener('gesturestart', onGestureStart, true)
       window.removeEventListener('gesturechange', onGestureChange, true)
       window.removeEventListener('gestureend', onGestureEnd, true)
+      window.removeEventListener('input', onTerminalInputCapture, true)
+      terminalTextarea?.removeEventListener('input', onTerminalInputAfterXterm, true)
+      pendingTerminalInputEvent = null
+      recentTerminalKeydowns.length = 0
+      suppressedTerminalKeydowns.length = 0
       document.removeEventListener('contextmenu', onDocumentContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keyup', onKeyUp, true)

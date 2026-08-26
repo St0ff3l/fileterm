@@ -674,6 +674,20 @@ async fn connect_transport(
     })?
 }
 
+/// Verify that the Telnet transport (including its configured proxy) accepts
+/// a connection. Telnet has no standard authentication handshake; any login
+/// script is intentionally left for the interactive session.
+pub async fn test_connection(profile: &Value) -> Result<(), String> {
+    let host = profile
+        .get("host")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "Telnet host is required".to_string())?;
+    let port = port_from_profile(profile, 23, "Telnet")?;
+    let _transport = connect_transport(profile, host, port).await?;
+    Ok(())
+}
+
 /// 校验代理主机名：拒绝控制字符（含 CRLF，防止 HTTP CONNECT 头注入；
 /// SOCKS5 虽是二进制协议，但控制字符 host 对任何代理都是非法输入），
 /// 拒绝超长 host（RFC 1035 限制 253 字符，留余量到 255）。

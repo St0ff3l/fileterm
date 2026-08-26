@@ -2019,6 +2019,7 @@ pub fn run() {
             crate::commands::app_save_session_log,
             crate::commands::app_get_ui_preferences,
             crate::commands::app_set_ui_preferences,
+            crate::commands::app_list_local_terminal_shells,
             crate::commands::app_list_ai_providers,
             crate::commands::app_save_ai_provider,
             crate::commands::app_delete_ai_provider,
@@ -2124,6 +2125,7 @@ pub fn run() {
             // Phase 2: profile / folder / command CRUD
             crate::commands::app_create_profile,
             crate::commands::app_update_profile,
+            crate::commands::app_test_connection,
             crate::commands::app_delete_profile,
             crate::commands::app_update_folder,
             crate::commands::app_delete_folder,

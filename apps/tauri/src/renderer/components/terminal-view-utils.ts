@@ -119,6 +119,62 @@ export function isTerminalClipboardShortcut(event: KeyboardEvent, isMac: boolean
   return isMac ? event.metaKey && !event.shiftKey && matchesKey : event.ctrlKey && event.shiftKey && matchesKey
 }
 
+/**
+ * WebKit can drop the first Shift+number keydown in xterm's hidden textarea
+ * input path when the next key arrives before the browser finishes the prior
+ * composition/layout update. Keep the workaround limited to the number row:
+ * ordinary letters, IME input, and modifier shortcuts must remain owned by
+ * xterm and the browser.
+ */
+const US_SHIFTED_DIGITS: Readonly<Record<string, string>> = {
+  Digit0: ')',
+  Digit1: '!',
+  Digit2: '@',
+  Digit3: '#',
+  Digit4: '$',
+  Digit5: '%',
+  Digit6: '^',
+  Digit7: '&',
+  Digit8: '*',
+  Digit9: '('
+}
+
+const SHIFTED_TERMINAL_INPUT_CHARACTERS = new Set('!@#$%^&*()¥"')
+
+export function isShiftedTerminalInputData(value: string | null) {
+  return Boolean(value) && [...(value ?? '')].every((character) => SHIFTED_TERMINAL_INPUT_CHARACTERS.has(character))
+}
+
+export function getShiftedTerminalInput(event: KeyboardEvent) {
+  if (
+    !event.shiftKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.altKey ||
+    event.isComposing ||
+    event.key === 'Dead' ||
+    event.key === 'Process' ||
+    !/^Digit[0-9]$/.test(event.code)
+  ) {
+    return null
+  }
+
+  // `key` is the layout-resolved character on supported WebKit builds. The
+  // fallback only applies when WebKit reports the unshifted digit instead.
+  if (event.key.length === 1 && !/^[0-9]$/.test(event.key)) {
+    return event.key
+  }
+
+  // A 229/Unidentified key is resolved by the following input event. Do not
+  // guess a US layout character here; the committed input event has the
+  // correct character for layouts such as macOS Chinese/Japanese keyboards.
+  if (event.keyCode === 229) {
+    return null
+  }
+
+  return US_SHIFTED_DIGITS[event.code] ?? null
+}
+
 export function trimTranscript(transcript: string) {
   if (transcript.length <= TERMINAL_TRANSCRIPT_LIMIT) {
     return transcript

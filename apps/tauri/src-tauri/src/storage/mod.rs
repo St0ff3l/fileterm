@@ -11,6 +11,40 @@ use crate::AppError;
 
 const LEGACY_MIGRATION_VERSION: u32 = 1;
 const LEGACY_MIGRATION_MARKER: &str = "legacy-fileterm-migration.json";
+#[cfg(any(test, target_os = "windows"))]
+const PORTABLE_CONFIG_DIRECTORY: &str = "config";
+#[cfg(any(test, target_os = "windows"))]
+const PORTABLE_MARKER_FILE: &str = "portable";
+#[cfg(any(test, target_os = "windows"))]
+const PORTABLE_MIGRATION_VERSION: u32 = 1;
+#[cfg(any(test, target_os = "windows"))]
+const PORTABLE_MIGRATION_MARKER: &str = "portable-migration.json";
+#[cfg(any(test, target_os = "windows"))]
+const PORTABLE_DATA_ENTRIES: &[(&str, bool)] = &[
+    ("profiles.json", false),
+    ("folders.json", false),
+    ("profile-secrets.json", true),
+    ("command-folders.json", false),
+    ("commands.json", false),
+    ("command-history.json", false),
+    ("command-send-preferences.json", false),
+    ("ui-state.json", false),
+    ("ui-preferences.json", false),
+    ("transfer-journal.json", false),
+    ("webdav-sync.json", true),
+    ("s3-backup.json", true),
+    ("ai-providers.json", false),
+    ("ai-provider-secrets.json", true),
+    ("ai-conversations.json", true),
+    ("ai-conversations", true),
+    ("fonts.json", false),
+    ("fonts", false),
+    ("ssh-keys.json", false),
+    ("ssh-key-secrets.json", true),
+    ("ssh-keys", true),
+    ("secret-store-v1.key", true),
+    (LEGACY_MIGRATION_MARKER, false),
+];
 
 #[derive(Clone, Copy)]
 enum JsonMergeMode {
@@ -113,12 +147,52 @@ struct PendingFile {
     confidential: bool,
 }
 
-pub fn state_path(app: &AppHandle) -> Result<PathBuf, AppError> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| AppError::Storage(error.to_string()))?;
+#[cfg(any(test, target_os = "windows"))]
+fn portable_config_directory_for_executable(executable: &Path) -> Option<PathBuf> {
+    let parent = executable.parent()?;
+    let executable_name = executable
+        .file_stem()?
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    let has_portable_name = executable_name == "portable"
+        || executable_name.ends_with("-portable")
+        || executable_name.ends_with("_portable");
+    let has_marker = parent.join(PORTABLE_MARKER_FILE).is_file();
+
+    has_portable_name
+        .then(|| parent.join(PORTABLE_CONFIG_DIRECTORY))
+        .or_else(|| has_marker.then(|| parent.join(PORTABLE_CONFIG_DIRECTORY)))
+}
+
+pub fn portable_config_directory() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::current_exe()
+            .ok()
+            .and_then(|executable| portable_config_directory_for_executable(&executable))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    None
+}
+
+pub fn storage_root(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let dir = if let Some(portable_directory) = portable_config_directory() {
+        // Portable mode must not silently fall back to a user directory. A
+        // read-only USB or network location should report the real problem so
+        // the user can move it to a writable directory.
+        portable_directory
+    } else {
+        app.path()
+            .app_data_dir()
+            .map_err(|error| AppError::Storage(error.to_string()))?
+    };
     fs::create_dir_all(&dir).map_err(|error| AppError::Storage(error.to_string()))?;
+    Ok(dir)
+}
+
+pub fn state_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let dir = storage_root(app)?;
     Ok(dir.join("ui-preferences.json"))
 }
 
@@ -132,24 +206,264 @@ pub fn workspace_file(app: &AppHandle, name: &str) -> Result<PathBuf, AppError> 
 /// boundary that prevents a later delete or clear in Tauri from being undone
 /// by another read of Electron's still-live store.
 pub fn migrate_legacy_data_once(app: &AppHandle) -> Result<(), AppError> {
-    let current_dir = app
+    let current_dir = storage_root(app)?;
+    #[cfg(target_os = "windows")]
+    if portable_config_directory().is_some() {
+        migrate_portable_data_once(app, &current_dir)?;
+    }
+    let config_dir = app.path().app_config_dir().ok();
+    let data_dir = app.path().app_data_dir().ok();
+    let legacy_dir =
+        select_legacy_directory(&current_dir, config_dir.as_deref(), data_dir.as_deref())?;
+    migrate_legacy_store(&current_dir, &legacy_dir).map(|_| ())
+}
+
+#[cfg(any(test, target_os = "windows"))]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableMigrationReport {
+    version: u32,
+    status: String,
+    completed_at: u64,
+    source_directory: Option<String>,
+    copied_files: Vec<String>,
+}
+
+#[cfg(target_os = "windows")]
+fn migrate_portable_data_once(app: &AppHandle, current_dir: &Path) -> Result<(), AppError> {
+    let source_dir = app
         .path()
         .app_data_dir()
         .map_err(|error| AppError::Storage(error.to_string()))?;
-    let config_dir = app.path().app_config_dir().ok();
-    let legacy_dir = select_legacy_directory(&current_dir, config_dir.as_deref())?;
-    migrate_legacy_store(&current_dir, &legacy_dir).map(|_| ())
+    migrate_portable_data_from_source(current_dir, &source_dir)
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn migrate_portable_data_from_source(
+    current_dir: &Path,
+    source_dir: &Path,
+) -> Result<(), AppError> {
+    fs::create_dir_all(current_dir).map_err(|error| AppError::Storage(error.to_string()))?;
+    lock_down_directory(current_dir)?;
+
+    let marker_path = current_dir.join(PORTABLE_MIGRATION_MARKER);
+    if marker_path.exists() {
+        let report: PortableMigrationReport = read_json_file(&marker_path)?;
+        if report.version >= PORTABLE_MIGRATION_VERSION
+            && matches!(
+                report.status.as_str(),
+                "completed" | "existing" | "no-source"
+            )
+        {
+            return Ok(());
+        }
+        return Err(AppError::Storage(
+            "便携版数据迁移标记无效，拒绝重复复制用户数据".to_string(),
+        ));
+    }
+
+    if directory_has_entries(current_dir)? {
+        return write_portable_migration_marker(current_dir, "existing", None, Vec::new());
+    }
+
+    if source_dir == current_dir || !source_dir.is_dir() {
+        return write_portable_migration_marker(
+            current_dir,
+            "no-source",
+            Some(source_dir),
+            Vec::new(),
+        );
+    }
+
+    let transaction_dir = current_dir.join(format!(".portable-migration-{}", uuid::Uuid::new_v4()));
+    let staged_dir = transaction_dir.join("staged");
+    let backup_dir = transaction_dir.join("backup");
+    fs::create_dir_all(&staged_dir).map_err(|error| AppError::Storage(error.to_string()))?;
+    fs::create_dir_all(&backup_dir).map_err(|error| AppError::Storage(error.to_string()))?;
+    lock_down_directory(&transaction_dir)?;
+
+    let result = (|| {
+        let mut pending = Vec::new();
+        let mut copied_files = Vec::new();
+        for (relative, confidential) in PORTABLE_DATA_ENTRIES {
+            stage_portable_entry(
+                current_dir,
+                &staged_dir,
+                &backup_dir,
+                Path::new(relative),
+                &source_dir.join(relative),
+                *confidential,
+                &mut pending,
+                &mut copied_files,
+            )?;
+        }
+
+        if copied_files.is_empty() {
+            return Ok(None);
+        }
+
+        copied_files.sort();
+        let report = PortableMigrationReport {
+            version: PORTABLE_MIGRATION_VERSION,
+            status: "completed".to_string(),
+            completed_at: now_millis(),
+            source_directory: Some(source_dir.to_string_lossy().into_owned()),
+            copied_files,
+        };
+        let report_value = serde_json::to_value(&report)
+            .map_err(|error| AppError::Serialization(error.to_string()))?;
+        stage_json_file(
+            current_dir,
+            &staged_dir,
+            &backup_dir,
+            PORTABLE_MIGRATION_MARKER,
+            &report_value,
+            false,
+            &mut pending,
+        )?;
+        commit_pending_files(&pending)?;
+        Ok(Some(()))
+    })();
+
+    let cleanup_result = fs::remove_dir_all(&transaction_dir);
+    match (result, cleanup_result) {
+        (Ok(Some(())), Ok(())) => Ok(()),
+        (Ok(Some(())), Err(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        (Ok(Some(())), Err(error)) => Err(AppError::Storage(format!(
+            "便携版数据迁移成功，但无法删除事务目录: {error}"
+        ))),
+        (Ok(None), _) => {
+            write_portable_migration_marker(current_dir, "no-source", Some(source_dir), Vec::new())
+        }
+        (Err(error), _) => Err(error),
+    }
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn directory_has_entries(directory: &Path) -> Result<bool, AppError> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(AppError::Storage(error.to_string())),
+    };
+
+    for entry in entries {
+        let entry = entry.map_err(|error| AppError::Storage(error.to_string()))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == PORTABLE_MIGRATION_MARKER
+            || name == "mcp-runtime.json"
+            || name.starts_with(".portable-migration-")
+            || name.starts_with(".portable-migration.json.")
+        {
+            continue;
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+#[cfg(any(test, target_os = "windows"))]
+#[allow(clippy::too_many_arguments)]
+fn stage_portable_entry(
+    current_dir: &Path,
+    staged_dir: &Path,
+    backup_dir: &Path,
+    relative: &Path,
+    source: &Path,
+    confidential: bool,
+    pending: &mut Vec<PendingFile>,
+    copied_files: &mut Vec<String>,
+) -> Result<(), AppError> {
+    let metadata = match fs::symlink_metadata(source) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(AppError::Storage(error.to_string())),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(AppError::Storage(format!(
+            "便携版数据迁移拒绝复制符号链接: {}",
+            source.display()
+        )));
+    }
+    if metadata.is_file() {
+        stage_file_copy(
+            current_dir,
+            staged_dir,
+            backup_dir,
+            relative,
+            source,
+            confidential,
+            pending,
+        )?;
+        copied_files.push(relative.to_string_lossy().into_owned());
+        return Ok(());
+    }
+    if !metadata.is_dir() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(source).map_err(|error| AppError::Storage(error.to_string()))? {
+        let entry = entry.map_err(|error| AppError::Storage(error.to_string()))?;
+        let child_relative = relative.join(entry.file_name());
+        stage_portable_entry(
+            current_dir,
+            staged_dir,
+            backup_dir,
+            &child_relative,
+            &entry.path(),
+            confidential,
+            pending,
+            copied_files,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn write_portable_migration_marker(
+    current_dir: &Path,
+    status: &str,
+    source_directory: Option<&Path>,
+    copied_files: Vec<String>,
+) -> Result<(), AppError> {
+    let marker = PortableMigrationReport {
+        version: PORTABLE_MIGRATION_VERSION,
+        status: status.to_string(),
+        completed_at: now_millis(),
+        source_directory: source_directory.map(|path| path.to_string_lossy().into_owned()),
+        copied_files,
+    };
+    let bytes = serde_json::to_vec_pretty(&marker)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    let target = current_dir.join(PORTABLE_MIGRATION_MARKER);
+    let temporary = target.with_file_name(format!(
+        ".{PORTABLE_MIGRATION_MARKER}.{}.tmp",
+        uuid::Uuid::new_v4()
+    ));
+    write_restricted_file(&temporary, &bytes)?;
+    if let Err(error) = replace_file_atomically(&temporary, &target) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    Ok(())
 }
 
 fn select_legacy_directory(
     current_dir: &Path,
     config_dir: Option<&Path>,
+    data_dir: Option<&Path>,
 ) -> Result<PathBuf, AppError> {
     let mut candidates = Vec::new();
     if let Some(parent) = current_dir.parent() {
         candidates.push(parent.join("FileTerm"));
     }
     if let Some(parent) = config_dir.and_then(Path::parent) {
+        let candidate = parent.join("FileTerm");
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    if let Some(parent) = data_dir.and_then(Path::parent) {
         let candidate = parent.join("FileTerm");
         if !candidates.contains(&candidate) {
             candidates.push(candidate);
@@ -1019,8 +1333,9 @@ pub fn new_id(prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        commit_pending_files, migrate_legacy_store, replace_file_atomically,
-        select_legacy_directory, PendingFile, LEGACY_MIGRATION_MARKER,
+        commit_pending_files, migrate_legacy_store, migrate_portable_data_from_source,
+        portable_config_directory_for_executable, replace_file_atomically, select_legacy_directory,
+        PendingFile, LEGACY_MIGRATION_MARKER,
     };
     use serde_json::{json, Value};
     use std::fs;
@@ -1034,6 +1349,91 @@ mod tests {
         fs::create_dir_all(&current).unwrap();
         fs::create_dir_all(&legacy).unwrap();
         (root, current, legacy)
+    }
+
+    #[test]
+    fn portable_executable_uses_a_config_directory_next_to_the_binary() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-portable-path-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+
+        let portable_executable = root.join("FileTerm-2.2.4-windows-x64-portable.exe");
+        assert_eq!(
+            portable_config_directory_for_executable(&portable_executable),
+            Some(root.join("config"))
+        );
+
+        let regular_executable = root.join("FileTerm.exe");
+        assert_eq!(
+            portable_config_directory_for_executable(&regular_executable),
+            None
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn portable_marker_enables_local_config_for_a_renamed_binary() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-portable-marker-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("portable"), b"").unwrap();
+
+        assert_eq!(
+            portable_config_directory_for_executable(&root.join("FileTerm.exe")),
+            Some(root.join("config"))
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn portable_data_migration_copies_owned_files_once() {
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-portable-data-migration-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let source = root.join("app-data");
+        let current = root.join("portable").join("config");
+        fs::create_dir_all(source.join("ai-conversations")).unwrap();
+        fs::create_dir_all(&current).unwrap();
+        fs::write(source.join("profiles.json"), b"profiles").unwrap();
+        fs::write(source.join("secret-store-v1.key"), b"seed").unwrap();
+        fs::write(
+            source.join("ai-conversations").join("conversation.json"),
+            b"conversation",
+        )
+        .unwrap();
+        fs::write(source.join("mcp-runtime.json"), b"stale runtime").unwrap();
+        fs::create_dir_all(source.join("logs")).unwrap();
+        fs::write(source.join("logs").join("app.log"), b"diagnostic log").unwrap();
+
+        migrate_portable_data_from_source(&current, &source).unwrap();
+
+        assert_eq!(
+            fs::read(current.join("profiles.json")).unwrap(),
+            b"profiles"
+        );
+        assert_eq!(
+            fs::read(current.join("secret-store-v1.key")).unwrap(),
+            b"seed"
+        );
+        assert_eq!(
+            fs::read(current.join("ai-conversations").join("conversation.json")).unwrap(),
+            b"conversation"
+        );
+        assert!(!current.join("mcp-runtime.json").exists());
+        assert!(!current.join("logs").exists());
+        assert!(current.join("portable-migration.json").exists());
+
+        fs::write(source.join("profiles.json"), b"changed source").unwrap();
+        migrate_portable_data_from_source(&current, &source).unwrap();
+        assert_eq!(
+            fs::read(current.join("profiles.json")).unwrap(),
+            b"profiles"
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1053,7 +1453,29 @@ mod tests {
         fs::write(electron.join("profiles.json"), b"[]").unwrap();
 
         assert_eq!(
-            select_legacy_directory(&current_data, Some(&current_config)).unwrap(),
+            select_legacy_directory(&current_data, Some(&current_config), None).unwrap(),
+            electron
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn legacy_directory_uses_app_data_parent_for_portable_storage() {
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-portable-legacy-root-selection-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let portable_config = root.join("portable").join("config");
+        let app_data = root.join("data").join("com.fileterm.desktop");
+        let electron = root.join("data").join("FileTerm");
+        fs::create_dir_all(&portable_config).unwrap();
+        fs::create_dir_all(&app_data).unwrap();
+        fs::create_dir_all(&electron).unwrap();
+        fs::write(electron.join("profiles.json"), b"[]").unwrap();
+
+        assert_eq!(
+            select_legacy_directory(&portable_config, None, Some(&app_data)).unwrap(),
             electron
         );
 

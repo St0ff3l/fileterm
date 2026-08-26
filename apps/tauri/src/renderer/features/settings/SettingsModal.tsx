@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
+  DEFAULT_LOCAL_TERMINAL_SHELLS,
   DEFAULT_MCP_AGENT_PREFERENCES,
   DEFAULT_OVERVIEW_SECTION_ORDER,
   createCodexThemeConfig,
@@ -14,6 +15,9 @@ import {
   type BackupUploadMode,
   type ConnectionProfile,
   type ImportedFont,
+  type LocalTerminalPlatform,
+  type LocalTerminalShellOption,
+  type LocalTerminalShellPreferences,
   type McpAgentClientStatus,
   type McpAgentPreferences,
   type McpAgentSetup,
@@ -29,8 +33,8 @@ import {
 import { deriveThemeVariant, getSavedThemeConfig, normalizeSavedTheme } from '../../app/theme-config'
 import { registerImportedFont, registerImportedFonts, unregisterImportedFont } from '../../app/imported-fonts'
 import { usePointerSortFallback, type PointerSortTarget } from '../../hooks/usePointerSortFallback'
-import { t, type LocaleMessages } from '../../i18n'
-import { AppIcon } from '../common/AppIcon'
+import { formatMessage, t, type LocaleMessages } from '../../i18n'
+import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
@@ -38,7 +42,41 @@ import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition 
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
 
-type SettingsTab = 'ai' | 'agent' | 'connections' | 'interface' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+type SettingsTab =
+  'ai' | 'agent' | 'connections' | 'interface' | 'local-terminal' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+
+type SettingsSidebarItem = {
+  tab: SettingsTab
+  labelKey: keyof LocaleMessages
+  materialIcon?: string
+  appIcon?: AppIconName
+}
+
+const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
+  { tab: 'interface', labelKey: 'interfaceSettings', materialIcon: 'palette' },
+  { tab: 'local-terminal', labelKey: 'localTerminalSettings', appIcon: 'terminal-file' },
+  { tab: 'ai', labelKey: 'aiSettings', materialIcon: 'auto_awesome' },
+  { tab: 'agent', labelKey: 'agentMcpSettings', appIcon: 'terminal-file' },
+  { tab: 'connections', labelKey: 'connectionDefaults', materialIcon: 'settings_ethernet' },
+  { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
+  { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update' },
+  { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
+  { tab: 'system', labelKey: 'systemLogsInfo', materialIcon: 'info' },
+  { tab: 'language', labelKey: 'languageSidebarLabel', materialIcon: 'translate' }
+]
+
+const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
+  interface: 'appearance overview theme color font ui 外观 概览 主题 颜色 字体',
+  'local-terminal': 'terminal shell powershell pwsh bash zsh fish nushell 本地终端 shell',
+  ai: 'ai provider model api key openai anthropic 模型 服务 密钥',
+  agent: 'agent mcp cli command tool automation 代理 命令 工具',
+  connections: 'connection ssh sftp ftp telnet reconnect resource monitor 连接 默认值 重连 监控',
+  sync: 'sync webdav s3 backup cloud configuration 同步 备份 云端',
+  updates: 'update release version beta stable 更新 版本 发布',
+  tools: 'manager connection command key shortcut 管理器 连接 命令 密钥 快捷键',
+  system: 'system log diagnostics platform version 系统 日志 诊断 平台 版本',
+  language: 'language locale chinese english 中文 英文 语言'
+}
 
 type ThemePresetFamily = 'fileterm' | 'codex'
 type ThemePresetVariant = ThemeConfig['variant']
@@ -83,6 +121,47 @@ const ANSI_COLOR_LABELS: Record<TerminalAnsiColorName, string> = {
   brightMagenta: 'Bright Magenta',
   brightCyan: 'Bright Cyan',
   brightWhite: 'Bright White'
+}
+
+const LOCAL_TERMINAL_SHELL_CONFIGS: Array<{
+  platform: LocalTerminalPlatform
+  labelKey: 'localTerminalShellWindows' | 'localTerminalShellMacos' | 'localTerminalShellLinux'
+  hintKey: 'localTerminalShellWindowsHint' | 'localTerminalShellMacosHint' | 'localTerminalShellLinuxHint'
+  placeholder: string
+}> = [
+  {
+    platform: 'win32',
+    labelKey: 'localTerminalShellWindows',
+    hintKey: 'localTerminalShellWindowsHint',
+    placeholder: 'pwsh.exe'
+  },
+  {
+    platform: 'darwin',
+    labelKey: 'localTerminalShellMacos',
+    hintKey: 'localTerminalShellMacosHint',
+    placeholder: '/bin/zsh'
+  },
+  {
+    platform: 'linux',
+    labelKey: 'localTerminalShellLinux',
+    hintKey: 'localTerminalShellLinuxHint',
+    placeholder: '/bin/bash'
+  }
+]
+
+function localTerminalShellOptionsFor(detectedOptions: LocalTerminalShellOption[]) {
+  const options = detectedOptions.map((option) => ({
+    shell: option.shell,
+    label: `${option.label} · ${option.path}`
+  }))
+  const seen = new Set<string>()
+  return options
+    .filter((option) => {
+      if (seen.has(option.shell)) return false
+      seen.add(option.shell)
+      return true
+    })
+    .map((option) => ({ value: option.shell, label: option.label }))
 }
 
 const THEME_PRESETS: Array<{
@@ -493,6 +572,7 @@ export function SettingsModal({
   inline?: boolean
 }) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState('')
   const [syncSubTab, setSyncSubTab] = useState<'webdav' | 's3'>('webdav')
   const [agentSubTab, setAgentSubTab] = useState<'mcp' | 'cli'>('mcp')
   const [updateStatus, setUpdateStatus] = useState<AppUpdateStatus | null>(null)
@@ -503,6 +583,18 @@ export function SettingsModal({
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const [isSavingTerminalZoomPreference, setIsSavingTerminalZoomPreference] = useState(false)
   const [terminalZoomPreferenceError, setTerminalZoomPreferenceError] = useState<string | null>(null)
+  const [localTerminalShells, setLocalTerminalShells] = useState<LocalTerminalShellPreferences>(() => ({
+    ...DEFAULT_LOCAL_TERMINAL_SHELLS
+  }))
+  const [localTerminalShellDrafts, setLocalTerminalShellDrafts] = useState<LocalTerminalShellPreferences>(() => ({
+    ...DEFAULT_LOCAL_TERMINAL_SHELLS
+  }))
+  const [localTerminalShellOptions, setLocalTerminalShellOptions] = useState<LocalTerminalShellOption[]>([])
+  const [isLoadingLocalTerminalShellOptions, setIsLoadingLocalTerminalShellOptions] = useState(false)
+  const [localTerminalShellScanVersion, setLocalTerminalShellScanVersion] = useState(0)
+  const [isSavingLocalTerminalShells, setIsSavingLocalTerminalShells] = useState(false)
+  const [localTerminalShellMessage, setLocalTerminalShellMessage] = useState<string | null>(null)
+  const [localTerminalShellError, setLocalTerminalShellError] = useState<string | null>(null)
   const [filePanelRememberRatio, setFilePanelRememberRatio] = useState(true)
   const [isSavingFilePanelPreference, setIsSavingFilePanelPreference] = useState(false)
   const [filePanelPreferenceError, setFilePanelPreferenceError] = useState<string | null>(null)
@@ -578,6 +670,19 @@ export function SettingsModal({
   const suppressOverviewCardClickRef = useRef(false)
   const desktopApi = window.fileterm
   const updatePreviewState = import.meta.env.DEV ? import.meta.env.VITE_UPDATE_PREVIEW : undefined
+  const visibleSettingsTabs = useMemo(() => {
+    const query = settingsSearchQuery.trim().toLocaleLowerCase()
+    if (!query) {
+      return new Set(SETTINGS_SIDEBAR_ITEMS.map((item) => item.tab))
+    }
+
+    return new Set(
+      SETTINGS_SIDEBAR_ITEMS.filter((item) => {
+        const searchText = `${t[item.labelKey]} ${SETTINGS_TAB_SEARCH_TERMS[item.tab]}`.toLocaleLowerCase()
+        return searchText.includes(query)
+      }).map((item) => item.tab)
+    )
+  }, [locale, settingsSearchQuery])
 
   useEffect(() => {
     if (!desktopApi) return
@@ -610,6 +715,17 @@ export function SettingsModal({
   useEffect(() => {
     setActiveTab(initialTab)
   }, [initialTab])
+
+  useEffect(() => {
+    if (!settingsSearchQuery.trim() || visibleSettingsTabs.has(activeTab)) {
+      return
+    }
+
+    const nextTab = SETTINGS_SIDEBAR_ITEMS.find((item) => visibleSettingsTabs.has(item.tab))?.tab
+    if (nextTab) {
+      setActiveTab(nextTab)
+    }
+  }, [activeTab, settingsSearchQuery, visibleSettingsTabs])
 
   useEffect(() => {
     if (updatePreviewState) {
@@ -645,6 +761,8 @@ export function SettingsModal({
           setAutoCheckUpdates(preferences.autoCheckUpdates)
           setUpdateChannel(preferences.updateChannel)
           setTerminalZoomLocked(preferences.terminalZoomLocked)
+          setLocalTerminalShells({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
+          setLocalTerminalShellDrafts({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
           setFilePanelRememberRatio(preferences.filePanelRememberRatio)
           setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
           setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
@@ -670,6 +788,8 @@ export function SettingsModal({
         setAutoCheckUpdates(preferences.autoCheckUpdates)
         setUpdateChannel(preferences.updateChannel)
         setTerminalZoomLocked(preferences.terminalZoomLocked)
+        setLocalTerminalShells({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
+        setLocalTerminalShellDrafts({ ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells })
         setFilePanelRememberRatio(preferences.filePanelRememberRatio)
         setMcpAgentPreferences({ ...DEFAULT_MCP_AGENT_PREFERENCES, ...preferences.mcpAgent })
         setConnectionDefaults({ ...DEFAULT_SSH_CONNECTION_DEFAULTS, ...preferences.connectionDefaults })
@@ -690,6 +810,37 @@ export function SettingsModal({
       unsubscribe()
     }
   }, [desktopApi])
+
+  useEffect(() => {
+    if (activeTab !== 'local-terminal' || !desktopApi) {
+      return
+    }
+
+    let canceled = false
+    setIsLoadingLocalTerminalShellOptions(true)
+    setLocalTerminalShellError(null)
+    void desktopApi
+      .listLocalTerminalShells()
+      .then((options) => {
+        if (!canceled) {
+          setLocalTerminalShellOptions(options)
+        }
+      })
+      .catch(() => {
+        if (!canceled) {
+          setLocalTerminalShellError(t.localTerminalShellDetectionFailed)
+        }
+      })
+      .finally(() => {
+        if (!canceled) {
+          setIsLoadingLocalTerminalShellOptions(false)
+        }
+      })
+
+    return () => {
+      canceled = true
+    }
+  }, [activeTab, desktopApi, localTerminalShellScanVersion])
 
   useEffect(() => {
     if (activeTab !== 'sync' || !desktopApi) return
@@ -1006,6 +1157,16 @@ export function SettingsModal({
     }
     return `${platform} / ${arch}`
   })()
+  const currentLocalTerminalPlatform: LocalTerminalPlatform | null =
+    desktopApi?.platform === 'win32' || desktopApi?.platform === 'darwin' || desktopApi?.platform === 'linux'
+      ? desktopApi.platform
+      : null
+  const currentLocalTerminalShellConfig = currentLocalTerminalPlatform
+    ? (LOCAL_TERMINAL_SHELL_CONFIGS.find((config) => config.platform === currentLocalTerminalPlatform) ?? null)
+    : null
+  const currentLocalTerminalShellOptions = currentLocalTerminalShellConfig
+    ? localTerminalShellOptionsFor(localTerminalShellOptions)
+    : []
 
   const managerToolsHint = inline ? t.settingsManagersInlineHint : t.settingsManagersWindowHint
   const managerToolsActionLabel = inline ? t.switchToManagerPage : t.openInSeparateWindow
@@ -1090,6 +1251,46 @@ export function SettingsModal({
         setTerminalZoomPreferenceError(t.terminalZoomPreferenceSaveFailed)
       })
       .finally(() => setIsSavingTerminalZoomPreference(false))
+  }
+
+  const updateLocalTerminalShellDraft = (platform: LocalTerminalPlatform, value: string) => {
+    setLocalTerminalShellDrafts((current) => ({ ...current, [platform]: value }))
+    setLocalTerminalShellMessage(null)
+    setLocalTerminalShellError(null)
+  }
+
+  const localTerminalShellsDirty = currentLocalTerminalShellConfig
+    ? localTerminalShellDrafts[currentLocalTerminalShellConfig.platform] !==
+      localTerminalShells[currentLocalTerminalShellConfig.platform]
+    : false
+
+  const saveLocalTerminalShells = () => {
+    if (!desktopApi || !currentLocalTerminalShellConfig || isSavingLocalTerminalShells || !localTerminalShellsDirty) {
+      return
+    }
+
+    const previousShells = localTerminalShells
+    const platform = currentLocalTerminalShellConfig.platform
+    const nextShells: Partial<LocalTerminalShellPreferences> = {
+      [platform]: localTerminalShellDrafts[platform]
+    }
+    setLocalTerminalShellError(null)
+    setLocalTerminalShellMessage(null)
+    setIsSavingLocalTerminalShells(true)
+    void desktopApi
+      .setUiPreferences({ localTerminalShells: nextShells })
+      .then((preferences) => {
+        const savedShells = { ...DEFAULT_LOCAL_TERMINAL_SHELLS, ...preferences.localTerminalShells }
+        setLocalTerminalShells(savedShells)
+        setLocalTerminalShellDrafts(savedShells)
+        setLocalTerminalShellMessage(t.localTerminalShellSaved)
+      })
+      .catch(() => {
+        setLocalTerminalShells(previousShells)
+        setLocalTerminalShellDrafts(previousShells)
+        setLocalTerminalShellError(t.localTerminalShellSaveFailed)
+      })
+      .finally(() => setIsSavingLocalTerminalShells(false))
   }
 
   const setFilePanelRememberRatioPreference = (nextValue: boolean) => {
@@ -1747,6 +1948,16 @@ export function SettingsModal({
           <span className="material-symbols-outlined">settings</span>
           <span>{t.settings}</span>
         </span>
+        <label className="connection-manager-search settings-search">
+          <AppIcon name="search" size={14} />
+          <input
+            aria-label={t.filterSettings}
+            placeholder={t.filterSettings}
+            type="search"
+            value={settingsSearchQuery}
+            onChange={(event) => setSettingsSearchQuery(event.target.value)}
+          />
+        </label>
         {!inline && (
           <div className="connection-manager-header-actions">
             <CloseButton disabled={syncOperation !== null} onClick={onClose} />
@@ -1755,99 +1966,137 @@ export function SettingsModal({
       </div>
       <div className="connection-manager-layout">
         <aside className="connection-manager-sidebar" aria-label={t.settings}>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'interface' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('interface')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">palette</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.interfaceSettings}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'ai' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('ai')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">auto_awesome</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.aiSettings}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'agent' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('agent')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <AppIcon name="terminal-file" size={17} />
-            </span>
-            <span className="connection-manager-sidebar-label">{t.agentMcpSettings}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'connections' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('connections')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">settings_ethernet</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.connectionDefaults}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'sync' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('sync')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">cloud_sync</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.configSync}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'updates' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('updates')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">system_update</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.appUpdates}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'tools' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('tools')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">apps</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.managerToolsShortcut}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'system' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('system')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">info</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.systemLogsInfo}</span>
-          </button>
-          <button
-            className={`connection-manager-sidebar-item ${activeTab === 'language' ? 'active' : ''}`}
-            type="button"
-            onClick={() => setActiveTab('language')}
-          >
-            <span className="connection-manager-sidebar-icon">
-              <span className="material-symbols-outlined">translate</span>
-            </span>
-            <span className="connection-manager-sidebar-label">{t.languageSidebarLabel}</span>
-          </button>
+          {SETTINGS_SIDEBAR_ITEMS.filter((item) => visibleSettingsTabs.has(item.tab)).map((item) => (
+            <button
+              className={`connection-manager-sidebar-item ${activeTab === item.tab ? 'active' : ''}`}
+              key={item.tab}
+              type="button"
+              onClick={() => setActiveTab(item.tab)}
+            >
+              <span className="connection-manager-sidebar-icon">
+                {item.appIcon ? (
+                  <AppIcon name={item.appIcon} size={17} />
+                ) : (
+                  <span className="material-symbols-outlined">{item.materialIcon}</span>
+                )}
+              </span>
+              <span className="connection-manager-sidebar-label">{t[item.labelKey]}</span>
+            </button>
+          ))}
+          {visibleSettingsTabs.size === 0 ? <p className="settings-sidebar-empty">{t.noMatchingSettings}</p> : null}
         </aside>
 
         <main className="connection-manager-main">
+          {activeTab === 'local-terminal' ? (
+            <div className="settings-panel">
+              <section className="settings-section">
+                <h3>{t.localTerminalSettings}</h3>
+                <p className="settings-tools-hint">{t.localTerminalSettingsHint}</p>
+
+                <div className="local-terminal-shell-detection">
+                  <div className="local-terminal-shell-detection-copy">
+                    <strong>
+                      {currentLocalTerminalPlatform
+                        ? isLoadingLocalTerminalShellOptions
+                          ? t.localTerminalShellDetecting
+                          : formatMessage(t.localTerminalShellDetectionSummary, {
+                              count: localTerminalShellOptions.length
+                            })
+                        : t.localTerminalShellDetectionDesktopOnly}
+                    </strong>
+                    <p>{t.localTerminalShellDetectionHint}</p>
+                  </div>
+                  <button
+                    className="flat-button compact"
+                    disabled={!desktopApi || isLoadingLocalTerminalShellOptions || isSavingLocalTerminalShells}
+                    onClick={() => setLocalTerminalShellScanVersion((version) => version + 1)}
+                    type="button"
+                  >
+                    <AppIcon name="refresh" size={14} />
+                    {t.localTerminalShellDetect}
+                  </button>
+                </div>
+
+                <div className="local-terminal-shell-list">
+                  {currentLocalTerminalShellConfig ? (
+                    <div className="local-terminal-shell-card">
+                      <div className="local-terminal-shell-card-heading">
+                        <div>
+                          <strong>{t[currentLocalTerminalShellConfig.labelKey]}</strong>
+                          <p>{t[currentLocalTerminalShellConfig.hintKey]}</p>
+                        </div>
+                        <span className="local-terminal-shell-current-badge">
+                          {t.localTerminalShellCurrentPlatform}
+                        </span>
+                      </div>
+                      <div className="local-terminal-shell-control-row">
+                        <label className="local-terminal-shell-input-label">
+                          <span>{t.localTerminalShellExecutable}</span>
+                          <input
+                            aria-label={`${t[currentLocalTerminalShellConfig.labelKey]} · ${t.localTerminalShellExecutable}`}
+                            disabled={!desktopApi || isSavingLocalTerminalShells}
+                            onChange={(event) =>
+                              updateLocalTerminalShellDraft(
+                                currentLocalTerminalShellConfig.platform,
+                                event.target.value
+                              )
+                            }
+                            placeholder={currentLocalTerminalShellConfig.placeholder}
+                            spellCheck={false}
+                            value={localTerminalShellDrafts[currentLocalTerminalShellConfig.platform]}
+                          />
+                        </label>
+                        <DropdownSelect
+                          ariaLabel={`${t[currentLocalTerminalShellConfig.labelKey]} ${t.localTerminalShellSelectPlaceholder}`}
+                          className="local-terminal-shell-select"
+                          disabled={
+                            !desktopApi || isSavingLocalTerminalShells || currentLocalTerminalShellOptions.length === 0
+                          }
+                          onChange={(value) =>
+                            updateLocalTerminalShellDraft(currentLocalTerminalShellConfig.platform, value)
+                          }
+                          options={currentLocalTerminalShellOptions}
+                          placeholder={t.localTerminalShellSelectPlaceholder}
+                          value={localTerminalShellDrafts[currentLocalTerminalShellConfig.platform]}
+                        />
+                      </div>
+                      <p className="local-terminal-shell-input-hint">{t.localTerminalShellExecutableHint}</p>
+                      <button
+                        className="flat-button compact local-terminal-shell-reset"
+                        disabled={!desktopApi || isSavingLocalTerminalShells}
+                        onClick={() => updateLocalTerminalShellDraft(currentLocalTerminalShellConfig.platform, '')}
+                        type="button"
+                      >
+                        <AppIcon name="refresh" size={13} />
+                        {t.localTerminalShellReset}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="local-terminal-shell-empty">{t.localTerminalShellDetectionDesktopOnly}</p>
+                  )}
+                </div>
+
+                {localTerminalShellError ? <p className="modal-error">{localTerminalShellError}</p> : null}
+                <div className="local-terminal-shell-actions">
+                  <button
+                    className="primary-button compact"
+                    disabled={!desktopApi || isSavingLocalTerminalShells || !localTerminalShellsDirty}
+                    onClick={saveLocalTerminalShells}
+                    type="button"
+                  >
+                    {isSavingLocalTerminalShells ? <span aria-hidden="true" className="button-spinner" /> : null}
+                    {t.localTerminalShellSave}
+                  </button>
+                  {localTerminalShellMessage ? (
+                    <span aria-live="polite" className="local-terminal-shell-save-message">
+                      {localTerminalShellMessage}
+                    </span>
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
           {activeTab === 'ai' ? (
             <div className="settings-panel settings-ai-panel">
               <section className="settings-section">

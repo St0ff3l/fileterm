@@ -121,6 +121,8 @@ export function ConnectionModal({
   hasSavedSuPassword = false,
   setForm,
   onClearHostFingerprint,
+  onDismissError,
+  onTestConnection,
   onSubmit,
   onClose,
   standalone = false,
@@ -141,6 +143,8 @@ export function ConnectionModal({
   hasSavedSuPassword?: boolean
   setForm(value: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)): void
   onClearHostFingerprint?(): void
+  onDismissError(): void
+  onTestConnection(): Promise<boolean>
   onSubmit(event: FormEvent<HTMLFormElement>): void
   onClose(): void
   standalone?: boolean
@@ -153,6 +157,8 @@ export function ConnectionModal({
   const [isLoadingSerialPorts, setIsLoadingSerialPorts] = useState(false)
   const [serialPortLoadError, setSerialPortLoadError] = useState<string | null>(null)
   const [serialValidationError, setSerialValidationError] = useState<string | null>(null)
+  const [isTestingConnection, setIsTestingConnection] = useState(false)
+  const [connectionTestSucceeded, setConnectionTestSucceeded] = useState(false)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
   const platform = window.fileterm?.platform
@@ -160,6 +166,27 @@ export function ConnectionModal({
   const supportsBuiltInRs485 = ['linux', 'darwin'].includes(platform ?? '') && form.flowControl !== 'hardware'
   const supportsExtendedParity = ['linux', 'win32'].includes(platform ?? '') || (isMacOs && form.dataBits === 7)
   const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== editingProfileId)
+
+  useEffect(() => {
+    setConnectionTestSucceeded(false)
+  }, [form])
+
+  const isFormBusy = isSubmitting || isTestingConnection
+
+  const handleTestConnection = async () => {
+    if (isFormBusy) {
+      return
+    }
+
+    setIsTestingConnection(true)
+    setConnectionTestSucceeded(false)
+    setSerialValidationError(null)
+    try {
+      setConnectionTestSucceeded(await onTestConnection())
+    } finally {
+      setIsTestingConnection(false)
+    }
+  }
 
   const setSshConnectionSetting = <K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -291,7 +318,7 @@ export function ConnectionModal({
           <span>{mode === 'edit' ? t.editConnection : t.newConnection}</span>
         </span>
         <div className="connection-manager-header-actions">
-          <CloseButton disabled={isSubmitting} onClick={onClose} />
+          <CloseButton disabled={isFormBusy} onClick={onClose} />
         </div>
       </div>
       <div className="ssh-modal-body">
@@ -324,10 +351,10 @@ export function ConnectionModal({
             </button>
           ) : null}
         </aside>
-        <form aria-busy={isSubmitting} className="ssh-form-shell" onSubmit={handleSubmit}>
+        <form aria-busy={isFormBusy} className="ssh-form-shell" onSubmit={handleSubmit}>
           <fieldset
             className="connection-form-submit-lock"
-            disabled={isSubmitting}
+            disabled={isFormBusy}
             style={{ border: 0, display: 'contents', margin: 0, padding: 0 }}
           >
             {section === 'ssh' ? (
@@ -1890,13 +1917,40 @@ export function ConnectionModal({
                 </fieldset>
               </div>
             ) : null}
-            {serialValidationError ? <div className="modal-error">{serialValidationError}</div> : null}
-            {errorMessage ? <div className="modal-error">{errorMessage}</div> : null}
+            {serialValidationError ? (
+              <div className="modal-error connection-test-status" role="alert">
+                <span>{serialValidationError}</span>
+                <CloseButton aria-label={t.closeTab} onClick={() => setSerialValidationError(null)} size="compact" />
+              </div>
+            ) : null}
+            {errorMessage ? (
+              <div className="modal-error connection-test-status" role="alert">
+                <span>{errorMessage}</span>
+                <CloseButton aria-label={t.closeTab} onClick={onDismissError} size="compact" />
+              </div>
+            ) : null}
+            {connectionTestSucceeded ? (
+              <div className="modal-success connection-test-status" role="status">
+                <span>{t.connectionTestSuccess}</span>
+                <CloseButton aria-label={t.closeTab} onClick={() => setConnectionTestSucceeded(false)} size="compact" />
+              </div>
+            ) : null}
             <div className="form-actions ssh-actions">
-              <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">
+              <button className="flat-button" disabled={isFormBusy} onClick={onClose} type="button">
                 {t.cancel}
               </button>
-              <button className="primary-button" disabled={isSubmitting} type="submit">
+              <button
+                className="flat-button"
+                disabled={isFormBusy}
+                onClick={() => {
+                  void handleTestConnection()
+                }}
+                type="button"
+              >
+                {isTestingConnection ? <span aria-hidden="true" className="button-spinner" /> : null}
+                <span>{t.testConnection}</span>
+              </button>
+              <button className="primary-button" disabled={isFormBusy} type="submit">
                 {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
                 <span>{mode === 'edit' ? t.saveChanges : t.saveConnection}</span>
               </button>

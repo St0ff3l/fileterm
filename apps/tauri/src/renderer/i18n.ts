@@ -306,6 +306,9 @@ const zhCN = {
   terminalConnected: '连接主机成功',
   terminalDisconnected: '连接已断开',
   terminalConnectionClosed: '[连接已关闭]',
+  sshConnectionFailedPrefix: 'SSH 连接失败：',
+  sshAuthenticationFailed: 'SSH 认证失败',
+  connectionDisconnected: '连接已断开',
   telnetReconnectScheduled: '[Telnet] 将在 {seconds} 秒后自动重连（第 {attempt} 次）',
   telnetReconnectLimit: '[Telnet] 自动重连已停止：{error}',
   pressEnterToReconnect: '按回车重新连接…',
@@ -715,6 +718,9 @@ const zhCN = {
   ownerGroup: '用户/用户组',
   folder: '文件夹',
   saveConnection: '保存连接',
+  testConnection: '测试连接',
+  connectionTestSuccess: '连接测试成功，可以保存。',
+  connectionTestFillRequired: '请填写用于连接测试的主机或串口设备路径。',
   cancel: '取消',
   connectionType: '类型',
   host: '主机',
@@ -812,6 +818,8 @@ const zhCN = {
   allCommands: '全部命令',
   filterCommands: '筛选命令...',
   noMatchingCommands: '没有匹配的命令',
+  filterSettings: '筛选设置...',
+  noMatchingSettings: '没有匹配的设置',
   commandCountLabel: '个命令',
   folderCountLabel: '个分组',
   closeTab: '关闭',
@@ -1103,6 +1111,29 @@ const zhCN = {
   terminalDockHideFilePanel: '隐藏文件面板',
   newCommand: '新建命令',
   settings: '设置',
+  localTerminalSettings: '本地终端',
+  localTerminalSettingsHint:
+    '配置当前设备新建本地终端使用的 Shell。设置会按 Windows、macOS 和 Linux 分开保存，切换到其他平台时使用对应配置；已打开的终端不会改变。',
+  localTerminalShellWindows: 'Windows',
+  localTerminalShellWindowsHint: '推荐使用 PowerShell 7（pwsh.exe）；也可以填写 powershell.exe 或 cmd.exe。',
+  localTerminalShellMacos: 'macOS',
+  localTerminalShellMacosHint: '通常使用 /bin/zsh；也可以填写 bash、fish 或其他已安装的 Shell。',
+  localTerminalShellLinux: 'Linux',
+  localTerminalShellLinuxHint: '通常使用 /bin/bash；也可以填写 zsh、fish 或其他已安装的 Shell。',
+  localTerminalShellExecutable: 'Shell 可执行文件',
+  localTerminalShellExecutableHint: '填写 PATH 中可直接运行的命令或绝对路径，例如 pwsh.exe；不要填写启动参数。',
+  localTerminalShellDetectionSummary: '当前平台检测到 {count} 个可选 Shell',
+  localTerminalShellDetectionHint: '下拉列表只展示当前系统实际检测到的 Shell；未检测到的 Shell 可以手动填写。',
+  localTerminalShellDetectionDesktopOnly: 'Shell 检测仅在桌面应用中可用',
+  localTerminalShellDetecting: '正在检测当前平台的 Shell…',
+  localTerminalShellDetect: '重新检测',
+  localTerminalShellCurrentPlatform: '当前平台',
+  localTerminalShellSelectPlaceholder: '选择已检测的 Shell',
+  localTerminalShellDetectionFailed: '无法检测当前平台的 Shell，可继续手动填写。',
+  localTerminalShellReset: '恢复系统默认',
+  localTerminalShellSave: '保存配置',
+  localTerminalShellSaved: '本地终端默认 Shell 已保存。',
+  localTerminalShellSaveFailed: '无法保存本地终端默认 Shell。',
   connectionDefaults: '连接默认值',
   connectionDefaultsHint: '设置新连接默认使用的 SSH 高级选项；已有连接保持自己的配置，修改后仅对之后新建的连接生效。',
   connectionDefaultsSaveFailed: '无法保存连接默认值。',
@@ -1832,6 +1863,9 @@ const enUS: typeof zhCN = {
   terminalConnected: 'Connected to host',
   terminalDisconnected: 'Connection closed',
   terminalConnectionClosed: '[connection closed]',
+  sshConnectionFailedPrefix: 'SSH connection failed: ',
+  sshAuthenticationFailed: 'SSH authentication failed',
+  connectionDisconnected: 'Connection closed',
   telnetReconnectScheduled: '[Telnet] Automatic reconnect in {seconds} seconds (attempt {attempt})',
   telnetReconnectLimit: '[Telnet] Automatic reconnect stopped: {error}',
   pressEnterToReconnect: 'Press Enter to reconnect…',
@@ -2246,6 +2280,9 @@ const enUS: typeof zhCN = {
   ownerGroup: 'Owner/Group',
   folder: 'Folder',
   saveConnection: 'Save Connection',
+  testConnection: 'Test Connection',
+  connectionTestSuccess: 'Connection test succeeded. You can save it.',
+  connectionTestFillRequired: 'Enter a host or serial device path to test the connection.',
   cancel: 'Cancel',
   connectionType: 'Type',
   host: 'Host',
@@ -2349,6 +2386,8 @@ const enUS: typeof zhCN = {
   allCommands: 'All Commands',
   filterCommands: 'Filter commands...',
   noMatchingCommands: 'No matching commands',
+  filterSettings: 'Filter settings...',
+  noMatchingSettings: 'No matching settings',
   commandCountLabel: 'commands',
   folderCountLabel: 'folders',
   closeTab: 'Close',
@@ -2655,6 +2694,33 @@ const enUS: typeof zhCN = {
   terminalDockHideFilePanel: 'Hide file panel',
   newCommand: 'New Command',
   settings: 'Settings',
+  localTerminalSettings: 'Local Terminal',
+  localTerminalSettingsHint:
+    'Configure the shell used by new local terminals on this device. Preferences are stored separately for Windows, macOS, and Linux; existing terminals are unchanged.',
+  localTerminalShellWindows: 'Windows',
+  localTerminalShellWindowsHint:
+    'PowerShell 7 (pwsh.exe) is recommended; powershell.exe and cmd.exe are also supported.',
+  localTerminalShellMacos: 'macOS',
+  localTerminalShellMacosHint: 'Usually /bin/zsh; bash, fish, and other installed shells are also supported.',
+  localTerminalShellLinux: 'Linux',
+  localTerminalShellLinuxHint: 'Usually /bin/bash; zsh, fish, and other installed shells are also supported.',
+  localTerminalShellExecutable: 'Shell executable',
+  localTerminalShellExecutableHint:
+    'Enter a command available on PATH or an absolute path, such as pwsh.exe. Do not include launch arguments.',
+  localTerminalShellDetectionSummary: '{count} selectable shells detected on the current platform',
+  localTerminalShellDetectionHint:
+    'The dropdown only shows shells actually detected on the current system. Other shells can be entered manually.',
+  localTerminalShellDetectionDesktopOnly: 'Shell detection is only available in the desktop app',
+  localTerminalShellDetecting: 'Detecting shells on the current platform…',
+  localTerminalShellDetect: 'Rescan',
+  localTerminalShellCurrentPlatform: 'Current platform',
+  localTerminalShellSelectPlaceholder: 'Select a detected shell',
+  localTerminalShellDetectionFailed:
+    'Unable to detect shells on the current platform. You can still enter one manually.',
+  localTerminalShellReset: 'Restore system default',
+  localTerminalShellSave: 'Save configuration',
+  localTerminalShellSaved: 'The default local terminal shells were saved.',
+  localTerminalShellSaveFailed: 'Unable to save the default local terminal shells.',
   connectionDefaults: 'Connection Defaults',
   connectionDefaultsHint:
     'Choose the default SSH advanced options for new connections. Existing connections keep their saved values; changes apply only to connections created afterward.',
@@ -3164,6 +3230,7 @@ const errorScopeTranslations: Record<string, string> = {
   取消关闭文件编辑器: 'Cancel closing file editor',
   显示文件编辑器: 'Show file editor',
   删除连接: 'Delete connection',
+  测试连接: 'Test connection',
   清除主机指纹: 'Clear host fingerprint',
   执行命令模板: 'Run command template',
   从管理器打开连接: 'Open connection from manager',
@@ -3219,6 +3286,14 @@ const errorScopeTranslations: Record<string, string> = {
 
 export function localizeErrorScope(scope: string, locale: AppLocale = activeLocale) {
   return locale === 'enUS' ? (errorScopeTranslations[scope] ?? scope) : scope
+}
+
+export function localizeConnectionErrorText(value: string) {
+  return value
+    .replace(/^(?:command|storage|serialization|window|clipboard) error:\s*/i, '')
+    .replace(/^SSH connect failed:\s*/i, t.sshConnectionFailedPrefix)
+    .replace(/^SSH Authentication failed(?: \(via jump host\))?$/i, t.sshAuthenticationFailed)
+    .replace(/\bDisconnected\b/gi, t.connectionDisconnected)
 }
 
 export const t = new Proxy({} as LocaleMessages, {

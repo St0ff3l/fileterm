@@ -2904,6 +2904,11 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(path));
     }
 
+    #[cfg(target_os = "windows")]
+    if let Some(portable_directory) = crate::storage::portable_config_directory() {
+        return Ok(portable_directory.join(MCP_RUNTIME_FILE));
+    }
+
     #[cfg(target_os = "macos")]
     let path = {
         let home = env::var_os("HOME")

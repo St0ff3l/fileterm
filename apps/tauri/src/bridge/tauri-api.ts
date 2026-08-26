@@ -42,6 +42,7 @@ import type {
   ActionApprovalRequest,
   McpApprovalRequest,
   LocalTerminalLaunchOptions,
+  LocalTerminalShellOption,
   AiProviderSummary,
   AiProviderTestResult,
   AiChatRequest,
@@ -52,6 +53,7 @@ import type {
   AiStreamEvent,
   CreateAiConversationInput,
   CreateAiContextPreviewInput,
+  CreateProfileInput,
   ImportedFont,
   RenameAiConversationInput,
   RetryAiChatInput,
@@ -391,6 +393,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
+    listLocalTerminalShells: () => invoke<LocalTerminalShellOption[]>('app_list_local_terminal_shells'),
     getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
     saveAiProvider: (input: SaveAiProviderInput) => invoke<AiProviderSummary>('app_save_ai_provider', { input }),
@@ -604,6 +607,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-command', payload: { input } }),
     updateProfile: (profileId: string, input: unknown) =>
       invoke<WorkspaceSnapshot>('app_update_profile', { profileId, input }),
+    testConnection: (input: CreateProfileInput, profileId?: string) =>
+      invoke<void>('app_test_connection', { input, profileId: profileId ?? null }),
     deleteProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_delete_profile', { profileId }),
     updateFolder: (folderId: string, updates: unknown) =>
       invoke<WorkspaceSnapshot>('app_update_folder', { folderId, updates }),

@@ -316,6 +316,46 @@ fn normalize_profile_secret_input(
     changed
 }
 
+/// Build an in-memory profile for a connection test without persisting the
+/// form values. Existing profiles are hydrated first so an empty/redacted
+/// password field continues to use the saved credential during the test.
+pub fn profile_for_connection_test(
+    app: &AppHandle,
+    profile_id: Option<&str>,
+    input: Value,
+) -> Result<Value, AppError> {
+    let input_object = input
+        .as_object()
+        .ok_or_else(|| AppError::Command("Connection profile is invalid".to_string()))?;
+    let profile_id = profile_id.map(str::trim).filter(|value| !value.is_empty());
+    let (profiles, _) = read_and_heal_profiles(app)?;
+    let previous = profile_id.and_then(|id| {
+        profiles
+            .iter()
+            .find(|profile| profile.get("id").and_then(Value::as_str) == Some(id))
+            .cloned()
+    });
+
+    if profile_id.is_some() && previous.is_none() {
+        return Err(AppError::Storage("Profile not found".to_string()));
+    }
+
+    let mut profile = previous
+        .clone()
+        .unwrap_or_else(|| Value::Object(Map::new()));
+    let object = profile
+        .as_object_mut()
+        .ok_or_else(|| AppError::Command("Connection profile is invalid".to_string()))?;
+    for (key, value) in input_object {
+        object.insert(key.clone(), value.clone());
+    }
+    if let Some(profile_id) = profile_id {
+        object.insert("id".to_string(), Value::String(profile_id.to_string()));
+    }
+    normalize_profile_secret_input(object, previous.as_ref());
+    Ok(profile)
+}
+
 fn heal_typed_entities(entities: &mut [Value], expected_type: &str) -> bool {
     let mut dirty = false;
     let mut next_order = chrono_now_ms();

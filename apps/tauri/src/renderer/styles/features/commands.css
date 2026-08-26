@@ -1111,6 +1111,8 @@
 }
 
 .command-template-preview {
+  display: flex;
+  flex-direction: column;
   align-self: stretch;
   flex: 1 1 auto;
   min-height: 0;
@@ -1132,7 +1134,7 @@
   height: 100%;
   min-height: 0;
   max-height: none;
-  border-width: 1px 0;
+  border-width: 0;
   border-radius: 0;
 }
 
@@ -1681,24 +1683,171 @@
   color: var(--text-main);
 }
 
-.command-param-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  flex: 0 0 auto;
-  padding: 8px 12px;
+.command-param-docked-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
+  background: var(--bg-main);
   border-top: 1px solid var(--border-light);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-.command-param-grid label {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.command-param-docked-lead {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-right: 6px;
+  border-right: 1px solid var(--border-light);
+  height: 14px;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--text-muted);
+  user-select: none;
+}
+
+.command-param-docked-lead .app-icon {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.command-param-scroll-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  padding: 1px 0;
+}
+
+.command-param-scroll-track::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.command-param-chip {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 420px;
+  height: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    min-width 0.2s ease,
+    max-width 0.2s ease,
+    background 0.15s ease;
+  box-sizing: border-box;
+}
+
+.command-param-chip:hover {
+  border-color: var(--border-dark);
+}
+
+.command-param-chip:focus-within {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 1px var(--focus-outline);
+  min-width: 180px;
+  max-width: 520px;
+  background: var(--surface-inset);
+}
+
+.command-param-chip-prefix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  padding: 0 5px;
+  height: 100%;
+  box-sizing: border-box;
+  background: var(--surface-chip);
+  border-right: 1px solid var(--border-light);
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.command-param-chip-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
+  font-size: 10px;
+  transform: translateY(1.1px) scale(0.9);
+  transform-origin: center center;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-muted);
+  text-transform: none !important;
+  text-align: center;
+}
+
+.command-param-chip input {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  height: 100% !important;
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  color: var(--text-main) !important;
+  font-family: var(--font-mono, 'SF Mono', Menlo, monospace) !important;
+  font-size: 9px !important;
+  line-height: 1 !important;
+  padding: 0 5px !important;
+  margin: 0 !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box !important;
+}
+
+.command-param-chip input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.4;
+  font-family: var(--font-mono, 'SF Mono', Menlo, monospace);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.command-param-chip-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  margin-right: 3px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.command-param-chip-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
 }
 
 .command-manager-editor label {
@@ -1710,7 +1859,6 @@
   color: var(--text-muted);
 }
 
-.command-param-grid input,
 .command-manager-sidebar input,
 .command-manager-editor input,
 .command-manager-editor select,
@@ -2420,10 +2568,6 @@
   .command-manager-editor {
     border-left: 0;
     border-top: 1px solid var(--border-light);
-  }
-
-  .command-param-grid {
-    grid-template-columns: 1fr;
   }
 
   .command-runner-controls {
