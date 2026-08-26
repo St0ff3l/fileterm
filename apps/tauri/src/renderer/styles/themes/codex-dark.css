@@ -171,6 +171,7 @@
   --dialog-button-danger-hover-bg: #e04c4c;
   --dialog-button-danger-hover-border: transparent;
   --dialog-button-danger-hover-text: #ffffff;
-  --dialog-focus-ring: 0 0 0 2px rgba(27, 27, 27, 0.88), 0 0 0 4px rgba(1, 105, 204, 0.28);
+  --dialog-focus-ring:
+    0 0 0 2px rgba(27, 27, 27, 0.88), 0 0 0 4px color-mix(in srgb, var(--focus-outline) 28%, transparent);
   --dialog-warning-text: var(--danger);
 }

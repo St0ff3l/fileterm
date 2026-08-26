@@ -25,7 +25,7 @@ export function ConfirmActionDialog({
   description: ReactNode
   errorMessage?: string | null
   extraActions?: ReactNode
-  initialFocus?: 'cancel' | 'dialog'
+  initialFocus?: 'cancel' | 'dialog' | 'none'
   isSubmitting?: boolean
   onClose(): void
   onConfirm(): void
@@ -47,7 +47,8 @@ export function ConfirmActionDialog({
   )
 
   useEffect(() => {
-    const target = initialFocus === 'dialog' ? dialogRef.current : cancelButtonRef.current
+    const target =
+      initialFocus === 'dialog' ? dialogRef.current : initialFocus === 'cancel' ? cancelButtonRef.current : null
     target?.focus()
   }, [initialFocus])
 

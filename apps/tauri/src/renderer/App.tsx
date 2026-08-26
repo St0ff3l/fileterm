@@ -1494,7 +1494,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             {t.closeConfirmHide}
           </button>
         ) : null,
-        initialFocus: 'dialog' as const,
+        initialFocus: 'none' as const,
         onClose: () => resolveWindowCloseConfirmation('cancel'),
         onConfirm: () => resolveWindowCloseConfirmation('quit'),
         title: t.closeConfirmTitle
