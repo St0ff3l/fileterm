@@ -388,18 +388,18 @@ fn default_theme_config_for_variant(variant: &str) -> ThemeConfig {
             ink: if is_light { "#18181b" } else { "#e7e7e7" }.to_string(),
             opaque_windows: true,
             semantic_colors: ThemeSemanticColors {
-                diff_added: if is_light { "#168a53" } else { "#39d98a" }.to_string(),
+                diff_added: if is_light { "#168a53" } else { "#34d399" }.to_string(),
                 diff_removed: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
                 skill: if is_light { "#7c3aed" } else { "#b06dff" }.to_string(),
-                keyword: if is_light { "#b45309" } else { "#ffcc00" }.to_string(),
+                keyword: if is_light { "#b45309" } else { "#fbbf24" }.to_string(),
                 sftp: if is_light { "#0284c7" } else { "#38bdf8" }.to_string(),
                 ftp: if is_light { "#9333ea" } else { "#c084fc" }.to_string(),
                 secondary: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
                 text_secondary: if is_light { "#5e5e61" } else { "#9b9b9b" }.to_string(),
-                info: if is_light { "#3b82f6" } else { "#8bbfff" }.to_string(),
+                info: if is_light { "#3b82f6" } else { "#38bdf8" }.to_string(),
                 warning: if is_light { "#d97706" } else { "#ffcc00" }.to_string(),
                 error: if is_light { "#d94e4e" } else { "#ff5f57" }.to_string(),
-                success: if is_light { "#168a53" } else { "#39d98a" }.to_string(),
+                success: if is_light { "#168a53" } else { "#34d399" }.to_string(),
             },
             surface: if is_light { "#F4F4F6" } else { "#151515" }.to_string(),
             surface_secondary: if is_light { "#ffffff" } else { "#1e1e1e" }.to_string(),
@@ -6363,6 +6363,12 @@ mod ui_preferences_tests {
         let serialized = serde_json::to_value(&dark).expect("default theme should serialize");
 
         assert!(serialized["theme"].get("overrides").is_none());
+        assert_eq!(dark.code_theme_id, "fileterm");
+        assert_eq!(dark.base_theme_id.as_deref(), Some("fileterm"));
+        assert_eq!(dark.theme.semantic_colors.diff_added, "#34d399");
+        assert_eq!(dark.theme.semantic_colors.keyword, "#fbbf24");
+        assert_eq!(dark.theme.semantic_colors.info, "#38bdf8");
+        assert_eq!(dark.theme.semantic_colors.success, "#34d399");
         assert_eq!(dark.theme.terminal.selection_background, "#388BFD85");
         assert_eq!(light.theme.terminal.selection_background, "#0969DA42");
     }
@@ -6404,7 +6410,7 @@ mod ui_preferences_tests {
         assert_eq!(normalized.theme.surface_secondary, "#1E1E1E");
         assert_eq!(normalized.theme.surface_elevated, "#2A2A2A");
         assert_eq!(normalized.theme.semantic_colors.secondary, "#8BBFFF");
-        assert_eq!(normalized.theme.semantic_colors.success, "#39D98A");
+        assert_eq!(normalized.theme.semantic_colors.success, "#34D399");
     }
 
     #[test]
