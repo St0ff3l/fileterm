@@ -683,6 +683,20 @@ async fn connect_ftp(profile: &Value, host: &str, port: u16) -> Result<FtpClient
     .await
 }
 
+/// Verify the FTP/FTPS transport and credentials without opening a workspace
+/// session or listing the configured remote directory.
+pub async fn test_connection(profile: &Value) -> Result<(), String> {
+    let host = profile
+        .get("host")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "FTP host is required".to_string())?;
+    let port = port_from_profile(profile, 21, "FTP")?;
+    let mut client = connect_ftp(profile, host, port).await?;
+    let _ = timeout(DEFAULT_FTP_OPERATION_TIMEOUT, client_quit(&mut client)).await;
+    Ok(())
+}
+
 /// Connect an FTP client with an injected TLS connector.
 ///
 /// Production always supplies the platform-default validating connector above.

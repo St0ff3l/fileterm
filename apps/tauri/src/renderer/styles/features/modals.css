@@ -1087,6 +1087,32 @@
   line-height: 1.5;
 }
 
+.modal-success {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--success-surface);
+  border: 1px solid var(--success-border);
+  border-radius: 10px;
+  color: var(--success-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.connection-test-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.connection-test-status > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.connection-test-status > .app-close-button {
+  margin: -6px -8px 0 0;
+}
+
 .ssh-auth-hint {
   padding: 12px 14px;
   border: 1px solid var(--border-light);

@@ -3452,6 +3452,19 @@ async fn open_session(
     }
 }
 
+/// Verify SSH transport, host-key policy, and authentication without opening
+/// a shell or SFTP channel. The caller supplies a transient tab id only so
+/// existing SSH interaction dialogs can route credential and host-key prompts.
+pub async fn test_connection(app: &AppHandle, profile: &Value, tab_id: &str) -> Result<(), String> {
+    let handle = open_session(profile, app, tab_id).await?;
+    let _ = timeout(
+        Duration::from_secs(3),
+        handle.disconnect(Disconnect::ByApplication, "connection test complete", "en"),
+    )
+    .await;
+    Ok(())
+}
+
 enum AuthenticationResult {
     Authenticated,
     /// Password/public-key authentication was rejected. A caller that owns

@@ -23,6 +23,8 @@ export function ConnectionFormHost({
   standalone,
   onClearHostFingerprint,
   onClose,
+  onDismissError,
+  onTestConnection,
   onSubmit
 }: {
   editingProfileId: string | null
@@ -39,6 +41,8 @@ export function ConnectionFormHost({
   standalone?: boolean
   onClearHostFingerprint(profile: ConnectionProfile): void
   onClose(): void
+  onDismissError(): void
+  onTestConnection(): Promise<boolean>
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }) {
   const editingProfile = editingProfileId ? (profiles.find((profile) => profile.id === editingProfileId) ?? null) : null
@@ -69,6 +73,8 @@ export function ConnectionFormHost({
       setForm={setForm}
       onClearHostFingerprint={clearHostFingerprint}
       standalone={standalone}
+      onDismissError={onDismissError}
+      onTestConnection={onTestConnection}
       onSubmit={onSubmit}
       onClose={onClose}
     />

@@ -6,12 +6,12 @@ use crate::{
     },
 };
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     env,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{atomic::Ordering, mpsc as std_mpsc, Arc},
     thread,
     time::Duration,
@@ -207,6 +207,141 @@ pub struct LocalTerminalLaunchOptions {
     pub cwd: Option<String>,
     pub args: Option<Vec<String>>,
     pub env: Option<BTreeMap<String, String>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalTerminalShellOption {
+    pub shell: String,
+    pub label: String,
+    pub path: String,
+}
+
+fn executable_on_path(name: &str) -> Option<PathBuf> {
+    let path = env::var_os("PATH")?;
+    env::split_paths(&path)
+        .map(|directory| directory.join(name))
+        .find(|candidate| candidate.is_file())
+}
+
+fn shell_option(shell: String, label: &str, path: PathBuf) -> LocalTerminalShellOption {
+    LocalTerminalShellOption {
+        shell,
+        label: label.to_string(),
+        path: path.to_string_lossy().into_owned(),
+    }
+}
+
+fn add_shell_option(options: &mut Vec<LocalTerminalShellOption>, option: LocalTerminalShellOption) {
+    if options
+        .iter()
+        .any(|existing| existing.shell == option.shell || existing.path == option.path)
+    {
+        return;
+    }
+    options.push(option);
+}
+
+pub fn available_shells() -> Vec<LocalTerminalShellOption> {
+    #[cfg(target_os = "windows")]
+    {
+        available_windows_shells()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    available_posix_shells()
+}
+
+#[cfg(target_os = "windows")]
+fn available_windows_shells() -> Vec<LocalTerminalShellOption> {
+    let candidates = [
+        ("PowerShell 7", "pwsh.exe"),
+        ("Windows PowerShell", "powershell.exe"),
+        ("Command Prompt", "cmd.exe"),
+        ("Git Bash", "bash.exe"),
+        ("WSL", "wsl.exe"),
+        ("Nushell", "nu.exe"),
+        ("Fish", "fish.exe"),
+    ];
+    let mut options = Vec::new();
+    for (label, name) in candidates {
+        let Some(shell) = resolve_windows_shell(name) else {
+            continue;
+        };
+        let path = executable_on_path(name)
+            .or_else(|| Path::new(&shell).is_file().then(|| PathBuf::from(&shell)));
+        let Some(path) = path else {
+            continue;
+        };
+        add_shell_option(&mut options, shell_option(shell, label, path));
+    }
+    options
+}
+
+#[cfg(not(target_os = "windows"))]
+fn available_posix_shells() -> Vec<LocalTerminalShellOption> {
+    // Keep the picker focused on shells users commonly choose for an
+    // interactive terminal. `/bin/sh`, `dash`, and similar compatibility or
+    // legacy entry points are intentionally omitted; users can still enter a
+    // less common shell manually in the settings field.
+    let candidates = [
+        ("Bash", "bash"),
+        ("Zsh", "zsh"),
+        ("Fish", "fish"),
+        ("Nushell", "nu"),
+        ("PowerShell 7", "pwsh"),
+        ("Elvish", "elvish"),
+        ("Xonsh", "xonsh"),
+    ];
+    let mut options = Vec::new();
+
+    if let Some(shell) = env::var_os("SHELL")
+        .and_then(|value| value.into_string().ok())
+        .filter(|value| Path::new(value).is_file())
+    {
+        let label = format_shell_label(&shell);
+        add_shell_option(
+            &mut options,
+            shell_option(shell.clone(), &label, PathBuf::from(shell)),
+        );
+    }
+
+    for (label, name) in candidates {
+        let path = executable_on_path(name).or_else(|| {
+            [
+                "/bin",
+                "/usr/bin",
+                "/usr/local/bin",
+                "/opt/homebrew/bin",
+                "/opt/local/bin",
+            ]
+            .iter()
+            .map(|directory| Path::new(directory).join(name))
+            .find(|candidate| candidate.is_file())
+        });
+        let Some(path) = path else {
+            continue;
+        };
+        add_shell_option(&mut options, shell_option(name.to_string(), label, path));
+    }
+    options
+}
+
+fn format_shell_label(shell: &str) -> String {
+    match shell_name(shell).as_str() {
+        "bash" => "Bash".to_string(),
+        "zsh" => "Zsh".to_string(),
+        "fish" => "Fish".to_string(),
+        "sh" => "POSIX sh".to_string(),
+        "dash" => "Dash".to_string(),
+        "ksh" => "KornShell".to_string(),
+        "tcsh" => "Tcsh".to_string(),
+        "nu" => "Nushell".to_string(),
+        "pwsh" | "powershell" => "PowerShell 7".to_string(),
+        "elvish" => "Elvish".to_string(),
+        "xonsh" => "Xonsh".to_string(),
+        _ => shell.to_string(),
+    }
 }
 
 enum LocalPtyCommand {
@@ -1353,9 +1488,9 @@ fn clamp_u16(value: u32, fallback: u16) -> u16 {
 
 #[cfg(target_os = "windows")]
 fn default_shell() -> String {
-    // 优先 PowerShell（Windows 默认），缺失时回退 cmd.exe。
-    // Server Core / 精简镜像可能没有 powershell.exe。
-    for name in ["powershell.exe", "pwsh.exe", "cmd.exe"] {
+    // 优先 PowerShell 7，缺失时回退 Windows PowerShell，再回退 cmd.exe。
+    // Server Core / 精简镜像可能没有其中某个 shell。
+    for name in ["pwsh.exe", "powershell.exe", "cmd.exe"] {
         if let Some(shell) = resolve_windows_shell(name) {
             return shell;
         }
@@ -1749,7 +1884,7 @@ mod tests {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
     use super::{
-        append_local_output_chunk, clamp_u16, cmd_args_have_explicit_command,
+        append_local_output_chunk, available_shells, clamp_u16, cmd_args_have_explicit_command,
         configure_shell_command, default_launch, local_shell_exit_summary,
         powershell_args_have_explicit_command, resolve_launch, scan_alt_screen_transition,
         shell_name, validate_launch, AltScreenTransitionScanner, LocalOsc7CwdTracker,
@@ -1837,6 +1972,15 @@ mod tests {
         assert_eq!(shell_name("/bin/zsh"), "zsh");
         assert_eq!(shell_name("-bash"), "bash");
         assert_eq!(shell_name("C:\\Windows\\System32\\cmd.exe"), "cmd.exe");
+    }
+
+    #[test]
+    fn available_shells_do_not_return_duplicate_commands_or_paths() {
+        let options = available_shells();
+
+        assert!(options
+            .windows(2)
+            .all(|pair| { pair[0].shell != pair[1].shell && pair[0].path != pair[1].path }));
     }
 
     #[test]

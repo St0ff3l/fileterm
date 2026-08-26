@@ -140,6 +140,100 @@ async fn resolve_serial_device(
     }
 }
 
+/// Open and configure a serial device once, then close it without creating a
+/// terminal worker. This validates the selected device and all line settings
+/// while keeping the test side-effect free for the workspace.
+pub async fn test_connection(app: &AppHandle, profile: &Value, tab_id: &str) -> Result<(), String> {
+    let configured_device_path = profile
+        .get("devicePath")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "串口设备路径不能为空".to_string())?;
+    let device_path = resolve_serial_device(profile, configured_device_path)
+        .await
+        .map_err(|error| error.to_string())?;
+    let baud_rate = serial_baud_rate(
+        profile
+            .get("baudRate")
+            .and_then(Value::as_u64)
+            .unwrap_or(115_200),
+    )?;
+    let serial_parity = parity(
+        profile
+            .get("parity")
+            .and_then(Value::as_str)
+            .unwrap_or("none"),
+    )?;
+    let data_bits_value = profile.get("dataBits").and_then(Value::as_u64).unwrap_or(8);
+    let stop_bits_value = profile.get("stopBits").and_then(Value::as_u64).unwrap_or(1);
+    let data_bits_value_u8 =
+        u8::try_from(data_bits_value).map_err(|_| "串口数据位超出支持范围".to_string())?;
+    let parity_wire_mode = serial_parity_wire_mode(serial_parity, data_bits_value_u8)?;
+    let configured_flow_control = profile
+        .get("flowControl")
+        .and_then(Value::as_str)
+        .unwrap_or("none");
+    let configured_rs485_mode = profile
+        .get("rs485Mode")
+        .and_then(Value::as_str)
+        .unwrap_or("none");
+    if configured_flow_control == "hardware" && configured_rs485_mode == "half-duplex" {
+        return Err("串口 RS-485 半双工不能与硬件流控同时启用".to_string());
+    }
+
+    let control_state = SerialControlState::from_profile(profile);
+    let wire_data_bits_value = wire_data_bits(data_bits_value, parity_wire_mode);
+    let mut builder = tokio_serial::new(&device_path, baud_rate)
+        .data_bits(data_bits(wire_data_bits_value)?)
+        .stop_bits(stop_bits(stop_bits_value)?)
+        .parity(serial_parity.tokio_value())
+        .flow_control(flow_control(configured_flow_control)?);
+    if let Some(dtr_on_open) = control_state.dtr {
+        builder = builder.dtr_on_open(dtr_on_open);
+    }
+    let mut stream = builder
+        .open_native_async()
+        .map_err(|error| serial_error(&device_path, error))?;
+    if matches!(parity_wire_mode, SerialParityWireMode::Native) {
+        if let Err(error) = apply_platform_parity(&stream, serial_parity) {
+            close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+            return Err(error);
+        }
+    }
+
+    let delay_before_send = profile
+        .get("rs485DelayRtsBeforeSendMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let delay_after_send = profile
+        .get("rs485DelayRtsAfterSendMs")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if delay_before_send > 60_000 || delay_after_send > 60_000 {
+        close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err("串口 RS-485 RTS 延迟必须在 0 到 60000 毫秒之间".to_string());
+    }
+    if let Err(error) = apply_rs485(
+        &mut stream,
+        configured_rs485_mode,
+        profile
+            .get("rs485RtsOnSend")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        delay_before_send as u32,
+        delay_after_send as u32,
+    ) {
+        close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err(error);
+    }
+    if let Err(error) = apply_initial_lines(&mut stream, control_state) {
+        close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+        return Err(error);
+    }
+    close_native_serial_stream(&mut stream, control_state, app, tab_id).await;
+    Ok(())
+}
+
 async fn close_native_serial_stream(
     stream: &mut tokio_serial::SerialStream,
     state: SerialControlState,

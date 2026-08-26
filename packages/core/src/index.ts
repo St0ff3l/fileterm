@@ -241,6 +241,28 @@ export const DEFAULT_SSH_CONNECTION_DEFAULTS: SshConnectionDefaults = {
   legacyAlgorithms: false
 }
 
+/** Default local terminal shell command stored separately for each desktop OS. */
+export type LocalTerminalPlatform = 'win32' | 'darwin' | 'linux'
+
+export interface LocalTerminalShellPreferences {
+  win32: string
+  darwin: string
+  linux: string
+}
+
+/** An installed shell candidate discovered on the current desktop platform. */
+export interface LocalTerminalShellOption {
+  shell: string
+  label: string
+  path: string
+}
+
+export const DEFAULT_LOCAL_TERMINAL_SHELLS: LocalTerminalShellPreferences = {
+  win32: 'pwsh.exe',
+  darwin: '/bin/zsh',
+  linux: '/bin/bash'
+}
+
 /** Scope exposed to externally launched MCP Agents such as Codex and Claude. */
 export type McpConnectionScope = 'all-saved-connections' | 'active-session' | 'default-connection'
 
@@ -1755,6 +1777,7 @@ export interface UiPreferences {
   autoCheckUpdates: boolean
   updateChannel: AppUpdateChannel
   terminalZoomLocked: boolean
+  localTerminalShells: LocalTerminalShellPreferences
   filePanelRememberRatio: boolean
   resourceMonitoringMetrics: ResourceMonitoringMetric[]
   resourceMonitoringMetricOrder: ResourceMonitoringMetric[]
@@ -1775,6 +1798,7 @@ export interface UiPreferencesInput {
   autoCheckUpdates?: boolean
   updateChannel?: UiPreferences['updateChannel']
   terminalZoomLocked?: boolean
+  localTerminalShells?: Partial<LocalTerminalShellPreferences>
   filePanelRememberRatio?: boolean
   resourceMonitoringMetrics?: ResourceMonitoringMetric[]
   resourceMonitoringMetricOrder?: ResourceMonitoringMetric[]
@@ -2150,6 +2174,7 @@ export interface FileTermDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
+  listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
   saveAiProvider(input: SaveAiProviderInput): Promise<AiProviderSummary>
@@ -2288,6 +2313,7 @@ export interface FileTermDesktopApi {
   setCommandSendPreferences(preferences: CommandSendPreferences): Promise<void>
   createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
   updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
+  testConnection(input: CreateProfileInput, profileId?: string): Promise<void>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfileFromManager(profileId: string): Promise<WorkspaceSnapshot>

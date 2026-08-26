@@ -731,6 +731,25 @@ pub struct SavedTheme {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct LocalTerminalShellPreferences {
+    #[serde(default = "default_windows_local_terminal_shell")]
+    pub win32: String,
+    #[serde(default = "default_macos_local_terminal_shell")]
+    pub darwin: String,
+    #[serde(default = "default_linux_local_terminal_shell")]
+    pub linux: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalTerminalShellPreferencesInput {
+    pub win32: Option<String>,
+    pub darwin: Option<String>,
+    pub linux: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub theme: String,
     pub locale: String,
@@ -744,6 +763,8 @@ pub struct UiPreferences {
     pub update_channel: String,
     #[serde(default)]
     pub terminal_zoom_locked: bool,
+    #[serde(default = "default_local_terminal_shells")]
+    pub local_terminal_shells: LocalTerminalShellPreferences,
     #[serde(default = "default_file_panel_remember_ratio")]
     pub file_panel_remember_ratio: bool,
     #[serde(default = "default_resource_monitoring_metrics")]
@@ -776,6 +797,7 @@ pub struct UiPreferencesInput {
     pub auto_check_updates: Option<bool>,
     pub update_channel: Option<String>,
     pub terminal_zoom_locked: Option<bool>,
+    pub local_terminal_shells: Option<LocalTerminalShellPreferencesInput>,
     pub file_panel_remember_ratio: Option<bool>,
     pub resource_monitoring_metrics: Option<Vec<String>>,
     pub resource_monitoring_metric_order: Option<Vec<String>>,
@@ -799,6 +821,50 @@ fn default_auto_check_updates() -> bool {
 
 fn default_update_channel() -> String {
     "stable".to_string()
+}
+
+fn default_windows_local_terminal_shell() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        crate::sessions::local_terminal::default_launch().shell
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        "pwsh.exe".to_string()
+    }
+}
+
+fn default_macos_local_terminal_shell() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        crate::sessions::local_terminal::default_launch().shell
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        "/bin/zsh".to_string()
+    }
+}
+
+fn default_linux_local_terminal_shell() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        crate::sessions::local_terminal::default_launch().shell
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        "/bin/bash".to_string()
+    }
+}
+
+fn default_local_terminal_shells() -> LocalTerminalShellPreferences {
+    LocalTerminalShellPreferences {
+        win32: default_windows_local_terminal_shell(),
+        darwin: default_macos_local_terminal_shell(),
+        linux: default_linux_local_terminal_shell(),
+    }
 }
 
 fn default_file_panel_remember_ratio() -> bool {
@@ -964,6 +1030,25 @@ fn normalize_resource_monitoring_metric_order(order: Vec<String>) -> Vec<String>
     normalized
 }
 
+fn normalize_local_terminal_shell(value: String, fallback: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn normalize_local_terminal_shells(
+    mut shells: LocalTerminalShellPreferences,
+) -> LocalTerminalShellPreferences {
+    let defaults = default_local_terminal_shells();
+    shells.win32 = normalize_local_terminal_shell(shells.win32, &defaults.win32);
+    shells.darwin = normalize_local_terminal_shell(shells.darwin, &defaults.darwin);
+    shells.linux = normalize_local_terminal_shell(shells.linux, &defaults.linux);
+    shells
+}
+
 fn normalize_saved_themes(themes: Vec<SavedTheme>) -> Vec<SavedTheme> {
     let mut normalized = Vec::new();
     for mut saved in themes {
@@ -1058,6 +1143,8 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
+    preferences.local_terminal_shells =
+        normalize_local_terminal_shells(preferences.local_terminal_shells);
     preferences.resource_monitoring_metrics =
         normalize_resource_monitoring_metrics(preferences.resource_monitoring_metrics);
     preferences.resource_monitoring_metric_order =
@@ -1852,6 +1939,7 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             auto_check_updates: default_auto_check_updates(),
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: default_file_panel_remember_ratio(),
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -1864,6 +1952,12 @@ pub fn app_get_ui_preferences(app: AppHandle) -> Result<UiPreferences, AppError>
             overview_section_order: default_overview_section_order(),
         })
     }
+}
+
+#[tauri::command]
+pub fn app_list_local_terminal_shells(
+) -> Vec<crate::sessions::local_terminal::LocalTerminalShellOption> {
+    crate::sessions::local_terminal::available_shells()
 }
 
 #[tauri::command]
@@ -1904,6 +1998,17 @@ pub fn app_set_ui_preferences(
     }
     if let Some(terminal_zoom_locked) = input.terminal_zoom_locked {
         preferences.terminal_zoom_locked = terminal_zoom_locked;
+    }
+    if let Some(local_terminal_shells) = input.local_terminal_shells {
+        if let Some(value) = local_terminal_shells.win32 {
+            preferences.local_terminal_shells.win32 = value;
+        }
+        if let Some(value) = local_terminal_shells.darwin {
+            preferences.local_terminal_shells.darwin = value;
+        }
+        if let Some(value) = local_terminal_shells.linux {
+            preferences.local_terminal_shells.linux = value;
+        }
     }
     if let Some(file_panel_remember_ratio) = input.file_panel_remember_ratio {
         preferences.file_panel_remember_ratio = file_panel_remember_ratio;
@@ -2005,6 +2110,28 @@ pub fn app_set_ui_preferences(
     Ok(preferences)
 }
 
+fn current_local_terminal_shell(preferences: &UiPreferences) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        preferences.local_terminal_shells.win32.clone()
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        preferences.local_terminal_shells.darwin.clone()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        preferences.local_terminal_shells.linux.clone()
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        crate::sessions::local_terminal::default_launch().shell
+    }
+}
+
 /// Toggle terminal font zoom from a native menu item while keeping the
 /// renderer and settings page on the same persisted preference/event path.
 pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, AppError> {
@@ -2019,6 +2146,7 @@ pub fn app_toggle_terminal_zoom_lock(app: AppHandle) -> Result<UiPreferences, Ap
             auto_check_updates: None,
             update_channel: None,
             terminal_zoom_locked: Some(!current.terminal_zoom_locked),
+            local_terminal_shells: None,
             file_panel_remember_ratio: None,
             resource_monitoring_metrics: None,
             resource_monitoring_metric_order: None,
@@ -4719,7 +4847,12 @@ pub async fn app_open_local_terminal(
         ),
     );
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    let launch = match crate::sessions::local_terminal::resolve_launch(options) {
+    let mut launch_options = options.unwrap_or_default();
+    if launch_options.shell.is_none() {
+        let preferences = app_get_ui_preferences(app.clone())?;
+        launch_options.shell = Some(current_local_terminal_shell(&preferences));
+    }
+    let launch = match crate::sessions::local_terminal::resolve_launch(Some(launch_options)) {
         Ok(launch) => launch,
         Err(error) => {
             crate::services::logging::error(
@@ -5698,6 +5831,38 @@ pub async fn app_update_profile(
 }
 
 #[tauri::command]
+pub async fn app_test_connection(
+    app: AppHandle,
+    profile_id: Option<String>,
+    input: serde_json::Value,
+) -> Result<(), AppError> {
+    let library_guard = lock_library_after_transfer_hydration(&app).await?;
+    let profile = crate::services::profile_ops::profile_for_connection_test(
+        &app,
+        profile_id.as_deref(),
+        input,
+    )?;
+    let resolved_profile = resolve_profile_for_session(&app, &profile)?;
+    drop(library_guard);
+
+    let test_tab_id = format!("connection-test-{}", uuid::Uuid::new_v4());
+    let profile_type = resolved_profile
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("ssh");
+    match profile_type {
+        "ssh" => crate::sessions::ssh::test_connection(&app, &resolved_profile, &test_tab_id).await,
+        "ftp" => crate::sessions::ftp::test_connection(&resolved_profile).await,
+        "telnet" => crate::sessions::telnet::test_connection(&resolved_profile).await,
+        "serial" => {
+            crate::sessions::serial::test_connection(&app, &resolved_profile, &test_tab_id).await
+        }
+        other => Err(format!("Unsupported connection type: {other}")),
+    }
+    .map_err(AppError::Command)
+}
+
+#[tauri::command]
 pub async fn app_delete_profile(
     app: AppHandle,
     profile_id: String,
@@ -6317,11 +6482,13 @@ mod ui_preferences_tests {
     use std::collections::BTreeMap;
 
     use super::{
-        default_overview_section_order, default_resource_monitoring_metric_order,
-        default_resource_monitoring_metrics, default_theme_config, default_update_channel,
+        default_local_terminal_shells, default_overview_section_order,
+        default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
+        default_theme_config, default_update_channel, normalize_local_terminal_shells,
         normalize_resource_monitoring_metric_order, normalize_theme_config,
-        normalize_ui_preferences, resolve_profile_with_connection_defaults, McpAgentPreferences,
-        SavedTheme, SshConnectionDefaults, UiPreferences, UiPreferencesInput,
+        normalize_ui_preferences, resolve_profile_with_connection_defaults,
+        LocalTerminalShellPreferences, McpAgentPreferences, SavedTheme, SshConnectionDefaults,
+        UiPreferences, UiPreferencesInput,
     };
 
     #[test]
@@ -6451,6 +6618,7 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -6483,6 +6651,7 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "nightly".to_string(),
             terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -6570,6 +6739,7 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: false,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -6617,6 +6787,7 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -6654,6 +6825,7 @@ mod ui_preferences_tests {
             auto_check_updates: true,
             update_channel: default_update_channel(),
             terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: true,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -6746,6 +6918,33 @@ mod ui_preferences_tests {
             preferences.overview_section_order,
             default_overview_section_order()
         );
+        let local_terminal_shell_defaults = default_local_terminal_shells();
+        assert_eq!(
+            preferences.local_terminal_shells.win32,
+            local_terminal_shell_defaults.win32
+        );
+        assert_eq!(
+            preferences.local_terminal_shells.darwin,
+            local_terminal_shell_defaults.darwin
+        );
+        assert_eq!(
+            preferences.local_terminal_shells.linux,
+            local_terminal_shell_defaults.linux
+        );
+    }
+
+    #[test]
+    fn restores_blank_local_terminal_shells_to_platform_defaults() {
+        let defaults = default_local_terminal_shells();
+        let normalized = normalize_local_terminal_shells(LocalTerminalShellPreferences {
+            win32: "  ".to_string(),
+            darwin: " /custom/zsh ".to_string(),
+            linux: String::new(),
+        });
+
+        assert_eq!(normalized.win32, defaults.win32);
+        assert_eq!(normalized.darwin, "/custom/zsh");
+        assert_eq!(normalized.linux, defaults.linux);
     }
 
     #[test]
@@ -6757,7 +6956,8 @@ mod ui_preferences_tests {
             "overviewShowRecent": false,
             "overviewShowAllConnections": true,
             "overviewShowQuickActions": false,
-            "overviewSectionOrder": ["recent", "allConnections", "stats", "quickActions"]
+            "overviewSectionOrder": ["recent", "allConnections", "stats", "quickActions"],
+            "localTerminalShells": { "win32": "pwsh.exe" }
         }))
         .expect("renderer preference input should deserialize");
         assert_eq!(input.auto_check_updates, Some(false));
@@ -6766,6 +6966,13 @@ mod ui_preferences_tests {
         assert_eq!(input.overview_show_recent, Some(false));
         assert_eq!(input.overview_show_all_connections, Some(true));
         assert_eq!(input.overview_show_quick_actions, Some(false));
+        assert_eq!(
+            input
+                .local_terminal_shells
+                .as_ref()
+                .and_then(|shells| shells.win32.as_deref()),
+            Some("pwsh.exe")
+        );
         assert_eq!(
             input.overview_section_order,
             Some(vec![
@@ -6784,6 +6991,7 @@ mod ui_preferences_tests {
             auto_check_updates: false,
             update_channel: "beta".to_string(),
             terminal_zoom_locked: true,
+            local_terminal_shells: default_local_terminal_shells(),
             file_panel_remember_ratio: false,
             resource_monitoring_metrics: default_resource_monitoring_metrics(),
             resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
@@ -6816,6 +7024,7 @@ mod ui_preferences_tests {
             preferences["overviewSectionOrder"],
             serde_json::json!(["recent", "allConnections", "stats", "quickActions"])
         );
+        assert_eq!(preferences["localTerminalShells"]["win32"], "pwsh.exe");
     }
 }
 
