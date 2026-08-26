@@ -196,6 +196,12 @@ export function TransferPopover({
             const progress = Math.round(Math.max(0, Math.min(100, Number(transfer.progress) || 0)))
             const transferTimestamp = getTransferTimestamp(transfer)
             const transferDateTime = formatTransferDateTime(transferTimestamp)
+            const temporaryPath =
+              transfer.partialPath && transfer.status !== 'done' && transfer.status !== 'canceled'
+                ? transfer.partialPath
+                : undefined
+            const transferMessage =
+              transfer.message && transfer.message !== transfer.partialPath ? transfer.message : undefined
             return (
               <div
                 aria-busy={Boolean(pendingActions[transfer.id])}
@@ -284,14 +290,19 @@ export function TransferPopover({
                     {t.transferDestination} {transfer.destinationPath}
                   </small>
                 ) : null}
-                {transfer.message ? (
-                  <small className="transfer-row-message" title={transfer.message}>
+                {temporaryPath ? (
+                  <small className="transfer-row-path" title={temporaryPath}>
+                    {t.transferTemporaryFile} {temporaryPath}
+                  </small>
+                ) : null}
+                {transferMessage ? (
+                  <small className="transfer-row-message" title={transferMessage}>
                     {transfer.manifest && !isCompletedTransfer(transfer) ? (
                       <span className="transfer-row-current-item-label">
                         {transfer.direction === 'download' ? t.currentDownloadItem : t.currentUploadItem}
                       </span>
                     ) : null}
-                    {transfer.message}
+                    {transferMessage}
                   </small>
                 ) : null}
               </div>
