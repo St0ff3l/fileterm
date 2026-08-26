@@ -1543,6 +1543,25 @@ async fn emit_terminal_data(app: &AppHandle, tab_id: &str, chunk: &str) {
 
 /// Mirrors Electron's `followShellCwd`: only a confirmed shell CWD update may
 /// move the file panel, and only while the user has Follow terminal enabled.
+///
+/// The first SFTP listing is intentionally detached from the terminal loop so
+/// a slow server cannot block terminal input. Once the shell reports its CWD,
+/// that detached request is stale even if it started with the same path that is
+/// still visible in the snapshot. Do not let its result put the old directory
+/// rows back under the new CWD path.
+fn initial_remote_listing_matches_current_session(
+    initial_remote_path: &str,
+    current_remote_path: &str,
+    shell_cwd: Option<&str>,
+    follow_shell_cwd: bool,
+) -> bool {
+    current_remote_path == initial_remote_path
+        && (!follow_shell_cwd
+            || shell_cwd
+                .map(|cwd| cwd == initial_remote_path)
+                .unwrap_or(true))
+}
+
 #[allow(clippy::too_many_arguments)] // Protocol/session context is intentionally explicit at this async boundary.
 async fn follow_shell_cwd(
     app: AppHandle,
@@ -4668,34 +4687,49 @@ async fn run_worker_loop(
                         return;
                     }
 
-                    let initial_error = initial_files.as_ref().err().cloned();
                     let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
+                    let mut initial_listing_is_current = false;
                     if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
-                        session.remote_files_loading = false;
                         session.remote_capabilities = Some(remote_capabilities);
-                        if let Ok(files) = initial_files {
-                            session.remote_files = files;
+                        initial_listing_is_current = initial_remote_listing_matches_current_session(
+                            &initial_remote_path,
+                            &session.remote_path,
+                            session.shell_cwd.as_deref(),
+                            session.follow_shell_cwd,
+                        );
+                        if initial_listing_is_current {
+                            session.remote_files_loading = false;
+                            if let Ok(files) = &initial_files {
+                                session.remote_files = files.clone();
+                            }
+                        } else if session.remote_path != initial_remote_path {
+                            // A manual navigation or a completed CWD follow
+                            // owns the current listing. The detached startup
+                            // request must not keep its loading flag alive.
+                            session.remote_files_loading = false;
                         }
                     }
 
-                    if let Some(error) = initial_error {
-                        crate::services::logging::session(
-                            &initial_app,
-                            "WARN",
-                            "sftp",
-                            &initial_tab_id,
-                            format!("initial directory listing failed: {error}"),
-                        );
-                        // A usable SFTP channel can still lack access to the
-                        // profile's configured starting directory.
-                        emit_terminal_data(
-                            &initial_app,
-                            &initial_tab_id,
-                            &format!(
-                                "\r\n[files] 列出目录 {initial_remote_path} 失败: {error}\r\n"
-                            ),
-                        )
-                        .await;
+                    if initial_listing_is_current {
+                        if let Some(error) = initial_files.as_ref().err() {
+                            crate::services::logging::session(
+                                &initial_app,
+                                "WARN",
+                                "sftp",
+                                &initial_tab_id,
+                                format!("initial directory listing failed: {error}"),
+                            );
+                            // A usable SFTP channel can still lack access to the
+                            // profile's configured starting directory.
+                            emit_terminal_data(
+                                &initial_app,
+                                &initial_tab_id,
+                                &format!(
+                                    "\r\n[files] 列出目录 {initial_remote_path} 失败: {error}\r\n"
+                                ),
+                            )
+                            .await;
+                        }
                     }
 
                     if initial_cancellation.is_cancelled() {
@@ -9055,13 +9089,13 @@ mod tests {
         coalesce_terminal_input, contains_interrupt_byte, decode_bytes, default_ssh_key_paths,
         detect_remote_exec_input_kind, effective_remote_file_type, effective_remote_forward_port,
         encode_text, enqueue_tunnel_command, exec_channel_enabled, finish_shell_setup_suppression,
-        format_sftp_unavailable_reason, is_password_prompt, is_root_upload_staging_path,
-        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
-        merge_system_metrics_history, missing_password_credential, parent_remote_item,
-        parent_remote_path, parse_root_file_access_method, parse_root_file_list,
-        password_for_authentication, privilege_command_from_terminal_input,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        resource_monitoring_interval_seconds, root_access_auth_failed,
+        format_sftp_unavailable_reason, initial_remote_listing_matches_current_session,
+        is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
+        looks_like_root_prompt, looks_like_shell_prompt, merge_system_metrics_history,
+        missing_password_credential, parent_remote_item, parent_remote_path,
+        parse_root_file_access_method, parse_root_file_list, password_for_authentication,
+        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
         root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
         root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
@@ -9214,6 +9248,31 @@ mod tests {
         assert!(!exec_channel_enabled(&serde_json::json!({
             "enableExecChannel": false
         })));
+    }
+
+    #[test]
+    fn initial_remote_listing_cannot_overwrite_a_followed_shell_directory() {
+        assert!(!initial_remote_listing_matches_current_session(
+            "/",
+            "/",
+            Some("/home/stoffel"),
+            true
+        ));
+        assert!(initial_remote_listing_matches_current_session(
+            "/home/stoffel",
+            "/home/stoffel",
+            Some("/home/stoffel"),
+            true
+        ));
+        assert!(initial_remote_listing_matches_current_session(
+            "/", "/", None, true
+        ));
+        assert!(!initial_remote_listing_matches_current_session(
+            "/",
+            "/home/stoffel",
+            Some("/home/stoffel"),
+            true
+        ));
     }
 
     #[test]
