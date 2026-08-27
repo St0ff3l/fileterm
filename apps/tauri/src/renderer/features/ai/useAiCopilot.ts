@@ -185,7 +185,7 @@ export function useAiCopilot() {
         setIsLoading(false)
       }
     }
-  }, [applyConversation, selectProvider])
+  }, [selectProvider])
 
   useEffect(() => {
     mountedRef.current = true
@@ -884,8 +884,10 @@ export function useAiCopilot() {
     setErrorMessage(null)
     setUsage(null)
     setToolActivities([])
+    setContextPreview(null)
+    clearToolApprovalState()
     applyConversation(null)
-  }, [applyConversation, isStreaming])
+  }, [applyConversation, clearToolApprovalState, isStreaming])
 
   const currentProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null
   // Effective model: user-selected override > provider's default model

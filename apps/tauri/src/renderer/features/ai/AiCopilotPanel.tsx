@@ -356,6 +356,8 @@ export function AiCopilotPanel({
   const openNewConversation = () => {
     if (isStreaming) return
     newChat()
+    setDraft('')
+    setConversationSearch('')
     setIsConversationListOpen(false)
   }
 

@@ -5719,8 +5719,8 @@ mod tests {
         stream_openai_compatible_chat, stream_openai_compatible_chat_with_tools,
         stream_openai_responses, stream_openai_responses_with_tools, system_prompt,
         test_openai_compatible_chat, title_from_user_message, title_summary_chat_messages,
-        title_summary_history_items, validate_context_for_mode, write_json_file,
-        AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
+        title_summary_history_items, validate_context_for_mode, validate_message_id,
+        write_json_file, AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
         AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
         AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary,
         AiStreamEvent, ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot,
@@ -6903,6 +6903,22 @@ mod tests {
             normalize_ai_title_suggestion(&"a".repeat(MAX_AI_TITLE_SUGGESTION_LENGTH + 1)).is_err()
         );
         assert!(normalize_ai_title_suggestion("   ").is_err());
+    }
+
+    #[test]
+    fn ai_message_ids_are_bounded_and_path_safe() {
+        assert_eq!(
+            validate_message_id("  ai-message-123  ")
+                .expect("generated message ID should be accepted"),
+            "ai-message-123"
+        );
+        for invalid in ["", "   ", "../message", "message_id", "message/id"] {
+            assert!(
+                validate_message_id(invalid).is_err(),
+                "invalid ID should be rejected: {invalid:?}"
+            );
+        }
+        assert!(validate_message_id(&"a".repeat(161)).is_err());
     }
 
     #[tokio::test]
