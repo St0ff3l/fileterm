@@ -643,141 +643,83 @@
   font-size: 13px;
 }
 
-/* Keep the reconnect field and its hint on the same label/control tracks as
-   the reliability grid below. This removes the old flex row plus arbitrary
-   hint indentation that made the section look vertically unrelated. */
-.connection-reconnect-limit-row {
-  display: grid;
-  grid-template-columns: minmax(120px, max-content) minmax(150px, 224px);
+/* Reconnect limit box inside auto reconnect toggle */
+.reconnect-auto-limit-box {
+  display: flex;
   align-items: center;
-  column-gap: 8px;
-  row-gap: 4px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+  margin-left: 22px;
+  max-width: calc(100% - 22px);
 }
 
-.connection-reconnect-limit {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: minmax(120px, max-content) minmax(150px, 224px);
+.reconnect-auto-limit-label {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: var(--button-height-md, 36px);
+  font-size: 12px;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.3;
-}
-
-.connection-reconnect-limit > span {
-  min-width: 0;
   white-space: nowrap;
 }
 
-.connection-reconnect-limit input {
+.reconnect-auto-limit-label input {
+  width: 90px;
+  height: var(--button-height-md, 36px);
+  min-height: var(--button-height-md, 36px);
+  padding: 0 10px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.reconnect-auto-limit-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.reliability-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-left: 22px;
+  max-width: calc(100% - 22px);
+}
+
+.reliability-field-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reliability-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.reliability-field-box input {
   width: 100%;
   height: var(--button-height-md, 36px);
   min-height: var(--button-height-md, 36px);
-  max-width: 224px;
   box-sizing: border-box;
   padding: 0 10px;
-  line-height: 1.2;
-}
-
-.connection-reconnect-limit-row > .connection-reconnect-hint {
-  grid-column: 2;
-  min-width: 0;
-  margin: 0;
-}
-
-/* Timeout and keepalive values share a two-column row rhythm. A wider label
-   track keeps CJK labels on one line without changing the existing general
-   SSH grid used by the other connection fields. */
-.ssh-grid.connection-reliability-grid {
-  align-items: center;
-  gap: 10px 16px;
-}
-
-.ssh-grid .connection-reliability-field {
-  display: grid;
-  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: var(--button-height-md, 36px);
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: var(--input-bg);
+  color: var(--text-main);
   font-size: 13px;
-  line-height: 1.3;
-}
-
-.connection-reliability-field > span {
-  min-width: 0;
-  color: var(--text-secondary);
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.ssh-grid.connection-reliability-grid > .ssh-field-hint {
-  margin-top: 0;
-  margin-left: calc(120px + 8px);
-}
-
-.ssh-grid .connection-reliability-toggle {
-  min-width: 0;
-  min-height: var(--button-height-md, 36px);
-  line-height: 1.3;
-}
-
-.connection-reliability-toggle .advanced-toggle-name {
-  line-height: 1.3;
-}
-
-.connection-reliability-field:has(input:disabled),
-.connection-reliability-toggle:has(input:disabled) {
-  color: var(--text-muted);
 }
 
 @media (max-width: 560px) {
-  .connection-reconnect-limit-row {
-    grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
-  }
-
-  .ssh-grid.connection-reliability-grid {
+  .reliability-inputs-grid {
     grid-template-columns: 1fr;
-  }
-
-  .connection-reconnect-limit {
-    grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
-  }
-
-  .connection-reconnect-limit input {
-    max-width: none;
-  }
-}
-
-@media (max-width: 420px) {
-  .connection-reconnect-limit-row {
-    grid-template-columns: 1fr;
-  }
-
-  .connection-reconnect-limit {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .connection-reconnect-limit > span {
-    white-space: normal;
-  }
-
-  .connection-reconnect-limit-row > .connection-reconnect-hint,
-  .ssh-grid.connection-reliability-grid > .ssh-field-hint {
-    grid-column: 1;
-    margin-left: 0;
-  }
-
-  .ssh-grid .connection-reliability-field {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .connection-reliability-field > span {
-    white-space: normal;
   }
 }
 

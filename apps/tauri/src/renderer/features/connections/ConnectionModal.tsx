@@ -1015,106 +1015,128 @@ export function ConnectionModal({
                             <span className="advanced-toggle-name">{t.autoReconnect}</span>
                           </label>
                           <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
+                          {effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'auto' ? (
+                            <div className="reconnect-auto-limit-box">
+                              <label className="reconnect-auto-limit-label">
+                                <span>{t.reconnectMaxAttempts}:</span>
+                                <input
+                                  inputMode="numeric"
+                                  min={0}
+                                  max={4294967295}
+                                  type="number"
+                                  value={form.reconnectMaxAttempts ?? 0}
+                                  onChange={(event) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      reconnectMaxAttempts: Math.max(
+                                        0,
+                                        Math.min(4294967295, Number(event.target.value) || 0)
+                                      )
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <span className="reconnect-auto-limit-hint">{t.reconnectMaxAttemptsHint}</span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="connection-reconnect-limit-row">
-                        <label className="serial-reconnect-limit connection-reconnect-limit">
-                          <span>{t.reconnectMaxAttempts}:</span>
-                          <input
-                            inputMode="numeric"
-                            min={0}
-                            max={4294967295}
-                            type="number"
-                            value={form.reconnectMaxAttempts ?? 0}
-                            onChange={(event) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
-                              }))
-                            }
-                          />
-                        </label>
-                        <p className="advanced-toggle-hint connection-reconnect-hint">{t.reconnectMaxAttemptsHint}</p>
-                      </div>
                     </div>
-                    <div className="ssh-grid connection-reliability-grid">
-                      <label className="connection-reliability-field">
-                        <span>{t.connectionTimeout}:</span>
-                        <input
-                          inputMode="numeric"
-                          min={5}
-                          max={300}
-                          type="number"
-                          value={form.connectTimeoutSeconds ?? 30}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              connectTimeoutSeconds: Math.max(5, Math.min(300, Number(event.target.value) || 5))
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="connection-reliability-field">
-                        <span>{t.operationTimeout}:</span>
-                        <input
-                          inputMode="numeric"
-                          min={5}
-                          max={3600}
-                          type="number"
-                          value={form.operationTimeoutSeconds ?? 60}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              operationTimeoutSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="ssh-checkbox advanced-toggle-label connection-reliability-toggle span-2">
-                        <input
-                          checked={form.keepaliveEnabled !== false}
-                          type="checkbox"
-                          onChange={(event) => setForm((prev) => ({ ...prev, keepaliveEnabled: event.target.checked }))}
-                        />
-                        <span className="advanced-toggle-name">{t.keepalive}</span>
-                      </label>
-                      {form.keepaliveEnabled !== false ? (
-                        <>
-                          <label className="connection-reliability-field">
-                            <span>{t.keepaliveInterval}:</span>
+                    <div className="reconnect-mode-group">
+                      <div className="reconnect-mode-group__label">{t.timeoutAndKeepalive}</div>
+                      <div className="advanced-toggle-list">
+                        <div className="advanced-toggle-row">
+                          <div className="reliability-inputs-grid">
+                            <label className="reliability-field-box">
+                              <span className="reliability-field-label">{t.connectionTimeout}:</span>
+                              <input
+                                inputMode="numeric"
+                                min={5}
+                                max={300}
+                                type="number"
+                                value={form.connectTimeoutSeconds ?? 30}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    connectTimeoutSeconds: Math.max(5, Math.min(300, Number(event.target.value) || 5))
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="reliability-field-box">
+                              <span className="reliability-field-label">{t.operationTimeout}:</span>
+                              <input
+                                inputMode="numeric"
+                                min={5}
+                                max={3600}
+                                type="number"
+                                value={form.operationTimeoutSeconds ?? 60}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    operationTimeoutSeconds: Math.max(
+                                      5,
+                                      Math.min(3600, Number(event.target.value) || 5)
+                                    )
+                                  }))
+                                }
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
                             <input
-                              inputMode="numeric"
-                              min={5}
-                              max={3600}
-                              type="number"
-                              value={form.keepaliveIntervalSeconds ?? 30}
+                              checked={form.keepaliveEnabled !== false}
+                              type="checkbox"
                               onChange={(event) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
-                                }))
+                                setForm((prev) => ({ ...prev, keepaliveEnabled: event.target.checked }))
                               }
                             />
+                            <span className="advanced-toggle-name">{t.keepalive}</span>
                           </label>
-                          <label className="connection-reliability-field">
-                            <span>{t.keepaliveMaxMisses}:</span>
-                            <input
-                              inputMode="numeric"
-                              min={1}
-                              max={32}
-                              type="number"
-                              value={form.keepaliveMaxMisses ?? 3}
-                              onChange={(event) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
-                                }))
-                              }
-                            />
-                          </label>
-                          <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
-                        </>
-                      ) : null}
+                          <p className="advanced-toggle-hint">{t.keepaliveHint}</p>
+                          {form.keepaliveEnabled !== false ? (
+                            <div className="reliability-inputs-grid">
+                              <label className="reliability-field-box">
+                                <span className="reliability-field-label">{t.keepaliveInterval}:</span>
+                                <input
+                                  inputMode="numeric"
+                                  min={5}
+                                  max={3600}
+                                  type="number"
+                                  value={form.keepaliveIntervalSeconds ?? 30}
+                                  onChange={(event) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      keepaliveIntervalSeconds: Math.max(
+                                        5,
+                                        Math.min(3600, Number(event.target.value) || 5)
+                                      )
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="reliability-field-box">
+                                <span className="reliability-field-label">{t.keepaliveMaxMisses}:</span>
+                                <input
+                                  inputMode="numeric"
+                                  min={1}
+                                  max={32}
+                                  type="number"
+                                  value={form.keepaliveMaxMisses ?? 3}
+                                  onChange={(event) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
+                                    }))
+                                  }
+                                />
+                              </label>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                     <div className="reconnect-mode-group network-routing-group">
                       <div className="reconnect-mode-group__label network-routing-group__label">
@@ -1221,106 +1243,128 @@ export function ConnectionModal({
                             <span className="advanced-toggle-name">{t.autoReconnect}</span>
                           </label>
                           <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
+                          {form.reconnectMode === 'auto' ? (
+                            <div className="reconnect-auto-limit-box">
+                              <label className="reconnect-auto-limit-label">
+                                <span>{t.reconnectMaxAttempts}:</span>
+                                <input
+                                  inputMode="numeric"
+                                  min={0}
+                                  max={4294967295}
+                                  type="number"
+                                  value={form.reconnectMaxAttempts ?? 0}
+                                  onChange={(event) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      reconnectMaxAttempts: Math.max(
+                                        0,
+                                        Math.min(4294967295, Number(event.target.value) || 0)
+                                      )
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <span className="reconnect-auto-limit-hint">{t.reconnectMaxAttemptsHint}</span>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="connection-reconnect-limit-row">
-                        <label className="serial-reconnect-limit connection-reconnect-limit">
-                          <span>{t.reconnectMaxAttempts}:</span>
-                          <input
-                            inputMode="numeric"
-                            min={0}
-                            max={4294967295}
-                            type="number"
-                            value={form.reconnectMaxAttempts ?? 0}
-                            onChange={(event) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
-                              }))
-                            }
-                          />
-                        </label>
-                        <p className="advanced-toggle-hint connection-reconnect-hint">{t.reconnectMaxAttemptsHint}</p>
-                      </div>
                     </div>
-                    <div className="ssh-grid connection-reliability-grid">
-                      <label className="connection-reliability-field">
-                        <span>{t.connectionTimeout}:</span>
-                        <input
-                          inputMode="numeric"
-                          min={5}
-                          max={300}
-                          type="number"
-                          value={form.connectTimeoutSeconds ?? 30}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              connectTimeoutSeconds: Math.max(5, Math.min(300, Number(event.target.value) || 5))
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="connection-reliability-field">
-                        <span>{t.operationTimeout}:</span>
-                        <input
-                          inputMode="numeric"
-                          min={5}
-                          max={3600}
-                          type="number"
-                          value={form.operationTimeoutSeconds ?? 60}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              operationTimeoutSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
-                            }))
-                          }
-                        />
-                      </label>
-                      <label className="ssh-checkbox advanced-toggle-label connection-reliability-toggle span-2">
-                        <input
-                          checked={form.keepaliveEnabled !== false}
-                          type="checkbox"
-                          onChange={(event) => setForm((prev) => ({ ...prev, keepaliveEnabled: event.target.checked }))}
-                        />
-                        <span className="advanced-toggle-name">{t.keepalive}</span>
-                      </label>
-                      {form.keepaliveEnabled !== false ? (
-                        <>
-                          <label className="connection-reliability-field">
-                            <span>{t.keepaliveInterval}:</span>
+                    <div className="reconnect-mode-group">
+                      <div className="reconnect-mode-group__label">{t.timeoutAndKeepalive}</div>
+                      <div className="advanced-toggle-list">
+                        <div className="advanced-toggle-row">
+                          <div className="reliability-inputs-grid">
+                            <label className="reliability-field-box">
+                              <span className="reliability-field-label">{t.connectionTimeout}:</span>
+                              <input
+                                inputMode="numeric"
+                                min={5}
+                                max={300}
+                                type="number"
+                                value={form.connectTimeoutSeconds ?? 30}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    connectTimeoutSeconds: Math.max(5, Math.min(300, Number(event.target.value) || 5))
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label className="reliability-field-box">
+                              <span className="reliability-field-label">{t.operationTimeout}:</span>
+                              <input
+                                inputMode="numeric"
+                                min={5}
+                                max={3600}
+                                type="number"
+                                value={form.operationTimeoutSeconds ?? 60}
+                                onChange={(event) =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    operationTimeoutSeconds: Math.max(
+                                      5,
+                                      Math.min(3600, Number(event.target.value) || 5)
+                                    )
+                                  }))
+                                }
+                              />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="advanced-toggle-row">
+                          <label className="ssh-checkbox advanced-toggle-label">
                             <input
-                              inputMode="numeric"
-                              min={5}
-                              max={3600}
-                              type="number"
-                              value={form.keepaliveIntervalSeconds ?? 30}
+                              checked={form.keepaliveEnabled !== false}
+                              type="checkbox"
                               onChange={(event) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
-                                }))
+                                setForm((prev) => ({ ...prev, keepaliveEnabled: event.target.checked }))
                               }
                             />
+                            <span className="advanced-toggle-name">{t.keepalive}</span>
                           </label>
-                          <label className="connection-reliability-field">
-                            <span>{t.keepaliveMaxMisses}:</span>
-                            <input
-                              inputMode="numeric"
-                              min={1}
-                              max={32}
-                              type="number"
-                              value={form.keepaliveMaxMisses ?? 3}
-                              onChange={(event) =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
-                                }))
-                              }
-                            />
-                          </label>
-                          <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
-                        </>
-                      ) : null}
+                          <p className="advanced-toggle-hint">{t.keepaliveHint}</p>
+                          {form.keepaliveEnabled !== false ? (
+                            <div className="reliability-inputs-grid">
+                              <label className="reliability-field-box">
+                                <span className="reliability-field-label">{t.keepaliveInterval}:</span>
+                                <input
+                                  inputMode="numeric"
+                                  min={5}
+                                  max={3600}
+                                  type="number"
+                                  value={form.keepaliveIntervalSeconds ?? 30}
+                                  onChange={(event) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      keepaliveIntervalSeconds: Math.max(
+                                        5,
+                                        Math.min(3600, Number(event.target.value) || 5)
+                                      )
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="reliability-field-box">
+                                <span className="reliability-field-label">{t.keepaliveMaxMisses}:</span>
+                                <input
+                                  inputMode="numeric"
+                                  min={1}
+                                  max={32}
+                                  type="number"
+                                  value={form.keepaliveMaxMisses ?? 3}
+                                  onChange={(event) =>
+                                    setForm((prev) => ({
+                                      ...prev,
+                                      keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
+                                    }))
+                                  }
+                                />
+                              </label>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   </fieldset>
                 ) : null}

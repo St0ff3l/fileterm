@@ -889,6 +889,7 @@ const zhCN = {
   telnetInsecureHint: 'Telnet 不加密传输，用户名、命令和输出都可能被网络中的其他人看到。能用 SSH 时请优先 SSH。',
   telnetTunnelHint:
     '如需加密传输，请先通过 SSH 隧道或代理把远端端口转发到本机，再将 Telnet 连接到本地端口。Telnet 本身不会提供加密。',
+  timeoutAndKeepalive: '超时与保活',
   connectionTimeout: '连接超时（秒）',
   operationTimeout: '操作超时（秒）',
   keepalive: '启用保活',
@@ -2528,6 +2529,7 @@ const enUS: typeof zhCN = {
     'Telnet is unencrypted: usernames, commands, and output may be visible to others on the network. Prefer SSH whenever possible.',
   telnetTunnelHint:
     'For encryption, first forward the remote port to a local port through an SSH tunnel or proxy, then connect Telnet to that local port. Telnet itself does not encrypt traffic.',
+  timeoutAndKeepalive: 'Timeouts & Keepalive',
   connectionTimeout: 'Connect timeout (seconds)',
   operationTimeout: 'Operation timeout (seconds)',
   keepalive: 'Enable keepalive',
