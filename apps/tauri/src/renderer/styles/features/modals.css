@@ -728,6 +728,28 @@
   grid-template-columns: none;
 }
 
+.session-log-config-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  margin-left: 22px;
+  max-width: calc(100% - 22px);
+}
+
+.session-log-directory-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-log-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
 .session-log-directory-control {
   display: flex;
   align-items: center;
@@ -749,6 +771,20 @@
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular);
   white-space: nowrap;
+}
+
+.session-log-inline-hint {
+  margin: 0 !important;
+  margin-top: 4px !important;
+}
+
+.session-log-serial-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-dark);
 }
 
 .serial-port-picker {

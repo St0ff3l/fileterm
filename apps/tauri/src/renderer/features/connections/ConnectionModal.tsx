@@ -1778,89 +1778,104 @@ export function ConnectionModal({
             ) : null}
             {section === 'session-log' ? (
               <div className="ssh-form-page">
-                <fieldset className="ssh-fieldset narrow">
+                <fieldset className="ssh-fieldset">
                   <legend>{t.sessionLogs}</legend>
-                  <div className="ssh-grid single">
-                    <label className="ssh-checkbox advanced-toggle-label">
-                      <input
-                        checked={form.sessionLogEnabled === true}
-                        onChange={(event) =>
-                          setForm((previous) => ({ ...previous, sessionLogEnabled: event.target.checked }))
-                        }
-                        type="checkbox"
-                      />
-                      <span className="advanced-toggle-name">{t.autoSaveSessionLog}</span>
-                    </label>
-                    <p className="ssh-field-hint">{t.autoSaveSessionLogHint}</p>
-                    <label>
-                      {t.sessionLogDirectory}:
-                      <div className="session-log-directory-control">
-                        <input
-                          readOnly
-                          placeholder={t.sessionLogDefaultDirectory}
-                          spellCheck={false}
-                          value={form.sessionLogDirectory ?? ''}
-                        />
-                        <button
-                          aria-busy={isSelectingSessionLogDirectory}
-                          className="flat-button"
-                          disabled={isSelectingSessionLogDirectory}
-                          onClick={() => void chooseSessionLogDirectory()}
-                          type="button"
-                        >
-                          <StableButtonContent
-                            busy={isSelectingSessionLogDirectory}
-                            busyLabel={t.choosingDirectory}
-                            label={t.chooseDirectory}
+                  <div className="reconnect-mode-group">
+                    <div className="reconnect-mode-group__label">{t.sessionLogs}</div>
+                    <div className="advanced-toggle-list">
+                      <div className="advanced-toggle-row">
+                        <label className="ssh-checkbox advanced-toggle-label">
+                          <input
+                            checked={form.sessionLogEnabled === true}
+                            onChange={(event) =>
+                              setForm((previous) => ({ ...previous, sessionLogEnabled: event.target.checked }))
+                            }
+                            type="checkbox"
                           />
-                        </button>
-                        {form.sessionLogDirectory ? (
-                          <button
-                            className="flat-button"
-                            onClick={() => setForm((previous) => ({ ...previous, sessionLogDirectory: '' }))}
-                            type="button"
-                          >
-                            {t.clear}
-                          </button>
+                          <span className="advanced-toggle-name">{t.autoSaveSessionLog}</span>
+                        </label>
+                        <p className="advanced-toggle-hint">{t.autoSaveSessionLogHint}</p>
+                        {form.sessionLogEnabled === true ? (
+                          <div className="session-log-config-box">
+                            <div className="session-log-directory-block">
+                              <span className="session-log-field-label">{t.sessionLogDirectory}:</span>
+                              <div className="session-log-directory-control">
+                                <input
+                                  readOnly
+                                  placeholder={t.sessionLogDefaultDirectory}
+                                  spellCheck={false}
+                                  value={form.sessionLogDirectory ?? ''}
+                                />
+                                <button
+                                  aria-busy={isSelectingSessionLogDirectory}
+                                  className="flat-button"
+                                  disabled={isSelectingSessionLogDirectory}
+                                  onClick={() => void chooseSessionLogDirectory()}
+                                  type="button"
+                                >
+                                  <StableButtonContent
+                                    busy={isSelectingSessionLogDirectory}
+                                    busyLabel={t.choosingDirectory}
+                                    label={t.chooseDirectory}
+                                  />
+                                </button>
+                                {form.sessionLogDirectory ? (
+                                  <button
+                                    className="flat-button"
+                                    onClick={() => setForm((previous) => ({ ...previous, sessionLogDirectory: '' }))}
+                                    type="button"
+                                  >
+                                    {t.clear}
+                                  </button>
+                                ) : null}
+                              </div>
+                              <p className="advanced-toggle-hint session-log-inline-hint">{t.sessionLogPrivacyHint}</p>
+                            </div>
+                            {form.type === 'serial' ? (
+                              <div className="session-log-serial-options">
+                                <label className="ssh-checkbox advanced-toggle-label">
+                                  <input
+                                    checked={form.sessionLogIncludeInput === true}
+                                    onChange={(event) =>
+                                      setForm((previous) => ({
+                                        ...previous,
+                                        sessionLogIncludeInput: event.target.checked
+                                      }))
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span className="advanced-toggle-name">{t.serialSessionLogIncludeInput}</span>
+                                </label>
+                                <label className="ssh-checkbox advanced-toggle-label">
+                                  <input
+                                    checked={form.sessionLogTimestamps === true}
+                                    onChange={(event) =>
+                                      setForm((previous) => ({
+                                        ...previous,
+                                        sessionLogTimestamps: event.target.checked
+                                      }))
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span className="advanced-toggle-name">{t.serialSessionLogTimestamps}</span>
+                                </label>
+                                <label className="ssh-checkbox advanced-toggle-label">
+                                  <input
+                                    checked={form.sessionLogRaw === true}
+                                    onChange={(event) =>
+                                      setForm((previous) => ({ ...previous, sessionLogRaw: event.target.checked }))
+                                    }
+                                    type="checkbox"
+                                  />
+                                  <span className="advanced-toggle-name">{t.serialSessionLogRaw}</span>
+                                </label>
+                                <p className="advanced-toggle-hint">{t.serialSessionLogOptionsHint}</p>
+                              </div>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
-                    </label>
-                    <p className="ssh-field-hint">{t.sessionLogPrivacyHint}</p>
-                    {form.type === 'serial' ? (
-                      <>
-                        <label className="ssh-checkbox advanced-toggle-label">
-                          <input
-                            checked={form.sessionLogIncludeInput === true}
-                            onChange={(event) =>
-                              setForm((previous) => ({ ...previous, sessionLogIncludeInput: event.target.checked }))
-                            }
-                            type="checkbox"
-                          />
-                          <span className="advanced-toggle-name">{t.serialSessionLogIncludeInput}</span>
-                        </label>
-                        <label className="ssh-checkbox advanced-toggle-label">
-                          <input
-                            checked={form.sessionLogTimestamps === true}
-                            onChange={(event) =>
-                              setForm((previous) => ({ ...previous, sessionLogTimestamps: event.target.checked }))
-                            }
-                            type="checkbox"
-                          />
-                          <span className="advanced-toggle-name">{t.serialSessionLogTimestamps}</span>
-                        </label>
-                        <label className="ssh-checkbox advanced-toggle-label">
-                          <input
-                            checked={form.sessionLogRaw === true}
-                            onChange={(event) =>
-                              setForm((previous) => ({ ...previous, sessionLogRaw: event.target.checked }))
-                            }
-                            type="checkbox"
-                          />
-                          <span className="advanced-toggle-name">{t.serialSessionLogRaw}</span>
-                        </label>
-                        <p className="ssh-field-hint">{t.serialSessionLogOptionsHint}</p>
-                      </>
-                    ) : null}
+                    </div>
                   </div>
                 </fieldset>
               </div>
