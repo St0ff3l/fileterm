@@ -1,16 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FileTermDesktopApi, SecuritySettings } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
+import { FeedbackText } from '../common/FeedbackText'
+import { waitForMinimumBusyDuration } from '../common/operation-timing'
+import { SessionLockScreen } from './SessionLockScreen'
 
-type SecurityOperation = 'load' | 'session' | 'backup' | null
+type SecurityOperation = 'load' | null
+type SecurityActionFeedback = {
+  target: 'session' | 'backup'
+  kind: 'success' | 'error'
+  message: string
+}
 
 export function SecuritySettingsPanel({
   desktopApi,
-  notice
+  notice,
+  focusBackupPasswordRequest = 0,
+  onBackupPasswordFocusHandled,
+  onBackupPasswordSaved
 }: {
   desktopApi?: FileTermDesktopApi
   notice?: string | null
+  focusBackupPasswordRequest?: number
+  onBackupPasswordFocusHandled?: () => void
+  onBackupPasswordSaved?: () => void
 }) {
   const [settings, setSettings] = useState<SecuritySettings | null>(null)
   const [lockEnabled, setLockEnabled] = useState(false)
@@ -20,20 +34,20 @@ export function SecuritySettingsPanel({
   const [backupPassword, setBackupPassword] = useState('')
   const [backupPasswordConfirmation, setBackupPasswordConfirmation] = useState('')
   const [operation, setOperation] = useState<SecurityOperation>('load')
+  const [isSessionSaving, setIsSessionSaving] = useState(false)
+  const [isBackupSaving, setIsBackupSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(notice ?? null)
+  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null)
+  const [actionFeedback, setActionFeedback] = useState<SecurityActionFeedback | null>(null)
+  const [previewMode, setPreviewMode] = useState<'loading' | 'locked' | null>(null)
+  const backupPasswordSectionRef = useRef<HTMLDivElement>(null)
+  const backupPasswordInputRef = useRef<HTMLInputElement>(null)
 
   const applySettings = (next: SecuritySettings) => {
     setSettings(next)
     setLockEnabled(next.lockEnabled)
     setIdleLockMinutes(next.idleLockMinutes)
   }
-
-  useEffect(() => {
-    if (notice) {
-      setFeedbackMessage(notice)
-    }
-  }, [notice])
 
   useEffect(() => {
     let canceled = false
@@ -70,20 +84,39 @@ export function SecuritySettingsPanel({
     }
   }, [desktopApi])
 
+  useEffect(() => {
+    if (!desktopApi || focusBackupPasswordRequest <= 0 || operation !== null) return
+
+    const frame = window.requestAnimationFrame(() => {
+      backupPasswordSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      backupPasswordInputRef.current?.focus({ preventScroll: true })
+      onBackupPasswordFocusHandled?.()
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [desktopApi, focusBackupPasswordRequest, onBackupPasswordFocusHandled, operation])
+
   const saveSessionSettings = async () => {
-    if (!desktopApi || operation) return
+    if (!desktopApi || operation || isSessionSaving) return
     if (lockPassword && lockPassword !== lockPasswordConfirmation) {
-      setErrorMessage(t.securityPasswordMismatch)
+      const message = t.securityPasswordMismatch
+      setErrorMessage(message)
+      setActionFeedback({ target: 'session', kind: 'error', message })
       return
     }
     if (lockEnabled && !settings?.hasLockPassword && !lockPassword) {
-      setErrorMessage(t.securityLockPasswordRequired)
+      const message = t.securityLockPasswordRequired
+      setErrorMessage(message)
+      setActionFeedback({ target: 'session', kind: 'error', message })
       return
     }
 
-    setOperation('session')
+    const operationStartedAt = performance.now()
+    setIsSessionSaving(true)
     setErrorMessage(null)
     setFeedbackMessage(null)
+    setActionFeedback(null)
+    let saved = false
     try {
       const next = await desktopApi.setSecuritySettings({
         idleLockMinutes,
@@ -91,41 +124,65 @@ export function SecuritySettingsPanel({
         ...(lockPassword ? { lockPassword } : {})
       })
       applySettings(next)
-      setLockPassword('')
-      setLockPasswordConfirmation('')
       setFeedbackMessage(t.securitySessionSaved)
+      setActionFeedback({ target: 'session', kind: 'success', message: t.securitySessionSaved })
+      saved = true
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause)
-      setErrorMessage(message === 'SECURITY_LOCK_PASSWORD_REQUIRED' ? t.securityLockPasswordRequired : message)
+      const displayMessage = message === 'SECURITY_LOCK_PASSWORD_REQUIRED' ? t.securityLockPasswordRequired : message
+      setErrorMessage(displayMessage)
+      setActionFeedback({ target: 'session', kind: 'error', message: displayMessage })
     } finally {
-      setOperation(null)
+      await waitForMinimumBusyDuration(operationStartedAt)
+      if (saved) {
+        setLockPassword('')
+        setLockPasswordConfirmation('')
+      }
+      setIsSessionSaving(false)
     }
   }
 
   const saveBackupPassword = async () => {
-    if (!desktopApi || operation) return
+    if (!desktopApi || operation || isBackupSaving) return
     if (!backupPassword) {
-      setErrorMessage(t.securityBackupPasswordRequired)
+      const message = t.securityBackupPasswordRequired
+      setErrorMessage(message)
+      setActionFeedback({ target: 'backup', kind: 'error', message })
+      backupPasswordInputRef.current?.focus()
       return
     }
     if (backupPassword !== backupPasswordConfirmation) {
-      setErrorMessage(t.securityPasswordMismatch)
+      const message = t.securityPasswordMismatch
+      setErrorMessage(message)
+      setActionFeedback({ target: 'backup', kind: 'error', message })
+      backupPasswordInputRef.current?.focus()
       return
     }
 
-    setOperation('backup')
+    const operationStartedAt = performance.now()
+    setIsBackupSaving(true)
     setErrorMessage(null)
     setFeedbackMessage(null)
+    setActionFeedback(null)
+    let saved = false
     try {
       const next = await desktopApi.setSecuritySettings({ backupPassword })
       applySettings(next)
-      setBackupPassword('')
-      setBackupPasswordConfirmation('')
       setFeedbackMessage(t.securityBackupPasswordSaved)
+      setActionFeedback({ target: 'backup', kind: 'success', message: t.securityBackupPasswordSaved })
+      onBackupPasswordSaved?.()
+      saved = true
     } catch (cause) {
-      setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+      const message = cause instanceof Error ? cause.message : String(cause)
+      setErrorMessage(message)
+      setActionFeedback({ target: 'backup', kind: 'error', message })
     } finally {
-      setOperation(null)
+      await waitForMinimumBusyDuration(operationStartedAt)
+      if (saved) {
+        setBackupPassword('')
+        setBackupPasswordConfirmation('')
+      }
+      setIsBackupSaving(false)
     }
   }
 
@@ -145,9 +202,17 @@ export function SecuritySettingsPanel({
   }
 
   const isLoading = operation === 'load'
-  const isSaving = operation === 'session' || operation === 'backup'
   const hasLockPassword = settings?.hasLockPassword === true
   const hasBackupPassword = settings?.hasBackupPassword === true
+  const topFeedback = isLoading
+    ? { message: t.securityLoading, tone: 'loading' as const }
+    : errorMessage && !actionFeedback
+      ? { message: errorMessage, tone: 'error' as const }
+      : notice
+        ? { message: notice, tone: 'info' as const }
+        : feedbackMessage && !actionFeedback
+          ? { message: feedbackMessage, tone: 'success' as const }
+          : null
 
   return (
     <div className="settings-panel security-settings-panel">
@@ -155,23 +220,7 @@ export function SecuritySettingsPanel({
         <h3>{t.securitySettings}</h3>
         <p className="settings-tools-hint">{t.securitySettingsHint}</p>
 
-        {isLoading ? (
-          <div aria-busy="true" className="settings-feedback-banner settings-feedback-banner--loading">
-            <span aria-hidden="true" className="button-spinner" />
-            <span>{t.securityLoading}</span>
-          </div>
-        ) : null}
-        {errorMessage ? (
-          <p className="modal-error" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
-        {feedbackMessage ? (
-          <div className="settings-feedback-banner settings-feedback-banner--success" role="status">
-            <AppIcon name="check" size={14} />
-            <span>{feedbackMessage}</span>
-          </div>
-        ) : null}
+        {topFeedback ? <FeedbackText message={topFeedback.message} tone={topFeedback.tone} /> : null}
 
         <div className="security-card">
           <div className="security-card-header">
@@ -192,10 +241,12 @@ export function SecuritySettingsPanel({
             <label className="ssh-checkbox security-checkbox-wrapper" title={t.securityEnableLock}>
               <input
                 checked={lockEnabled}
-                disabled={isLoading || isSaving || (!hasLockPassword && !lockPassword)}
+                disabled={isLoading || isSessionSaving || (!hasLockPassword && !lockPassword)}
                 onChange={(event) => {
                   setLockEnabled(event.target.checked)
                   setErrorMessage(null)
+                  setFeedbackMessage(null)
+                  setActionFeedback(null)
                 }}
                 type="checkbox"
               />
@@ -211,7 +262,7 @@ export function SecuritySettingsPanel({
               <button
                 aria-label={t.securityDecreaseIdleLock}
                 className="security-stepper-btn"
-                disabled={isLoading || isSaving || idleLockMinutes <= 0}
+                disabled={isLoading || isSessionSaving || idleLockMinutes <= 0}
                 onClick={() => adjustIdleMinutes(-1)}
                 type="button"
               >
@@ -220,12 +271,15 @@ export function SecuritySettingsPanel({
               <input
                 aria-label={t.securityIdleLockMinutes}
                 className="security-stepper-input"
-                disabled={isLoading || isSaving}
+                disabled={isLoading || isSessionSaving}
                 max={1440}
                 min={0}
                 onChange={(event) => {
                   const parsed = Number.parseInt(event.target.value, 10)
                   setIdleLockMinutes(Number.isFinite(parsed) ? Math.min(1440, Math.max(0, parsed)) : 0)
+                  setErrorMessage(null)
+                  setFeedbackMessage(null)
+                  setActionFeedback(null)
                 }}
                 type="number"
                 value={idleLockMinutes}
@@ -233,7 +287,7 @@ export function SecuritySettingsPanel({
               <button
                 aria-label={t.securityIncreaseIdleLock}
                 className="security-stepper-btn"
-                disabled={isLoading || isSaving || idleLockMinutes >= 1440}
+                disabled={isLoading || isSessionSaving || idleLockMinutes >= 1440}
                 onClick={() => adjustIdleMinutes(1)}
                 type="button"
               >
@@ -248,10 +302,13 @@ export function SecuritySettingsPanel({
               <span>{hasLockPassword ? t.securityChangeMasterPassword : t.securitySetMasterPassword}</span>
               <input
                 autoComplete="new-password"
-                disabled={isLoading || isSaving}
+                disabled={isLoading}
+                readOnly={isSessionSaving}
                 onChange={(event) => {
                   setLockPassword(event.target.value)
                   setErrorMessage(null)
+                  setFeedbackMessage(null)
+                  setActionFeedback(null)
                 }}
                 placeholder={t.securityPasswordPlaceholder}
                 type="password"
@@ -262,10 +319,13 @@ export function SecuritySettingsPanel({
               <span>{t.securityConfirmMasterPassword}</span>
               <input
                 autoComplete="new-password"
-                disabled={isLoading || isSaving}
+                disabled={isLoading}
+                readOnly={isSessionSaving}
                 onChange={(event) => {
                   setLockPasswordConfirmation(event.target.value)
                   setErrorMessage(null)
+                  setFeedbackMessage(null)
+                  setActionFeedback(null)
                 }}
                 placeholder={t.securityConfirmPasswordPlaceholder}
                 type="password"
@@ -278,18 +338,36 @@ export function SecuritySettingsPanel({
 
           <div className="security-actions-row">
             <button
+              aria-busy={isSessionSaving}
               className="primary-button compact"
-              disabled={isLoading || isSaving}
+              disabled={isLoading || isSessionSaving}
               onClick={() => void saveSessionSettings()}
               type="button"
             >
-              {operation === 'session' ? (
-                <span aria-hidden="true" className="button-spinner" />
-              ) : (
-                <AppIcon name="check" size={13} />
-              )}
-              <span>{t.securityApplySession}</span>
+              <span aria-hidden="true" className="security-action-icon">
+                {isSessionSaving ? <span className="button-spinner" /> : <AppIcon name="check" size={14} />}
+              </span>
+              <span className="security-action-label">
+                <span>{isSessionSaving ? t.securitySaving : t.securityApplySession}</span>
+                <span aria-hidden="true" className="security-action-label-reserve">
+                  {t.securityApplySession}
+                </span>
+                <span aria-hidden="true" className="security-action-label-reserve">
+                  {t.securitySaving}
+                </span>
+              </span>
             </button>
+            <button className="flat-button compact" onClick={() => setPreviewMode('loading')} type="button">
+              <AppIcon name="shield-check" size={14} />
+              <span>{t.securityPreviewLockScreen}</span>
+            </button>
+            {actionFeedback?.target === 'session' ? (
+              <FeedbackText
+                className="security-inline-feedback"
+                message={actionFeedback.message}
+                tone={actionFeedback.kind}
+              />
+            ) : null}
           </div>
         </div>
       </section>
@@ -298,7 +376,7 @@ export function SecuritySettingsPanel({
         <h3>{t.securityBackupCardTitle}</h3>
         <p className="settings-tools-hint">{t.securityBackupCardHint}</p>
 
-        <div className="security-card">
+        <div className="security-card" ref={backupPasswordSectionRef}>
           <div className="security-card-header">
             <div className="security-card-header-copy">
               <strong>{t.securityBackupCardTitle}</strong>
@@ -319,12 +397,16 @@ export function SecuritySettingsPanel({
               <span>{t.securityBackupPassword}</span>
               <input
                 autoComplete="new-password"
-                disabled={isLoading || isSaving}
+                disabled={isLoading}
+                readOnly={isBackupSaving}
                 onChange={(event) => {
                   setBackupPassword(event.target.value)
                   setErrorMessage(null)
+                  setFeedbackMessage(null)
+                  setActionFeedback(null)
                 }}
                 placeholder={t.securityBackupPasswordPlaceholder}
+                ref={backupPasswordInputRef}
                 type="password"
                 value={backupPassword}
               />
@@ -333,10 +415,13 @@ export function SecuritySettingsPanel({
               <span>{t.securityConfirmBackupPassword}</span>
               <input
                 autoComplete="new-password"
-                disabled={isLoading || isSaving}
+                disabled={isLoading}
+                readOnly={isBackupSaving}
                 onChange={(event) => {
                   setBackupPasswordConfirmation(event.target.value)
                   setErrorMessage(null)
+                  setFeedbackMessage(null)
+                  setActionFeedback(null)
                 }}
                 placeholder={t.securityConfirmPasswordPlaceholder}
                 type="password"
@@ -349,18 +434,41 @@ export function SecuritySettingsPanel({
 
           <div className="security-actions-row">
             <button
+              aria-busy={isBackupSaving}
               className="primary-button compact"
-              disabled={isLoading || isSaving}
+              disabled={isLoading || isBackupSaving}
               onClick={() => void saveBackupPassword()}
               type="button"
             >
-              {operation === 'backup' ? (
-                <span aria-hidden="true" className="button-spinner" />
-              ) : (
-                <AppIcon name="check" size={13} />
-              )}
-              <span>{hasBackupPassword ? t.securityReplaceBackupPassword : t.securitySaveBackupPassword}</span>
+              <span aria-hidden="true" className="security-action-icon">
+                {isBackupSaving ? <span className="button-spinner" /> : <AppIcon name="check" size={14} />}
+              </span>
+              <span className="security-action-label">
+                <span>
+                  {isBackupSaving
+                    ? t.securitySaving
+                    : hasBackupPassword
+                      ? t.securityReplaceBackupPassword
+                      : t.securitySaveBackupPassword}
+                </span>
+                <span aria-hidden="true" className="security-action-label-reserve">
+                  {t.securitySaveBackupPassword}
+                </span>
+                <span aria-hidden="true" className="security-action-label-reserve">
+                  {t.securityReplaceBackupPassword}
+                </span>
+                <span aria-hidden="true" className="security-action-label-reserve">
+                  {t.securitySaving}
+                </span>
+              </span>
             </button>
+            {actionFeedback?.target === 'backup' ? (
+              <FeedbackText
+                className="security-inline-feedback"
+                message={actionFeedback.message}
+                tone={actionFeedback.kind}
+              />
+            ) : null}
           </div>
         </div>
       </section>
@@ -369,6 +477,56 @@ export function SecuritySettingsPanel({
         <AppIcon name="config-file" size={14} />
         <span>{t.securityStorageHint}</span>
       </div>
+
+      {previewMode !== null ? (
+        <div
+          className="security-lock-preview-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000
+          }}
+        >
+          <SessionLockScreen
+            mode={previewMode}
+            onRetry={() => setPreviewMode('loading')}
+            onUnlock={async () => {
+              setPreviewMode(null)
+              return true
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: 20,
+              right: 24,
+              zIndex: 1010,
+              display: 'flex',
+              gap: 8
+            }}
+          >
+            <button
+              className="flat-button compact"
+              onClick={() => setPreviewMode(previewMode === 'loading' ? 'locked' : 'loading')}
+              style={{
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-main)',
+                borderColor: 'var(--border-light)'
+              }}
+              type="button"
+            >
+              <AppIcon name="refresh" size={14} />
+              <span>
+                {previewMode === 'loading' ? t.securitySwitchToLockedPreview : t.securitySwitchToLoadingPreview}
+              </span>
+            </button>
+            <button className="primary-button compact" onClick={() => setPreviewMode(null)} type="button">
+              <AppIcon name="close" size={14} />
+              <span>{t.securityClosePreview}</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

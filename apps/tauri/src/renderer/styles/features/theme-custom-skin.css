@@ -9,60 +9,60 @@
  *   surfaceElevated  -> title bars, tabs, controls, and overlays
  */
 
-:root[data-theme-custom='true'] .fs-shell,
-:root[data-theme-custom='true'] .fs-main,
-:root[data-theme-custom='true'] .connection-manager-layout,
-:root[data-theme-custom='true'] .connection-manager-main {
+:root[data-theme-base='codex'] .fs-shell,
+:root[data-theme-base='codex'] .fs-main,
+:root[data-theme-base='codex'] .connection-manager-layout,
+:root[data-theme-base='codex'] .connection-manager-main {
   background: var(--theme-surface) !important;
 }
 
-:root[data-theme-custom='true'] .fs-sidebar,
-:root[data-theme-custom='true'] .home-sidebar,
-:root[data-theme-custom='true'] .connection-manager-sidebar,
-:root[data-theme-custom='true'] .system-sidebar-layout {
+:root[data-theme-base='codex'] .fs-sidebar,
+:root[data-theme-base='codex'] .home-sidebar,
+:root[data-theme-base='codex'] .connection-manager-sidebar,
+:root[data-theme-base='codex'] .system-sidebar-layout {
   background: var(--theme-sidebar-background, var(--theme-surface-secondary)) !important;
 }
 
-:root[data-theme-custom='true'] .fs-tabbar,
-:root[data-theme-custom='true'] .titlebar-brand,
-:root[data-theme-custom='true'] .titlebar-tabarea,
-:root[data-theme-custom='true'] .window-menubar,
-:root[data-theme-custom='true'] .standalone-window-titlebar {
+:root[data-theme-base='codex'] .fs-tabbar,
+:root[data-theme-base='codex'] .titlebar-brand,
+:root[data-theme-base='codex'] .titlebar-tabarea,
+:root[data-theme-base='codex'] .window-menubar,
+:root[data-theme-base='codex'] .standalone-window-titlebar {
   background: var(--theme-surface-elevated) !important;
 }
 
-:root[data-theme-custom='true'] .fs-tab,
-:root[data-theme-custom='true'] .file-tabs button {
+:root[data-theme-base='codex'] .fs-tab,
+:root[data-theme-base='codex'] .file-tabs button {
   background: transparent;
 }
 
-:root[data-theme-custom='true'] .fs-tab.active,
-:root[data-theme-custom='true'] .file-tabs button.active {
+:root[data-theme-base='codex'] .fs-tab.active,
+:root[data-theme-base='codex'] .file-tabs button.active {
   background: var(--theme-surface-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .file-manager,
-:root[data-theme-custom='true'] .file-toolbar,
-:root[data-theme-custom='true'] .local-pane,
-:root[data-theme-custom='true'] .remote-pane,
-:root[data-theme-custom='true'] .command-pane-preview,
-:root[data-theme-custom='true'] .file-table-shell {
+:root[data-theme-base='codex'] .file-manager,
+:root[data-theme-base='codex'] .file-toolbar,
+:root[data-theme-base='codex'] .local-pane,
+:root[data-theme-base='codex'] .remote-pane,
+:root[data-theme-base='codex'] .command-pane-preview,
+:root[data-theme-base='codex'] .file-table-shell {
   background: var(--theme-surface-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .file-tabs {
+:root[data-theme-base='codex'] .file-tabs {
   background: var(--theme-surface-elevated) !important;
 }
 
-:root[data-theme-custom='true'] .file-split-resizer {
+:root[data-theme-base='codex'] .file-split-resizer {
   background: var(--theme-surface-secondary);
 }
 
-:root[data-theme-custom='true'] .settings-modal .connection-manager-layout {
+:root[data-theme-base='codex'] .settings-modal .connection-manager-layout {
   background: var(--theme-surface) !important;
 }
 
-:root[data-theme-custom='true'] .terminal-dock-bar {
+:root[data-theme-base='codex'] .terminal-dock-bar {
   background: var(--theme-surface-elevated) !important;
 }
 
@@ -74,179 +74,179 @@
  * component and without touching the built-in themes.
  */
 
-:root[data-theme-custom='true'] .session-workspace,
-:root[data-theme-custom='true'] .workspace-stage,
-:root[data-theme-custom='true'] .system-info-workspace,
-:root[data-theme-custom='true'] .home-workspace {
+:root[data-theme-base='codex'] .session-workspace,
+:root[data-theme-base='codex'] .workspace-stage,
+:root[data-theme-base='codex'] .system-info-workspace,
+:root[data-theme-base='codex'] .home-workspace {
   background: var(--theme-surface) !important;
 }
 
-:root[data-theme-custom='true'] .sys-card,
-:root[data-theme-custom='true'] .connection-summary,
-:root[data-theme-custom='true'] .process-table,
-:root[data-theme-custom='true'] .disk-table,
-:root[data-theme-custom='true'] .disk-scroll-region,
-:root[data-theme-custom='true'] .disk-body,
-:root[data-theme-custom='true'] .file-manager,
-:root[data-theme-custom='true'] .local-pane,
-:root[data-theme-custom='true'] .remote-pane,
-:root[data-theme-custom='true'] .command-pane-preview,
-:root[data-theme-custom='true'] .file-table-shell {
+:root[data-theme-base='codex'] .sys-card,
+:root[data-theme-base='codex'] .connection-summary,
+:root[data-theme-base='codex'] .process-table,
+:root[data-theme-base='codex'] .disk-table,
+:root[data-theme-base='codex'] .disk-scroll-region,
+:root[data-theme-base='codex'] .disk-body,
+:root[data-theme-base='codex'] .file-manager,
+:root[data-theme-base='codex'] .local-pane,
+:root[data-theme-base='codex'] .remote-pane,
+:root[data-theme-base='codex'] .command-pane-preview,
+:root[data-theme-base='codex'] .file-table-shell {
   background: var(--theme-surface-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .local-terminal-frame {
+:root[data-theme-base='codex'] .local-terminal-frame {
   background: var(--theme-surface-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .file-toolbar,
-:root[data-theme-custom='true'] .pane-title,
-:root[data-theme-custom='true'] .pane-path-bar,
-:root[data-theme-custom='true'] .pane-filter-bar,
-:root[data-theme-custom='true'] .file-tabs,
-:root[data-theme-custom='true'] .transfer-strip,
-:root[data-theme-custom='true'] .fs-file-table th {
+:root[data-theme-base='codex'] .file-toolbar,
+:root[data-theme-base='codex'] .pane-title,
+:root[data-theme-base='codex'] .pane-path-bar,
+:root[data-theme-base='codex'] .pane-filter-bar,
+:root[data-theme-base='codex'] .file-tabs,
+:root[data-theme-base='codex'] .transfer-strip,
+:root[data-theme-base='codex'] .fs-file-table th {
   background: var(--theme-surface-elevated) !important;
 }
 
-:root[data-theme-custom='true'] .file-toolbar,
-:root[data-theme-custom='true'] .pane-title,
-:root[data-theme-custom='true'] .pane-path-bar,
-:root[data-theme-custom='true'] .transfer-strip {
+:root[data-theme-base='codex'] .file-toolbar,
+:root[data-theme-base='codex'] .pane-title,
+:root[data-theme-base='codex'] .pane-path-bar,
+:root[data-theme-base='codex'] .transfer-strip {
   color: var(--theme-text-primary) !important;
 }
 
-:root[data-theme-custom='true'] .pane-title span,
-:root[data-theme-custom='true'] .pane-path-bar strong,
-:root[data-theme-custom='true'] .pane-path-bar span,
-:root[data-theme-custom='true'] .file-current-path.is-status-hint,
-:root[data-theme-custom='true'] .transfer-strip {
+:root[data-theme-base='codex'] .pane-title span,
+:root[data-theme-base='codex'] .pane-path-bar strong,
+:root[data-theme-base='codex'] .pane-path-bar span,
+:root[data-theme-base='codex'] .file-current-path.is-status-hint,
+:root[data-theme-base='codex'] .transfer-strip {
   color: var(--theme-text-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .file-toolbar button,
-:root[data-theme-custom='true'] .file-tab-actions button,
-:root[data-theme-custom='true'] .pane-path-bar-action,
-:root[data-theme-custom='true'] .follow-shell-cwd-toggle,
-:root[data-theme-custom='true'] .pane-filter-mode-toggles,
-:root[data-theme-custom='true'] .pane-filter-mode-btn.active {
+:root[data-theme-base='codex'] .file-toolbar button,
+:root[data-theme-base='codex'] .file-tab-actions button,
+:root[data-theme-base='codex'] .pane-path-bar-action,
+:root[data-theme-base='codex'] .follow-shell-cwd-toggle,
+:root[data-theme-base='codex'] .pane-filter-mode-toggles,
+:root[data-theme-base='codex'] .pane-filter-mode-btn.active {
   background: var(--theme-surface-elevated) !important;
   color: var(--theme-text-primary) !important;
 }
 
-:root[data-theme-custom='true'] .pane-filter-input-wrapper:hover,
-:root[data-theme-custom='true'] .pane-filter-input-wrapper:focus-within {
+:root[data-theme-base='codex'] .pane-filter-input-wrapper:hover,
+:root[data-theme-base='codex'] .pane-filter-input-wrapper:focus-within {
   background: var(--theme-surface-elevated) !important;
 }
 
-:root[data-theme-custom='true'] .fs-file-table {
+:root[data-theme-base='codex'] .fs-file-table {
   color: var(--theme-text-primary) !important;
 }
 
-:root[data-theme-custom='true'] .fs-file-table th {
+:root[data-theme-base='codex'] .fs-file-table th {
   color: var(--theme-text-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .fs-file-table tbody tr:nth-child(odd),
-:root[data-theme-custom='true'] .process-row:nth-child(odd),
-:root[data-theme-custom='true'] .disk-row:nth-child(odd) {
+:root[data-theme-base='codex'] .fs-file-table tbody tr:nth-child(odd),
+:root[data-theme-base='codex'] .process-row:nth-child(odd),
+:root[data-theme-base='codex'] .disk-row:nth-child(odd) {
   background: var(--theme-surface-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .fs-file-table tbody tr:nth-child(even),
-:root[data-theme-custom='true'] .process-row:nth-child(even),
-:root[data-theme-custom='true'] .disk-row:nth-child(even) {
+:root[data-theme-base='codex'] .fs-file-table tbody tr:nth-child(even),
+:root[data-theme-base='codex'] .process-row:nth-child(even),
+:root[data-theme-base='codex'] .disk-row:nth-child(even) {
   background: color-mix(in srgb, var(--theme-surface-secondary) 92%, var(--theme-surface-elevated) 8%) !important;
 }
 
-:root[data-theme-custom='true'] .fs-file-table tbody tr:hover,
-:root[data-theme-custom='true'] .fs-file-table tbody tr.is-selected,
-:root[data-theme-custom='true'] .disk-row:hover {
+:root[data-theme-base='codex'] .fs-file-table tbody tr:hover,
+:root[data-theme-base='codex'] .fs-file-table tbody tr.is-selected,
+:root[data-theme-base='codex'] .disk-row:hover {
   background: var(--bg-active) !important;
 }
 
-:root[data-theme-custom='true'] .file-split-resizer {
+:root[data-theme-base='codex'] .file-split-resizer {
   background: transparent !important;
 }
 
-:root[data-theme-custom='true'] .file-split-resizer::before {
+:root[data-theme-base='codex'] .file-split-resizer::before {
   background: var(--border-light) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .system-sidebar-toggle,
-:root[data-theme-custom='true'] .system-sidebar-layout .system-title,
-:root[data-theme-custom='true'] .system-sidebar-layout .network-select,
-:root[data-theme-custom='true'] .system-sidebar-layout .grid-chart {
+:root[data-theme-base='codex'] .system-sidebar-layout .system-sidebar-toggle,
+:root[data-theme-base='codex'] .system-sidebar-layout .system-title,
+:root[data-theme-base='codex'] .system-sidebar-layout .network-select,
+:root[data-theme-base='codex'] .system-sidebar-layout .grid-chart {
   background: var(--theme-surface-elevated) !important;
   color: var(--theme-text-primary) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .mini-tabs {
+:root[data-theme-base='codex'] .system-sidebar-layout .mini-tabs {
   background: var(--theme-surface-elevated) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .mini-tabs span {
+:root[data-theme-base='codex'] .system-sidebar-layout .mini-tabs span {
   background: transparent !important;
   color: var(--theme-text-secondary) !important;
   border-color: var(--border-light) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .mini-tabs span.active {
+:root[data-theme-base='codex'] .system-sidebar-layout .mini-tabs span.active {
   background: var(--bg-active) !important;
   color: var(--theme-text-primary) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .meter-track,
-:root[data-theme-custom='true'] .system-sidebar-layout .collapsed-resource-track {
+:root[data-theme-base='codex'] .system-sidebar-layout .meter-track,
+:root[data-theme-base='codex'] .system-sidebar-layout .collapsed-resource-track {
   background: color-mix(in srgb, var(--theme-surface-elevated) 72%, var(--theme-surface-secondary) 28%) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .disk-head {
+:root[data-theme-base='codex'] .system-sidebar-layout .disk-head {
   background: var(--theme-surface-elevated) !important;
   color: var(--theme-text-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .system-sidebar-layout .process-row,
-:root[data-theme-custom='true'] .system-sidebar-layout .disk-row {
+:root[data-theme-base='codex'] .system-sidebar-layout .process-row,
+:root[data-theme-base='codex'] .system-sidebar-layout .disk-row {
   color: var(--theme-text-primary) !important;
 }
 
-:root[data-theme-custom='true'] .terminal-dock-placeholder {
+:root[data-theme-base='codex'] .terminal-dock-placeholder {
   color: var(--theme-text-secondary) !important;
   opacity: 0.78;
 }
 
-:root[data-theme-custom='true'] .terminal-dock-bar {
+:root[data-theme-base='codex'] .terminal-dock-bar {
   color: var(--theme-text-primary);
 }
 
-:root[data-theme-custom='true'] .settings-modal,
-:root[data-theme-custom='true'] .settings-modal .connection-manager-layout,
-:root[data-theme-custom='true'] .settings-modal .connection-manager-main,
-:root[data-theme-custom='true'] .settings-modal .settings-panel {
+:root[data-theme-base='codex'] .settings-modal,
+:root[data-theme-base='codex'] .settings-modal .connection-manager-layout,
+:root[data-theme-base='codex'] .settings-modal .connection-manager-main,
+:root[data-theme-base='codex'] .settings-modal .settings-panel {
   background: var(--theme-surface) !important;
 }
 
-:root[data-theme-custom='true'] .settings-modal .connection-manager-sidebar,
-:root[data-theme-custom='true'] .settings-modal .theme-config-toolbar,
-:root[data-theme-custom='true'] .settings-modal .theme-advanced-section,
-:root[data-theme-custom='true'] .settings-modal .theme-color-field {
+:root[data-theme-base='codex'] .settings-modal .connection-manager-sidebar,
+:root[data-theme-base='codex'] .settings-modal .theme-config-toolbar,
+:root[data-theme-base='codex'] .settings-modal .theme-advanced-section,
+:root[data-theme-base='codex'] .settings-modal .theme-color-field {
   background: var(--theme-surface-secondary) !important;
 }
 
-:root[data-theme-custom='true'] .settings-modal .connection-manager-sidebar-item.active {
+:root[data-theme-base='codex'] .settings-modal .connection-manager-sidebar-item.active {
   background: var(--bg-active) !important;
 }
 
-:root[data-theme-custom='true'] .settings-modal .connection-manager-footer,
-:root[data-theme-custom='true'] .settings-modal .theme-config-preview,
-:root[data-theme-custom='true'] .settings-modal .theme-config-select.dropdown-select-trigger,
-:root[data-theme-custom='true'] .settings-modal .theme-config-select.ft-select-shell select,
-:root[data-theme-custom='true'] .settings-modal .theme-color-text {
+:root[data-theme-base='codex'] .settings-modal .connection-manager-footer,
+:root[data-theme-base='codex'] .settings-modal .theme-config-preview,
+:root[data-theme-base='codex'] .settings-modal .theme-config-select.dropdown-select-trigger,
+:root[data-theme-base='codex'] .settings-modal .theme-config-select.ft-select-shell select,
+:root[data-theme-base='codex'] .settings-modal .theme-color-text {
   background: var(--theme-surface-elevated) !important;
 }
 
-:root[data-theme-custom='true'] .settings-modal .connection-manager-header {
+:root[data-theme-base='codex'] .settings-modal .connection-manager-header {
   background: var(--theme-surface) !important;
 }
 

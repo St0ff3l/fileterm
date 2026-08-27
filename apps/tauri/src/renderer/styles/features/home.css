@@ -718,9 +718,14 @@
   animation: dot-glow 2.5s infinite ease-in-out;
 }
 
+.type-dot.dot-telnet {
+  background-color: var(--type-telnet);
+  box-shadow: 0 0 8px var(--type-telnet-surface);
+}
+
 .type-dot.dot-sftp {
-  background-color: var(--type-sftp);
-  box-shadow: 0 0 8px var(--type-sftp-surface);
+  background-color: var(--type-telnet);
+  box-shadow: 0 0 8px var(--type-telnet-surface);
 }
 
 .type-dot.dot-ftp {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 export function SmbSharePickerModal({
@@ -76,13 +77,13 @@ export function SmbSharePickerModal({
               {t.networkShareSelectChangeCredentials}
             </button>
             <button
+              aria-busy={isSubmitting}
               className="primary-button"
               disabled={isSubmitting || !selectedShare}
               onClick={() => onSubmit(selectedShare)}
               type="button"
             >
-              {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-              <span>{t.networkShareSelectConfirm}</span>
+              <StableButtonContent busy={isSubmitting} label={t.networkShareSelectConfirm} />
             </button>
           </div>
         </div>

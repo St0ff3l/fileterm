@@ -2072,12 +2072,12 @@
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
-  padding: 20px 24px;
+  padding: 16px 20px;
   box-sizing: border-box;
 }
 
 .command-editor-dialog-form {
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 .command-form-standalone-page {
@@ -2091,10 +2091,10 @@
 .command-form-standalone-page label:not(.command-editor-checkbox-row) {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .command-form-standalone-page label.command-editor-checkbox-row {
@@ -2107,7 +2107,7 @@
   user-select: none;
   font-size: 12px;
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .command-form-standalone-page input:not([type='checkbox']),
@@ -2223,7 +2223,7 @@
 }
 
 .command-dialog-body {
-  padding: 0 18px 18px;
+  padding: 0 16px 16px;
   min-height: 0;
   overflow-y: auto;
 }
@@ -2232,20 +2232,20 @@
 .command-folder-dialog-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 0 4px;
+  gap: 10px;
+  padding: 0 2px;
 }
 
 .command-editor-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 16px;
+  gap: 10px 12px;
 }
 
 .command-editor-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -2260,7 +2260,7 @@
 /* Inline row: name on the left, category on the right — same row */
 .command-editor-row {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-end;
 }
 
@@ -2311,8 +2311,8 @@
 .command-editor-dialog-form input:not([type='checkbox']),
 .command-editor-dialog-form select,
 .command-folder-dialog-form input {
-  height: 34px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
 }
 
 .command-editor-dialog-form select {
@@ -2437,15 +2437,16 @@
 .command-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   padding-top: 4px;
 }
 
 .command-dialog-actions > button {
   min-width: 92px;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 8px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   font-size: 13px;
   font-weight: 600;
 }
@@ -2527,7 +2528,8 @@
 .command-manager-modal .command-manager-sidebar-head button,
 .command-manager-modal .command-manager-submit button {
   min-width: 0;
-  height: 28px;
+  min-height: 36px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);

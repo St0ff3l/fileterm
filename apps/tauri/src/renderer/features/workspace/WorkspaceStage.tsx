@@ -21,6 +21,7 @@ import { SystemInfoWorkspace } from '../system/SystemInfoWorkspace'
 import { HomeWorkspace } from './HomeWorkspace'
 import { LocalTerminalWorkspace } from './LocalTerminalWorkspace'
 import { SessionWorkspace } from './SessionWorkspace'
+import type { FilePanelSnapTarget } from './file-panel-snap'
 
 type ActiveLocalTab = {
   kind: 'home' | 'system'
@@ -44,8 +45,8 @@ export function WorkspaceStage({
   onFilePanelHeightChange,
   filePanelRatio,
   onFilePanelRatioCommit,
-  filePanelDiskHeaderAnchor,
-  onFilePanelDiskHeaderAnchorCommit,
+  filePanelSnapTarget,
+  onFilePanelSnapTargetCommit,
   rememberFilePanelRatio,
   sendTargets,
   terminalDockSendScope,
@@ -161,8 +162,8 @@ export function WorkspaceStage({
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
   filePanelRatio: number
   onFilePanelRatioCommit(ratio: number): void
-  filePanelDiskHeaderAnchor: boolean
-  onFilePanelDiskHeaderAnchorCommit(anchor: boolean): void
+  filePanelSnapTarget: FilePanelSnapTarget | null
+  onFilePanelSnapTargetCommit(target: FilePanelSnapTarget | null): void
   rememberFilePanelRatio: boolean
   sendTargets: SessionSendTarget[]
   terminalDockSendScope: SendScope
@@ -324,8 +325,8 @@ export function WorkspaceStage({
         onFilePanelHeightChange={onFilePanelHeightChange}
         filePanelRatio={filePanelRatio}
         onFilePanelRatioCommit={onFilePanelRatioCommit}
-        filePanelDiskHeaderAnchor={filePanelDiskHeaderAnchor}
-        onFilePanelDiskHeaderAnchorCommit={onFilePanelDiskHeaderAnchorCommit}
+        filePanelSnapTarget={filePanelSnapTarget}
+        onFilePanelSnapTargetCommit={onFilePanelSnapTargetCommit}
         rememberFilePanelRatio={rememberFilePanelRatio}
         sendTargets={sendTargets}
         terminalDockSendScope={terminalDockSendScope}

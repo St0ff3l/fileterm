@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SshKeyboardInteractiveRequest } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 export function SshKeyboardInteractiveModal({
@@ -58,13 +59,13 @@ export function SshKeyboardInteractiveModal({
             {t.cancel}
           </button>
           <button
+            aria-busy={isSubmitting}
             className="primary-button"
             disabled={!canSubmit || isSubmitting}
             onClick={() => onSubmit(answers)}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.sshAuthPromptConfirm}</span>
+            <StableButtonContent busy={isSubmitting} label={t.sshAuthPromptConfirm} />
           </button>
         </div>
       </div>

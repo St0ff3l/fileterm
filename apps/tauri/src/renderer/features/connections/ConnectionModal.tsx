@@ -14,7 +14,9 @@ import { localizeSerialTerminalText, t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { FeedbackText } from '../common/FeedbackText'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 type SshConnectionSettingKey = keyof SshConnectionDefaults
@@ -121,7 +123,6 @@ export function ConnectionModal({
   hasSavedSuPassword = false,
   setForm,
   onClearHostFingerprint,
-  onDismissError,
   onTestConnection,
   onSubmit,
   onClose,
@@ -143,7 +144,6 @@ export function ConnectionModal({
   hasSavedSuPassword?: boolean
   setForm(value: CreateProfileInput | ((prev: CreateProfileInput) => CreateProfileInput)): void
   onClearHostFingerprint?(): void
-  onDismissError(): void
   onTestConnection(): Promise<boolean>
   onSubmit(event: FormEvent<HTMLFormElement>): void
   onClose(): void
@@ -172,6 +172,20 @@ export function ConnectionModal({
   }, [form])
 
   const isFormBusy = isSubmitting || isTestingConnection
+
+  const connectionTestFeedback = serialValidationError
+    ? {
+        message: serialValidationError,
+        tone: 'error' as const
+      }
+    : errorMessage
+      ? { message: errorMessage, tone: 'error' as const }
+      : connectionTestSucceeded
+        ? {
+            message: t.connectionTestSuccess,
+            tone: 'success' as const
+          }
+        : null
 
   const handleTestConnection = async () => {
     if (isFormBusy) {
@@ -448,14 +462,19 @@ export function ConnectionModal({
                             }}
                           />
                           <button
+                            aria-busy={isLoadingSerialPorts}
                             className="flat-button serial-port-picker__refresh"
                             disabled={isLoadingSerialPorts}
                             title={isLoadingSerialPorts ? t.serialPortRefreshing : t.serialPortRefresh}
                             type="button"
                             onClick={() => void refreshSerialPorts()}
                           >
-                            <AppIcon name="refresh" size={14} />
-                            <span>{isLoadingSerialPorts ? t.serialPortRefreshing : t.serialPortRefresh}</span>
+                            <StableButtonContent
+                              busy={isLoadingSerialPorts}
+                              busyLabel={t.serialPortRefreshing}
+                              icon={<AppIcon name="refresh" size={14} />}
+                              label={t.serialPortRefresh}
+                            />
                           </button>
                         </div>
                         {serialPortLoadError ? (
@@ -836,7 +855,7 @@ export function ConnectionModal({
                           <p>{t.clearSavedFingerprintHint}</p>
                         </div>
                         <button
-                          className="flat-button compact saved-fingerprint-card__action"
+                          className="flat-button saved-fingerprint-card__action"
                           onClick={onClearHostFingerprint}
                           type="button"
                         >
@@ -998,27 +1017,29 @@ export function ConnectionModal({
                           <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
                         </div>
                       </div>
-                      <label className="serial-reconnect-limit">
-                        {t.reconnectMaxAttempts}:
-                        <input
-                          inputMode="numeric"
-                          min={0}
-                          max={4294967295}
-                          type="number"
-                          value={form.reconnectMaxAttempts ?? 0}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
-                            }))
-                          }
-                        />
-                      </label>
-                      <p className="advanced-toggle-hint">{t.reconnectMaxAttemptsHint}</p>
+                      <div className="connection-reconnect-limit-row">
+                        <label className="serial-reconnect-limit connection-reconnect-limit">
+                          <span>{t.reconnectMaxAttempts}:</span>
+                          <input
+                            inputMode="numeric"
+                            min={0}
+                            max={4294967295}
+                            type="number"
+                            value={form.reconnectMaxAttempts ?? 0}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
+                              }))
+                            }
+                          />
+                        </label>
+                        <p className="advanced-toggle-hint connection-reconnect-hint">{t.reconnectMaxAttemptsHint}</p>
+                      </div>
                     </div>
-                    <div className="ssh-grid">
-                      <label>
-                        {t.connectionTimeout}:
+                    <div className="ssh-grid connection-reliability-grid">
+                      <label className="connection-reliability-field">
+                        <span>{t.connectionTimeout}:</span>
                         <input
                           inputMode="numeric"
                           min={5}
@@ -1033,8 +1054,8 @@ export function ConnectionModal({
                           }
                         />
                       </label>
-                      <label>
-                        {t.operationTimeout}:
+                      <label className="connection-reliability-field">
+                        <span>{t.operationTimeout}:</span>
                         <input
                           inputMode="numeric"
                           min={5}
@@ -1049,7 +1070,7 @@ export function ConnectionModal({
                           }
                         />
                       </label>
-                      <label className="ssh-checkbox advanced-toggle-label">
+                      <label className="ssh-checkbox advanced-toggle-label connection-reliability-toggle span-2">
                         <input
                           checked={form.keepaliveEnabled !== false}
                           type="checkbox"
@@ -1057,41 +1078,43 @@ export function ConnectionModal({
                         />
                         <span className="advanced-toggle-name">{t.keepalive}</span>
                       </label>
-                      <label>
-                        {t.keepaliveInterval}:
-                        <input
-                          disabled={form.keepaliveEnabled === false}
-                          inputMode="numeric"
-                          min={5}
-                          max={3600}
-                          type="number"
-                          value={form.keepaliveIntervalSeconds ?? 30}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        {t.keepaliveMaxMisses}:
-                        <input
-                          disabled={form.keepaliveEnabled === false}
-                          inputMode="numeric"
-                          min={1}
-                          max={32}
-                          type="number"
-                          value={form.keepaliveMaxMisses ?? 3}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
-                            }))
-                          }
-                        />
-                      </label>
-                      <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
+                      {form.keepaliveEnabled !== false ? (
+                        <>
+                          <label className="connection-reliability-field">
+                            <span>{t.keepaliveInterval}:</span>
+                            <input
+                              inputMode="numeric"
+                              min={5}
+                              max={3600}
+                              type="number"
+                              value={form.keepaliveIntervalSeconds ?? 30}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="connection-reliability-field">
+                            <span>{t.keepaliveMaxMisses}:</span>
+                            <input
+                              inputMode="numeric"
+                              min={1}
+                              max={32}
+                              type="number"
+                              value={form.keepaliveMaxMisses ?? 3}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
+                                }))
+                              }
+                            />
+                          </label>
+                          <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
+                        </>
+                      ) : null}
                     </div>
                     <div className="reconnect-mode-group network-routing-group">
                       <div className="reconnect-mode-group__label network-routing-group__label">
@@ -1200,27 +1223,29 @@ export function ConnectionModal({
                           <p className="advanced-toggle-hint">{t.autoReconnectHint}</p>
                         </div>
                       </div>
-                      <label className="serial-reconnect-limit">
-                        {t.reconnectMaxAttempts}:
-                        <input
-                          inputMode="numeric"
-                          min={0}
-                          max={4294967295}
-                          type="number"
-                          value={form.reconnectMaxAttempts ?? 0}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
-                            }))
-                          }
-                        />
-                      </label>
-                      <p className="advanced-toggle-hint">{t.reconnectMaxAttemptsHint}</p>
+                      <div className="connection-reconnect-limit-row">
+                        <label className="serial-reconnect-limit connection-reconnect-limit">
+                          <span>{t.reconnectMaxAttempts}:</span>
+                          <input
+                            inputMode="numeric"
+                            min={0}
+                            max={4294967295}
+                            type="number"
+                            value={form.reconnectMaxAttempts ?? 0}
+                            onChange={(event) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                reconnectMaxAttempts: Math.max(0, Math.min(4294967295, Number(event.target.value) || 0))
+                              }))
+                            }
+                          />
+                        </label>
+                        <p className="advanced-toggle-hint connection-reconnect-hint">{t.reconnectMaxAttemptsHint}</p>
+                      </div>
                     </div>
-                    <div className="ssh-grid">
-                      <label>
-                        {t.connectionTimeout}:
+                    <div className="ssh-grid connection-reliability-grid">
+                      <label className="connection-reliability-field">
+                        <span>{t.connectionTimeout}:</span>
                         <input
                           inputMode="numeric"
                           min={5}
@@ -1235,8 +1260,8 @@ export function ConnectionModal({
                           }
                         />
                       </label>
-                      <label>
-                        {t.operationTimeout}:
+                      <label className="connection-reliability-field">
+                        <span>{t.operationTimeout}:</span>
                         <input
                           inputMode="numeric"
                           min={5}
@@ -1251,7 +1276,7 @@ export function ConnectionModal({
                           }
                         />
                       </label>
-                      <label className="ssh-checkbox advanced-toggle-label">
+                      <label className="ssh-checkbox advanced-toggle-label connection-reliability-toggle span-2">
                         <input
                           checked={form.keepaliveEnabled !== false}
                           type="checkbox"
@@ -1259,41 +1284,43 @@ export function ConnectionModal({
                         />
                         <span className="advanced-toggle-name">{t.keepalive}</span>
                       </label>
-                      <label>
-                        {t.keepaliveInterval}:
-                        <input
-                          disabled={form.keepaliveEnabled === false}
-                          inputMode="numeric"
-                          min={5}
-                          max={3600}
-                          type="number"
-                          value={form.keepaliveIntervalSeconds ?? 30}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        {t.keepaliveMaxMisses}:
-                        <input
-                          disabled={form.keepaliveEnabled === false}
-                          inputMode="numeric"
-                          min={1}
-                          max={32}
-                          type="number"
-                          value={form.keepaliveMaxMisses ?? 3}
-                          onChange={(event) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
-                            }))
-                          }
-                        />
-                      </label>
-                      <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
+                      {form.keepaliveEnabled !== false ? (
+                        <>
+                          <label className="connection-reliability-field">
+                            <span>{t.keepaliveInterval}:</span>
+                            <input
+                              inputMode="numeric"
+                              min={5}
+                              max={3600}
+                              type="number"
+                              value={form.keepaliveIntervalSeconds ?? 30}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  keepaliveIntervalSeconds: Math.max(5, Math.min(3600, Number(event.target.value) || 5))
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="connection-reliability-field">
+                            <span>{t.keepaliveMaxMisses}:</span>
+                            <input
+                              inputMode="numeric"
+                              min={1}
+                              max={32}
+                              type="number"
+                              value={form.keepaliveMaxMisses ?? 3}
+                              onChange={(event) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  keepaliveMaxMisses: Math.max(1, Math.min(32, Number(event.target.value) || 1))
+                                }))
+                              }
+                            />
+                          </label>
+                          <p className="ssh-field-hint span-2">{t.keepaliveHint}</p>
+                        </>
+                      ) : null}
                     </div>
                   </fieldset>
                 ) : null}
@@ -1731,16 +1758,21 @@ export function ConnectionModal({
                           value={form.sessionLogDirectory ?? ''}
                         />
                         <button
-                          className="flat-button compact"
+                          aria-busy={isSelectingSessionLogDirectory}
+                          className="flat-button"
                           disabled={isSelectingSessionLogDirectory}
                           onClick={() => void chooseSessionLogDirectory()}
                           type="button"
                         >
-                          {isSelectingSessionLogDirectory ? t.choosingDirectory : t.chooseDirectory}
+                          <StableButtonContent
+                            busy={isSelectingSessionLogDirectory}
+                            busyLabel={t.choosingDirectory}
+                            label={t.chooseDirectory}
+                          />
                         </button>
                         {form.sessionLogDirectory ? (
                           <button
-                            className="flat-button compact"
+                            className="flat-button"
                             onClick={() => setForm((previous) => ({ ...previous, sessionLogDirectory: '' }))}
                             type="button"
                           >
@@ -1917,29 +1949,19 @@ export function ConnectionModal({
                 </fieldset>
               </div>
             ) : null}
-            {serialValidationError ? (
-              <div className="modal-error connection-test-status" role="alert">
-                <span>{serialValidationError}</span>
-                <CloseButton aria-label={t.closeTab} onClick={() => setSerialValidationError(null)} size="compact" />
-              </div>
-            ) : null}
-            {errorMessage ? (
-              <div className="modal-error connection-test-status" role="alert">
-                <span>{errorMessage}</span>
-                <CloseButton aria-label={t.closeTab} onClick={onDismissError} size="compact" />
-              </div>
-            ) : null}
-            {connectionTestSucceeded ? (
-              <div className="modal-success connection-test-status" role="status">
-                <span>{t.connectionTestSuccess}</span>
-                <CloseButton aria-label={t.closeTab} onClick={() => setConnectionTestSucceeded(false)} size="compact" />
-              </div>
-            ) : null}
             <div className="form-actions ssh-actions">
+              {connectionTestFeedback ? (
+                <FeedbackText
+                  className="connection-test-feedback"
+                  message={connectionTestFeedback.message}
+                  tone={connectionTestFeedback.tone}
+                />
+              ) : null}
               <button className="flat-button" disabled={isFormBusy} onClick={onClose} type="button">
                 {t.cancel}
               </button>
               <button
+                aria-busy={isTestingConnection}
                 className="flat-button"
                 disabled={isFormBusy}
                 onClick={() => {
@@ -1947,12 +1969,10 @@ export function ConnectionModal({
                 }}
                 type="button"
               >
-                {isTestingConnection ? <span aria-hidden="true" className="button-spinner" /> : null}
-                <span>{t.testConnection}</span>
+                <StableButtonContent busy={isTestingConnection} label={t.test} />
               </button>
-              <button className="primary-button" disabled={isFormBusy} type="submit">
-                {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-                <span>{mode === 'edit' ? t.saveChanges : t.saveConnection}</span>
+              <button aria-busy={isSubmitting} className="primary-button" disabled={isFormBusy} type="submit">
+                <StableButtonContent busy={isSubmitting} label={t.save} />
               </button>
             </div>
           </fieldset>

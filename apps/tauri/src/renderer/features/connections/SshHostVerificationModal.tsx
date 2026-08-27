@@ -1,5 +1,6 @@
 import type { SshHostVerificationRequest } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 export function SshHostVerificationModal({
@@ -50,9 +51,14 @@ export function SshHostVerificationModal({
           <button className="flat-button" disabled={isSubmitting} onClick={onAcceptOnce} type="button">
             {t.sshHostAcceptOnce}
           </button>
-          <button className="primary-button" disabled={isSubmitting} onClick={onAcceptAndSave} type="button">
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.sshHostAcceptAndSave}</span>
+          <button
+            aria-busy={isSubmitting}
+            className="primary-button"
+            disabled={isSubmitting}
+            onClick={onAcceptAndSave}
+            type="button"
+          >
+            <StableButtonContent busy={isSubmitting} label={t.sshHostAcceptAndSave} />
           </button>
         </div>
       </div>

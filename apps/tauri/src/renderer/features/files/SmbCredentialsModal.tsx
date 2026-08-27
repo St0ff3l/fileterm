@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 function isSmbHostPath(path: string) {
@@ -95,9 +96,18 @@ export function SmbCredentialsModal({
             <button className="flat-button" disabled={isSubmitting} onClick={onCancel} type="button">
               {t.cancel}
             </button>
-            <button className="primary-button" disabled={isSubmitting} onClick={submit} type="button">
-              {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-              <span>{needsShareSelection ? t.networkShareCredentialsSelect : t.networkShareCredentialsConfirm}</span>
+            <button
+              aria-busy={isSubmitting}
+              className="primary-button"
+              disabled={isSubmitting}
+              onClick={submit}
+              type="button"
+            >
+              <StableButtonContent
+                busy={isSubmitting}
+                label={needsShareSelection ? t.networkShareCredentialsSelect : t.networkShareCredentialsConfirm}
+                reserveLabel={needsShareSelection ? t.networkShareCredentialsConfirm : t.networkShareCredentialsSelect}
+              />
             </button>
           </div>
         </div>

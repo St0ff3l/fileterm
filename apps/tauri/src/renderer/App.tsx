@@ -21,6 +21,7 @@ import {
   DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   createCodexThemeConfig,
   createDefaultThemeConfig,
+  normalizeThemeConfig,
   type FileContentSnapshot,
   type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
@@ -67,6 +68,11 @@ import { WindowMenubar } from './features/layout/WindowMenubar'
 import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
 import { WorkspaceStage } from './features/workspace/WorkspaceStage'
+import {
+  DEFAULT_FILE_PANEL_SNAP_TARGET,
+  isFilePanelSnapTarget,
+  type FilePanelSnapTarget
+} from './features/workspace/file-panel-snap'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
 import {
   defaultLocale,
@@ -104,7 +110,6 @@ const SIDEBAR_MAX_WIDTH = 360
 const FILE_PANEL_PREFERENCES_KEY = 'ui.file-panel-preferences.v1'
 const DEFAULT_FILE_PANEL_RATIO = 30
 const MAX_FILE_PANEL_RATIO = 70
-const FILE_PANEL_DISK_HEADER_ANCHOR = 'disk-header'
 // Four overview cards need 4 * 200px. Include the home body/page padding and
 // a small scrollbar allowance so the last card stays on the same row at the
 // configured 1150px minimum window width.
@@ -207,11 +212,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const hasRenderedWorkspaceRef = useRef(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams, initialUiPreferences))
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
-    if (initialUiPreferences?.themeConfig) {
-      return initialUiPreferences.themeConfig
-    }
     const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
-    return createDefaultThemeConfig(initialTheme === 'default-light' ? 'light' : 'dark')
+    const variant = initialTheme === 'default-light' ? 'light' : 'dark'
+    if (initialUiPreferences?.themeConfig) {
+      return normalizeThemeConfig(initialUiPreferences.themeConfig, variant)
+    }
+    return createDefaultThemeConfig(variant)
   })
   const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() =>
     (initialUiPreferences?.customThemes ?? []).map(normalizeSavedTheme)
@@ -253,7 +259,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [aiCopilotWidth, setAiCopilotWidth] = useState(368)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
   const [filePanelRatios, setFilePanelRatios] = useState<Record<string, number>>({})
-  const [filePanelDiskHeaderAnchors, setFilePanelDiskHeaderAnchors] = useState<Record<string, boolean>>({})
+  const [filePanelSnapTargets, setFilePanelSnapTargets] = useState<Record<string, FilePanelSnapTarget | null>>({})
   const [hasLoadedFilePanelRatios, setHasLoadedFilePanelRatios] = useState(false)
   const [filePanelRatioPersistenceReady, setFilePanelRatioPersistenceReady] = useState(false)
   const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
@@ -485,7 +491,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         if (canceled) return
         if (!value) {
           setFilePanelRatios({})
-          setFilePanelDiskHeaderAnchors({})
+          setFilePanelSnapTargets({})
           setFilePanelRatioPersistenceReady(true)
           return
         }
@@ -493,28 +499,30 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           const parsed: unknown = JSON.parse(value)
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
             setFilePanelRatios({})
-            setFilePanelDiskHeaderAnchors({})
+            setFilePanelSnapTargets({})
           } else {
             const normalizedRatios: Record<string, number> = {}
-            const normalizedAnchors: Record<string, boolean> = {}
+            const normalizedSnapTargets: Record<string, FilePanelSnapTarget | null> = {}
             Object.entries(parsed).forEach(([profileId, entry]) => {
               if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return
               const ratio = (entry as { ratio?: unknown }).ratio
               if (typeof ratio !== 'number' || !Number.isFinite(ratio)) return
               normalizedRatios[profileId] = Math.max(0, Math.min(MAX_FILE_PANEL_RATIO, ratio))
               const anchor = (entry as { anchor?: unknown }).anchor
-              if (anchor === FILE_PANEL_DISK_HEADER_ANCHOR) {
-                normalizedAnchors[profileId] = true
+              if (isFilePanelSnapTarget(anchor)) {
+                normalizedSnapTargets[profileId] = anchor
               } else if (typeof anchor === 'boolean') {
-                normalizedAnchors[profileId] = anchor
+                // Keep the v1 boolean format readable. `true` represented
+                // the only target that existed at the time: the disk header.
+                normalizedSnapTargets[profileId] = anchor ? DEFAULT_FILE_PANEL_SNAP_TARGET : null
               }
             })
             setFilePanelRatios(normalizedRatios)
-            setFilePanelDiskHeaderAnchors(normalizedAnchors)
+            setFilePanelSnapTargets(normalizedSnapTargets)
           }
         } catch {
           setFilePanelRatios({})
-          setFilePanelDiskHeaderAnchors({})
+          setFilePanelSnapTargets({})
         }
         setFilePanelRatioPersistenceReady(true)
       })
@@ -536,7 +544,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           profileId,
           {
             ratio,
-            ...(filePanelDiskHeaderAnchors[profileId] ? { anchor: FILE_PANEL_DISK_HEADER_ANCHOR } : {})
+            ...(filePanelSnapTargets[profileId] ? { anchor: filePanelSnapTargets[profileId] } : {})
           }
         ])
       )
@@ -546,8 +554,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     })
   }, [
     desktopApi,
-    filePanelDiskHeaderAnchors,
     filePanelRatios,
+    filePanelSnapTargets,
     filePanelRatioPersistenceReady,
     hasLoadedFilePanelRatios,
     isMainWorkspaceWindow
@@ -649,12 +657,15 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       ? (filePanelRatios[activeTab.profileId] ?? DEFAULT_FILE_PANEL_RATIO)
       : DEFAULT_FILE_PANEL_RATIO
     : DEFAULT_FILE_PANEL_RATIO
-  const activeFilePanelDiskHeaderAnchor = activeTab
+  const activeFilePanelSnapTarget = activeTab
     ? filePanelRememberRatio && hasLoadedFilePanelRatios
-      ? (filePanelDiskHeaderAnchors[activeTab.profileId] ??
-        !Object.prototype.hasOwnProperty.call(filePanelRatios, activeTab.profileId))
-      : true
-    : false
+      ? Object.prototype.hasOwnProperty.call(filePanelSnapTargets, activeTab.profileId)
+        ? filePanelSnapTargets[activeTab.profileId]
+        : Object.prototype.hasOwnProperty.call(filePanelRatios, activeTab.profileId)
+          ? null
+          : DEFAULT_FILE_PANEL_SNAP_TARGET
+      : DEFAULT_FILE_PANEL_SNAP_TARGET
+    : null
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
   const activeWorkspaceView = activeTab ? (workspaceViews[activeTab.id] ?? 'file') : 'file'
@@ -686,7 +697,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       const launch =
         client.id === 'claude-code'
           ? { title: 'Claude Code', command: 'claude' }
-          : { title: 'Codex CLI', command: 'codex' }
+          : client.id === 'codex-cli'
+            ? { title: 'Codex CLI', command: 'codex' }
+            : { title: 'OpenCode', command: 'opencode' }
       void openLocalTerminal({ title: launch.title }, launch.command)
     },
     [openLocalTerminal]
@@ -729,12 +742,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
   )
 
-  const commitActiveFilePanelDiskHeaderAnchor = useCallback(
-    (nextAnchor: boolean) => {
+  const commitActiveFilePanelSnapTarget = useCallback(
+    (nextTarget: FilePanelSnapTarget | null) => {
       if (!activeTab || !filePanelRememberRatio || !hasLoadedFilePanelRatios) return
-      setFilePanelDiskHeaderAnchors((currentAnchors) => {
-        if (currentAnchors[activeTab.profileId] === nextAnchor) return currentAnchors
-        return { ...currentAnchors, [activeTab.profileId]: nextAnchor }
+      setFilePanelSnapTargets((currentTargets) => {
+        if (
+          Object.prototype.hasOwnProperty.call(currentTargets, activeTab.profileId) &&
+          currentTargets[activeTab.profileId] === nextTarget
+        ) {
+          return currentTargets
+        }
+        return { ...currentTargets, [activeTab.profileId]: nextTarget }
       })
     },
     [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
@@ -1615,7 +1633,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 }
               }}
               onTestConnection={handleTestConnection}
-              onDismissError={() => setFormError(null)}
               onSubmit={handleSaveProfile}
               onClose={closeConnectionForm}
             />
@@ -1709,7 +1726,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           }}
           standalone
           onTestConnection={handleTestConnection}
-          onDismissError={() => setFormError(null)}
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
@@ -1902,8 +1918,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onFilePanelHeightChange={setActiveFilePanelHeight}
                 filePanelRatio={activeFilePanelRatio}
                 onFilePanelRatioCommit={commitActiveFilePanelRatio}
-                filePanelDiskHeaderAnchor={activeFilePanelDiskHeaderAnchor}
-                onFilePanelDiskHeaderAnchorCommit={commitActiveFilePanelDiskHeaderAnchor}
+                filePanelSnapTarget={activeFilePanelSnapTarget}
+                onFilePanelSnapTargetCommit={commitActiveFilePanelSnapTarget}
                 rememberFilePanelRatio={filePanelRememberRatio}
                 sendTargets={sessionSendTargets}
                 terminalDockSendScope={activeTerminalDockSendState.scope}
@@ -2100,7 +2116,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                   void handleClearHostFingerprint(profile)
                 },
                 onTestConnection: handleTestConnection,
-                onDismissError: () => setFormError(null),
                 onSubmit: handleSaveProfile,
                 onClose: closeConnectionForm
               }
@@ -2403,12 +2418,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           title={actionApprovalRequests[0].title}
         />
       ) : null}
-      {isMainWorkspaceWindow && sessionSecurity.status === 'loading' ? <SessionLockScreen mode="loading" /> : null}
-      {isMainWorkspaceWindow && sessionSecurity.status === 'error' ? (
-        <SessionLockScreen mode="error" onRetry={sessionSecurity.retry} />
-      ) : null}
-      {isMainWorkspaceWindow && sessionSecurity.status === 'ready' && sessionSecurity.isLocked ? (
-        <SessionLockScreen mode="locked" onUnlock={sessionSecurity.unlock} />
+      {isMainWorkspaceWindow && sessionSecurity.isLocked ? (
+        sessionSecurity.status === 'error' ? (
+          <SessionLockScreen mode="error" onRetry={sessionSecurity.retry} />
+        ) : (
+          <SessionLockScreen mode="locked" onUnlock={sessionSecurity.unlock} />
+        )
       ) : null}
     </>
   )

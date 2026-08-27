@@ -5,6 +5,7 @@ import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import { t, formatMessage } from '../../i18n'
 
@@ -116,7 +117,13 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
           <span>{t.tunnelPurpose}</span>
         </p>
       </div>
-      {error ? <p className="ssh-tunnel-error">{error}</p> : null}
+      <div
+        aria-live="polite"
+        className={`ssh-tunnel-error-slot${error ? ' is-visible' : ''}`}
+        role={error ? 'alert' : undefined}
+      >
+        {error ? <p className="ssh-tunnel-error">{error}</p> : null}
+      </div>
       <div aria-busy={isLoading} className={`ssh-tunnel-list${isLoading ? ' is-loading' : ''}`}>
         {isLoading ? (
           <WorkspaceLoadingState label={t.loadingTunnels} />
@@ -130,7 +137,7 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
             <strong>{t.noRuntimeTunnels}</strong>
             <span>{t.noRuntimeTunnelsDescription}</span>
             <button
-              className="flat-button compact ssh-tunnel-secondary-action"
+              className="flat-button ssh-tunnel-secondary-action"
               disabled={isCreating}
               type="button"
               onClick={() => {
@@ -240,18 +247,19 @@ export function SshTunnelPanel({ tabId }: { tabId: string }) {
                 </div>
               </fieldset>
             </fieldset>
-            {error ? (
-              <p className="ssh-tunnel-error ssh-tunnel-dialog-error" role="alert">
-                {error}
-              </p>
-            ) : null}
+            <div
+              aria-live="polite"
+              className={`ssh-tunnel-dialog-error-slot${error ? ' is-visible' : ''}`}
+              role={error ? 'alert' : undefined}
+            >
+              {error ? <p className="ssh-tunnel-error ssh-tunnel-dialog-error">{error}</p> : null}
+            </div>
             <div className="ssh-tunnel-form-actions">
               <button className="flat-button" disabled={isCreating} type="button" onClick={() => setIsAdding(false)}>
                 {t.tunnelCancel}
               </button>
-              <button className="primary-button" disabled={isCreating} type="submit">
-                {isCreating ? <span aria-hidden="true" className="button-spinner" /> : null}
-                {isCreating ? t.tunnelAdding : t.tunnelAddAndStart}
+              <button aria-busy={isCreating} className="primary-button" disabled={isCreating} type="submit">
+                <StableButtonContent busy={isCreating} busyLabel={t.tunnelAdding} label={t.tunnelAddAndStart} />
               </button>
             </div>
           </form>
@@ -365,6 +373,7 @@ function TunnelRow({
         <span className="ssh-tunnel-state">{tunnel.status}</span>
         <div className="ssh-tunnel-actions">
           <button
+            aria-busy={Boolean(pendingAction)}
             disabled={Boolean(pendingAction)}
             type="button"
             onClick={() =>
@@ -375,13 +384,12 @@ function TunnelRow({
               )
             }
           >
-            {pendingAction === 'stop'
-              ? t.tunnelStopping
-              : pendingAction === 'start'
-                ? t.tunnelStarting
-                : running
-                  ? t.tunnelStop
-                  : t.tunnelStart}
+            <StableButtonLabel
+              busy={Boolean(pendingAction)}
+              busyLabel={pendingAction === 'stop' ? t.tunnelStopping : t.tunnelStarting}
+              label={running ? t.tunnelStop : t.tunnelStart}
+              reserveLabel={running ? t.tunnelStart : t.tunnelStop}
+            />
           </button>
           {tunnel.runtimeOnly ? (
             <button

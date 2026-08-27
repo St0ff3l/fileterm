@@ -282,7 +282,7 @@ export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
   operationPolicy: 'approved-operations'
 }
 
-export type McpAgentClientId = 'claude-code' | 'codex-cli'
+export type McpAgentClientId = 'claude-code' | 'codex-cli' | 'opencode'
 
 /** Local client discovery result. Detection reads PATH and known install locations, never runs the client. */
 export interface McpAgentClientStatus {
@@ -1415,8 +1415,11 @@ export interface ThemeSemanticColors {
   diffRemoved: string
   skill: string
   keyword: string
-  sftp: string
+  total: string
+  telnet: string
   ftp: string
+  networkRx: string
+  networkTx: string
   secondary: string
   textSecondary: string
   info: string
@@ -1543,8 +1546,11 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
         diffRemoved: isLight ? '#ba2623' : '#f43f5e',
         skill: isLight ? '#924ff7' : '#a855f7',
         keyword: isLight ? '#b45309' : '#fbbf24',
-        sftp: isLight ? '#0284c7' : '#38bdf8',
+        total: isLight ? '#2563eb' : '#60a5fa',
+        telnet: isLight ? '#0284c7' : '#38bdf8',
         ftp: isLight ? '#924ff7' : '#b06dff',
+        networkRx: isLight ? '#0284c7' : '#38bdf8',
+        networkTx: isLight ? '#ba2623' : '#f43f5e',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#667085' : '#a1a1aa',
         info: isLight ? '#339cff' : '#38bdf8',
@@ -1594,8 +1600,11 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
         skill: isLight ? '#7c3aed' : '#b06dff',
         keyword: isLight ? '#b45309' : '#fbbf24',
-        sftp: isLight ? '#0284c7' : '#38bdf8',
+        total: isLight ? '#2563eb' : '#60a5fa',
+        telnet: isLight ? '#0284c7' : '#38bdf8',
         ftp: isLight ? '#9333ea' : '#c084fc',
+        networkRx: isLight ? '#3b82f6' : '#65a9ff',
+        networkTx: isLight ? '#ef4444' : '#ff7474',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
         info: isLight ? '#3b82f6' : '#38bdf8',
@@ -1689,12 +1698,22 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
     typeof rawSemanticColors.success === 'string' &&
     rawSemanticColors.success.trim().toLowerCase() === '#00a240'
   const normalizedSkill = normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill)
-  const normalizedSftp = migrateLegacyCodexStatusColors
-    ? variantFallback.theme.semanticColors.sftp
-    : normalizeThemeColor(rawSemanticColors.sftp, variantFallback.theme.semanticColors.sftp)
+  const normalizedTotal = normalizeThemeColor(rawSemanticColors.total, variantFallback.theme.semanticColors.total)
+  const rawTelnet = rawSemanticColors.telnet ?? rawSemanticColors.sftp
+  const normalizedTelnet = migrateLegacyCodexStatusColors
+    ? variantFallback.theme.semanticColors.telnet
+    : normalizeThemeColor(rawTelnet, variantFallback.theme.semanticColors.telnet)
   const normalizedSuccess = migrateLegacyCodexStatusColors
     ? variantFallback.theme.semanticColors.success
     : normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
+  const normalizedNetworkRx = normalizeThemeColor(
+    rawSemanticColors.networkRx,
+    variantFallback.theme.semanticColors.networkRx
+  )
+  const normalizedNetworkTx = normalizeThemeColor(
+    rawSemanticColors.networkTx,
+    variantFallback.theme.semanticColors.networkTx
+  )
   const ftpFallback = isFileTermTheme ? variantFallback.theme.semanticColors.ftp : normalizedSkill
   const normalizedFtp = normalizeThemeColor(rawSemanticColors.ftp, ftpFallback)
   const normalizedSurface = normalizeThemeColor(rawTheme.surface, variantFallback.theme.surface)
@@ -1744,8 +1763,11 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
         ),
         skill: normalizedSkill,
         keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword),
-        sftp: normalizedSftp,
+        total: normalizedTotal,
+        telnet: normalizedTelnet,
         ftp: normalizedFtp,
+        networkRx: normalizedNetworkRx,
+        networkTx: normalizedNetworkTx,
         secondary: normalizeThemeColor(rawSemanticColors.secondary, variantFallback.theme.semanticColors.secondary),
         textSecondary: normalizeThemeColor(
           rawSemanticColors.textSecondary,

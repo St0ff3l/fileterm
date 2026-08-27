@@ -1,5 +1,7 @@
 export type AppIconName =
   | 'brand'
+  | 'terminal'
+  | 'telnet'
   | 'grid'
   | 'menu'
   | 'server'
@@ -75,11 +77,19 @@ export function AppIcon({
       viewBox="0 0 16 16"
       width={size}
     >
-      {name === 'brand' ? (
+      {name === 'brand' || name === 'terminal' ? (
         <>
           <rect {...commonProps} x="2.25" y="2.5" width="11.5" height="11" rx="2" />
           <path {...commonProps} d="m5.2 5.7 2 1.8-2 1.8" />
           <path {...commonProps} d="M8.5 10.3h3" />
+        </>
+      ) : null}
+      {name === 'telnet' ? (
+        <>
+          <rect {...commonProps} x="2.25" y="2.5" width="11.5" height="8.6" rx="1.8" />
+          <path {...commonProps} d="m4.8 5.4 1.8 1.4-1.8 1.4" />
+          <path {...commonProps} d="M8.2 8.2h2.8" />
+          <path {...commonProps} d="M8 11.1v2.4M5.2 13.5h5.6" />
         </>
       ) : null}
       {name === 'grid' ? (

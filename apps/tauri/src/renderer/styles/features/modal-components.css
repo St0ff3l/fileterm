@@ -19,8 +19,8 @@
 .file-action-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .file-action-field span {
@@ -31,8 +31,8 @@
 
 .file-action-field input {
   width: 100%;
-  height: 42px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 10px;
   background: var(--bg-main);
@@ -528,10 +528,11 @@
 
 .file-permission-dialog__actions .flat-button,
 .file-permission-dialog__actions .primary-button {
-  min-width: 78px;
+  min-width: 88px;
+  min-height: 36px;
   height: 36px;
-  padding: 0 16px;
-  border-radius: 8px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
 }
@@ -646,13 +647,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  padding: 0 16px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
   background: var(--bg-hover);
   color: var(--text-main);
-  border-radius: 10px;
-  font-size: 13px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
@@ -804,7 +806,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
@@ -1006,8 +1008,8 @@
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  height: 30px;
-  min-height: 30px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-md, 6px);
@@ -1201,8 +1203,8 @@
 .local-terminal-shell-select.dropdown-select-trigger,
 .local-terminal-shell-select.ft-select-shell select {
   box-sizing: border-box;
-  height: 32px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--input-bg);
@@ -1239,6 +1241,7 @@
 
 .local-terminal-shell-select.ft-select-shell {
   width: auto;
+  height: 36px;
 }
 
 .local-terminal-shell-select.ft-select-shell select {
@@ -1261,8 +1264,19 @@
 }
 
 .local-terminal-shell-save-message {
+  min-width: 0;
+  min-height: 18px;
+  overflow: hidden;
   color: var(--success-text, var(--text-muted));
   font-size: 12px;
+  line-height: 18px;
+  opacity: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-terminal-shell-save-message.is-visible {
+  opacity: 1;
 }
 
 @media (max-width: 760px) {
@@ -1371,8 +1385,8 @@
 .update-check-preference-select.dropdown-select-trigger,
 .update-check-preference-select.ft-select-shell select {
   box-sizing: border-box;
-  height: 32px;
-  padding: 0 28px 0 10px;
+  height: 36px;
+  padding: 0 28px 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--input-bg);
@@ -1388,6 +1402,7 @@
 
 .update-check-preference-select.ft-select-shell {
   width: auto;
+  height: 36px;
 }
 
 .update-check-preference-select.ft-select-shell select {
@@ -1544,8 +1559,8 @@
 
 .settings-update-actions .primary-button.compact,
 .settings-update-actions .flat-button.compact {
-  height: 30px;
-  min-height: 30px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 12px;
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular, 12px);
@@ -1747,8 +1762,8 @@
   gap: 6px;
   width: auto;
   min-width: 0;
-  height: 32px;
-  min-height: 32px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 12px;
   border-radius: 6px;
   border-color: transparent;
@@ -1872,9 +1887,9 @@
   gap: 6px;
   height: 36px;
   min-height: 36px;
-  padding: 0 14px;
-  border-radius: 7px;
-  font-size: 13px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -1889,10 +1904,10 @@
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 40%, var(--border-light));
-  border-radius: 7px;
+  border-radius: var(--radius-md, 6px);
   background: color-mix(in srgb, var(--danger, #ef4444) 10%, var(--bg-card));
   color: var(--danger, #ef4444);
-  font-size: 13px;
+  font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -2049,7 +2064,9 @@
   min-width: 78px;
   height: 36px;
   min-height: 36px;
-  padding: 0 9px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
   white-space: nowrap;
 }
 
@@ -2382,14 +2399,32 @@
 }
 
 .theme-config-action-status {
+  min-height: 16px;
   max-width: 100%;
   overflow: hidden;
-  color: var(--success-text, var(--text-muted));
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.35;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
+  visibility: hidden;
+}
+
+.theme-config-action-status.is-visible {
+  visibility: visible;
+}
+
+.theme-config-action-status.is-error {
+  color: var(--danger-text, var(--danger));
+}
+
+.theme-config-action-status.is-warning {
+  color: var(--warning, #f59e0b);
+}
+
+.theme-config-action-status.is-success {
+  color: var(--success-text, var(--success));
 }
 
 .language-selector-row {
@@ -2482,8 +2517,8 @@
 .tool-card-details .primary-button.compact {
   align-self: flex-start;
   margin-top: 4px;
-  height: 30px;
-  min-height: 30px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 12px;
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular, 12px);
@@ -2540,8 +2575,8 @@
 .logs-shortcut-card button,
 .logs-shortcut-card .flat-button.compact {
   align-self: flex-start;
-  height: 30px;
-  min-height: 30px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 12px;
   border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular, 12px);
@@ -2550,13 +2585,13 @@
 }
 
 .webdav-sync-form {
-  --settings-form-control-height: 38px;
+  --settings-form-control-height: 36px;
   --settings-form-control-inline-padding: 12px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 16px;
-  row-gap: 14px;
-  margin-top: 14px;
+  row-gap: 12px;
+  margin-top: 12px;
 }
 
 .webdav-sync-form label {
@@ -2579,7 +2614,7 @@
 }
 
 /* Keep native macOS selects and the Windows/Linux custom DropdownSelect on the
-   same 38px form-control rhythm used by the New Connection form. */
+   same 36px form-control rhythm used by the New Connection form. */
 .webdav-sync-form .dropdown-select-trigger,
 .webdav-sync-form .ft-select-shell select {
   width: 100%;
@@ -2644,8 +2679,8 @@
 .sync-config-primary-buttons .flat-button.compact {
   display: inline-flex;
   min-width: 80px;
-  height: 30px;
-  min-height: 30px;
+  height: 36px;
+  min-height: 36px;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -2676,17 +2711,6 @@
   padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid var(--border-light);
-}
-
-.sync-feedback-banner {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.45;
-  background: color-mix(in srgb, var(--accent-highlight, #3b82f6) 10%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--accent-highlight, #3b82f6) 24%, var(--border-light));
-  color: var(--text-main);
 }
 
 /* Manual Backup & Sync Card */
@@ -2814,8 +2838,8 @@
 .sync-op-controls-row .ft-select-shell,
 .sync-op-controls-row .ft-select-shell select {
   width: 100%;
-  height: 32px;
-  min-height: 32px;
+  height: 36px;
+  min-height: 36px;
   box-sizing: border-box;
 }
 
@@ -2846,8 +2870,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
-  min-height: 32px;
+  height: 36px;
+  min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
@@ -2963,14 +2987,27 @@
   font-size: 12px;
 }
 .connection-import-actions > button:not(.primary-button) {
+  box-sizing: border-box;
+  min-width: 88px;
+  min-height: 36px;
+  height: 36px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
-  padding: 7px 10px;
+  padding: 0 12px;
   background: transparent;
   color: var(--text-main);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+.connection-import-actions > .primary-button {
+  box-sizing: border-box;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular);
 }
 @media (max-width: 600px) {
   .connection-import-item {

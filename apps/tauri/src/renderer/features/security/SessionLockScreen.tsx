@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
+import { StableButtonContent } from '../common/StableButtonContent'
 
 export function SessionLockScreen({
   mode,
@@ -100,13 +101,17 @@ export function SessionLockScreen({
                 {errorMessage}
               </p>
             ) : null}
-            <button className="primary-button session-lock-card__action" disabled={isSubmitting} type="submit">
-              {isSubmitting ? (
-                <span aria-hidden="true" className="button-spinner" />
-              ) : (
-                <AppIcon name="check" size={14} />
-              )}
-              <span>{t.securityUnlock}</span>
+            <button
+              aria-busy={isSubmitting}
+              className="primary-button session-lock-card__action"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              <StableButtonContent
+                busy={isSubmitting}
+                icon={<AppIcon name="check" size={14} />}
+                label={t.securityUnlock}
+              />
             </button>
           </form>
         ) : (

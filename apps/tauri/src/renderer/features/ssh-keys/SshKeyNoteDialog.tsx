@@ -3,6 +3,7 @@ import type { SshKeyFileSelection, SshKeyImportSource } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { formatMessage, t } from '../../i18n'
 
 const MAX_PRIVATE_KEY_TEXT_LENGTH = 1024 * 1024
@@ -151,23 +152,19 @@ export function SshKeyNoteDialog({
                       <span>{selectedFile?.fileName ?? t.sshKeyNoteNoFile}</span>
                     </div>
                     <button
-                      className="flat-button compact ssh-key-import-dialog__file-button"
+                      aria-busy={isSelectingFile}
+                      className="flat-button ssh-key-import-dialog__file-button"
                       disabled={isSubmitting || isSelectingFile}
                       onClick={() => void selectFile()}
                       type="button"
                     >
-                      {isSelectingFile ? (
-                        <span aria-hidden="true" className="button-spinner" />
-                      ) : (
-                        <AppIcon name="folder" size={14} />
-                      )}
-                      <span>
-                        {isSelectingFile
-                          ? t.sshKeyNoteSelecting
-                          : selectedFile
-                            ? t.sshKeyNoteReselect
-                            : t.sshKeyNoteSelectFile}
-                      </span>
+                      <StableButtonContent
+                        busy={isSelectingFile}
+                        busyLabel={t.sshKeyNoteSelecting}
+                        icon={<AppIcon name="folder" size={14} />}
+                        label={selectedFile ? t.sshKeyNoteReselect : t.sshKeyNoteSelectFile}
+                        reserveLabel={selectedFile ? t.sshKeyNoteSelectFile : t.sshKeyNoteReselect}
+                      />
                     </button>
                   </div>
                   {selectedFile?.existingKey ? (

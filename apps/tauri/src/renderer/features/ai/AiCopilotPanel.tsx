@@ -15,6 +15,7 @@ import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
 import { AiCopilotMarkdown } from './AiCopilotMarkdown'
@@ -85,6 +86,7 @@ function AiCopilotToolActivity({
     onExecuteTerminalCommand && !result ? (
       <button
         aria-label={t.aiCopilotWriteTerminalInput}
+        aria-busy={isExecutingTerminalCommand}
         className="ai-copilot-tool-write-button"
         disabled={!canExecuteTerminalCommand || isResolvingApproval}
         title={canExecuteTerminalCommand ? t.aiCopilotWriteTerminalInputHint : t.aiCopilotMultilinePasteUnavailable}
@@ -97,8 +99,11 @@ function AiCopilotToolActivity({
             .finally(() => setIsExecutingTerminalCommand(false))
         }}
       >
-        <AppIcon name="terminal-file" size={13} />
-        {t.aiCopilotWriteTerminalInput}
+        <StableButtonContent
+          busy={isExecutingTerminalCommand}
+          icon={<AppIcon name="terminal-file" size={13} />}
+          label={t.aiCopilotWriteTerminalInput}
+        />
       </button>
     ) : null
   const statusLabel = result
@@ -156,15 +161,20 @@ function AiCopilotToolActivity({
           ) : null}
           <footer className="ai-copilot-tool-approval-actions">
             <button
+              aria-busy={isResolvingApproval}
               disabled={isResolvingApproval || isExecutingTerminalCommand}
               type="button"
               onClick={() => onResolveApproval?.(approval.requestId, false)}
             >
-              <AppIcon name="close" size={13} />
-              {t.aiCopilotToolReject}
+              <StableButtonContent
+                busy={isResolvingApproval}
+                icon={<AppIcon name="close" size={13} />}
+                label={t.aiCopilotToolReject}
+              />
             </button>
             {executeTerminalCommandButton}
             <button
+              aria-busy={isResolvingApproval}
               disabled={
                 isResolvingApproval ||
                 isExecutingTerminalCommand ||
@@ -174,8 +184,11 @@ function AiCopilotToolActivity({
               type="button"
               onClick={() => onResolveApproval?.(approval.requestId, true, riskAcknowledged)}
             >
-              <AppIcon name="check" size={13} />
-              {t.aiCopilotToolApprove}
+              <StableButtonContent
+                busy={isResolvingApproval}
+                icon={<AppIcon name="check" size={13} />}
+                label={t.aiCopilotToolApprove}
+              />
             </button>
           </footer>
         </div>
@@ -960,6 +973,7 @@ export function AiCopilotPanel({
                   <button
                     aria-pressed={referenceTerminal}
                     aria-label={t.aiCopilotReferenceTerminal}
+                    aria-busy={isContextPreviewing}
                     className={`ai-copilot-context-switch ${referenceTerminal ? 'is-active' : ''}`}
                     disabled={
                       isStreaming ||
@@ -970,16 +984,25 @@ export function AiCopilotPanel({
                     type="button"
                     onClick={toggleTerminalReference}
                   >
-                    <span aria-hidden="true" className="material-symbols-outlined">
-                      {referenceTerminal ? 'visibility' : 'visibility_off'}
+                    <span aria-hidden="true" className="stable-button-icon ai-copilot-context-switch-icon">
+                      {isContextPreviewing ? (
+                        <span className="button-spinner" />
+                      ) : (
+                        <span className="material-symbols-outlined">
+                          {referenceTerminal ? 'visibility' : 'visibility_off'}
+                        </span>
+                      )}
                     </span>
                     <span>{t.aiCopilotReferenceTerminal}</span>
                     <span className="ai-copilot-context-switch-state">
-                      {isContextPreviewing
-                        ? t.aiCopilotContextPreparing
-                        : referenceTerminal
-                          ? t.aiCopilotReferenceTerminalOn
-                          : t.aiCopilotReferenceTerminalOff}
+                      <StableButtonLabel
+                        busy={isContextPreviewing}
+                        busyLabel={t.aiCopilotContextPreparing}
+                        label={referenceTerminal ? t.aiCopilotReferenceTerminalOn : t.aiCopilotReferenceTerminalOff}
+                        reserveLabel={
+                          referenceTerminal ? t.aiCopilotReferenceTerminalOff : t.aiCopilotReferenceTerminalOn
+                        }
+                      />
                     </span>
                   </button>
                   <span className="ai-copilot-context-dock-hint">
@@ -1155,11 +1178,22 @@ export function AiCopilotPanel({
               >
                 <AppIcon name={dangerousCommandRestrictionsEnabled ? 'shield-check' : 'shield'} size={12} />
                 <span>{t.aiCopilotDangerousCommandRestrictions}</span>
-                <strong>
-                  {dangerousCommandRestrictionsEnabled
-                    ? t.aiCopilotDangerousCommandRestrictionsOn
-                    : t.aiCopilotDangerousCommandRestrictionsOff}
-                </strong>
+                <StableButtonLabel
+                  label={
+                    <strong>
+                      {dangerousCommandRestrictionsEnabled
+                        ? t.aiCopilotDangerousCommandRestrictionsOn
+                        : t.aiCopilotDangerousCommandRestrictionsOff}
+                    </strong>
+                  }
+                  reserveLabel={
+                    <strong>
+                      {dangerousCommandRestrictionsEnabled
+                        ? t.aiCopilotDangerousCommandRestrictionsOff
+                        : t.aiCopilotDangerousCommandRestrictionsOn}
+                    </strong>
+                  }
+                />
               </button>
             </>
           ) : null}

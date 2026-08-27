@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TransferTask } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import {
   formatTransferBytes,
   formatTransferDateTime,
@@ -128,13 +129,17 @@ export function TransferPopover({
         <div className="transfer-popover-actions">
           {statusFilter === 'completed' ? (
             <button
+              aria-busy={isClearing}
               className="transfer-clear-button"
               disabled={!clearableTransferIds.length || isClearing}
               onClick={clearTransfers}
               type="button"
             >
-              {isClearing ? <span aria-hidden="true" className="button-spinner" /> : null}
-              {isClearing ? t.clearingTransferHistory : t.clearTransferHistory}
+              <StableButtonContent
+                busy={isClearing}
+                busyLabel={t.clearingTransferHistory}
+                label={t.clearTransferHistory}
+              />
             </button>
           ) : null}
           <CloseButton onClick={onClose} />
@@ -212,21 +217,31 @@ export function TransferPopover({
                   <strong title={transfer.name}>{transfer.name}</strong>
                   {(transfer.status === 'running' || transfer.status === 'queued') && transfer.resumable ? (
                     <button
+                      aria-busy={pendingActions[transfer.id] === 'pause'}
                       className="transfer-cancel"
                       disabled={Boolean(pendingActions[transfer.id])}
                       onClick={() => runAction(transfer.id, 'pause', onPauseTransfer)}
                       type="button"
                     >
-                      {pendingActions[transfer.id] === 'pause' ? t.pausingTransfer : t.pauseTransfer}
+                      <StableButtonLabel
+                        busy={pendingActions[transfer.id] === 'pause'}
+                        busyLabel={t.pausingTransfer}
+                        label={t.pauseTransfer}
+                      />
                     </button>
                   ) : transfer.status === 'running' || transfer.status === 'queued' ? (
                     <button
+                      aria-busy={pendingActions[transfer.id] === 'discard'}
                       className="transfer-cancel"
                       disabled={Boolean(pendingActions[transfer.id])}
                       onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
                       type="button"
                     >
-                      {pendingActions[transfer.id] === 'discard' ? t.stopping : t.stop}
+                      <StableButtonLabel
+                        busy={pendingActions[transfer.id] === 'discard'}
+                        busyLabel={t.stopping}
+                        label={t.stop}
+                      />
                     </button>
                   ) : transfer.resumable &&
                     (transfer.status === 'paused' ||
@@ -234,20 +249,30 @@ export function TransferPopover({
                       transfer.status === 'failed') ? (
                     <span className="transfer-row-actions">
                       <button
+                        aria-busy={pendingActions[transfer.id] === 'resume'}
                         className="transfer-cancel"
                         disabled={Boolean(pendingActions[transfer.id])}
                         onClick={() => runAction(transfer.id, 'resume', onResumeTransfer)}
                         type="button"
                       >
-                        {pendingActions[transfer.id] === 'resume' ? t.resumingTransfer : t.resumeTransfer}
+                        <StableButtonLabel
+                          busy={pendingActions[transfer.id] === 'resume'}
+                          busyLabel={t.resumingTransfer}
+                          label={t.resumeTransfer}
+                        />
                       </button>
                       <button
+                        aria-busy={pendingActions[transfer.id] === 'discard'}
                         className="transfer-cancel"
                         disabled={Boolean(pendingActions[transfer.id])}
                         onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
                         type="button"
                       >
-                        {pendingActions[transfer.id] === 'discard' ? t.discardingCheckpoint : t.discardCheckpoint}
+                        <StableButtonLabel
+                          busy={pendingActions[transfer.id] === 'discard'}
+                          busyLabel={t.discardingCheckpoint}
+                          label={t.discardCheckpoint}
+                        />
                       </button>
                     </span>
                   ) : transfer.cleanupPending ||
@@ -255,12 +280,17 @@ export function TransferPopover({
                     transfer.status === 'interrupted' ||
                     (transfer.status === 'failed' && Boolean(transfer.partialPath)) ? (
                     <button
+                      aria-busy={pendingActions[transfer.id] === 'discard'}
                       className="transfer-cancel"
                       disabled={Boolean(pendingActions[transfer.id])}
                       onClick={() => runAction(transfer.id, 'discard', onDiscardTransfer)}
                       type="button"
                     >
-                      {pendingActions[transfer.id] === 'discard' ? t.discardingCheckpoint : t.discardCheckpoint}
+                      <StableButtonLabel
+                        busy={pendingActions[transfer.id] === 'discard'}
+                        busyLabel={t.discardingCheckpoint}
+                        label={t.discardCheckpoint}
+                      />
                     </button>
                   ) : null}
                 </div>

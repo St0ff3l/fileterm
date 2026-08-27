@@ -1993,10 +1993,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 48px;
+  gap: 12px;
+  min-height: 44px;
   box-sizing: border-box;
-  padding: 0 16px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-sidebar);
 }
@@ -2062,12 +2062,12 @@
 
 .root-access-modal__body {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px 16px 16px;
+  padding: 10px 14px 12px;
   scrollbar-gutter: stable;
 }
 
@@ -2080,9 +2080,14 @@
 
 .ssh-fieldset.root-access-fieldset {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-  padding: 10px 20px 12px;
+  padding: 8px 16px 10px;
+}
+
+.root-access-modal .file-action-field {
+  gap: 6px;
+  margin-bottom: 0;
 }
 
 .network-share-fieldset > legend {
@@ -2120,8 +2125,8 @@
 .root-access-modal .file-action-field select {
   box-sizing: border-box;
   width: 100%;
-  height: 42px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 4px;
   background: var(--input-bg);
@@ -2151,11 +2156,11 @@
 .root-access-modal .file-action-field .dropdown-select-trigger {
   box-sizing: border-box;
   width: 100%;
-  height: 42px;
+  height: 36px;
 }
 
 .root-access-modal .file-action-field .dropdown-select-trigger {
-  padding: 0 14px;
+  padding: 0 12px;
   border-color: var(--border-light);
   border-radius: 4px;
   background: var(--input-bg);
@@ -2176,7 +2181,7 @@
 }
 
 .root-access-modal .root-access-method-hint {
-  margin: -4px 0 0;
+  margin: -3px 0 0;
 }
 
 .network-share-picker-modal .file-action-field select {
@@ -2194,18 +2199,18 @@
   border-radius: 0;
   background: transparent;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .root-access-modal .root-access-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   margin: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--border-light);
-  border-radius: 0;
+  border-radius: var(--radius-sm, 4px);
   background: var(--input-bg);
   font-size: 12px;
 }
@@ -2218,8 +2223,8 @@
 .root-access-modal .root-access-note {
   margin: 0 2px;
   display: grid;
-  gap: 4px;
-  padding: 10px 12px;
+  gap: 3px;
+  padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--focus-outline) 24%, var(--border-light));
   border-radius: 0;
   background: color-mix(in srgb, var(--accent-highlight) 8%, transparent);
@@ -2240,7 +2245,7 @@
 
 .root-access-modal__actions {
   margin: 0;
-  padding: 10px 16px 12px;
+  padding: 8px 14px 10px;
   border-top: 1px solid var(--border-light);
   background: var(--bg-card);
 }
@@ -2289,6 +2294,11 @@
 
 .conflict-resolution-actions > button {
   min-width: 120px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular);
 }
 
 .file-permission-name {
@@ -2749,7 +2759,8 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
-  height: 28px;
+  min-height: 36px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
@@ -3514,8 +3525,22 @@
   cursor: pointer;
 }
 
+.tunnel-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.ssh-tunnel-actions button,
+.ssh-tunnel-secondary-action {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+}
+
 .ssh-tunnel-header-actions .ssh-tunnel-create-button {
-  height: 32px;
+  min-height: 36px;
+  height: 36px;
   padding: 0 12px;
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
@@ -3613,7 +3638,7 @@
 }
 .ssh-tunnel-field-grid label {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -3621,11 +3646,11 @@
 .ssh-tunnel-field-grid select {
   box-sizing: border-box;
   width: 100%;
-  min-height: 42px;
+  min-height: 36px;
   min-width: 0;
   border: 1px solid var(--border-light);
   border-radius: 4px;
-  padding: 0 14px;
+  padding: 0 12px;
   color: var(--text-main);
   background: var(--input-bg);
   font: inherit;
@@ -3668,22 +3693,44 @@
   border-top: 1px solid var(--border-light);
 }
 .ssh-tunnel-form-actions .flat-button {
-  min-width: 76px;
-  height: 38px;
-  padding: 0 14px;
+  min-width: 88px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
 }
 .ssh-tunnel-form-actions .primary-button {
   min-width: 116px;
-  height: 38px;
-  padding: 0 14px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
 }
 .ssh-tunnel-error {
   margin-top: 12px !important;
   color: var(--danger-text, #d86666) !important;
+}
+.ssh-tunnel-error-slot {
+  min-height: 18px;
+  margin-top: 12px;
+  visibility: hidden;
+}
+.ssh-tunnel-error-slot.is-visible {
+  visibility: visible;
+}
+.ssh-tunnel-error-slot .ssh-tunnel-error {
+  margin-top: 0 !important;
+}
+.ssh-tunnel-dialog-error-slot {
+  min-height: 18px;
+  visibility: hidden;
+}
+.ssh-tunnel-dialog-error-slot.is-visible {
+  visibility: visible;
 }
 .ssh-tunnel-dialog-error {
   margin: 0 !important;

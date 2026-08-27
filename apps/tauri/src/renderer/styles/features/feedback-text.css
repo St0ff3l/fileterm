@@ -1,0 +1,57 @@
+.feedback-text {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
+.feedback-text__spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border-width: 1.5px;
+}
+
+.feedback-text__message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-text--info {
+  color: var(--info-text, var(--info, var(--accent-highlight)));
+}
+
+.feedback-text--success {
+  color: var(--success-text, var(--success));
+}
+
+.feedback-text--warning {
+  color: var(--warning-text, var(--warning));
+}
+
+.feedback-text--error {
+  color: var(--danger-text, var(--danger));
+}
+
+.feedback-text--loading {
+  color: var(--text-muted);
+}
+
+.sync-feedback-text {
+  min-width: 0;
+  max-width: 36ch;
+  flex: 0 1 36ch;
+}
+
+@media (max-width: 720px) {
+  .sync-feedback-text {
+    max-width: 100%;
+    flex-basis: auto;
+  }
+}

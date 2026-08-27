@@ -1303,6 +1303,25 @@ fn resolve_local_cli(command: &str) -> Option<std::path::PathBuf> {
         .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .unwrap_or_default();
 
+    // OpenCode's official installer may place the native binary in a directory
+    // that a GUI-launched process does not inherit. Keep these paths ahead of
+    // the generic Node manager fallbacks, matching the installer priority used
+    // by CC Switch without executing the client or a shell profile.
+    if command.eq_ignore_ascii_case("opencode") {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default();
+        for path in opencode_extra_search_paths(
+            &home,
+            std::env::var_os("OPENCODE_INSTALL_DIR"),
+            std::env::var_os("XDG_BIN_DIR"),
+            std::env::var_os("GOPATH"),
+        ) {
+            push_unique_cli_search_path(&mut search_paths, path);
+        }
+    }
+
     append_local_cli_search_paths(&mut search_paths);
     resolve_local_cli_from_paths(command, search_paths)
 }
@@ -1476,6 +1495,36 @@ fn append_home_cli_search_paths(
     }
 }
 
+/// OpenCode's official installer order is
+/// `OPENCODE_INSTALL_DIR > XDG_BIN_DIR > ~/bin > ~/.opencode/bin`.
+/// Include the default Bun and Go locations as well because those installs are
+/// common on machines where a packaged desktop app receives a reduced PATH.
+fn opencode_extra_search_paths(
+    home: &std::path::Path,
+    opencode_install_dir: Option<std::ffi::OsString>,
+    xdg_bin_dir: Option<std::ffi::OsString>,
+    gopath: Option<std::ffi::OsString>,
+) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    for value in [opencode_install_dir, xdg_bin_dir].into_iter().flatten() {
+        push_unique_cli_search_path(&mut paths, std::path::PathBuf::from(value));
+    }
+
+    if !home.as_os_str().is_empty() {
+        for relative in ["bin", ".opencode/bin", ".bun/bin", "go/bin"] {
+            push_unique_cli_search_path(&mut paths, home.join(relative));
+        }
+    }
+
+    if let Some(gopath) = gopath {
+        for path in std::env::split_paths(&gopath) {
+            push_unique_cli_search_path(&mut paths, path.join("bin"));
+        }
+    }
+
+    paths
+}
+
 fn push_unique_cli_search_path(
     search_paths: &mut Vec<std::path::PathBuf>,
     path: std::path::PathBuf,
@@ -1521,6 +1570,12 @@ pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
                 "Codex CLI",
                 "codex",
                 format!("codex mcp add fileterm -- {fileterm_command} mcp"),
+            ),
+            make_client(
+                "opencode",
+                "OpenCode",
+                "opencode",
+                format!("opencode mcp add fileterm -- {fileterm_command} mcp"),
             ),
         ],
     })
@@ -6083,8 +6138,10 @@ mod command_template_tests {
 #[cfg(test)]
 mod mcp_agent_setup_tests {
     use super::{
-        app_get_mcp_agent_setup, append_home_cli_search_paths, resolve_local_cli_from_paths,
+        app_get_mcp_agent_setup, append_home_cli_search_paths, opencode_extra_search_paths,
+        resolve_local_cli_from_paths,
     };
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn resolves_cli_from_ordered_search_paths_without_running_it() {
@@ -6156,6 +6213,61 @@ mod mcp_agent_setup_tests {
     }
 
     #[test]
+    fn includes_opencode_official_and_manager_install_paths_in_priority_order() {
+        let home = Path::new("/home/tester");
+        let gopath = std::env::join_paths([PathBuf::from("/go/path1"), PathBuf::from("/go/path2")])
+            .expect("test GOPATH should be representable");
+
+        let paths = opencode_extra_search_paths(
+            home,
+            Some(std::ffi::OsString::from("/custom/opencode/bin")),
+            Some(std::ffi::OsString::from("/xdg/bin")),
+            Some(gopath),
+        );
+
+        assert_eq!(paths[0], PathBuf::from("/custom/opencode/bin"));
+        assert_eq!(paths[1], PathBuf::from("/xdg/bin"));
+        assert_eq!(paths[2], PathBuf::from("/home/tester/bin"));
+        assert_eq!(paths[3], PathBuf::from("/home/tester/.opencode/bin"));
+        assert!(paths.contains(&PathBuf::from("/home/tester/.bun/bin")));
+        assert!(paths.contains(&PathBuf::from("/home/tester/go/bin")));
+        assert!(paths.contains(&PathBuf::from("/go/path1/bin")));
+        assert!(paths.contains(&PathBuf::from("/go/path2/bin")));
+    }
+
+    #[test]
+    fn resolves_opencode_from_the_official_user_install_directory() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-opencode-cli-{}", uuid::Uuid::new_v4()));
+        let cli_dir = root.join(".opencode/bin");
+        std::fs::create_dir_all(&cli_dir).expect("OpenCode bin directory should be created");
+        let opencode = cli_dir.join("opencode");
+        std::fs::write(&opencode, b"OpenCode CLI").expect("OpenCode placeholder should be written");
+
+        let paths = opencode_extra_search_paths(&root, None, None, None);
+        let resolved = resolve_local_cli_from_paths("opencode", paths);
+
+        assert_eq!(resolved, Some(opencode));
+        std::fs::remove_dir_all(root).expect("temporary OpenCode directory should be removed");
+    }
+
+    #[test]
+    fn deduplicates_opencode_install_paths() {
+        let home = Path::new("/home/tester");
+        let same_dir = std::ffi::OsString::from("/same/opencode/bin");
+
+        let paths = opencode_extra_search_paths(home, Some(same_dir.clone()), Some(same_dir), None);
+
+        assert_eq!(
+            paths
+                .iter()
+                .filter(|path| path.as_path() == Path::new("/same/opencode/bin"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn generates_stdio_registration_commands_for_supported_clients() {
         let setup = app_get_mcp_agent_setup().expect("MCP Agent setup should be readable");
         assert!(!setup.fileterm_command.is_empty());
@@ -6182,6 +6294,17 @@ mod mcp_agent_setup_tests {
             .registration_command
             .starts_with("codex mcp add fileterm -- "));
         assert!(codex.registration_command.ends_with(" mcp"));
+
+        let opencode = setup
+            .clients
+            .iter()
+            .find(|client| client.id == "opencode")
+            .expect("OpenCode client should be exposed");
+        assert_eq!(opencode.command, "opencode");
+        assert!(opencode
+            .registration_command
+            .starts_with("opencode mcp add fileterm -- "));
+        assert!(opencode.registration_command.ends_with(" mcp"));
     }
 }
 

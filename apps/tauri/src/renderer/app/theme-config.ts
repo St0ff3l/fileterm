@@ -72,10 +72,10 @@ function resolveCompactUiVariables(
   const accent = theme.accent
   const secondaryAccent = theme.semanticColors.secondary
 
-  const sidebar = surfaceSecondary
+  const sidebar = isCodex ? surfaceSecondary : isLight ? surfaceElevated : '#242424'
   const card = surfaceSecondary
   const elevated = surfaceElevated
-  const input = surfaceElevated
+  const input = isCodex ? surfaceElevated : isLight ? surfaceElevated : '#1a1a1a'
   // Codex uses the same quiet neutral hover/active treatment as its native
   // sidebar. Keep the primary blue for actions and status semantics instead
   // of tinting every navigation interaction blue.
@@ -92,8 +92,9 @@ function resolveCompactUiVariables(
     : isLight
       ? blend(surfaceElevated, accent, 12)
       : blend(surfaceElevated, accent, 18)
-  const titlebar = surfaceElevated
-  const managerHeadBg = surfaceSecondary
+  const titlebar = isCodex ? surfaceElevated : isLight ? surface : '#272727'
+  const tabbar = isCodex ? surfaceElevated : isLight ? surface : surfaceSecondary
+  const managerHeadBg = isCodex ? surfaceSecondary : isLight ? surface : '#242424'
 
   const secondaryText = theme.semanticColors.textSecondary
   const softText = isLight ? blend(surface, secondaryText, 72) : blend(surface, secondaryText, 68)
@@ -115,9 +116,16 @@ function resolveCompactUiVariables(
   const success = theme.semanticColors.success
   const warning = theme.semanticColors.warning
   const info = theme.semanticColors.info
-  const sftp = theme.semanticColors.sftp
+  const telnet =
+    theme.semanticColors.telnet ??
+    (theme.semanticColors as { sftp?: string }).sftp ??
+    (isCodex ? (isLight ? '#0284c7' : '#38bdf8') : isLight ? '#0284c7' : '#38bdf8')
   const ftp = theme.semanticColors.ftp
-  const total = isCodex && !isLight ? '#60a5fa' : accent
+  const total = theme.semanticColors.total ?? (isCodex && !isLight ? '#60a5fa' : isLight ? '#2563eb' : '#60a5fa')
+  const networkRx =
+    theme.semanticColors.networkRx ?? (isCodex ? (isLight ? '#0284c7' : '#38bdf8') : isLight ? '#3b82f6' : '#65a9ff')
+  const networkTx =
+    theme.semanticColors.networkTx ?? (isCodex ? (isLight ? '#ba2623' : '#f43f5e') : isLight ? '#ef4444' : '#ff7474')
 
   const secondarySurface = alpha(secondaryAccent, isLight ? 10 : 14)
   const totalSurface = alpha(total, isLight ? 10 : 14)
@@ -139,7 +147,7 @@ function resolveCompactUiVariables(
     '--bg-hover': hover,
     '--bg-active': active,
     '--titlebar-background': titlebar,
-    '--tabbar-background': surfaceElevated,
+    '--tabbar-background': tabbar,
     '--manager-head-bg': managerHeadBg,
     '--input-bg': input,
     '--command-history-head-bg': surface,
@@ -176,8 +184,12 @@ function resolveCompactUiVariables(
     '--theme-text-primary': ink,
     '--theme-text-secondary': secondaryText,
     '--theme-info': info,
-    '--theme-semantic-sftp': sftp,
+    '--theme-semantic-total': total,
+    '--theme-semantic-telnet': telnet,
+    '--theme-semantic-sftp': telnet,
     '--theme-semantic-ftp': ftp,
+    '--theme-semantic-network-rx': networkRx,
+    '--theme-semantic-network-tx': networkTx,
     '--theme-warning': warning,
     '--theme-error': danger,
     '--theme-success': success,
@@ -203,15 +215,15 @@ function resolveCompactUiVariables(
     '--info-text': secondaryHover,
     '--info-surface': infoSurface,
     '--info-border': alpha(info, isLight ? 20 : 30),
-    '--folder-accent': warning,
-    '--kernel-accent': accent,
-    '--copy-link': accent,
-    '--copy-link-hover': accentHover,
+    '--folder-accent': isCodex ? (isLight ? '#3b82f6' : '#fbbf24') : isLight ? '#3b82f6' : '#65a9ff',
+    '--kernel-accent': isCodex ? accent : isLight ? '#2563eb' : '#65a9ff',
+    '--copy-link': isCodex ? (isLight ? '#0284c7' : '#38bdf8') : isLight ? '#4f7cff' : '#65a9ff',
+    '--copy-link-hover': isCodex ? (isLight ? '#0369a1' : '#7dd3fc') : isLight ? '#2f5fef' : '#8bbfff',
     '--mini-tab-active-bg': secondarySurface,
     '--mini-tab-active-text': secondaryHover,
     '--memory-warn': warning,
-    '--network-tx': danger,
-    '--network-rx': info,
+    '--network-tx': networkTx,
+    '--network-rx': networkRx,
     '--button-primary-bg': isLight ? accent : blend(accent, '#000000', 25),
     '--button-primary-hover': isLight ? accentHover : blend(accent, '#000000', 12),
     '--button-primary-border': border,
@@ -294,9 +306,11 @@ function resolveCompactUiVariables(
     '--type-ssh': success,
     '--type-ssh-surface': successSurface,
     // Connection overview types have their own controls. In particular,
-    // SFTP and FTP must not consume the secondary focus/outline color.
-    '--type-sftp': sftp,
-    '--type-sftp-surface': alpha(sftp, isLight ? 10 : 14),
+    // Telnet and FTP must not consume the secondary focus/outline color.
+    '--type-telnet': telnet,
+    '--type-telnet-surface': alpha(telnet, isLight ? 10 : 14),
+    '--type-sftp': telnet,
+    '--type-sftp-surface': alpha(telnet, isLight ? 10 : 14),
     '--type-ftp': ftp,
     '--type-ftp-surface': alpha(ftp, isLight ? 10 : 14),
     '--type-folder': warning,
@@ -345,8 +359,11 @@ function isDefaultFileTermTheme(config: ThemeConfig, variant: ThemeVariant): boo
     'diffRemoved',
     'skill',
     'keyword',
-    'sftp',
+    'total',
+    'telnet',
     'ftp',
+    'networkRx',
+    'networkTx',
     'secondary',
     'textSecondary',
     'info',
@@ -484,8 +501,12 @@ function buildThemeVariables(
     '--theme-semantic-diff-removed': theme.semanticColors.diffRemoved,
     '--theme-semantic-skill': theme.semanticColors.skill,
     '--theme-semantic-keyword': theme.semanticColors.keyword,
-    '--theme-semantic-sftp': theme.semanticColors.sftp,
+    '--theme-semantic-total': theme.semanticColors.total,
+    '--theme-semantic-telnet': theme.semanticColors.telnet,
+    '--theme-semantic-sftp': theme.semanticColors.telnet,
     '--theme-semantic-ftp': theme.semanticColors.ftp,
+    '--theme-semantic-network-rx': theme.semanticColors.networkRx,
+    '--theme-semantic-network-tx': theme.semanticColors.networkTx,
     '--terminal-background': theme.terminal.background,
     '--terminal-foreground': theme.terminal.foreground,
     '--terminal-cursor': theme.terminal.cursor,

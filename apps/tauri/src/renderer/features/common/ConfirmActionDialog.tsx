@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { Children, cloneElement, isValidElement, useEffect, useId, useRef, type ReactNode } from 'react'
 import { t } from '../../i18n'
+import { StableButtonContent } from './StableButtonContent'
 
 export function ConfirmActionDialog({
   cancelLabel = t.cancel,
@@ -101,13 +102,13 @@ export function ConfirmActionDialog({
           </button>
           {guardedExtraActions}
           <button
+            aria-busy={isSubmitting}
             className={confirmButtonClassName}
             disabled={isSubmitting || confirmDisabled}
             onClick={onConfirm}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{confirmLabel}</span>
+            <StableButtonContent busy={isSubmitting} label={confirmLabel} />
           </button>
         </div>
       </div>

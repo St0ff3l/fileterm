@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 const SAVED_PASSWORD_MASK = '••••••••••••'
@@ -147,13 +148,13 @@ export function RootAccessModal({
             {t.cancel}
           </button>
           <button
+            aria-busy={isSubmitting}
             className="primary-button file-action-submit-button"
             disabled={isSubmitting}
             onClick={submit}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.fileRootAccessConfirm}</span>
+            <StableButtonContent busy={isSubmitting} label={t.fileRootAccessConfirm} />
           </button>
         </div>
       </div>

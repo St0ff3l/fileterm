@@ -3,6 +3,7 @@ import type { SudoPasswordRequest } from '@fileterm/core'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 
 /** Local-only one-time sudo/su password prompt for an isolated exec channel. */
 export function SudoPasswordPromptModal({
@@ -95,13 +96,13 @@ export function SudoPasswordPromptModal({
             {t.sudoPasswordOneTime}
           </button>
           <button
+            aria-busy={isSubmitting}
             className="primary-button"
             disabled={!value || isSubmitting}
             onClick={() => submit(true)}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.sudoPasswordSaveAndExecute}</span>
+            <StableButtonContent busy={isSubmitting} label={t.sudoPasswordSaveAndExecute} />
           </button>
         </div>
       </div>

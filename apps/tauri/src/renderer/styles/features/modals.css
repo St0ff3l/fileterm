@@ -195,13 +195,13 @@
   grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 .ssh-form-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   min-height: 0;
 }
@@ -306,8 +306,8 @@
 .tunnel-rule-grid input,
 .tunnel-rule-grid select {
   min-width: 0;
-  height: 32px;
-  padding: 5px 8px;
+  height: 36px;
+  padding: 6px 10px;
   border: 1px solid var(--border-dark);
   border-radius: 5px;
   background: var(--bg-main);
@@ -356,8 +356,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 0 11px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px dashed color-mix(in srgb, var(--primary) 65%, var(--border-light));
   border-radius: 6px;
   background: color-mix(in srgb, var(--primary) 7%, transparent);
@@ -385,7 +386,7 @@
 }
 
 .network-routing-group__label .material-symbols-outlined {
-  color: var(--copy-link);
+  color: var(--focus-outline);
   font-size: 15px;
 }
 
@@ -498,8 +499,8 @@
 .ssh-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 24px;
-  padding: 0 4px;
+  gap: 10px 16px;
+  padding: 0 2px;
 }
 
 .ssh-grid.single {
@@ -514,7 +515,7 @@
   display: grid;
   grid-template-columns: 72px 1fr;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   font-size: 13px;
 }
 
@@ -536,8 +537,8 @@
 .ssh-grid select,
 .ssh-grid textarea {
   width: 100%;
-  min-height: 32px;
-  padding: 5px 10px;
+  min-height: 36px;
+  padding: 6px 10px;
   border: 1px solid var(--border-dark);
   border-radius: 4px;
 }
@@ -566,6 +567,50 @@
   color: var(--text-main);
   font-size: 18px;
   line-height: 1;
+}
+
+/* Form controls rendered through DropdownSelect must follow the same rhythm
+   as the neighboring inputs. The shared component keeps the platform
+   behavior (native select on macOS, portal menu elsewhere); this only aligns
+   its two rendered control branches inside the SSH form grid. */
+.ssh-grid input:not([type='checkbox']):not([type='radio']),
+.ssh-grid select,
+.ssh-grid .dropdown-select-trigger,
+.ssh-grid .ft-select-shell,
+.ssh-grid .ft-select-shell select {
+  box-sizing: border-box;
+  height: var(--button-height-md, 36px);
+  min-height: var(--button-height-md, 36px);
+}
+
+.ssh-grid .dropdown-select-trigger {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg);
+  color: var(--text-main);
+  padding: 0 10px;
+  line-height: 1.2;
+}
+
+.ssh-grid .ft-select-shell select {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg);
+  color: var(--text-main);
+  padding: 0 34px 0 10px !important;
+  line-height: 1.2;
+}
+
+.ssh-grid .dropdown-select-trigger:hover:not(:disabled),
+.ssh-grid .ft-select-shell select:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+.ssh-grid .dropdown-select-trigger:focus-visible,
+.ssh-grid .ft-select-shell select:focus-visible {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
 .ssh-grid textarea {
@@ -598,6 +643,144 @@
   font-size: 13px;
 }
 
+/* Keep the reconnect field and its hint on the same label/control tracks as
+   the reliability grid below. This removes the old flex row plus arbitrary
+   hint indentation that made the section look vertically unrelated. */
+.connection-reconnect-limit-row {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(150px, 224px);
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+}
+
+.connection-reconnect-limit {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(150px, 224px);
+  align-items: center;
+  gap: 8px;
+  min-height: var(--button-height-md, 36px);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.connection-reconnect-limit > span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.connection-reconnect-limit input {
+  width: 100%;
+  height: var(--button-height-md, 36px);
+  min-height: var(--button-height-md, 36px);
+  max-width: 224px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  line-height: 1.2;
+}
+
+.connection-reconnect-limit-row > .connection-reconnect-hint {
+  grid-column: 2;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Timeout and keepalive values share a two-column row rhythm. A wider label
+   track keeps CJK labels on one line without changing the existing general
+   SSH grid used by the other connection fields. */
+.ssh-grid.connection-reliability-grid {
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.ssh-grid .connection-reliability-field {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--button-height-md, 36px);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.connection-reliability-field > span {
+  min-width: 0;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.ssh-grid.connection-reliability-grid > .ssh-field-hint {
+  margin-top: 0;
+  margin-left: calc(120px + 8px);
+}
+
+.ssh-grid .connection-reliability-toggle {
+  min-width: 0;
+  min-height: var(--button-height-md, 36px);
+  line-height: 1.3;
+}
+
+.connection-reliability-toggle .advanced-toggle-name {
+  line-height: 1.3;
+}
+
+.connection-reliability-field:has(input:disabled),
+.connection-reliability-toggle:has(input:disabled) {
+  color: var(--text-muted);
+}
+
+@media (max-width: 560px) {
+  .connection-reconnect-limit-row {
+    grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  }
+
+  .ssh-grid.connection-reliability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .connection-reconnect-limit {
+    grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  }
+
+  .connection-reconnect-limit input {
+    max-width: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .connection-reconnect-limit-row {
+    grid-template-columns: 1fr;
+  }
+
+  .connection-reconnect-limit {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .connection-reconnect-limit > span {
+    white-space: normal;
+  }
+
+  .connection-reconnect-limit-row > .connection-reconnect-hint,
+  .ssh-grid.connection-reliability-grid > .ssh-field-hint {
+    grid-column: 1;
+    margin-left: 0;
+  }
+
+  .ssh-grid .connection-reliability-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .connection-reliability-field > span {
+    white-space: normal;
+  }
+}
+
 .ssh-grid .ssh-checkbox {
   display: flex;
   grid-template-columns: none;
@@ -617,6 +800,12 @@
 
 .session-log-directory-control button {
   flex: 0 0 auto;
+  min-width: 88px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular);
   white-space: nowrap;
 }
 
@@ -636,7 +825,10 @@
 
 .serial-port-picker__refresh {
   flex: 0 0 auto;
-  min-height: 32px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   white-space: nowrap;
 }
 
@@ -685,9 +877,10 @@
 
 .saved-fingerprint-card__action {
   min-width: 112px;
-  height: 34px;
-  padding: 0 13px;
-  border-radius: 8px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   gap: 5px;
   white-space: nowrap;
 }
@@ -708,7 +901,7 @@
 }
 
 .ssh-field-hint {
-  margin-top: 10px;
+  margin-top: 6px;
   margin-left: 82px;
   font-size: 12px;
   line-height: 1.6;
@@ -788,21 +981,35 @@
   min-width: 0;
 }
 
-/* macOS keeps the shared native-select shell; give its short labels the same
-   leading inset as the Windows/Linux trigger so "1 秒" is not flush left. */
-.resource-monitoring-interval__select select {
-  padding-left: 10px;
-}
-
-/* Match the connection editor's select skin without changing the interval
-   control's existing width or height. */
-.settings-connection-defaults .resource-monitoring-interval__select.dropdown-select-trigger,
-.settings-connection-defaults .resource-monitoring-interval__select.ft-select-shell select {
+/* Keep both platform branches aligned with the normal SSH form inputs: 36px
+   high, 8px corners, and a centered text line inside the control. */
+.resource-monitoring-interval__select.dropdown-select-trigger,
+.resource-monitoring-interval__select.ft-select-shell select {
+  display: flex;
+  align-items: center;
   box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
   border: 1px solid var(--border-light);
-  border-radius: 4px;
+  border-radius: 8px;
   background: var(--input-bg);
   color: var(--text-main);
+}
+
+.resource-monitoring-interval__select.dropdown-select-trigger {
+  justify-content: space-between;
+  padding: 0 12px;
+  line-height: 1;
+}
+
+.resource-monitoring-interval__select.ft-select-shell {
+  height: 36px;
+}
+
+.resource-monitoring-interval__select.ft-select-shell select {
+  display: block;
+  padding: 0 34px 0 12px !important;
+  line-height: 34px;
 }
 
 /* The global default interval should keep the neutral control border even
@@ -866,7 +1073,7 @@
   gap: 8px;
   padding: 6px 8px;
   border: 1px solid var(--border-light);
-  border-radius: 7px;
+  border-radius: var(--radius-md, 6px);
   background: var(--bg-card);
   color: var(--text-main);
   cursor: grab;
@@ -982,7 +1189,7 @@
   gap: 8px;
   padding: 5px 10px;
   border: 1px solid var(--border-light);
-  border-radius: 7px;
+  border-radius: var(--radius-md, 6px);
   background: var(--bg-card);
   color: var(--text-main);
   cursor: pointer;
@@ -1087,32 +1294,6 @@
   line-height: 1.5;
 }
 
-.modal-success {
-  margin-top: 12px;
-  padding: 12px 14px;
-  background: var(--success-surface);
-  border: 1px solid var(--success-border);
-  border-radius: 10px;
-  color: var(--success-text);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.connection-test-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.connection-test-status > span {
-  min-width: 0;
-  flex: 1;
-}
-
-.connection-test-status > .app-close-button {
-  margin: -6px -8px 0 0;
-}
-
 .ssh-auth-hint {
   padding: 12px 14px;
   border: 1px solid var(--border-light);
@@ -1125,7 +1306,7 @@
 
 .ssh-secret-field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1215,19 +1396,27 @@
 }
 
 .ssh-actions {
-  margin-top: 20px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.ssh-actions .connection-test-feedback {
+  min-width: 0;
+  max-width: min(100%, 48ch);
+  flex: 0 1 48ch;
+  margin-right: auto;
 }
 
 .connection-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px 16px;
+  gap: 14px 12px;
 }
 
 .connection-form label {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   font-size: 13px;
   font-weight: 500;
 }
@@ -1235,8 +1424,8 @@
 .connection-form input,
 .connection-form select {
   width: 100%;
-  height: 42px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
   border-radius: 10px;
   background: var(--bg-main);
@@ -1261,8 +1450,8 @@
 .ssh-grid select,
 .ssh-grid textarea {
   width: 100%;
-  min-height: 38px;
-  padding: 8px 12px;
+  min-height: 36px;
+  padding: 6px 10px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: var(--bg-main);
@@ -1288,9 +1477,9 @@
 .checkbox-row {
   flex-direction: row !important;
   align-items: center;
-  gap: 10px !important;
+  gap: 8px !important;
   align-self: end;
-  height: 42px;
+  height: 36px;
 }
 
 .checkbox-row input {
@@ -1368,7 +1557,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 40px;
+  height: 36px;
   padding: 0 20px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -1438,6 +1627,21 @@
   margin-top: 20px;
 }
 
+/* Modal actions use the same compact density as settings actions. Keep the
+ * button content optional so text-only actions do not reserve an empty icon
+ * slot, while icon + text actions keep their existing icon. */
+.form-actions > .flat-button,
+.form-actions > .primary-button {
+  box-sizing: border-box;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-md, 6px);
+  gap: 6px;
+  font-size: var(--button-font-size-regular);
+  min-width: 88px;
+}
+
 .file-action-submit-button {
   min-width: 100px;
 }
@@ -1449,6 +1653,33 @@
   border-right-color: transparent;
   border-radius: 50%;
   animation: button-spinner-rotate 0.75s linear infinite;
+}
+
+.stable-button-icon {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  place-items: center;
+}
+
+.stable-button-icon .button-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.stable-button-label {
+  display: grid;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.stable-button-label > span {
+  grid-area: 1 / 1;
+}
+
+.stable-button-label-reserve {
+  visibility: hidden;
 }
 
 @keyframes button-spinner-rotate {

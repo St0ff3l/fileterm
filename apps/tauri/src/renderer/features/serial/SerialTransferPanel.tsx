@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SerialTransferMode, SerialTransferProgress } from '@fileterm/core'
 import { formatMessage, localizeSerialTerminalText, t } from '../../i18n'
+import { StableButtonLabel } from '../common/StableButtonContent'
 
 const MODES: SerialTransferMode[] = ['raw', 'xmodem', 'ymodem', 'zmodem', 'kermit']
 
@@ -169,11 +170,21 @@ export function SerialTransferPanel({
           <button disabled={!connected || busy} type="button" onClick={() => void runReceive()}>
             {t.serialTransferReceive}
           </button>
-          {busy ? (
-            <button disabled={cancelRequested} type="button" onClick={() => void cancelTransfer()}>
-              {cancelRequested ? t.serialTransferCanceling : t.serialTransferCancel}
+          <span aria-hidden={!busy} className={`serial-transfer-panel__cancel-slot${busy ? ' is-visible' : ''}`}>
+            <button
+              aria-busy={cancelRequested}
+              disabled={!busy || cancelRequested}
+              tabIndex={busy ? undefined : -1}
+              type="button"
+              onClick={() => void cancelTransfer()}
+            >
+              <StableButtonLabel
+                busy={cancelRequested}
+                busyLabel={t.serialTransferCanceling}
+                label={t.serialTransferCancel}
+              />
             </button>
-          ) : null}
+          </span>
         </div>
         {receiveDirectory ? <div className="serial-transfer-panel__path">{receiveDirectory}</div> : null}
         <div className="serial-transfer-panel__hint">{t.serialTransferHint}</div>
