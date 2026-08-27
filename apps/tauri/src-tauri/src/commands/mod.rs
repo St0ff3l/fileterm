@@ -12,6 +12,7 @@ use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
 
 /// 等待 worker 接收命令的最大时间。worker 主循环被 SFTP init / shell
 /// channel 写阻塞 时，mpsc 一旦满，send 会永久 await，导致前端 invoke
@@ -2110,6 +2111,31 @@ pub fn app_set_ui_preferences(
     Ok(preferences)
 }
 
+#[tauri::command]
+pub fn app_get_security_settings(
+    app: AppHandle,
+) -> Result<crate::services::security::SecuritySettings, AppError> {
+    crate::services::security::get_settings(&app)
+}
+
+#[tauri::command]
+pub fn app_set_security_settings(
+    app: AppHandle,
+    input: crate::services::security::SecuritySettingsInput,
+) -> Result<crate::services::security::SecuritySettings, AppError> {
+    crate::services::security::save_settings(&app, input)
+}
+
+#[tauri::command]
+pub fn app_verify_security_password(
+    app: AppHandle,
+    mut password: String,
+) -> Result<bool, AppError> {
+    let result = crate::services::security::verify_lock_password(&app, &password);
+    password.zeroize();
+    result
+}
+
 fn current_local_terminal_shell(preferences: &UiPreferences) -> String {
     #[cfg(target_os = "windows")]
     {
@@ -2260,6 +2286,14 @@ pub async fn app_summarize_ai_conversation_title(
     input: crate::services::ai::SummarizeAiConversationTitleInput,
 ) -> Result<crate::services::ai::AiConversation, AppError> {
     crate::services::ai::summarize_conversation_title(&app, input).await
+}
+
+#[tauri::command]
+pub fn app_delete_ai_message(
+    app: AppHandle,
+    input: crate::services::ai::DeleteAiMessageInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::delete_message(&app, input)
 }
 
 #[tauri::command]

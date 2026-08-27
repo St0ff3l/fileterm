@@ -173,24 +173,9 @@ export function useAiCopilot() {
         null
       selectProvider(nextProviderId)
 
-      const currentConversationId = activeConversationIdRef.current
-      const initialConversationId =
-        currentConversationId ??
-        nextConversations.find((item) => item.providerId === nextProviderId)?.id ??
-        nextConversations[0]?.id ??
-        null
-      if (initialConversationId && initialConversationId !== currentConversationId) {
-        const initialConversation = await desktopApi.getAiConversation(initialConversationId)
-        if (mountedRef.current) {
-          applyConversation(initialConversation)
-          const conversationProvider = availableProviders.find(
-            (provider) => provider.id === initialConversation.providerId
-          )
-          if (conversationProvider) {
-            selectProvider(conversationProvider.id)
-          }
-        }
-      }
+      // Opening the Copilot surface starts with a clean draft. Existing local
+      // chats remain available from the conversation list and are only loaded
+      // after an explicit user selection.
     } catch (error) {
       if (mountedRef.current) {
         setErrorMessage(toMessage(error))
@@ -842,7 +827,10 @@ export function useAiCopilot() {
   const deleteConversation = useCallback(
     async (conversationId: string) => {
       const desktopApi = window.fileterm
-      if (!desktopApi || isStreaming) return false
+      // Keep the active stream's conversation intact, but allow housekeeping
+      // of an idle history item while another conversation is generating.
+      const isDeletingActiveConversation = conversationRef.current?.id === conversationId
+      if (!desktopApi || (isStreaming && isDeletingActiveConversation)) return false
       setErrorMessage(null)
       try {
         await desktopApi.deleteAiConversation(conversationId)
@@ -855,6 +843,29 @@ export function useAiCopilot() {
             setContextPreview(null)
             applyConversation(null)
           }
+        }
+        return true
+      } catch (error) {
+        if (mountedRef.current) {
+          setErrorMessage(toMessage(error))
+        }
+        return false
+      }
+    },
+    [applyConversation, isStreaming]
+  )
+
+  const deleteMessage = useCallback(
+    async (conversationId: string, messageId: string) => {
+      const desktopApi = window.fileterm
+      if (!desktopApi || isStreaming || conversationRef.current?.id !== conversationId) return false
+      setErrorMessage(null)
+      try {
+        const updated = await desktopApi.deleteAiMessage({ conversationId, messageId })
+        if (mountedRef.current) {
+          const next = preserveLocalConversationTitle(conversationRef.current, updated)
+          applyConversation(next)
+          setConversations((current) => replaceConversationSummary(current, next))
         }
         return true
       } catch (error) {
@@ -904,6 +915,7 @@ export function useAiCopilot() {
     refresh,
     newChat,
     renameConversation,
+    deleteMessage,
     deleteConversation,
     createContextPreview,
     clearContextPreview,

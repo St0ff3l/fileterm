@@ -34,6 +34,7 @@ import {
   logTerminalZoom,
   looksLikeShellPrompt,
   localizeTerminalText,
+  logTerminalRender,
   PinchGestureEvent,
   splitOscPayload,
   stripHydratedTerminalResponses,
@@ -728,6 +729,29 @@ export function useTerminalLifecycle({
     })
     terminalRef.current = terminal
     searchAddonRef.current = searchAddon
+
+    // Ghostty invalidates its render state whenever the terminal switches
+    // between the normal and alternate screen. OpenCode, Claude Code, Vim,
+    // and similar TUIs rely on that screen heavily; keeping a stale WebView
+    // canvas/atlas after a tab activation can otherwise leave the terminal
+    // looking black until another external repaint occurs.
+    let renderedBufferType = terminal.buffer.active.type
+    const screenBufferRenderDisposable = terminal.onWriteParsed(() => {
+      const nextBufferType = terminal.buffer.active.type
+      if (nextBufferType === renderedBufferType) {
+        return
+      }
+
+      const previousBufferType = renderedBufferType
+      renderedBufferType = nextBufferType
+      terminal.clearTextureAtlas()
+      terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+      logTerminalRender(terminal, 'screen-buffer-switched', {
+        tabId: tabIdRef.current,
+        previousBufferType,
+        nextBufferType
+      })
+    })
 
     const searchResultsDisposable = searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
       setFindMatchCount(resultCount)
@@ -1734,6 +1758,7 @@ export function useTerminalLifecycle({
       pendingTerminalInputEvent = null
       recentTerminalKeydowns.length = 0
       suppressedTerminalKeydowns.length = 0
+      screenBufferRenderDisposable.dispose()
       document.removeEventListener('contextmenu', onDocumentContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keyup', onKeyUp, true)

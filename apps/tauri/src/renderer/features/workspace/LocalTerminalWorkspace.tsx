@@ -51,6 +51,9 @@ export function LocalTerminalWorkspace({
           />
         ) : (
           <TerminalView
+            // A local PTY can run the same high-frequency alternate-screen
+            // TUIs as SSH. Isolate its xterm lifecycle from other tabs.
+            key={activeTab.id}
             profileId={activeTab.profileId}
             bootText={activeSession.terminalTranscript ?? ''}
             sessionType="local"

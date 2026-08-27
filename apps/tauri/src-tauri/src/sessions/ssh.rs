@@ -78,6 +78,9 @@ const TERMINAL_RESIZE_TIMEOUT: Duration = Duration::from_millis(500);
 /// memory does not balloon and `emit_terminal_data` does not grow a multi-MB
 /// chunk in one shot.
 const TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD: usize = 64 * 1024;
+/// Capability metadata is optional and must not occupy the single SFTP
+/// request stream long enough to delay a user's first file action.
+const INITIAL_CAPABILITY_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 type SshShellWriteHalf = ChannelWriteHalf<russh::client::Msg>;
 
@@ -4736,8 +4739,23 @@ async fn run_worker_loop(
                 let initial_tab_id = tab_id.to_string();
                 let initial_cancellation = cancellation.clone();
                 tokio::spawn(async move {
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial directory listing started path={initial_remote_path} timeout_secs={}",
+                            operation_timeout.as_secs()
+                        ),
+                    );
                     let initial_files = tokio::select! {
-                        _ = initial_cancellation.cancelled() => return,
+                        _ = initial_cancellation.cancelled() => {
+                            crate::services::logging::ssh_debug(
+                                &initial_app,
+                                &initial_tab_id,
+                                "initial directory listing cancelled",
+                            );
+                            return;
+                        },
                         result = timeout(operation_timeout, async {
                             let sftp = initial_sftp.write().await;
                             list_dir(&sftp, &initial_remote_path).await
@@ -4747,40 +4765,10 @@ async fn run_worker_loop(
                         },
                     };
 
-                    let mut remote_capabilities = tokio::select! {
-                        _ = initial_cancellation.cancelled() => return,
-                        result = timeout(operation_timeout, async {
-                            let sftp = initial_sftp.write().await;
-                            inspect_sftp_capabilities(&sftp, &initial_remote_path).await
-                        }) => match result {
-                            Ok(capabilities) => capabilities,
-                            Err(_) => default_sftp_capabilities(),
-                        },
-                    };
-                    let (server_copy, checksum_algorithms) = if exec_channel_enabled {
-                        tokio::select! {
-                            _ = initial_cancellation.cancelled() => return,
-                            result = inspect_ssh_exec_capabilities(&initial_handle, operation_timeout) => result,
-                        }
-                    } else {
-                        (false, Vec::new())
-                    };
-                    remote_capabilities.server_copy = server_copy;
-                    remote_capabilities.checksum_algorithms = checksum_algorithms;
-
-                    // The initial probe is deliberately detached from the
-                    // terminal select loop, but it must not publish results
-                    // after this worker has been stopped for a reconnect or
-                    // tab close. Otherwise a slow old SFTP probe can overwrite
-                    // the snapshot of the replacement session.
-                    if initial_cancellation.is_cancelled() {
-                        return;
-                    }
-
+                    let initial_listing_error = initial_files.as_ref().err().cloned();
                     let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
                     let mut initial_listing_is_current = false;
                     if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
-                        session.remote_capabilities = Some(remote_capabilities);
                         initial_listing_is_current = initial_remote_listing_matches_current_session(
                             &initial_remote_path,
                             &session.remote_path,
@@ -4800,15 +4788,28 @@ async fn run_worker_loop(
                         }
                     }
 
+                    match &initial_files {
+                        Ok(files) => crate::services::logging::ssh_debug(
+                            &initial_app,
+                            &initial_tab_id,
+                            format!(
+                                "initial directory listing completed path={initial_remote_path} entries={} current={initial_listing_is_current}",
+                                files.len()
+                            ),
+                        ),
+                        Err(error) => crate::services::logging::session(
+                            &initial_app,
+                            "WARN",
+                            "sftp",
+                            &initial_tab_id,
+                            format!(
+                                "initial directory listing failed path={initial_remote_path} current={initial_listing_is_current}: {error}"
+                            ),
+                        ),
+                    }
+
                     if initial_listing_is_current {
-                        if let Some(error) = initial_files.as_ref().err() {
-                            crate::services::logging::session(
-                                &initial_app,
-                                "WARN",
-                                "sftp",
-                                &initial_tab_id,
-                                format!("initial directory listing failed: {error}"),
-                            );
+                        if let Some(error) = initial_listing_error {
                             // A usable SFTP channel can still lack access to the
                             // profile's configured starting directory.
                             emit_terminal_data(
@@ -4822,9 +4823,88 @@ async fn run_worker_loop(
                         }
                     }
 
+                    // Publish the directory result before running optional
+                    // capability probes. fs_info/readlink/hardlink and the
+                    // SSH exec probe are best-effort metadata; a slow or
+                    // restricted server must not keep usable file rows behind
+                    // the loading spinner.
+                    if let Ok(snapshot) =
+                        crate::commands::get_workspace_snapshot(initial_app.clone()).await
+                    {
+                        let _ = initial_app.emit("workspace:snapshot", snapshot);
+                    }
+
                     if initial_cancellation.is_cancelled() {
                         return;
                     }
+
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial capability probes started path={initial_remote_path} exec_enabled={exec_channel_enabled} timeout_secs={}",
+                            operation_timeout
+                                .min(INITIAL_CAPABILITY_PROBE_TIMEOUT)
+                                .as_secs()
+                        ),
+                    );
+                    let capability_timeout =
+                        operation_timeout.min(INITIAL_CAPABILITY_PROBE_TIMEOUT);
+                    let mut remote_capabilities = tokio::select! {
+                        _ = initial_cancellation.cancelled() => return,
+                        result = timeout(capability_timeout, async {
+                            let sftp = initial_sftp.write().await;
+                            inspect_sftp_capabilities(&sftp, &initial_remote_path).await
+                        }) => match result {
+                            Ok(capabilities) => capabilities,
+                            Err(_) => {
+                                crate::services::logging::session(
+                                    &initial_app,
+                                    "WARN",
+                                    "sftp",
+                                    &initial_tab_id,
+                                    format!(
+                                        "initial SFTP capability probe timed out path={initial_remote_path} timeout_secs={}",
+                                        capability_timeout.as_secs()
+                                    ),
+                                );
+                                default_sftp_capabilities()
+                            },
+                        },
+                    };
+                    let (server_copy, checksum_algorithms) = if exec_channel_enabled {
+                        tokio::select! {
+                            _ = initial_cancellation.cancelled() => return,
+                            result = inspect_ssh_exec_capabilities(&initial_handle, capability_timeout) => result,
+                        }
+                    } else {
+                        (false, Vec::new())
+                    };
+                    remote_capabilities.server_copy = server_copy;
+                    remote_capabilities.checksum_algorithms = checksum_algorithms;
+
+                    // The initial probe is deliberately detached from the
+                    // terminal select loop, but it must not publish results
+                    // after this worker has been stopped for a reconnect or
+                    // tab close. Otherwise a slow old SFTP probe can overwrite
+                    // the snapshot of the replacement session.
+                    if initial_cancellation.is_cancelled() {
+                        return;
+                    }
+
+                    let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
+                    if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
+                        session.remote_capabilities = Some(remote_capabilities.clone());
+                    }
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial capability probes completed path={initial_remote_path} server_copy={} checksums={}",
+                            remote_capabilities.server_copy,
+                            remote_capabilities.checksum_algorithms.len()
+                        ),
+                    );
                     if let Ok(snapshot) =
                         crate::commands::get_workspace_snapshot(initial_app.clone()).await
                     {

@@ -27,7 +27,17 @@ export async function copyAiText(text: string) {
   }
 }
 
-export function AiCopilotCopyButton({ text }: { text: string }) {
+export function AiCopilotCopyButton({
+  text,
+  label = t.aiCopilotCopyCommand,
+  copiedLabel = t.aiCopilotCommandCopied,
+  className
+}: {
+  text: string
+  label?: string
+  copiedLabel?: string
+  className?: string
+}) {
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<number | null>(null)
 
@@ -54,9 +64,9 @@ export function AiCopilotCopyButton({ text }: { text: string }) {
 
   return (
     <button
-      aria-label={copied ? t.aiCopilotCommandCopied : t.aiCopilotCopyCommand}
-      className="ai-copilot-copy-button"
-      title={copied ? t.aiCopilotCommandCopied : t.aiCopilotCopyCommand}
+      aria-label={copied ? copiedLabel : label}
+      className={['ai-copilot-copy-button', className].filter(Boolean).join(' ')}
+      title={copied ? copiedLabel : label}
       type="button"
       onClick={() => void handleCopy()}
     >

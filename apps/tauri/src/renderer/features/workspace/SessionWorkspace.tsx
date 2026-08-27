@@ -592,6 +592,10 @@ export function SessionWorkspace({
             />
           ) : (
             <TerminalView
+              // Keep one xterm parser/write queue per session. Reusing the
+              // same instance across tabs makes a fast TUI's pending writes
+              // race with transcript replay and can leave a blank canvas.
+              key={terminalActiveTab.id}
               profileId={terminalActiveTab.profileId}
               tabId={terminalActiveTab.id}
               bootText={terminalActiveSession.terminalTranscript ?? ''}

@@ -86,11 +86,13 @@ import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
 import { useBackupPasswordInteractions } from './hooks/useBackupPasswordInteractions'
+import { useSessionSecurity } from './hooks/useSessionSecurity'
 import { useSudoPasswordPrompt } from './hooks/useSudoPasswordPrompt'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
 import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
 import { StandaloneWindowFrame } from './features/layout/StandaloneWindowFrame'
+import { SessionLockScreen } from './features/security/SessionLockScreen'
 
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
@@ -269,6 +271,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // AppKit chrome because its traffic lights are intentionally native.
   const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux'
   const hasRevealedStandaloneWindowRef = useRef(false)
+  const sessionSecurity = useSessionSecurity(desktopApi, isMainWorkspaceWindow)
 
   useEffect(() => {
     if (!desktopApi) return
@@ -1041,6 +1044,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     acceptHostAndSave
   } = useSshInteractions({
     desktopApi,
+    isMainWorkspaceWindow,
     onError: (scope, err) => reportError(setError, scope, err)
   })
 
@@ -2398,6 +2402,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           }}
           title={actionApprovalRequests[0].title}
         />
+      ) : null}
+      {isMainWorkspaceWindow && sessionSecurity.status === 'loading' ? <SessionLockScreen mode="loading" /> : null}
+      {isMainWorkspaceWindow && sessionSecurity.status === 'error' ? (
+        <SessionLockScreen mode="error" onRetry={sessionSecurity.retry} />
+      ) : null}
+      {isMainWorkspaceWindow && sessionSecurity.status === 'ready' && sessionSecurity.isLocked ? (
+        <SessionLockScreen mode="locked" onUnlock={sessionSecurity.unlock} />
       ) : null}
     </>
   )

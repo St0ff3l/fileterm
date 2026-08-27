@@ -17,6 +17,7 @@ export type SshCredentialsInput = {
 
 export type UseSshInteractionsOptions = {
   desktopApi?: FileTermDesktopApi
+  isMainWorkspaceWindow?: boolean
   onError(scope: string, error: unknown): void
 }
 
@@ -40,7 +41,11 @@ export type UseSshInteractionsResult = {
   acceptHostAndSave(): Promise<void>
 }
 
-export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOptions): UseSshInteractionsResult {
+export function useSshInteractions({
+  desktopApi,
+  isMainWorkspaceWindow = false,
+  onError
+}: UseSshInteractionsOptions): UseSshInteractionsResult {
   const [requests, setRequests] = useState<SshInteractionRequest[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null)
@@ -52,6 +57,13 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
     }
 
     const unsubscribe = desktopApi.onSshInteraction((nextRequest) => {
+      // SSH handshakes can start from a standalone connection form while the
+      // renderer-owned interaction modal belongs to the main workspace. Bring
+      // that window to the foreground before React paints the request; without
+      // this the host-key warning is present but remains behind the form.
+      if (isMainWorkspaceWindow) {
+        void desktopApi.showCurrentWindow().catch(() => undefined)
+      }
       setRequests((current) => {
         const existingIndex = current.findIndex((item) => item.requestId === nextRequest.requestId)
         if (existingIndex === -1) {
@@ -68,7 +80,7 @@ export function useSshInteractions({ desktopApi, onError }: UseSshInteractionsOp
     return () => {
       unsubscribe()
     }
-  }, [desktopApi])
+  }, [desktopApi, isMainWorkspaceWindow])
 
   const resolve = useCallback(
     async (requestId: string, response: SshInteractionResponse) => {

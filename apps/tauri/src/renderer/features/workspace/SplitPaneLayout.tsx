@@ -122,6 +122,9 @@ function PaneRenderer({
       <div className={`split-pane-leaf ${isActive ? 'split-pane-leaf--active' : ''}`}>
         <div className="split-pane-terminal">
           <TerminalView
+            // Pane positions can be reused after a split mutation. Key by the
+            // session so an old parser/write queue never follows a new pane.
+            key={node.tabId}
             profileId={session?.profileId ?? rootTabProfileId}
             tabId={node.tabId}
             bootText={session?.terminalTranscript ?? ''}

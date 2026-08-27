@@ -483,6 +483,13 @@ pub struct RenameAiConversationInput {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DeleteAiMessageInput {
+    pub conversation_id: String,
+    pub message_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SummarizeAiConversationTitleInput {
     pub conversation_id: String,
     pub provider_id: String,
@@ -970,6 +977,19 @@ fn validate_conversation_id(value: &str) -> Result<String, AppError> {
             .all(|character| character.is_ascii_alphanumeric() || character == '-')
     {
         return Err(ai_error("AI_CONVERSATION_NOT_FOUND", "AI 对话 ID 无效"));
+    }
+    Ok(value.to_string())
+}
+
+fn validate_message_id(value: &str) -> Result<String, AppError> {
+    let value = value.trim();
+    if value.is_empty()
+        || value.len() > 160
+        || !value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err(ai_error("AI_MESSAGE_NOT_FOUND", "AI 消息 ID 无效"));
     }
     Ok(value.to_string())
 }
@@ -2500,8 +2520,53 @@ pub async fn summarize_conversation_title(
     Ok(public_conversation(latest))
 }
 
+pub fn delete_message(
+    app: &AppHandle,
+    input: DeleteAiMessageInput,
+) -> Result<AiConversation, AppError> {
+    let conversation_id = validate_conversation_id(&input.conversation_id)?;
+    let message_id = validate_message_id(&input.message_id)?;
+    // Keep the request registry lock while acquiring the file-store lock so a
+    // message cannot be removed while the same conversation is still being
+    // generated. Idle conversations remain removable even when another
+    // conversation is streaming.
+    let chat_guard = chat_registry_lock()?;
+    if chat_guard.by_conversation.contains_key(&conversation_id) {
+        return Err(ai_error(
+            "AI_CONVERSATION_ACTIVE",
+            "当前对话正在生成，请等待完成后再删除消息",
+        ));
+    }
+    let _guard = conversation_store_lock()?;
+    let mut index = read_conversation_index(app)?;
+    require_indexed_conversation(&index, &conversation_id)?;
+    let mut conversation = read_stored_conversation(app, &conversation_id)?;
+    let before = conversation.messages.len();
+    conversation
+        .messages
+        .retain(|message| message.id != message_id);
+    if before == conversation.messages.len() {
+        return Err(ai_error("AI_MESSAGE_NOT_FOUND", "找不到指定的 AI 消息"));
+    }
+    conversation.updated_at = now_timestamp();
+    persist_conversation(app, &mut index, &conversation)?;
+    Ok(public_conversation(conversation))
+}
+
 pub fn delete_conversation(app: &AppHandle, conversation_id: &str) -> Result<(), AppError> {
     let conversation_id = validate_conversation_id(conversation_id)?;
+    // Keep the request registry lock while acquiring the file-store lock so a
+    // conversation cannot disappear between the active-request check and the
+    // index/file deletion. The renderer may delete an idle history item while
+    // another conversation is streaming, but the currently generating item
+    // must remain available until its request is stopped or completed.
+    let chat_guard = chat_registry_lock()?;
+    if chat_guard.by_conversation.contains_key(&conversation_id) {
+        return Err(ai_error(
+            "AI_CONVERSATION_ACTIVE",
+            "当前对话正在生成，请等待完成后再删除",
+        ));
+    }
     let _guard = conversation_store_lock()?;
     let mut index = read_conversation_index(app)?;
     let before = index.conversations.len();

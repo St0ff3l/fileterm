@@ -3,6 +3,8 @@ import type {
   AiCopilotMode,
   AiCommandRisk,
   AiToolActivity,
+  AiConversationSummary,
+  AiMessage,
   ActionApprovalRequest,
   SessionSnapshot,
   WorkspaceTab
@@ -16,6 +18,7 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
 import { AiCopilotMarkdown } from './AiCopilotMarkdown'
+import { AiCopilotMessageActions } from './AiCopilotMessageActions'
 import { useAiCopilot } from './useAiCopilot'
 
 function commandRiskLabel(risk: AiCommandRisk) {
@@ -212,6 +215,10 @@ export function AiCopilotPanel({
   const [isRenamingConversation, setIsRenamingConversation] = useState(false)
   const [conversationTitleDraft, setConversationTitleDraft] = useState('')
   const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] = useState(false)
+  const [conversationPendingDeletion, setConversationPendingDeletion] = useState<AiConversationSummary | null>(null)
+  const [messagePendingDeletion, setMessagePendingDeletion] = useState<AiMessage | null>(null)
+  const [isDeletingConversation, setIsDeletingConversation] = useState(false)
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false)
   const composerCompositionRef = useRef(false)
   const panelRef = useRef<HTMLElement>(null)
   const messageViewportRef = useRef<HTMLDivElement>(null)
@@ -294,6 +301,7 @@ export function AiCopilotPanel({
     loadConversation,
     newChat,
     renameConversation,
+    deleteMessage,
     deleteConversation,
     createContextPreview,
     sendMessage,
@@ -330,6 +338,7 @@ export function AiCopilotPanel({
   useEffect(() => {
     setIsRenamingConversation(false)
     setIsDeleteConfirmationOpen(false)
+    setMessagePendingDeletion(null)
     setConversationTitleDraft(conversation?.title ?? '')
   }, [conversation?.id, conversation?.title])
 
@@ -499,6 +508,27 @@ export function AiCopilotPanel({
     }
   }
 
+  const confirmConversationDeletion = async () => {
+    if (!conversationPendingDeletion) return
+    setIsDeletingConversation(true)
+    const deleted = await deleteConversation(conversationPendingDeletion.id)
+    setIsDeletingConversation(false)
+    if (deleted) {
+      setConversationPendingDeletion(null)
+      setConversationSearch('')
+    }
+  }
+
+  const confirmMessageDeletion = async () => {
+    if (!messagePendingDeletion || !conversation || isStreaming) return
+    setIsDeletingMessage(true)
+    const deleted = await deleteMessage(conversation.id, messagePendingDeletion.id)
+    setIsDeletingMessage(false)
+    if (deleted) {
+      setMessagePendingDeletion(null)
+    }
+  }
+
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     // Some macOS input methods report `isComposing` as false on the Enter
     // keydown that commits a candidate. keyCode 229 and the explicit
@@ -656,32 +686,47 @@ export function AiCopilotPanel({
             <div className="ai-copilot-conversation-list" role="list">
               {filteredConversations.length ? (
                 filteredConversations.map((item) => (
-                  <button
+                  <div
                     key={item.id}
                     className={`ai-copilot-conversation-list-item ${item.id === conversation?.id ? 'is-active' : ''}`}
-                    disabled={isStreaming}
                     role="listitem"
-                    type="button"
-                    onClick={() => {
-                      setIsConversationListOpen(false)
-                      void loadConversation(item.id)
-                    }}
                   >
-                    <span aria-hidden="true" className="material-symbols-outlined">
-                      forum
-                    </span>
-                    <span className="ai-copilot-conversation-list-item-copy">
-                      <strong>{item.title}</strong>
-                      <small>
-                        {item.messageCount > 0
-                          ? t.aiCopilotConversationMessageCount.replace('{count}', String(item.messageCount))
-                          : t.aiCopilotConversationNoMessages}
-                      </small>
-                    </span>
-                    <span aria-hidden="true" className="material-symbols-outlined">
-                      chevron_right
-                    </span>
-                  </button>
+                    <button
+                      aria-current={item.id === conversation?.id ? 'true' : undefined}
+                      className="ai-copilot-conversation-list-item-open"
+                      disabled={isStreaming}
+                      type="button"
+                      onClick={() => {
+                        setIsConversationListOpen(false)
+                        void loadConversation(item.id)
+                      }}
+                    >
+                      <span aria-hidden="true" className="material-symbols-outlined">
+                        forum
+                      </span>
+                      <span className="ai-copilot-conversation-list-item-copy">
+                        <strong>{item.title}</strong>
+                        <small>
+                          {item.messageCount > 0
+                            ? t.aiCopilotConversationMessageCount.replace('{count}', String(item.messageCount))
+                            : t.aiCopilotConversationNoMessages}
+                        </small>
+                      </span>
+                      <span aria-hidden="true" className="material-symbols-outlined">
+                        chevron_right
+                      </span>
+                    </button>
+                    <button
+                      aria-label={`${t.aiCopilotDeleteConversation}: ${item.title}`}
+                      className="ai-copilot-conversation-list-item-delete"
+                      disabled={isStreaming && item.id === conversation?.id}
+                      title={t.aiCopilotDeleteConversation}
+                      type="button"
+                      onClick={() => setConversationPendingDeletion(item)}
+                    >
+                      <AppIcon name="trash" size={14} />
+                    </button>
+                  </div>
                 ))
               ) : (
                 <div className="ai-copilot-conversation-list-empty">
@@ -861,6 +906,13 @@ export function AiCopilotPanel({
                           onExecuteTerminalCommand={executeCommandInTerminal}
                         />
                       ))}
+                      <AiCopilotMessageActions
+                        deleteDisabled={isStreaming}
+                        text={message.content}
+                        onDelete={() => {
+                          if (!isStreaming) setMessagePendingDeletion(message)
+                        }}
+                      />
                     </article>
                   ))
                 )}
@@ -1122,6 +1174,34 @@ export function AiCopilotPanel({
           }}
           onConfirm={() => void confirmFullyAutomaticMode()}
           title={t.aiCopilotModeFullTitle}
+        />
+      ) : null}
+      {conversationPendingDeletion ? (
+        <ConfirmActionDialog
+          confirmLabel={t.delete}
+          confirmVariant="danger"
+          description={t.aiCopilotDeleteConversationConfirm}
+          errorMessage={errorMessage}
+          isSubmitting={isDeletingConversation}
+          onClose={() => {
+            if (!isDeletingConversation) setConversationPendingDeletion(null)
+          }}
+          onConfirm={() => void confirmConversationDeletion()}
+          title={t.aiCopilotDeleteConversation}
+        />
+      ) : null}
+      {messagePendingDeletion ? (
+        <ConfirmActionDialog
+          confirmLabel={t.aiCopilotDeleteMessage}
+          confirmVariant="danger"
+          description={t.aiCopilotDeleteMessageConfirm}
+          errorMessage={errorMessage}
+          isSubmitting={isDeletingMessage}
+          onClose={() => {
+            if (!isDeletingMessage) setMessagePendingDeletion(null)
+          }}
+          onConfirm={() => void confirmMessageDeletion()}
+          title={t.aiCopilotDeleteMessage}
         />
       ) : null}
     </aside>

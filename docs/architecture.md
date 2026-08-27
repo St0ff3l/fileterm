@@ -52,6 +52,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - Telnet（RFC 854 基础协商）和 Serial（Rust device handle）终端会话；Serial 设备枚举通过 `app_list_serial_ports` 和 `serial:ports-changed` 经 Tauri bridge 暴露，连接表单同时保留手动设备路径。Serial 的换行、Text/Hex 收发、本地回显、调制解调器控制、X/Y/ZMODEM、Kermit 文件传输和断线策略随 profile/会话边界处理；两者不进入 SFTP、CWD、sudo 或系统指标链路。
 - 设置页的 WebDAV 手动配置同步：完整包包含连接密码、私钥口令和代理密码，上传使用 ETag 检测冲突；renderer 仍不接触明文 payload，界面明确要求仅使用可信 HTTPS WebDAV。
 - 设置页的 S3 兼容配置备份：完整包复用 WebDAV 的安全导入、hash 校验和 ETag 冲突策略；S3 签名、Access Key、Secret Access Key 与含凭据 payload 全部停留在 Rust 服务层。Cloudflare R2 作为预设，固定使用 `region=auto` 与 path-style 地址。
+- 设置页的会话安全由 Rust `security.json` 保存：主密码只在 Rust 侧验证，空闲锁定由主工作区的 renderer 覆盖层执行；WebDAV/S3 备份包共用安全页中的加密密码，未配置时备份操作返回稳定错误并引导回安全页。Windows portable 使用 exe 旁的 `config` 存储该文件及其设备绑定密钥。
 
 ### 2.1 Rust/Tauri 迁移边界
 

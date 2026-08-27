@@ -33,6 +33,7 @@ const PORTABLE_DATA_ENTRIES: &[(&str, bool)] = &[
     ("transfer-journal.json", false),
     ("webdav-sync.json", true),
     ("s3-backup.json", true),
+    ("security.json", true),
     ("ai-providers.json", false),
     ("ai-provider-secrets.json", true),
     ("ai-conversations.json", true),

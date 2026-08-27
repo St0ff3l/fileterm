@@ -110,7 +110,7 @@ fn random_bytes<const N: usize>() -> [u8; N] {
     output
 }
 
-fn validate_password(password: &str) -> Result<(), BackupCryptoError> {
+pub(crate) fn validate_password(password: &str) -> Result<(), BackupCryptoError> {
     if password.chars().count() < MIN_BACKUP_PASSWORD_CHARS {
         return Err(BackupCryptoError::PasswordTooShort);
     }

@@ -53,11 +53,14 @@ import type {
   AiStreamEvent,
   CreateAiConversationInput,
   CreateAiContextPreviewInput,
+  DeleteAiMessageInput,
   CreateProfileInput,
   ImportedFont,
   RenameAiConversationInput,
   RetryAiChatInput,
   SaveAiProviderInput,
+  SecuritySettings,
+  SecuritySettingsInput,
   SetAiContextAttachInput,
   SetAiCopilotModeInput,
   SetAiDangerousCommandRestrictionsInput,
@@ -393,6 +396,10 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
+    getSecuritySettings: () => invoke<SecuritySettings>('app_get_security_settings'),
+    setSecuritySettings: (input: SecuritySettingsInput) =>
+      invoke<SecuritySettings>('app_set_security_settings', { input }),
+    verifySecurityPassword: (password: string) => invoke<boolean>('app_verify_security_password', { password }),
     listLocalTerminalShells: () => invoke<LocalTerminalShellOption[]>('app_list_local_terminal_shells'),
     getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
@@ -408,6 +415,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<AiConversation>('app_rename_ai_conversation', { input }),
     summarizeAiConversationTitle: (input: SummarizeAiConversationTitleInput) =>
       invoke<AiConversation>('app_summarize_ai_conversation_title', { input }),
+    deleteAiMessage: (input: DeleteAiMessageInput) => invoke<AiConversation>('app_delete_ai_message', { input }),
     deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
     getAiCopilotModeState: () => invoke<AiCopilotModeState>('app_get_ai_copilot_mode_state'),
     setAiCopilotMode: (input: SetAiCopilotModeInput) =>
@@ -754,6 +762,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     getDroppedFilePaths: (files: File[]) => takeNativeDropPaths(files),
     onUiPreferencesChanged: (listener: (preferences: UiPreferences) => void) =>
       subscribe('app:ui-preferences-changed', listener),
+    onSecuritySettingsChanged: (listener: (settings: SecuritySettings) => void) =>
+      subscribe('app:security-settings-changed', listener),
     onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) =>
       subscribe('app:window-maximized-change', listener),
     onFileEditorCloseRequest: (listener: () => void) => subscribe('app:file-editor-close-request', listener),

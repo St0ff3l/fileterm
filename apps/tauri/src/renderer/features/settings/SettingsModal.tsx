@@ -41,9 +41,20 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
+import { SecuritySettingsPanel } from '../security/SecuritySettingsPanel'
 
 type SettingsTab =
-  'ai' | 'agent' | 'connections' | 'interface' | 'local-terminal' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+  | 'ai'
+  | 'agent'
+  | 'connections'
+  | 'interface'
+  | 'local-terminal'
+  | 'security'
+  | 'sync'
+  | 'tools'
+  | 'updates'
+  | 'system'
+  | 'language'
 
 type SettingsSidebarItem = {
   tab: SettingsTab
@@ -58,6 +69,7 @@ const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'ai', labelKey: 'aiSettings', materialIcon: 'auto_awesome' },
   { tab: 'agent', labelKey: 'agentMcpSettings', appIcon: 'terminal-file' },
   { tab: 'connections', labelKey: 'connectionDefaults', materialIcon: 'settings_ethernet' },
+  { tab: 'security', labelKey: 'securitySettings', appIcon: 'shield-check' },
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update' },
   { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
@@ -71,6 +83,7 @@ const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
   ai: 'ai provider model api key openai anthropic 模型 服务 密钥',
   agent: 'agent mcp cli command tool automation 代理 命令 工具',
   connections: 'connection ssh sftp ftp telnet reconnect resource monitor 连接 默认值 重连 监控',
+  security: 'security session lock password backup credentials safe 安全 会话 锁屏 密码 备份 凭据',
   sync: 'sync webdav s3 backup cloud configuration 同步 备份 云端',
   updates: 'update release version beta stable 更新 版本 发布',
   tools: 'manager connection command key shortcut 管理器 连接 命令 密钥 快捷键',
@@ -635,6 +648,7 @@ export function SettingsModal({
   const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
   const [syncPassword, setSyncPassword] = useState('')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [securityNotice, setSecurityNotice] = useState<string | null>(null)
   const [s3Config, setS3Config] = useState<S3BackupConfig | null>(null)
   const [s3SecretAccessKey, setS3SecretAccessKey] = useState('')
   const [s3Message, setS3Message] = useState<string | null>(null)
@@ -947,7 +961,10 @@ export function SettingsModal({
       await action()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (operation.startsWith('s3-')) {
+      if (message.includes('SECURITY_BACKUP_PASSWORD_REQUIRED')) {
+        setSecurityNotice(t.securityBackupPasswordRequired)
+        setActiveTab('security')
+      } else if (operation.startsWith('s3-')) {
         setS3Message(message)
       } else {
         setSyncMessage(message)
@@ -3500,6 +3517,8 @@ export function SettingsModal({
             </div>
           ) : null}
 
+          {activeTab === 'security' ? <SecuritySettingsPanel desktopApi={desktopApi} notice={securityNotice} /> : null}
+
           {activeTab === 'sync' && syncConfig ? (
             <div className="settings-panel">
               <div className="sync-subtabs">
@@ -3643,7 +3662,20 @@ export function SettingsModal({
                           <AppIcon name="refresh" size={15} />
                           <h4>{t.manualSyncTitle}</h4>
                         </div>
-                        <span className="sync-operations-card-subtitle">{t.manualSyncDescription}</span>
+                        <div className="sync-operations-card-subtitle">
+                          <span>{t.manualSyncDescription}</span>
+                          <button
+                            className="sync-security-link"
+                            type="button"
+                            onClick={() => {
+                              setSecurityNotice(null)
+                              setActiveTab('security')
+                            }}
+                          >
+                            <AppIcon name="shield-check" size={12} />
+                            <span>{t.securityOpenSettings}</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="sync-operations-grid">
@@ -3910,7 +3942,20 @@ export function SettingsModal({
                           <AppIcon name="refresh" size={15} />
                           <h4>{t.manualSyncTitle}</h4>
                         </div>
-                        <span className="sync-operations-card-subtitle">{t.manualSyncDescription}</span>
+                        <div className="sync-operations-card-subtitle">
+                          <span>{t.manualSyncDescription}</span>
+                          <button
+                            className="sync-security-link"
+                            type="button"
+                            onClick={() => {
+                              setSecurityNotice(null)
+                              setActiveTab('security')
+                            }}
+                          >
+                            <AppIcon name="shield-check" size={12} />
+                            <span>{t.securityOpenSettings}</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="sync-operations-grid">

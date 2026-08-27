@@ -1252,6 +1252,24 @@ export interface BackupPasswordRequest {
   provider: 'WebDAV' | 'S3'
 }
 
+/** Non-secret session and remote-backup security state exposed to the renderer. */
+export interface SecuritySettings {
+  lockEnabled: boolean
+  idleLockMinutes: number
+  hasLockPassword: boolean
+  hasBackupPassword: boolean
+}
+
+/** Secret values are write-only from the renderer's point of view. */
+export interface SecuritySettingsInput {
+  lockEnabled?: boolean
+  idleLockMinutes?: number
+  lockPassword?: string
+  backupPassword?: string
+  clearLockPassword?: boolean
+  clearBackupPassword?: boolean
+}
+
 export type ActionApprovalSource = 'mcp' | 'ai-copilot'
 
 /** One-time in-app approval shared by MCP and Copilot tool calls. */
@@ -2049,6 +2067,11 @@ export interface RenameAiConversationInput {
   title: string
 }
 
+export interface DeleteAiMessageInput {
+  conversationId: string
+  messageId: string
+}
+
 /** Requests automatic title generation from the configured Provider. */
 export interface SummarizeAiConversationTitleInput {
   conversationId: string
@@ -2135,7 +2158,9 @@ export type AiErrorCode =
   | 'AI_TOOL_CALL_INVALID'
   | 'AI_TOOL_LOOP_LIMIT'
   | 'AI_CONVERSATION_LIMIT'
+  | 'AI_CONVERSATION_ACTIVE'
   | 'AI_CONVERSATION_NOT_FOUND'
+  | 'AI_MESSAGE_NOT_FOUND'
   | 'AI_CONVERSATION_INVALID_INPUT'
 
 export interface AiCommandError {
@@ -2174,6 +2199,9 @@ export interface FileTermDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
+  getSecuritySettings(): Promise<SecuritySettings>
+  setSecuritySettings(input: SecuritySettingsInput): Promise<SecuritySettings>
+  verifySecurityPassword(password: string): Promise<boolean>
   listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
@@ -2185,6 +2213,7 @@ export interface FileTermDesktopApi {
   createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
   renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
   summarizeAiConversationTitle(input: SummarizeAiConversationTitleInput): Promise<AiConversation>
+  deleteAiMessage(input: DeleteAiMessageInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
   getAiCopilotModeState(): Promise<AiCopilotModeState>
   setAiCopilotMode(input: SetAiCopilotModeInput): Promise<AiCopilotModeState>
@@ -2241,6 +2270,7 @@ export interface FileTermDesktopApi {
   requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
   onUiPreferencesChanged(listener: (preferences: UiPreferences) => void): () => void
+  onSecuritySettingsChanged(listener: (settings: SecuritySettings) => void): () => void
   onFileEditorCloseRequest(listener: () => void): () => void
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
