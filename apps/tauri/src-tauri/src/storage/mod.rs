@@ -150,18 +150,53 @@ struct PendingFile {
 #[cfg(any(test, target_os = "windows"))]
 fn portable_config_directory_for_executable(executable: &Path) -> Option<PathBuf> {
     let parent = executable.parent()?;
-    let executable_name = executable
-        .file_stem()?
-        .to_string_lossy()
-        .to_ascii_lowercase();
-    let has_portable_name = executable_name == "portable"
-        || executable_name.ends_with("-portable")
-        || executable_name.ends_with("_portable");
-    let has_marker = parent.join(PORTABLE_MARKER_FILE).is_file();
+    let has_portable_name =
+        is_compiled_portable_build() || has_portable_executable_name(executable);
+    let has_marker = portable_marker_path_for_executable(executable)
+        .map(|path| path.is_file())
+        .unwrap_or(false);
 
     has_portable_name
         .then(|| parent.join(PORTABLE_CONFIG_DIRECTORY))
         .or_else(|| has_marker.then(|| parent.join(PORTABLE_CONFIG_DIRECTORY)))
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn has_portable_executable_name(executable: &Path) -> bool {
+    let Some(executable_name) = executable.file_stem() else {
+        return false;
+    };
+    let executable_name = executable_name.to_string_lossy().to_ascii_lowercase();
+    executable_name == "portable"
+        || executable_name.ends_with("-portable")
+        || executable_name.ends_with("_portable")
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn portable_marker_path_for_executable(executable: &Path) -> Option<PathBuf> {
+    executable
+        .parent()
+        .map(|parent| parent.join(PORTABLE_MARKER_FILE))
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn ensure_portable_marker_for_executable(executable: &Path) -> Result<Option<PathBuf>, AppError> {
+    let Some(marker_path) = portable_marker_path_for_executable(executable) else {
+        return Ok(None);
+    };
+    if portable_config_directory_for_executable(executable).is_none() {
+        return Ok(None);
+    }
+    if marker_path.is_file() {
+        return Ok(Some(marker_path));
+    }
+
+    // Persist the fact that this directory was launched as the portable
+    // build. This survives a user renaming the executable or clearing the
+    // config directory, so the next launch cannot silently fall back to
+    // %APPDATA% and repopulate deleted data.
+    write_restricted_file(&marker_path, b"")?;
+    Ok(Some(marker_path))
 }
 
 pub fn portable_config_directory() -> Option<PathBuf> {
@@ -174,6 +209,29 @@ pub fn portable_config_directory() -> Option<PathBuf> {
 
     #[cfg(not(target_os = "windows"))]
     None
+}
+
+pub fn is_compiled_portable_build() -> bool {
+    option_env!("FILETERM_PORTABLE_BUILD")
+        .map(|value| value == "1")
+        .unwrap_or(false)
+}
+
+/// Persist a portable-mode marker next to the executable after the first
+/// successful startup. The marker is deliberately outside `config/`: clearing
+/// portable data must not make the next launch migrate the old app-data store
+/// back into the freshly emptied directory.
+pub fn ensure_portable_marker() -> Result<Option<PathBuf>, AppError> {
+    #[cfg(target_os = "windows")]
+    {
+        let Some(executable) = std::env::current_exe().ok() else {
+            return Ok(None);
+        };
+        return ensure_portable_marker_for_executable(&executable);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    Ok(None)
 }
 
 pub fn storage_root(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -207,15 +265,100 @@ pub fn workspace_file(app: &AppHandle, name: &str) -> Result<PathBuf, AppError> 
 /// by another read of Electron's still-live store.
 pub fn migrate_legacy_data_once(app: &AppHandle) -> Result<(), AppError> {
     let current_dir = storage_root(app)?;
+    crate::services::logging::info(
+        app,
+        "storage",
+        format!(
+            "data migration started root={} portable={} compiled_portable={}",
+            current_dir.display(),
+            portable_config_directory().is_some(),
+            is_compiled_portable_build()
+        ),
+    );
     #[cfg(target_os = "windows")]
     if portable_config_directory().is_some() {
-        migrate_portable_data_once(app, &current_dir)?;
+        let portable_marker_exists = std::env::current_exe()
+            .ok()
+            .and_then(|executable| portable_marker_path_for_executable(&executable))
+            .map(|path| path.is_file())
+            .unwrap_or(false);
+        if portable_marker_exists {
+            // The parent marker is intentionally independent from config/.
+            // If a user clears portable data, neither the old Tauri store nor
+            // the historical Electron store should be copied back on the
+            // next launch.
+            crate::services::logging::info(
+                app,
+                "storage",
+                format!(
+                    "portable migration skipped because the executable marker exists root={}",
+                    current_dir.display()
+                ),
+            );
+            return Ok(());
+        }
+        let result = migrate_portable_data_once(app, &current_dir);
+        match &result {
+            Ok(()) => crate::services::logging::info(
+                app,
+                "storage",
+                format!(
+                    "portable data migration completed root={}",
+                    current_dir.display()
+                ),
+            ),
+            Err(error) => crate::services::logging::error(
+                app,
+                "storage",
+                format!(
+                    "portable data migration failed root={} error={error}",
+                    current_dir.display()
+                ),
+            ),
+        }
+        result?;
     }
     let config_dir = app.path().app_config_dir().ok();
     let data_dir = app.path().app_data_dir().ok();
     let legacy_dir =
         select_legacy_directory(&current_dir, config_dir.as_deref(), data_dir.as_deref())?;
-    migrate_legacy_store(&current_dir, &legacy_dir).map(|_| ())
+    crate::services::logging::info(
+        app,
+        "storage",
+        format!(
+            "legacy migration source selected root={} source={}",
+            current_dir.display(),
+            legacy_dir.display()
+        ),
+    );
+    match migrate_legacy_store(&current_dir, &legacy_dir) {
+        Ok(report) => {
+            crate::services::logging::info(
+                app,
+                "storage",
+                format!(
+                    "legacy migration completed root={} source_files={} migrated_files={} kept_current_files={}",
+                    current_dir.display(),
+                    report.source_files.len(),
+                    report.migrated_files.len(),
+                    report.kept_current_files.len()
+                ),
+            );
+            Ok(())
+        }
+        Err(error) => {
+            crate::services::logging::error(
+                app,
+                "storage",
+                format!(
+                    "legacy migration failed root={} source={} error={error}",
+                    current_dir.display(),
+                    legacy_dir.display()
+                ),
+            );
+            Err(error)
+        }
+    }
 }
 
 #[cfg(any(test, target_os = "windows"))]
@@ -235,6 +378,15 @@ fn migrate_portable_data_once(app: &AppHandle, current_dir: &Path) -> Result<(),
         .path()
         .app_data_dir()
         .map_err(|error| AppError::Storage(error.to_string()))?;
+    crate::services::logging::debug(
+        app,
+        "storage",
+        format!(
+            "portable migration source={} target={}",
+            source_dir.display(),
+            current_dir.display()
+        ),
+    );
     migrate_portable_data_from_source(current_dir, &source_dir)
 }
 
@@ -1333,9 +1485,9 @@ pub fn new_id(prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        commit_pending_files, migrate_legacy_store, migrate_portable_data_from_source,
-        portable_config_directory_for_executable, replace_file_atomically, select_legacy_directory,
-        PendingFile, LEGACY_MIGRATION_MARKER,
+        commit_pending_files, ensure_portable_marker_for_executable, migrate_legacy_store,
+        migrate_portable_data_from_source, portable_config_directory_for_executable,
+        replace_file_atomically, select_legacy_directory, PendingFile, LEGACY_MIGRATION_MARKER,
     };
     use serde_json::{json, Value};
     use std::fs;
@@ -1383,6 +1535,24 @@ mod tests {
             portable_config_directory_for_executable(&root.join("FileTerm.exe")),
             Some(root.join("config"))
         );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn portable_mode_persists_a_marker_for_future_launches() {
+        let root = std::env::temp_dir().join(format!(
+            "fileterm-portable-marker-persist-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let executable = root.join("FileTerm-2.2.5-windows-x64-portable.exe");
+
+        let marker = ensure_portable_marker_for_executable(&executable)
+            .unwrap()
+            .expect("portable executable should get a marker");
+        assert!(marker.is_file());
+        assert_eq!(fs::read(marker).unwrap(), Vec::<u8>::new());
 
         fs::remove_dir_all(root).unwrap();
     }

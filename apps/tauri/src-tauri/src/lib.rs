@@ -1647,14 +1647,75 @@ pub fn run() {
 
     builder
         .setup(|app| {
-            crate::storage::migrate_legacy_data_once(app.handle())?;
+            // Initialize the logger before migration so portable-root and
+            // legacy-source decisions remain diagnosable on first launch.
             crate::services::logging::init(app.handle());
+            let migration_result = crate::storage::migrate_legacy_data_once(app.handle());
             // Install after `logging::init` so `LOG_DIRECTORY` is populated.
             // Captures panic location + payload for any spawned task that
             // panics (SSH worker, output pump, transfer service) — without
             // this, supervision code only sees a `JoinError` with no source
             // location and the panic site is lost.
             crate::services::logging::install_panic_hook();
+            if let Err(error) = migration_result.as_ref() {
+                crate::services::logging::error(
+                    app.handle(),
+                    "storage",
+                    format!("startup migration failed: {error}"),
+                );
+            }
+            migration_result?;
+
+            match crate::storage::ensure_portable_marker() {
+                Ok(Some(marker)) => crate::services::logging::info(
+                    app.handle(),
+                    "storage",
+                    format!("portable marker ready path={}", marker.display()),
+                ),
+                Ok(None) => {}
+                Err(error) => crate::services::logging::warn(
+                    app.handle(),
+                    "storage",
+                    format!("unable to persist portable marker: {error}"),
+                ),
+            }
+
+            let executable = std::env::current_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|error| format!("<unavailable:{error}>"));
+            let portable_directory = crate::storage::portable_config_directory();
+            let storage_mode = if portable_directory.is_some() {
+                "portable"
+            } else {
+                "app-data"
+            };
+            let portable_directory = portable_directory
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "<none>".to_string());
+            let app_data_directory = app
+                .path()
+                .app_data_dir()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|error| format!("<unavailable:{error}>"));
+            match crate::storage::storage_root(app.handle()) {
+                Ok(root) => crate::services::logging::info(
+                    app.handle(),
+                    "storage",
+                    format!(
+                        "resolved mode={storage_mode} compiled_portable={} executable={executable} root={} portable_config={portable_directory} app_data={app_data_directory}",
+                        crate::storage::is_compiled_portable_build(),
+                        root.display()
+                    ),
+                ),
+                Err(error) => crate::services::logging::error(
+                    app.handle(),
+                    "storage",
+                    format!(
+                        "unable to resolve storage root mode={storage_mode} compiled_portable={} executable={executable} portable_config={portable_directory} app_data={app_data_directory}: {error}",
+                        crate::storage::is_compiled_portable_build()
+                    ),
+                ),
+            }
             crate::services::logging::info(
                 app.handle(),
                 "app",

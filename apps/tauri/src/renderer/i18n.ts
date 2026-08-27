@@ -1217,7 +1217,7 @@ const zhCN = {
   themeImportedFonts: '已导入字体',
   themeDeleteFont: '删除字体',
   themeDeleteFontConfirm: '确定要删除字体“{name}”吗？使用该字体的主题将自动恢复为系统默认字体。',
-  themeFontImportFailed: '字体导入失败，请选择有效的 .ttf 或 .otf 文件。',
+  themeFontImportFailed: '字体导入失败，请检查字体格式以及便携版 config 目录的读写权限。',
   themeFontDeleteFailed: '删除字体失败。',
   themeSemanticColors: '代码语义色',
   themeAdvancedHint: '默认主题不会改变，手动调整才会覆盖语义映射。',
@@ -2807,7 +2807,7 @@ const enUS: typeof zhCN = {
   themeDeleteFont: 'Delete font',
   themeDeleteFontConfirm:
     'Are you sure you want to delete the font "{name}"? Themes using this font will automatically fall back to the system default.',
-  themeFontImportFailed: 'Font import failed. Choose a valid .ttf or .otf file.',
+  themeFontImportFailed: 'Font import failed. Check the font format and the portable config directory permissions.',
   themeFontDeleteFailed: 'Failed to delete font.',
   themeSemanticColors: 'Code semantic colors',
   themeAdvancedHint: 'The default themes stay unchanged until you override a semantic token.',

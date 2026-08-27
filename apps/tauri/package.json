@@ -22,6 +22,7 @@
     "release:mac": "node ./scripts/run-tauri.mjs build --target aarch64-apple-darwin --config src-tauri/tauri.release.macos.conf.json",
     "release:mac:x64": "node ./scripts/run-tauri.mjs build --target x86_64-apple-darwin --config src-tauri/tauri.release.macos.conf.json",
     "release:win": "node ./scripts/run-tauri.mjs build --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.windows.conf.json",
+    "release:win:portable": "node ./scripts/run-tauri.mjs build --target x86_64-pc-windows-msvc --config src-tauri/tauri.release.windows.conf.json --no-bundle",
     "release:linux": "node ./scripts/run-tauri.mjs build --target x86_64-unknown-linux-gnu --config src-tauri/tauri.release.linux.conf.json"
   },
   "dependencies": {

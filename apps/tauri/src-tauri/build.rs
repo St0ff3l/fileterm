@@ -1,4 +1,11 @@
 fn main() {
+    let portable_build = std::env::var("FILETERM_PORTABLE_BUILD").as_deref() == Ok("1");
+    println!("cargo:rerun-if-env-changed=FILETERM_PORTABLE_BUILD");
+    println!(
+        "cargo:rustc-env=FILETERM_PORTABLE_BUILD={}",
+        if portable_build { "1" } else { "0" }
+    );
+
     // tauri_build embeds the Windows app manifest into the .rc resource that
     // only bin targets link, so cargo test executables ship without a manifest.
     // The loader then resolves comctl32.dll to v5 and the statically imported

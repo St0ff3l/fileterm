@@ -703,7 +703,8 @@ export function SettingsModal({
           entries.filter((entry): entry is { font: ImportedFont; dataUrl: string } => entry !== null)
         )
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
+        console.error('[FileTerm] 加载导入字体', cause)
         if (!canceled) setFontImportError(t.themeFontImportFailed)
       })
 
@@ -1369,7 +1370,8 @@ export function SettingsModal({
       if (dataUrl) registerImportedFont(font, dataUrl)
       setImportedFonts((current) => [font, ...current.filter((item) => item.id !== font.id)])
       updateThemeFonts({ [kind]: font.family })
-    } catch {
+    } catch (cause: unknown) {
+      console.error('[FileTerm] 导入字体', cause)
       setFontImportError(t.themeFontImportFailed)
     } finally {
       setFontImportKind(null)
@@ -1399,7 +1401,8 @@ export function SettingsModal({
       }
       setFontToDelete(null)
       setFontImportError(null)
-    } catch {
+    } catch (cause: unknown) {
+      console.error('[FileTerm] 删除字体', cause)
       setFontImportError(t.themeFontDeleteFailed)
     }
   }
