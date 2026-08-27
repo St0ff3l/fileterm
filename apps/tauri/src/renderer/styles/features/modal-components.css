@@ -999,6 +999,29 @@
   gap: 20px;
 }
 
+.settings-panel .primary-button.compact,
+.settings-panel .flat-button.compact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size-regular, 12px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.settings-panel .flat-button.compact {
+  border-color: var(--border-light);
+}
+
 .sync-subtabs,
 .agent-mcp-subtabs {
   display: inline-flex;
@@ -1519,14 +1542,15 @@
   gap: 10px;
 }
 
-/* WebDAV actions live inline with secondary upload/download controls. Keep the
- * primary save affordance visible without giving it dialog-footer weight. */
-.settings-update-actions .primary-button.compact {
-  height: 28px;
+.settings-update-actions .primary-button.compact,
+.settings-update-actions .flat-button.compact {
+  height: 30px;
+  min-height: 30px;
   padding: 0 12px;
-  border-radius: 6px;
-  font-size: var(--button-font-size-compact);
-  font-weight: var(--button-font-weight);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
+  font-weight: 500;
+  gap: 6px;
 }
 
 .theme-options-grid {
@@ -2454,9 +2478,17 @@
   line-height: 1.5;
 }
 
-.tool-card-details button {
+.tool-card-details button,
+.tool-card-details .primary-button.compact {
   align-self: flex-start;
   margin-top: 4px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
+  font-weight: 500;
+  gap: 6px;
 }
 
 .about-info-list {
@@ -2505,8 +2537,16 @@
   line-height: 1.5;
 }
 
-.logs-shortcut-card button {
+.logs-shortcut-card button,
+.logs-shortcut-card .flat-button.compact {
   align-self: flex-start;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
+  font-weight: 500;
+  gap: 6px;
 }
 
 .webdav-sync-form {
@@ -2604,15 +2644,16 @@
 .sync-config-primary-buttons .flat-button.compact {
   display: inline-flex;
   min-width: 80px;
-  height: 32px;
+  height: 30px;
+  min-height: 30px;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 0 14px;
+  gap: 6px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   font-size: var(--button-font-size-regular, 12px);
-  font-weight: var(--button-font-weight, 500);
+  font-weight: 500;
 }
 
 .sync-config-primary-buttons .flat-button.compact {
@@ -2680,6 +2721,10 @@
 }
 
 .sync-operations-card-subtitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   font-size: 11.5px;
   color: var(--text-muted);
   line-height: 1.45;

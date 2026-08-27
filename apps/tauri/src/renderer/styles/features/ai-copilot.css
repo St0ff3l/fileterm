@@ -591,12 +591,12 @@
 
 .ai-copilot-conversation-list-item {
   display: grid;
-  grid-template-columns: 19px minmax(0, 1fr) 16px;
+  grid-template-columns: minmax(0, 1fr) 26px;
   min-width: 0;
   align-items: center;
-  gap: 7px;
+  gap: 4px;
   min-height: 48px;
-  padding: 7px 8px;
+  padding: 0 5px 0 8px;
   border: 1px solid var(--border-light);
   border-radius: 9px;
   color: var(--text-muted);
@@ -604,25 +604,80 @@
   text-align: left;
 }
 
-.ai-copilot-conversation-list-item:hover:not(:disabled),
+.ai-copilot-conversation-list-item-open {
+  display: grid;
+  grid-template-columns: 19px minmax(0, 1fr) 16px;
+  min-width: 0;
+  min-height: 46px;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.ai-copilot-conversation-list-item:hover,
 .ai-copilot-conversation-list-item.is-active {
   border-color: color-mix(in srgb, var(--focus-outline) 48%, var(--border-light));
   color: var(--text-main);
   background: var(--accent-tint-weak);
 }
 
-.ai-copilot-conversation-list-item:disabled {
+.ai-copilot-conversation-list-item-open:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
 
-.ai-copilot-conversation-list-item > .material-symbols-outlined {
+.ai-copilot-conversation-list-item-open > .material-symbols-outlined {
   font-size: 17px;
 }
 
-.ai-copilot-conversation-list-item > .material-symbols-outlined:last-child {
+.ai-copilot-conversation-list-item-open > .material-symbols-outlined:last-child {
   justify-self: end;
   font-size: 15px;
+}
+
+.ai-copilot-conversation-list-item-delete {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.14s ease,
+    color 0.14s ease,
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.ai-copilot-conversation-list-item:hover .ai-copilot-conversation-list-item-delete,
+.ai-copilot-conversation-list-item:focus-within .ai-copilot-conversation-list-item-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ai-copilot-conversation-list-item-delete:hover:not(:disabled),
+.ai-copilot-conversation-list-item-delete:focus-visible {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border-light));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  outline: 0;
+}
+
+.ai-copilot-conversation-list-item-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.36;
 }
 
 .ai-copilot-conversation-list-item-copy {
@@ -907,6 +962,68 @@
   border-radius: 10px 10px 3px;
   color: var(--text-main);
   background: var(--accent-tint-weak);
+}
+
+.ai-copilot-message-actions {
+  display: flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 3px;
+}
+
+.ai-copilot-message.is-user .ai-copilot-message-actions {
+  justify-content: flex-end;
+}
+
+.ai-copilot-message-actions .ai-copilot-copy-button,
+.ai-copilot-message-delete-button {
+  position: static;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-soft);
+  background: transparent;
+  opacity: 0.78;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    border-color 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.ai-copilot-message-actions .ai-copilot-copy-button:hover,
+.ai-copilot-message-actions .ai-copilot-copy-button:focus-visible,
+.ai-copilot-message-delete-button:hover:not(:disabled),
+.ai-copilot-message-delete-button:focus-visible {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--focus-outline) 42%, var(--border-light));
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--surface-hover) 72%, transparent);
+  outline: 0;
+}
+
+.ai-copilot-message-delete-button:hover:not(:disabled),
+.ai-copilot-message-delete-button:focus-visible {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border-light));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.ai-copilot-message-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.34;
+}
+
+.ai-copilot-message-actions .app-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .ai-copilot-message-markdown {
@@ -2823,11 +2940,14 @@
 .ai-settings-footer-actions .ai-settings-secondary-button,
 .ai-settings-footer-actions .ai-settings-danger-button,
 .ai-settings-footer-actions .primary-button {
-  height: 32px;
-  min-height: 32px;
-  max-height: 32px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
   padding: 0 12px;
-  font-size: 11px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
+  font-weight: 500;
+  gap: 6px;
 }
 
 .ai-settings-secondary-button {
