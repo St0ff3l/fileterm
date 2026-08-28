@@ -7,6 +7,7 @@ import { CloseButton } from '../common/CloseButton'
 interface SplitPaneLayoutProps {
   rootTab: WorkspaceTab
   sessions: Record<string, SessionSnapshot>
+  isWorkspaceActive?: boolean
   activePaneTabId?: string
   onClosePane(paneTabId: string): void
   onCloseTab(): void
@@ -29,6 +30,7 @@ interface SplitPaneLayoutProps {
 export function SplitPaneLayout({
   rootTab,
   sessions,
+  isWorkspaceActive = true,
   activePaneTabId,
   onClosePane,
   onCloseTab,
@@ -52,6 +54,7 @@ export function SplitPaneLayout({
       <PaneRenderer
         node={rootTab.paneRoot}
         sessions={sessions}
+        isWorkspaceActive={isWorkspaceActive}
         rootTabId={rootTab.id}
         rootTabProfileId={rootTab.profileId}
         rootTabSessionType={rootTab.sessionType}
@@ -81,6 +84,7 @@ function countPaneLeaves(node: PaneNode): number {
 interface PaneRendererProps {
   node: PaneNode
   sessions: Record<string, SessionSnapshot>
+  isWorkspaceActive: boolean
   rootTabId: string
   rootTabProfileId: string
   rootTabSessionType: WorkspaceTab['sessionType']
@@ -100,6 +104,7 @@ interface PaneRendererProps {
 function PaneRenderer({
   node,
   sessions,
+  isWorkspaceActive,
   rootTabId,
   rootTabProfileId,
   rootTabSessionType,
@@ -117,7 +122,7 @@ function PaneRenderer({
 }: PaneRendererProps) {
   if (node.kind === 'leaf') {
     const session = sessions[node.tabId]
-    const isActive = activePaneTabId === node.tabId
+    const isActive = isWorkspaceActive && activePaneTabId === node.tabId
     return (
       <div className={`split-pane-leaf ${isActive ? 'split-pane-leaf--active' : ''}`}>
         <div className="split-pane-terminal">
@@ -140,7 +145,7 @@ function PaneRenderer({
             onCloseTab={onCloseTab}
             canClosePane={canClosePane}
             onActivate={() => {
-              if (!isActive) {
+              if (isWorkspaceActive && !isActive) {
                 onActivatePane(node.tabId)
               }
             }}
@@ -168,6 +173,7 @@ function PaneRenderer({
       panes={panes}
       initialWeights={weights}
       sessions={sessions}
+      isWorkspaceActive={isWorkspaceActive}
       rootTabId={rootTabId}
       rootTabProfileId={rootTabProfileId}
       rootTabSessionType={rootTabSessionType}
@@ -191,6 +197,7 @@ interface SplitContainerProps {
   panes: PaneNode[]
   initialWeights: number[]
   sessions: Record<string, SessionSnapshot>
+  isWorkspaceActive: boolean
   rootTabId: string
   rootTabProfileId: string
   rootTabSessionType: WorkspaceTab['sessionType']
@@ -212,6 +219,7 @@ function SplitContainer({
   panes,
   initialWeights,
   sessions,
+  isWorkspaceActive,
   rootTabId,
   rootTabProfileId,
   rootTabSessionType,
@@ -287,6 +295,7 @@ function SplitContainer({
         <PaneRenderer
           node={child}
           sessions={sessions}
+          isWorkspaceActive={isWorkspaceActive}
           rootTabId={rootTabId}
           rootTabProfileId={rootTabProfileId}
           rootTabSessionType={rootTabSessionType}

@@ -111,7 +111,8 @@ export function SessionWorkspace({
   onDownloadFiles,
   onDownloadLocalNetworkFiles,
   onDropUpload,
-  isWorkspaceFocusMode
+  isWorkspaceFocusMode,
+  isActive = true
 }: {
   activeTab: WorkspaceTab
   terminalActiveTab: WorkspaceTab
@@ -198,11 +199,12 @@ export function SessionWorkspace({
   onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
   onDropUpload(event: DragEvent<HTMLDivElement>): void
   isWorkspaceFocusMode: boolean
+  isActive?: boolean
 }) {
   const isFileOnly = activeTab.layout === 'file-only'
   const isTerminalOnly = activeTab.layout === 'terminal-only'
   const setFilePanelHeight = onFilePanelHeightChange
-  const [isFilePanelCollapsed, setIsFilePanelCollapsed] = useState(filePanelRatio <= 0)
+  const [isFilePanelCollapsed, setIsFilePanelCollapsed] = useState(filePanelRatio <= 0 || isWorkspaceFocusMode)
   const [isFilePanelDragging, setIsFilePanelDragging] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const isResizingFilePanel = useRef(false)
@@ -264,7 +266,7 @@ export function SessionWorkspace({
     })
 
   const syncFilePanelHeight = (mode: 'align' | 'clamp' = 'clamp') => {
-    if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current || isResizingFilePanel.current) {
+    if (!isActive || isFileOnly || isFilePanelCollapsed || !workspaceRef.current || isResizingFilePanel.current) {
       return
     }
 
@@ -292,7 +294,7 @@ export function SessionWorkspace({
   }, [filePanelHeight, isFilePanelCollapsed])
 
   useEffect(() => {
-    if (isFileOnly) {
+    if (!isActive || isFileOnly) {
       return
     }
     if (appliedWorkspaceFocusMode.current === isWorkspaceFocusMode) {
@@ -313,7 +315,7 @@ export function SessionWorkspace({
 
     setFilePanelHeight((prev) => (prev > 0 ? prev : lastExpandedFilePanelHeight.current || DEFAULT_FILE_PANEL_HEIGHT))
     setIsFilePanelCollapsed(false)
-  }, [isFileOnly, isWorkspaceFocusMode])
+  }, [isActive, isFileOnly, isWorkspaceFocusMode])
 
   useEffect(() => {
     isResizingFilePanel.current = false
@@ -325,7 +327,7 @@ export function SessionWorkspace({
   }, [activeTab.id, filePanelSnapTarget])
 
   useEffect(() => {
-    if (isFileOnly) {
+    if (!isActive || isFileOnly) {
       return
     }
 
@@ -407,10 +409,17 @@ export function SessionWorkspace({
       document.body.style.userSelect = ''
       setIsFilePanelDragging(false)
     }
-  }, [isFileOnly, onFilePanelSnapTargetCommit, onFilePanelRatioCommit, rememberFilePanelRatio, setFilePanelHeight])
+  }, [
+    isActive,
+    isFileOnly,
+    onFilePanelSnapTargetCommit,
+    onFilePanelRatioCommit,
+    rememberFilePanelRatio,
+    setFilePanelHeight
+  ])
 
   useEffect(() => {
-    if (isFileOnly) {
+    if (!isActive || isFileOnly) {
       return
     }
 
@@ -463,10 +472,18 @@ export function SessionWorkspace({
         window.clearTimeout(checkTimer)
       }
     }
-  }, [activeTab.id, filePanelRatio, filePanelSnapTarget, isFileOnly, rememberFilePanelRatio, setFilePanelHeight])
+  }, [
+    activeTab.id,
+    filePanelRatio,
+    filePanelSnapTarget,
+    isActive,
+    isFileOnly,
+    rememberFilePanelRatio,
+    setFilePanelHeight
+  ])
 
   useEffect(() => {
-    if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current) {
+    if (!isActive || isFileOnly || isFilePanelCollapsed || !workspaceRef.current) {
       return
     }
 
@@ -564,7 +581,7 @@ export function SessionWorkspace({
       themeObserver.disconnect()
       window.removeEventListener('resize', syncAfterLayout)
     }
-  }, [isFileOnly, isFilePanelCollapsed, filePanelSnapTarget, filePanelRatio, setFilePanelHeight])
+  }, [isActive, isFileOnly, isFilePanelCollapsed, filePanelSnapTarget, filePanelRatio, setFilePanelHeight])
 
   const handleToggleFilePanelCollapsed = () => {
     if (isFilePanelCollapsed) {
@@ -612,6 +629,7 @@ export function SessionWorkspace({
             <SplitPaneLayout
               rootTab={splitRootTab}
               sessions={splitPaneSessions}
+              isWorkspaceActive={isActive}
               activePaneTabId={activePaneTabId}
               onClosePane={onClosePane}
               onCloseTab={onCloseTab}
@@ -629,6 +647,7 @@ export function SessionWorkspace({
               tabId={terminalActiveTab.id}
               bootText={terminalActiveSession.terminalTranscript ?? ''}
               sessionType={terminalActiveTab.sessionType}
+              isActive={isActive}
               connected={terminalActiveSession.connected === true}
               connecting={terminalActiveTab.status === 'connecting'}
               onReconnect={reconnectOnEnter}
@@ -636,17 +655,19 @@ export function SessionWorkspace({
               onCloseTab={onCloseTab}
             />
           )}
-          <TerminalDock
-            activeTab={terminalActiveTab}
-            connected={terminalActiveSession.connected === true}
-            selectedTabIds={terminalDockSelectedTabIds}
-            sendScope={terminalDockSendScope}
-            sendTargets={sendTargets}
-            onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
-            onSendCommand={onSendTerminalCommand}
-            onSendScopeChange={onTerminalDockSendScopeChange}
-            onReconnect={reconnectOnEnter}
-          />
+          {isActive ? (
+            <TerminalDock
+              activeTab={terminalActiveTab}
+              connected={terminalActiveSession.connected === true}
+              selectedTabIds={terminalDockSelectedTabIds}
+              sendScope={terminalDockSendScope}
+              sendTargets={sendTargets}
+              onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
+              onSendCommand={onSendTerminalCommand}
+              onSendScopeChange={onTerminalDockSendScopeChange}
+              onReconnect={reconnectOnEnter}
+            />
+          ) : null}
           {!isFileOnly && !isTerminalOnly ? (
             <button
               aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
@@ -691,60 +712,62 @@ export function SessionWorkspace({
       ) : null}
       {!isTerminalOnly ? (
         <div className="session-bottom-panel">
-          <FileManager
-            activeSession={activeSession}
-            activeTab={activeTab}
-            activeView={activeView}
-            onActiveViewChange={onActiveViewChange}
-            commandPaneWidth={commandPaneWidth}
-            onCommandPaneWidthChange={onCommandPaneWidthChange}
-            sendTargets={sendTargets}
-            commandFolders={commandFolders}
-            commandTemplates={commandTemplates}
-            isBusy={isBusy}
-            localItems={localItems}
-            localPath={localPath}
-            localPanePath={localPanePath}
-            isLocalNetworkShare={isLocalNetworkShare}
-            isLocalDirectoryLoading={isLocalDirectoryLoading}
-            isWorkspaceRefreshing={isWorkspaceRefreshing}
-            isWorkspaceSwitching={isWorkspaceSwitching}
-            canPasteToLocal={canPasteToLocal}
-            canPasteToRemote={canPasteToRemote}
-            clipboardStatusText={clipboardStatusText}
-            localCutPaths={localCutPaths}
-            remoteCutPaths={remoteCutPaths}
-            onCopyItems={onCopyItems}
-            onCutItems={onCutItems}
-            onClearCutState={onClearCutState}
-            onExecuteCommand={onExecuteCommand}
-            onSendTerminalCommand={onSendTerminalCommand}
-            onSaveTemporaryCommand={onSaveTemporaryCommand}
-            onUpdateCommand={onUpdateCommand}
-            onOpenCommandManager={onOpenCommandManager}
-            onOpenLocalItem={onOpenLocalItem}
-            onOpenLocalPath={onOpenLocalPath}
-            onBackToLocalComputer={onBackToLocalComputer}
-            onOpenRemoteItem={onOpenRemoteItem}
-            onOpenRemotePath={onOpenRemotePath}
-            onPasteIntoPane={onPasteIntoPane}
-            onRequestChangePermissions={onRequestChangePermissions}
-            onRequestDelete={onRequestDelete}
-            onRequestNewFile={onRequestNewFile}
-            onRequestNewFolder={onRequestNewFolder}
-            onRequestQuickDelete={onRequestQuickDelete}
-            onRequestRename={onRequestRename}
-            onToggleFollowShellCwd={onToggleFollowShellCwd}
-            onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
-            remoteFileAccessMode={remoteFileAccessMode}
-            isRemoteDirectoryLoading={isRemoteDirectoryLoading}
-            onRefresh={onRefresh}
-            onUploadFiles={onUploadFiles}
-            onChooseUploadFiles={onChooseUploadFiles}
-            onDownloadFiles={onDownloadFiles}
-            onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
-            onDropUpload={onDropUpload}
-          />
+          {isActive ? (
+            <FileManager
+              activeSession={activeSession}
+              activeTab={activeTab}
+              activeView={activeView}
+              onActiveViewChange={onActiveViewChange}
+              commandPaneWidth={commandPaneWidth}
+              onCommandPaneWidthChange={onCommandPaneWidthChange}
+              sendTargets={sendTargets}
+              commandFolders={commandFolders}
+              commandTemplates={commandTemplates}
+              isBusy={isBusy}
+              localItems={localItems}
+              localPath={localPath}
+              localPanePath={localPanePath}
+              isLocalNetworkShare={isLocalNetworkShare}
+              isLocalDirectoryLoading={isLocalDirectoryLoading}
+              isWorkspaceRefreshing={isWorkspaceRefreshing}
+              isWorkspaceSwitching={isWorkspaceSwitching}
+              canPasteToLocal={canPasteToLocal}
+              canPasteToRemote={canPasteToRemote}
+              clipboardStatusText={clipboardStatusText}
+              localCutPaths={localCutPaths}
+              remoteCutPaths={remoteCutPaths}
+              onCopyItems={onCopyItems}
+              onCutItems={onCutItems}
+              onClearCutState={onClearCutState}
+              onExecuteCommand={onExecuteCommand}
+              onSendTerminalCommand={onSendTerminalCommand}
+              onSaveTemporaryCommand={onSaveTemporaryCommand}
+              onUpdateCommand={onUpdateCommand}
+              onOpenCommandManager={onOpenCommandManager}
+              onOpenLocalItem={onOpenLocalItem}
+              onOpenLocalPath={onOpenLocalPath}
+              onBackToLocalComputer={onBackToLocalComputer}
+              onOpenRemoteItem={onOpenRemoteItem}
+              onOpenRemotePath={onOpenRemotePath}
+              onPasteIntoPane={onPasteIntoPane}
+              onRequestChangePermissions={onRequestChangePermissions}
+              onRequestDelete={onRequestDelete}
+              onRequestNewFile={onRequestNewFile}
+              onRequestNewFolder={onRequestNewFolder}
+              onRequestQuickDelete={onRequestQuickDelete}
+              onRequestRename={onRequestRename}
+              onToggleFollowShellCwd={onToggleFollowShellCwd}
+              onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
+              remoteFileAccessMode={remoteFileAccessMode}
+              isRemoteDirectoryLoading={isRemoteDirectoryLoading}
+              onRefresh={onRefresh}
+              onUploadFiles={onUploadFiles}
+              onChooseUploadFiles={onChooseUploadFiles}
+              onDownloadFiles={onDownloadFiles}
+              onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
+              onDropUpload={onDropUpload}
+            />
+          ) : null}
         </div>
       ) : null}
       <div className="terminal-right-frame" aria-hidden="true" />

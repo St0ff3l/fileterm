@@ -8,6 +8,7 @@ import { SplitPaneLayout } from './SplitPaneLayout'
 export function LocalTerminalWorkspace({
   activeTab,
   activeSession,
+  isActive = true,
   onRestart,
   onCloseTab,
   splitRootTab,
@@ -20,6 +21,7 @@ export function LocalTerminalWorkspace({
 }: {
   activeTab: WorkspaceTab
   activeSession: SessionSnapshot
+  isActive?: boolean
   onRestart(tabId: string): Promise<void>
   onCloseTab(): void
   splitRootTab?: WorkspaceTab
@@ -39,6 +41,7 @@ export function LocalTerminalWorkspace({
           <SplitPaneLayout
             rootTab={splitRootTab}
             sessions={splitPaneSessions}
+            isWorkspaceActive={isActive}
             activePaneTabId={activePaneTabId}
             onClosePane={onClosePane}
             onCloseTab={onCloseTab}
@@ -57,6 +60,7 @@ export function LocalTerminalWorkspace({
             profileId={activeTab.profileId}
             bootText={activeSession.terminalTranscript ?? ''}
             sessionType="local"
+            isActive={isActive}
             closedMessage={t.localTerminalExited}
             connected={activeSession.connected}
             connecting={activeTab.status === 'connecting'}

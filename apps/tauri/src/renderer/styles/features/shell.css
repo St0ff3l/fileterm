@@ -1291,6 +1291,32 @@
   min-height: 0;
 }
 
+.workspace-content-stack {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-content-stack__item {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.workspace-content-stack__item.is-active {
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
+}
+
 .workspace-stage-transition.is-transitioning > * {
   animation: workspace-stage-fade-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

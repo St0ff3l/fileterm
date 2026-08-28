@@ -21,7 +21,11 @@ import { SystemInfoWorkspace } from '../system/SystemInfoWorkspace'
 import { HomeWorkspace } from './HomeWorkspace'
 import { LocalTerminalWorkspace } from './LocalTerminalWorkspace'
 import { SessionWorkspace } from './SessionWorkspace'
-import type { FilePanelSnapTarget } from './file-panel-snap'
+import { DEFAULT_FILE_PANEL_SNAP_TARGET, type FilePanelSnapTarget } from './file-panel-snap'
+
+const DEFAULT_FILE_PANEL_HEIGHT = 218
+const DEFAULT_FILE_PANEL_RATIO = 30
+const DEFAULT_COMMAND_PANE_WIDTH = 300
 
 type ActiveLocalTab = {
   kind: 'home' | 'system'
@@ -135,6 +139,7 @@ export function WorkspaceStage({
   onLaunchLocalAgent,
   isSidebarCollapsed,
   isWorkspaceFocusMode,
+  isWorkspaceActive = true,
   tabBarProps,
   isResizingSidebar,
   onResizeStart,
@@ -263,6 +268,7 @@ export function WorkspaceStage({
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
   isSidebarCollapsed: boolean
   isWorkspaceFocusMode: boolean
+  isWorkspaceActive?: boolean
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
   onResizeStart(): void
@@ -289,6 +295,7 @@ export function WorkspaceStage({
       <LocalTerminalWorkspace
         activeSession={activeSession}
         activeTab={activeTab}
+        isActive={isWorkspaceActive}
         onCloseTab={onCloseTab}
         onRestart={onReconnectLocalTerminal}
         splitRootTab={splitRootTab}
@@ -379,6 +386,7 @@ export function WorkspaceStage({
         onRefresh={onRefresh}
         onUploadFiles={onUploadFiles}
         isWorkspaceFocusMode={isWorkspaceFocusMode}
+        isActive={isWorkspaceActive}
       />
     )
   }
@@ -428,5 +436,118 @@ export function WorkspaceStage({
       isResizingSidebar={isResizingSidebar}
       onResizeStart={onResizeStart}
     />
+  )
+}
+
+type WorkspaceStageProps = Parameters<typeof WorkspaceStage>[0]
+
+type KeepAliveWorkspaceStageProps = WorkspaceStageProps & {
+  workspaceTabs: WorkspaceTab[]
+  filePanelHeights: Record<string, number>
+  filePanelRatios: Record<string, number>
+  filePanelSnapTargets: Record<string, FilePanelSnapTarget | null>
+  commandPaneWidths: Record<string, number>
+  workspaceFocusModes: Record<string, boolean>
+  workspaceViews: Record<string, 'file' | 'command' | 'tunnel'>
+}
+
+/**
+ * Keep every top-level terminal workspace mounted while another tab is shown.
+ *
+ * A terminal TUI owns state that is not reconstructible from the session
+ * transcript: alternate-screen contents, cursor position, selection, scrollback
+ * and pending ANSI writes. The stack only changes which surface is visible;
+ * the xterm instance and its PTY event subscription stay attached to its tab.
+ */
+export function KeepAliveWorkspaceStage({
+  workspaceTabs,
+  filePanelHeights,
+  filePanelRatios,
+  filePanelSnapTargets,
+  commandPaneWidths,
+  workspaceFocusModes,
+  workspaceViews,
+  ...stageProps
+}: KeepAliveWorkspaceStageProps) {
+  const sessionWorkspaceItems = workspaceTabs.map((workspaceTab) => {
+    const session = stageProps.sessions[workspaceTab.id]
+    if (!session) {
+      return null
+    }
+
+    const isActive =
+      !stageProps.activeLocalTab && stageProps.activeTab?.id === workspaceTab.id && stageProps.activeSession !== null
+    const isCurrentTab = isActive
+    const tabTerminal = isCurrentTab ? (stageProps.terminalActiveTab ?? workspaceTab) : workspaceTab
+    const tabTerminalSession = isCurrentTab ? (stageProps.terminalActiveSession ?? session) : session
+    const tabFilePanelHeight = isCurrentTab
+      ? stageProps.filePanelHeight
+      : (filePanelHeights[workspaceTab.id] ?? DEFAULT_FILE_PANEL_HEIGHT)
+    const tabFilePanelRatio = isCurrentTab
+      ? stageProps.filePanelRatio
+      : stageProps.rememberFilePanelRatio
+        ? (filePanelRatios[workspaceTab.profileId] ?? DEFAULT_FILE_PANEL_RATIO)
+        : DEFAULT_FILE_PANEL_RATIO
+    const hasStoredFilePanelRatio = Object.prototype.hasOwnProperty.call(filePanelRatios, workspaceTab.profileId)
+    const hasStoredFilePanelSnapTarget = Object.prototype.hasOwnProperty.call(
+      filePanelSnapTargets,
+      workspaceTab.profileId
+    )
+    const tabFilePanelSnapTarget = isCurrentTab
+      ? stageProps.filePanelSnapTarget
+      : !stageProps.rememberFilePanelRatio
+        ? DEFAULT_FILE_PANEL_SNAP_TARGET
+        : hasStoredFilePanelSnapTarget
+          ? filePanelSnapTargets[workspaceTab.profileId]
+          : hasStoredFilePanelRatio
+            ? null
+            : DEFAULT_FILE_PANEL_SNAP_TARGET
+    const tabCommandPaneWidth = isCurrentTab
+      ? stageProps.commandPaneWidth
+      : (commandPaneWidths[workspaceTab.id] ?? DEFAULT_COMMAND_PANE_WIDTH)
+    const tabWorkspaceFocusMode = isCurrentTab
+      ? stageProps.isWorkspaceFocusMode
+      : (workspaceFocusModes[workspaceTab.id] ?? false)
+
+    return (
+      <div
+        key={workspaceTab.id}
+        className={'workspace-content-stack__item ' + (isActive ? 'is-active' : '')}
+        data-workspace-tab-id={workspaceTab.id}
+        aria-hidden={!isActive}
+      >
+        <WorkspaceStage
+          {...stageProps}
+          activeLocalTab={null}
+          activeSession={session}
+          activeTab={workspaceTab}
+          terminalActiveTab={tabTerminal}
+          terminalActiveSession={tabTerminalSession}
+          splitRootTab={workspaceTab.paneRoot ? workspaceTab : undefined}
+          activeView={isCurrentTab ? stageProps.activeView : (workspaceViews[workspaceTab.id] ?? 'file')}
+          commandPaneWidth={tabCommandPaneWidth}
+          filePanelHeight={tabFilePanelHeight}
+          filePanelRatio={tabFilePanelRatio}
+          filePanelSnapTarget={tabFilePanelSnapTarget}
+          activePaneTabId={isCurrentTab ? stageProps.activePaneTabId : undefined}
+          isWorkspaceSwitching={isCurrentTab ? stageProps.isWorkspaceSwitching : false}
+          isWorkspaceFocusMode={tabWorkspaceFocusMode}
+          isWorkspaceActive={isActive}
+        />
+      </div>
+    )
+  })
+
+  const showBaseWorkspace = stageProps.activeLocalTab !== null || !stageProps.activeTab || !stageProps.activeSession
+
+  return (
+    <div className="workspace-content-stack">
+      {showBaseWorkspace ? (
+        <div className="workspace-content-stack__item is-active" aria-hidden="false">
+          <WorkspaceStage {...stageProps} />
+        </div>
+      ) : null}
+      {sessionWorkspaceItems}
+    </div>
   )
 }

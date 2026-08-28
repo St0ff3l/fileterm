@@ -105,6 +105,7 @@ export function useTerminalView({
   // tab from swallowing keystrokes after this tab is brought back.
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
+  const isActiveRef = useRef(Boolean(isActive))
   const serialTransferBusyRef = useRef(false)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{
@@ -136,6 +137,7 @@ export function useTerminalView({
   tabIdRef.current = tabId
   connectedRef.current = Boolean(connected)
   connectingRef.current = Boolean(connecting)
+  isActiveRef.current = Boolean(isActive)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
   closedMessageRef.current = closedMessage
@@ -670,6 +672,13 @@ export function useTerminalView({
 
   const recoverTerminalRender = useCallback(
     (reason: 'activation') => {
+      // A tab can become hidden again between the two activation animation
+      // frames. Do not let a stale recovery clear, resize, or focus that
+      // terminal after a rapid tab switch.
+      if (!isActiveRef.current) {
+        return
+      }
+
       const terminal = terminalRef.current
       const fitAddon = fitAddonRef.current
       const host = hostRef.current
@@ -690,6 +699,9 @@ export function useTerminalView({
 
       terminal.clearTextureAtlas()
       syncTerminalSize(fitAddon, terminal, { force: true })
+      if (!isActiveRef.current) {
+        return
+      }
       terminal.refresh(0, Math.max(terminal.rows - 1, 0))
       terminal.focus()
       logTerminalRender(terminal, 'recovery-complete', { tabId: tabIdRef.current, reason })
@@ -723,6 +735,7 @@ export function useTerminalView({
   useTerminalLifecycle({
     isMac,
     isWin,
+    isActive,
     bootText: hydratedBootText,
     hostRef,
     setViewportElement,
@@ -752,6 +765,7 @@ export function useTerminalView({
     transcriptReplayGenerationRef,
     connectedRef,
     connectingRef,
+    isActiveRef,
     serialTransferBusyRef,
     lastSyncedSizeRef,
     lastObservedHostRectRef,

@@ -67,7 +67,7 @@ import { AiCopilotPanel } from './features/ai/AiCopilotPanel'
 import { WindowMenubar } from './features/layout/WindowMenubar'
 import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
-import { WorkspaceStage } from './features/workspace/WorkspaceStage'
+import { KeepAliveWorkspaceStage } from './features/workspace/WorkspaceStage'
 import {
   DEFAULT_FILE_PANEL_SNAP_TARGET,
   isFilePanelSnapTarget,
@@ -1894,11 +1894,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           ) : null}
           <div className={`workspace-stage ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}>
             <div
-              key={activeLocalTab ? activeWorkspaceOrderKey : 'session-workspace'}
               className={`workspace-stage-transition ${isWorkspaceTransitionActive ? 'is-transitioning' : ''}`}
               data-nav-direction={workspaceNavDirection}
             >
-              <WorkspaceStage
+              <KeepAliveWorkspaceStage
                 activeLocalTab={activeLocalTab}
                 activeHomeTabId={effectiveActiveLocalTabId}
                 activeProfile={activeProfile}
@@ -2036,6 +2035,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 isResizingSidebar={isResizingSidebar}
                 onResizeStart={startSidebarResize}
                 sessions={workspace.sessions}
+                workspaceTabs={visibleWorkspaceTabs}
+                filePanelHeights={filePanelHeights}
+                filePanelRatios={filePanelRatios}
+                filePanelSnapTargets={filePanelSnapTargets}
+                commandPaneWidths={commandPaneWidths}
+                workspaceFocusModes={workspaceFocusModes}
+                workspaceViews={workspaceViews}
                 activePaneTabId={activePaneTab?.id}
                 onClosePane={closePane}
                 onCloseTab={closeActiveWorkspaceItem}
