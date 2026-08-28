@@ -375,6 +375,22 @@
   -webkit-app-region: no-drag;
 }
 
+.session-lock-screen__drag-region {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 48px;
+  -webkit-app-region: drag;
+}
+
+/* The quit request is still confirmed while the workspace is locked. Keep
+ * that confirmation actionable instead of rendering it below the lock layer. */
+.modal-backdrop.session-lock-close-confirm-backdrop {
+  z-index: 1100;
+}
+
 .session-lock-screen::before {
   position: absolute;
   inset: -20%;

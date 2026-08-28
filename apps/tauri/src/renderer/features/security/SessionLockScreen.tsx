@@ -55,11 +55,19 @@ export function SessionLockScreen({
       aria-busy={mode === 'loading' || isSubmitting}
       aria-live="polite"
       className={`session-lock-screen session-lock-screen--${mode}`}
-      onKeyDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        // Keep the lock screen isolated from workspace-level handlers while
+        // allowing window-level escape/quit actions to reach their owners.
+        const isWindowLevelShortcut = event.key === 'Escape' || (event.metaKey && event.key.toLowerCase() === 'q')
+        if (!isWindowLevelShortcut) {
+          event.stopPropagation()
+        }
+      }}
       onPointerDown={(event) => event.stopPropagation()}
       role="dialog"
       aria-modal="true"
     >
+      <div aria-hidden="true" className="session-lock-screen__drag-region" data-tauri-drag-region="deep" />
       <div className="session-lock-screen__grid" aria-hidden="true" />
       <div className={['session-lock-card', isShaking && 'session-lock-card--shake'].filter(Boolean).join(' ')}>
         <div className="session-lock-card__mark" aria-hidden="true">

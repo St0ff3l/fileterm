@@ -1583,6 +1583,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
   const windowCloseConfirmProps = windowCloseConfirm
     ? {
+        backdropClassName: sessionSecurity.isLocked ? 'session-lock-close-confirm-backdrop' : undefined,
         confirmLabel: t.closeConfirmQuit,
         confirmVariant: 'danger' as const,
         description: (
