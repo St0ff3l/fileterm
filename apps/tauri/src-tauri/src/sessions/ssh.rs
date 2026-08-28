@@ -1646,6 +1646,137 @@ fn initial_remote_listing_can_be_fallback(
         && current_remote_files_empty
 }
 
+/// Return the SFTP paths that can represent a shell CWD.
+///
+/// SSH and SFTP do not necessarily see the same filesystem root. Synology is
+/// a common example: the shell reports a physical path such as
+/// `/volume2/homes/alice`, while SFTP may expose `/`, `/homes/alice`, or
+/// `/alice` depending on the configured service root/chroot. Keep the
+/// physical path first so ordinary Linux hosts retain their exact behaviour;
+/// only a `NoSuchFile` result may advance to one of the namespace candidates.
+///
+/// The volume number is detected from the path instead of assuming
+/// `/volume1`. Synology documents often use volume1 as an example, but the
+/// actual volume is configurable when multiple volumes exist.
+pub(crate) fn shell_cwd_sftp_path_candidates(shell_cwd: &str) -> Vec<String> {
+    let normalized = if shell_cwd.is_empty() {
+        "/".to_string()
+    } else {
+        let trimmed = shell_cwd.trim_end_matches('/');
+        if trimmed.is_empty() {
+            "/".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    };
+    let mut candidates = vec![normalized.clone()];
+
+    if let Some(prefix) = synology_volume_prefix(&normalized) {
+        push_path_suffix_candidate(&mut candidates, &normalized, prefix);
+        push_synology_home_candidates(&mut candidates, &normalized, prefix);
+    }
+    push_path_suffix_candidate(&mut candidates, &normalized, "/var/services");
+    push_synology_home_candidates(&mut candidates, &normalized, "/var/services");
+
+    candidates
+}
+
+/// Detect `/volumeN` without treating names such as `/volume10foo` as a
+/// volume root. The actual volume number is intentionally not fixed.
+fn synology_volume_prefix(path: &str) -> Option<&str> {
+    const PREFIX: &str = "/volume";
+    let suffix = path.strip_prefix(PREFIX)?;
+    let digit_count = suffix
+        .bytes()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count();
+    if digit_count == 0 {
+        return None;
+    }
+    if suffix
+        .as_bytes()
+        .get(digit_count)
+        .is_some_and(|byte| *byte != b'/')
+    {
+        return None;
+    }
+    Some(&path[..PREFIX.len() + digit_count])
+}
+
+fn push_path_suffix_candidate(candidates: &mut Vec<String>, path: &str, prefix: &str) {
+    let Some(suffix) = path.strip_prefix(prefix) else {
+        return;
+    };
+    if !suffix.is_empty() && !suffix.starts_with('/') {
+        return;
+    }
+    let candidate = if suffix.is_empty() { "/" } else { suffix };
+    push_candidate(candidates, candidate);
+}
+
+fn push_candidate(candidates: &mut Vec<String>, candidate: &str) {
+    let candidate = if candidate.is_empty() { "/" } else { candidate };
+    if !candidates.iter().any(|item| item == candidate) {
+        candidates.push(candidate.to_string());
+    }
+}
+
+/// Add the two deeper Synology user-home namespace shapes. This covers both
+/// the shared-folder root (`/homes/user`) and a chroot rooted at that user's
+/// home (`/`).
+fn push_synology_home_candidates(candidates: &mut Vec<String>, path: &str, storage_prefix: &str) {
+    let Some(storage_relative) = path.strip_prefix(storage_prefix) else {
+        return;
+    };
+    if storage_relative != "/homes" && !storage_relative.starts_with("/homes/") {
+        return;
+    }
+
+    let after_homes = &storage_relative["/homes".len()..];
+    push_candidate(candidates, after_homes);
+
+    let Some(user_and_rest) = after_homes.strip_prefix('/') else {
+        return;
+    };
+    if user_and_rest.is_empty() {
+        return;
+    }
+    let after_user = user_and_rest
+        .find('/')
+        .map(|user_end| &user_and_rest[user_end..])
+        .unwrap_or("");
+    push_candidate(candidates, after_user);
+}
+
+/// A path-listing error can safely trigger a namespace fallback. Permission,
+/// timeout and protocol errors must remain visible instead of being hidden by
+/// trying unrelated paths.
+pub(crate) fn is_sftp_path_not_found_message(error: &str) -> bool {
+    error.to_ascii_lowercase().contains("no such file")
+}
+
+async fn list_shell_cwd_dir(
+    sftp: &SftpSession,
+    shell_cwd: &str,
+) -> Result<(Vec<Value>, String), String> {
+    let candidates = shell_cwd_sftp_path_candidates(shell_cwd);
+    let mut last_error = None;
+    for (index, candidate) in candidates.iter().enumerate() {
+        match list_dir(sftp, candidate).await {
+            Ok(files) => return Ok((files, candidate.clone())),
+            Err(error) => {
+                let can_try_next =
+                    index + 1 < candidates.len() && is_sftp_path_not_found_message(&error);
+                last_error = Some(error);
+                if !can_try_next {
+                    break;
+                }
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| format!("无法列出 Shell 当前目录 {shell_cwd}")))
+}
+
 #[allow(clippy::too_many_arguments)] // Protocol/session context is intentionally explicit at this async boundary.
 async fn follow_shell_cwd(
     app: AppHandle,
@@ -1686,7 +1817,7 @@ async fn follow_shell_cwd(
     // The SFTP session belongs to the login user. Once `sudo -i` has started
     // a root shell, following CWD through that channel silently remains in
     // the old user's view. Electron switches to its sudo shell path here.
-    let files = match timeout(operation_timeout, async {
+    let listing = match timeout(operation_timeout, async {
         if file_access_mode == "root" {
             exec_list_dir_via_shell(
                 &handle,
@@ -1696,13 +1827,14 @@ async fn follow_shell_cwd(
                 &sudo_password,
             )
             .await
+            .map(|files| (files, cwd.clone()))
         } else {
             // russh-sftp's client is one request stream. Serialise access to it:
             // concurrent read locks let multiple list/delete/upload requests
             // interleave and eventually time out after app focus is restored.
             // The timeout covers both waiting for the lock and SFTP read_dir.
             let sftp = sftp.write().await;
-            list_dir(&sftp, &cwd).await
+            list_shell_cwd_dir(&sftp, &cwd).await
         }
     })
     .await
@@ -1711,7 +1843,7 @@ async fn follow_shell_cwd(
         Err(_) => Err(format!("跟随终端目录 {cwd} 超时")),
     };
 
-    let follow_error = files.as_ref().err().cloned();
+    let follow_error = listing.as_ref().err().cloned();
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let mut sessions = state.sessions.write().await;
     let Some(session) = sessions.get_mut(&tab_id) else {
@@ -1719,9 +1851,9 @@ async fn follow_shell_cwd(
     };
     session.remote_files_loading = false;
     if session.shell_cwd.as_deref() == Some(cwd.as_str()) && session.follow_shell_cwd {
-        if let Ok(files) = files {
-            session.remote_path = cwd.clone();
-            session.remote_files = files;
+        if let Ok((files, resolved_path)) = &listing {
+            session.remote_path = resolved_path.clone();
+            session.remote_files = files.clone();
         }
     }
     drop(sessions);
@@ -1732,8 +1864,20 @@ async fn follow_shell_cwd(
             &tab_id,
             format!("CWD follow failed for {cwd}: {error}"),
         );
-    } else {
-        crate::services::logging::ssh_debug(&app, &tab_id, format!("CWD follow applied: {cwd}"));
+    } else if let Ok((_, resolved_path)) = listing.as_ref() {
+        if resolved_path == &cwd {
+            crate::services::logging::ssh_debug(
+                &app,
+                &tab_id,
+                format!("CWD follow applied: {cwd}"),
+            );
+        } else {
+            crate::services::logging::ssh_debug(
+                &app,
+                &tab_id,
+                format!("CWD follow mapped shell={cwd} sftp={resolved_path}"),
+            );
+        }
     }
 
     if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
@@ -4427,10 +4571,7 @@ fn is_sftp_not_found(error: &SftpError) -> bool {
     matches!(
         error,
         SftpError::Status(status) if status.status_code == StatusCode::NoSuchFile
-    ) || error
-        .to_string()
-        .to_ascii_lowercase()
-        .contains("no such file")
+    ) || is_sftp_path_not_found_message(&error.to_string())
 }
 
 async fn acquire_transfer_sftp(
@@ -9521,21 +9662,21 @@ mod tests {
         encode_text, enqueue_tunnel_command, exec_channel_enabled, finish_shell_setup_suppression,
         format_sftp_unavailable_reason, initial_remote_listing_can_be_fallback,
         initial_remote_listing_matches_current_session, is_password_prompt,
-        is_root_upload_staging_path, looks_like_mfa_prompt, looks_like_root_prompt,
-        looks_like_shell_prompt, merge_system_metrics_history, missing_password_credential,
-        parent_remote_item, parent_remote_path, parse_root_file_access_method,
-        parse_root_file_list, password_for_authentication, privilege_command_from_terminal_input,
-        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
-        resource_monitoring_interval_seconds, root_access_auth_failed,
+        is_root_upload_staging_path, is_sftp_path_not_found_message, looks_like_mfa_prompt,
+        looks_like_root_prompt, looks_like_shell_prompt, merge_system_metrics_history,
+        missing_password_credential, parent_remote_item, parent_remote_path,
+        parse_root_file_access_method, parse_root_file_list, password_for_authentication,
+        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
+        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
         root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
         root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
-        should_buffer_terminal_input_during_shell_setup, should_reinject_root_shell_setup,
-        spawn_cancellable_file_operation, split_prompt_tail_for_setup_wait, strip_su_exec_output,
-        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
-        track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
-        try_keyboard_interactive_with_responder, tunnel_bind_address,
-        validate_root_download_completion, validate_tunnel_rule,
+        shell_cwd_sftp_path_candidates, should_buffer_terminal_input_during_shell_setup,
+        should_reinject_root_shell_setup, spawn_cancellable_file_operation,
+        split_prompt_tail_for_setup_wait, strip_su_exec_output, su_exec_command,
+        suppress_shell_setup_echo, track_cwd_and_user, track_root_access_prompt_from_terminal,
+        trim_string_front, trusted_host_fingerprint, try_keyboard_interactive_with_responder,
+        tunnel_bind_address, validate_root_download_completion, validate_tunnel_rule,
         wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, KeyboardInteractiveRequest,
         RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand,
         BUSYBOX_SHELL_CWD_SETUP, SHELL_CWD_SETUP, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
@@ -9724,6 +9865,54 @@ mod tests {
         assert!(!initial_remote_listing_can_be_fallback(
             true, "/", "/", true
         ));
+    }
+
+    #[test]
+    fn shell_cwd_mapping_does_not_assume_volume1() {
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/volume2/photo/albums"),
+            vec![
+                "/volume2/photo/albums".to_string(),
+                "/photo/albums".to_string(),
+            ]
+        );
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/volume7/homes/alice/projects"),
+            vec![
+                "/volume7/homes/alice/projects".to_string(),
+                "/homes/alice/projects".to_string(),
+                "/alice/projects".to_string(),
+                "/projects".to_string(),
+            ]
+        );
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/volume10foo/photo"),
+            vec!["/volume10foo/photo".to_string()]
+        );
+    }
+
+    #[test]
+    fn shell_cwd_mapping_supports_synology_service_paths_and_root() {
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/var/services/homes/alice"),
+            vec![
+                "/var/services/homes/alice".to_string(),
+                "/homes/alice".to_string(),
+                "/alice".to_string(),
+                "/".to_string(),
+            ]
+        );
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/var/services"),
+            vec!["/var/services".to_string(), "/".to_string()]
+        );
+    }
+
+    #[test]
+    fn only_no_such_file_errors_trigger_sftp_namespace_fallback() {
+        assert!(is_sftp_path_not_found_message("No such file: No such file"));
+        assert!(!is_sftp_path_not_found_message("Permission denied"));
+        assert!(!is_sftp_path_not_found_message("Timeout"));
     }
 
     #[test]

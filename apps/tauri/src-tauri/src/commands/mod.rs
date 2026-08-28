@@ -3277,6 +3277,41 @@ async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Resu
     Ok(())
 }
 
+/// Refresh a file pane from a shell CWD while respecting the fact that SSH
+/// and SFTP may expose different filesystem roots. The worker uses the same
+/// candidate order for event-driven CWD updates; keeping the toggle recovery
+/// path here in sync prevents enabling Follow terminal from reintroducing the
+/// Synology failure.
+async fn refresh_remote_files_for_shell_cwd(
+    app: &AppHandle,
+    tab_id: &str,
+    shell_cwd: &str,
+    use_sftp_namespace: bool,
+) -> Result<String, AppError> {
+    let candidates = if use_sftp_namespace {
+        crate::sessions::ssh::shell_cwd_sftp_path_candidates(shell_cwd)
+    } else {
+        vec![shell_cwd.to_string()]
+    };
+    let mut last_error = None;
+    for (index, candidate) in candidates.iter().enumerate() {
+        match refresh_remote_files(app, tab_id, candidate).await {
+            Ok(()) => return Ok(candidate.clone()),
+            Err(error) => {
+                let can_try_next = use_sftp_namespace
+                    && index + 1 < candidates.len()
+                    && crate::sessions::ssh::is_sftp_path_not_found_message(&error.to_string());
+                last_error = Some(error);
+                if !can_try_next {
+                    break;
+                }
+            }
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| AppError::Storage(format!("无法列出 Shell 当前目录：{shell_cwd}"))))
+}
+
 /// Read-only MCP surface for browsing an already-open file-capable session.
 /// The MCP adapter intentionally cannot open profiles or access profile
 /// secrets; the desktop UI owns both actions and this helper only delegates to
@@ -5144,7 +5179,10 @@ pub async fn app_set_follow_shell_cwd(
         if let Some(session) = sessions.get_mut(&tab_id) {
             session.follow_shell_cwd = enabled;
             if enabled && session.shell_cwd.as_deref() != Some(session.remote_path.as_str()) {
-                session.shell_cwd.clone()
+                session
+                    .shell_cwd
+                    .clone()
+                    .map(|cwd| (cwd, session.file_access_mode != "root"))
             } else {
                 None
             }
@@ -5157,15 +5195,15 @@ pub async fn app_set_follow_shell_cwd(
     // catch the file pane up to the most recently reported shell directory.
     // Waiting for another `cd` leaves the toggle active while the pane remains
     // stale forever when the initial listing happened to fail.
-    if let Some(cwd) = cwd_to_follow {
-        match refresh_remote_files(&app, &tab_id, &cwd).await {
-            Ok(()) => {
+    if let Some((cwd, use_sftp_namespace)) = cwd_to_follow {
+        match refresh_remote_files_for_shell_cwd(&app, &tab_id, &cwd, use_sftp_namespace).await {
+            Ok(resolved_path) => {
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(&tab_id) {
                     if session.follow_shell_cwd
                         && session.shell_cwd.as_deref() == Some(cwd.as_str())
                     {
-                        session.remote_path = cwd;
+                        session.remote_path = resolved_path;
                     }
                 }
             }

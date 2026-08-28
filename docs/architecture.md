@@ -59,6 +59,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - Tauri bridge 位于 `apps/tauri/src/bridge/tauri-api.ts`，Rust commands/services/sessions 位于 `apps/tauri/src-tauri/src/`；`apps/electron/` 仅供实现对照，不属于受维护运行时。
 - Tauri 当前已覆盖桌面壳、JSON 存储、Workspace snapshot、可迁移的 SSH 私钥库，以及 russh SSH shell/SFTP/MFA/host verification、系统指标、CWD 跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 代理和运行时 SSH `-L/-R/-D` 隧道。
 - Tauri 已覆盖 Transfer、FTP/FTPS、Telnet、Serial、WebDAV 同步及 SSH 网络能力；Phase 3/4 的真实服务、实体设备和三平台验收仍是发行候选门禁。SFTP 被服务端拒绝时，Tauri 保留 SSH shell/隧道，并将文件通道故障单独广播到 renderer，而不误报为整条 SSH 连接失败。
+- SSH shell 与 SFTP 可能处于不同的文件系统根；`shellCwd` 保留 Shell 物理路径，`remotePath` 只保存 SFTP 命名空间路径。CWD 跟随先尝试原路径，遇到明确 `NoSuchFile` 后按实际 `/volumeN`、`/var/services` 和 Home chroot 候选探测，无法确认时保留最近有效的 SFTP 目录。完整背景、群晖示例和排查方式见 [ADR-0006](./decisions/0006-ssh-sftp-path-namespaces.md)。
 - 迁移期间 `packages/core` 的领域类型和现有 JSON 数据格式保持兼容；协议 controller 仍按 SSH、FTP、Telnet、Serial 分离。
 
 当前主题系统也已经开始成形，主要落点包括：
