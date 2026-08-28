@@ -18,6 +18,8 @@ export type SshCredentialsInput = {
 export type UseSshInteractionsOptions = {
   desktopApi?: FileTermDesktopApi
   isMainWorkspaceWindow?: boolean
+  isConnectionFormWindow?: boolean
+  isConnectionFormOpen?: boolean
   onError(scope: string, error: unknown): void
 }
 
@@ -29,6 +31,7 @@ export type UseSshInteractionsResult = {
   keyPassphraseRequest: SshKeyPassphrasePromptRequest | null
   errorMessage: string | null
   isResolving: boolean
+  waitForSshInteractionListener(): Promise<void>
   resolve(requestId: string, response: SshInteractionResponse): Promise<void>
   cancelCredentials(): Promise<void>
   submitCredentials(input: SshCredentialsInput): Promise<void>
@@ -44,43 +47,88 @@ export type UseSshInteractionsResult = {
 export function useSshInteractions({
   desktopApi,
   isMainWorkspaceWindow = false,
+  isConnectionFormWindow = false,
+  isConnectionFormOpen = false,
   onError
 }: UseSshInteractionsOptions): UseSshInteractionsResult {
   const [requests, setRequests] = useState<SshInteractionRequest[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null)
   const resolvingRequestIdsRef = useRef(new Set<string>())
+  const sshInteractionRegistrationRef = useRef<Promise<void>>(Promise.resolve())
+  const onErrorRef = useRef(onError)
+  onErrorRef.current = onError
 
   useEffect(() => {
     if (!desktopApi) {
+      sshInteractionRegistrationRef.current = Promise.resolve()
       return
     }
 
-    const unsubscribe = desktopApi.onSshInteraction((nextRequest) => {
-      // SSH handshakes can start from a standalone connection form while the
-      // renderer-owned interaction modal belongs to the main workspace. Bring
-      // that window to the foreground before React paints the request; without
-      // this the host-key warning is present but remains behind the form.
-      if (isMainWorkspaceWindow) {
-        void desktopApi.showCurrentWindow().catch(() => undefined)
-      }
-      setRequests((current) => {
-        const existingIndex = current.findIndex((item) => item.requestId === nextRequest.requestId)
-        if (existingIndex === -1) {
-          return [...current, nextRequest]
+    let active = true
+    let unsubscribe: (() => void) | null = null
+    const registration = desktopApi
+      .onSshInteraction((nextRequest) => {
+        // Connection tests are owned by the form that started them. Normal
+        // SSH sessions are owned by the main workspace. Every Tauri window
+        // receives the app-wide event, so filter here before a request can be
+        // resolved by the wrong renderer or become invisible in a child
+        // window.
+        const isConnectionTest = nextRequest.tabId.startsWith('connection-test-')
+        const canHandleRequest = isConnectionTest
+          ? isConnectionFormWindow || isConnectionFormOpen
+          : isMainWorkspaceWindow
+        if (!canHandleRequest) {
+          return
         }
 
-        const next = [...current]
-        next[existingIndex] = nextRequest
-        return next
+        void desktopApi.showCurrentWindow().catch(() => undefined)
+        setRequests((current) => {
+          const existingIndex = current.findIndex((item) => item.requestId === nextRequest.requestId)
+          if (existingIndex === -1) {
+            return [...current, nextRequest]
+          }
+
+          const next = [...current]
+          next[existingIndex] = nextRequest
+          return next
+        })
+        setErrorMessage(null)
       })
-      setErrorMessage(null)
-    })
+      .then((stopListening) => {
+        if (!active) {
+          stopListening()
+          return
+        }
+        unsubscribe = stopListening
+      })
+      .catch((error) => {
+        if (active) {
+          onErrorRef.current('注册 SSH 交互监听', error)
+          setErrorMessage(error instanceof Error ? error.message : String(error))
+        }
+        throw error
+      })
+    sshInteractionRegistrationRef.current = registration
+    // A renderer can exist without an active connection test. Avoid an
+    // unhandled rejection in that case while still letting a test that was
+    // waiting for registration receive the original error.
+    void registration.catch(() => undefined)
 
     return () => {
-      unsubscribe()
+      active = false
+      void registration.then(
+        () => {
+          unsubscribe?.()
+        },
+        () => undefined
+      )
     }
-  }, [desktopApi, isMainWorkspaceWindow])
+  }, [desktopApi, isConnectionFormOpen, isConnectionFormWindow, isMainWorkspaceWindow])
+
+  const waitForSshInteractionListener = useCallback(async () => {
+    await sshInteractionRegistrationRef.current
+  }, [])
 
   const resolve = useCallback(
     async (requestId: string, response: SshInteractionResponse) => {
@@ -213,6 +261,7 @@ export function useSshInteractions({
     keyPassphraseRequest,
     errorMessage,
     isResolving: Boolean(request && resolvingRequestId === request.requestId),
+    waitForSshInteractionListener,
     resolve,
     cancelCredentials,
     submitCredentials,

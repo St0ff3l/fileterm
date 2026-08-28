@@ -12,6 +12,15 @@
   z-index: 100;
 }
 
+/* A fixed modal backdrop is not clipped by the rounded standalone frame on
+ * macOS/Linux. Clip the overlay itself so opening a nested modal cannot turn
+ * the four corners of the connection window into square dark wedges. */
+html[data-platform='darwin'].tauri-standalone-window .modal-backdrop,
+html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
+  overflow: hidden;
+  border-radius: var(--window-corner-radius);
+}
+
 .modal-card {
   width: min(540px, 100%);
   padding: 24px;
@@ -43,6 +52,7 @@
   min-height: 0;
   padding: 0;
   overflow: hidden;
+  border-radius: var(--window-corner-radius);
   -webkit-app-region: no-drag;
 }
 
@@ -58,7 +68,7 @@
   min-height: 0;
   padding: 0 !important;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--window-corner-radius);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
@@ -206,6 +216,79 @@
   min-height: 0;
 }
 
+/* A fieldset has a min-content minimum in the browser UA stylesheet. Long
+ * hints, saved paths and form controls could therefore widen the standalone
+ * connection window past its viewport. Keep every connection-form layer
+ * shrinkable so the page owns overflow instead of the window. */
+.connection-form-window,
+.modal-card.ssh-modal,
+.modal-card.ssh-modal .ssh-modal-body,
+.modal-card.ssh-modal .ssh-form-shell,
+.modal-card.ssh-modal .ssh-form-page,
+.modal-card.ssh-modal .ssh-fieldset,
+.modal-card.ssh-modal .ssh-grid,
+.modal-card.ssh-modal .form-actions {
+  min-width: 0;
+  min-inline-size: 0;
+}
+
+.connection-form-window,
+.modal-card.ssh-modal .ssh-modal-body,
+.modal-card.ssh-modal .ssh-form-shell,
+.modal-card.ssh-modal .ssh-form-page,
+.modal-card.ssh-modal .ssh-fieldset,
+.modal-card.ssh-modal .ssh-grid {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-card.ssh-modal .ssh-fieldset,
+.modal-card.ssh-modal .ssh-grid > *,
+.modal-card.ssh-modal .ssh-grid label,
+.modal-card.ssh-modal .ssh-grid input,
+.modal-card.ssh-modal .ssh-grid select,
+.modal-card.ssh-modal .ssh-grid textarea,
+.modal-card.ssh-modal .ssh-grid .dropdown-select-trigger,
+.modal-card.ssh-modal .ssh-grid .ft-select-shell {
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+}
+
+.modal-card.ssh-modal .ssh-field-hint {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.modal-card.ssh-modal .ssh-actions {
+  width: auto;
+  max-width: none;
+  min-inline-size: 0;
+  flex-wrap: nowrap;
+}
+
+.modal-card.ssh-modal .ssh-actions .connection-test-feedback {
+  flex: 1 1 0;
+  max-width: none;
+  min-width: 0;
+  min-inline-size: 0;
+}
+
+.modal-card.ssh-modal .ssh-actions .connection-test-feedback .feedback-text__message {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.modal-card.ssh-modal .ssh-actions > .flat-button,
+.modal-card.ssh-modal .ssh-actions > .primary-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .modal-card.ssh-modal.standalone .ssh-modal-body {
   min-height: 0;
   overflow: clip;
@@ -219,8 +302,49 @@
 .modal-card.ssh-modal.standalone .ssh-form-page {
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 8px;
   padding-left: 4px;
+}
+
+.modal-card.ssh-modal .advanced-toggle-list,
+.modal-card.ssh-modal .advanced-toggle-row,
+.modal-card.ssh-modal .resource-monitoring-items-section,
+.modal-card.ssh-modal .resource-monitoring-items-header,
+.modal-card.ssh-modal .resource-monitoring-items,
+.modal-card.ssh-modal .resource-monitoring-item-card,
+.modal-card.ssh-modal .resource-monitoring-panel-row,
+.modal-card.ssh-modal .resource-monitoring-item-copy {
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-card.ssh-modal .resource-monitoring-items-section {
+  width: calc(100% - 22px);
+}
+
+.modal-card.ssh-modal .resource-monitoring-items-header p,
+.modal-card.ssh-modal .advanced-toggle-hint,
+.modal-card.ssh-modal .resource-monitoring-panel-name {
+  min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .modal-card.ssh-modal .ssh-actions {
+    flex-wrap: wrap;
+  }
+
+  .modal-card.ssh-modal .ssh-actions .connection-test-feedback {
+    flex: 1 0 100%;
+    margin-right: 0;
+  }
 }
 
 .ssh-fieldset {
@@ -1399,8 +1523,8 @@
 .connection-form input:focus,
 .connection-form select:focus {
   outline: none;
-  border-color: var(--text-muted);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
 .connection-form input:hover,
@@ -1426,8 +1550,8 @@
 .ssh-grid select:focus,
 .ssh-grid textarea:focus {
   outline: none;
-  border-color: var(--text-muted);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
 .ssh-grid textarea {

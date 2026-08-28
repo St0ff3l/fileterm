@@ -137,6 +137,8 @@ export function WorkspaceStage({
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
+  canLockNow,
+  onLockNow,
   isSidebarCollapsed,
   isWorkspaceFocusMode,
   isWorkspaceActive = true,
@@ -266,6 +268,8 @@ export function WorkspaceStage({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
+  canLockNow: boolean
+  onLockNow(): void
   isSidebarCollapsed: boolean
   isWorkspaceFocusMode: boolean
   isWorkspaceActive?: boolean
@@ -430,6 +434,8 @@ export function WorkspaceStage({
       onSetLocale={onSetLocale}
       onOpenLogsDirectory={onOpenLogsDirectory}
       onLaunchLocalAgent={onLaunchLocalAgent}
+      canLockNow={canLockNow}
+      onLockNow={onLockNow}
       isSidebarCollapsed={isSidebarCollapsed}
       profiles={profiles}
       tabBarProps={tabBarProps}

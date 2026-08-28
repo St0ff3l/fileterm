@@ -8,6 +8,7 @@ export function ConfirmActionDialog({
   confirmLabel,
   confirmDisabled = false,
   confirmVariant = 'danger',
+  backdropClassName,
   className,
   description,
   errorMessage,
@@ -22,6 +23,7 @@ export function ConfirmActionDialog({
   confirmLabel: string
   confirmDisabled?: boolean
   confirmVariant?: 'danger' | 'primary'
+  backdropClassName?: string
   className?: string
   description: ReactNode
   errorMessage?: string | null
@@ -65,7 +67,7 @@ export function ConfirmActionDialog({
   }, [isSubmitting, onClose])
 
   const dialog = (
-    <div className="modal-backdrop">
+    <div className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ''}`}>
       <div
         ref={dialogRef}
         className={`modal-card confirm-action-dialog${className ? ` ${className}` : ''}`}

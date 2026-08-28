@@ -1264,6 +1264,8 @@ export interface SecuritySettings {
 export interface SecuritySettingsInput {
   lockEnabled?: boolean
   idleLockMinutes?: number
+  currentLockPassword?: string
+  currentBackupPassword?: string
   lockPassword?: string
   backupPassword?: string
   clearLockPassword?: boolean
@@ -2224,6 +2226,7 @@ export interface FileTermDesktopApi {
   getSecuritySettings(): Promise<SecuritySettings>
   setSecuritySettings(input: SecuritySettingsInput): Promise<SecuritySettings>
   verifySecurityPassword(password: string): Promise<boolean>
+  resetSecurityBackupPassword(): Promise<SecuritySettings>
   listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
@@ -2365,6 +2368,7 @@ export interface FileTermDesktopApi {
   setCommandSendPreferences(preferences: CommandSendPreferences): Promise<void>
   createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
   updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
+  clearTrustedHostFingerprint(profileId: string): Promise<WorkspaceSnapshot>
   testConnection(input: CreateProfileInput, profileId?: string): Promise<void>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
@@ -2470,7 +2474,8 @@ export interface FileTermDesktopApi {
   onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
-  onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  /** Resolves only after the SSH interaction listener is registered in Tauri. */
+  onSshInteraction(listener: (request: SshInteractionRequest) => void): Promise<() => void>
   onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>
   /** Resolves only after the main renderer has registered the password prompt listener. */
   onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>

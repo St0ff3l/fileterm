@@ -2141,14 +2141,23 @@
 .root-access-modal .file-action-field input:focus,
 .root-access-modal .file-action-field select:focus {
   outline: none;
-  border-color: var(--text-muted);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
-.network-share-credentials-modal .file-action-field input:hover,
-.network-share-picker-modal .file-action-field select:hover,
-.root-access-modal .file-action-field input:hover,
-.root-access-modal .file-action-field select:hover {
+.network-share-credentials-modal .file-action-field input:hover:not(:focus),
+.network-share-picker-modal .file-action-field select:hover:not(:focus),
+.root-access-modal .file-action-field input:hover:not(:focus),
+.root-access-modal .file-action-field select:hover:not(:focus) {
+  border-color: var(--border-light);
+}
+
+.root-access-modal .file-action-field input:hover:not(:disabled):not(:focus),
+.root-access-modal .file-action-field select:hover:not(:disabled):not(:focus) {
+  border-color: var(--text-muted);
+}
+
+.network-share-credentials-modal .file-action-field input:hover:not(:disabled):not(:focus) {
   border-color: var(--text-muted);
 }
 
@@ -2172,11 +2181,12 @@
 
 .root-access-modal .file-action-field .dropdown-select-trigger:focus-visible {
   outline: none;
-  border-color: var(--text-muted);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
-.root-access-modal .file-action-field .dropdown-select-trigger:hover {
+.root-access-modal .file-action-field .dropdown-select-trigger:hover:not(:disabled):not(:focus-visible),
+.root-access-modal .file-action-field .ft-select-shell select:hover:not(:disabled):not(:focus) {
   border-color: var(--text-muted);
 }
 

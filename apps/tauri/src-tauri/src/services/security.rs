@@ -16,16 +16,39 @@ use crate::AppError;
 
 pub(crate) const SECURITY_FILE: &str = "security.json";
 pub(crate) const BACKUP_PASSWORD_REQUIRED_ERROR: &str = "SECURITY_BACKUP_PASSWORD_REQUIRED";
-const MAX_IDLE_LOCK_MINUTES: u32 = 24 * 60;
+pub(crate) const CURRENT_LOCK_PASSWORD_REQUIRED_ERROR: &str =
+    "SECURITY_CURRENT_LOCK_PASSWORD_REQUIRED";
+pub(crate) const CURRENT_LOCK_PASSWORD_INVALID_ERROR: &str =
+    "SECURITY_CURRENT_LOCK_PASSWORD_INVALID";
+pub(crate) const CURRENT_BACKUP_PASSWORD_REQUIRED_ERROR: &str =
+    "SECURITY_CURRENT_BACKUP_PASSWORD_REQUIRED";
+pub(crate) const CURRENT_BACKUP_PASSWORD_INVALID_ERROR: &str =
+    "SECURITY_CURRENT_BACKUP_PASSWORD_INVALID";
+pub(crate) const INVALID_IDLE_LOCK_MINUTES_ERROR: &str = "SECURITY_IDLE_LOCK_MINUTES_INVALID";
+const DEFAULT_IDLE_LOCK_MINUTES: u32 = 10;
+// The renderer displays this value as the explicit “Never” option; users do
+// not enter a numeric zero.
+const IDLE_LOCK_NEVER_MINUTES: u32 = 0;
 const MIN_LOCK_PASSWORD_CHARS: usize = 4;
 const MAX_PASSWORD_BYTES: usize = 8 * 1024;
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+fn default_idle_lock_minutes() -> u32 {
+    DEFAULT_IDLE_LOCK_MINUTES
+}
+
+fn is_supported_idle_lock_minutes(minutes: u32) -> bool {
+    matches!(
+        minutes,
+        IDLE_LOCK_NEVER_MINUTES | 1 | 2 | 3 | 5 | 10 | 20 | 30 | 60 | 90 | 120 | 150 | 180
+    )
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredSecurityConfig {
     #[serde(default)]
     lock_enabled: bool,
-    #[serde(default)]
+    #[serde(default = "default_idle_lock_minutes")]
     idle_lock_minutes: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     lock_password: Option<String>,
@@ -33,16 +56,35 @@ struct StoredSecurityConfig {
     backup_password: Option<String>,
 }
 
+impl Default for StoredSecurityConfig {
+    fn default() -> Self {
+        Self {
+            lock_enabled: false,
+            idle_lock_minutes: DEFAULT_IDLE_LOCK_MINUTES,
+            lock_password: None,
+            backup_password: None,
+        }
+    }
+}
+
 impl StoredSecurityConfig {
-    fn clear_secrets(&mut self) {
+    fn clear_lock_password(&mut self) {
         if let Some(password) = self.lock_password.as_mut() {
             password.zeroize();
         }
+        self.lock_password = None;
+    }
+
+    fn clear_backup_password(&mut self) {
         if let Some(password) = self.backup_password.as_mut() {
             password.zeroize();
         }
-        self.lock_password = None;
         self.backup_password = None;
+    }
+
+    fn clear_secrets(&mut self) {
+        self.clear_lock_password();
+        self.clear_backup_password();
     }
 }
 
@@ -66,6 +108,8 @@ pub struct SecuritySettings {
 pub struct SecuritySettingsInput {
     pub lock_enabled: Option<bool>,
     pub idle_lock_minutes: Option<u32>,
+    pub current_lock_password: Option<String>,
+    pub current_backup_password: Option<String>,
     pub lock_password: Option<String>,
     pub backup_password: Option<String>,
     pub clear_lock_password: Option<bool>,
@@ -78,8 +122,8 @@ fn config_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 
 fn normalize_config(config: &mut StoredSecurityConfig) -> bool {
     let mut changed = false;
-    if config.idle_lock_minutes > MAX_IDLE_LOCK_MINUTES {
-        config.idle_lock_minutes = MAX_IDLE_LOCK_MINUTES;
+    if !is_supported_idle_lock_minutes(config.idle_lock_minutes) {
+        config.idle_lock_minutes = DEFAULT_IDLE_LOCK_MINUTES;
         changed = true;
     }
     if config.lock_enabled && config.lock_password.is_none() {
@@ -213,6 +257,53 @@ fn validate_lock_password(password: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+fn authorize_password_change(
+    saved_password: Option<&str>,
+    current_password: Option<&str>,
+    required_error: &str,
+    invalid_error: &str,
+) -> Result<(), AppError> {
+    let Some(saved_password) = saved_password else {
+        return Ok(());
+    };
+
+    let Some(current_password) = current_password.filter(|password| !password.is_empty()) else {
+        return Err(AppError::Command(required_error.to_string()));
+    };
+    if saved_password != current_password {
+        return Err(AppError::Command(invalid_error.to_string()));
+    }
+    Ok(())
+}
+
+fn authorize_lock_password_change(
+    saved_password: Option<&str>,
+    current_password: Option<&str>,
+) -> Result<(), AppError> {
+    authorize_password_change(
+        saved_password,
+        current_password,
+        CURRENT_LOCK_PASSWORD_REQUIRED_ERROR,
+        CURRENT_LOCK_PASSWORD_INVALID_ERROR,
+    )
+}
+
+fn authorize_backup_password_change(
+    saved_password: Option<&str>,
+    current_password: Option<&str>,
+) -> Result<(), AppError> {
+    authorize_password_change(
+        saved_password,
+        current_password,
+        CURRENT_BACKUP_PASSWORD_REQUIRED_ERROR,
+        CURRENT_BACKUP_PASSWORD_INVALID_ERROR,
+    )
+}
+
+fn reset_backup_config(config: &mut StoredSecurityConfig) {
+    config.clear_backup_password();
+}
+
 pub(crate) fn get_settings(app: &AppHandle) -> Result<SecuritySettings, AppError> {
     let mut config = read_config(app)?;
     let settings = snapshot(&config);
@@ -227,28 +318,58 @@ pub(crate) fn save_settings(
     let path = config_path(app)?;
     let (mut config, _) = read_config_at(&path)?;
 
+    let current_lock_password = input.current_lock_password.take().map(Zeroizing::new);
+    let current_backup_password = input.current_backup_password.take().map(Zeroizing::new);
+    let changes_lock_password =
+        input.lock_password.is_some() || input.clear_lock_password == Some(true);
+    if changes_lock_password {
+        authorize_lock_password_change(
+            config.lock_password.as_deref(),
+            current_lock_password
+                .as_ref()
+                .map(|password| password.as_str()),
+        )?;
+    }
+    let changes_backup_password =
+        input.backup_password.is_some() || input.clear_backup_password == Some(true);
+    if changes_backup_password {
+        authorize_backup_password_change(
+            config.backup_password.as_deref(),
+            current_backup_password
+                .as_ref()
+                .map(|password| password.as_str()),
+        )?;
+    }
+
     if input.clear_lock_password == Some(true) {
-        config.lock_password = None;
+        config.clear_lock_password();
     }
     if input.clear_backup_password == Some(true) {
-        config.backup_password = None;
+        config.clear_backup_password();
     }
     if let Some(password) = input.lock_password.take() {
         let password = Zeroizing::new(password);
         validate_lock_password(&password)?;
+        config.clear_lock_password();
         config.lock_password = Some(password.to_string());
     }
     if let Some(password) = input.backup_password.take() {
         let password = Zeroizing::new(password);
         crate::services::backup_crypto::validate_password(&password)
             .map_err(|error| AppError::Command(error.to_string()))?;
+        config.clear_backup_password();
         config.backup_password = Some(password.to_string());
     }
     if let Some(lock_enabled) = input.lock_enabled {
         config.lock_enabled = lock_enabled;
     }
     if let Some(idle_lock_minutes) = input.idle_lock_minutes {
-        config.idle_lock_minutes = idle_lock_minutes.min(MAX_IDLE_LOCK_MINUTES);
+        if !is_supported_idle_lock_minutes(idle_lock_minutes) {
+            return Err(AppError::Command(
+                INVALID_IDLE_LOCK_MINUTES_ERROR.to_string(),
+            ));
+        }
+        config.idle_lock_minutes = idle_lock_minutes;
     }
     if config.lock_enabled && config.lock_password.is_none() {
         return Err(AppError::Command(
@@ -269,6 +390,28 @@ pub(crate) fn save_settings(
             settings.has_lock_password,
             settings.has_backup_password
         ),
+    );
+    let _ = app.emit("app:security-settings-changed", &settings);
+    config.clear_secrets();
+    Ok(settings)
+}
+
+/// Recovery path for a forgotten local remote-backup password.
+///
+/// This clears only the password saved on this device. Existing encrypted
+/// backup bundles are intentionally left untouched and still require their
+/// original password for recovery.
+pub(crate) fn reset_backup_password(app: &AppHandle) -> Result<SecuritySettings, AppError> {
+    let path = config_path(app)?;
+    let (mut config, _) = read_config_at(&path)?;
+    reset_backup_config(&mut config);
+
+    write_config_at(&path, &config)?;
+    let settings = snapshot(&config);
+    crate::services::logging::info(
+        app,
+        "security",
+        "local remote-backup password reset; session-lock settings preserved",
     );
     let _ = app.emit("app:security-settings-changed", &settings);
     config.clear_secrets();
@@ -310,6 +453,76 @@ mod tests {
         assert!(validate_lock_password("123").is_err());
         assert!(validate_lock_password("1234").is_ok());
         assert!(validate_lock_password("line\nbreak").is_err());
+    }
+
+    #[test]
+    fn changing_an_existing_lock_password_requires_the_current_password() {
+        assert!(authorize_lock_password_change(None, None).is_ok());
+        assert!(matches!(
+            authorize_lock_password_change(Some("old-password"), None),
+            Err(AppError::Command(message)) if message == CURRENT_LOCK_PASSWORD_REQUIRED_ERROR
+        ));
+        assert!(matches!(
+            authorize_lock_password_change(Some("old-password"), Some("wrong-password")),
+            Err(AppError::Command(message)) if message == CURRENT_LOCK_PASSWORD_INVALID_ERROR
+        ));
+        assert!(authorize_lock_password_change(Some("old-password"), Some("old-password")).is_ok());
+    }
+
+    #[test]
+    fn changing_an_existing_backup_password_requires_the_current_password() {
+        assert!(authorize_backup_password_change(None, None).is_ok());
+        assert!(matches!(
+            authorize_backup_password_change(Some("old-password"), None),
+            Err(AppError::Command(message)) if message == CURRENT_BACKUP_PASSWORD_REQUIRED_ERROR
+        ));
+        assert!(matches!(
+            authorize_backup_password_change(Some("old-password"), Some("wrong-password")),
+            Err(AppError::Command(message)) if message == CURRENT_BACKUP_PASSWORD_INVALID_ERROR
+        ));
+        assert!(
+            authorize_backup_password_change(Some("old-password"), Some("old-password")).is_ok()
+        );
+    }
+
+    #[test]
+    fn idle_lock_uses_the_default_and_only_allows_preset_values() {
+        assert_eq!(StoredSecurityConfig::default().idle_lock_minutes, 10);
+        assert!(is_supported_idle_lock_minutes(IDLE_LOCK_NEVER_MINUTES));
+        assert!(is_supported_idle_lock_minutes(1));
+        assert!(is_supported_idle_lock_minutes(180));
+        assert!(!is_supported_idle_lock_minutes(4));
+        assert!(!is_supported_idle_lock_minutes(1440));
+
+        let mut config = StoredSecurityConfig {
+            lock_enabled: false,
+            idle_lock_minutes: 7,
+            lock_password: None,
+            backup_password: None,
+        };
+        assert!(normalize_config(&mut config));
+        assert_eq!(config.idle_lock_minutes, DEFAULT_IDLE_LOCK_MINUTES);
+    }
+
+    #[test]
+    fn clearing_one_password_preserves_the_other() {
+        let mut config = StoredSecurityConfig {
+            lock_enabled: true,
+            idle_lock_minutes: 15,
+            lock_password: Some("lock-password".to_string()),
+            backup_password: Some("Backup password 8".to_string()),
+        };
+
+        config.lock_enabled = false;
+        config.clear_lock_password();
+        normalize_config(&mut config);
+        assert!(!config.lock_enabled);
+        assert_eq!(config.idle_lock_minutes, DEFAULT_IDLE_LOCK_MINUTES);
+        assert!(config.lock_password.is_none());
+        assert_eq!(config.backup_password.as_deref(), Some("Backup password 8"));
+
+        reset_backup_config(&mut config);
+        assert!(config.backup_password.is_none());
     }
 
     #[test]

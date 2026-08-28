@@ -1237,6 +1237,8 @@
 :root[data-theme='default-dark'] .connection-form-window,
 :root[data-theme='default'] .connection-form-window {
   background: #1b1b1b;
+  border-radius: var(--window-corner-radius);
+  overflow: hidden;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal.standalone,
@@ -2906,7 +2908,8 @@
   height: 100% !important;
   min-height: 0 !important;
   border: 0 !important;
-  border-radius: 0 !important;
+  border-radius: var(--window-corner-radius) !important;
+  overflow: hidden !important;
   box-shadow: none !important;
 }
 

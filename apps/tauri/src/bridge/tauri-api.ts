@@ -400,6 +400,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     setSecuritySettings: (input: SecuritySettingsInput) =>
       invoke<SecuritySettings>('app_set_security_settings', { input }),
     verifySecurityPassword: (password: string) => invoke<boolean>('app_verify_security_password', { password }),
+    resetSecurityBackupPassword: () => invoke<SecuritySettings>('app_reset_security_backup_password'),
     listLocalTerminalShells: () => invoke<LocalTerminalShellOption[]>('app_list_local_terminal_shells'),
     getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
@@ -615,6 +616,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-command', payload: { input } }),
     updateProfile: (profileId: string, input: unknown) =>
       invoke<WorkspaceSnapshot>('app_update_profile', { profileId, input }),
+    clearTrustedHostFingerprint: (profileId: string) =>
+      invoke<WorkspaceSnapshot>('app_clear_trusted_host_fingerprint', { profileId }),
     testConnection: (input: CreateProfileInput, profileId?: string) =>
       invoke<void>('app_test_connection', { input, profileId: profileId ?? null }),
     deleteProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_delete_profile', { profileId }),
@@ -775,7 +778,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) => subscribe('workspace:snapshot', listener),
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
-    onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
+    onSshInteraction: (listener: (request: SshInteractionRequest) => void) =>
+      subscribeReady('ssh:interaction', listener),
     onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>
       subscribeReady('sudo:password-request', listener),
     onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>

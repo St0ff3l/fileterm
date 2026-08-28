@@ -13,6 +13,7 @@ import type {
 import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
 import { resolveRendererPlatform } from '../../lib/renderer-platform'
+import { AppIcon } from '../common/AppIcon'
 import { OverviewPage } from './OverviewPage'
 import { QuickLinksPage } from './QuickLinksPage'
 import { ConnectionManagerModal } from '../connections/ConnectionManagerModal'
@@ -59,6 +60,8 @@ export function HomeWorkspace({
   onSetLocale,
   onOpenLogsDirectory,
   onLaunchLocalAgent,
+  canLockNow,
+  onLockNow,
   isSidebarCollapsed,
   tabBarProps,
   isResizingSidebar,
@@ -105,6 +108,8 @@ export function HomeWorkspace({
   onSetLocale(value: 'zhCN' | 'enUS'): void
   onOpenLogsDirectory(): void
   onLaunchLocalAgent?(client: McpAgentClientStatus): void
+  canLockNow: boolean
+  onLockNow(): void
   isSidebarCollapsed: boolean
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
@@ -473,6 +478,17 @@ export function HomeWorkspace({
                 <span>{activeSshKeyFolderName}</span>
               </>
             )}
+            {canLockNow ? (
+              <button
+                aria-label={t.securityLockNow}
+                className="security-lock-now-button"
+                onClick={onLockNow}
+                title={t.securityLockNow}
+                type="button"
+              >
+                <AppIcon name="lock" size={15} />
+              </button>
+            ) : null}
           </div>
           {/* Footer nav hidden: Changelog, API Reference, Status — code/handlers preserved */}
         </footer>

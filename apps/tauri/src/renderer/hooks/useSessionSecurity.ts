@@ -11,9 +11,9 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
   const settingsRef = useRef<SecuritySettings | null>(null)
   const hasLoadedOnceRef = useRef(false)
 
-  const lock = useCallback(() => {
+  const lock = useCallback((force = false) => {
     const current = settingsRef.current
-    if (!current?.lockEnabled || !current.hasLockPassword) {
+    if (!current?.hasLockPassword || (!force && !current.lockEnabled)) {
       return
     }
     setIsLocked(true)
@@ -46,7 +46,7 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
         if (next.lockEnabled && next.hasLockPassword) {
           setIsLocked(true)
         }
-      } else if (!next.lockEnabled || !next.hasLockPassword) {
+      } else if (!next.hasLockPassword) {
         setIsLocked(false)
       }
     }
@@ -93,7 +93,7 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
       if (timer !== undefined) {
         window.clearTimeout(timer)
       }
-      timer = window.setTimeout(lock, timeoutMs)
+      timer = window.setTimeout(() => lock(), timeoutMs)
     }
     const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']
     activityEvents.forEach((eventName) => window.addEventListener(eventName, resetTimer))
@@ -126,6 +126,10 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
     [desktopApi]
   )
 
+  const lockNow = useCallback(() => {
+    lock(true)
+  }, [lock])
+
   const retry = useCallback(() => {
     setReloadToken((token) => token + 1)
   }, [])
@@ -135,6 +139,7 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
     status,
     isLocked,
     lock,
+    lockNow,
     unlock,
     retry
   }

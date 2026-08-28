@@ -64,7 +64,6 @@ export function SmbCredentialsModal({
             <label className="file-action-field">
               <span>{t.networkShareCredentialsUsername}</span>
               <input
-                autoFocus
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 onKeyDown={(event) => {

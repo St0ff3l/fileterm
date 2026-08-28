@@ -38,6 +38,11 @@ const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
 const SERIAL_TRANSFER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
+/// Do not start another connection test for the same endpoint immediately
+/// after the previous one. Some SSH servers enforce a strict unauthenticated
+/// connection rate and return only `Disconnected` when that limit is hit.
+const CONNECTION_TEST_RETRY_COOLDOWN: Duration = Duration::from_secs(5);
+
 /// A local tab should become connected once its PTY transport is ready. The
 /// background startup task keeps this bounded window as a guard for a failed
 /// readiness signal; the shell's first visible prompt is not a prerequisite
@@ -2179,6 +2184,13 @@ pub fn app_set_security_settings(
     input: crate::services::security::SecuritySettingsInput,
 ) -> Result<crate::services::security::SecuritySettings, AppError> {
     crate::services::security::save_settings(&app, input)
+}
+
+#[tauri::command]
+pub fn app_reset_security_backup_password(
+    app: AppHandle,
+) -> Result<crate::services::security::SecuritySettings, AppError> {
+    crate::services::security::reset_backup_password(&app)
 }
 
 #[tauri::command]
@@ -5920,8 +5932,19 @@ pub async fn app_update_profile(
 }
 
 #[tauri::command]
+pub async fn app_clear_trusted_host_fingerprint(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    crate::services::profile_ops::clear_trusted_host_fingerprint(&app, &profile_id)?;
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+#[tauri::command]
 pub async fn app_test_connection(
     app: AppHandle,
+    window: WebviewWindow,
     profile_id: Option<String>,
     input: serde_json::Value,
 ) -> Result<(), AppError> {
@@ -5934,21 +5957,107 @@ pub async fn app_test_connection(
     let resolved_profile = resolve_profile_for_session(&app, &profile)?;
     drop(library_guard);
 
+    // A connection test can remain in the SSH handshake while it waits for a
+    // host-key decision. Guard it in Rust as well as in the renderer: the
+    // standalone form and the main window are separate WebViews and can both
+    // invoke this command before either one observes the other's busy state.
+    // The key deliberately contains no credentials.
+    let test_key = profile_id
+        .as_deref()
+        .map(|id| format!("profile:{id}"))
+        .unwrap_or_else(|| {
+            let host = resolved_profile
+                .get("host")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            let port = resolved_profile
+                .get("port")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default();
+            let username = resolved_profile
+                .get("username")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            format!("endpoint:{username}@{host}:{port}")
+        });
+    let connection_tests_in_flight = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_tests_in_flight
+        .clone();
+    {
+        let mut active_tests = connection_tests_in_flight.lock().await;
+        if !active_tests.insert(test_key.clone()) {
+            return Err(AppError::Command(
+                "Connection test already in progress".to_string(),
+            ));
+        }
+    }
+
+    let connection_tests_last_started = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_tests_last_started
+        .clone();
+    let now = Instant::now();
+    let cooldown_error = {
+        let mut last_started = connection_tests_last_started.lock().await;
+        if let Some(started_at) = last_started.get(&test_key) {
+            if started_at.elapsed() < CONNECTION_TEST_RETRY_COOLDOWN {
+                Some("Connection test cooldown active; please wait before retrying".to_string())
+            } else {
+                last_started.insert(test_key.clone(), now);
+                None
+            }
+        } else {
+            last_started.insert(test_key.clone(), now);
+            None
+        }
+    };
+    if let Some(error) = cooldown_error {
+        connection_tests_in_flight.lock().await.remove(&test_key);
+        return Err(AppError::Command(error));
+    }
+
     let test_tab_id = format!("connection-test-{}", uuid::Uuid::new_v4());
     let profile_type = resolved_profile
         .get("type")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("ssh");
-    match profile_type {
-        "ssh" => crate::sessions::ssh::test_connection(&app, &resolved_profile, &test_tab_id).await,
+    let interaction_window_label = window.label().to_string();
+    let result = match profile_type {
+        "ssh" => {
+            crate::sessions::ssh::test_connection(
+                &app,
+                &resolved_profile,
+                &test_tab_id,
+                interaction_window_label,
+            )
+            .await
+        }
         "ftp" => crate::sessions::ftp::test_connection(&resolved_profile).await,
         "telnet" => crate::sessions::telnet::test_connection(&resolved_profile).await,
         "serial" => {
             crate::sessions::serial::test_connection(&app, &resolved_profile, &test_tab_id).await
         }
         other => Err(format!("Unsupported connection type: {other}")),
+    };
+    match &result {
+        Ok(()) => crate::services::logging::session(
+            &app,
+            "INFO",
+            "connection-test",
+            &test_tab_id,
+            format!("connection test command completed type={profile_type}"),
+        ),
+        Err(error) => crate::services::logging::session(
+            &app,
+            "ERROR",
+            "connection-test",
+            &test_tab_id,
+            format!("connection test command failed type={profile_type} error={error}"),
+        ),
     }
-    .map_err(AppError::Command)
+    connection_tests_in_flight.lock().await.remove(&test_key);
+    result.map_err(AppError::Command)
 }
 
 #[tauri::command]

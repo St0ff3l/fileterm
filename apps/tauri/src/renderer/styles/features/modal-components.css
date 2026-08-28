@@ -43,12 +43,12 @@
 
 .file-action-field input:focus {
   outline: none;
-  border-color: var(--text-muted);
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
-.file-action-field input:hover {
-  border-color: var(--text-muted);
+.file-action-field input:hover:not(:focus) {
+  border-color: var(--border-light);
 }
 
 .file-action-hint {
@@ -174,6 +174,72 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* Group frames stay neutral; only the active control gets the focus color. */
+:root .ssh-fieldset.root-access-fieldset {
+  border-color: var(--border-dark);
+}
+
+:root .ssh-fieldset.ssh-verification-fieldset {
+  border-color: var(--border-dark);
+}
+
+.ssh-host-verification-modal {
+  width: min(500px, 100%);
+}
+
+.ssh-interaction-modal__body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ssh-fieldset.ssh-verification-fieldset {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 16px 10px;
+}
+
+.ssh-verification-fieldset > legend {
+  padding-inline: 8px;
+}
+
+.ssh-verification-fieldset .root-access-description {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ssh-verification-fieldset .root-access-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--input-bg);
+  font-size: 12px;
+}
+
+.ssh-verification-fieldset .root-access-meta strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ssh-verification-fieldset .ssh-verification-box {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm, 4px);
 }
 
 /* File Permission Modal */

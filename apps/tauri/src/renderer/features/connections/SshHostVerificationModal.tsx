@@ -18,31 +18,40 @@ export function SshHostVerificationModal({
 }) {
   return (
     <div className="modal-backdrop">
-      <div className="modal-card ssh-interaction-modal">
+      <div className="modal-card ssh-interaction-modal ssh-host-verification-modal">
         <div className="modal-header">
           <span>{t.sshHostVerificationTitle}</span>
           <CloseButton disabled={isSubmitting} onClick={onReject} />
         </div>
 
-        <div className="root-access-description">{t.sshHostVerificationDescription}</div>
-        {request.knownFingerprint ? <div className="modal-error">{t.sshHostVerificationChanged}</div> : null}
+        <div className="ssh-interaction-modal__body">
+          <fieldset className="ssh-fieldset ssh-verification-fieldset">
+            <legend>{t.general}</legend>
+            <div className="root-access-description">{t.sshHostVerificationDescription}</div>
 
-        <div className="root-access-meta">
-          <span>{t.host}</span>
-          <strong>{`${request.host}:${request.port}`}</strong>
+            <div className="root-access-meta">
+              <span>{t.host}</span>
+              <strong>{`${request.host}:${request.port}`}</strong>
+            </div>
+          </fieldset>
+
+          {request.knownFingerprint ? <div className="modal-error">{t.sshHostVerificationChanged}</div> : null}
+
+          <fieldset className="ssh-fieldset ssh-verification-fieldset">
+            <legend>{t.sshHostFingerprintLabel}</legend>
+            <div className="ssh-verification-box">
+              <span>{t.sshHostFingerprintLabel}</span>
+              <strong>{request.fingerprint}</strong>
+            </div>
+
+            {request.knownFingerprint ? (
+              <div className="ssh-verification-box">
+                <span>{t.sshHostKnownFingerprintLabel}</span>
+                <strong>{request.knownFingerprint}</strong>
+              </div>
+            ) : null}
+          </fieldset>
         </div>
-
-        <div className="ssh-verification-box">
-          <span>{t.sshHostFingerprintLabel}</span>
-          <strong>{request.fingerprint}</strong>
-        </div>
-
-        {request.knownFingerprint ? (
-          <div className="ssh-verification-box">
-            <span>{t.sshHostKnownFingerprintLabel}</span>
-            <strong>{request.knownFingerprint}</strong>
-          </div>
-        ) : null}
 
         <div className="form-actions ssh-verification-actions">
           <button className="flat-button" disabled={isSubmitting} onClick={onReject} type="button">

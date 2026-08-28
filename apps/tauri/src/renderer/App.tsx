@@ -35,7 +35,6 @@ import {
   type McpAgentClientStatus
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
-import { profileToForm } from './app/app-data'
 import { settledResultsError } from './app/app-utils'
 import { deriveThemeVariant, normalizeSavedTheme } from './app/theme-config'
 import { registerImportedFonts } from './app/imported-fonts'
@@ -96,7 +95,11 @@ import { useSessionSecurity } from './hooks/useSessionSecurity'
 import { useSudoPasswordPrompt } from './hooks/useSudoPasswordPrompt'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
-import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
+import {
+  ModalPortalManager,
+  SshInteractionPortal,
+  type FileActionModalBinding
+} from './features/layout/ModalPortalManager'
 import { StandaloneWindowFrame } from './features/layout/StandaloneWindowFrame'
 import { SessionLockScreen } from './features/security/SessionLockScreen'
 
@@ -1051,6 +1054,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     keyPassphraseRequest,
     errorMessage: sshInteractionError,
     isResolving: isSshInteractionResolving,
+    waitForSshInteractionListener,
     cancelCredentials,
     submitCredentials,
     cancelKeyboardInteractive,
@@ -1063,8 +1067,53 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   } = useSshInteractions({
     desktopApi,
     isMainWorkspaceWindow,
+    isConnectionFormWindow,
+    isConnectionFormOpen: showConnectionForm,
     onError: (scope, err) => reportError(setError, scope, err)
   })
+
+  const sshInteractionPortalProps = {
+    sshCredentials: credentialsRequest
+      ? {
+          errorMessage: sshInteractionError,
+          isSubmitting: isSshInteractionResolving,
+          request: credentialsRequest,
+          onCancel: cancelCredentials,
+          onSubmit: submitCredentials
+        }
+      : null,
+    sshHostVerification: hostVerificationRequest
+      ? {
+          request: hostVerificationRequest,
+          isSubmitting: isSshInteractionResolving,
+          onReject: rejectHost,
+          onAcceptOnce: acceptHostOnce,
+          onAcceptAndSave: acceptHostAndSave
+        }
+      : null,
+    sshKeyPassphrase: keyPassphraseRequest
+      ? {
+          errorMessage: sshInteractionError,
+          isSubmitting: isSshInteractionResolving,
+          request: keyPassphraseRequest,
+          onCancel: cancelKeyPassphrase,
+          onSubmit: submitKeyPassphrase
+        }
+      : null,
+    sshKeyboardInteractive: keyboardInteractiveRequest
+      ? {
+          request: keyboardInteractiveRequest,
+          errorMessage: sshInteractionError,
+          isSubmitting: isSshInteractionResolving,
+          onCancel: () => {
+            void cancelKeyboardInteractive()
+          },
+          onSubmit: (answers: string[]) => {
+            void submitKeyboardInteractive(answers)
+          }
+        }
+      : null
+  }
 
   const {
     request: backupPasswordRequest,
@@ -1390,6 +1439,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     try {
       profileTestInFlightRef.current = true
       setIsBusy(true)
+      // The standalone form can be used immediately after its WebView is
+      // created. Wait until Tauri has registered the SSH interaction listener
+      // so a first-time host-key prompt cannot be emitted into the void.
+      await waitForSshInteractionListener()
       await desktopApi.testConnection(payload, editingProfileId ?? undefined)
       setFormError(null)
       return true
@@ -1428,11 +1481,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
     try {
       setIsBusy(true)
-      const nextInput: CreateProfileInput = {
-        ...profileToForm(profile, connectionDefaults),
-        trustedHostFingerprint: ''
-      }
-      const snapshot = await desktopApi.updateProfile(profile.id, nextInput)
+      const snapshot = await desktopApi.clearTrustedHostFingerprint(profile.id)
       applySnapshot(snapshot)
       setError(null)
     } catch (err) {
@@ -1729,6 +1778,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
+        <SshInteractionPortal {...sshInteractionPortalProps} />
       </StandaloneWindowFrame>
     )
   }
@@ -2031,6 +2081,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLogsDirectory={openLogsDirectory}
                 isSidebarCollapsed={isSystemSidebarCollapsed}
                 isWorkspaceFocusMode={isWorkspaceFocusMode}
+                canLockNow={
+                  isMainWorkspaceWindow &&
+                  sessionSecurity.status === 'ready' &&
+                  sessionSecurity.settings?.hasLockPassword === true &&
+                  !sessionSecurity.isLocked
+                }
+                onLockNow={sessionSecurity.lockNow}
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
                 onResizeStart={startSidebarResize}
@@ -2284,54 +2341,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               }
             : null
         }
-        sshCredentials={
-          credentialsRequest
-            ? {
-                errorMessage: sshInteractionError,
-                isSubmitting: isSshInteractionResolving,
-                request: credentialsRequest,
-                onCancel: cancelCredentials,
-                onSubmit: submitCredentials
-              }
-            : null
-        }
-        sshHostVerification={
-          hostVerificationRequest
-            ? {
-                request: hostVerificationRequest,
-                isSubmitting: isSshInteractionResolving,
-                onReject: rejectHost,
-                onAcceptOnce: acceptHostOnce,
-                onAcceptAndSave: acceptHostAndSave
-              }
-            : null
-        }
-        sshKeyPassphrase={
-          keyPassphraseRequest
-            ? {
-                errorMessage: sshInteractionError,
-                isSubmitting: isSshInteractionResolving,
-                request: keyPassphraseRequest,
-                onCancel: cancelKeyPassphrase,
-                onSubmit: submitKeyPassphrase
-              }
-            : null
-        }
-        sshKeyboardInteractive={
-          keyboardInteractiveRequest
-            ? {
-                request: keyboardInteractiveRequest,
-                errorMessage: sshInteractionError,
-                isSubmitting: isSshInteractionResolving,
-                onCancel: () => {
-                  void cancelKeyboardInteractive()
-                },
-                onSubmit: (answers) => {
-                  void submitKeyboardInteractive(answers)
-                }
-              }
-            : null
-        }
+        {...sshInteractionPortalProps}
         backupPassword={
           backupPasswordRequest
             ? {

@@ -21,6 +21,8 @@ import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 type SshConnectionSettingKey = keyof SshConnectionDefaults
 
+const CONNECTION_TEST_RETRY_COOLDOWN_MS = 5000
+
 function ConnectionSecretField({
   id,
   label,
@@ -158,6 +160,7 @@ export function ConnectionModal({
   const [serialPortLoadError, setSerialPortLoadError] = useState<string | null>(null)
   const [serialValidationError, setSerialValidationError] = useState<string | null>(null)
   const [isTestingConnection, setIsTestingConnection] = useState(false)
+  const [isTestRetryCoolingDown, setIsTestRetryCoolingDown] = useState(false)
   const [connectionTestSucceeded, setConnectionTestSucceeded] = useState(false)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
@@ -172,6 +175,7 @@ export function ConnectionModal({
   }, [form])
 
   const isFormBusy = isSubmitting || isTestingConnection
+  const isTestBusy = isFormBusy || isTestRetryCoolingDown
 
   const connectionTestFeedback = serialValidationError
     ? {
@@ -188,7 +192,7 @@ export function ConnectionModal({
         : null
 
   const handleTestConnection = async () => {
-    if (isFormBusy) {
+    if (isTestBusy) {
       return
     }
 
@@ -199,8 +203,18 @@ export function ConnectionModal({
       setConnectionTestSucceeded(await onTestConnection())
     } finally {
       setIsTestingConnection(false)
+      setIsTestRetryCoolingDown(true)
     }
   }
+
+  useEffect(() => {
+    if (!isTestRetryCoolingDown) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setIsTestRetryCoolingDown(false), CONNECTION_TEST_RETRY_COOLDOWN_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [isTestRetryCoolingDown])
 
   const setSshConnectionSetting = <K extends SshConnectionSettingKey>(key: K, value: SshConnectionDefaults[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }))
@@ -2019,7 +2033,7 @@ export function ConnectionModal({
               <button
                 aria-busy={isTestingConnection}
                 className="flat-button"
-                disabled={isFormBusy}
+                disabled={isTestBusy}
                 onClick={() => {
                   void handleTestConnection()
                 }}

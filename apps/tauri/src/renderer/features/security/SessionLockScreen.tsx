@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
-import { StableButtonContent } from '../common/StableButtonContent'
 
 export function SessionLockScreen({
   mode,
@@ -16,6 +15,7 @@ export function SessionLockScreen({
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isShaking, setIsShaking] = useState(false)
 
   useEffect(() => {
     if (mode === 'locked') {
@@ -23,11 +23,17 @@ export function SessionLockScreen({
     }
   }, [mode])
 
+  const triggerShake = () => {
+    setIsShaking(true)
+    setTimeout(() => setIsShaking(false), 450)
+  }
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!onUnlock || isSubmitting) return
     if (!password) {
       setErrorMessage(t.securityUnlockRequired)
+      triggerShake()
       passwordInputRef.current?.focus()
       return
     }
@@ -39,6 +45,7 @@ export function SessionLockScreen({
     setIsSubmitting(false)
     if (!valid) {
       setErrorMessage(t.securityUnlockFailed)
+      triggerShake()
       passwordInputRef.current?.focus()
     }
   }
@@ -54,13 +61,9 @@ export function SessionLockScreen({
       aria-modal="true"
     >
       <div className="session-lock-screen__grid" aria-hidden="true" />
-      <div className="session-lock-card">
-        <div className="session-lock-card__eyebrow">
-          <AppIcon name={mode === 'error' ? 'shield' : 'shield-check'} size={16} />
-          <span>FILETERM / SECURE SESSION</span>
-        </div>
+      <div className={['session-lock-card', isShaking && 'session-lock-card--shake'].filter(Boolean).join(' ')}>
         <div className="session-lock-card__mark" aria-hidden="true">
-          <AppIcon name={mode === 'error' ? 'shield' : 'shield-check'} size={34} strokeWidth={1.45} />
+          <AppIcon name={mode === 'error' ? 'shield' : 'shield-check'} size={28} strokeWidth={1.5} />
         </div>
         <h1>
           {mode === 'loading' ? t.securityLoading : mode === 'error' ? t.securityLoadFailed : t.securityLockedTitle}
@@ -74,45 +77,48 @@ export function SessionLockScreen({
         </p>
 
         {mode === 'error' ? (
-          <button className="primary-button session-lock-card__action" onClick={onRetry} type="button">
+          <button className="session-lock-card__retry-button" onClick={onRetry} type="button">
             <AppIcon name="refresh" size={14} />
             <span>{t.securityRetry}</span>
           </button>
         ) : mode === 'locked' ? (
           <form className="session-lock-card__form" onSubmit={(event) => void submit(event)}>
-            <label className="session-lock-card__input-label" htmlFor="session-lock-password">
-              {t.securityUnlockPassword}
-            </label>
-            <input
-              ref={passwordInputRef}
-              autoComplete="current-password"
-              disabled={isSubmitting}
-              id="session-lock-password"
-              onChange={(event) => {
-                setPassword(event.target.value)
-                setErrorMessage(null)
-              }}
-              placeholder={t.securityUnlockPasswordPlaceholder}
-              type="password"
-              value={password}
-            />
+            <div className="session-lock-card__input-wrapper">
+              <AppIcon className="session-lock-card__input-icon" name="lock" size={14} strokeWidth={1.35} />
+              <input
+                ref={passwordInputRef}
+                aria-label={t.securityUnlockPassword}
+                autoComplete="current-password"
+                disabled={isSubmitting}
+                id="session-lock-password"
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  setErrorMessage(null)
+                }}
+                placeholder={t.securityUnlockPasswordPlaceholder}
+                type="password"
+                value={password}
+              />
+              <button
+                aria-busy={isSubmitting}
+                aria-label={t.securityUnlock}
+                className={['session-lock-card__submit-button', password && 'is-active'].filter(Boolean).join(' ')}
+                disabled={!password || isSubmitting}
+                title={t.securityUnlock}
+                type="submit"
+              >
+                {isSubmitting ? (
+                  <span aria-hidden="true" className="session-lock-card__submit-spinner button-spinner" />
+                ) : (
+                  <AppIcon name="arrow-right" size={14} strokeWidth={2.2} />
+                )}
+              </button>
+            </div>
             {errorMessage ? (
               <p className="session-lock-card__error" role="alert">
                 {errorMessage}
               </p>
             ) : null}
-            <button
-              aria-busy={isSubmitting}
-              className="primary-button session-lock-card__action"
-              disabled={isSubmitting}
-              type="submit"
-            >
-              <StableButtonContent
-                busy={isSubmitting}
-                icon={<AppIcon name="check" size={14} />}
-                label={t.securityUnlock}
-              />
-            </button>
           </form>
         ) : (
           <span aria-hidden="true" className="session-lock-card__spinner button-spinner" />

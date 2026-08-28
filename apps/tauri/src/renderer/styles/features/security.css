@@ -93,72 +93,50 @@
   cursor: pointer;
 }
 
-.security-stepper-control {
-  display: inline-flex;
+.security-idle-lock-select {
   flex: 0 0 auto;
-  align-items: center;
+  width: 180px;
+}
+
+.security-idle-lock-select.dropdown-select-trigger,
+.security-idle-lock-select.ft-select-shell select {
   box-sizing: border-box;
+  width: 100%;
   height: 36px;
+  min-height: 36px;
   border: 1px solid var(--border-light);
   border-radius: 6px;
   background: var(--input-bg, var(--bg-input, var(--bg-primary)));
-  overflow: hidden;
-}
-
-.security-stepper-btn {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 14px;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.security-stepper-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-main);
-}
-
-.security-stepper-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.security-stepper-input {
-  width: 44px;
-  height: 100%;
-  border: 0;
-  border-right: 1px solid var(--border-light);
-  border-left: 1px solid var(--border-light);
-  background: transparent;
   color: var(--text-main);
   font: inherit;
   font-size: 12px;
-  text-align: center;
+}
+
+.security-idle-lock-select.dropdown-select-trigger {
+  padding: 0 32px 0 12px;
+  text-align: left;
+}
+
+.security-idle-lock-select.ft-select-shell {
+  width: 180px;
+  height: 36px;
+}
+
+.security-idle-lock-select.ft-select-shell select {
+  padding: 0 34px 0 12px;
+}
+
+.security-idle-lock-select.dropdown-select-trigger:focus-visible,
+.security-idle-lock-select.ft-select-shell select:focus-visible {
+  border-color: var(--focus-outline);
   outline: none;
-  -moz-appearance: textfield;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
-.security-stepper-input::-webkit-inner-spin-button,
-.security-stepper-input::-webkit-outer-spin-button {
-  margin: 0;
-  -webkit-appearance: none;
-}
-
-.security-stepper-input:focus {
-  box-shadow: inset 0 0 0 2px var(--focus-outline);
-}
-
-.security-stepper-unit {
-  padding: 0 8px;
-  color: var(--text-muted);
-  font-size: 11px;
+.security-idle-lock-select.dropdown-select-trigger:disabled,
+.security-idle-lock-select.ft-select-shell:has(select:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .security-form-grid {
@@ -167,6 +145,10 @@
   gap: 14px;
   padding-top: 10px;
   border-top: 1px solid var(--border-light);
+}
+
+.security-password-grid--changing {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .security-form-grid label {
@@ -217,7 +199,8 @@
 }
 
 .security-actions-row .primary-button,
-.security-actions-row .primary-button.compact {
+.security-actions-row .primary-button.compact,
+.security-actions-row .security-reset-password-button {
   height: 36px;
   min-height: 36px;
   padding: 0 12px;
@@ -225,6 +208,20 @@
   font-size: var(--button-font-size-regular, 12px);
   font-weight: 500;
   gap: 6px;
+}
+
+.security-reset-password-button {
+  color: var(--danger-text);
+}
+
+.security-reset-password-button:hover:not(:disabled) {
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
+}
+
+.security-reset-password-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--danger-border);
 }
 
 .security-action-icon {
@@ -291,6 +288,47 @@
 .security-storage-note .app-icon {
   flex: 0 0 auto;
   margin-top: 1px;
+}
+
+.security-lock-reset-dialog,
+.security-backup-reset-dialog {
+  width: min(480px, 100%);
+}
+
+.security-remove-lock-dialog-content {
+  display: grid;
+  gap: 14px;
+}
+
+.security-remove-lock-password-field {
+  display: grid;
+  gap: 6px;
+  color: var(--dialog-description);
+  font-size: 12px;
+  text-align: left;
+}
+
+.security-remove-lock-password-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  outline: none;
+  background: var(--input-bg, var(--bg-main));
+  color: var(--text-main);
+  font: inherit;
+}
+
+.security-remove-lock-password-field input:focus {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.security-remove-lock-password-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .sync-security-link {
@@ -366,108 +404,264 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: min(430px, 100%);
-  padding: 30px 32px 32px;
-  border: 1px solid color-mix(in srgb, var(--accent-highlight) 30%, var(--border-light));
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-main));
+  width: min(340px, calc(100vw - 32px));
+  padding: 36px 28px 32px;
+  border: 1px solid color-mix(in srgb, var(--accent-highlight) 24%, var(--border-light));
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-main));
   box-shadow:
-    0 24px 80px color-mix(in srgb, var(--bg-main) 72%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--text-main) 8%, transparent);
+    0 24px 64px color-mix(in srgb, var(--bg-main) 80%, transparent),
+    0 2px 8px color-mix(in srgb, var(--accent-highlight) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent);
   text-align: center;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.session-lock-card__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 24px;
-  color: var(--accent-highlight);
-  font-family: var(--font-code, monospace);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+@keyframes session-lock-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+.session-lock-card--shake {
+  animation: session-lock-shake 0.38s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 .session-lock-card__mark {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 18px;
-  border: 1px solid color-mix(in srgb, var(--accent-highlight) 42%, var(--border-light));
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--accent-highlight) 13%, var(--bg-main));
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-highlight) 38%, var(--border-light));
+  border-radius: 16px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-highlight) 18%, var(--bg-card)),
+    color-mix(in srgb, var(--accent-highlight) 6%, var(--bg-card))
+  );
   color: var(--accent-highlight);
-  box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent-highlight) 5%, transparent);
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--accent-highlight) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 15%, transparent);
 }
 
 .session-lock-card h1 {
-  margin: 0;
+  margin: 0 0 6px;
   color: var(--text-main);
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .session-lock-card__description {
-  max-width: 34ch;
-  margin: 10px 0 24px;
+  max-width: 270px;
+  margin: 0 0 22px;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-wrap: balance;
 }
 
 .session-lock-card__form {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: min(310px, 100%);
+  width: 100%;
+  gap: 10px;
   text-align: left;
 }
 
-.session-lock-card__input-label {
-  margin-bottom: 6px;
+.session-lock-card__input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.session-lock-card__input-icon {
+  position: absolute;
+  left: 13px;
   color: var(--text-muted);
-  font-size: 12px;
+  opacity: 0.65;
+  pointer-events: none;
 }
 
 .session-lock-card__form input {
   box-sizing: border-box;
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
+  height: 42px;
+  padding: 0 42px 0 36px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: 12px;
   outline: none;
   background: var(--bg-input, var(--bg-main));
   color: var(--text-main);
   font: inherit;
+  font-size: 13.5px;
+  letter-spacing: normal;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.session-lock-card__form input::placeholder {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.session-lock-card__form input:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--border-light) 65%, var(--text-main));
 }
 
 .session-lock-card__form input:focus {
   border-color: var(--focus-outline);
   box-shadow: 0 0 0 3px var(--accent-focus-ring);
+  background: var(--bg-input, var(--bg-card));
+}
+
+.session-lock-card__submit-button {
+  position: absolute;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.35;
+  cursor: default;
+  transition:
+    opacity 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease;
+}
+
+.session-lock-card__submit-button.is-active:not(:disabled) {
+  opacity: 1;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--button-primary-bg) 35%, transparent);
+}
+
+.session-lock-card__submit-button.is-active:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+  transform: scale(1.06);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--button-primary-bg) 45%, transparent);
+}
+
+.session-lock-card__submit-button.is-active:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.session-lock-card__submit-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.session-lock-card__retry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--button-primary-border, var(--border-light));
+  border-radius: 10px;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--button-primary-bg) 30%, transparent);
+  transition: all 0.16s ease;
+}
+
+.session-lock-card__retry-button:hover {
+  background: var(--button-primary-hover);
+  transform: translateY(-1px);
 }
 
 .session-lock-card__error {
-  margin: 8px 0 0;
-  color: var(--danger-text, var(--text-main));
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger-color, #ef4444) 25%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger-color, #ef4444) 10%, transparent);
+  color: var(--danger-text, var(--danger-color, #ef4444));
+  font-size: 12px;
   line-height: 1.4;
 }
 
-.session-lock-card__action {
-  align-self: center;
-  min-width: 132px;
-  margin-top: 16px;
+.security-lock-now-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  box-sizing: border-box;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  -webkit-app-region: no-drag;
 }
 
-.session-lock-card__form .session-lock-card__action {
-  align-self: stretch;
-  min-height: 36px;
-  height: 36px;
-  margin-top: 18px;
+.security-lock-now-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  opacity: 1;
+}
+
+.security-lock-now-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.security-lock-now-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  opacity: 1;
+}
+
+.security-lock-now-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .session-lock-card__spinner {
@@ -485,6 +679,10 @@
   .security-form-grid {
     grid-template-columns: 1fr;
   }
+
+  .security-password-grid--changing {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 480px) {
@@ -496,6 +694,11 @@
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+  }
+
+  .security-idle-lock-select,
+  .security-idle-lock-select.ft-select-shell {
+    width: 100%;
   }
 
   .session-lock-screen {
