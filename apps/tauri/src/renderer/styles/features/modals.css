@@ -728,26 +728,15 @@
   grid-template-columns: none;
 }
 
-.session-log-config-box {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 10px;
-  margin-left: 22px;
-  max-width: calc(100% - 22px);
+.session-log-top-hint {
+  margin-left: 22px !important;
+  margin-top: 2px !important;
+  margin-bottom: 6px !important;
 }
 
-.session-log-directory-block {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.session-log-field-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
+.session-log-box {
+  margin-top: 6px;
+  gap: 10px;
 }
 
 .session-log-directory-control {
@@ -773,16 +762,11 @@
   white-space: nowrap;
 }
 
-.session-log-inline-hint {
-  margin: 0 !important;
-  margin-top: 4px !important;
-}
-
 .session-log-serial-options {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 6px;
   padding-top: 10px;
   border-top: 1px solid var(--border-dark);
 }
@@ -1503,7 +1487,7 @@
 
 .ssh-checkbox input:checked,
 .checkbox-row input:checked {
-  border-color: var(--focus-outline, #8bbfff);
+  border-color: var(--focus-outline, #8bbfff) !important;
   background: var(--bg-main);
 }
 
@@ -1524,8 +1508,8 @@
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
-.ssh-checkbox input:hover:not(:disabled),
-.checkbox-row input:hover:not(:disabled) {
+.ssh-checkbox input:hover:not(:disabled):not(:checked),
+.checkbox-row input:hover:not(:disabled):not(:checked) {
   border-color: var(--text-muted);
 }
 
