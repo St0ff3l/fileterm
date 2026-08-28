@@ -3,6 +3,7 @@ import type { ConnectionImportConflictStrategy, ConnectionImportPlan } from '@fi
 import { formatMessage, t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent } from '../common/StableButtonContent'
 
 export function ConnectionImportPreviewModal({
   plan,
@@ -110,13 +111,17 @@ export function ConnectionImportPreviewModal({
             {t.cancel}
           </button>
           <button
-            className="primary-button compact"
+            aria-busy={isSubmitting}
+            className="primary-button"
             disabled={!selected.size || isSubmitting}
             type="button"
             onClick={() => void commit()}
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{isSubmitting ? t.connectionImporting : t.connectionImportConfirm}</span>
+            <StableButtonContent
+              busy={isSubmitting}
+              busyLabel={t.connectionImporting}
+              label={t.connectionImportConfirm}
+            />
           </button>
         </footer>
       </section>

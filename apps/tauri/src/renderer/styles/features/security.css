@@ -1,0 +1,727 @@
+/* Security Settings Panel */
+.security-settings-panel {
+  gap: 20px;
+}
+
+.security-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-card);
+}
+
+.security-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.security-card-header-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.security-card-header-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.security-card-header-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.security-status-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.security-status-badge.configured {
+  border-color: var(--success-border, var(--border-light));
+  background: var(--accent-tint-weak, transparent);
+  color: var(--success-text, var(--text-muted));
+}
+
+.security-preference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+.security-preference-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.security-preference-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.security-preference-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.security-checkbox-wrapper {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.security-idle-lock-select {
+  flex: 0 0 auto;
+  width: 180px;
+}
+
+.security-idle-lock-select.dropdown-select-trigger,
+.security-idle-lock-select.ft-select-shell select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  min-height: 36px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--input-bg, var(--bg-input, var(--bg-primary)));
+  color: var(--text-main);
+  font: inherit;
+  font-size: 12px;
+}
+
+.security-idle-lock-select.dropdown-select-trigger {
+  padding: 0 32px 0 12px;
+  text-align: left;
+}
+
+.security-idle-lock-select.ft-select-shell {
+  width: 180px;
+  height: 36px;
+}
+
+.security-idle-lock-select.ft-select-shell select {
+  padding: 0 34px 0 12px;
+}
+
+.security-idle-lock-select.dropdown-select-trigger:focus-visible,
+.security-idle-lock-select.ft-select-shell select:focus-visible {
+  border-color: var(--focus-outline);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.security-idle-lock-select.dropdown-select-trigger:disabled,
+.security-idle-lock-select.ft-select-shell:has(select:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.security-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+.security-password-grid--changing {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.security-form-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.security-form-grid input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: var(--input-bg, var(--bg-input, var(--bg-primary)));
+  color: var(--text-main);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.security-form-grid input:focus {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.security-form-grid input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.security-policy-hint {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.security-actions-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+
+.security-actions-row .primary-button,
+.security-actions-row .primary-button.compact,
+.security-actions-row .security-reset-password-button {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--button-font-size-regular, 12px);
+  font-weight: 500;
+  gap: 6px;
+}
+
+.security-reset-password-button {
+  color: var(--danger-text);
+}
+
+.security-reset-password-button:hover:not(:disabled) {
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
+}
+
+.security-reset-password-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--danger-border);
+}
+
+.security-action-icon {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  place-items: center;
+}
+
+.security-action-icon .button-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.security-action-label {
+  display: grid;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.security-action-label > span {
+  grid-area: 1 / 1;
+}
+
+.security-action-label-reserve {
+  visibility: hidden;
+}
+
+.security-inline-feedback {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.security-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-highlight) 6%, var(--bg-card));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.security-callout .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-highlight);
+}
+
+.security-storage-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.security-storage-note .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.security-lock-reset-dialog,
+.security-backup-reset-dialog {
+  width: min(480px, 100%);
+}
+
+.security-remove-lock-dialog-content {
+  display: grid;
+  gap: 14px;
+}
+
+.security-remove-lock-password-field {
+  display: grid;
+  gap: 6px;
+  color: var(--dialog-description);
+  font-size: 12px;
+  text-align: left;
+}
+
+.security-remove-lock-password-field input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  outline: none;
+  background: var(--input-bg, var(--bg-main));
+  color: var(--text-main);
+  font: inherit;
+}
+
+.security-remove-lock-password-field input:focus {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.security-remove-lock-password-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.sync-security-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent-highlight) 28%, var(--border-light));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent-highlight) 6%, transparent);
+  color: var(--accent-highlight);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.sync-security-link:hover {
+  border-color: var(--accent-highlight);
+  background: color-mix(in srgb, var(--accent-highlight) 13%, transparent);
+  color: var(--text-main);
+}
+
+.sync-security-link:focus-visible {
+  outline: 2px solid var(--accent-focus-ring);
+  outline-offset: 1px;
+}
+
+/* Session Lock Screen Overlay */
+.session-lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 24px;
+  background: var(--bg-main);
+  color: var(--text-main);
+  -webkit-app-region: no-drag;
+}
+
+.session-lock-screen__drag-region {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 48px;
+  -webkit-app-region: drag;
+}
+
+/* The quit request is still confirmed while the workspace is locked. Keep
+ * that confirmation actionable instead of rendering it below the lock layer. */
+.modal-backdrop.session-lock-close-confirm-backdrop {
+  z-index: 1100;
+}
+
+.session-lock-screen::before {
+  position: absolute;
+  inset: -20%;
+  content: '';
+  background:
+    radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--accent-highlight) 16%, transparent), transparent 35%),
+    radial-gradient(circle at 80% 90%, color-mix(in srgb, var(--accent-highlight) 8%, transparent), transparent 32%);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.session-lock-screen__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--border-light) 46%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--border-light) 46%, transparent) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, transparent, black 18%, black 82%, transparent);
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.session-lock-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(340px, calc(100vw - 32px));
+  padding: 36px 28px 32px;
+  border: 1px solid color-mix(in srgb, var(--accent-highlight) 24%, var(--border-light));
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--bg-main));
+  box-shadow:
+    0 24px 64px color-mix(in srgb, var(--bg-main) 80%, transparent),
+    0 2px 8px color-mix(in srgb, var(--accent-highlight) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-main) 10%, transparent);
+  text-align: center;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+@keyframes session-lock-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-5px);
+  }
+  40%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+.session-lock-card--shake {
+  animation: session-lock-shake 0.38s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.session-lock-card__mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent-highlight) 38%, var(--border-light));
+  border-radius: 16px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent-highlight) 18%, var(--bg-card)),
+    color-mix(in srgb, var(--accent-highlight) 6%, var(--bg-card))
+  );
+  color: var(--accent-highlight);
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--accent-highlight) 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 15%, transparent);
+}
+
+.session-lock-card h1 {
+  margin: 0 0 6px;
+  color: var(--text-main);
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.session-lock-card__description {
+  max-width: 270px;
+  margin: 0 0 22px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.session-lock-card__form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 10px;
+  text-align: left;
+}
+
+.session-lock-card__input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.session-lock-card__input-icon {
+  position: absolute;
+  left: 13px;
+  color: var(--text-muted);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.session-lock-card__form input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 42px;
+  padding: 0 42px 0 36px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  outline: none;
+  background: var(--bg-input, var(--bg-main));
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13.5px;
+  letter-spacing: normal;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.session-lock-card__form input::placeholder {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.session-lock-card__form input:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--border-light) 65%, var(--text-main));
+}
+
+.session-lock-card__form input:focus {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+  background: var(--bg-input, var(--bg-card));
+}
+
+.session-lock-card__submit-button {
+  position: absolute;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0.35;
+  cursor: default;
+  transition:
+    opacity 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease;
+}
+
+.session-lock-card__submit-button.is-active:not(:disabled) {
+  opacity: 1;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--button-primary-bg) 35%, transparent);
+}
+
+.session-lock-card__submit-button.is-active:hover:not(:disabled) {
+  background: var(--button-primary-hover);
+  transform: scale(1.06);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--button-primary-bg) 45%, transparent);
+}
+
+.session-lock-card__submit-button.is-active:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.session-lock-card__submit-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.session-lock-card__retry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--button-primary-border, var(--border-light));
+  border-radius: 10px;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--button-primary-bg) 30%, transparent);
+  transition: all 0.16s ease;
+}
+
+.session-lock-card__retry-button:hover {
+  background: var(--button-primary-hover);
+  transform: translateY(-1px);
+}
+
+.session-lock-card__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger-color, #ef4444) 25%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger-color, #ef4444) 10%, transparent);
+  color: var(--danger-text, var(--danger-color, #ef4444));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.security-lock-now-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  box-sizing: border-box;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.security-lock-now-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-main);
+  opacity: 1;
+}
+
+.security-lock-now-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.security-lock-now-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+  opacity: 1;
+}
+
+.security-lock-now-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.session-lock-card__spinner {
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .security-card-header,
+  .security-preference-row {
+    align-items: flex-start;
+  }
+
+  .security-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .security-password-grid--changing {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .security-card {
+    padding: 12px;
+  }
+
+  .security-preference-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .security-idle-lock-select,
+  .security-idle-lock-select.ft-select-shell {
+    width: 100%;
+  }
+
+  .session-lock-screen {
+    padding: 16px;
+  }
+
+  .session-lock-card {
+    padding: 26px 20px 24px;
+  }
+}

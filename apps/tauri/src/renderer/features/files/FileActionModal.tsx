@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 export function FileActionModal({
@@ -65,13 +66,13 @@ export function FileActionModal({
             {t.cancel}
           </button>
           <button
+            aria-busy={isSubmitting}
             className="primary-button file-action-submit-button"
             disabled={isSubmitting}
             onClick={() => onConfirm(value)}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{confirmLabel}</span>
+            <StableButtonContent busy={isSubmitting} label={confirmLabel} />
           </button>
         </div>
       </div>

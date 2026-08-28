@@ -282,7 +282,7 @@ export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
   operationPolicy: 'approved-operations'
 }
 
-export type McpAgentClientId = 'claude-code' | 'codex-cli'
+export type McpAgentClientId = 'claude-code' | 'codex-cli' | 'opencode'
 
 /** Local client discovery result. Detection reads PATH and known install locations, never runs the client. */
 export interface McpAgentClientStatus {
@@ -680,7 +680,7 @@ export interface NetworkRates {
   tx: string
 }
 
-export type RemoteSystemPlatform = 'linux' | 'busybox' | 'windows' | 'unknown'
+export type RemoteSystemPlatform = 'linux' | 'busybox' | 'darwin' | 'freebsd' | 'windows' | 'unknown'
 
 export interface RawResourceUsageBreakdown {
   totalBytes: number
@@ -1252,6 +1252,26 @@ export interface BackupPasswordRequest {
   provider: 'WebDAV' | 'S3'
 }
 
+/** Non-secret session and remote-backup security state exposed to the renderer. */
+export interface SecuritySettings {
+  lockEnabled: boolean
+  idleLockMinutes: number
+  hasLockPassword: boolean
+  hasBackupPassword: boolean
+}
+
+/** Secret values are write-only from the renderer's point of view. */
+export interface SecuritySettingsInput {
+  lockEnabled?: boolean
+  idleLockMinutes?: number
+  currentLockPassword?: string
+  currentBackupPassword?: string
+  lockPassword?: string
+  backupPassword?: string
+  clearLockPassword?: boolean
+  clearBackupPassword?: boolean
+}
+
 export type ActionApprovalSource = 'mcp' | 'ai-copilot'
 
 /** One-time in-app approval shared by MCP and Copilot tool calls. */
@@ -1397,8 +1417,11 @@ export interface ThemeSemanticColors {
   diffRemoved: string
   skill: string
   keyword: string
-  sftp: string
+  total: string
+  telnet: string
   ftp: string
+  networkRx: string
+  networkTx: string
   secondary: string
   textSecondary: string
   info: string
@@ -1525,8 +1548,11 @@ export function createCodexThemeConfig(variant: ThemeVariant = 'dark'): ThemeCon
         diffRemoved: isLight ? '#ba2623' : '#f43f5e',
         skill: isLight ? '#924ff7' : '#a855f7',
         keyword: isLight ? '#b45309' : '#fbbf24',
-        sftp: isLight ? '#0284c7' : '#38bdf8',
+        total: isLight ? '#2563eb' : '#60a5fa',
+        telnet: isLight ? '#0284c7' : '#38bdf8',
         ftp: isLight ? '#924ff7' : '#b06dff',
+        networkRx: isLight ? '#0284c7' : '#38bdf8',
+        networkTx: isLight ? '#ba2623' : '#f43f5e',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#667085' : '#a1a1aa',
         info: isLight ? '#339cff' : '#38bdf8',
@@ -1576,8 +1602,11 @@ export function createDefaultThemeConfig(variant: ThemeVariant = 'dark'): ThemeC
         diffRemoved: isLight ? '#d94e4e' : '#ff5f57',
         skill: isLight ? '#7c3aed' : '#b06dff',
         keyword: isLight ? '#b45309' : '#fbbf24',
-        sftp: isLight ? '#0284c7' : '#38bdf8',
+        total: isLight ? '#2563eb' : '#60a5fa',
+        telnet: isLight ? '#0284c7' : '#38bdf8',
         ftp: isLight ? '#9333ea' : '#c084fc',
+        networkRx: isLight ? '#3b82f6' : '#65a9ff',
+        networkTx: isLight ? '#ef4444' : '#ff7474',
         secondary: isLight ? '#3b82f6' : '#8bbfff',
         textSecondary: isLight ? '#5e5e61' : '#9b9b9b',
         info: isLight ? '#3b82f6' : '#38bdf8',
@@ -1671,12 +1700,22 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
     typeof rawSemanticColors.success === 'string' &&
     rawSemanticColors.success.trim().toLowerCase() === '#00a240'
   const normalizedSkill = normalizeThemeColor(rawSemanticColors.skill, variantFallback.theme.semanticColors.skill)
-  const normalizedSftp = migrateLegacyCodexStatusColors
-    ? variantFallback.theme.semanticColors.sftp
-    : normalizeThemeColor(rawSemanticColors.sftp, variantFallback.theme.semanticColors.sftp)
+  const normalizedTotal = normalizeThemeColor(rawSemanticColors.total, variantFallback.theme.semanticColors.total)
+  const rawTelnet = rawSemanticColors.telnet ?? rawSemanticColors.sftp
+  const normalizedTelnet = migrateLegacyCodexStatusColors
+    ? variantFallback.theme.semanticColors.telnet
+    : normalizeThemeColor(rawTelnet, variantFallback.theme.semanticColors.telnet)
   const normalizedSuccess = migrateLegacyCodexStatusColors
     ? variantFallback.theme.semanticColors.success
     : normalizeThemeColor(rawSemanticColors.success, variantFallback.theme.semanticColors.success)
+  const normalizedNetworkRx = normalizeThemeColor(
+    rawSemanticColors.networkRx,
+    variantFallback.theme.semanticColors.networkRx
+  )
+  const normalizedNetworkTx = normalizeThemeColor(
+    rawSemanticColors.networkTx,
+    variantFallback.theme.semanticColors.networkTx
+  )
   const ftpFallback = isFileTermTheme ? variantFallback.theme.semanticColors.ftp : normalizedSkill
   const normalizedFtp = normalizeThemeColor(rawSemanticColors.ftp, ftpFallback)
   const normalizedSurface = normalizeThemeColor(rawTheme.surface, variantFallback.theme.surface)
@@ -1726,8 +1765,11 @@ export function normalizeThemeConfig(value: unknown, fallbackVariant: ThemeVaria
         ),
         skill: normalizedSkill,
         keyword: normalizeThemeColor(rawSemanticColors.keyword, variantFallback.theme.semanticColors.keyword),
-        sftp: normalizedSftp,
+        total: normalizedTotal,
+        telnet: normalizedTelnet,
         ftp: normalizedFtp,
+        networkRx: normalizedNetworkRx,
+        networkTx: normalizedNetworkTx,
         secondary: normalizeThemeColor(rawSemanticColors.secondary, variantFallback.theme.semanticColors.secondary),
         textSecondary: normalizeThemeColor(
           rawSemanticColors.textSecondary,
@@ -2049,6 +2091,11 @@ export interface RenameAiConversationInput {
   title: string
 }
 
+export interface DeleteAiMessageInput {
+  conversationId: string
+  messageId: string
+}
+
 /** Requests automatic title generation from the configured Provider. */
 export interface SummarizeAiConversationTitleInput {
   conversationId: string
@@ -2135,7 +2182,9 @@ export type AiErrorCode =
   | 'AI_TOOL_CALL_INVALID'
   | 'AI_TOOL_LOOP_LIMIT'
   | 'AI_CONVERSATION_LIMIT'
+  | 'AI_CONVERSATION_ACTIVE'
   | 'AI_CONVERSATION_NOT_FOUND'
+  | 'AI_MESSAGE_NOT_FOUND'
   | 'AI_CONVERSATION_INVALID_INPUT'
 
 export interface AiCommandError {
@@ -2174,6 +2223,10 @@ export interface FileTermDesktopApi {
   writeClipboardText(text: string): Promise<void>
   getUiPreferences(): Promise<UiPreferences>
   setUiPreferences(input: UiPreferencesInput): Promise<UiPreferences>
+  getSecuritySettings(): Promise<SecuritySettings>
+  setSecuritySettings(input: SecuritySettingsInput): Promise<SecuritySettings>
+  verifySecurityPassword(password: string): Promise<boolean>
+  resetSecurityBackupPassword(): Promise<SecuritySettings>
   listLocalTerminalShells(): Promise<LocalTerminalShellOption[]>
   getMcpAgentSetup(): Promise<McpAgentSetup>
   listAiProviders(): Promise<AiProviderSummary[]>
@@ -2185,6 +2238,7 @@ export interface FileTermDesktopApi {
   createAiConversation(input: CreateAiConversationInput): Promise<AiConversation>
   renameAiConversation(input: RenameAiConversationInput): Promise<AiConversation>
   summarizeAiConversationTitle(input: SummarizeAiConversationTitleInput): Promise<AiConversation>
+  deleteAiMessage(input: DeleteAiMessageInput): Promise<AiConversation>
   deleteAiConversation(conversationId: string): Promise<void>
   getAiCopilotModeState(): Promise<AiCopilotModeState>
   setAiCopilotMode(input: SetAiCopilotModeInput): Promise<AiCopilotModeState>
@@ -2241,6 +2295,7 @@ export interface FileTermDesktopApi {
   requestCloseCurrentWindow(): Promise<void>
   onWindowMaximizedChange(listener: (isMaximized: boolean) => void): () => void
   onUiPreferencesChanged(listener: (preferences: UiPreferences) => void): () => void
+  onSecuritySettingsChanged(listener: (settings: SecuritySettings) => void): () => void
   onFileEditorCloseRequest(listener: () => void): () => void
   requestQuitApp(): Promise<void>
   getSnapshot(): Promise<WorkspaceSnapshot>
@@ -2313,6 +2368,7 @@ export interface FileTermDesktopApi {
   setCommandSendPreferences(preferences: CommandSendPreferences): Promise<void>
   createProfile(input: CreateProfileInput): Promise<WorkspaceSnapshot>
   updateProfile(profileId: string, input: CreateProfileInput): Promise<WorkspaceSnapshot>
+  clearTrustedHostFingerprint(profileId: string): Promise<WorkspaceSnapshot>
   testConnection(input: CreateProfileInput, profileId?: string): Promise<void>
   deleteProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
@@ -2418,7 +2474,8 @@ export interface FileTermDesktopApi {
   onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
-  onSshInteraction(listener: (request: SshInteractionRequest) => void): () => void
+  /** Resolves only after the SSH interaction listener is registered in Tauri. */
+  onSshInteraction(listener: (request: SshInteractionRequest) => void): Promise<() => void>
   onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>
   /** Resolves only after the main renderer has registered the password prompt listener. */
   onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>

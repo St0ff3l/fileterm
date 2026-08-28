@@ -1,12 +1,14 @@
 import { createPortal } from 'react-dom'
 import { Children, cloneElement, isValidElement, useEffect, useId, useRef, type ReactNode } from 'react'
 import { t } from '../../i18n'
+import { StableButtonContent } from './StableButtonContent'
 
 export function ConfirmActionDialog({
   cancelLabel = t.cancel,
   confirmLabel,
   confirmDisabled = false,
   confirmVariant = 'danger',
+  backdropClassName,
   className,
   description,
   errorMessage,
@@ -21,6 +23,7 @@ export function ConfirmActionDialog({
   confirmLabel: string
   confirmDisabled?: boolean
   confirmVariant?: 'danger' | 'primary'
+  backdropClassName?: string
   className?: string
   description: ReactNode
   errorMessage?: string | null
@@ -64,7 +67,7 @@ export function ConfirmActionDialog({
   }, [isSubmitting, onClose])
 
   const dialog = (
-    <div className="modal-backdrop">
+    <div className={`modal-backdrop${backdropClassName ? ` ${backdropClassName}` : ''}`}>
       <div
         ref={dialogRef}
         className={`modal-card confirm-action-dialog${className ? ` ${className}` : ''}`}
@@ -101,13 +104,13 @@ export function ConfirmActionDialog({
           </button>
           {guardedExtraActions}
           <button
+            aria-busy={isSubmitting}
             className={confirmButtonClassName}
             disabled={isSubmitting || confirmDisabled}
             onClick={onConfirm}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{confirmLabel}</span>
+            <StableButtonContent busy={isSubmitting} label={confirmLabel} />
           </button>
         </div>
       </div>

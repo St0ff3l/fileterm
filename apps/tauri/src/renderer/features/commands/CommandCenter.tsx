@@ -12,6 +12,7 @@ import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
+import { StableButtonContent } from '../common/StableButtonContent'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
@@ -692,18 +693,20 @@ export function CommandCenter({
                       <span>{t.save}</span>
                     </button>
                     <button
+                      aria-busy={isSavingToCommandManager}
                       disabled={!temporaryCommand.trim() || isSavingToCommandManager}
                       type="button"
                       onClick={handleSaveTemporaryToCommandManager}
                     >
-                      {isSavingToCommandManager ? (
-                        <span aria-hidden="true" className="button-spinner" />
-                      ) : (
-                        <span className="material-symbols-outlined" aria-hidden="true">
-                          save_as
-                        </span>
-                      )}
-                      <span>{t.commandSaveToManager}</span>
+                      <StableButtonContent
+                        busy={isSavingToCommandManager}
+                        icon={
+                          <span className="material-symbols-outlined" aria-hidden="true">
+                            save_as
+                          </span>
+                        }
+                        label={t.commandSaveToManager}
+                      />
                     </button>
                   </div>
                   <div className="command-pane-actions">
@@ -729,13 +732,13 @@ export function CommandCenter({
                       {t.clear}
                     </button>
                     <button
+                      aria-busy={isSendingTemporary}
                       className="primary-button compact"
                       type="button"
                       onClick={handleTemporaryRun}
                       disabled={isBusy || isSendingTemporary || !canSendTemporary}
                     >
-                      {isSendingTemporary ? <span aria-hidden="true" className="button-spinner" /> : null}
-                      {t.send}
+                      <StableButtonContent busy={isSendingTemporary} label={t.send} />
                     </button>
                     <SessionSendTargetPicker
                       allLabel={t.commandSendAllWithCount.replace('{count}', String(sendTargets.length))}

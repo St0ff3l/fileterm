@@ -21,6 +21,7 @@ import {
   DEFAULT_RESOURCE_MONITORING_METRIC_ORDER,
   createCodexThemeConfig,
   createDefaultThemeConfig,
+  normalizeThemeConfig,
   type FileContentSnapshot,
   type ActionApprovalRequest,
   DEFAULT_OVERVIEW_SECTION_ORDER,
@@ -34,7 +35,6 @@ import {
   type McpAgentClientStatus
 } from '@fileterm/core'
 import { normalizeConnectionHost, validateConnectionHost } from '@fileterm/shared'
-import { profileToForm } from './app/app-data'
 import { settledResultsError } from './app/app-utils'
 import { deriveThemeVariant, normalizeSavedTheme } from './app/theme-config'
 import { registerImportedFonts } from './app/imported-fonts'
@@ -66,7 +66,12 @@ import { AiCopilotPanel } from './features/ai/AiCopilotPanel'
 import { WindowMenubar } from './features/layout/WindowMenubar'
 import { SystemSidebarShell } from './features/system/SystemSidebarShell'
 import { TransferCenterHost } from './features/transfers/TransferCenterHost'
-import { WorkspaceStage } from './features/workspace/WorkspaceStage'
+import { KeepAliveWorkspaceStage } from './features/workspace/WorkspaceStage'
+import {
+  DEFAULT_FILE_PANEL_SNAP_TARGET,
+  isFilePanelSnapTarget,
+  type FilePanelSnapTarget
+} from './features/workspace/file-panel-snap'
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode'
 import {
   defaultLocale,
@@ -86,11 +91,17 @@ import { useWorkspaceModals } from './hooks/useWorkspaceModals'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useSshInteractions } from './hooks/useSshInteractions'
 import { useBackupPasswordInteractions } from './hooks/useBackupPasswordInteractions'
+import { useSessionSecurity } from './hooks/useSessionSecurity'
 import { useSudoPasswordPrompt } from './hooks/useSudoPasswordPrompt'
 import { useFileEditor } from './hooks/useFileEditor'
 import { useWorkspaceDataOps } from './hooks/useWorkspaceDataOps'
-import { ModalPortalManager, type FileActionModalBinding } from './features/layout/ModalPortalManager'
+import {
+  ModalPortalManager,
+  SshInteractionPortal,
+  type FileActionModalBinding
+} from './features/layout/ModalPortalManager'
 import { StandaloneWindowFrame } from './features/layout/StandaloneWindowFrame'
+import { SessionLockScreen } from './features/security/SessionLockScreen'
 
 const STATUS_MESSAGE_TIMEOUT_MS = 15_000
 const REMOTE_METHOD_ERROR_PREFIX = /Error invoking remote method '[^']+':\s*/i
@@ -102,7 +113,6 @@ const SIDEBAR_MAX_WIDTH = 360
 const FILE_PANEL_PREFERENCES_KEY = 'ui.file-panel-preferences.v1'
 const DEFAULT_FILE_PANEL_RATIO = 30
 const MAX_FILE_PANEL_RATIO = 70
-const FILE_PANEL_DISK_HEADER_ANCHOR = 'disk-header'
 // Four overview cards need 4 * 200px. Include the home body/page padding and
 // a small scrollbar allowance so the last card stays on the same row at the
 // configured 1150px minimum window width.
@@ -205,11 +215,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const hasRenderedWorkspaceRef = useRef(false)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readInitialTheme(searchParams, initialUiPreferences))
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
-    if (initialUiPreferences?.themeConfig) {
-      return initialUiPreferences.themeConfig
-    }
     const initialTheme = readInitialTheme(searchParams, initialUiPreferences)
-    return createDefaultThemeConfig(initialTheme === 'default-light' ? 'light' : 'dark')
+    const variant = initialTheme === 'default-light' ? 'light' : 'dark'
+    if (initialUiPreferences?.themeConfig) {
+      return normalizeThemeConfig(initialUiPreferences.themeConfig, variant)
+    }
+    return createDefaultThemeConfig(variant)
   })
   const [customThemes, setCustomThemes] = useState<SavedTheme[]>(() =>
     (initialUiPreferences?.customThemes ?? []).map(normalizeSavedTheme)
@@ -251,7 +262,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const [aiCopilotWidth, setAiCopilotWidth] = useState(368)
   const [filePanelHeights, setFilePanelHeights] = useState<Record<string, number>>({})
   const [filePanelRatios, setFilePanelRatios] = useState<Record<string, number>>({})
-  const [filePanelDiskHeaderAnchors, setFilePanelDiskHeaderAnchors] = useState<Record<string, boolean>>({})
+  const [filePanelSnapTargets, setFilePanelSnapTargets] = useState<Record<string, FilePanelSnapTarget | null>>({})
   const [hasLoadedFilePanelRatios, setHasLoadedFilePanelRatios] = useState(false)
   const [filePanelRatioPersistenceReady, setFilePanelRatioPersistenceReady] = useState(false)
   const [commandPaneWidths, setCommandPaneWidths] = useState<Record<string, number>>({})
@@ -269,6 +280,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   // AppKit chrome because its traffic lights are intentionally native.
   const usesCustomWindowChrome = isWindowsDesktop || rendererPlatform === 'linux'
   const hasRevealedStandaloneWindowRef = useRef(false)
+  const sessionSecurity = useSessionSecurity(desktopApi, isMainWorkspaceWindow)
 
   useEffect(() => {
     if (!desktopApi) return
@@ -482,7 +494,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         if (canceled) return
         if (!value) {
           setFilePanelRatios({})
-          setFilePanelDiskHeaderAnchors({})
+          setFilePanelSnapTargets({})
           setFilePanelRatioPersistenceReady(true)
           return
         }
@@ -490,28 +502,30 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           const parsed: unknown = JSON.parse(value)
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
             setFilePanelRatios({})
-            setFilePanelDiskHeaderAnchors({})
+            setFilePanelSnapTargets({})
           } else {
             const normalizedRatios: Record<string, number> = {}
-            const normalizedAnchors: Record<string, boolean> = {}
+            const normalizedSnapTargets: Record<string, FilePanelSnapTarget | null> = {}
             Object.entries(parsed).forEach(([profileId, entry]) => {
               if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return
               const ratio = (entry as { ratio?: unknown }).ratio
               if (typeof ratio !== 'number' || !Number.isFinite(ratio)) return
               normalizedRatios[profileId] = Math.max(0, Math.min(MAX_FILE_PANEL_RATIO, ratio))
               const anchor = (entry as { anchor?: unknown }).anchor
-              if (anchor === FILE_PANEL_DISK_HEADER_ANCHOR) {
-                normalizedAnchors[profileId] = true
+              if (isFilePanelSnapTarget(anchor)) {
+                normalizedSnapTargets[profileId] = anchor
               } else if (typeof anchor === 'boolean') {
-                normalizedAnchors[profileId] = anchor
+                // Keep the v1 boolean format readable. `true` represented
+                // the only target that existed at the time: the disk header.
+                normalizedSnapTargets[profileId] = anchor ? DEFAULT_FILE_PANEL_SNAP_TARGET : null
               }
             })
             setFilePanelRatios(normalizedRatios)
-            setFilePanelDiskHeaderAnchors(normalizedAnchors)
+            setFilePanelSnapTargets(normalizedSnapTargets)
           }
         } catch {
           setFilePanelRatios({})
-          setFilePanelDiskHeaderAnchors({})
+          setFilePanelSnapTargets({})
         }
         setFilePanelRatioPersistenceReady(true)
       })
@@ -533,7 +547,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           profileId,
           {
             ratio,
-            ...(filePanelDiskHeaderAnchors[profileId] ? { anchor: FILE_PANEL_DISK_HEADER_ANCHOR } : {})
+            ...(filePanelSnapTargets[profileId] ? { anchor: filePanelSnapTargets[profileId] } : {})
           }
         ])
       )
@@ -543,8 +557,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     })
   }, [
     desktopApi,
-    filePanelDiskHeaderAnchors,
     filePanelRatios,
+    filePanelSnapTargets,
     filePanelRatioPersistenceReady,
     hasLoadedFilePanelRatios,
     isMainWorkspaceWindow
@@ -646,12 +660,15 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       ? (filePanelRatios[activeTab.profileId] ?? DEFAULT_FILE_PANEL_RATIO)
       : DEFAULT_FILE_PANEL_RATIO
     : DEFAULT_FILE_PANEL_RATIO
-  const activeFilePanelDiskHeaderAnchor = activeTab
+  const activeFilePanelSnapTarget = activeTab
     ? filePanelRememberRatio && hasLoadedFilePanelRatios
-      ? (filePanelDiskHeaderAnchors[activeTab.profileId] ??
-        !Object.prototype.hasOwnProperty.call(filePanelRatios, activeTab.profileId))
-      : true
-    : false
+      ? Object.prototype.hasOwnProperty.call(filePanelSnapTargets, activeTab.profileId)
+        ? filePanelSnapTargets[activeTab.profileId]
+        : Object.prototype.hasOwnProperty.call(filePanelRatios, activeTab.profileId)
+          ? null
+          : DEFAULT_FILE_PANEL_SNAP_TARGET
+      : DEFAULT_FILE_PANEL_SNAP_TARGET
+    : null
   const activeWorkspaceFocusKey = activeTab?.id ?? effectiveActiveLocalTabId
   const isWorkspaceFocusMode = activeWorkspaceFocusKey ? (workspaceFocusModes[activeWorkspaceFocusKey] ?? false) : false
   const activeWorkspaceView = activeTab ? (workspaceViews[activeTab.id] ?? 'file') : 'file'
@@ -683,7 +700,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       const launch =
         client.id === 'claude-code'
           ? { title: 'Claude Code', command: 'claude' }
-          : { title: 'Codex CLI', command: 'codex' }
+          : client.id === 'codex-cli'
+            ? { title: 'Codex CLI', command: 'codex' }
+            : { title: 'OpenCode', command: 'opencode' }
       void openLocalTerminal({ title: launch.title }, launch.command)
     },
     [openLocalTerminal]
@@ -726,12 +745,17 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
   )
 
-  const commitActiveFilePanelDiskHeaderAnchor = useCallback(
-    (nextAnchor: boolean) => {
+  const commitActiveFilePanelSnapTarget = useCallback(
+    (nextTarget: FilePanelSnapTarget | null) => {
       if (!activeTab || !filePanelRememberRatio || !hasLoadedFilePanelRatios) return
-      setFilePanelDiskHeaderAnchors((currentAnchors) => {
-        if (currentAnchors[activeTab.profileId] === nextAnchor) return currentAnchors
-        return { ...currentAnchors, [activeTab.profileId]: nextAnchor }
+      setFilePanelSnapTargets((currentTargets) => {
+        if (
+          Object.prototype.hasOwnProperty.call(currentTargets, activeTab.profileId) &&
+          currentTargets[activeTab.profileId] === nextTarget
+        ) {
+          return currentTargets
+        }
+        return { ...currentTargets, [activeTab.profileId]: nextTarget }
       })
     },
     [activeTab, filePanelRememberRatio, hasLoadedFilePanelRatios]
@@ -1030,6 +1054,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     keyPassphraseRequest,
     errorMessage: sshInteractionError,
     isResolving: isSshInteractionResolving,
+    waitForSshInteractionListener,
     cancelCredentials,
     submitCredentials,
     cancelKeyboardInteractive,
@@ -1041,8 +1066,54 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     acceptHostAndSave
   } = useSshInteractions({
     desktopApi,
+    isMainWorkspaceWindow,
+    isConnectionFormWindow,
+    isConnectionFormOpen: showConnectionForm,
     onError: (scope, err) => reportError(setError, scope, err)
   })
+
+  const sshInteractionPortalProps = {
+    sshCredentials: credentialsRequest
+      ? {
+          errorMessage: sshInteractionError,
+          isSubmitting: isSshInteractionResolving,
+          request: credentialsRequest,
+          onCancel: cancelCredentials,
+          onSubmit: submitCredentials
+        }
+      : null,
+    sshHostVerification: hostVerificationRequest
+      ? {
+          request: hostVerificationRequest,
+          isSubmitting: isSshInteractionResolving,
+          onReject: rejectHost,
+          onAcceptOnce: acceptHostOnce,
+          onAcceptAndSave: acceptHostAndSave
+        }
+      : null,
+    sshKeyPassphrase: keyPassphraseRequest
+      ? {
+          errorMessage: sshInteractionError,
+          isSubmitting: isSshInteractionResolving,
+          request: keyPassphraseRequest,
+          onCancel: cancelKeyPassphrase,
+          onSubmit: submitKeyPassphrase
+        }
+      : null,
+    sshKeyboardInteractive: keyboardInteractiveRequest
+      ? {
+          request: keyboardInteractiveRequest,
+          errorMessage: sshInteractionError,
+          isSubmitting: isSshInteractionResolving,
+          onCancel: () => {
+            void cancelKeyboardInteractive()
+          },
+          onSubmit: (answers: string[]) => {
+            void submitKeyboardInteractive(answers)
+          }
+        }
+      : null
+  }
 
   const {
     request: backupPasswordRequest,
@@ -1368,6 +1439,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     try {
       profileTestInFlightRef.current = true
       setIsBusy(true)
+      // The standalone form can be used immediately after its WebView is
+      // created. Wait until Tauri has registered the SSH interaction listener
+      // so a first-time host-key prompt cannot be emitted into the void.
+      await waitForSshInteractionListener()
       await desktopApi.testConnection(payload, editingProfileId ?? undefined)
       setFormError(null)
       return true
@@ -1406,11 +1481,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
     try {
       setIsBusy(true)
-      const nextInput: CreateProfileInput = {
-        ...profileToForm(profile, connectionDefaults),
-        trustedHostFingerprint: ''
-      }
-      const snapshot = await desktopApi.updateProfile(profile.id, nextInput)
+      const snapshot = await desktopApi.clearTrustedHostFingerprint(profile.id)
       applySnapshot(snapshot)
       setError(null)
     } catch (err) {
@@ -1512,6 +1583,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
 
   const windowCloseConfirmProps = windowCloseConfirm
     ? {
+        backdropClassName: sessionSecurity.isLocked ? 'session-lock-close-confirm-backdrop' : undefined,
         confirmLabel: t.closeConfirmQuit,
         confirmVariant: 'danger' as const,
         description: (
@@ -1611,7 +1683,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 }
               }}
               onTestConnection={handleTestConnection}
-              onDismissError={() => setFormError(null)}
               onSubmit={handleSaveProfile}
               onClose={closeConnectionForm}
             />
@@ -1705,10 +1776,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           }}
           standalone
           onTestConnection={handleTestConnection}
-          onDismissError={() => setFormError(null)}
           onSubmit={handleSaveProfile}
           onClose={closeCurrentWindow}
         />
+        <SshInteractionPortal {...sshInteractionPortalProps} />
       </StandaloneWindowFrame>
     )
   }
@@ -1829,7 +1900,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   return (
     <>
       <div
-        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}
+        className={`fs-shell ${usesCustomWindowChrome ? 'has-window-menubar' : ''} ${isMaximized ? 'is-window-maximized' : ''} ${isHomeWorkspaceVisible ? 'is-home-active' : ''} ${isLocalTerminalWorkspace ? 'is-local-terminal' : ''} ${isSystemSidebarCollapsed ? 'is-sidebar-collapsed' : ''} ${isResizingSidebar ? 'is-resizing-sidebar' : ''} ${isResizingAiCopilot ? 'is-resizing-copilot' : ''} ${shouldShowAiCopilot ? 'has-ai-copilot' : ''} ${usesCustomWindowChrome && sessionSecurity.isLocked ? 'is-session-locked' : ''}`}
         style={
           {
             '--sidebar-width': `${resolvedSidebarWidth}px`,
@@ -1874,11 +1945,10 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           ) : null}
           <div className={`workspace-stage ${shouldShowAiCopilot ? 'has-ai-copilot' : ''}`}>
             <div
-              key={activeLocalTab ? activeWorkspaceOrderKey : 'session-workspace'}
               className={`workspace-stage-transition ${isWorkspaceTransitionActive ? 'is-transitioning' : ''}`}
               data-nav-direction={workspaceNavDirection}
             >
-              <WorkspaceStage
+              <KeepAliveWorkspaceStage
                 activeLocalTab={activeLocalTab}
                 activeHomeTabId={effectiveActiveLocalTabId}
                 activeProfile={activeProfile}
@@ -1898,8 +1968,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onFilePanelHeightChange={setActiveFilePanelHeight}
                 filePanelRatio={activeFilePanelRatio}
                 onFilePanelRatioCommit={commitActiveFilePanelRatio}
-                filePanelDiskHeaderAnchor={activeFilePanelDiskHeaderAnchor}
-                onFilePanelDiskHeaderAnchorCommit={commitActiveFilePanelDiskHeaderAnchor}
+                filePanelSnapTarget={activeFilePanelSnapTarget}
+                onFilePanelSnapTargetCommit={commitActiveFilePanelSnapTarget}
                 rememberFilePanelRatio={filePanelRememberRatio}
                 sendTargets={sessionSendTargets}
                 terminalDockSendScope={activeTerminalDockSendState.scope}
@@ -2012,10 +2082,24 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 onOpenLogsDirectory={openLogsDirectory}
                 isSidebarCollapsed={isSystemSidebarCollapsed}
                 isWorkspaceFocusMode={isWorkspaceFocusMode}
+                canLockNow={
+                  isMainWorkspaceWindow &&
+                  sessionSecurity.status === 'ready' &&
+                  sessionSecurity.settings?.hasLockPassword === true &&
+                  !sessionSecurity.isLocked
+                }
+                onLockNow={sessionSecurity.lockNow}
                 tabBarProps={tabBarProps}
                 isResizingSidebar={isResizingSidebar}
                 onResizeStart={startSidebarResize}
                 sessions={workspace.sessions}
+                workspaceTabs={visibleWorkspaceTabs}
+                filePanelHeights={filePanelHeights}
+                filePanelRatios={filePanelRatios}
+                filePanelSnapTargets={filePanelSnapTargets}
+                commandPaneWidths={commandPaneWidths}
+                workspaceFocusModes={workspaceFocusModes}
+                workspaceViews={workspaceViews}
                 activePaneTabId={activePaneTab?.id}
                 onClosePane={closePane}
                 onCloseTab={closeActiveWorkspaceItem}
@@ -2096,7 +2180,6 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                   void handleClearHostFingerprint(profile)
                 },
                 onTestConnection: handleTestConnection,
-                onDismissError: () => setFormError(null),
                 onSubmit: handleSaveProfile,
                 onClose: closeConnectionForm
               }
@@ -2259,54 +2342,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               }
             : null
         }
-        sshCredentials={
-          credentialsRequest
-            ? {
-                errorMessage: sshInteractionError,
-                isSubmitting: isSshInteractionResolving,
-                request: credentialsRequest,
-                onCancel: cancelCredentials,
-                onSubmit: submitCredentials
-              }
-            : null
-        }
-        sshHostVerification={
-          hostVerificationRequest
-            ? {
-                request: hostVerificationRequest,
-                isSubmitting: isSshInteractionResolving,
-                onReject: rejectHost,
-                onAcceptOnce: acceptHostOnce,
-                onAcceptAndSave: acceptHostAndSave
-              }
-            : null
-        }
-        sshKeyPassphrase={
-          keyPassphraseRequest
-            ? {
-                errorMessage: sshInteractionError,
-                isSubmitting: isSshInteractionResolving,
-                request: keyPassphraseRequest,
-                onCancel: cancelKeyPassphrase,
-                onSubmit: submitKeyPassphrase
-              }
-            : null
-        }
-        sshKeyboardInteractive={
-          keyboardInteractiveRequest
-            ? {
-                request: keyboardInteractiveRequest,
-                errorMessage: sshInteractionError,
-                isSubmitting: isSshInteractionResolving,
-                onCancel: () => {
-                  void cancelKeyboardInteractive()
-                },
-                onSubmit: (answers) => {
-                  void submitKeyboardInteractive(answers)
-                }
-              }
-            : null
-        }
+        {...sshInteractionPortalProps}
         backupPassword={
           backupPasswordRequest
             ? {
@@ -2398,6 +2434,13 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           }}
           title={actionApprovalRequests[0].title}
         />
+      ) : null}
+      {isMainWorkspaceWindow && sessionSecurity.isLocked ? (
+        sessionSecurity.status === 'error' ? (
+          <SessionLockScreen mode="error" onRetry={sessionSecurity.retry} />
+        ) : (
+          <SessionLockScreen mode="locked" onUnlock={sessionSecurity.unlock} />
+        )
       ) : null}
     </>
   )

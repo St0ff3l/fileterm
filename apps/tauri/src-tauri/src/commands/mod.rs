@@ -12,6 +12,7 @@ use tauri::{ipc::Channel, AppHandle, Emitter, Manager, WebviewWindow};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
 
 /// 等待 worker 接收命令的最大时间。worker 主循环被 SFTP init / shell
 /// channel 写阻塞 时，mpsc 一旦满，send 会永久 await，导致前端 invoke
@@ -36,6 +37,11 @@ const WORKER_FILE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
 const WORKER_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
 const SERIAL_TRANSFER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+
+/// Do not start another connection test for the same endpoint immediately
+/// after the previous one. Some SSH servers enforce a strict unauthenticated
+/// connection rate and return only `Disconnected` when that limit is hit.
+const CONNECTION_TEST_RETRY_COOLDOWN: Duration = Duration::from_secs(5);
 
 /// A local tab should become connected once its PTY transport is ready. The
 /// background startup task keeps this bounded window as a guard for a failed
@@ -1302,6 +1308,25 @@ fn resolve_local_cli(command: &str) -> Option<std::path::PathBuf> {
         .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .unwrap_or_default();
 
+    // OpenCode's official installer may place the native binary in a directory
+    // that a GUI-launched process does not inherit. Keep these paths ahead of
+    // the generic Node manager fallbacks, matching the installer priority used
+    // by CC Switch without executing the client or a shell profile.
+    if command.eq_ignore_ascii_case("opencode") {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default();
+        for path in opencode_extra_search_paths(
+            &home,
+            std::env::var_os("OPENCODE_INSTALL_DIR"),
+            std::env::var_os("XDG_BIN_DIR"),
+            std::env::var_os("GOPATH"),
+        ) {
+            push_unique_cli_search_path(&mut search_paths, path);
+        }
+    }
+
     append_local_cli_search_paths(&mut search_paths);
     resolve_local_cli_from_paths(command, search_paths)
 }
@@ -1475,6 +1500,36 @@ fn append_home_cli_search_paths(
     }
 }
 
+/// OpenCode's official installer order is
+/// `OPENCODE_INSTALL_DIR > XDG_BIN_DIR > ~/bin > ~/.opencode/bin`.
+/// Include the default Bun and Go locations as well because those installs are
+/// common on machines where a packaged desktop app receives a reduced PATH.
+fn opencode_extra_search_paths(
+    home: &std::path::Path,
+    opencode_install_dir: Option<std::ffi::OsString>,
+    xdg_bin_dir: Option<std::ffi::OsString>,
+    gopath: Option<std::ffi::OsString>,
+) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    for value in [opencode_install_dir, xdg_bin_dir].into_iter().flatten() {
+        push_unique_cli_search_path(&mut paths, std::path::PathBuf::from(value));
+    }
+
+    if !home.as_os_str().is_empty() {
+        for relative in ["bin", ".opencode/bin", ".bun/bin", "go/bin"] {
+            push_unique_cli_search_path(&mut paths, home.join(relative));
+        }
+    }
+
+    if let Some(gopath) = gopath {
+        for path in std::env::split_paths(&gopath) {
+            push_unique_cli_search_path(&mut paths, path.join("bin"));
+        }
+    }
+
+    paths
+}
+
 fn push_unique_cli_search_path(
     search_paths: &mut Vec<std::path::PathBuf>,
     path: std::path::PathBuf,
@@ -1520,6 +1575,12 @@ pub fn app_get_mcp_agent_setup() -> Result<McpAgentSetup, AppError> {
                 "Codex CLI",
                 "codex",
                 format!("codex mcp add fileterm -- {fileterm_command} mcp"),
+            ),
+            make_client(
+                "opencode",
+                "OpenCode",
+                "opencode",
+                format!("opencode mcp add fileterm -- {fileterm_command} mcp"),
             ),
         ],
     })
@@ -2110,6 +2171,38 @@ pub fn app_set_ui_preferences(
     Ok(preferences)
 }
 
+#[tauri::command]
+pub fn app_get_security_settings(
+    app: AppHandle,
+) -> Result<crate::services::security::SecuritySettings, AppError> {
+    crate::services::security::get_settings(&app)
+}
+
+#[tauri::command]
+pub fn app_set_security_settings(
+    app: AppHandle,
+    input: crate::services::security::SecuritySettingsInput,
+) -> Result<crate::services::security::SecuritySettings, AppError> {
+    crate::services::security::save_settings(&app, input)
+}
+
+#[tauri::command]
+pub fn app_reset_security_backup_password(
+    app: AppHandle,
+) -> Result<crate::services::security::SecuritySettings, AppError> {
+    crate::services::security::reset_backup_password(&app)
+}
+
+#[tauri::command]
+pub fn app_verify_security_password(
+    app: AppHandle,
+    mut password: String,
+) -> Result<bool, AppError> {
+    let result = crate::services::security::verify_lock_password(&app, &password);
+    password.zeroize();
+    result
+}
+
 fn current_local_terminal_shell(preferences: &UiPreferences) -> String {
     #[cfg(target_os = "windows")]
     {
@@ -2260,6 +2353,14 @@ pub async fn app_summarize_ai_conversation_title(
     input: crate::services::ai::SummarizeAiConversationTitleInput,
 ) -> Result<crate::services::ai::AiConversation, AppError> {
     crate::services::ai::summarize_conversation_title(&app, input).await
+}
+
+#[tauri::command]
+pub fn app_delete_ai_message(
+    app: AppHandle,
+    input: crate::services::ai::DeleteAiMessageInput,
+) -> Result<crate::services::ai::AiConversation, AppError> {
+    crate::services::ai::delete_message(&app, input)
 }
 
 #[tauri::command]
@@ -3174,6 +3275,41 @@ async fn refresh_remote_files(app: &AppHandle, tab_id: &str, path: &str) -> Resu
         session.remote_files = files;
     }
     Ok(())
+}
+
+/// Refresh a file pane from a shell CWD while respecting the fact that SSH
+/// and SFTP may expose different filesystem roots. The worker uses the same
+/// candidate order for event-driven CWD updates; keeping the toggle recovery
+/// path here in sync prevents enabling Follow terminal from reintroducing the
+/// Synology failure.
+async fn refresh_remote_files_for_shell_cwd(
+    app: &AppHandle,
+    tab_id: &str,
+    shell_cwd: &str,
+    use_sftp_namespace: bool,
+) -> Result<String, AppError> {
+    let candidates = if use_sftp_namespace {
+        crate::sessions::ssh::shell_cwd_sftp_path_candidates(shell_cwd)
+    } else {
+        vec![shell_cwd.to_string()]
+    };
+    let mut last_error = None;
+    for (index, candidate) in candidates.iter().enumerate() {
+        match refresh_remote_files(app, tab_id, candidate).await {
+            Ok(()) => return Ok(candidate.clone()),
+            Err(error) => {
+                let can_try_next = use_sftp_namespace
+                    && index + 1 < candidates.len()
+                    && crate::sessions::ssh::is_sftp_path_not_found_message(&error.to_string());
+                last_error = Some(error);
+                if !can_try_next {
+                    break;
+                }
+            }
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| AppError::Storage(format!("无法列出 Shell 当前目录：{shell_cwd}"))))
 }
 
 /// Read-only MCP surface for browsing an already-open file-capable session.
@@ -5043,7 +5179,10 @@ pub async fn app_set_follow_shell_cwd(
         if let Some(session) = sessions.get_mut(&tab_id) {
             session.follow_shell_cwd = enabled;
             if enabled && session.shell_cwd.as_deref() != Some(session.remote_path.as_str()) {
-                session.shell_cwd.clone()
+                session
+                    .shell_cwd
+                    .clone()
+                    .map(|cwd| (cwd, session.file_access_mode != "root"))
             } else {
                 None
             }
@@ -5056,15 +5195,15 @@ pub async fn app_set_follow_shell_cwd(
     // catch the file pane up to the most recently reported shell directory.
     // Waiting for another `cd` leaves the toggle active while the pane remains
     // stale forever when the initial listing happened to fail.
-    if let Some(cwd) = cwd_to_follow {
-        match refresh_remote_files(&app, &tab_id, &cwd).await {
-            Ok(()) => {
+    if let Some((cwd, use_sftp_namespace)) = cwd_to_follow {
+        match refresh_remote_files_for_shell_cwd(&app, &tab_id, &cwd, use_sftp_namespace).await {
+            Ok(resolved_path) => {
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(&tab_id) {
                     if session.follow_shell_cwd
                         && session.shell_cwd.as_deref() == Some(cwd.as_str())
                     {
-                        session.remote_path = cwd;
+                        session.remote_path = resolved_path;
                     }
                 }
             }
@@ -5831,8 +5970,19 @@ pub async fn app_update_profile(
 }
 
 #[tauri::command]
+pub async fn app_clear_trusted_host_fingerprint(
+    app: AppHandle,
+    profile_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let _guard = lock_library_after_transfer_hydration(&app).await?;
+    crate::services::profile_ops::clear_trusted_host_fingerprint(&app, &profile_id)?;
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+#[tauri::command]
 pub async fn app_test_connection(
     app: AppHandle,
+    window: WebviewWindow,
     profile_id: Option<String>,
     input: serde_json::Value,
 ) -> Result<(), AppError> {
@@ -5845,21 +5995,107 @@ pub async fn app_test_connection(
     let resolved_profile = resolve_profile_for_session(&app, &profile)?;
     drop(library_guard);
 
+    // A connection test can remain in the SSH handshake while it waits for a
+    // host-key decision. Guard it in Rust as well as in the renderer: the
+    // standalone form and the main window are separate WebViews and can both
+    // invoke this command before either one observes the other's busy state.
+    // The key deliberately contains no credentials.
+    let test_key = profile_id
+        .as_deref()
+        .map(|id| format!("profile:{id}"))
+        .unwrap_or_else(|| {
+            let host = resolved_profile
+                .get("host")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            let port = resolved_profile
+                .get("port")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_default();
+            let username = resolved_profile
+                .get("username")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            format!("endpoint:{username}@{host}:{port}")
+        });
+    let connection_tests_in_flight = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_tests_in_flight
+        .clone();
+    {
+        let mut active_tests = connection_tests_in_flight.lock().await;
+        if !active_tests.insert(test_key.clone()) {
+            return Err(AppError::Command(
+                "Connection test already in progress".to_string(),
+            ));
+        }
+    }
+
+    let connection_tests_last_started = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_tests_last_started
+        .clone();
+    let now = Instant::now();
+    let cooldown_error = {
+        let mut last_started = connection_tests_last_started.lock().await;
+        if let Some(started_at) = last_started.get(&test_key) {
+            if started_at.elapsed() < CONNECTION_TEST_RETRY_COOLDOWN {
+                Some("Connection test cooldown active; please wait before retrying".to_string())
+            } else {
+                last_started.insert(test_key.clone(), now);
+                None
+            }
+        } else {
+            last_started.insert(test_key.clone(), now);
+            None
+        }
+    };
+    if let Some(error) = cooldown_error {
+        connection_tests_in_flight.lock().await.remove(&test_key);
+        return Err(AppError::Command(error));
+    }
+
     let test_tab_id = format!("connection-test-{}", uuid::Uuid::new_v4());
     let profile_type = resolved_profile
         .get("type")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("ssh");
-    match profile_type {
-        "ssh" => crate::sessions::ssh::test_connection(&app, &resolved_profile, &test_tab_id).await,
+    let interaction_window_label = window.label().to_string();
+    let result = match profile_type {
+        "ssh" => {
+            crate::sessions::ssh::test_connection(
+                &app,
+                &resolved_profile,
+                &test_tab_id,
+                interaction_window_label,
+            )
+            .await
+        }
         "ftp" => crate::sessions::ftp::test_connection(&resolved_profile).await,
         "telnet" => crate::sessions::telnet::test_connection(&resolved_profile).await,
         "serial" => {
             crate::sessions::serial::test_connection(&app, &resolved_profile, &test_tab_id).await
         }
         other => Err(format!("Unsupported connection type: {other}")),
+    };
+    match &result {
+        Ok(()) => crate::services::logging::session(
+            &app,
+            "INFO",
+            "connection-test",
+            &test_tab_id,
+            format!("connection test command completed type={profile_type}"),
+        ),
+        Err(error) => crate::services::logging::session(
+            &app,
+            "ERROR",
+            "connection-test",
+            &test_tab_id,
+            format!("connection test command failed type={profile_type} error={error}"),
+        ),
     }
-    .map_err(AppError::Command)
+    connection_tests_in_flight.lock().await.remove(&test_key);
+    result.map_err(AppError::Command)
 }
 
 #[tauri::command]
@@ -6049,8 +6285,10 @@ mod command_template_tests {
 #[cfg(test)]
 mod mcp_agent_setup_tests {
     use super::{
-        app_get_mcp_agent_setup, append_home_cli_search_paths, resolve_local_cli_from_paths,
+        app_get_mcp_agent_setup, append_home_cli_search_paths, opencode_extra_search_paths,
+        resolve_local_cli_from_paths,
     };
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn resolves_cli_from_ordered_search_paths_without_running_it() {
@@ -6122,6 +6360,61 @@ mod mcp_agent_setup_tests {
     }
 
     #[test]
+    fn includes_opencode_official_and_manager_install_paths_in_priority_order() {
+        let home = Path::new("/home/tester");
+        let gopath = std::env::join_paths([PathBuf::from("/go/path1"), PathBuf::from("/go/path2")])
+            .expect("test GOPATH should be representable");
+
+        let paths = opencode_extra_search_paths(
+            home,
+            Some(std::ffi::OsString::from("/custom/opencode/bin")),
+            Some(std::ffi::OsString::from("/xdg/bin")),
+            Some(gopath),
+        );
+
+        assert_eq!(paths[0], PathBuf::from("/custom/opencode/bin"));
+        assert_eq!(paths[1], PathBuf::from("/xdg/bin"));
+        assert_eq!(paths[2], PathBuf::from("/home/tester/bin"));
+        assert_eq!(paths[3], PathBuf::from("/home/tester/.opencode/bin"));
+        assert!(paths.contains(&PathBuf::from("/home/tester/.bun/bin")));
+        assert!(paths.contains(&PathBuf::from("/home/tester/go/bin")));
+        assert!(paths.contains(&PathBuf::from("/go/path1/bin")));
+        assert!(paths.contains(&PathBuf::from("/go/path2/bin")));
+    }
+
+    #[test]
+    fn resolves_opencode_from_the_official_user_install_directory() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-opencode-cli-{}", uuid::Uuid::new_v4()));
+        let cli_dir = root.join(".opencode/bin");
+        std::fs::create_dir_all(&cli_dir).expect("OpenCode bin directory should be created");
+        let opencode = cli_dir.join("opencode");
+        std::fs::write(&opencode, b"OpenCode CLI").expect("OpenCode placeholder should be written");
+
+        let paths = opencode_extra_search_paths(&root, None, None, None);
+        let resolved = resolve_local_cli_from_paths("opencode", paths);
+
+        assert_eq!(resolved, Some(opencode));
+        std::fs::remove_dir_all(root).expect("temporary OpenCode directory should be removed");
+    }
+
+    #[test]
+    fn deduplicates_opencode_install_paths() {
+        let home = Path::new("/home/tester");
+        let same_dir = std::ffi::OsString::from("/same/opencode/bin");
+
+        let paths = opencode_extra_search_paths(home, Some(same_dir.clone()), Some(same_dir), None);
+
+        assert_eq!(
+            paths
+                .iter()
+                .filter(|path| path.as_path() == Path::new("/same/opencode/bin"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn generates_stdio_registration_commands_for_supported_clients() {
         let setup = app_get_mcp_agent_setup().expect("MCP Agent setup should be readable");
         assert!(!setup.fileterm_command.is_empty());
@@ -6148,6 +6441,17 @@ mod mcp_agent_setup_tests {
             .registration_command
             .starts_with("codex mcp add fileterm -- "));
         assert!(codex.registration_command.ends_with(" mcp"));
+
+        let opencode = setup
+            .clients
+            .iter()
+            .find(|client| client.id == "opencode")
+            .expect("OpenCode client should be exposed");
+        assert_eq!(opencode.command, "opencode");
+        assert!(opencode
+            .registration_command
+            .starts_with("opencode mcp add fileterm -- "));
+        assert!(opencode.registration_command.ends_with(" mcp"));
     }
 }
 

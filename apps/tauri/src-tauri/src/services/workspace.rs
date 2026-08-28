@@ -1,7 +1,7 @@
 use crate::services::transfers::TransferTask;
 use crate::sessions::WorkerCmd;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -528,6 +528,16 @@ pub struct WorkspaceState {
     /// Import plans retain sanitized source data in main process until the
     /// renderer confirms a selected subset and conflict strategy.
     pub connection_import_plans: Arc<RwLock<HashMap<String, Vec<ConnectionImportPlanEntry>>>>,
+    /// At most one connection test may be active for a profile/endpoint.
+    /// Keeping this in the backend also covers duplicate clicks from multiple
+    /// renderer windows and prevents a stalled host-key prompt from opening a
+    /// burst of SSH handshakes against the same server.
+    pub connection_tests_in_flight: Arc<Mutex<HashSet<String>>>,
+    /// Keep a short per-endpoint cooldown after a test starts. A fast remote
+    /// rejection can resolve the command before the renderer has time to
+    /// repaint its disabled button, so sequential clicks still need a
+    /// backend-side guard against hammering an SSHD's unauthenticated limit.
+    pub connection_tests_last_started: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     /// Serializes profile/folder/command read-modify-write transactions from
     /// independent Tauri windows. Unlike Electron's single main event loop,
     /// Tauri commands can otherwise overwrite each other's JSON snapshots.
@@ -594,6 +604,8 @@ impl Default for WorkspaceState {
             transfer_last_event: Arc::new(Mutex::new(HashMap::new())),
             transfer_progress_samples: Arc::new(Mutex::new(HashMap::new())),
             connection_import_plans: Arc::new(RwLock::new(HashMap::new())),
+            connection_tests_in_flight: Arc::new(Mutex::new(HashSet::new())),
+            connection_tests_last_started: Arc::new(Mutex::new(HashMap::new())),
             library_mutation: Arc::new(Mutex::new(())),
             update_status: Arc::new(RwLock::new(None)),
             update_check: Arc::new(Mutex::new(())),

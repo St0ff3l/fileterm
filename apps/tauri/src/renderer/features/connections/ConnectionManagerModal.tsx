@@ -504,11 +504,13 @@ export function ConnectionManagerModal({
                   void handleEditProfile(node)
                 }}
               >
-                {openingProfileId === node.id ? (
-                  <span aria-hidden="true" className="button-spinner manager-action-spinner" />
-                ) : (
-                  <AppIcon name="edit" size={14} />
-                )}
+                <span aria-hidden="true" className="stable-button-icon">
+                  {openingProfileId === node.id ? (
+                    <span className="button-spinner manager-action-spinner" />
+                  ) : (
+                    <AppIcon name="edit" size={14} />
+                  )}
+                </span>
               </button>
             )}
             <button

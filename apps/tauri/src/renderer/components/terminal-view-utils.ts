@@ -90,6 +90,8 @@ export const LOCAL_TERMINAL_STARTUP_TRANSCRIPT = 'Starting local shell...\r\n'
 export const TERMINAL_WHEEL_ZOOM_THRESHOLD = 12
 export const TERMINAL_GESTURE_ZOOM_THRESHOLD = Math.log(1.08)
 
+const TERMINAL_TRANSCRIPT_RETAINED_THRESHOLD = TERMINAL_TRANSCRIPT_LIMIT - 20_000
+
 export type SplitPaneDirection = 'row' | 'column'
 
 export function splitPaneShortcutsForPlatform(platform: string | undefined) {
@@ -176,11 +178,61 @@ export function getShiftedTerminalInput(event: KeyboardEvent) {
 }
 
 export function trimTranscript(transcript: string) {
-  if (transcript.length <= TERMINAL_TRANSCRIPT_LIMIT) {
+  // The native session buffer is intentionally trimmed before it reaches the
+  // renderer. That means a 180k snapshot can already begin in the middle of a
+  // CSI/OSC sequence even though it is below the renderer's 200k limit. When
+  // replayed after a tab switch, xterm would then inherit a bogus parser/style
+  // state and TUI applications could render as a mostly blank/black screen.
+  // Start long snapshots at the next line/control boundary instead.
+  const requestedStart =
+    transcript.length > TERMINAL_TRANSCRIPT_LIMIT
+      ? transcript.length - TERMINAL_TRANSCRIPT_LIMIT
+      : transcript.length >= TERMINAL_TRANSCRIPT_RETAINED_THRESHOLD
+        ? 0
+        : -1
+  if (requestedStart < 0) {
     return transcript
   }
 
-  return transcript.slice(transcript.length - TERMINAL_TRANSCRIPT_LIMIT)
+  const safeStart = findTranscriptReplayBoundary(transcript, requestedStart)
+  return transcript.slice(safeStart)
+}
+
+function findTranscriptReplayBoundary(value: string, requestedStart: number) {
+  if (requestedStart < 0 || requestedStart >= value.length) {
+    return Math.max(0, requestedStart)
+  }
+
+  // A native snapshot may already start in the middle of a control sequence.
+  // Keep an existing escape/line boundary, but otherwise move forward to the
+  // next one instead of replaying a partial CSI/OSC prefix.
+  if (
+    (requestedStart === 0 && value[0] === '\u001b') ||
+    (requestedStart > 0 &&
+      (value[requestedStart] === '\u001b' || value[requestedStart - 1] === '\n' || value[requestedStart - 1] === '\r'))
+  ) {
+    return requestedStart
+  }
+
+  const nextEscape = value.indexOf('\u001b', requestedStart)
+  const nextLineFeed = value.indexOf('\n', requestedStart)
+  const nextCarriageReturn = value.indexOf('\r', requestedStart)
+  let safeStart = value.length
+
+  if (nextEscape >= 0) {
+    safeStart = Math.min(safeStart, nextEscape)
+  }
+  if (nextLineFeed >= 0) {
+    safeStart = Math.min(safeStart, nextLineFeed + 1)
+  }
+  if (nextCarriageReturn >= 0) {
+    safeStart = Math.min(safeStart, nextCarriageReturn + 1)
+  }
+
+  // A long transcript can contain one very long printable line. Keep the
+  // original limit in that uncommon case rather than discarding the whole
+  // snapshot when no parser-safe boundary exists.
+  return safeStart < value.length ? safeStart : requestedStart
 }
 
 /**
@@ -691,6 +743,26 @@ export function logTerminalZoom(terminal: Terminal, action: string, details: Rec
 
   console.info(`[TerminalView][zoom] ${action}`, {
     fontSize: terminal.options.fontSize,
+    ...details
+  })
+}
+
+export function logTerminalRender(terminal: Terminal, action: string, details: Record<string, unknown> = {}) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  const element = terminal.element
+  const rect = element?.getBoundingClientRect()
+  console.debug(`[TerminalView][render] ${action}`, {
+    cols: terminal.cols,
+    rows: terminal.rows,
+    bufferType: terminal.buffer.active.type,
+    bufferLength: terminal.buffer.active.length,
+    viewportY: terminal.buffer.active.viewportY,
+    elementConnected: Boolean(element?.isConnected),
+    elementWidth: rect ? Math.round(rect.width) : 0,
+    elementHeight: rect ? Math.round(rect.height) : 0,
     ...details
   })
 }

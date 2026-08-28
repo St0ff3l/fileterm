@@ -53,11 +53,14 @@ import type {
   AiStreamEvent,
   CreateAiConversationInput,
   CreateAiContextPreviewInput,
+  DeleteAiMessageInput,
   CreateProfileInput,
   ImportedFont,
   RenameAiConversationInput,
   RetryAiChatInput,
   SaveAiProviderInput,
+  SecuritySettings,
+  SecuritySettingsInput,
   SetAiContextAttachInput,
   SetAiCopilotModeInput,
   SetAiDangerousCommandRestrictionsInput,
@@ -393,6 +396,11 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     writeClipboardText: (text: string) => invoke<void>('app_write_clipboard_text', { text }),
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
+    getSecuritySettings: () => invoke<SecuritySettings>('app_get_security_settings'),
+    setSecuritySettings: (input: SecuritySettingsInput) =>
+      invoke<SecuritySettings>('app_set_security_settings', { input }),
+    verifySecurityPassword: (password: string) => invoke<boolean>('app_verify_security_password', { password }),
+    resetSecurityBackupPassword: () => invoke<SecuritySettings>('app_reset_security_backup_password'),
     listLocalTerminalShells: () => invoke<LocalTerminalShellOption[]>('app_list_local_terminal_shells'),
     getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
@@ -408,6 +416,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<AiConversation>('app_rename_ai_conversation', { input }),
     summarizeAiConversationTitle: (input: SummarizeAiConversationTitleInput) =>
       invoke<AiConversation>('app_summarize_ai_conversation_title', { input }),
+    deleteAiMessage: (input: DeleteAiMessageInput) => invoke<AiConversation>('app_delete_ai_message', { input }),
     deleteAiConversation: (conversationId: string) => invoke<void>('app_delete_ai_conversation', { conversationId }),
     getAiCopilotModeState: () => invoke<AiCopilotModeState>('app_get_ai_copilot_mode_state'),
     setAiCopilotMode: (input: SetAiCopilotModeInput) =>
@@ -607,6 +616,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<WorkspaceSnapshot>('app_workspace_mutation', { operation: 'create-command', payload: { input } }),
     updateProfile: (profileId: string, input: unknown) =>
       invoke<WorkspaceSnapshot>('app_update_profile', { profileId, input }),
+    clearTrustedHostFingerprint: (profileId: string) =>
+      invoke<WorkspaceSnapshot>('app_clear_trusted_host_fingerprint', { profileId }),
     testConnection: (input: CreateProfileInput, profileId?: string) =>
       invoke<void>('app_test_connection', { input, profileId: profileId ?? null }),
     deleteProfile: (profileId: string) => invoke<WorkspaceSnapshot>('app_delete_profile', { profileId }),
@@ -754,6 +765,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     getDroppedFilePaths: (files: File[]) => takeNativeDropPaths(files),
     onUiPreferencesChanged: (listener: (preferences: UiPreferences) => void) =>
       subscribe('app:ui-preferences-changed', listener),
+    onSecuritySettingsChanged: (listener: (settings: SecuritySettings) => void) =>
+      subscribe('app:security-settings-changed', listener),
     onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) =>
       subscribe('app:window-maximized-change', listener),
     onFileEditorCloseRequest: (listener: () => void) => subscribe('app:file-editor-close-request', listener),
@@ -765,7 +778,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) => subscribe('workspace:snapshot', listener),
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
-    onSshInteraction: (listener: (request: SshInteractionRequest) => void) => subscribe('ssh:interaction', listener),
+    onSshInteraction: (listener: (request: SshInteractionRequest) => void) =>
+      subscribeReady('ssh:interaction', listener),
     onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>
       subscribeReady('sudo:password-request', listener),
     onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>

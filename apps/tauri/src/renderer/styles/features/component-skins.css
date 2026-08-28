@@ -1237,6 +1237,8 @@
 :root[data-theme='default-dark'] .connection-form-window,
 :root[data-theme='default'] .connection-form-window {
   background: #1b1b1b;
+  border-radius: var(--window-corner-radius);
+  overflow: hidden;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal.standalone,
@@ -2322,7 +2324,8 @@
 :root[data-theme='default'] .manager-toolbar .primary-button {
   min-width: 120px;
   height: 36px;
-  padding: 0 20px;
+  min-height: 36px;
+  padding: 0 12px;
 }
 
 :root:not([data-theme]) .modal-backdrop,
@@ -2541,7 +2544,7 @@
 :root[data-theme='default-dark'] .command-dialog-body,
 :root[data-theme='default'] .command-dialog-body {
   /* Keep the form centered whether a native scrollbar is present or not. */
-  padding: 20px 24px 0 !important;
+  padding: 16px 20px 0 !important;
   scrollbar-gutter: stable both-edges;
 }
 
@@ -2582,9 +2585,9 @@
   border-radius: 4px !important;
   color: var(--text-main) !important;
   font-size: 14px !important;
-  min-height: 38px !important;
-  height: 38px !important;
-  padding: 0 14px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 0 12px !important;
   transition:
     border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -2622,7 +2625,7 @@
 :root[data-theme='default-dark'] .command-form-standalone-page textarea:not(.command-code-area textarea),
 :root[data-theme='default'] .command-form-standalone-page textarea:not(.command-code-area textarea) {
   height: auto !important;
-  padding: 12px 14px !important;
+  padding: 10px 12px !important;
 }
 
 /* Hover styles for inputs */
@@ -2740,8 +2743,8 @@
 :root[data-theme='default-dark'] .command-dialog-actions,
 :root[data-theme='default'] .command-dialog-actions {
   background: #1b1b1b !important;
-  margin: 20px -24px -20px -24px !important;
-  padding: 16px 24px !important;
+  margin: 14px -20px -16px -20px !important;
+  padding: 12px 20px !important;
   border-top: 1px solid var(--border-light) !important;
 }
 
@@ -2752,10 +2755,11 @@
   background: var(--bg-hover) !important;
   color: var(--text-main) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 8px !important;
-  height: 40px !important;
+  border-radius: var(--radius-md, 6px) !important;
+  min-height: 36px !important;
+  height: 36px !important;
   min-width: 92px !important;
-  padding: 0 16px !important;
+  padding: 0 12px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   cursor: pointer !important;
@@ -2777,10 +2781,11 @@
   background: var(--button-primary-bg) !important;
   color: var(--button-primary-text) !important;
   border: 1px solid var(--button-primary-border) !important;
-  border-radius: 8px !important;
-  height: 40px !important;
+  border-radius: var(--radius-md, 6px) !important;
+  min-height: 36px !important;
+  height: 36px !important;
   min-width: 92px !important;
-  padding: 0 16px !important;
+  padding: 0 12px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   cursor: pointer !important;
@@ -2903,7 +2908,8 @@
   height: 100% !important;
   min-height: 0 !important;
   border: 0 !important;
-  border-radius: 0 !important;
+  border-radius: var(--window-corner-radius) !important;
+  overflow: hidden !important;
   box-shadow: none !important;
 }
 
@@ -2958,7 +2964,7 @@
   background: var(--bg-hover) !important;
   color: var(--text-main) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 10px !important;
+  border-radius: var(--radius-md, 6px) !important;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal .form-actions .flat-button:hover,
@@ -2973,7 +2979,7 @@
   background: var(--button-primary-bg) !important;
   color: var(--button-primary-text) !important;
   border: 1px solid var(--button-primary-border) !important;
-  border-radius: 10px !important;
+  border-radius: var(--radius-md, 6px) !important;
 }
 
 :root:not([data-theme]) .modal-card.ssh-modal .form-actions .primary-button:hover,

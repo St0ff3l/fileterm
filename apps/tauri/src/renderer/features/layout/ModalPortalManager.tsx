@@ -44,6 +44,13 @@ export type ConfirmActionDialogBinding = ModalBinding<typeof ConfirmActionDialog
 export type FileEditorModalBinding = NonStandaloneModalBinding<typeof FileEditorModal>
 export type TabContextMenuBinding = ModalBinding<typeof TabContextMenu>
 
+export interface SshInteractionPortalProps {
+  sshCredentials: SshCredentialsModalBinding
+  sshHostVerification: SshHostVerificationModalBinding
+  sshKeyboardInteractive: SshKeyboardInteractiveModalBinding
+  sshKeyPassphrase: SshKeyPassphraseModalBinding
+}
+
 export type FileActionModalBinding =
   | {
       kind: 'delete'
@@ -55,7 +62,7 @@ export type FileActionModalBinding =
     }
   | null
 
-export interface ModalPortalManagerProps {
+export interface ModalPortalManagerProps extends SshInteractionPortalProps {
   commandManager: CommandManagerModalBinding
   connectionForm: ConnectionFormModalBinding
   connectionManager: ConnectionManagerModalBinding
@@ -68,14 +75,26 @@ export interface ModalPortalManagerProps {
   smbSharePicker: SmbSharePickerModalBinding
   settings: SettingsModalBinding
   shortcutCloseConfirm: ConfirmActionDialogBinding
-  sshCredentials: SshCredentialsModalBinding
-  sshHostVerification: SshHostVerificationModalBinding
-  sshKeyboardInteractive: SshKeyboardInteractiveModalBinding
-  sshKeyPassphrase: SshKeyPassphraseModalBinding
   backupPassword: BackupPasswordModalBinding
   sudoPasswordPrompt: SudoPasswordPromptModalBinding
   tabContextMenu?: TabContextMenuBinding
   windowCloseConfirm: ConfirmActionDialogBinding
+}
+
+export function SshInteractionPortal({
+  sshCredentials,
+  sshHostVerification,
+  sshKeyboardInteractive,
+  sshKeyPassphrase
+}: SshInteractionPortalProps) {
+  return (
+    <>
+      {sshCredentials ? <SshCredentialsModal {...sshCredentials} /> : null}
+      {sshHostVerification ? <SshHostVerificationModal {...sshHostVerification} /> : null}
+      {sshKeyboardInteractive ? <SshKeyboardInteractiveModal {...sshKeyboardInteractive} /> : null}
+      {sshKeyPassphrase ? <SshKeyPassphraseModal {...sshKeyPassphrase} /> : null}
+    </>
+  )
 }
 
 export function ModalPortalManager({
@@ -121,10 +140,12 @@ export function ModalPortalManager({
       {rootAccess ? <RootAccessModal {...rootAccess} /> : null}
       {smbCredentials ? <SmbCredentialsModal {...smbCredentials} /> : null}
       {smbSharePicker ? <SmbSharePickerModal {...smbSharePicker} /> : null}
-      {sshCredentials ? <SshCredentialsModal {...sshCredentials} /> : null}
-      {sshHostVerification ? <SshHostVerificationModal {...sshHostVerification} /> : null}
-      {sshKeyboardInteractive ? <SshKeyboardInteractiveModal {...sshKeyboardInteractive} /> : null}
-      {sshKeyPassphrase ? <SshKeyPassphraseModal {...sshKeyPassphrase} /> : null}
+      <SshInteractionPortal
+        sshCredentials={sshCredentials}
+        sshHostVerification={sshHostVerification}
+        sshKeyboardInteractive={sshKeyboardInteractive}
+        sshKeyPassphrase={sshKeyPassphrase}
+      />
       {backupPassword ? <BackupPasswordModal {...backupPassword} /> : null}
       {sudoPasswordPrompt ? <SudoPasswordPromptModal {...sudoPasswordPrompt} /> : null}
       {shortcutCloseConfirm ? <ConfirmActionDialog {...shortcutCloseConfirm} /> : null}

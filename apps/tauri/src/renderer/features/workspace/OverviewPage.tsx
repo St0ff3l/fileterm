@@ -38,8 +38,8 @@ export function OverviewPage({
     .slice(0, 6)
   const allProfiles = flattenConnectionProfiles(buildConnectionTree(profiles, folders).roots)
   const sshCount = profiles.filter((profile) => profile.type === 'ssh').length
+  const telnetCount = profiles.filter((profile) => profile.type === 'telnet').length
   const ftpCount = profiles.filter((profile) => profile.type === 'ftp').length
-  const secureFtpCount = profiles.filter((profile) => profile.type === 'ftp' && profile.secure).length
 
   const renderConnectionCard = (profile: ConnectionProfile) => (
     <div
@@ -107,12 +107,12 @@ export function OverviewPage({
             </div>
           </div>
           <div className="stat-card">
-            <div className="stat-icon stat-icon-sftp">
-              <span className="material-symbols-outlined">folder_open</span>
+            <div className="stat-icon stat-icon-telnet">
+              <span className="material-symbols-outlined">settings_ethernet</span>
             </div>
             <div className="stat-content">
-              <div className="stat-value">{secureFtpCount}</div>
-              <div className="stat-label">{t.overviewSecureFtpConnections}</div>
+              <div className="stat-value">{telnetCount}</div>
+              <div className="stat-label">{t.overviewTelnetConnections}</div>
             </div>
           </div>
           <div className="stat-card">

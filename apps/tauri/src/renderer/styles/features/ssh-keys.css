@@ -192,9 +192,10 @@
 
 .ssh-private-key-action-button {
   min-width: 112px;
-  height: 38px;
-  padding: 0 13px;
-  border-radius: 8px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md, 6px);
   font-family: var(--font-ui);
   font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
@@ -248,10 +249,10 @@
 
 .ssh-key-import-dialog .confirm-action-dialog__title {
   display: flex;
-  min-height: 48px;
+  min-height: 44px;
   align-items: center;
   box-sizing: border-box;
-  margin: calc(-1 * var(--ssh-key-dialog-padding)) calc(-1 * var(--ssh-key-dialog-padding)) 10px;
+  margin: calc(-1 * var(--ssh-key-dialog-padding)) calc(-1 * var(--ssh-key-dialog-padding)) 8px;
   padding: 0 16px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-sidebar);
@@ -273,13 +274,13 @@
 
 .ssh-key-import-dialog__form {
   display: grid;
-  gap: 20px;
-  margin-top: 4px;
+  gap: 14px;
+  margin-top: 2px;
 }
 
 .ssh-key-note-dialog__field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ssh-key-note-dialog__field > span {
@@ -292,8 +293,8 @@
 .ssh-key-note-dialog__field select,
 .ssh-key-note-dialog__field textarea {
   width: 100%;
-  min-height: 40px;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 6px 10px;
   border: 1px solid var(--border-light);
   border-radius: 8px;
   background: var(--bg-main);
@@ -337,7 +338,7 @@
 
 .ssh-key-import-dialog__source-switch button {
   display: inline-flex;
-  min-height: 32px;
+  min-height: 30px;
   align-items: center;
   gap: 6px;
   padding: 0 10px;
@@ -374,16 +375,16 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .ssh-key-import-dialog__file-name {
   display: flex;
   min-width: 0;
-  min-height: 40px;
+  min-height: 36px;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   overflow: hidden;
   border: 1px solid var(--border-light);
   border-radius: 8px;
@@ -411,17 +412,18 @@
 .ssh-key-import-dialog__file-row .ssh-key-import-dialog__file-button {
   display: inline-flex;
   min-width: 112px;
-  height: 40px;
+  min-height: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: var(--radius-md, 6px);
   background: var(--bg-hover);
   color: var(--text-main);
   font-family: var(--font-ui);
-  font-size: var(--button-font-size-prominent);
+  font-size: var(--button-font-size-regular);
   font-weight: var(--button-font-weight);
   line-height: var(--button-line-height);
   transition:

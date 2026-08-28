@@ -34,6 +34,7 @@ import {
   logTerminalZoom,
   looksLikeShellPrompt,
   localizeTerminalText,
+  logTerminalRender,
   PinchGestureEvent,
   splitOscPayload,
   stripHydratedTerminalResponses,
@@ -57,6 +58,7 @@ type TerminalResizeOptions = {
 type TerminalLifecycleOptions = {
   isMac: boolean
   isWin: boolean
+  isActive: boolean
   bootText: string
   hostRef: MutableRef<HTMLDivElement | null>
   setViewportElement(value: HTMLElement | null): void
@@ -86,6 +88,7 @@ type TerminalLifecycleOptions = {
   transcriptReplayGenerationRef: MutableRef<number>
   connectedRef: MutableRef<boolean>
   connectingRef: MutableRef<boolean>
+  isActiveRef: MutableRef<boolean>
   serialTransferBusyRef: MutableRef<boolean>
   lastSyncedSizeRef: MutableRef<TerminalSize | null>
   lastObservedHostRectRef: MutableRef<TerminalHostRect | null>
@@ -138,6 +141,7 @@ let terminalUnderPointer: Terminal | null = null
 export function useTerminalLifecycle({
   isMac,
   isWin,
+  isActive,
   bootText,
   hostRef,
   setViewportElement,
@@ -167,6 +171,7 @@ export function useTerminalLifecycle({
   transcriptReplayGenerationRef,
   connectedRef,
   connectingRef,
+  isActiveRef,
   serialTransferBusyRef,
   lastSyncedSizeRef,
   lastObservedHostRectRef,
@@ -326,10 +331,16 @@ export function useTerminalLifecycle({
       return changed
     }
     const markTerminalFocused = () => {
+      if (!isActiveRef.current) {
+        return
+      }
       lastFocusedTerminal = terminal
       logTerminalZoom(terminal, 'terminal-focused', { tabId: tabIdRef.current })
     }
     const markTerminalUnderPointer = () => {
+      if (!isActiveRef.current) {
+        return
+      }
       terminalUnderPointer = terminal
       logTerminalZoom(terminal, 'terminal-pointer-entered', { tabId: tabIdRef.current })
     }
@@ -729,6 +740,29 @@ export function useTerminalLifecycle({
     terminalRef.current = terminal
     searchAddonRef.current = searchAddon
 
+    // Ghostty invalidates its render state whenever the terminal switches
+    // between the normal and alternate screen. OpenCode, Claude Code, Vim,
+    // and similar TUIs rely on that screen heavily; keeping a stale WebView
+    // canvas/atlas after a tab activation can otherwise leave the terminal
+    // looking black until another external repaint occurs.
+    let renderedBufferType = terminal.buffer.active.type
+    const screenBufferRenderDisposable = terminal.onWriteParsed(() => {
+      const nextBufferType = terminal.buffer.active.type
+      if (nextBufferType === renderedBufferType) {
+        return
+      }
+
+      const previousBufferType = renderedBufferType
+      renderedBufferType = nextBufferType
+      terminal.clearTextureAtlas()
+      terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+      logTerminalRender(terminal, 'screen-buffer-switched', {
+        tabId: tabIdRef.current,
+        previousBufferType,
+        nextBufferType
+      })
+    })
+
     const searchResultsDisposable = searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
       setFindMatchCount(resultCount)
       setActiveFindIndex(resultIndex)
@@ -775,6 +809,9 @@ export function useTerminalLifecycle({
     }
 
     const scheduleResize = (force = false, freezeCols = false, preserveVisibleBuffer = false) => {
+      if (!isActiveRef.current) {
+        return
+      }
       pendingResizeForceRef.current = pendingResizeForceRef.current || force
       pendingResizeFreezeColsRef.current = pendingResizeFreezeColsRef.current || freezeCols
 
@@ -859,6 +896,9 @@ export function useTerminalLifecycle({
         responseWrite?.catch((error: unknown) => {
           console.debug('[TerminalView] startup terminal response was not accepted', error)
         })
+        return
+      }
+      if (!isActiveRef.current) {
         return
       }
       if (!data) {
@@ -962,6 +1002,14 @@ export function useTerminalLifecycle({
       if (event.target !== terminalTextarea) {
         return
       }
+      if (!isActiveRef.current) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        if (terminalTextarea) {
+          terminalTextarea.value = ''
+        }
+        return
+      }
 
       const inputEvent = event as InputEvent
       const data = inputEvent.data ?? ''
@@ -1014,6 +1062,13 @@ export function useTerminalLifecycle({
       }
     }
     const onTerminalInputAfterXterm = (event: Event) => {
+      if (!isActiveRef.current) {
+        pendingTerminalInputEvent = null
+        if (terminalTextarea) {
+          terminalTextarea.value = ''
+        }
+        return
+      }
       const inputEvent = event as InputEvent
       if (pendingTerminalInputEvent?.event !== inputEvent) {
         return
@@ -1264,6 +1319,9 @@ export function useTerminalLifecycle({
     }
 
     const isTerminalGestureTarget = (event: Event) => {
+      if (!isActiveRef.current) {
+        return false
+      }
       if (isEventInsideTerminal(event)) {
         return true
       }
@@ -1294,7 +1352,9 @@ export function useTerminalLifecycle({
     }
 
     const isTerminalShortcutTarget = (event: KeyboardEvent) =>
-      lastFocusedTerminal === terminal && (document.activeElement === terminalTextarea || isEventInsideTerminal(event))
+      isActiveRef.current &&
+      lastFocusedTerminal === terminal &&
+      (document.activeElement === terminalTextarea || isEventInsideTerminal(event))
 
     const onMouseDown = (event: MouseEvent) => {
       if (!isSecondaryButton(event)) {
@@ -1584,25 +1644,28 @@ export function useTerminalLifecycle({
     }
 
     const handleFocusTerminal = (targetTabId: string) => {
-      if (targetTabId && targetTabId !== tabIdRef.current) {
+      if (!isActiveRef.current || (targetTabId && targetTabId !== tabIdRef.current)) {
         return
       }
       markTerminalFocused()
       terminal.focus()
     }
     const handleTerminalCopy = () => {
-      if (lastFocusedTerminal !== terminal) {
+      if (!isActiveRef.current || lastFocusedTerminal !== terminal) {
         return
       }
       runCopy()
     }
     const handleTerminalPaste = () => {
-      if (lastFocusedTerminal !== terminal) {
+      if (!isActiveRef.current || lastFocusedTerminal !== terminal) {
         return
       }
       void runPaste()
     }
     const handleTerminalFind = () => {
+      if (!isActiveRef.current) {
+        return
+      }
       if (findOpenRef.current) {
         closeFind()
       } else {
@@ -1610,7 +1673,7 @@ export function useTerminalLifecycle({
       }
     }
     const handleTerminalZoom = (operation: TerminalZoomOperation) => {
-      if (lastFocusedTerminal !== terminal) {
+      if (!isActiveRef.current || lastFocusedTerminal !== terminal) {
         logTerminalZoom(terminal, 'native-zoom-request-ignored-not-focused', {
           operation,
           tabId: tabIdRef.current
@@ -1621,7 +1684,7 @@ export function useTerminalLifecycle({
       applyTerminalZoom(operation, 'menu')
     }
     const handleTerminalGestureZoom = (operation: TerminalZoomOperation) => {
-      if (terminalUnderPointer !== terminal) {
+      if (!isActiveRef.current || terminalUnderPointer !== terminal) {
         logTerminalZoom(terminal, 'native-gesture-zoom-ignored-not-hovered', {
           operation,
           hoveredTerminal: terminalUnderPointer === null ? null : 'another-terminal'
@@ -1734,6 +1797,7 @@ export function useTerminalLifecycle({
       pendingTerminalInputEvent = null
       recentTerminalKeydowns.length = 0
       suppressedTerminalKeydowns.length = 0
+      screenBufferRenderDisposable.dispose()
       document.removeEventListener('contextmenu', onDocumentContextMenu, true)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keyup', onKeyUp, true)
@@ -1755,4 +1819,28 @@ export function useTerminalLifecycle({
       terminal.dispose()
     }
   }, [isMac])
+
+  // A kept-alive terminal must not retain focus after its workspace is hidden.
+  // Otherwise the hidden xterm textarea can continue to receive keyboard input
+  // and remain the global shortcut owner while another tab is visible.
+  useEffect(() => {
+    if (isActive) {
+      return
+    }
+
+    const terminal = terminalRef.current
+    if (!terminal) {
+      return
+    }
+
+    if (document.activeElement === terminal.textarea) {
+      terminal.blur()
+    }
+    if (lastFocusedTerminal === terminal) {
+      lastFocusedTerminal = null
+    }
+    if (terminalUnderPointer === terminal) {
+      terminalUnderPointer = null
+    }
+  }, [isActive, terminalRef])
 }

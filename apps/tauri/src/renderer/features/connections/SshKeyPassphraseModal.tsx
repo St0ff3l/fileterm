@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { SshKeyPassphrasePromptRequest } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 
 export function SshKeyPassphraseModal({
   errorMessage,
@@ -67,9 +68,14 @@ export function SshKeyPassphraseModal({
           <button className="flat-button" disabled={isSubmitting} onClick={onCancel} type="button">
             {t.cancel}
           </button>
-          <button className="primary-button" disabled={!passphrase || isSubmitting} onClick={submit} type="button">
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.sshKeyPassphraseContinue}</span>
+          <button
+            aria-busy={isSubmitting}
+            className="primary-button"
+            disabled={!passphrase || isSubmitting}
+            onClick={submit}
+            type="button"
+          >
+            <StableButtonContent busy={isSubmitting} label={t.sshKeyPassphraseContinue} />
           </button>
         </div>
       </div>

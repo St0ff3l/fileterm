@@ -35,8 +35,8 @@
   --accent-text: #c8d0da;
   --sidebar-active-accent: #ffffff;
   --selection-bg: #383f48;
-  --copy-link: #38bdf8;
-  --copy-link-hover: #7dd3fc;
+  --copy-link: #65a9ff;
+  --copy-link-hover: #8bbfff;
   --folder-accent: #65a9ff;
   --kernel-accent: #65a9ff;
   --mini-tab-active-bg: #294366;
@@ -118,6 +118,8 @@
   --type-total-surface: rgba(96, 165, 250, 0.15);
   --type-ssh: #34d399;
   --type-ssh-surface: rgba(52, 211, 153, 0.15);
+  --type-telnet: #38bdf8;
+  --type-telnet-surface: rgba(56, 189, 248, 0.15);
   --type-sftp: #38bdf8;
   --type-sftp-surface: rgba(56, 189, 248, 0.15);
   --type-ftp: #c084fc;

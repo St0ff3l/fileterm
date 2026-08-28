@@ -177,6 +177,12 @@ jobs:
       - name: Package signed Windows installer and updater signature
         run: npm run release:win -w @fileterm/tauri
 
+      - name: Package self-identifying portable Windows executable
+        shell: pwsh
+        env:
+          FILETERM_PORTABLE_BUILD: '1'
+        run: npm run release:win:portable -w @fileterm/tauri
+
       - name: Normalize Windows installer artifact names
         shell: pwsh
         run: |

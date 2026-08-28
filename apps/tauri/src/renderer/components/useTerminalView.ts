@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
@@ -16,6 +16,7 @@ import {
 import {
   getVimVisualSelection,
   logTerminalClipboard,
+  logTerminalRender,
   normalizeLocalTerminalStartupTranscript,
   splitPaneShortcutsForPlatform,
   toDisplayTerminalText,
@@ -104,6 +105,7 @@ export function useTerminalView({
   // tab from swallowing keystrokes after this tab is brought back.
   const connectedRef = useRef(Boolean(connected))
   const connectingRef = useRef(Boolean(connecting))
+  const isActiveRef = useRef(Boolean(isActive))
   const serialTransferBusyRef = useRef(false)
   const lastSyncedSizeRef = useRef<{ cols: number; rows: number; width: number; height: number } | null>(null)
   const lastObservedHostRectRef = useRef<{
@@ -135,6 +137,7 @@ export function useTerminalView({
   tabIdRef.current = tabId
   connectedRef.current = Boolean(connected)
   connectingRef.current = Boolean(connecting)
+  isActiveRef.current = Boolean(isActive)
   onStatusRef.current = onStatus
   onReconnectRef.current = onReconnect
   closedMessageRef.current = closedMessage
@@ -541,14 +544,30 @@ export function useTerminalView({
     replayingTranscriptRef.current = true
     terminal.reset()
     const replayText = formatTerminalChunk(terminal, renderedTranscriptRef.current)
+    logTerminalRender(terminal, 'transcript-replay-start', {
+      tabId: tabIdRef.current,
+      replayGeneration,
+      transcriptLength: renderedTranscriptRef.current.length,
+      replayLength: replayText.length
+    })
     if (replayText) {
       terminal.write(replayText, () => {
         if (transcriptReplayGenerationRef.current === replayGeneration) {
           replayingTranscriptRef.current = false
         }
+        logTerminalRender(terminal, 'transcript-replay-complete', {
+          tabId: tabIdRef.current,
+          replayGeneration,
+          currentReplayGeneration: transcriptReplayGenerationRef.current
+        })
       })
     } else {
       replayingTranscriptRef.current = false
+      logTerminalRender(terminal, 'transcript-replay-complete', {
+        tabId: tabIdRef.current,
+        replayGeneration,
+        currentReplayGeneration: transcriptReplayGenerationRef.current
+      })
     }
     suppressHydratedChunksUntilRef.current = Date.now() + 1500
   }
@@ -581,72 +600,114 @@ export function useTerminalView({
     return true
   }
 
-  const syncTerminalSize = (
-    fitAddon: FitAddon,
-    terminal: Terminal,
-    options: {
-      force?: boolean
-      freezeCols?: boolean
-      preserveVisibleBuffer?: boolean
-    } = {}
-  ) => {
-    const { force = false, freezeCols = false } = options
-    const host = hostRef.current
-    if (!host) {
-      return
-    }
+  const syncTerminalSize = useCallback(
+    (
+      fitAddon: FitAddon,
+      terminal: Terminal,
+      options: {
+        force?: boolean
+        freezeCols?: boolean
+        preserveVisibleBuffer?: boolean
+      } = {}
+    ) => {
+      const { force = false, freezeCols = false } = options
+      const host = hostRef.current
+      if (!host) {
+        return
+      }
 
-    const { width, height } = host.getBoundingClientRect()
-    if (width <= 0 || height <= 0) {
-      return
-    }
+      const { width, height } = host.getBoundingClientRect()
+      if (width <= 0 || height <= 0) {
+        return
+      }
 
-    const proposed = fitAddon.proposeDimensions()
-    if (!proposed) {
-      return
-    }
+      const proposed = fitAddon.proposeDimensions()
+      if (!proposed) {
+        return
+      }
 
-    const displayCols = Math.max(1, proposed.cols)
-    const rows = Math.max(1, proposed.rows - TERMINAL_FIT_GUARD_ROWS)
-    const previousSize = lastSyncedSizeRef.current
-    const liveCols = Math.max(1, displayCols - TERMINAL_REMOTE_GUARD_COLS)
-    const cols = freezeCols && previousSize ? previousSize.cols : liveCols
-    if (terminal.cols !== cols || terminal.rows !== rows) {
-      terminal.resize(cols, rows)
+      const displayCols = Math.max(1, proposed.cols)
+      const rows = Math.max(1, proposed.rows - TERMINAL_FIT_GUARD_ROWS)
+      const previousSize = lastSyncedSizeRef.current
+      const liveCols = Math.max(1, displayCols - TERMINAL_REMOTE_GUARD_COLS)
+      const cols = freezeCols && previousSize ? previousSize.cols : liveCols
+      if (terminal.cols !== cols || terminal.rows !== rows) {
+        terminal.resize(cols, rows)
+        terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+      }
+
+      const nextSize = {
+        cols: terminal.cols,
+        rows: terminal.rows,
+        width: Math.floor(width),
+        height: Math.floor(height)
+      }
+      const remoteGridChanged =
+        !previousSize || previousSize.cols !== nextSize.cols || previousSize.rows !== nextSize.rows
+      if (
+        !force &&
+        previousSize &&
+        previousSize.cols === nextSize.cols &&
+        previousSize.rows === nextSize.rows &&
+        Math.abs(previousSize.width - nextSize.width) <= TERMINAL_RESIZE_PIXEL_EPSILON &&
+        Math.abs(previousSize.height - nextSize.height) <= TERMINAL_RESIZE_PIXEL_EPSILON
+      ) {
+        return
+      }
+      lastSyncedSizeRef.current = nextSize
+      if (!remoteGridChanged) {
+        return
+      }
+
+      void window.fileterm?.resizeTerminal(
+        tabIdRef.current,
+        nextSize.cols,
+        nextSize.rows,
+        nextSize.width,
+        nextSize.height
+      )
+    },
+    []
+  )
+
+  const recoverTerminalRender = useCallback(
+    (reason: 'activation') => {
+      // A tab can become hidden again between the two activation animation
+      // frames. Do not let a stale recovery clear, resize, or focus that
+      // terminal after a rapid tab switch.
+      if (!isActiveRef.current) {
+        return
+      }
+
+      const terminal = terminalRef.current
+      const fitAddon = fitAddonRef.current
+      const host = hostRef.current
+      if (!terminal || !fitAddon || !host) {
+        return
+      }
+
+      const { width, height } = host.getBoundingClientRect()
+      if (width <= 0 || height <= 0) {
+        logTerminalRender(terminal, 'recovery-skipped-zero-host', {
+          tabId: tabIdRef.current,
+          reason,
+          hostWidth: Math.round(width),
+          hostHeight: Math.round(height)
+        })
+        return
+      }
+
+      terminal.clearTextureAtlas()
+      syncTerminalSize(fitAddon, terminal, { force: true })
+      if (!isActiveRef.current) {
+        return
+      }
       terminal.refresh(0, Math.max(terminal.rows - 1, 0))
-    }
-
-    const nextSize = {
-      cols: terminal.cols,
-      rows: terminal.rows,
-      width: Math.floor(width),
-      height: Math.floor(height)
-    }
-    const remoteGridChanged =
-      !previousSize || previousSize.cols !== nextSize.cols || previousSize.rows !== nextSize.rows
-    if (
-      !force &&
-      previousSize &&
-      previousSize.cols === nextSize.cols &&
-      previousSize.rows === nextSize.rows &&
-      Math.abs(previousSize.width - nextSize.width) <= TERMINAL_RESIZE_PIXEL_EPSILON &&
-      Math.abs(previousSize.height - nextSize.height) <= TERMINAL_RESIZE_PIXEL_EPSILON
-    ) {
-      return
-    }
-    lastSyncedSizeRef.current = nextSize
-    if (!remoteGridChanged) {
-      return
-    }
-
-    void window.fileterm?.resizeTerminal(
-      tabIdRef.current,
-      nextSize.cols,
-      nextSize.rows,
-      nextSize.width,
-      nextSize.height
-    )
-  }
+      terminal.focus()
+      logTerminalRender(terminal, 'recovery-complete', { tabId: tabIdRef.current, reason })
+    },
+    [syncTerminalSize]
+  )
 
   const applyTerminalFontSize = (fontSize: number) => {
     const terminal = terminalRef.current
@@ -674,6 +735,7 @@ export function useTerminalView({
   useTerminalLifecycle({
     isMac,
     isWin,
+    isActive,
     bootText: hydratedBootText,
     hostRef,
     setViewportElement,
@@ -703,6 +765,7 @@ export function useTerminalView({
     transcriptReplayGenerationRef,
     connectedRef,
     connectingRef,
+    isActiveRef,
     serialTransferBusyRef,
     lastSyncedSizeRef,
     lastObservedHostRectRef,
@@ -750,12 +813,22 @@ export function useTerminalView({
   })
 
   useEffect(() => {
-    if (isActive) {
-      window.requestAnimationFrame(() => {
-        terminalRef.current?.focus()
-      })
+    if (!isActive) {
+      return
     }
-  }, [isActive])
+
+    let secondFrame: number | null = null
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => recoverTerminalRender('activation'))
+    })
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (secondFrame !== null) {
+        window.cancelAnimationFrame(secondFrame)
+      }
+    }
+  }, [isActive, recoverTerminalRender])
 
   useEffect(() => {
     bootTextRef.current = hydratedBootText

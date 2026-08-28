@@ -149,7 +149,12 @@ export function SystemSidebar({
               <AddressLine label={t.privateIp} value={internalIp} />
               <AddressLine label={t.accessAddress} value={accessAddress} />
             </div>
-            <button className="system-title" onClick={onOpenSystemInfo} type="button">
+            <button
+              className="system-title"
+              data-file-panel-snap-target="system-title"
+              onClick={onOpenSystemInfo}
+              type="button"
+            >
               {t.systemInfo}
             </button>
             <ResourceMetricCards
@@ -166,7 +171,7 @@ export function SystemSidebar({
             {visibleMetrics.includes('network') ? <NetworkMetricPanel metrics={metrics} /> : null}
           </section>
           <section className="disk-table">
-            <div className="disk-head">
+            <div className="disk-head" data-file-panel-snap-target="disk-header">
               <span>{t.path}</span>
               <span>{t.availableSize}</span>
             </div>
@@ -298,7 +303,7 @@ function ProcessMetricPanel({
 }) {
   return (
     <div className="system-process-panel">
-      <div className="mini-tabs">
+      <div className="mini-tabs" data-file-panel-snap-target="process-tabs">
         <span className={sortMode === 'memory' ? 'active' : ''} onClick={() => onSortModeChange('memory')}>
           {t.memory}
         </span>
@@ -1084,7 +1089,7 @@ function NetworkPanel({ metrics }: { metrics?: SystemMetrics }) {
 
   return (
     <>
-      <div className="network-panel">
+      <div className="network-panel" data-file-panel-snap-target="network-panel">
         <div className="network-rates">
           <span className="network-rate up">
             <i>

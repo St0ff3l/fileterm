@@ -109,6 +109,8 @@
   --type-total-surface: rgba(37, 99, 235, 0.1);
   --type-ssh: #059669;
   --type-ssh-surface: rgba(5, 150, 105, 0.1);
+  --type-telnet: #0284c7;
+  --type-telnet-surface: rgba(2, 132, 199, 0.1);
   --type-sftp: #0284c7;
   --type-sftp-surface: rgba(2, 132, 199, 0.1);
   --type-ftp: #9333ea;

@@ -140,6 +140,15 @@
   opacity: 0.5;
 }
 
+.serial-transfer-panel__cancel-slot {
+  display: inline-flex;
+  visibility: hidden;
+}
+
+.serial-transfer-panel__cancel-slot.is-visible {
+  visibility: visible;
+}
+
 .serial-transfer-panel label {
   display: inline-flex;
   align-items: center;

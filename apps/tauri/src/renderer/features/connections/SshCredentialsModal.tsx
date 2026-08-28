@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SshCredentialsPromptRequest } from '@fileterm/core'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 export function SshCredentialsModal({
@@ -77,13 +78,13 @@ export function SshCredentialsModal({
             {t.cancel}
           </button>
           <button
+            aria-busy={isSubmitting}
             className="primary-button"
             disabled={isSubmitting}
             onClick={() => onSubmit({ username, password })}
             type="button"
           >
-            {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.sshAuthPromptConfirm}</span>
+            <StableButtonContent busy={isSubmitting} label={t.sshAuthPromptConfirm} />
           </button>
         </div>
       </div>

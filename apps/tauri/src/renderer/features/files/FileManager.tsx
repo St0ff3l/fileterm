@@ -31,6 +31,7 @@ import {
 import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon, type AppIconName } from '../common/AppIcon'
+import { StableButtonLabel } from '../common/StableButtonContent'
 import { WorkspaceLoadingState } from '../common/WorkspaceLoadingState'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
@@ -876,7 +877,10 @@ export function FileManager({
                 type="button"
                 onClick={onToggleRemoteFileAccessMode}
               >
-                {remoteFileAccessMode === 'root' ? activeSession.sudoUser || 'root' : 'user'}
+                <StableButtonLabel
+                  label={remoteFileAccessMode === 'root' ? activeSession.sudoUser || 'root' : 'user'}
+                  reserveLabel={remoteFileAccessMode === 'root' ? 'user' : activeSession.sudoUser || 'root'}
+                />
               </button>
             ) : null}
             <button

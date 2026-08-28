@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_SSH_CONNECTION_DEFAULTS,
   DEFAULT_LOCAL_TERMINAL_SHELLS,
@@ -38,12 +38,36 @@ import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { FeedbackText } from '../common/FeedbackText'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
+import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
+import { waitForMinimumBusyDuration } from '../common/operation-timing'
+import { SecuritySettingsPanel } from '../security/SecuritySettingsPanel'
 
 type SettingsTab =
-  'ai' | 'agent' | 'connections' | 'interface' | 'local-terminal' | 'sync' | 'tools' | 'updates' | 'system' | 'language'
+  | 'ai'
+  | 'agent'
+  | 'connections'
+  | 'interface'
+  | 'local-terminal'
+  | 'security'
+  | 'sync'
+  | 'tools'
+  | 'updates'
+  | 'system'
+  | 'language'
+
+type SyncFeedback = {
+  kind: 'success' | 'error'
+  message: string
+}
+
+type AiFeedback = {
+  kind: 'success' | 'error'
+  message: string
+}
 
 type SettingsSidebarItem = {
   tab: SettingsTab
@@ -58,6 +82,7 @@ const SETTINGS_SIDEBAR_ITEMS: SettingsSidebarItem[] = [
   { tab: 'ai', labelKey: 'aiSettings', materialIcon: 'auto_awesome' },
   { tab: 'agent', labelKey: 'agentMcpSettings', appIcon: 'terminal-file' },
   { tab: 'connections', labelKey: 'connectionDefaults', materialIcon: 'settings_ethernet' },
+  { tab: 'security', labelKey: 'securitySettings', appIcon: 'shield-check' },
   { tab: 'sync', labelKey: 'configSync', materialIcon: 'cloud_sync' },
   { tab: 'updates', labelKey: 'appUpdates', materialIcon: 'system_update' },
   { tab: 'tools', labelKey: 'managerToolsShortcut', materialIcon: 'apps' },
@@ -71,6 +96,7 @@ const SETTINGS_TAB_SEARCH_TERMS: Record<SettingsTab, string> = {
   ai: 'ai provider model api key openai anthropic 模型 服务 密钥',
   agent: 'agent mcp cli command tool automation 代理 命令 工具',
   connections: 'connection ssh sftp ftp telnet reconnect resource monitor 连接 默认值 重连 监控',
+  security: 'security session lock password backup credentials safe 安全 会话 锁屏 密码 备份 凭据',
   sync: 'sync webdav s3 backup cloud configuration 同步 备份 云端',
   updates: 'update release version beta stable 更新 版本 发布',
   tools: 'manager connection command key shortcut 管理器 连接 命令 密钥 快捷键',
@@ -182,16 +208,18 @@ const THEME_PRESETS: Array<{
 ]
 
 function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESETS)[number] | undefined {
+  if (!themeConfig) return undefined
+  const normalizedTheme = normalizeThemeConfig(themeConfig, themeConfig.variant ?? 'dark')
   return THEME_PRESETS.find((preset) => {
-    const candidate = preset.config[themeConfig.variant]
+    const candidate = preset.config[normalizedTheme.variant]
     const matchesId =
       preset.id === 'fileterm'
-        ? themeConfig.codeThemeId === 'fileterm' ||
-          themeConfig.codeThemeId === 'fileterm-dark' ||
-          themeConfig.codeThemeId === 'fileterm-light'
-        : themeConfig.codeThemeId === 'codex' ||
-          themeConfig.codeThemeId === 'codex-dark' ||
-          themeConfig.codeThemeId === 'codex-light'
+        ? normalizedTheme.codeThemeId === 'fileterm' ||
+          normalizedTheme.codeThemeId === 'fileterm-dark' ||
+          normalizedTheme.codeThemeId === 'fileterm-light'
+        : normalizedTheme.codeThemeId === 'codex' ||
+          normalizedTheme.codeThemeId === 'codex-dark' ||
+          normalizedTheme.codeThemeId === 'codex-light'
     if (!matchesId) return false
     const colorValues = [
       candidate.theme.accent,
@@ -201,31 +229,41 @@ function findMatchingThemePreset(themeConfig: ThemeConfig): (typeof THEME_PRESET
       candidate.theme.ink,
       candidate.theme.semanticColors.secondary,
       candidate.theme.semanticColors.textSecondary,
-      candidate.theme.semanticColors.sftp,
+      candidate.theme.semanticColors.total,
+      candidate.theme.semanticColors.telnet,
       candidate.theme.semanticColors.ftp,
+      candidate.theme.semanticColors.networkRx,
+      candidate.theme.semanticColors.networkTx,
       candidate.theme.semanticColors.info,
       candidate.theme.semanticColors.warning,
       candidate.theme.semanticColors.error,
       candidate.theme.semanticColors.success
     ]
     const themeColorValues = [
-      themeConfig.theme.accent,
-      themeConfig.theme.surface,
-      themeConfig.theme.surfaceSecondary,
-      themeConfig.theme.surfaceElevated,
-      themeConfig.theme.ink,
-      themeConfig.theme.semanticColors.secondary,
-      themeConfig.theme.semanticColors.textSecondary,
-      themeConfig.theme.semanticColors.sftp,
-      themeConfig.theme.semanticColors.ftp,
-      themeConfig.theme.semanticColors.info,
-      themeConfig.theme.semanticColors.warning,
-      themeConfig.theme.semanticColors.error,
-      themeConfig.theme.semanticColors.success
+      normalizedTheme.theme.accent,
+      normalizedTheme.theme.surface,
+      normalizedTheme.theme.surfaceSecondary,
+      normalizedTheme.theme.surfaceElevated,
+      normalizedTheme.theme.ink,
+      normalizedTheme.theme.semanticColors.secondary,
+      normalizedTheme.theme.semanticColors.textSecondary,
+      normalizedTheme.theme.semanticColors.total,
+      normalizedTheme.theme.semanticColors.telnet,
+      normalizedTheme.theme.semanticColors.ftp,
+      normalizedTheme.theme.semanticColors.networkRx,
+      normalizedTheme.theme.semanticColors.networkTx,
+      normalizedTheme.theme.semanticColors.info,
+      normalizedTheme.theme.semanticColors.warning,
+      normalizedTheme.theme.semanticColors.error,
+      normalizedTheme.theme.semanticColors.success
     ]
     return (
-      colorValues.every((value, index) => value.toUpperCase() === themeColorValues[index].toUpperCase()) &&
-      candidate.theme.contrast === themeConfig.theme.contrast
+      colorValues.every(
+        (value, index) =>
+          typeof value === 'string' &&
+          typeof themeColorValues[index] === 'string' &&
+          value.toUpperCase() === themeColorValues[index].toUpperCase()
+      ) && candidate.theme.contrast === normalizedTheme.theme.contrast
     )
   })
 }
@@ -235,8 +273,10 @@ function sameThemeConfig(left: ThemeConfig, right: ThemeConfig) {
 }
 
 function findSavedThemeForConfig(savedThemes: SavedTheme[], themeConfig: ThemeConfig) {
+  if (!themeConfig) return undefined
+  const normalizedTheme = normalizeThemeConfig(themeConfig, themeConfig.variant ?? 'dark')
   return savedThemes.find((candidate) =>
-    sameThemeConfig(getSavedThemeConfig(candidate, themeConfig.variant), themeConfig)
+    sameThemeConfig(getSavedThemeConfig(candidate, normalizedTheme.variant), normalizedTheme)
   )
 }
 
@@ -250,7 +290,8 @@ function createCustomThemeId() {
   return `custom-${randomId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`
 }
 
-function toColorInputValue(value: string) {
+function toColorInputValue(value: unknown) {
+  if (typeof value !== 'string') return '#000000'
   const normalized = value.trim()
   if (/^#[\da-f]{6}$/i.test(normalized)) return normalized
   if (/^#[\da-f]{8}$/i.test(normalized)) return normalized.slice(0, 7)
@@ -271,12 +312,21 @@ function toColorInputValue(value: string) {
   return '#000000'
 }
 
-function ThemeColorField({ label, value, onChange }: { label: string; value: string; onChange(value: string): void }) {
-  const [draft, setDraft] = useState(value)
+function ThemeColorField({
+  label,
+  value,
+  onChange
+}: {
+  label: string
+  value: string | undefined | null
+  onChange(value: string): void
+}) {
+  const safeValue = typeof value === 'string' ? value : '#000000'
+  const [draft, setDraft] = useState(safeValue)
 
   useEffect(() => {
-    setDraft(value)
-  }, [value])
+    setDraft(safeValue)
+  }, [safeValue])
 
   return (
     <label className="theme-color-field">
@@ -287,14 +337,14 @@ function ThemeColorField({ label, value, onChange }: { label: string; value: str
           className="theme-color-picker"
           onChange={(event) => onChange(event.target.value.toUpperCase())}
           type="color"
-          value={toColorInputValue(value)}
+          value={toColorInputValue(safeValue)}
         />
         <input
           aria-label={`${label} HEX`}
           className="theme-color-text"
-          onBlur={() => setDraft(value)}
+          onBlur={() => setDraft(safeValue)}
           onChange={(event) => {
-            const nextValue = event.target.value
+            const nextValue = event.target.value ?? ''
             setDraft(nextValue)
             if (THEME_HEX_COLOR_PATTERN.test(nextValue.trim())) {
               onChange(nextValue.trim().toUpperCase())
@@ -604,7 +654,10 @@ export function SettingsModal({
   const [fontToDelete, setFontToDelete] = useState<ImportedFont | null>(null)
   const [themeConfigOperation, setThemeConfigOperation] = useState<'import' | 'copy' | null>(null)
   const themeConfigOperationRef = useRef<typeof themeConfigOperation>(null)
-  const [themeConfigMessage, setThemeConfigMessage] = useState<string | null>(null)
+  const [themeConfigMessage, setThemeConfigMessage] = useState<{
+    text: string
+    kind: 'success' | 'error' | 'warning'
+  } | null>(null)
   const [customThemeName, setCustomThemeName] = useState('')
   const [editingCustomThemeId, setEditingCustomThemeId] = useState<string | null>(null)
   const [showDeleteThemeConfirm, setShowDeleteThemeConfirm] = useState(false)
@@ -634,10 +687,12 @@ export function SettingsModal({
   const [overviewPreferenceError, setOverviewPreferenceError] = useState<string | null>(null)
   const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
   const [syncPassword, setSyncPassword] = useState('')
-  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [syncFeedback, setSyncFeedback] = useState<SyncFeedback | null>(null)
+  const [securityNotice, setSecurityNotice] = useState<string | null>(null)
+  const [securityFocusRequest, setSecurityFocusRequest] = useState(0)
   const [s3Config, setS3Config] = useState<S3BackupConfig | null>(null)
   const [s3SecretAccessKey, setS3SecretAccessKey] = useState('')
-  const [s3Message, setS3Message] = useState<string | null>(null)
+  const [s3Feedback, setS3Feedback] = useState<SyncFeedback | null>(null)
   const [backupUploadMode, setBackupUploadMode] = useState<BackupUploadMode>('overwrite-cloud')
   const [backupDownloadMode, setBackupDownloadMode] = useState<BackupDownloadMode>('merge-local')
   const [aiProviders, setAiProviders] = useState<AiProviderSummary[]>([])
@@ -652,7 +707,7 @@ export function SettingsModal({
   const [customModelText, setCustomModelText] = useState('')
   const [aiApiKey, setAiApiKey] = useState('')
   const [clearAiApiKey, setClearAiApiKey] = useState(false)
-  const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const [aiMessage, setAiMessage] = useState<AiFeedback | null>(null)
   const [aiOperation, setAiOperation] = useState<'load' | 'save' | 'test' | 'delete' | null>(null)
   // React's disabled state is applied on the next render. Keep a synchronous
   // guard as well so rapid clicks cannot submit the same AI operation twice.
@@ -703,7 +758,8 @@ export function SettingsModal({
           entries.filter((entry): entry is { font: ImportedFont; dataUrl: string } => entry !== null)
         )
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
+        console.error('[FileTerm] 加载导入字体', cause)
         if (!canceled) setFontImportError(t.themeFontImportFailed)
       })
 
@@ -845,6 +901,8 @@ export function SettingsModal({
   useEffect(() => {
     if (activeTab !== 'sync' || !desktopApi) return
     if (syncOperationRef.current) return
+    setSyncFeedback(null)
+    setS3Feedback(null)
     syncOperationRef.current = 'load'
     setSyncOperation('load')
     void desktopApi
@@ -853,7 +911,9 @@ export function SettingsModal({
         setSyncConfig(webDavConfig)
         setS3Config(await desktopApi.getS3BackupConfig())
       })
-      .catch((error: unknown) => setSyncMessage(error instanceof Error ? error.message : String(error)))
+      .catch((error: unknown) =>
+        setSyncFeedback({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
+      )
       .finally(() => {
         if (syncOperationRef.current === 'load') {
           syncOperationRef.current = null
@@ -861,6 +921,18 @@ export function SettingsModal({
         }
       })
   }, [activeTab, desktopApi])
+
+  const openSecuritySettings = (focusBackupPassword = false) => {
+    setSecurityNotice(focusBackupPassword ? t.securityBackupPasswordRequired : null)
+    if (focusBackupPassword) {
+      setSecurityFocusRequest((current) => current + 1)
+    }
+    setActiveTab('security')
+  }
+
+  const handleSecurityBackupPasswordFocusHandled = useCallback(() => {
+    setSecurityFocusRequest(0)
+  }, [])
 
   useEffect(() => {
     if (activeTab !== 'agent') return
@@ -894,7 +966,7 @@ export function SettingsModal({
   useEffect(() => {
     if (activeTab !== 'ai') return
     if (!desktopApi) {
-      setAiMessage(t.aiSettingsDesktopOnly)
+      setAiMessage({ kind: 'error', message: t.aiSettingsDesktopOnly })
       return
     }
 
@@ -914,7 +986,7 @@ export function SettingsModal({
       })
       .catch((error: unknown) => {
         if (!canceled) {
-          setAiMessage(error instanceof Error ? error.message : String(error))
+          setAiMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
         }
       })
       .finally(() => {
@@ -935,23 +1007,27 @@ export function SettingsModal({
     action: () => Promise<void>
   ) => {
     if (syncOperationRef.current) return
+    const operationStartedAt = performance.now()
     syncOperationRef.current = operation
     setSyncOperation(operation)
     if (operation.startsWith('s3-')) {
-      setS3Message(null)
+      setS3Feedback(null)
     } else {
-      setSyncMessage(null)
+      setSyncFeedback(null)
     }
     try {
       await action()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (operation.startsWith('s3-')) {
-        setS3Message(message)
+      if (message.includes('SECURITY_BACKUP_PASSWORD_REQUIRED')) {
+        openSecuritySettings(true)
+      } else if (operation.startsWith('s3-')) {
+        setS3Feedback({ kind: 'error', message })
       } else {
-        setSyncMessage(message)
+        setSyncFeedback({ kind: 'error', message })
       }
     } finally {
+      await waitForMinimumBusyDuration(operationStartedAt)
       if (syncOperationRef.current === operation) {
         syncOperationRef.current = null
         setSyncOperation(null)
@@ -1054,18 +1130,18 @@ export function SettingsModal({
     if (!desktopApi || aiOperation || aiActionInFlightRef.current || aiProviderActionInFlight) return
     const trimmedName = aiDraft.name.trim()
     if (!trimmedName) {
-      setAiMessage('Provider 名称不能为空')
+      setAiMessage({ kind: 'error', message: 'Provider 名称不能为空' })
       return
     }
     const duplicate = aiProviders.find(
       (p) => p.name.trim().toLowerCase() === trimmedName.toLowerCase() && p.id !== aiDraft.id
     )
     if (duplicate) {
-      setAiMessage(`Provider 名称 "${trimmedName}" 已存在，请使用其他唯一名称`)
+      setAiMessage({ kind: 'error', message: `Provider 名称 "${trimmedName}" 已存在，请使用其他唯一名称` })
       return
     }
     if (configuredModels.length === 0) {
-      setAiMessage('请至少添加一个模型到 Provider')
+      setAiMessage({ kind: 'error', message: '请至少添加一个模型到 Provider' })
       return
     }
 
@@ -1073,6 +1149,7 @@ export function SettingsModal({
     aiProviderActionInFlight = true
     // Keep the current footer message while the request is in flight. Clearing
     // it would briefly render the idle test hint for fast save requests.
+    const operationStartedAt = performance.now()
     setAiOperation('save')
     try {
       const saved = await desktopApi.saveAiProvider(aiProviderInput())
@@ -1084,10 +1161,11 @@ export function SettingsModal({
         selected.models && selected.models.length > 0 ? selected.models : selected.model ? [selected.model] : []
       setConfiguredModels(savedModels)
       window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
-      setAiMessage(t.aiSettingsSaveSucceeded)
+      setAiMessage({ kind: 'success', message: t.aiSettingsSaveSucceeded })
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : String(error))
+      setAiMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
     } finally {
+      await waitForMinimumBusyDuration(operationStartedAt)
       aiActionInFlightRef.current = false
       aiProviderActionInFlight = false
       setAiApiKey('')
@@ -1100,13 +1178,15 @@ export function SettingsModal({
     if (!desktopApi || aiOperation || aiActionInFlightRef.current || aiProviderActionInFlight) return
     aiActionInFlightRef.current = true
     aiProviderActionInFlight = true
+    const operationStartedAt = performance.now()
     setAiOperation('test')
     try {
       const result = await desktopApi.testAiProvider(aiProviderInput())
-      setAiMessage(result.message)
+      setAiMessage({ kind: 'success', message: result.message })
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : String(error))
+      setAiMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
     } finally {
+      await waitForMinimumBusyDuration(operationStartedAt)
       aiActionInFlightRef.current = false
       aiProviderActionInFlight = false
       setAiOperation(null)
@@ -1118,6 +1198,7 @@ export function SettingsModal({
 
     aiActionInFlightRef.current = true
     aiProviderActionInFlight = true
+    const operationStartedAt = performance.now()
     setAiOperation('delete')
     try {
       const providers = await desktopApi.deleteAiProvider(aiDraft.id)
@@ -1127,11 +1208,12 @@ export function SettingsModal({
       setAiApiKey('')
       setClearAiApiKey(false)
       window.dispatchEvent(new Event('fileterm:ai-providers-changed'))
-      setAiMessage(t.aiSettingsDeleteSucceeded)
+      setAiMessage({ kind: 'success', message: t.aiSettingsDeleteSucceeded })
       setShowDeleteAiProviderConfirm(false)
     } catch (error) {
-      setAiMessage(error instanceof Error ? error.message : String(error))
+      setAiMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) })
     } finally {
+      await waitForMinimumBusyDuration(operationStartedAt)
       aiActionInFlightRef.current = false
       aiProviderActionInFlight = false
       setAiOperation(null)
@@ -1313,6 +1395,7 @@ export function SettingsModal({
   }
 
   const themeVariant = theme === 'default-light' ? 'light' : 'dark'
+  const normalizedThemeConfig = normalizeThemeConfig(themeConfig, themeVariant)
 
   const setThemeConfigValue = (nextValue: ThemeConfig) => {
     onSetThemeConfig(
@@ -1320,7 +1403,7 @@ export function SettingsModal({
         {
           ...nextValue,
           codeThemeId: 'custom',
-          baseThemeId: themeBaseIdForConfig(themeConfig)
+          baseThemeId: themeBaseIdForConfig(nextValue)
         },
         themeVariant
       )
@@ -1330,9 +1413,9 @@ export function SettingsModal({
 
   const updateThemeBody = (patch: Partial<ThemeConfig['theme']>) => {
     setThemeConfigValue({
-      ...themeConfig,
+      ...normalizedThemeConfig,
       theme: {
-        ...themeConfig.theme,
+        ...normalizedThemeConfig.theme,
         ...patch
       }
     })
@@ -1341,7 +1424,7 @@ export function SettingsModal({
   const updateThemeSemanticColors = (patch: Partial<ThemeConfig['theme']['semanticColors']>) => {
     updateThemeBody({
       semanticColors: {
-        ...themeConfig.theme.semanticColors,
+        ...normalizedThemeConfig.theme.semanticColors,
         ...patch
       }
     })
@@ -1369,7 +1452,8 @@ export function SettingsModal({
       if (dataUrl) registerImportedFont(font, dataUrl)
       setImportedFonts((current) => [font, ...current.filter((item) => item.id !== font.id)])
       updateThemeFonts({ [kind]: font.family })
-    } catch {
+    } catch (cause: unknown) {
+      console.error('[FileTerm] 导入字体', cause)
       setFontImportError(t.themeFontImportFailed)
     } finally {
       setFontImportKind(null)
@@ -1399,7 +1483,8 @@ export function SettingsModal({
       }
       setFontToDelete(null)
       setFontImportError(null)
-    } catch {
+    } catch (cause: unknown) {
+      console.error('[FileTerm] 删除字体', cause)
       setFontImportError(t.themeFontDeleteFailed)
     }
   }
@@ -1445,7 +1530,7 @@ export function SettingsModal({
       onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
       setEditingCustomThemeId(null)
       setCustomThemeName('')
-      setThemeConfigMessage(t.themePresetApplied)
+      setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
       return
     }
 
@@ -1458,7 +1543,7 @@ export function SettingsModal({
       onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
       setEditingCustomThemeId(savedTheme.id)
       setCustomThemeName(savedTheme.name)
-      setThemeConfigMessage(t.themePresetApplied)
+      setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
       return
     }
 
@@ -1469,13 +1554,13 @@ export function SettingsModal({
     onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
     setEditingCustomThemeId(null)
     setCustomThemeName('')
-    setThemeConfigMessage(t.themePresetApplied)
+    setThemeConfigMessage({ text: t.themePresetApplied, kind: 'success' })
   }
 
   const saveCustomTheme = () => {
     const name = customThemeName.trim()
     if (!name) {
-      setThemeConfigMessage(t.themeNameRequired)
+      setThemeConfigMessage({ text: t.themeNameRequired, kind: 'warning' })
       return
     }
 
@@ -1507,7 +1592,7 @@ export function SettingsModal({
     onSetTheme(nextThemeConfig.variant === 'light' ? 'default-light' : 'default-dark')
     setEditingCustomThemeId(id)
     setCustomThemeName(name)
-    setThemeConfigMessage(existingTheme ? t.themeUpdated : t.themeSaved)
+    setThemeConfigMessage({ text: existingTheme ? t.themeUpdated : t.themeSaved, kind: 'success' })
   }
 
   const deleteCustomTheme = () => {
@@ -1518,7 +1603,7 @@ export function SettingsModal({
     setEditingCustomThemeId(null)
     setCustomThemeName('')
     applyThemePreset('fileterm')
-    setThemeConfigMessage(t.themeDeleted)
+    setThemeConfigMessage({ text: t.themeDeleted, kind: 'success' })
     setShowDeleteThemeConfirm(false)
   }
 
@@ -1657,9 +1742,9 @@ export function SettingsModal({
       onSetTheme(importedTheme.variant === 'light' ? 'default-light' : 'default-dark')
       setEditingCustomThemeId(null)
       setCustomThemeName('')
-      setThemeConfigMessage(t.themeImported)
+      setThemeConfigMessage({ text: t.themeImported, kind: 'success' })
     } catch {
-      setThemeConfigMessage(t.themeImportFailed)
+      setThemeConfigMessage({ text: t.themeImportFailed, kind: 'error' })
     } finally {
       endThemeConfigOperation()
     }
@@ -1676,9 +1761,9 @@ export function SettingsModal({
         variant: normalizedTheme.variant
       })}`
       await writeThemeClipboard(serializedTheme)
-      setThemeConfigMessage(t.themeCopied)
+      setThemeConfigMessage({ text: t.themeCopied, kind: 'success' })
     } catch {
-      setThemeConfigMessage(t.themeCopyFailed)
+      setThemeConfigMessage({ text: t.themeCopyFailed, kind: 'error' })
     } finally {
       endThemeConfigOperation()
     }
@@ -2079,19 +2164,24 @@ export function SettingsModal({
                 {localTerminalShellError ? <p className="modal-error">{localTerminalShellError}</p> : null}
                 <div className="local-terminal-shell-actions">
                   <button
+                    aria-busy={isSavingLocalTerminalShells}
                     className="primary-button compact"
                     disabled={!desktopApi || isSavingLocalTerminalShells || !localTerminalShellsDirty}
                     onClick={saveLocalTerminalShells}
                     type="button"
                   >
-                    {isSavingLocalTerminalShells ? <span aria-hidden="true" className="button-spinner" /> : null}
-                    {t.localTerminalShellSave}
+                    <StableButtonContent
+                      busy={isSavingLocalTerminalShells}
+                      icon={<AppIcon name="disk" size={14} />}
+                      label={t.localTerminalShellSave}
+                    />
                   </button>
-                  {localTerminalShellMessage ? (
-                    <span aria-live="polite" className="local-terminal-shell-save-message">
-                      {localTerminalShellMessage}
-                    </span>
-                  ) : null}
+                  <span
+                    aria-live="polite"
+                    className={`local-terminal-shell-save-message${localTerminalShellMessage ? ' is-visible' : ''}`}
+                  >
+                    {localTerminalShellMessage ?? ''}
+                  </span>
                 </div>
               </section>
             </div>
@@ -2452,38 +2542,72 @@ export function SettingsModal({
                 </div>
 
                 <div className="ai-settings-footer">
-                  <small className={aiMessage ? 'ai-settings-operation-message' : undefined} role="status">
-                    {aiMessage || t.aiSettingsConnectionTestHint}
+                  <small
+                    className={
+                      aiMessage
+                        ? `ai-settings-operation-message ai-settings-operation-message--${aiMessage.kind}`
+                        : undefined
+                    }
+                    role={aiMessage?.kind === 'error' ? 'alert' : 'status'}
+                  >
+                    {aiMessage?.message ?? t.aiSettingsConnectionTestHint}
                   </small>
                   <div className="ai-settings-footer-actions">
                     {aiDraft.id ? (
                       <button
+                        aria-busy={aiOperation === 'delete'}
                         className="ai-settings-danger-button"
                         disabled={!desktopApi || aiOperation !== null}
                         type="button"
                         onClick={() => setShowDeleteAiProviderConfirm(true)}
                       >
                         <AppIcon name="trash" size={14} />
-                        {aiOperation === 'delete' ? t.aiSettingsDeleting : t.aiSettingsDelete}
+                        <span className="ai-settings-action-label">
+                          <span>{aiOperation === 'delete' ? t.aiSettingsDeleting : t.aiSettingsDelete}</span>
+                          <span aria-hidden="true" className="ai-settings-action-label-reserve">
+                            {t.aiSettingsDelete}
+                          </span>
+                          <span aria-hidden="true" className="ai-settings-action-label-reserve">
+                            {t.aiSettingsDeleting}
+                          </span>
+                        </span>
                       </button>
                     ) : null}
                     <button
+                      aria-busy={aiOperation === 'test'}
                       className="ai-settings-secondary-button"
                       disabled={!desktopApi || aiOperation !== null}
                       type="button"
                       onClick={() => void testAiProvider()}
                     >
                       <AppIcon name="flash" size={14} />
-                      {aiOperation === 'test' ? t.aiSettingsTesting : t.aiSettingsTestConnection}
+                      <span className="ai-settings-action-label">
+                        <span>{aiOperation === 'test' ? t.aiSettingsTesting : t.aiSettingsTestConnection}</span>
+                        <span aria-hidden="true" className="ai-settings-action-label-reserve">
+                          {t.aiSettingsTestConnection}
+                        </span>
+                        <span aria-hidden="true" className="ai-settings-action-label-reserve">
+                          {t.aiSettingsTesting}
+                        </span>
+                      </span>
                     </button>
                     <button
+                      aria-busy={aiOperation === 'save'}
                       className="primary-button compact"
                       disabled={!desktopApi || aiOperation !== null}
                       type="button"
                       onClick={() => void saveAiProvider()}
                     >
                       <AppIcon name="disk" size={14} />
-                      {aiOperation === 'save' ? t.aiSettingsSaving : t.aiSettingsSave}
+                      <span className="ai-settings-action-label">
+                        <span>{aiOperation === 'save' ? t.aiSettingsSaving : t.aiSettingsSave}</span>
+                        <span aria-hidden="true" className="ai-settings-action-label-reserve">
+                          {t.aiSettingsSave}
+                        </span>
+                        <span aria-hidden="true" className="ai-settings-action-label-reserve">
+                          {t.aiSettingsSaving}
+                        </span>
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -2915,29 +3039,40 @@ export function SettingsModal({
                   <div className="theme-config-action-group">
                     <div className="theme-config-actions">
                       <button
+                        aria-busy={themeConfigOperation === 'import'}
                         className="flat-button compact theme-config-action-button"
                         disabled={themeConfigOperation !== null}
                         onClick={() => void importThemeConfig()}
                         type="button"
                       >
-                        <AppIcon name="download" size={14} />
-                        {themeConfigOperation === 'import' ? t.themeWorking : t.themeImport}
+                        <StableButtonContent
+                          busy={themeConfigOperation === 'import'}
+                          busyLabel={t.themeWorking}
+                          icon={<AppIcon name="download" size={14} />}
+                          label={t.themeImport}
+                        />
                       </button>
                       <button
+                        aria-busy={themeConfigOperation === 'copy'}
                         className="flat-button compact theme-config-action-button"
                         disabled={themeConfigOperation !== null}
                         onClick={() => void copyThemeConfig()}
                         type="button"
                       >
-                        <AppIcon name="copy" size={14} />
-                        {themeConfigOperation === 'copy' ? t.themeWorking : t.themeCopy}
+                        <StableButtonContent
+                          busy={themeConfigOperation === 'copy'}
+                          busyLabel={t.themeWorking}
+                          icon={<AppIcon name="copy" size={14} />}
+                          label={t.themeCopy}
+                        />
                       </button>
                     </div>
-                    {themeConfigMessage ? (
-                      <span aria-live="polite" className="theme-config-action-status">
-                        {themeConfigMessage}
-                      </span>
-                    ) : null}
+                    <span
+                      aria-live="polite"
+                      className={`theme-config-action-status${themeConfigMessage ? ` is-visible is-${themeConfigMessage.kind}` : ''}`}
+                    >
+                      {themeConfigMessage?.text ?? ''}
+                    </span>
                   </div>
                 </div>
 
@@ -2976,8 +3111,11 @@ export function SettingsModal({
                       onClick={saveCustomTheme}
                       type="button"
                     >
-                      <AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />
-                      {editingSavedTheme ? t.themeUpdate : t.themeSave}
+                      <StableButtonContent
+                        icon={<AppIcon name={editingSavedTheme ? 'check' : 'edit'} size={14} />}
+                        label={editingSavedTheme ? t.themeUpdate : t.themeSave}
+                        reserveLabel={editingSavedTheme ? t.themeSave : t.themeUpdate}
+                      />
                     </button>
                     {selectedSavedTheme ? (
                       <button
@@ -3021,47 +3159,62 @@ export function SettingsModal({
                       <ThemeColorField
                         label={t.themePrimaryColor}
                         onChange={(value) => updateThemeBody({ accent: value })}
-                        value={themeConfig.theme.accent}
+                        value={normalizedThemeConfig.theme.accent}
                       />
                       <ThemeColorField
                         label={t.themeSecondaryColor}
                         onChange={(value) => updateThemeSemanticColors({ secondary: value })}
-                        value={themeConfig.theme.semanticColors.secondary}
+                        value={normalizedThemeConfig.theme.semanticColors.secondary}
                       />
                       <ThemeColorField
                         label={t.themeSurfaceColor}
                         onChange={(value) => updateThemeBody({ surface: value })}
-                        value={themeConfig.theme.surface}
+                        value={normalizedThemeConfig.theme.surface}
                       />
                       <ThemeColorField
                         label={t.themeSurfaceSecondaryColor}
                         onChange={(value) => updateThemeBody({ surfaceSecondary: value })}
-                        value={themeConfig.theme.surfaceSecondary}
+                        value={normalizedThemeConfig.theme.surfaceSecondary}
                       />
                       <ThemeColorField
                         label={t.themeSurfaceElevatedColor}
                         onChange={(value) => updateThemeBody({ surfaceElevated: value })}
-                        value={themeConfig.theme.surfaceElevated}
+                        value={normalizedThemeConfig.theme.surfaceElevated}
                       />
                       <ThemeColorField
                         label={t.themeTextPrimaryColor}
                         onChange={(value) => updateThemeBody({ ink: value })}
-                        value={themeConfig.theme.ink}
+                        value={normalizedThemeConfig.theme.ink}
                       />
                       <ThemeColorField
                         label={t.themeTextSecondaryColor}
                         onChange={(value) => updateThemeSemanticColors({ textSecondary: value })}
-                        value={themeConfig.theme.semanticColors.textSecondary}
+                        value={normalizedThemeConfig.theme.semanticColors.textSecondary}
                       />
                       <ThemeColorField
-                        label={t.themeSftpColor}
-                        onChange={(value) => updateThemeSemanticColors({ sftp: value })}
-                        value={themeConfig.theme.semanticColors.sftp}
+                        label={t.themeTotalColor}
+                        onChange={(value) => updateThemeSemanticColors({ total: value })}
+                        value={normalizedThemeConfig.theme.semanticColors.total}
+                      />
+                      <ThemeColorField
+                        label={t.themeTelnetColor}
+                        onChange={(value) => updateThemeSemanticColors({ telnet: value })}
+                        value={normalizedThemeConfig.theme.semanticColors.telnet}
                       />
                       <ThemeColorField
                         label={t.themeFtpColor}
                         onChange={(value) => updateThemeSemanticColors({ ftp: value })}
-                        value={themeConfig.theme.semanticColors.ftp}
+                        value={normalizedThemeConfig.theme.semanticColors.ftp}
+                      />
+                      <ThemeColorField
+                        label={t.themeNetworkRxColor}
+                        onChange={(value) => updateThemeSemanticColors({ networkRx: value })}
+                        value={normalizedThemeConfig.theme.semanticColors.networkRx}
+                      />
+                      <ThemeColorField
+                        label={t.themeNetworkTxColor}
+                        onChange={(value) => updateThemeSemanticColors({ networkTx: value })}
+                        value={normalizedThemeConfig.theme.semanticColors.networkTx}
                       />
                     </div>
                   </section>
@@ -3075,22 +3228,22 @@ export function SettingsModal({
                       <ThemeColorField
                         label={t.themeInfoColor}
                         onChange={(value) => updateThemeSemanticColors({ info: value })}
-                        value={themeConfig.theme.semanticColors.info}
+                        value={normalizedThemeConfig.theme.semanticColors.info}
                       />
                       <ThemeColorField
                         label={t.themeWarningColor}
                         onChange={(value) => updateThemeSemanticColors({ warning: value })}
-                        value={themeConfig.theme.semanticColors.warning}
+                        value={normalizedThemeConfig.theme.semanticColors.warning}
                       />
                       <ThemeColorField
                         label={t.themeErrorColor}
                         onChange={(value) => updateThemeSemanticColors({ error: value })}
-                        value={themeConfig.theme.semanticColors.error}
+                        value={normalizedThemeConfig.theme.semanticColors.error}
                       />
                       <ThemeColorField
                         label={t.themeSuccessColor}
                         onChange={(value) => updateThemeSemanticColors({ success: value })}
-                        value={themeConfig.theme.semanticColors.success}
+                        value={normalizedThemeConfig.theme.semanticColors.success}
                       />
                     </div>
                   </section>
@@ -3118,14 +3271,19 @@ export function SettingsModal({
                       />
                       <button
                         aria-label={t.themeImportFont}
+                        aria-busy={fontImportKind === 'ui'}
                         className="flat-button compact theme-font-import-button"
                         disabled={!desktopApi || fontImportKind !== null}
                         onClick={() => void importFontFor('ui')}
                         title={t.themeImportFont}
                         type="button"
                       >
-                        <AppIcon name="upload" size={14} />
-                        {fontImportKind === 'ui' ? t.themeImportingFont : t.themeImportFont}
+                        <StableButtonContent
+                          busy={fontImportKind === 'ui'}
+                          busyLabel={t.themeImportingFont}
+                          icon={<AppIcon name="upload" size={14} />}
+                          label={t.themeImportFont}
+                        />
                       </button>
                     </div>
                   </div>
@@ -3150,14 +3308,19 @@ export function SettingsModal({
                       />
                       <button
                         aria-label={t.themeImportFont}
+                        aria-busy={fontImportKind === 'code'}
                         className="flat-button compact theme-font-import-button"
                         disabled={!desktopApi || fontImportKind !== null}
                         onClick={() => void importFontFor('code')}
                         title={t.themeImportFont}
                         type="button"
                       >
-                        <AppIcon name="upload" size={14} />
-                        {fontImportKind === 'code' ? t.themeImportingFont : t.themeImportFont}
+                        <StableButtonContent
+                          busy={fontImportKind === 'code'}
+                          busyLabel={t.themeImportingFont}
+                          icon={<AppIcon name="upload" size={14} />}
+                          label={t.themeImportFont}
+                        />
                       </button>
                     </div>
                   </div>
@@ -3203,22 +3366,22 @@ export function SettingsModal({
                     <ThemeColorField
                       label={t.themeDiffAdded}
                       onChange={(value) => updateThemeSemanticColors({ diffAdded: value })}
-                      value={themeConfig.theme.semanticColors.diffAdded}
+                      value={normalizedThemeConfig.theme.semanticColors.diffAdded}
                     />
                     <ThemeColorField
                       label={t.themeDiffRemoved}
                       onChange={(value) => updateThemeSemanticColors({ diffRemoved: value })}
-                      value={themeConfig.theme.semanticColors.diffRemoved}
+                      value={normalizedThemeConfig.theme.semanticColors.diffRemoved}
                     />
                     <ThemeColorField
                       label={t.themeSkillColor}
                       onChange={(value) => updateThemeSemanticColors({ skill: value })}
-                      value={themeConfig.theme.semanticColors.skill}
+                      value={normalizedThemeConfig.theme.semanticColors.skill}
                     />
                     <ThemeColorField
                       label={t.themeKeywordColor}
                       onChange={(value) => updateThemeSemanticColors({ keyword: value })}
-                      value={themeConfig.theme.semanticColors.keyword}
+                      value={normalizedThemeConfig.theme.semanticColors.keyword}
                     />
                   </div>
                 </details>
@@ -3497,6 +3660,16 @@ export function SettingsModal({
             </div>
           ) : null}
 
+          {activeTab === 'security' ? (
+            <SecuritySettingsPanel
+              desktopApi={desktopApi}
+              focusBackupPasswordRequest={securityFocusRequest}
+              notice={securityNotice}
+              onBackupPasswordFocusHandled={handleSecurityBackupPasswordFocusHandled}
+              onBackupPasswordSaved={() => setSecurityNotice(null)}
+            />
+          ) : null}
+
           {activeTab === 'sync' && syncConfig ? (
             <div className="settings-panel">
               <div className="sync-subtabs">
@@ -3582,6 +3755,7 @@ export function SettingsModal({
                     <div className="sync-config-actions-row">
                       <div className="sync-config-primary-buttons">
                         <button
+                          aria-busy={syncOperation === 'save'}
                           className="primary-button compact"
                           disabled={syncOperation !== null}
                           type="button"
@@ -3594,14 +3768,18 @@ export function SettingsModal({
                               })
                               setSyncConfig(config)
                               setSyncPassword('')
-                              setSyncMessage(t.syncConfigSaved)
+                              setSyncFeedback({ kind: 'success', message: t.syncConfigSaved })
                             })
                           }}
                         >
-                          {syncOperation === 'save' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                          <span>{t.save}</span>
+                          <StableButtonContent
+                            busy={syncOperation === 'save'}
+                            icon={<AppIcon name="disk" size={14} />}
+                            label={t.save}
+                          />
                         </button>
                         <button
+                          aria-busy={syncOperation === 'test'}
                           className="flat-button compact"
                           disabled={syncOperation !== null}
                           type="button"
@@ -3609,13 +3787,23 @@ export function SettingsModal({
                             if (!desktopApi) return
                             void runSyncOperation('test', async () => {
                               const result = await desktopApi.testWebDavSync()
-                              setSyncMessage(result.message)
+                              setSyncFeedback({ kind: 'success', message: result.message })
                             })
                           }}
                         >
-                          {syncOperation === 'test' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                          <span>{t.webdavTestConnection}</span>
+                          <StableButtonContent
+                            busy={syncOperation === 'test'}
+                            icon={<AppIcon name="flash" size={14} />}
+                            label={t.webdavTestConnection}
+                          />
                         </button>
+                        {syncFeedback ? (
+                          <FeedbackText
+                            className="sync-feedback-text"
+                            message={syncFeedback.message}
+                            tone={syncFeedback.kind}
+                          />
+                        ) : null}
                       </div>
 
                       {syncConfig.lastSyncedAt ? (
@@ -3628,19 +3816,23 @@ export function SettingsModal({
                       ) : null}
                     </div>
 
-                    {syncMessage ? (
-                      <div className="sync-feedback-banner">
-                        <span>{syncMessage}</span>
-                      </div>
-                    ) : null}
-
                     <div className="sync-operations-card">
                       <div className="sync-operations-card-header">
                         <div className="sync-operations-card-title">
                           <AppIcon name="refresh" size={15} />
                           <h4>{t.manualSyncTitle}</h4>
                         </div>
-                        <span className="sync-operations-card-subtitle">{t.manualSyncDescription}</span>
+                        <div className="sync-operations-card-subtitle">
+                          <span>{t.manualSyncDescription}</span>
+                          <button
+                            className="sync-security-link"
+                            type="button"
+                            onClick={() => openSecuritySettings(true)}
+                          >
+                            <AppIcon name="shield-check" size={12} />
+                            <span>{t.securityOpenSettings}</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="sync-operations-grid">
@@ -3667,6 +3859,7 @@ export function SettingsModal({
                               />
                             </div>
                             <button
+                              aria-busy={syncOperation === 'upload'}
                               className="flat-button compact sync-op-btn"
                               disabled={!syncConfig.enabled || syncOperation !== null}
                               type="button"
@@ -3674,16 +3867,15 @@ export function SettingsModal({
                                 if (!desktopApi) return
                                 void runSyncOperation('upload', async () => {
                                   const result = await desktopApi.uploadWebDavSync(backupUploadMode)
-                                  setSyncMessage(result.message)
+                                  setSyncFeedback({ kind: 'success', message: result.message })
                                 })
                               }}
                             >
-                              {syncOperation === 'upload' ? (
-                                <span aria-hidden="true" className="button-spinner" />
-                              ) : (
-                                <AppIcon name="upload" size={13} />
-                              )}
-                              <span>{t.syncUpload}</span>
+                              <StableButtonContent
+                                busy={syncOperation === 'upload'}
+                                icon={<AppIcon name="upload" size={13} />}
+                                label={t.syncUpload}
+                              />
                             </button>
                           </div>
                         </div>
@@ -3711,6 +3903,7 @@ export function SettingsModal({
                               />
                             </div>
                             <button
+                              aria-busy={syncOperation === 'download'}
                               className="flat-button compact sync-op-btn"
                               disabled={!syncConfig.enabled || syncOperation !== null}
                               type="button"
@@ -3718,16 +3911,15 @@ export function SettingsModal({
                                 if (!desktopApi) return
                                 void runSyncOperation('download', async () => {
                                   const result = await desktopApi.downloadWebDavSync(backupDownloadMode)
-                                  setSyncMessage(result.message)
+                                  setSyncFeedback({ kind: 'success', message: result.message })
                                 })
                               }}
                             >
-                              {syncOperation === 'download' ? (
-                                <span aria-hidden="true" className="button-spinner" />
-                              ) : (
-                                <AppIcon name="download" size={13} />
-                              )}
-                              <span>{t.syncDownload}</span>
+                              <StableButtonContent
+                                busy={syncOperation === 'download'}
+                                icon={<AppIcon name="download" size={13} />}
+                                label={t.syncDownload}
+                              />
                             </button>
                           </div>
                         </div>
@@ -3852,6 +4044,7 @@ export function SettingsModal({
                     <div className="sync-config-actions-row">
                       <div className="sync-config-primary-buttons">
                         <button
+                          aria-busy={syncOperation === 's3-save'}
                           className="primary-button compact"
                           type="button"
                           onClick={() => {
@@ -3863,14 +4056,18 @@ export function SettingsModal({
                               })
                               setS3Config(config)
                               setS3SecretAccessKey('')
-                              setS3Message(t.s3BackupSaved)
+                              setS3Feedback({ kind: 'success', message: t.s3BackupSaved })
                             })
                           }}
                         >
-                          {syncOperation === 's3-save' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                          <span>{t.save}</span>
+                          <StableButtonContent
+                            busy={syncOperation === 's3-save'}
+                            icon={<AppIcon name="disk" size={14} />}
+                            label={t.save}
+                          />
                         </button>
                         <button
+                          aria-busy={syncOperation === 's3-test'}
                           className="flat-button compact"
                           disabled={syncOperation !== null}
                           type="button"
@@ -3878,13 +4075,23 @@ export function SettingsModal({
                             if (!desktopApi) return
                             void runSyncOperation('s3-test', async () => {
                               const result = await desktopApi.testS3Backup()
-                              setS3Message(result.message)
+                              setS3Feedback({ kind: 'success', message: result.message })
                             })
                           }}
                         >
-                          {syncOperation === 's3-test' ? <span aria-hidden="true" className="button-spinner" /> : null}
-                          <span>{t.s3TestConnection}</span>
+                          <StableButtonContent
+                            busy={syncOperation === 's3-test'}
+                            icon={<AppIcon name="flash" size={14} />}
+                            label={t.s3TestConnection}
+                          />
                         </button>
+                        {s3Feedback ? (
+                          <FeedbackText
+                            className="sync-feedback-text"
+                            message={s3Feedback.message}
+                            tone={s3Feedback.kind}
+                          />
+                        ) : null}
                       </div>
 
                       {s3Config.lastSyncedAt ? (
@@ -3895,19 +4102,23 @@ export function SettingsModal({
                       ) : null}
                     </div>
 
-                    {s3Message ? (
-                      <div className="sync-feedback-banner">
-                        <span>{s3Message}</span>
-                      </div>
-                    ) : null}
-
                     <div className="sync-operations-card">
                       <div className="sync-operations-card-header">
                         <div className="sync-operations-card-title">
                           <AppIcon name="refresh" size={15} />
                           <h4>{t.manualSyncTitle}</h4>
                         </div>
-                        <span className="sync-operations-card-subtitle">{t.manualSyncDescription}</span>
+                        <div className="sync-operations-card-subtitle">
+                          <span>{t.manualSyncDescription}</span>
+                          <button
+                            className="sync-security-link"
+                            type="button"
+                            onClick={() => openSecuritySettings(true)}
+                          >
+                            <AppIcon name="shield-check" size={12} />
+                            <span>{t.securityOpenSettings}</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="sync-operations-grid">
@@ -3934,6 +4145,7 @@ export function SettingsModal({
                               />
                             </div>
                             <button
+                              aria-busy={syncOperation === 's3-upload'}
                               className="flat-button compact sync-op-btn"
                               disabled={!s3Config.enabled || syncOperation !== null}
                               type="button"
@@ -3941,16 +4153,15 @@ export function SettingsModal({
                                 if (!desktopApi) return
                                 void runSyncOperation('s3-upload', async () => {
                                   const result = await desktopApi.uploadS3Backup(backupUploadMode)
-                                  setS3Message(result.message)
+                                  setS3Feedback({ kind: 'success', message: result.message })
                                 })
                               }}
                             >
-                              {syncOperation === 's3-upload' ? (
-                                <span aria-hidden="true" className="button-spinner" />
-                              ) : (
-                                <AppIcon name="upload" size={13} />
-                              )}
-                              <span>{t.syncUpload}</span>
+                              <StableButtonContent
+                                busy={syncOperation === 's3-upload'}
+                                icon={<AppIcon name="upload" size={13} />}
+                                label={t.syncUpload}
+                              />
                             </button>
                           </div>
                         </div>
@@ -3978,6 +4189,7 @@ export function SettingsModal({
                               />
                             </div>
                             <button
+                              aria-busy={syncOperation === 's3-download'}
                               className="flat-button compact sync-op-btn"
                               disabled={!s3Config.enabled || syncOperation !== null}
                               type="button"
@@ -3985,16 +4197,15 @@ export function SettingsModal({
                                 if (!desktopApi) return
                                 void runSyncOperation('s3-download', async () => {
                                   const result = await desktopApi.downloadS3Backup(backupDownloadMode)
-                                  setS3Message(result.message)
+                                  setS3Feedback({ kind: 'success', message: result.message })
                                 })
                               }}
                             >
-                              {syncOperation === 's3-download' ? (
-                                <span aria-hidden="true" className="button-spinner" />
-                              ) : (
-                                <AppIcon name="download" size={13} />
-                              )}
-                              <span>{t.syncDownload}</span>
+                              <StableButtonContent
+                                busy={syncOperation === 's3-download'}
+                                icon={<AppIcon name="download" size={13} />}
+                                label={t.syncDownload}
+                              />
                             </button>
                           </div>
                         </div>
@@ -4013,7 +4224,7 @@ export function SettingsModal({
                 <p className="settings-tools-hint">
                   <span aria-hidden="true" className="button-spinner" /> {t.loadingSyncConfig}
                 </p>
-                {syncMessage ? <p className="modal-error">{syncMessage}</p> : null}
+                {syncFeedback?.kind === 'error' ? <FeedbackText message={syncFeedback.message} tone="error" /> : null}
               </section>
             </div>
           ) : null}
@@ -4082,7 +4293,10 @@ export function SettingsModal({
                       }}
                       type="button"
                     >
-                      {updateStatus.updateMode === 'release-page' ? t.openReleasePage : t.downloadUpdate}
+                      <StableButtonLabel
+                        label={updateStatus.updateMode === 'release-page' ? t.openReleasePage : t.downloadUpdate}
+                        reserveLabel={updateStatus.updateMode === 'release-page' ? t.downloadUpdate : t.openReleasePage}
+                      />
                     </button>
                   ) : null}
                   {updateStatus?.state === 'downloaded' ? (
@@ -4096,12 +4310,18 @@ export function SettingsModal({
                   ) : null}
                   {updateStatus?.state !== 'downloading' && updateStatus?.state !== 'downloaded' ? (
                     <button
+                      aria-busy={updateStatus?.state === 'checking'}
                       className="flat-button compact"
                       disabled={updateStatus?.state === 'checking' || updateStatus?.state === 'unsupported'}
                       onClick={() => void desktopApi?.checkForUpdates()}
                       type="button"
                     >
-                      {updateStatus?.state === 'checking' ? t.checkingForUpdates : t.checkForUpdates}
+                      <StableButtonContent
+                        busy={updateStatus?.state === 'checking'}
+                        busyLabel={t.checkingForUpdates}
+                        icon={<AppIcon name="refresh" size={14} />}
+                        label={t.checkForUpdates}
+                      />
                     </button>
                   ) : null}
                 </div>

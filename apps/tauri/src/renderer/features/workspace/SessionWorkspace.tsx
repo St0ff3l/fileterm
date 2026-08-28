@@ -24,11 +24,18 @@ import { FileManager } from '../files/FileManager'
 import { TerminalDock } from '../terminal/TerminalDock'
 import { t } from '../../i18n'
 import { SplitPaneLayout } from './SplitPaneLayout'
+import { FILE_PANEL_SNAP_TARGETS, FILE_PANEL_SNAP_TARGET_SELECTORS, type FilePanelSnapTarget } from './file-panel-snap'
 
 const DEFAULT_FILE_PANEL_HEIGHT = 218
 const DEFAULT_FILE_PANEL_RATIO = 30
 const MAX_FILE_PANEL_RATIO = 70
 const MIN_TERMINAL_PANEL_HEIGHT = 120
+const FILE_PANEL_SNAP_THRESHOLD = 10
+
+type FilePanelSnapPoint = {
+  target: FilePanelSnapTarget
+  height: number
+}
 
 export function SessionWorkspace({
   activeTab,
@@ -51,8 +58,8 @@ export function SessionWorkspace({
   onFilePanelHeightChange,
   filePanelRatio,
   onFilePanelRatioCommit,
-  filePanelDiskHeaderAnchor,
-  onFilePanelDiskHeaderAnchorCommit,
+  filePanelSnapTarget,
+  onFilePanelSnapTargetCommit,
   rememberFilePanelRatio,
   sendTargets,
   terminalDockSendScope,
@@ -104,7 +111,8 @@ export function SessionWorkspace({
   onDownloadFiles,
   onDownloadLocalNetworkFiles,
   onDropUpload,
-  isWorkspaceFocusMode
+  isWorkspaceFocusMode,
+  isActive = true
 }: {
   activeTab: WorkspaceTab
   terminalActiveTab: WorkspaceTab
@@ -126,8 +134,8 @@ export function SessionWorkspace({
   onFilePanelHeightChange: Dispatch<SetStateAction<number>>
   filePanelRatio: number
   onFilePanelRatioCommit(ratio: number): void
-  filePanelDiskHeaderAnchor: boolean
-  onFilePanelDiskHeaderAnchorCommit(anchor: boolean): void
+  filePanelSnapTarget: FilePanelSnapTarget | null
+  onFilePanelSnapTargetCommit(target: FilePanelSnapTarget | null): void
   rememberFilePanelRatio: boolean
   sendTargets: SessionSendTarget[]
   terminalDockSendScope: SendScope
@@ -191,22 +199,24 @@ export function SessionWorkspace({
   onDownloadLocalNetworkFiles(items: LocalFileItem[]): void
   onDropUpload(event: DragEvent<HTMLDivElement>): void
   isWorkspaceFocusMode: boolean
+  isActive?: boolean
 }) {
   const isFileOnly = activeTab.layout === 'file-only'
   const isTerminalOnly = activeTab.layout === 'terminal-only'
   const setFilePanelHeight = onFilePanelHeightChange
-  const [isFilePanelCollapsed, setIsFilePanelCollapsed] = useState(filePanelRatio <= 0)
+  const [isFilePanelCollapsed, setIsFilePanelCollapsed] = useState(filePanelRatio <= 0 || isWorkspaceFocusMode)
   const [isFilePanelDragging, setIsFilePanelDragging] = useState(false)
   const workspaceRef = useRef<HTMLElement | null>(null)
   const isResizingFilePanel = useRef(false)
   const dragStateRef = useRef<{
     bottom: number
     height: number
-    snapHeight: number | null
+    snapTargets: FilePanelSnapPoint[]
+    latestSnapTarget: FilePanelSnapTarget | null
     latestHeight: number
   } | null>(null)
   const layoutFrameRef = useRef<number | null>(null)
-  const isFilePanelAlignedRef = useRef(false)
+  const filePanelSnapTargetRef = useRef<FilePanelSnapTarget | null>(null)
   const alignmentInitializedTabRef = useRef<string | null>(null)
   const lastExpandedFilePanelHeight = useRef(filePanelHeight)
   const appliedWorkspaceFocusMode = useRef<boolean | null>(null)
@@ -234,11 +244,29 @@ export function SessionWorkspace({
     return clampFilePanelRatio(Number(((height / workspaceHeight) * 100).toFixed(2)))
   }
 
-  const getDiskHeaderRect = () =>
-    document.querySelector<HTMLElement>('.fs-sidebar:not(.is-collapsed) .disk-head')?.getBoundingClientRect() ?? null
+  const getFilePanelSnapTargetElement = (target: FilePanelSnapTarget) =>
+    document.querySelector<HTMLElement>(`.fs-sidebar:not(.is-collapsed) ${FILE_PANEL_SNAP_TARGET_SELECTORS[target]}`) ??
+    null
+
+  const getFilePanelSnapHeight = (target: FilePanelSnapTarget, workspaceRect: DOMRect) => {
+    const targetRect = getFilePanelSnapTargetElement(target)?.getBoundingClientRect()
+    if (!targetRect || targetRect.height <= 0) {
+      return null
+    }
+
+    const nextHeight = workspaceRect.bottom - targetRect.top
+    const clampedHeight = clampFilePanelHeight(workspaceRect.height, nextHeight)
+    return Math.abs(nextHeight - clampedHeight) <= 0.5 ? clampedHeight : null
+  }
+
+  const getFilePanelSnapPoints = (workspaceRect: DOMRect): FilePanelSnapPoint[] =>
+    FILE_PANEL_SNAP_TARGETS.flatMap((target) => {
+      const height = getFilePanelSnapHeight(target, workspaceRect)
+      return height === null ? [] : [{ target, height }]
+    })
 
   const syncFilePanelHeight = (mode: 'align' | 'clamp' = 'clamp') => {
-    if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current || isResizingFilePanel.current) {
+    if (!isActive || isFileOnly || isFilePanelCollapsed || !workspaceRef.current || isResizingFilePanel.current) {
       return
     }
 
@@ -247,12 +275,10 @@ export function SessionWorkspace({
       return
     }
 
-    if (mode === 'align' && isFilePanelAlignedRef.current) {
-      const diskHeadRect = getDiskHeaderRect()
-      if (diskHeadRect) {
-        const nextHeight = workspaceRect.bottom - diskHeadRect.top
-        const clampedHeight = clampFilePanelHeight(workspaceRect.height, nextHeight)
-        setFilePanelHeight((prev) => (prev === clampedHeight ? prev : clampedHeight))
+    if (mode === 'align' && filePanelSnapTargetRef.current) {
+      const snapHeight = getFilePanelSnapHeight(filePanelSnapTargetRef.current, workspaceRect)
+      if (snapHeight !== null) {
+        setFilePanelHeight((prev) => (prev === snapHeight ? prev : snapHeight))
         return
       }
     }
@@ -268,7 +294,7 @@ export function SessionWorkspace({
   }, [filePanelHeight, isFilePanelCollapsed])
 
   useEffect(() => {
-    if (isFileOnly) {
+    if (!isActive || isFileOnly) {
       return
     }
     if (appliedWorkspaceFocusMode.current === isWorkspaceFocusMode) {
@@ -289,19 +315,19 @@ export function SessionWorkspace({
 
     setFilePanelHeight((prev) => (prev > 0 ? prev : lastExpandedFilePanelHeight.current || DEFAULT_FILE_PANEL_HEIGHT))
     setIsFilePanelCollapsed(false)
-  }, [isFileOnly, isWorkspaceFocusMode])
+  }, [isActive, isFileOnly, isWorkspaceFocusMode])
 
   useEffect(() => {
     isResizingFilePanel.current = false
     dragStateRef.current = null
-    isFilePanelAlignedRef.current = filePanelDiskHeaderAnchor
+    filePanelSnapTargetRef.current = filePanelSnapTarget
     setIsFilePanelDragging(false)
     document.body.style.cursor = ''
     document.body.style.userSelect = ''
-  }, [activeTab.id, filePanelDiskHeaderAnchor])
+  }, [activeTab.id, filePanelSnapTarget])
 
   useEffect(() => {
-    if (isFileOnly) {
+    if (!isActive || isFileOnly) {
       return
     }
 
@@ -313,7 +339,7 @@ export function SessionWorkspace({
         if (workspaceRef.current) {
           onFilePanelRatioCommit(filePanelRatioFromHeight(finalDragState.height, finalDragState.latestHeight))
         }
-        onFilePanelDiskHeaderAnchorCommit(isFilePanelAlignedRef.current)
+        onFilePanelSnapTargetCommit(finalDragState.latestSnapTarget)
       }
       isResizingFilePanel.current = false
       dragStateRef.current = null
@@ -331,14 +357,23 @@ export function SessionWorkspace({
         return
       }
 
-      const { bottom, height, snapHeight } = dragStateRef.current
+      const { bottom, height, snapTargets } = dragStateRef.current
       let nextHeight = bottom - event.clientY
 
-      const isSnappedToSidebar = snapHeight !== null && Math.abs(nextHeight - snapHeight) <= 10
-      if (isSnappedToSidebar) {
-        nextHeight = snapHeight
+      const nearestSnapTarget = snapTargets.reduce<{ point: FilePanelSnapPoint; distance: number } | null>(
+        (nearest, point) => {
+          const distance = Math.abs(nextHeight - point.height)
+          return !nearest || distance < nearest.distance ? { point, distance } : nearest
+        },
+        null
+      )
+      const snappedTarget =
+        nearestSnapTarget && nearestSnapTarget.distance <= FILE_PANEL_SNAP_THRESHOLD ? nearestSnapTarget.point : null
+      if (snappedTarget) {
+        nextHeight = snappedTarget.height
       }
-      isFilePanelAlignedRef.current = isSnappedToSidebar
+      filePanelSnapTargetRef.current = snappedTarget?.target ?? null
+      dragStateRef.current.latestSnapTarget = snappedTarget?.target ?? null
       dragStateRef.current.latestHeight = clampFilePanelHeight(height, nextHeight)
 
       if (dragFrame) {
@@ -375,19 +410,20 @@ export function SessionWorkspace({
       setIsFilePanelDragging(false)
     }
   }, [
+    isActive,
     isFileOnly,
-    onFilePanelDiskHeaderAnchorCommit,
+    onFilePanelSnapTargetCommit,
     onFilePanelRatioCommit,
     rememberFilePanelRatio,
     setFilePanelHeight
   ])
 
   useEffect(() => {
-    if (isFileOnly) {
+    if (!isActive || isFileOnly) {
       return
     }
 
-    const ratioKey = `${activeTab.id}:${filePanelRatio}:${filePanelDiskHeaderAnchor}:${rememberFilePanelRatio}`
+    const ratioKey = `${activeTab.id}:${filePanelRatio}:${filePanelSnapTarget ?? 'none'}:${rememberFilePanelRatio}`
     if (alignmentInitializedTabRef.current === ratioKey) {
       return
     }
@@ -404,20 +440,18 @@ export function SessionWorkspace({
       if (filePanelRatio <= 0) {
         setIsFilePanelCollapsed(true)
         setFilePanelHeight(0)
-        isFilePanelAlignedRef.current = filePanelDiskHeaderAnchor
+        filePanelSnapTargetRef.current = filePanelSnapTarget
         alignmentInitializedTabRef.current = ratioKey
         return true
       }
 
-      const diskHeadRect = filePanelDiskHeaderAnchor ? getDiskHeaderRect() : null
-      const nextHeight = diskHeadRect
-        ? clampFilePanelHeight(workspaceRect.height, workspaceRect.bottom - diskHeadRect.top)
-        : filePanelHeightFromRatio(workspaceRect.height, filePanelRatio)
+      const snapHeight = filePanelSnapTarget ? getFilePanelSnapHeight(filePanelSnapTarget, workspaceRect) : null
+      const nextHeight = snapHeight ?? filePanelHeightFromRatio(workspaceRect.height, filePanelRatio)
 
       setIsFilePanelCollapsed(filePanelRatio <= 0)
       setFilePanelHeight((prev) => (prev === nextHeight ? prev : nextHeight))
       if (nextHeight > 0) lastExpandedFilePanelHeight.current = nextHeight
-      isFilePanelAlignedRef.current = filePanelDiskHeaderAnchor
+      filePanelSnapTargetRef.current = filePanelSnapTarget
       alignmentInitializedTabRef.current = ratioKey
       return true
     }
@@ -438,10 +472,18 @@ export function SessionWorkspace({
         window.clearTimeout(checkTimer)
       }
     }
-  }, [activeTab.id, filePanelRatio, filePanelDiskHeaderAnchor, isFileOnly, rememberFilePanelRatio, setFilePanelHeight])
+  }, [
+    activeTab.id,
+    filePanelRatio,
+    filePanelSnapTarget,
+    isActive,
+    isFileOnly,
+    rememberFilePanelRatio,
+    setFilePanelHeight
+  ])
 
   useEffect(() => {
-    if (isFileOnly || isFilePanelCollapsed || !workspaceRef.current) {
+    if (!isActive || isFileOnly || isFilePanelCollapsed || !workspaceRef.current) {
       return
     }
 
@@ -454,7 +496,7 @@ export function SessionWorkspace({
 
       layoutFrameRef.current = window.requestAnimationFrame(() => {
         layoutFrameRef.current = null
-        syncFilePanelHeight(isFilePanelAlignedRef.current ? 'align' : 'clamp')
+        syncFilePanelHeight(filePanelSnapTargetRef.current ? 'align' : 'clamp')
       })
     }
 
@@ -463,35 +505,39 @@ export function SessionWorkspace({
     })
     resizeObserver.observe(workspaceRef.current)
 
-    // The disk header is in the sibling system sidebar rather than inside the
-    // workspace. Observe both sides of the alignment so a window resize or a
-    // sidebar content reflow keeps the two horizontal boundaries together.
+    // The snap targets are in the sibling system sidebar rather than inside
+    // the workspace. Observe both sides of the alignment so a window resize
+    // or a sidebar content reflow keeps the horizontal boundaries together.
     const layoutRoot = document.querySelector<HTMLElement>('.fs-shell') ?? document.body
     const sidebar = document.querySelector<HTMLElement>('.fs-sidebar:not(.is-collapsed)')
     const sidebarCard = sidebar?.querySelector<HTMLElement>('.sys-card')
-    let observedDiskHead: HTMLElement | null = null
-    const observeDiskHead = () => {
-      const nextDiskHead = document.querySelector<HTMLElement>('.fs-sidebar:not(.is-collapsed) .disk-head')
-      if (nextDiskHead === observedDiskHead) {
-        return
-      }
-      if (observedDiskHead) {
-        resizeObserver.unobserve(observedDiskHead)
-      }
-      observedDiskHead = nextDiskHead
-      if (observedDiskHead) {
-        resizeObserver.observe(observedDiskHead)
-      }
+    let observedSnapTargets: HTMLElement[] = []
+    const observeSnapTargets = () => {
+      const nextSnapTargets = FILE_PANEL_SNAP_TARGETS.flatMap((target) => {
+        const element = getFilePanelSnapTargetElement(target)
+        return element ? [element] : []
+      })
+      observedSnapTargets.forEach((element) => {
+        if (!nextSnapTargets.includes(element)) {
+          resizeObserver.unobserve(element)
+        }
+      })
+      nextSnapTargets.forEach((element) => {
+        if (!observedSnapTargets.includes(element)) {
+          resizeObserver.observe(element)
+        }
+      })
+      observedSnapTargets = nextSnapTargets
     }
     if (sidebar) resizeObserver.observe(sidebar)
     if (sidebarCard) resizeObserver.observe(sidebarCard)
-    observeDiskHead()
+    observeSnapTargets()
 
     // The sidebar can replace its metric card while a session reconnects or
     // while the compact layout is rebuilt. Keep observing the current header
     // instead of retaining a detached DOM node from the first render.
     const layoutMutationObserver = new MutationObserver(() => {
-      observeDiskHead()
+      observeSnapTargets()
       syncAfterLayout()
     })
     layoutMutationObserver.observe(layoutRoot, {
@@ -535,7 +581,7 @@ export function SessionWorkspace({
       themeObserver.disconnect()
       window.removeEventListener('resize', syncAfterLayout)
     }
-  }, [isFileOnly, isFilePanelCollapsed, filePanelDiskHeaderAnchor, filePanelRatio, setFilePanelHeight])
+  }, [isActive, isFileOnly, isFilePanelCollapsed, filePanelSnapTarget, filePanelRatio, setFilePanelHeight])
 
   const handleToggleFilePanelCollapsed = () => {
     if (isFilePanelCollapsed) {
@@ -545,7 +591,7 @@ export function SessionWorkspace({
       if (rememberFilePanelRatio && workspaceRef.current) {
         const workspaceHeight = workspaceRef.current.getBoundingClientRect().height
         onFilePanelRatioCommit(filePanelRatioFromHeight(workspaceHeight, nextHeight))
-        onFilePanelDiskHeaderAnchorCommit(isFilePanelAlignedRef.current)
+        onFilePanelSnapTargetCommit(filePanelSnapTargetRef.current)
       }
       return
     }
@@ -558,7 +604,7 @@ export function SessionWorkspace({
     setIsFilePanelCollapsed(true)
     if (rememberFilePanelRatio) {
       onFilePanelRatioCommit(0)
-      onFilePanelDiskHeaderAnchorCommit(isFilePanelAlignedRef.current)
+      onFilePanelSnapTargetCommit(filePanelSnapTargetRef.current)
     }
   }
 
@@ -583,6 +629,7 @@ export function SessionWorkspace({
             <SplitPaneLayout
               rootTab={splitRootTab}
               sessions={splitPaneSessions}
+              isWorkspaceActive={isActive}
               activePaneTabId={activePaneTabId}
               onClosePane={onClosePane}
               onCloseTab={onCloseTab}
@@ -592,10 +639,15 @@ export function SessionWorkspace({
             />
           ) : (
             <TerminalView
+              // Keep one xterm parser/write queue per session. Reusing the
+              // same instance across tabs makes a fast TUI's pending writes
+              // race with transcript replay and can leave a blank canvas.
+              key={terminalActiveTab.id}
               profileId={terminalActiveTab.profileId}
               tabId={terminalActiveTab.id}
               bootText={terminalActiveSession.terminalTranscript ?? ''}
               sessionType={terminalActiveTab.sessionType}
+              isActive={isActive}
               connected={terminalActiveSession.connected === true}
               connecting={terminalActiveTab.status === 'connecting'}
               onReconnect={reconnectOnEnter}
@@ -603,17 +655,19 @@ export function SessionWorkspace({
               onCloseTab={onCloseTab}
             />
           )}
-          <TerminalDock
-            activeTab={terminalActiveTab}
-            connected={terminalActiveSession.connected === true}
-            selectedTabIds={terminalDockSelectedTabIds}
-            sendScope={terminalDockSendScope}
-            sendTargets={sendTargets}
-            onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
-            onSendCommand={onSendTerminalCommand}
-            onSendScopeChange={onTerminalDockSendScopeChange}
-            onReconnect={reconnectOnEnter}
-          />
+          {isActive ? (
+            <TerminalDock
+              activeTab={terminalActiveTab}
+              connected={terminalActiveSession.connected === true}
+              selectedTabIds={terminalDockSelectedTabIds}
+              sendScope={terminalDockSendScope}
+              sendTargets={sendTargets}
+              onSelectedTabIdsChange={onTerminalDockSelectedTabIdsChange}
+              onSendCommand={onSendTerminalCommand}
+              onSendScopeChange={onTerminalDockSendScopeChange}
+              onReconnect={reconnectOnEnter}
+            />
+          ) : null}
           {!isFileOnly && !isTerminalOnly ? (
             <button
               aria-label={isFilePanelCollapsed ? t.terminalDockShowFilePanel : t.terminalDockHideFilePanel}
@@ -639,11 +693,11 @@ export function SessionWorkspace({
 
             if (workspaceRef.current) {
               const rect = workspaceRef.current.getBoundingClientRect()
-              const diskHeadRect = getDiskHeaderRect()
               dragStateRef.current = {
                 bottom: rect.bottom,
                 height: rect.height,
-                snapHeight: diskHeadRect ? rect.bottom - diskHeadRect.top : null,
+                snapTargets: getFilePanelSnapPoints(rect),
+                latestSnapTarget: filePanelSnapTarget,
                 latestHeight: filePanelHeight
               }
             }
@@ -658,60 +712,62 @@ export function SessionWorkspace({
       ) : null}
       {!isTerminalOnly ? (
         <div className="session-bottom-panel">
-          <FileManager
-            activeSession={activeSession}
-            activeTab={activeTab}
-            activeView={activeView}
-            onActiveViewChange={onActiveViewChange}
-            commandPaneWidth={commandPaneWidth}
-            onCommandPaneWidthChange={onCommandPaneWidthChange}
-            sendTargets={sendTargets}
-            commandFolders={commandFolders}
-            commandTemplates={commandTemplates}
-            isBusy={isBusy}
-            localItems={localItems}
-            localPath={localPath}
-            localPanePath={localPanePath}
-            isLocalNetworkShare={isLocalNetworkShare}
-            isLocalDirectoryLoading={isLocalDirectoryLoading}
-            isWorkspaceRefreshing={isWorkspaceRefreshing}
-            isWorkspaceSwitching={isWorkspaceSwitching}
-            canPasteToLocal={canPasteToLocal}
-            canPasteToRemote={canPasteToRemote}
-            clipboardStatusText={clipboardStatusText}
-            localCutPaths={localCutPaths}
-            remoteCutPaths={remoteCutPaths}
-            onCopyItems={onCopyItems}
-            onCutItems={onCutItems}
-            onClearCutState={onClearCutState}
-            onExecuteCommand={onExecuteCommand}
-            onSendTerminalCommand={onSendTerminalCommand}
-            onSaveTemporaryCommand={onSaveTemporaryCommand}
-            onUpdateCommand={onUpdateCommand}
-            onOpenCommandManager={onOpenCommandManager}
-            onOpenLocalItem={onOpenLocalItem}
-            onOpenLocalPath={onOpenLocalPath}
-            onBackToLocalComputer={onBackToLocalComputer}
-            onOpenRemoteItem={onOpenRemoteItem}
-            onOpenRemotePath={onOpenRemotePath}
-            onPasteIntoPane={onPasteIntoPane}
-            onRequestChangePermissions={onRequestChangePermissions}
-            onRequestDelete={onRequestDelete}
-            onRequestNewFile={onRequestNewFile}
-            onRequestNewFolder={onRequestNewFolder}
-            onRequestQuickDelete={onRequestQuickDelete}
-            onRequestRename={onRequestRename}
-            onToggleFollowShellCwd={onToggleFollowShellCwd}
-            onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
-            remoteFileAccessMode={remoteFileAccessMode}
-            isRemoteDirectoryLoading={isRemoteDirectoryLoading}
-            onRefresh={onRefresh}
-            onUploadFiles={onUploadFiles}
-            onChooseUploadFiles={onChooseUploadFiles}
-            onDownloadFiles={onDownloadFiles}
-            onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
-            onDropUpload={onDropUpload}
-          />
+          {isActive ? (
+            <FileManager
+              activeSession={activeSession}
+              activeTab={activeTab}
+              activeView={activeView}
+              onActiveViewChange={onActiveViewChange}
+              commandPaneWidth={commandPaneWidth}
+              onCommandPaneWidthChange={onCommandPaneWidthChange}
+              sendTargets={sendTargets}
+              commandFolders={commandFolders}
+              commandTemplates={commandTemplates}
+              isBusy={isBusy}
+              localItems={localItems}
+              localPath={localPath}
+              localPanePath={localPanePath}
+              isLocalNetworkShare={isLocalNetworkShare}
+              isLocalDirectoryLoading={isLocalDirectoryLoading}
+              isWorkspaceRefreshing={isWorkspaceRefreshing}
+              isWorkspaceSwitching={isWorkspaceSwitching}
+              canPasteToLocal={canPasteToLocal}
+              canPasteToRemote={canPasteToRemote}
+              clipboardStatusText={clipboardStatusText}
+              localCutPaths={localCutPaths}
+              remoteCutPaths={remoteCutPaths}
+              onCopyItems={onCopyItems}
+              onCutItems={onCutItems}
+              onClearCutState={onClearCutState}
+              onExecuteCommand={onExecuteCommand}
+              onSendTerminalCommand={onSendTerminalCommand}
+              onSaveTemporaryCommand={onSaveTemporaryCommand}
+              onUpdateCommand={onUpdateCommand}
+              onOpenCommandManager={onOpenCommandManager}
+              onOpenLocalItem={onOpenLocalItem}
+              onOpenLocalPath={onOpenLocalPath}
+              onBackToLocalComputer={onBackToLocalComputer}
+              onOpenRemoteItem={onOpenRemoteItem}
+              onOpenRemotePath={onOpenRemotePath}
+              onPasteIntoPane={onPasteIntoPane}
+              onRequestChangePermissions={onRequestChangePermissions}
+              onRequestDelete={onRequestDelete}
+              onRequestNewFile={onRequestNewFile}
+              onRequestNewFolder={onRequestNewFolder}
+              onRequestQuickDelete={onRequestQuickDelete}
+              onRequestRename={onRequestRename}
+              onToggleFollowShellCwd={onToggleFollowShellCwd}
+              onToggleRemoteFileAccessMode={onToggleRemoteFileAccessMode}
+              remoteFileAccessMode={remoteFileAccessMode}
+              isRemoteDirectoryLoading={isRemoteDirectoryLoading}
+              onRefresh={onRefresh}
+              onUploadFiles={onUploadFiles}
+              onChooseUploadFiles={onChooseUploadFiles}
+              onDownloadFiles={onDownloadFiles}
+              onDownloadLocalNetworkFiles={onDownloadLocalNetworkFiles}
+              onDropUpload={onDropUpload}
+            />
+          ) : null}
         </div>
       ) : null}
       <div className="terminal-right-frame" aria-hidden="true" />

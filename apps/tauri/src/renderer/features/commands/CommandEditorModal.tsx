@@ -5,6 +5,7 @@ import { extractCommandParams, sortByOrder } from './command-utils'
 import { CommandCodeEditor } from './CommandCodeEditor'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonContent } from '../common/StableButtonContent'
 
 export const emptyCommandForm: CommandTemplateInput = {
   name: '',
@@ -231,13 +232,13 @@ export function CommandEditorModal({
                 {t.cancel}
               </button>
               <button
+                aria-busy={submitLocked}
                 className="primary-button"
                 disabled={submitLocked}
                 type="button"
                 onClick={() => void submitForm()}
               >
-                {submitLocked ? <span aria-hidden="true" className="button-spinner" /> : null}
-                <span>{t.save}</span>
+                <StableButtonContent busy={submitLocked} label={t.save} />
               </button>
             </div>
             {submitError ? <div className="modal-error">{submitError}</div> : null}
@@ -255,9 +256,14 @@ export function CommandEditorModal({
           <button className="flat-button" disabled={submitLocked} type="button" onClick={onClose}>
             {t.cancel}
           </button>
-          <button className="primary-button" disabled={submitLocked} type="button" onClick={() => void submitForm()}>
-            {submitLocked ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{t.save}</span>
+          <button
+            aria-busy={submitLocked}
+            className="primary-button"
+            disabled={submitLocked}
+            type="button"
+            onClick={() => void submitForm()}
+          >
+            <StableButtonContent busy={submitLocked} label={t.save} />
           </button>
         </div>
         {submitError ? <div className="modal-error">{submitError}</div> : null}

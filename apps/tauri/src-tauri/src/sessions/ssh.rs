@@ -25,10 +25,10 @@ use russh::keys::PrivateKeyWithHashAlg;
 use russh::{Channel, ChannelMsg, ChannelWriteHalf, Disconnect, Sig};
 use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::fs::Metadata as SftpMetadata;
-use russh_sftp::client::SftpSession;
+use russh_sftp::client::{Config as SftpConfig, SftpSession};
 use russh_sftp::protocol::{OpenFlags, StatusCode};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, EventTarget, Manager};
 use tokio::io::{
     copy_bidirectional, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt,
 };
@@ -50,6 +50,11 @@ use crate::services::{
 
 const DEFAULT_SSH_KEY_FILES: [&str; 4] = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"];
 const SSH_INTERACTION_TIMEOUT: Duration = Duration::from_secs(300);
+// Connection tests are transient and have no workspace session to keep alive.
+// If a first-time host-key prompt cannot be observed by the form, release the
+// SSH handshake promptly instead of occupying a server-side unauthenticated
+// slot for the normal five-minute interaction window.
+const SSH_CONNECTION_TEST_INTERACTION_TIMEOUT: Duration = Duration::from_secs(30);
 // A TCP connection, SSH protocol handshake, or password-auth reply can remain
 // pending indefinitely on a broken server or middlebox. Keep each startup
 // stage bounded so the workspace moves out of `connecting` and the user can
@@ -78,6 +83,9 @@ const TERMINAL_RESIZE_TIMEOUT: Duration = Duration::from_millis(500);
 /// memory does not balloon and `emit_terminal_data` does not grow a multi-MB
 /// chunk in one shot.
 const TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD: usize = 64 * 1024;
+/// Capability metadata is optional and must not occupy the single SFTP
+/// request stream long enough to delay a user's first file action.
+const INITIAL_CAPABILITY_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 type SshShellWriteHalf = ChannelWriteHalf<russh::client::Msg>;
 
@@ -332,13 +340,14 @@ async fn wait_for_ssh_handshake_with_network_timeout<T>(
     stage: &str,
     host_verification_waiting: Arc<AtomicBool>,
     network_timeout: Duration,
+    interaction_timeout: Duration,
     operation: impl Future<Output = Result<T, String>>,
 ) -> Result<T, String> {
     wait_for_ssh_handshake_with_timeouts(
         stage,
         host_verification_waiting,
         network_timeout,
-        SSH_INTERACTION_TIMEOUT,
+        interaction_timeout,
         operation,
     )
     .await
@@ -716,6 +725,13 @@ pub struct ClientHandler {
     port: u16,
     trusted_fingerprint: Option<String>,
     host_verification_waiting: Arc<AtomicBool>,
+    interaction_timeout: Duration,
+    /// The WebView that owns this SSH interaction. Connection tests run in a
+    /// standalone form window, so broadcasting the request to every WebView
+    /// can race with window startup and leave the handshake waiting forever.
+    /// Normal sessions use the main workspace window; if the target is gone,
+    /// the emitter below still falls back to the app-wide event for recovery.
+    interaction_window_label: Option<String>,
 }
 
 pub type ClientHandle = Handle<ClientHandler>;
@@ -778,23 +794,42 @@ impl Handler for ClientHandler {
         // accept/reject dialog. The renderer resolves via
         // `app_resolve_ssh_interaction`, which forwards the response back
         // through the oneshot channel.
-        if self
-            .app
-            .emit(
-                "ssh:interaction",
-                serde_json::json!({
-                    "requestId": request_id,
-                    "kind": "host-verification",
-                    "tabId": self.tab_id,
-                    "profileId": self.profile_id,
-                    "host": self.host,
-                    "port": self.port,
-                    "fingerprint": fp,
-                    "knownFingerprint": known,
-                }),
-            )
-            .is_err()
+        let payload = serde_json::json!({
+            "requestId": request_id,
+            "kind": "host-verification",
+            "tabId": self.tab_id,
+            "profileId": self.profile_id,
+            "host": self.host,
+            "port": self.port,
+            "fingerprint": fp,
+            "knownFingerprint": known,
+        });
+        let (emit_result, route) = match self
+            .interaction_window_label
+            .as_deref()
+            .and_then(|label| self.app.get_webview_window(label))
         {
+            Some(window) => (
+                self.app.emit_to(
+                    EventTarget::webview_window(window.label()),
+                    "ssh:interaction",
+                    &payload,
+                ),
+                format!("window:{}", window.label()),
+            ),
+            None => (
+                self.app.emit("ssh:interaction", &payload),
+                "broadcast".to_string(),
+            ),
+        };
+        crate::services::logging::session(
+            &self.app,
+            "DEBUG",
+            "ssh",
+            &self.tab_id,
+            format!("host-key request emitted route={route}"),
+        );
+        if emit_result.is_err() {
             self.host_verification_waiting
                 .store(false, Ordering::Release);
             self.app
@@ -805,7 +840,17 @@ impl Handler for ClientHandler {
                 .remove(&request_id);
             return Ok(false);
         }
-        let response = timeout(SSH_INTERACTION_TIMEOUT, rx).await;
+        let response = timeout(self.interaction_timeout, rx).await;
+        // The renderer normally removes this entry when it resolves the
+        // interaction. A timeout has no renderer response, so clean it up
+        // here to prevent stale host-key requests from affecting later
+        // connection attempts.
+        self.app
+            .state::<crate::services::workspace::WorkspaceState>()
+            .pending_interactions
+            .write()
+            .await
+            .remove(&request_id);
         self.host_verification_waiting
             .store(false, Ordering::Release);
         let decision = match response {
@@ -1574,7 +1619,9 @@ async fn emit_terminal_data(app: &AppHandle, tab_id: &str, chunk: &str) {
 /// a slow server cannot block terminal input. Once the shell reports its CWD,
 /// that detached request is stale even if it started with the same path that is
 /// still visible in the snapshot. Do not let its result put the old directory
-/// rows back under the new CWD path.
+/// rows back under the new CWD path. The rows are still a safe fallback when
+/// the shell and SFTP expose different path namespaces (for example, a
+/// chrooted SFTP user whose shell reports `/volume1/homes/user`).
 fn initial_remote_listing_matches_current_session(
     initial_remote_path: &str,
     current_remote_path: &str,
@@ -1586,6 +1633,148 @@ fn initial_remote_listing_matches_current_session(
             || shell_cwd
                 .map(|cwd| cwd == initial_remote_path)
                 .unwrap_or(true))
+}
+
+fn initial_remote_listing_can_be_fallback(
+    initial_listing_is_current: bool,
+    initial_remote_path: &str,
+    current_remote_path: &str,
+    current_remote_files_empty: bool,
+) -> bool {
+    !initial_listing_is_current
+        && current_remote_path == initial_remote_path
+        && current_remote_files_empty
+}
+
+/// Return the SFTP paths that can represent a shell CWD.
+///
+/// SSH and SFTP do not necessarily see the same filesystem root. Synology is
+/// a common example: the shell reports a physical path such as
+/// `/volume2/homes/alice`, while SFTP may expose `/`, `/homes/alice`, or
+/// `/alice` depending on the configured service root/chroot. Keep the
+/// physical path first so ordinary Linux hosts retain their exact behaviour;
+/// only a `NoSuchFile` result may advance to one of the namespace candidates.
+///
+/// The volume number is detected from the path instead of assuming
+/// `/volume1`. Synology documents often use volume1 as an example, but the
+/// actual volume is configurable when multiple volumes exist.
+pub(crate) fn shell_cwd_sftp_path_candidates(shell_cwd: &str) -> Vec<String> {
+    let normalized = if shell_cwd.is_empty() {
+        "/".to_string()
+    } else {
+        let trimmed = shell_cwd.trim_end_matches('/');
+        if trimmed.is_empty() {
+            "/".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    };
+    let mut candidates = vec![normalized.clone()];
+
+    if let Some(prefix) = synology_volume_prefix(&normalized) {
+        push_path_suffix_candidate(&mut candidates, &normalized, prefix);
+        push_synology_home_candidates(&mut candidates, &normalized, prefix);
+    }
+    push_path_suffix_candidate(&mut candidates, &normalized, "/var/services");
+    push_synology_home_candidates(&mut candidates, &normalized, "/var/services");
+
+    candidates
+}
+
+/// Detect `/volumeN` without treating names such as `/volume10foo` as a
+/// volume root. The actual volume number is intentionally not fixed.
+fn synology_volume_prefix(path: &str) -> Option<&str> {
+    const PREFIX: &str = "/volume";
+    let suffix = path.strip_prefix(PREFIX)?;
+    let digit_count = suffix
+        .bytes()
+        .take_while(|byte| byte.is_ascii_digit())
+        .count();
+    if digit_count == 0 {
+        return None;
+    }
+    if suffix
+        .as_bytes()
+        .get(digit_count)
+        .is_some_and(|byte| *byte != b'/')
+    {
+        return None;
+    }
+    Some(&path[..PREFIX.len() + digit_count])
+}
+
+fn push_path_suffix_candidate(candidates: &mut Vec<String>, path: &str, prefix: &str) {
+    let Some(suffix) = path.strip_prefix(prefix) else {
+        return;
+    };
+    if !suffix.is_empty() && !suffix.starts_with('/') {
+        return;
+    }
+    let candidate = if suffix.is_empty() { "/" } else { suffix };
+    push_candidate(candidates, candidate);
+}
+
+fn push_candidate(candidates: &mut Vec<String>, candidate: &str) {
+    let candidate = if candidate.is_empty() { "/" } else { candidate };
+    if !candidates.iter().any(|item| item == candidate) {
+        candidates.push(candidate.to_string());
+    }
+}
+
+/// Add the two deeper Synology user-home namespace shapes. This covers both
+/// the shared-folder root (`/homes/user`) and a chroot rooted at that user's
+/// home (`/`).
+fn push_synology_home_candidates(candidates: &mut Vec<String>, path: &str, storage_prefix: &str) {
+    let Some(storage_relative) = path.strip_prefix(storage_prefix) else {
+        return;
+    };
+    if storage_relative != "/homes" && !storage_relative.starts_with("/homes/") {
+        return;
+    }
+
+    let after_homes = &storage_relative["/homes".len()..];
+    push_candidate(candidates, after_homes);
+
+    let Some(user_and_rest) = after_homes.strip_prefix('/') else {
+        return;
+    };
+    if user_and_rest.is_empty() {
+        return;
+    }
+    let after_user = user_and_rest
+        .find('/')
+        .map(|user_end| &user_and_rest[user_end..])
+        .unwrap_or("");
+    push_candidate(candidates, after_user);
+}
+
+/// A path-listing error can safely trigger a namespace fallback. Permission,
+/// timeout and protocol errors must remain visible instead of being hidden by
+/// trying unrelated paths.
+pub(crate) fn is_sftp_path_not_found_message(error: &str) -> bool {
+    error.to_ascii_lowercase().contains("no such file")
+}
+
+async fn list_shell_cwd_dir(
+    sftp: &SftpSession,
+    shell_cwd: &str,
+) -> Result<(Vec<Value>, String), String> {
+    let candidates = shell_cwd_sftp_path_candidates(shell_cwd);
+    let mut last_error = None;
+    for (index, candidate) in candidates.iter().enumerate() {
+        match list_dir(sftp, candidate).await {
+            Ok(files) => return Ok((files, candidate.clone())),
+            Err(error) => {
+                let can_try_next =
+                    index + 1 < candidates.len() && is_sftp_path_not_found_message(&error);
+                last_error = Some(error);
+                if !can_try_next {
+                    break;
+                }
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| format!("无法列出 Shell 当前目录 {shell_cwd}")))
 }
 
 #[allow(clippy::too_many_arguments)] // Protocol/session context is intentionally explicit at this async boundary.
@@ -1628,7 +1817,7 @@ async fn follow_shell_cwd(
     // The SFTP session belongs to the login user. Once `sudo -i` has started
     // a root shell, following CWD through that channel silently remains in
     // the old user's view. Electron switches to its sudo shell path here.
-    let files = match timeout(operation_timeout, async {
+    let listing = match timeout(operation_timeout, async {
         if file_access_mode == "root" {
             exec_list_dir_via_shell(
                 &handle,
@@ -1638,13 +1827,14 @@ async fn follow_shell_cwd(
                 &sudo_password,
             )
             .await
+            .map(|files| (files, cwd.clone()))
         } else {
             // russh-sftp's client is one request stream. Serialise access to it:
             // concurrent read locks let multiple list/delete/upload requests
             // interleave and eventually time out after app focus is restored.
             // The timeout covers both waiting for the lock and SFTP read_dir.
             let sftp = sftp.write().await;
-            list_dir(&sftp, &cwd).await
+            list_shell_cwd_dir(&sftp, &cwd).await
         }
     })
     .await
@@ -1653,7 +1843,7 @@ async fn follow_shell_cwd(
         Err(_) => Err(format!("跟随终端目录 {cwd} 超时")),
     };
 
-    let follow_error = files.as_ref().err().cloned();
+    let follow_error = listing.as_ref().err().cloned();
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let mut sessions = state.sessions.write().await;
     let Some(session) = sessions.get_mut(&tab_id) else {
@@ -1661,9 +1851,9 @@ async fn follow_shell_cwd(
     };
     session.remote_files_loading = false;
     if session.shell_cwd.as_deref() == Some(cwd.as_str()) && session.follow_shell_cwd {
-        if let Ok(files) = files {
-            session.remote_path = cwd.clone();
-            session.remote_files = files;
+        if let Ok((files, resolved_path)) = &listing {
+            session.remote_path = resolved_path.clone();
+            session.remote_files = files.clone();
         }
     }
     drop(sessions);
@@ -1674,8 +1864,20 @@ async fn follow_shell_cwd(
             &tab_id,
             format!("CWD follow failed for {cwd}: {error}"),
         );
-    } else {
-        crate::services::logging::ssh_debug(&app, &tab_id, format!("CWD follow applied: {cwd}"));
+    } else if let Ok((_, resolved_path)) = listing.as_ref() {
+        if resolved_path == &cwd {
+            crate::services::logging::ssh_debug(
+                &app,
+                &tab_id,
+                format!("CWD follow applied: {cwd}"),
+            );
+        } else {
+            crate::services::logging::ssh_debug(
+                &app,
+                &tab_id,
+                format!("CWD follow mapped shell={cwd} sftp={resolved_path}"),
+            );
+        }
     }
 
     if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
@@ -2617,6 +2819,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send> SshTransport for T {}
 
 type BoxedSshTransport = Box<dyn SshTransport>;
 
+#[allow(clippy::too_many_arguments)] // SSH handler construction keeps the connection identity and interaction policy explicit.
 fn new_client_handler(
     app: &AppHandle,
     tab_id: &str,
@@ -2625,6 +2828,8 @@ fn new_client_handler(
     port: u16,
     trusted_fingerprint: Option<String>,
     host_verification_waiting: Arc<AtomicBool>,
+    interaction_timeout: Duration,
+    interaction_window_label: Option<String>,
 ) -> ClientHandler {
     ClientHandler {
         app: app.clone(),
@@ -2634,6 +2839,8 @@ fn new_client_handler(
         port,
         trusted_fingerprint,
         host_verification_waiting,
+        interaction_timeout,
+        interaction_window_label,
     }
 }
 
@@ -2644,6 +2851,7 @@ async fn connect_target_through_jump(
     host: &str,
     port: u16,
     connect_timeout: Duration,
+    interaction_timeout: Duration,
 ) -> Result<Handle<ClientHandler>, String> {
     let host_verification_waiting = handler.host_verification_waiting.clone();
     let channel = wait_for_ssh_stage("SSH jump-host channel setup", connect_timeout, async {
@@ -2657,6 +2865,7 @@ async fn connect_target_through_jump(
         "SSH handshake via jump host",
         host_verification_waiting,
         connect_timeout,
+        interaction_timeout,
         async {
             russh::client::connect_stream(config, channel.into_stream(), handler)
                 .await
@@ -2958,6 +3167,7 @@ async fn ensure_password_credentials(
     profile: &mut Value,
     app: &AppHandle,
     tab_id: &str,
+    interaction_timeout: Duration,
 ) -> Result<(), String> {
     let Some(reason) = missing_password_credential(profile) else {
         return Ok(());
@@ -2992,7 +3202,7 @@ async fn ensure_password_credentials(
         return Err(error.to_string());
     }
 
-    let response = match timeout(SSH_INTERACTION_TIMEOUT, rx).await {
+    let response = match timeout(interaction_timeout, rx).await {
         Ok(Ok(response)) => response,
         Ok(Err(_)) => return Err("SSH credentials request canceled".to_string()),
         Err(_) => {
@@ -3069,9 +3279,11 @@ async fn open_session(
     profile: &Value,
     app: &AppHandle,
     tab_id: &str,
+    interaction_timeout: Duration,
+    interaction_window_label: Option<String>,
 ) -> Result<Handle<ClientHandler>, String> {
     let mut effective_profile = profile.clone();
-    ensure_password_credentials(&mut effective_profile, app, tab_id).await?;
+    ensure_password_credentials(&mut effective_profile, app, tab_id, interaction_timeout).await?;
     let profile = &effective_profile;
     let host = profile
         .get("host")
@@ -3200,7 +3412,14 @@ async fn open_session(
         // host itself could be resolved via another open_session call) and
         // Rust requires indirection for recursive async fns to avoid
         // infinitely-sized futures.
-        let jump_handle = Box::pin(open_session(&jump_profile, app, tab_id)).await?;
+        let jump_handle = Box::pin(open_session(
+            &jump_profile,
+            app,
+            tab_id,
+            interaction_timeout,
+            interaction_window_label.clone(),
+        ))
+        .await?;
         crate::services::logging::session(
             app,
             "INFO",
@@ -3228,10 +3447,13 @@ async fn open_session(
                     port,
                     trusted.clone(),
                     target_host_verification_waiting,
+                    interaction_timeout,
+                    interaction_window_label.clone(),
                 ),
                 &host,
                 port,
                 connect_timeout,
+                interaction_timeout,
             )
             .await?;
             match try_authenticate(
@@ -3271,10 +3493,13 @@ async fn open_session(
                             port,
                             trusted,
                             retry_host_verification_waiting,
+                            interaction_timeout,
+                            interaction_window_label.clone(),
                         ),
                         &host,
                         port,
                         connect_timeout,
+                        interaction_timeout,
                     )
                     .await?;
                     if try_keyboard_interactive(
@@ -3349,6 +3574,7 @@ async fn open_session(
         "SSH protocol handshake",
         host_verification_waiting.clone(),
         connect_timeout,
+        interaction_timeout,
         async {
             russh::client::connect_stream(
                 config.clone(),
@@ -3361,6 +3587,8 @@ async fn open_session(
                     port,
                     trusted.clone(),
                     host_verification_waiting,
+                    interaction_timeout,
+                    interaction_window_label.clone(),
                 ),
             )
             .await
@@ -3394,6 +3622,7 @@ async fn open_session(
                 "SSH protocol re-handshake",
                 retry_host_verification_waiting.clone(),
                 connect_timeout,
+                interaction_timeout,
                 async {
                     russh::client::connect_stream(
                         config,
@@ -3406,6 +3635,8 @@ async fn open_session(
                             port,
                             trusted,
                             retry_host_verification_waiting,
+                            interaction_timeout,
+                            interaction_window_label,
                         ),
                     )
                     .await
@@ -3453,15 +3684,43 @@ async fn open_session(
 }
 
 /// Verify SSH transport, host-key policy, and authentication without opening
-/// a shell or SFTP channel. The caller supplies a transient tab id only so
-/// existing SSH interaction dialogs can route credential and host-key prompts.
-pub async fn test_connection(app: &AppHandle, profile: &Value, tab_id: &str) -> Result<(), String> {
-    let handle = open_session(profile, app, tab_id).await?;
+/// a shell or SFTP channel. The caller supplies a transient tab id and the
+/// owning WebView label so host-key prompts are delivered to the form that
+/// started the test instead of racing with every renderer window.
+pub async fn test_connection(
+    app: &AppHandle,
+    profile: &Value,
+    tab_id: &str,
+    interaction_window_label: String,
+) -> Result<(), String> {
+    crate::services::logging::session(app, "INFO", "ssh", tab_id, "connection test started");
+    let handle = match open_session(
+        profile,
+        app,
+        tab_id,
+        SSH_CONNECTION_TEST_INTERACTION_TIMEOUT,
+        Some(interaction_window_label),
+    )
+    .await
+    {
+        Ok(handle) => handle,
+        Err(error) => {
+            crate::services::logging::session(
+                app,
+                "ERROR",
+                "ssh",
+                tab_id,
+                format!("connection test failed stage=open_session error={error}"),
+            );
+            return Err(error);
+        }
+    };
     let _ = timeout(
         Duration::from_secs(3),
         handle.disconnect(Disconnect::ByApplication, "connection test complete", "en"),
     )
     .await;
+    crate::services::logging::session(app, "INFO", "ssh", tab_id, "connection test completed");
     Ok(())
 }
 
@@ -4264,6 +4523,20 @@ const ROOT_ACCESS_VERIFY_TIMEOUT: Duration = Duration::from_millis(1500);
 /// 长时间不返回，必须强制收口。
 const FILE_OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Keep the detached first browse request responsive even when a server's
+/// SFTP subsystem accepts a request but never completes `READDIR`. User
+/// initiated operations retain the profile-configured timeout below.
+const INITIAL_SFTP_LISTING_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Resolving the SFTP current directory is a small compatibility probe. It
+/// must not inherit a one-hour operation timeout from a profile.
+const INITIAL_SFTP_HOME_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// A directory listing already carries metadata for the link itself. Following
+/// a symlink is optional UI enrichment, so one inaccessible or slow target
+/// must not hold the whole file pane behind the SFTP request timeout.
+const SFTP_SYMLINK_TARGET_TIMEOUT: Duration = Duration::from_secs(2);
+
 fn file_operation_timeout(profile: &Value) -> Duration {
     seconds_from_profile(
         profile,
@@ -4274,7 +4547,10 @@ fn file_operation_timeout(profile: &Value) -> Duration {
     )
 }
 
-async fn open_sftp_session(handle: &Handle<ClientHandler>) -> Result<SftpSession, String> {
+async fn open_sftp_session(
+    handle: &Handle<ClientHandler>,
+    request_timeout: Duration,
+) -> Result<SftpSession, String> {
     let sftp_channel = timeout(SFTP_INIT_STEP_TIMEOUT, handle.channel_open_session())
         .await
         .map_err(|_| "SFTP init failed: 打开 channel 超时".to_string())?
@@ -4286,9 +4562,16 @@ async fn open_sftp_session(handle: &Handle<ClientHandler>) -> Result<SftpSession
     .await
     .map_err(|_| "SFTP init failed: 请求 subsystem 超时".to_string())?
     .map_err(|error| format!("SFTP subsystem request failed: {error}"))?;
+    // russh-sftp defaults each request to 10 seconds. Keep that library-level
+    // deadline aligned with FileTerm's operation timeout so a slow SFTP
+    // server is not failed early with a misleading bare `Timeout` error.
+    let sftp_config = SftpConfig {
+        request_timeout_secs: request_timeout.as_secs().max(1),
+        ..SftpConfig::default()
+    };
     timeout(
         SFTP_INIT_STEP_TIMEOUT,
-        SftpSession::new(sftp_channel.into_stream()),
+        SftpSession::new_with_config(sftp_channel.into_stream(), sftp_config),
     )
     .await
     .map_err(|_| "SFTP init failed: 协议握手超时".to_string())?
@@ -4298,14 +4581,40 @@ async fn open_sftp_session(handle: &Handle<ClientHandler>) -> Result<SftpSession
 type SharedSftpSession = Arc<RwLock<SftpSession>>;
 type TransferSftpSlot = Arc<Mutex<Option<SharedSftpSession>>>;
 
+/// `/` was the historical SSH form default, but it is not a portable initial
+/// directory: a normal OpenSSH server exposes the whole filesystem while a
+/// chrooted or hosted SFTP server may expose the user's home as `/`. Treat the
+/// old `/` value and the new `.` value as an implicit Home request, then let
+/// the SFTP server resolve the actual namespace.
+fn is_implicit_ssh_home_path(path: &str) -> bool {
+    matches!(path.trim(), "" | "/" | ".")
+}
+
+async fn resolve_initial_sftp_home_path(
+    sftp: &SharedSftpSession,
+    operation_timeout: Duration,
+) -> Result<String, String> {
+    let resolution_timeout = operation_timeout.min(INITIAL_SFTP_HOME_RESOLUTION_TIMEOUT);
+    let canonical_path = timeout(resolution_timeout, async {
+        let sftp = sftp.write().await;
+        sftp.canonicalize(".").await
+    })
+    .await
+    .map_err(|_| "SFTP canonical home path resolution timed out".to_string())?
+    .map_err(|error| error.to_string())?;
+
+    let canonical_path = canonical_path.trim();
+    if canonical_path.is_empty() || canonical_path == "." {
+        return Err("SFTP server returned an empty canonical home path".to_string());
+    }
+    Ok(canonical_path.to_string())
+}
+
 fn is_sftp_not_found(error: &SftpError) -> bool {
     matches!(
         error,
         SftpError::Status(status) if status.status_code == StatusCode::NoSuchFile
-    ) || error
-        .to_string()
-        .to_ascii_lowercase()
-        .contains("no such file")
+    ) || is_sftp_path_not_found_message(&error.to_string())
 }
 
 async fn acquire_transfer_sftp(
@@ -4314,12 +4623,13 @@ async fn acquire_transfer_sftp(
     slot: &TransferSftpSlot,
     app: &AppHandle,
     tab_id: &str,
+    request_timeout: Duration,
 ) -> SharedSftpSession {
     let mut slot_guard = slot.lock().await;
     if let Some(session) = slot_guard.as_ref() {
         return Arc::clone(session);
     }
-    match open_sftp_session(handle).await {
+    match open_sftp_session(handle, request_timeout).await {
         Ok(session) => {
             let session = Arc::new(RwLock::new(session));
             *slot_guard = Some(Arc::clone(&session));
@@ -4408,7 +4718,15 @@ async fn run_worker_loop(
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
     // one authenticated handle for every channel. The handle is wrapped in
     // `Arc` so the background metrics task can share it with the main loop.
-    let handle: Arc<Handle<ClientHandler>> = match open_session(profile, app, tab_id).await {
+    let handle: Arc<Handle<ClientHandler>> = match open_session(
+        profile,
+        app,
+        tab_id,
+        SSH_INTERACTION_TIMEOUT,
+        Some("main".to_string()),
+    )
+    .await
+    {
         Ok(h) => Arc::new(h),
         Err(error) => {
             crate::services::logging::session(
@@ -4694,7 +5012,7 @@ async fn run_worker_loop(
         emit_terminal_data(app, tab_id, &format!("\r\n[files] {reason}\r\n")).await;
         (None, Some(reason))
     } else {
-        match open_sftp_session(&handle).await {
+        match open_sftp_session(&handle, operation_timeout).await {
             Ok(sftp) => {
                 crate::services::logging::session(
                     app,
@@ -4704,7 +5022,7 @@ async fn run_worker_loop(
                     "SFTP session ready",
                 );
                 let sftp_arc = Arc::new(RwLock::new(sftp));
-                let initial_remote_path = {
+                let configured_initial_remote_path = {
                     let sessions = state.sessions.read().await;
                     sessions
                         .get(tab_id)
@@ -4713,9 +5031,42 @@ async fn run_worker_loop(
                             crate::services::workspace::initial_remote_path_for_profile(profile)
                         })
                 };
+                let initial_remote_path = if is_implicit_ssh_home_path(
+                    &configured_initial_remote_path,
+                ) {
+                    match resolve_initial_sftp_home_path(&sftp_arc, operation_timeout).await {
+                        Ok(resolved_path) => {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                format!(
+                                    "initial SFTP home resolved configured={} resolved={resolved_path}",
+                                    configured_initial_remote_path
+                                ),
+                            );
+                            resolved_path
+                        }
+                        Err(error) => {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                format!(
+                                    "initial SFTP home resolution failed configured={} error={error}; using configured path",
+                                    configured_initial_remote_path
+                                ),
+                            );
+                            configured_initial_remote_path.clone()
+                        }
+                    }
+                } else {
+                    configured_initial_remote_path.clone()
+                };
                 {
                     let mut sessions = state.sessions.write().await;
                     if let Some(session) = sessions.get_mut(tab_id) {
+                        if session.remote_path == configured_initial_remote_path {
+                            session.remote_path = initial_remote_path.clone();
+                        }
                         session.remote_capabilities = Some(default_sftp_capabilities());
                     }
                 }
@@ -4735,10 +5086,35 @@ async fn run_worker_loop(
                 let initial_app = app.clone();
                 let initial_tab_id = tab_id.to_string();
                 let initial_cancellation = cancellation.clone();
+                let initial_listing_timeout = operation_timeout.min(INITIAL_SFTP_LISTING_TIMEOUT);
                 tokio::spawn(async move {
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial directory listing started path={initial_remote_path} timeout_secs={}",
+                            initial_listing_timeout.as_secs()
+                        ),
+                    );
                     let initial_files = tokio::select! {
-                        _ = initial_cancellation.cancelled() => return,
-                        result = timeout(operation_timeout, async {
+                        _ = initial_cancellation.cancelled() => {
+                            let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
+                            if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
+                                session.remote_files_loading = false;
+                            }
+                            if let Ok(snapshot) =
+                                crate::commands::get_workspace_snapshot(initial_app.clone()).await
+                            {
+                                let _ = initial_app.emit("workspace:snapshot", snapshot);
+                            }
+                            crate::services::logging::ssh_debug(
+                                &initial_app,
+                                &initial_tab_id,
+                                "initial directory listing cancelled",
+                            );
+                            return;
+                        },
+                        result = timeout(initial_listing_timeout, async {
                             let sftp = initial_sftp.write().await;
                             list_dir(&sftp, &initial_remote_path).await
                         }) => match result {
@@ -4747,20 +5123,135 @@ async fn run_worker_loop(
                         },
                     };
 
+                    let initial_listing_error = initial_files.as_ref().err().cloned();
+                    let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
+                    let mut initial_listing_is_current = false;
+                    let mut initial_listing_fallback_used = false;
+                    if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
+                        initial_listing_is_current = initial_remote_listing_matches_current_session(
+                            &initial_remote_path,
+                            &session.remote_path,
+                            session.shell_cwd.as_deref(),
+                            session.follow_shell_cwd,
+                        );
+                        if initial_listing_is_current {
+                            session.remote_files_loading = false;
+                            if let Ok(files) = &initial_files {
+                                session.remote_files = files.clone();
+                            }
+                        } else {
+                            if initial_remote_listing_can_be_fallback(
+                                initial_listing_is_current,
+                                &initial_remote_path,
+                                &session.remote_path,
+                                session.remote_files.is_empty(),
+                            ) {
+                                // A shell CWD may be outside the SFTP user's
+                                // namespace (Synology commonly chroots SFTP
+                                // at the user's home). Keep a successful
+                                // listing of the visible SFTP path instead of
+                                // leaving the pane empty after CWD follow fails.
+                                if let Ok(files) = &initial_files {
+                                    session.remote_files = files.clone();
+                                    initial_listing_fallback_used = true;
+                                }
+                            }
+                            // A manual navigation, a completed CWD follow, or
+                            // an unmapped shell CWD owns the final state. The
+                            // detached startup request must never leave the
+                            // file pane loading forever.
+                            session.remote_files_loading = false;
+                        }
+                    }
+
+                    match &initial_files {
+                        Ok(files) => crate::services::logging::ssh_debug(
+                            &initial_app,
+                            &initial_tab_id,
+                            format!(
+                                "initial directory listing completed path={initial_remote_path} entries={} current={initial_listing_is_current} fallback={initial_listing_fallback_used}",
+                                files.len()
+                            ),
+                        ),
+                        Err(error) => crate::services::logging::session(
+                            &initial_app,
+                            "WARN",
+                            "sftp",
+                            &initial_tab_id,
+                            format!(
+                                "initial directory listing failed path={initial_remote_path} current={initial_listing_is_current}: {error}"
+                            ),
+                        ),
+                    }
+
+                    if initial_listing_is_current {
+                        if let Some(error) = initial_listing_error {
+                            // A usable SFTP channel can still lack access to the
+                            // profile's configured starting directory.
+                            emit_terminal_data(
+                                &initial_app,
+                                &initial_tab_id,
+                                &format!(
+                                    "\r\n[files] 列出目录 {initial_remote_path} 失败: {error}\r\n"
+                                ),
+                            )
+                            .await;
+                        }
+                    }
+
+                    // Publish the directory result before running optional
+                    // capability probes. fs_info/readlink/hardlink and the
+                    // SSH exec probe are best-effort metadata; a slow or
+                    // restricted server must not keep usable file rows behind
+                    // the loading spinner.
+                    if let Ok(snapshot) =
+                        crate::commands::get_workspace_snapshot(initial_app.clone()).await
+                    {
+                        let _ = initial_app.emit("workspace:snapshot", snapshot);
+                    }
+
+                    if initial_cancellation.is_cancelled() {
+                        return;
+                    }
+
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial capability probes started path={initial_remote_path} exec_enabled={exec_channel_enabled} timeout_secs={}",
+                            operation_timeout
+                                .min(INITIAL_CAPABILITY_PROBE_TIMEOUT)
+                                .as_secs()
+                        ),
+                    );
+                    let capability_timeout =
+                        operation_timeout.min(INITIAL_CAPABILITY_PROBE_TIMEOUT);
                     let mut remote_capabilities = tokio::select! {
                         _ = initial_cancellation.cancelled() => return,
-                        result = timeout(operation_timeout, async {
+                        result = timeout(capability_timeout, async {
                             let sftp = initial_sftp.write().await;
                             inspect_sftp_capabilities(&sftp, &initial_remote_path).await
                         }) => match result {
                             Ok(capabilities) => capabilities,
-                            Err(_) => default_sftp_capabilities(),
+                            Err(_) => {
+                                crate::services::logging::session(
+                                    &initial_app,
+                                    "WARN",
+                                    "sftp",
+                                    &initial_tab_id,
+                                    format!(
+                                        "initial SFTP capability probe timed out path={initial_remote_path} timeout_secs={}",
+                                        capability_timeout.as_secs()
+                                    ),
+                                );
+                                default_sftp_capabilities()
+                            },
                         },
                     };
                     let (server_copy, checksum_algorithms) = if exec_channel_enabled {
                         tokio::select! {
                             _ = initial_cancellation.cancelled() => return,
-                            result = inspect_ssh_exec_capabilities(&initial_handle, operation_timeout) => result,
+                            result = inspect_ssh_exec_capabilities(&initial_handle, capability_timeout) => result,
                         }
                     } else {
                         (false, Vec::new())
@@ -4778,53 +5269,18 @@ async fn run_worker_loop(
                     }
 
                     let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
-                    let mut initial_listing_is_current = false;
                     if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
-                        session.remote_capabilities = Some(remote_capabilities);
-                        initial_listing_is_current = initial_remote_listing_matches_current_session(
-                            &initial_remote_path,
-                            &session.remote_path,
-                            session.shell_cwd.as_deref(),
-                            session.follow_shell_cwd,
-                        );
-                        if initial_listing_is_current {
-                            session.remote_files_loading = false;
-                            if let Ok(files) = &initial_files {
-                                session.remote_files = files.clone();
-                            }
-                        } else if session.remote_path != initial_remote_path {
-                            // A manual navigation or a completed CWD follow
-                            // owns the current listing. The detached startup
-                            // request must not keep its loading flag alive.
-                            session.remote_files_loading = false;
-                        }
+                        session.remote_capabilities = Some(remote_capabilities.clone());
                     }
-
-                    if initial_listing_is_current {
-                        if let Some(error) = initial_files.as_ref().err() {
-                            crate::services::logging::session(
-                                &initial_app,
-                                "WARN",
-                                "sftp",
-                                &initial_tab_id,
-                                format!("initial directory listing failed: {error}"),
-                            );
-                            // A usable SFTP channel can still lack access to the
-                            // profile's configured starting directory.
-                            emit_terminal_data(
-                                &initial_app,
-                                &initial_tab_id,
-                                &format!(
-                                    "\r\n[files] 列出目录 {initial_remote_path} 失败: {error}\r\n"
-                                ),
-                            )
-                            .await;
-                        }
-                    }
-
-                    if initial_cancellation.is_cancelled() {
-                        return;
-                    }
+                    crate::services::logging::ssh_debug(
+                        &initial_app,
+                        &initial_tab_id,
+                        format!(
+                            "initial capability probes completed path={initial_remote_path} server_copy={} checksums={}",
+                            remote_capabilities.server_copy,
+                            remote_capabilities.checksum_algorithms.len()
+                        ),
+                    );
                     if let Ok(snapshot) =
                         crate::commands::get_workspace_snapshot(initial_app.clone()).await
                     {
@@ -4931,12 +5387,16 @@ async fn run_worker_loop(
                 (Some(command), None)
             } else {
                 // POSIX: wrap the metrics script in a while-true loop
-                let raw = if metrics_plat == "busybox" {
-                    "busybox"
+                let metrics = if metrics_plat == "freebsd" {
+                    super::system_metrics::build_freebsd_metrics_command()
                 } else {
-                    "linux"
+                    let raw = if metrics_plat == "busybox" {
+                        "busybox"
+                    } else {
+                        "linux"
+                    };
+                    super::system_metrics::build_posix_metrics_command(raw)
                 };
-                let metrics = super::system_metrics::build_posix_metrics_command(raw);
                 let script = format!(
                     "{}\nwhile true; do\n{}\necho '{}'\nsleep {}\ndone\n",
                     "cd / >/dev/null 2>&1 || true", metrics, marker, metrics_interval_seconds
@@ -6557,9 +7017,15 @@ async fn handle_worker_cmd(
                 let use_login_sftp_staging =
                     fam == "root" && is_root_upload_staging_path(&remote_path);
                 let mut result = if use_login_sftp_staging || fam != "root" {
-                    let transfer_sftp =
-                        acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id)
-                            .await;
+                    let transfer_sftp = acquire_transfer_sftp(
+                        &handle,
+                        &sftp,
+                        &transfer_sftp_slot,
+                        &app,
+                        &tab_id,
+                        operation_timeout,
+                    )
+                    .await;
                     let sftp_guard = transfer_sftp.write().await;
                     let result = upload_local_file(
                         &sftp_guard,
@@ -6652,9 +7118,15 @@ async fn handle_worker_cmd(
                     )
                     .await
                 } else {
-                    let transfer_sftp =
-                        acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id)
-                            .await;
+                    let transfer_sftp = acquire_transfer_sftp(
+                        &handle,
+                        &sftp,
+                        &transfer_sftp_slot,
+                        &app,
+                        &tab_id,
+                        operation_timeout,
+                    )
+                    .await;
                     let sftp_guard = transfer_sftp.write().await;
                     let result = download_remote_file(
                         &sftp_guard,
@@ -6725,9 +7197,15 @@ async fn handle_worker_cmd(
                     )
                     .await
                 } else {
-                    let transfer_sftp =
-                        acquire_transfer_sftp(&handle, &sftp, &transfer_sftp_slot, &app, &tab_id)
-                            .await;
+                    let transfer_sftp = acquire_transfer_sftp(
+                        &handle,
+                        &sftp,
+                        &transfer_sftp_slot,
+                        &app,
+                        &tab_id,
+                        operation_timeout,
+                    )
+                    .await;
                     let sftp_guard = transfer_sftp.write().await;
                     let result =
                         replace_remote_file(&sftp_guard, &partial_path, &destination_path).await;
@@ -7415,12 +7893,14 @@ pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, 
         // `DirEntry::metadata()` preserves the link itself. Resolve the
         // target only for navigation so a link to a directory remains
         // enterable while a link to a regular file opens in the editor.
-        let link_target_is_dir = is_link
-            && sftp
-                .metadata(&full_path)
-                .await
-                .map(|target| target.is_dir())
-                .unwrap_or(false);
+        let link_target_is_dir = if is_link {
+            match timeout(SFTP_SYMLINK_TARGET_TIMEOUT, sftp.metadata(&full_path)).await {
+                Ok(Ok(target)) => target.is_dir(),
+                _ => false,
+            }
+        } else {
+            false
+        };
         let file_type = effective_remote_file_type(is_dir, is_link, link_target_is_dir);
         let size_str = if is_dir || link_target_is_dir {
             "-".to_string()
@@ -9272,22 +9752,24 @@ mod tests {
         coalesce_terminal_input, contains_interrupt_byte, decode_bytes, default_ssh_key_paths,
         detect_remote_exec_input_kind, effective_remote_file_type, effective_remote_forward_port,
         encode_text, enqueue_tunnel_command, exec_channel_enabled, finish_shell_setup_suppression,
-        format_sftp_unavailable_reason, initial_remote_listing_matches_current_session,
-        is_password_prompt, is_root_upload_staging_path, looks_like_mfa_prompt,
-        looks_like_root_prompt, looks_like_shell_prompt, merge_system_metrics_history,
-        missing_password_credential, parent_remote_item, parent_remote_path,
-        parse_root_file_access_method, parse_root_file_list, password_for_authentication,
-        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
+        format_sftp_unavailable_reason, initial_remote_listing_can_be_fallback,
+        initial_remote_listing_matches_current_session, is_implicit_ssh_home_path,
+        is_password_prompt, is_root_upload_staging_path, is_sftp_path_not_found_message,
+        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        merge_system_metrics_history, missing_password_credential, parent_remote_item,
+        parent_remote_path, parse_root_file_access_method, parse_root_file_list,
+        password_for_authentication, privilege_command_from_terminal_input,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        resource_monitoring_interval_seconds, root_access_auth_failed,
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
         root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
         root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
-        should_buffer_terminal_input_during_shell_setup, should_reinject_root_shell_setup,
-        spawn_cancellable_file_operation, split_prompt_tail_for_setup_wait, strip_su_exec_output,
-        su_exec_command, suppress_shell_setup_echo, track_cwd_and_user,
-        track_root_access_prompt_from_terminal, trim_string_front, trusted_host_fingerprint,
-        try_keyboard_interactive_with_responder, tunnel_bind_address,
-        validate_root_download_completion, validate_tunnel_rule,
+        shell_cwd_sftp_path_candidates, should_buffer_terminal_input_during_shell_setup,
+        should_reinject_root_shell_setup, spawn_cancellable_file_operation,
+        split_prompt_tail_for_setup_wait, strip_su_exec_output, su_exec_command,
+        suppress_shell_setup_echo, track_cwd_and_user, track_root_access_prompt_from_terminal,
+        trim_string_front, trusted_host_fingerprint, try_keyboard_interactive_with_responder,
+        tunnel_bind_address, validate_root_download_completion, validate_tunnel_rule,
         wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, KeyboardInteractiveRequest,
         RootFileAccessMethod, ShellSetupEchoSuppression, SshTunnelRule, TunnelCommand,
         BUSYBOX_SHELL_CWD_SETUP, SHELL_CWD_SETUP, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
@@ -9460,6 +9942,73 @@ mod tests {
     }
 
     #[test]
+    fn stale_initial_remote_listing_is_kept_for_an_unmapped_shell_cwd() {
+        assert!(initial_remote_listing_can_be_fallback(
+            false, "/", "/", true
+        ));
+        assert!(!initial_remote_listing_can_be_fallback(
+            false, "/", "/", false
+        ));
+        assert!(!initial_remote_listing_can_be_fallback(
+            false,
+            "/",
+            "/home/stoffel",
+            true
+        ));
+        assert!(!initial_remote_listing_can_be_fallback(
+            true, "/", "/", true
+        ));
+    }
+
+    #[test]
+    fn shell_cwd_mapping_does_not_assume_volume1() {
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/volume2/photo/albums"),
+            vec![
+                "/volume2/photo/albums".to_string(),
+                "/photo/albums".to_string(),
+            ]
+        );
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/volume7/homes/alice/projects"),
+            vec![
+                "/volume7/homes/alice/projects".to_string(),
+                "/homes/alice/projects".to_string(),
+                "/alice/projects".to_string(),
+                "/projects".to_string(),
+            ]
+        );
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/volume10foo/photo"),
+            vec!["/volume10foo/photo".to_string()]
+        );
+    }
+
+    #[test]
+    fn shell_cwd_mapping_supports_synology_service_paths_and_root() {
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/var/services/homes/alice"),
+            vec![
+                "/var/services/homes/alice".to_string(),
+                "/homes/alice".to_string(),
+                "/alice".to_string(),
+                "/".to_string(),
+            ]
+        );
+        assert_eq!(
+            shell_cwd_sftp_path_candidates("/var/services"),
+            vec!["/var/services".to_string(), "/".to_string()]
+        );
+    }
+
+    #[test]
+    fn only_no_such_file_errors_trigger_sftp_namespace_fallback() {
+        assert!(is_sftp_path_not_found_message("No such file: No such file"));
+        assert!(!is_sftp_path_not_found_message("Permission denied"));
+        assert!(!is_sftp_path_not_found_message("Timeout"));
+    }
+
+    #[test]
     fn ordinary_remote_exec_reports_bounded_input_hints_without_collecting_input() {
         assert_eq!(
             detect_remote_exec_input_kind("partial output\nPassword for ops: "),
@@ -9531,6 +10080,15 @@ mod tests {
         );
         assert!(shell_cwd_setup_for_platform("windows").is_none());
         assert!(shell_cwd_setup_for_platform("unknown").is_none());
+    }
+
+    #[test]
+    fn ssh_initial_home_path_accepts_legacy_root_and_relative_home() {
+        assert!(is_implicit_ssh_home_path(""));
+        assert!(is_implicit_ssh_home_path("/"));
+        assert!(is_implicit_ssh_home_path(" . "));
+        assert!(!is_implicit_ssh_home_path("/srv/app"));
+        assert!(!is_implicit_ssh_home_path("/volume2/photo"));
     }
 
     #[tokio::test]

@@ -316,6 +316,38 @@ fn normalize_profile_secret_input(
     changed
 }
 
+/// Keep a previously trusted SSH host key when a redacted connection form
+/// sends its empty placeholder back to Rust. An explicit `null` is reserved
+/// for callers that intentionally clear the value.
+fn preserve_trusted_host_fingerprint(
+    profile: &mut Map<String, Value>,
+    previous: Option<&Value>,
+) -> bool {
+    let should_preserve = match profile.get("trustedHostFingerprint") {
+        None => true,
+        Some(Value::String(value)) => value.trim().is_empty(),
+        Some(Value::Null) | Some(_) => false,
+    };
+    if !should_preserve {
+        return false;
+    }
+
+    let Some(previous_fingerprint) = previous
+        .and_then(|value| value.get("trustedHostFingerprint"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return false;
+    };
+
+    profile.insert(
+        "trustedHostFingerprint".to_string(),
+        Value::String(previous_fingerprint.to_string()),
+    );
+    true
+}
+
 /// Build an in-memory profile for a connection test without persisting the
 /// form values. Existing profiles are hydrated first so an empty/redacted
 /// password field continues to use the saved credential during the test.
@@ -352,6 +384,7 @@ pub fn profile_for_connection_test(
     if let Some(profile_id) = profile_id {
         object.insert("id".to_string(), Value::String(profile_id.to_string()));
     }
+    preserve_trusted_host_fingerprint(object, previous.as_ref());
     normalize_profile_secret_input(object, previous.as_ref());
     Ok(profile)
 }
@@ -597,6 +630,7 @@ pub fn update_profile(app: &AppHandle, profile_id: &str, input: Value) -> Result
         .unwrap_or(Value::Null);
 
     let mut profile = ensure_object(&input);
+    preserve_trusted_host_fingerprint(&mut profile, Some(&previous));
     normalize_profile_secret_input(&mut profile, Some(&previous));
     profile.insert("id".to_string(), Value::String(profile_id.to_string()));
     profile.insert("group".to_string(), Value::String(group));
@@ -845,6 +879,23 @@ pub async fn update_trusted_host_fingerprint(
     })
     .await
     .map_err(|e| AppError::Storage(format!("join error: {}", e)))?
+}
+
+/// Explicitly clear the SSH host key trust record for a profile.
+pub fn clear_trusted_host_fingerprint(app: &AppHandle, profile_id: &str) -> Result<(), AppError> {
+    let (mut profiles, _) = read_and_heal_profiles(app)?;
+    let profile = profiles
+        .iter_mut()
+        .find(|profile| profile.get("id").and_then(Value::as_str) == Some(profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+    let object = profile
+        .as_object_mut()
+        .ok_or_else(|| AppError::Storage("Profile is invalid".to_string()))?;
+    object.insert(
+        "trustedHostFingerprint".to_string(),
+        Value::String(String::new()),
+    );
+    persist_profiles(app, &profiles)
 }
 
 /// Update a folder. If `name` is changed, cascade to children profiles' `group`.
@@ -1784,6 +1835,46 @@ mod tests {
             strip_secret_fields_public(&Value::Object(edit))["hasSavedPassword"],
             false
         );
+    }
+
+    #[test]
+    fn empty_trusted_host_fingerprint_preserves_saved_value() {
+        let previous = json!({
+            "id": "profile-1",
+            "trustedHostFingerprint": "SHA256:saved-fingerprint"
+        });
+        let mut edit = json!({
+            "trustedHostFingerprint": ""
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        assert!(preserve_trusted_host_fingerprint(
+            &mut edit,
+            Some(&previous)
+        ));
+        assert_eq!(edit["trustedHostFingerprint"], "SHA256:saved-fingerprint");
+    }
+
+    #[test]
+    fn null_trusted_host_fingerprint_remains_an_explicit_clear() {
+        let previous = json!({
+            "id": "profile-1",
+            "trustedHostFingerprint": "SHA256:saved-fingerprint"
+        });
+        let mut clear = json!({
+            "trustedHostFingerprint": null
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+
+        assert!(!preserve_trusted_host_fingerprint(
+            &mut clear,
+            Some(&previous)
+        ));
+        assert!(clear["trustedHostFingerprint"].is_null());
     }
 
     #[test]

@@ -190,9 +190,14 @@
   color: var(--type-ssh);
 }
 
+.stat-icon-telnet {
+  background: transparent;
+  color: var(--type-telnet);
+}
+
 .stat-icon-sftp {
   background: transparent;
-  color: var(--type-sftp);
+  color: var(--type-telnet);
 }
 
 .stat-icon-ftp {
@@ -287,9 +292,14 @@
   color: var(--type-ssh);
 }
 
+.recent-icon-telnet {
+  background: transparent;
+  color: var(--type-telnet);
+}
+
 .recent-icon-sftp {
   background: transparent;
-  color: var(--type-sftp);
+  color: var(--type-telnet);
 }
 
 .recent-icon-ftp {
@@ -311,9 +321,14 @@
   color: var(--type-ssh);
 }
 
+.type-badge-telnet {
+  background: transparent;
+  color: var(--type-telnet);
+}
+
 .type-badge-sftp {
   background: transparent;
-  color: var(--type-sftp);
+  color: var(--type-telnet);
 }
 
 .type-badge-ftp {
@@ -447,7 +462,8 @@
   flex-shrink: 0;
 }
 
-.action-icon span.material-symbols-outlined {
+.action-icon span.material-symbols-outlined,
+.action-icon .app-icon {
   font-size: 22px;
   color: var(--text-main);
 }

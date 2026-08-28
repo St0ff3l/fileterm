@@ -66,7 +66,9 @@ export function ManagerInlineFolderRow({
             }
           }}
         />
-        {isCommitting ? <span aria-hidden="true" className="button-spinner" /> : null}
+        <span aria-hidden="true" className="stable-button-icon manager-inline-progress-slot">
+          {isCommitting ? <span className="button-spinner" /> : null}
+        </span>
       </span>
       {afterNameCells.map((cell, index) => (
         <span key={index}>{cell}</span>

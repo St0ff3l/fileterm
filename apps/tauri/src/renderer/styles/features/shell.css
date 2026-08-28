@@ -30,6 +30,8 @@
 .window-menubar {
   grid-column: 1 / -1;
   grid-row: 1;
+  position: relative;
+  z-index: 1001;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
@@ -37,6 +39,14 @@
   height: 32px;
   border-bottom: 1px solid var(--border-light);
   -webkit-app-region: drag;
+}
+
+/* Keep only native window actions reachable while the Windows/Linux session
+ * lock covers the workspace. The menu actions must not remain available while
+ * the session is locked. */
+.fs-shell.is-session-locked .window-menu-items {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .window-menu-items,
@@ -1289,6 +1299,32 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+.workspace-content-stack {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-content-stack__item {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.workspace-content-stack__item.is-active {
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
 }
 
 .workspace-stage-transition.is-transitioning > * {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PermissionChangeOptions } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
 type PermissionState = { read: boolean; write: boolean; execute: boolean }
@@ -199,11 +200,12 @@ export function FilePermissionModal({
           </div>
 
           <div className="form-actions file-permission-dialog__actions">
-            <button className="flat-button compact" disabled={isSubmitting} onClick={onClose} type="button">
+            <button className="flat-button" disabled={isSubmitting} onClick={onClose} type="button">
               {t.cancel}
             </button>
             <button
-              className="primary-button compact"
+              aria-busy={isSubmitting}
+              className="primary-button"
               disabled={!isModeValid || isSubmitting}
               onClick={() => {
                 if (!isModeValid) {
@@ -218,8 +220,7 @@ export function FilePermissionModal({
               }}
               type="button"
             >
-              {isSubmitting ? <span aria-hidden="true" className="button-spinner" /> : null}
-              <span>{t.permissionApplyChanges}</span>
+              <StableButtonContent busy={isSubmitting} label={t.permissionApplyChanges} />
             </button>
           </div>
         </fieldset>

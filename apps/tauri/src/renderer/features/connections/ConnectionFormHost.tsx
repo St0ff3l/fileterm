@@ -23,7 +23,6 @@ export function ConnectionFormHost({
   standalone,
   onClearHostFingerprint,
   onClose,
-  onDismissError,
   onTestConnection,
   onSubmit
 }: {
@@ -41,7 +40,6 @@ export function ConnectionFormHost({
   standalone?: boolean
   onClearHostFingerprint(profile: ConnectionProfile): void
   onClose(): void
-  onDismissError(): void
   onTestConnection(): Promise<boolean>
   onSubmit(event: FormEvent<HTMLFormElement>): void
 }) {
@@ -73,7 +71,6 @@ export function ConnectionFormHost({
       setForm={setForm}
       onClearHostFingerprint={clearHostFingerprint}
       standalone={standalone}
-      onDismissError={onDismissError}
       onTestConnection={onTestConnection}
       onSubmit={onSubmit}
       onClose={onClose}

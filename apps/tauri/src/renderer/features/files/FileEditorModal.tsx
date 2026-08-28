@@ -7,6 +7,7 @@ import { t } from '../../i18n'
 import { getConfiguredMonoFontFamily, observeCanvasTextMetrics } from '../../app/font-metrics'
 import { CloseButton } from '../common/CloseButton'
 import { AppIcon } from '../common/AppIcon'
+import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import {
   EDITOR_ENCODINGS,
   getEditorEncodingLabel,
@@ -288,8 +289,7 @@ export function FileEditorModal({
             onClick={() => onSave(content, encoding)}
             type="button"
           >
-            {isSaving ? <span aria-hidden="true" className="button-spinner" /> : null}
-            <span>{isSaving ? t.saving : t.save}</span>
+            <StableButtonContent busy={isSaving} busyLabel={t.saving} label={t.save} />
           </button>
           <CloseButton disabled={isBusy || isSaving} onClick={onClose} />
         </div>
@@ -302,7 +302,9 @@ export function FileEditorModal({
               <EditorMenuButton current={openMenu} label={t.fileEditorFile} menu="file" onToggle={setOpenMenu}>
                 <MenuAction
                   disabled={!effectiveIsDirty || isBusy || isSaving}
-                  label={isSaving ? t.saving : t.save}
+                  busy={isSaving}
+                  busyLabel={t.saving}
+                  label={t.save}
                   onClick={() => onSave(content, encoding)}
                 />
                 <MenuAction
@@ -515,10 +517,22 @@ function StatusMenu({
   )
 }
 
-function MenuAction({ disabled = false, label, onClick }: { disabled?: boolean; label: string; onClick(): void }) {
+function MenuAction({
+  busy = false,
+  busyLabel,
+  disabled = false,
+  label,
+  onClick
+}: {
+  busy?: boolean
+  busyLabel?: string
+  disabled?: boolean
+  label: string
+  onClick(): void
+}) {
   return (
-    <button disabled={disabled} onClick={onClick} type="button">
-      {label}
+    <button aria-busy={busy} disabled={disabled} onClick={onClick} type="button">
+      <StableButtonLabel busy={busy} busyLabel={busyLabel} label={label} />
     </button>
   )
 }

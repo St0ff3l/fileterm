@@ -1352,13 +1352,30 @@ pub fn open_child_window(app: &AppHandle, input: OpenWindowInput) -> Result<(), 
     let label = window_label(&input);
     if let Some(window) = app.get_webview_window(&label) {
         // Match Electron's form lifecycle: opening a form always reloads it
-        // with the new mode/id URL. Focusing the existing WebviewWindow keeps
-        // its old query string, which made edit requests render the previous
-        // create form (or a different profile) instead.
+        // with the new mode/id URL. Do this by navigating the existing
+        // WebviewWindow instead of destroying and immediately rebuilding the
+        // same label. Native window destruction is asynchronous on macOS and
+        // Windows; rebuilding synchronously used to race with label removal,
+        // leaving an old form/listener alive and making SSH prompts appear
+        // intermittently.
         if matches!(input.kind.as_str(), "connection-form" | "command-form") {
-            window
-                .destroy()
+            let current_url = window
+                .url()
                 .map_err(|error| AppError::Window(error.to_string()))?;
+            let target_url = current_url
+                .join(&window_url(&input).to_string())
+                .map_err(|error| AppError::Window(error.to_string()))?;
+            window
+                .navigate(target_url)
+                .map_err(|error| AppError::Window(error.to_string()))?;
+            center_child_window_on_main(app, &window);
+            restore_window(app, &window, true);
+            crate::services::logging::debug(
+                app,
+                "window",
+                format!("navigated existing label={label} kind={}", input.kind),
+            );
+            return Ok(());
         } else {
             crate::services::logging::debug(
                 app,
@@ -1647,14 +1664,75 @@ pub fn run() {
 
     builder
         .setup(|app| {
-            crate::storage::migrate_legacy_data_once(app.handle())?;
+            // Initialize the logger before migration so portable-root and
+            // legacy-source decisions remain diagnosable on first launch.
             crate::services::logging::init(app.handle());
+            let migration_result = crate::storage::migrate_legacy_data_once(app.handle());
             // Install after `logging::init` so `LOG_DIRECTORY` is populated.
             // Captures panic location + payload for any spawned task that
             // panics (SSH worker, output pump, transfer service) — without
             // this, supervision code only sees a `JoinError` with no source
             // location and the panic site is lost.
             crate::services::logging::install_panic_hook();
+            if let Err(error) = migration_result.as_ref() {
+                crate::services::logging::error(
+                    app.handle(),
+                    "storage",
+                    format!("startup migration failed: {error}"),
+                );
+            }
+            migration_result?;
+
+            match crate::storage::ensure_portable_marker() {
+                Ok(Some(marker)) => crate::services::logging::info(
+                    app.handle(),
+                    "storage",
+                    format!("portable marker ready path={}", marker.display()),
+                ),
+                Ok(None) => {}
+                Err(error) => crate::services::logging::warn(
+                    app.handle(),
+                    "storage",
+                    format!("unable to persist portable marker: {error}"),
+                ),
+            }
+
+            let executable = std::env::current_exe()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|error| format!("<unavailable:{error}>"));
+            let portable_directory = crate::storage::portable_config_directory();
+            let storage_mode = if portable_directory.is_some() {
+                "portable"
+            } else {
+                "app-data"
+            };
+            let portable_directory = portable_directory
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "<none>".to_string());
+            let app_data_directory = app
+                .path()
+                .app_data_dir()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|error| format!("<unavailable:{error}>"));
+            match crate::storage::storage_root(app.handle()) {
+                Ok(root) => crate::services::logging::info(
+                    app.handle(),
+                    "storage",
+                    format!(
+                        "resolved mode={storage_mode} compiled_portable={} executable={executable} root={} portable_config={portable_directory} app_data={app_data_directory}",
+                        crate::storage::is_compiled_portable_build(),
+                        root.display()
+                    ),
+                ),
+                Err(error) => crate::services::logging::error(
+                    app.handle(),
+                    "storage",
+                    format!(
+                        "unable to resolve storage root mode={storage_mode} compiled_portable={} executable={executable} portable_config={portable_directory} app_data={app_data_directory}: {error}",
+                        crate::storage::is_compiled_portable_build()
+                    ),
+                ),
+            }
             crate::services::logging::info(
                 app.handle(),
                 "app",
@@ -2019,6 +2097,10 @@ pub fn run() {
             crate::commands::app_save_session_log,
             crate::commands::app_get_ui_preferences,
             crate::commands::app_set_ui_preferences,
+            crate::commands::app_get_security_settings,
+            crate::commands::app_set_security_settings,
+            crate::commands::app_reset_security_backup_password,
+            crate::commands::app_verify_security_password,
             crate::commands::app_list_local_terminal_shells,
             crate::commands::app_list_ai_providers,
             crate::commands::app_save_ai_provider,
@@ -2029,6 +2111,7 @@ pub fn run() {
             crate::commands::app_create_ai_conversation,
             crate::commands::app_rename_ai_conversation,
             crate::commands::app_summarize_ai_conversation_title,
+            crate::commands::app_delete_ai_message,
             crate::commands::app_delete_ai_conversation,
             crate::commands::app_get_ai_copilot_mode_state,
             crate::commands::app_set_ai_copilot_mode,
@@ -2125,6 +2208,7 @@ pub fn run() {
             // Phase 2: profile / folder / command CRUD
             crate::commands::app_create_profile,
             crate::commands::app_update_profile,
+            crate::commands::app_clear_trusted_host_fingerprint,
             crate::commands::app_test_connection,
             crate::commands::app_delete_profile,
             crate::commands::app_update_folder,

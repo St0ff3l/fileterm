@@ -2,6 +2,7 @@ import type { CreateProfileInput, SshKeyImportSource } from '@fileterm/core'
 import { useState } from 'react'
 import { useSshKeyLibrary } from '../../hooks/useSshKeyLibrary'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { StableButtonLabel } from '../common/StableButtonContent'
 import { SshKeyNoteDialog } from '../ssh-keys/SshKeyNoteDialog'
 import { formatMessage, t } from '../../i18n'
 
@@ -70,12 +71,13 @@ export function SshPrivateKeyField({
         />
       </label>
       <button
-        className="primary-button compact ssh-private-key-action-button"
+        aria-busy={busy}
+        className="primary-button ssh-private-key-action-button"
         disabled={busy}
         onClick={() => requestImport()}
         type="button"
       >
-        {busy ? t.privateKeyImporting : t.privateKeyImportNew}
+        <StableButtonLabel busy={busy} busyLabel={t.privateKeyImporting} label={t.privateKeyImportNew} />
       </button>
       {form.privateKeyPath && !form.privateKeyId ? (
         <div className="ssh-private-key-legacy">
@@ -84,7 +86,7 @@ export function SshPrivateKeyField({
             {form.privateKeyPath}
           </span>
           <button
-            className="flat-button compact ssh-private-key-action-button"
+            className="flat-button ssh-private-key-action-button"
             disabled={busy}
             onClick={() => requestImport(form.privateKeyPath)}
             type="button"
