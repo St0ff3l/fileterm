@@ -38,7 +38,10 @@ export const defaultForm: CreateProfileInput = {
   port: 22,
   username: '',
   group: t.defaultGroup,
-  remotePath: '/',
+  // SSH/SFTP sessions start in the server-provided home directory. The Rust
+  // bridge resolves this to a canonical SFTP path after the subsystem opens;
+  // FTP keeps its protocol root via the connection-type defaults.
+  remotePath: '.',
   note: '',
   sessionLogEnabled: false,
   sessionLogDirectory: '',

@@ -412,7 +412,16 @@ export function ConnectionModal({
                                 : prev.port,
                             authType: nextType === 'ssh' ? (prev.authType ?? 'system') : 'password',
                             useEmptyPassword: nextType === 'ssh' ? prev.useEmptyPassword : false,
-                            remotePath: nextType === 'ssh' || nextType === 'ftp' ? prev.remotePath || '/' : ''
+                            remotePath:
+                              nextType === 'ssh'
+                                ? prev.type === 'ssh'
+                                  ? prev.remotePath || '.'
+                                  : '.'
+                                : nextType === 'ftp'
+                                  ? prev.type === 'ftp'
+                                    ? prev.remotePath || '/'
+                                    : '/'
+                                  : ''
                           }))
                         }}
                       />

@@ -680,7 +680,7 @@ export interface NetworkRates {
   tx: string
 }
 
-export type RemoteSystemPlatform = 'linux' | 'busybox' | 'windows' | 'unknown'
+export type RemoteSystemPlatform = 'linux' | 'busybox' | 'darwin' | 'freebsd' | 'windows' | 'unknown'
 
 export interface RawResourceUsageBreakdown {
   totalBytes: number

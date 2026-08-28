@@ -4523,6 +4523,20 @@ const ROOT_ACCESS_VERIFY_TIMEOUT: Duration = Duration::from_millis(1500);
 /// 长时间不返回，必须强制收口。
 const FILE_OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Keep the detached first browse request responsive even when a server's
+/// SFTP subsystem accepts a request but never completes `READDIR`. User
+/// initiated operations retain the profile-configured timeout below.
+const INITIAL_SFTP_LISTING_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Resolving the SFTP current directory is a small compatibility probe. It
+/// must not inherit a one-hour operation timeout from a profile.
+const INITIAL_SFTP_HOME_RESOLUTION_TIMEOUT: Duration = Duration::from_secs(8);
+
+/// A directory listing already carries metadata for the link itself. Following
+/// a symlink is optional UI enrichment, so one inaccessible or slow target
+/// must not hold the whole file pane behind the SFTP request timeout.
+const SFTP_SYMLINK_TARGET_TIMEOUT: Duration = Duration::from_secs(2);
+
 fn file_operation_timeout(profile: &Value) -> Duration {
     seconds_from_profile(
         profile,
@@ -4566,6 +4580,35 @@ async fn open_sftp_session(
 
 type SharedSftpSession = Arc<RwLock<SftpSession>>;
 type TransferSftpSlot = Arc<Mutex<Option<SharedSftpSession>>>;
+
+/// `/` was the historical SSH form default, but it is not a portable initial
+/// directory: a normal OpenSSH server exposes the whole filesystem while a
+/// chrooted or hosted SFTP server may expose the user's home as `/`. Treat the
+/// old `/` value and the new `.` value as an implicit Home request, then let
+/// the SFTP server resolve the actual namespace.
+fn is_implicit_ssh_home_path(path: &str) -> bool {
+    matches!(path.trim(), "" | "/" | ".")
+}
+
+async fn resolve_initial_sftp_home_path(
+    sftp: &SharedSftpSession,
+    operation_timeout: Duration,
+) -> Result<String, String> {
+    let resolution_timeout = operation_timeout.min(INITIAL_SFTP_HOME_RESOLUTION_TIMEOUT);
+    let canonical_path = timeout(resolution_timeout, async {
+        let sftp = sftp.write().await;
+        sftp.canonicalize(".").await
+    })
+    .await
+    .map_err(|_| "SFTP canonical home path resolution timed out".to_string())?
+    .map_err(|error| error.to_string())?;
+
+    let canonical_path = canonical_path.trim();
+    if canonical_path.is_empty() || canonical_path == "." {
+        return Err("SFTP server returned an empty canonical home path".to_string());
+    }
+    Ok(canonical_path.to_string())
+}
 
 fn is_sftp_not_found(error: &SftpError) -> bool {
     matches!(
@@ -4979,7 +5022,7 @@ async fn run_worker_loop(
                     "SFTP session ready",
                 );
                 let sftp_arc = Arc::new(RwLock::new(sftp));
-                let initial_remote_path = {
+                let configured_initial_remote_path = {
                     let sessions = state.sessions.read().await;
                     sessions
                         .get(tab_id)
@@ -4988,9 +5031,42 @@ async fn run_worker_loop(
                             crate::services::workspace::initial_remote_path_for_profile(profile)
                         })
                 };
+                let initial_remote_path = if is_implicit_ssh_home_path(
+                    &configured_initial_remote_path,
+                ) {
+                    match resolve_initial_sftp_home_path(&sftp_arc, operation_timeout).await {
+                        Ok(resolved_path) => {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                format!(
+                                    "initial SFTP home resolved configured={} resolved={resolved_path}",
+                                    configured_initial_remote_path
+                                ),
+                            );
+                            resolved_path
+                        }
+                        Err(error) => {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                format!(
+                                    "initial SFTP home resolution failed configured={} error={error}; using configured path",
+                                    configured_initial_remote_path
+                                ),
+                            );
+                            configured_initial_remote_path.clone()
+                        }
+                    }
+                } else {
+                    configured_initial_remote_path.clone()
+                };
                 {
                     let mut sessions = state.sessions.write().await;
                     if let Some(session) = sessions.get_mut(tab_id) {
+                        if session.remote_path == configured_initial_remote_path {
+                            session.remote_path = initial_remote_path.clone();
+                        }
                         session.remote_capabilities = Some(default_sftp_capabilities());
                     }
                 }
@@ -5010,17 +5086,27 @@ async fn run_worker_loop(
                 let initial_app = app.clone();
                 let initial_tab_id = tab_id.to_string();
                 let initial_cancellation = cancellation.clone();
+                let initial_listing_timeout = operation_timeout.min(INITIAL_SFTP_LISTING_TIMEOUT);
                 tokio::spawn(async move {
                     crate::services::logging::ssh_debug(
                         &initial_app,
                         &initial_tab_id,
                         format!(
                             "initial directory listing started path={initial_remote_path} timeout_secs={}",
-                            operation_timeout.as_secs()
+                            initial_listing_timeout.as_secs()
                         ),
                     );
                     let initial_files = tokio::select! {
                         _ = initial_cancellation.cancelled() => {
+                            let state = initial_app.state::<crate::services::workspace::WorkspaceState>();
+                            if let Some(session) = state.sessions.write().await.get_mut(&initial_tab_id) {
+                                session.remote_files_loading = false;
+                            }
+                            if let Ok(snapshot) =
+                                crate::commands::get_workspace_snapshot(initial_app.clone()).await
+                            {
+                                let _ = initial_app.emit("workspace:snapshot", snapshot);
+                            }
                             crate::services::logging::ssh_debug(
                                 &initial_app,
                                 &initial_tab_id,
@@ -5028,7 +5114,7 @@ async fn run_worker_loop(
                             );
                             return;
                         },
-                        result = timeout(operation_timeout, async {
+                        result = timeout(initial_listing_timeout, async {
                             let sftp = initial_sftp.write().await;
                             list_dir(&sftp, &initial_remote_path).await
                         }) => match result {
@@ -5301,12 +5387,16 @@ async fn run_worker_loop(
                 (Some(command), None)
             } else {
                 // POSIX: wrap the metrics script in a while-true loop
-                let raw = if metrics_plat == "busybox" {
-                    "busybox"
+                let metrics = if metrics_plat == "freebsd" {
+                    super::system_metrics::build_freebsd_metrics_command()
                 } else {
-                    "linux"
+                    let raw = if metrics_plat == "busybox" {
+                        "busybox"
+                    } else {
+                        "linux"
+                    };
+                    super::system_metrics::build_posix_metrics_command(raw)
                 };
-                let metrics = super::system_metrics::build_posix_metrics_command(raw);
                 let script = format!(
                     "{}\nwhile true; do\n{}\necho '{}'\nsleep {}\ndone\n",
                     "cd / >/dev/null 2>&1 || true", metrics, marker, metrics_interval_seconds
@@ -7803,12 +7893,14 @@ pub async fn list_dir(sftp: &SftpSession, dir_path: &str) -> Result<Vec<Value>, 
         // `DirEntry::metadata()` preserves the link itself. Resolve the
         // target only for navigation so a link to a directory remains
         // enterable while a link to a regular file opens in the editor.
-        let link_target_is_dir = is_link
-            && sftp
-                .metadata(&full_path)
-                .await
-                .map(|target| target.is_dir())
-                .unwrap_or(false);
+        let link_target_is_dir = if is_link {
+            match timeout(SFTP_SYMLINK_TARGET_TIMEOUT, sftp.metadata(&full_path)).await {
+                Ok(Ok(target)) => target.is_dir(),
+                _ => false,
+            }
+        } else {
+            false
+        };
         let file_type = effective_remote_file_type(is_dir, is_link, link_target_is_dir);
         let size_str = if is_dir || link_target_is_dir {
             "-".to_string()
@@ -9661,13 +9753,14 @@ mod tests {
         detect_remote_exec_input_kind, effective_remote_file_type, effective_remote_forward_port,
         encode_text, enqueue_tunnel_command, exec_channel_enabled, finish_shell_setup_suppression,
         format_sftp_unavailable_reason, initial_remote_listing_can_be_fallback,
-        initial_remote_listing_matches_current_session, is_password_prompt,
-        is_root_upload_staging_path, is_sftp_path_not_found_message, looks_like_mfa_prompt,
-        looks_like_root_prompt, looks_like_shell_prompt, merge_system_metrics_history,
-        missing_password_credential, parent_remote_item, parent_remote_path,
-        parse_root_file_access_method, parse_root_file_list, password_for_authentication,
-        privilege_command_from_terminal_input, remote_bind_host_matches, resolve_shell_file_access,
-        resource_monitoring_enabled, resource_monitoring_interval_seconds, root_access_auth_failed,
+        initial_remote_listing_matches_current_session, is_implicit_ssh_home_path,
+        is_password_prompt, is_root_upload_staging_path, is_sftp_path_not_found_message,
+        looks_like_mfa_prompt, looks_like_root_prompt, looks_like_shell_prompt,
+        merge_system_metrics_history, missing_password_credential, parent_remote_item,
+        parent_remote_path, parse_root_file_access_method, parse_root_file_list,
+        password_for_authentication, privilege_command_from_terminal_input,
+        remote_bind_host_matches, resolve_shell_file_access, resource_monitoring_enabled,
+        resource_monitoring_interval_seconds, root_access_auth_failed,
         root_editor_verify_shell_command, root_editor_write_shell_command, root_file_command,
         root_list_shell_command, root_replace_remote_file_command, root_stat_shell_command,
         root_upload_base64_shell_command, root_upload_shell_command, shell_cwd_setup_for_platform,
@@ -9987,6 +10080,15 @@ mod tests {
         );
         assert!(shell_cwd_setup_for_platform("windows").is_none());
         assert!(shell_cwd_setup_for_platform("unknown").is_none());
+    }
+
+    #[test]
+    fn ssh_initial_home_path_accepts_legacy_root_and_relative_home() {
+        assert!(is_implicit_ssh_home_path(""));
+        assert!(is_implicit_ssh_home_path("/"));
+        assert!(is_implicit_ssh_home_path(" . "));
+        assert!(!is_implicit_ssh_home_path("/srv/app"));
+        assert!(!is_implicit_ssh_home_path("/volume2/photo"));
     }
 
     #[tokio::test]
