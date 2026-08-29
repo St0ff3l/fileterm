@@ -1,8 +1,8 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：阶段 1-4 已实现；自动化门禁已通过；打包人工验收与真实设备验收待进行
+状态：阶段 0-5 的代码、自动化回归与文档已完成；打包人工验收与真实设备验收待进行
 
-关联 Issue：[St0ff3l/fileterm#224](https://github.com/St0ff3l/fileterm/issues/224)
+关联 Issue：#224
 
 创建日期：2026-08-29
 
@@ -95,21 +95,16 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 
 ### 2.3 当前权限策略
 
-当前 Agent 偏好只有两个维度：
+当前 Agent 偏好包含连接范围和操作等级两个维度：
 
-| 维度     | 当前值                                                    |
-| -------- | --------------------------------------------------------- |
-| 连接范围 | all-saved-connections、active-session、default-connection |
-| 操作策略 | read-only、approved-operations                            |
+| 维度     | 当前值                                                                          |
+| -------- | ------------------------------------------------------------------------------- |
+| 连接范围 | all-saved-connections、selected-connections、active-session、default-connection |
+| 操作策略 | read-only、approved-operations、full-access                                     |
 
 当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按范围过滤。
 
-当前缺口是：
-
-- 不能从 N 个已保存连接中逐个勾选允许项。
-- 没有明确的第三档“完全授权”策略。
-- 没有 MCP client 身份区分；所有 MCP 客户端共享 FileTerm 全局设置，这是预期方向，但需要在文档和 UI 中明确。
-- CLI 与 MCP 共用范围和只读检查，但 CLI 当前不会触发 MCP 审批；AI 如果改用一次性 CLI，可能绕开“每次操作确认”的用户预期。
+当前实现已经补齐逐个连接选择和第三档“完全授权”策略；仍然不区分具体 MCP client，所有 MCP client 共享 FileTerm 全局设置。一次性 CLI 保留显式用户调用语义，常驻 Agent 则强制使用桌面审批策略。
 
 ### 2.4 当前凭据处理
 
@@ -594,8 +589,10 @@ fileterm agent
 
 - 一个 agent 进程处理多个请求。
 - 请求之间通过 request ID 区分 progress 和最终结果。
+- Agent 可发送 `cancel_request` 请求取消仍在等待中的 request ID；取消返回后，原请求以 `FILETERM_AGENT_REQUEST_CANCELLED` 结束。
 - 仍然由 FileTerm GUI 主进程持有 profile secret、SSH session 和 approval queue。
 - Agent 进程不得初始化 GUI 窗口或创建额外桌面 runtime。
+- 取消只结束 Agent 等待和输出，不回滚桌面端已经接受或开始执行的操作。
 - 如果 macOS 应用包仍把 headless 子进程展示为 GUI 图标，则构建独立的 fileterm-agent sidecar，并验证其 application type / bundle 行为。
 
 ### 10.3 一次性 CLI 的定位
@@ -693,6 +690,8 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 - 退出码 0：调用成功。
 - 非零退出码：调用失败；错误文本包含稳定错误码，但不包含 secret。
 
+Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 request ID；取消请求本身返回 `cancelled: true/false`，被取消的请求最终返回 `FILETERM_AGENT_REQUEST_CANCELLED`。
+
 ### 11.4 MCP 输出约定
 
 - notifications/progress / notifications/message：等待和阶段状态。
@@ -745,41 +744,41 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 
 ### P1：SSH 登录凭据等待闭环
 
-- [ ] 在 Rust workspace state 增加 connection operation registry。
-- [ ] 在 SSH worker 的 Connected / Failed / Cancelled 路径发送 operation 完成通知。
-- [ ] 将 SSH credentials、key passphrase、keyboard-interactive 的等待状态映射为外部 progress。
-- [ ] 主窗口可用时，保持原 CLI/MCP operation 等待到最终状态。
-- [ ] 主窗口不可用、用户取消、认证失败和超时返回稳定错误码。
-- [ ] 保持密码只在 Rust/main window 内流转，不新增 SSH 密码外部字段。
-- [ ] 增加 wait_for_connection MCP/CLI 恢复路径。
+- [x] 在 Rust workspace state 增加 connection operation registry。
+- [x] 在 SSH worker 的 Connected / Failed / Cancelled 路径发送 operation 完成通知。
+- [x] 将 SSH credentials、key passphrase、keyboard-interactive 的等待状态映射为外部 progress。
+- [x] 主窗口可用时，保持原 CLI/MCP operation 等待到最终状态。
+- [x] 主窗口不可用、用户取消、认证失败和超时返回稳定错误码。
+- [x] 保持密码只在 Rust/main window 内流转，不新增 SSH 密码外部字段。
+- [x] 增加 wait_for_connection MCP/CLI 恢复路径。
 
 ### P1：按连接白名单和全局操作等级
 
-- [ ] 扩展 McpAgentPreferences。
-- [ ] 对新旧配置做显式迁移，不静默扩大访问范围。
-- [ ] 在 Rust bridge route 前执行 selected profile 校验。
-- [ ] 对 connections、sessions、transfers、tunnels 和 wait 操作统一过滤。
-- [ ] 增加三档操作等级及对应的 action classification。
-- [ ] 让 MCP 和 Agent bridge 使用同一份 policy evaluator。
-- [ ] 增加 unselected profile、删除 profile、重命名 profile 和默认 profile 变化测试。
+- [x] 扩展 McpAgentPreferences。
+- [x] 对新旧配置做显式迁移，不静默扩大访问范围。
+- [x] 在 Rust bridge route 前执行 selected profile 校验。
+- [x] 对 connections、sessions、transfers、tunnels 和 wait 操作统一过滤。
+- [x] 增加三档操作等级及对应的 action classification。
+- [x] 让 MCP 和 Agent bridge 使用同一份 policy evaluator。
+- [x] 增加 unselected profile、删除 profile、重命名 profile 和默认 profile 变化测试。
 
 ### P1：Renderer 设置和凭据交互状态
 
-- [ ] 增加已保存连接多选列表。
-- [ ] 展示非敏感凭据存在状态。
-- [ ] 增加只读 / 受控操作 / 完全授权说明。
-- [ ] 增加连接 operation 等待中的 UI 状态和错误提示。
-- [ ] 确保等待状态不泄漏 prompt 内容和密码。
+- [x] 增加已保存连接多选列表。
+- [x] 展示非敏感凭据存在状态。
+- [x] 增加只读 / 受控操作 / 完全授权说明。
+- [x] 增加连接 operation 等待中的 UI 状态和错误提示。
+- [x] 确保等待状态不泄漏 prompt 内容和密码。
 
 ### P2：Agent 常驻进程与连接去重
 
-- [ ] 设计 fileterm agent 的 stdio multiplexing 或本地 socket 契约。
-- [ ] 复用 desktop bridge 的认证和 policy evaluator。
-- [ ] 支持多个 request ID、独立 progress、取消和最终结果。
-- [ ] 完成 profile-scoped connection flight 去重。
-- [ ] 验证同一 profile 四个并发请求只创建一个 tab / worker / credential prompt。
+- [x] 设计 fileterm agent 的 stdio multiplexing 或本地 socket 契约。
+- [x] 复用 desktop bridge 的认证和 policy evaluator。
+- [x] 支持多个 request ID、独立 progress、取消和最终结果。
+- [x] 完成 profile-scoped connection flight 去重。
+- [x] 验证同一 profile 四个并发请求只创建一个 tab / worker / credential prompt。
 - [ ] macOS 验证 headless agent 不产生额外 GUI 图标；必要时构建独立 sidecar。
-- [ ] 保留一次性 CLI，并在设置页和文档中推荐 MCP/Agent 常驻模式。
+- [x] 保留一次性 CLI，并在设置页和文档中推荐 MCP/Agent 常驻模式。
 
 ### P3：CLI 凭据输入硬化
 
@@ -791,13 +790,15 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 ### P4：回归、打包和文档
 
 - [x] 完成 Rust unit/contract 测试。
-- [x] 完成 CLI 参数、凭据边界和 bridge 等待单测；CLI 真实子进程 stdout/stderr/exit code 验收仍待补充。
+- [x] 完成 CLI 参数、凭据边界和 bridge 等待单测，以及 CLI 子进程 stdout/stderr/exit code 回归。
 - [x] 完成 MCP progress/tool result/error code 单测。
 - [ ] 完成 macOS、Windows、Linux 打包应用的交互验证。
-- [ ] 更新 docs/architecture.md、Issue #224 说明和统一验收计划。
+- [x] 更新 docs/architecture.md、本计划和 Issue #224 关联说明；不自动改写远端 Issue。
 - [x] 通过项目现有 typecheck、lint、format、Tauri tests 和 clippy 门禁。
 
 ## 14. 验收标准
+
+说明：本次执行已完成代码、单元/契约和本地子进程回归；涉及真实 SSH/FTP/网络设备、打包产物和 macOS Dock 的条目保留未勾选，按“除了实机测试”约定跳过。
 
 ### 14.1 SSH 登录凭据
 
@@ -821,33 +822,33 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 
 ### 14.3 权限策略
 
-- [ ] 未保存 profile 无法被 open_connection 或 CLI open 访问。
-- [ ] 未选中的已保存 profile 无法被 MCP/Agent 访问。
-- [ ] selected profile 的连接列表、会话、传输和隧道结果均按同一白名单过滤。
-- [ ] 只读策略拒绝写入、删除、远程命令和危险传输操作。
-- [ ] 受控操作策略在 MCP/Agent bridge 触发 FileTerm 审批。
-- [ ] 完全授权只跳过逐次审批，不绕过连接范围、session revision、路径和凭据安全边界。
-- [ ] 两个不同 MCP client 看到并使用同一份全局策略。
+- [x] 未保存 profile 无法被 open_connection 或 CLI open 访问。
+- [x] 未选中的已保存 profile 无法被 MCP/Agent 访问。
+- [x] selected profile 的连接列表、会话、传输和隧道结果均按同一白名单过滤。
+- [x] 只读策略拒绝写入、删除、远程命令和危险传输操作。
+- [x] 受控操作策略在 MCP/Agent bridge 触发 FileTerm 审批。
+- [x] 完全授权只跳过逐次审批，不绕过连接范围、session revision、路径和凭据安全边界。
+- [x] 两个不同 MCP client 看到并使用同一份全局策略。
 
 ### 14.4 并发与进程
 
-- [ ] 同一 profile 并发 open 只创建一个连接 operation、一个 tab 和一个密码 prompt。
-- [ ] 多个等待者能收到同一最终状态，但不会共享密码文本。
-- [ ] fileterm agent 能在一个常驻进程中处理多个 request ID。
-- [ ] Agent 常驻模式不会为每个请求创建新的 GUI runtime。
-- [ ] 一次性 CLI 仍能独立运行并输出标准 JSON。
+- [x] 同一 profile 并发 open 只创建一个连接 operation、一个 tab 和一个密码 prompt。
+- [x] 多个等待者能收到同一最终状态，但不会共享密码文本。
+- [x] fileterm agent 能在一个常驻进程中处理多个 request ID。
+- [x] Agent 常驻模式不会为每个请求创建新的 GUI runtime。
+- [x] 一次性 CLI 仍能独立运行并输出标准 JSON。
 - [ ] macOS 不再因推荐的 Agent 常驻模式显示多个 FileTerm GUI 图标。
 
 ### 14.5 脱敏与质量门禁
 
-- [ ] MCP tool result、CLI stdout/stderr、workspace snapshot 和日志均无凭据明文。
-- [ ] 错误消息不包含密码、私钥内容、完整 terminal transcript 或敏感 prompt。
-- [ ] 并发、取消、窗口关闭、session revision 变化和 profile 删除均有回归覆盖。
-- [ ] 通过 npm run typecheck -w @fileterm/tauri。
-- [ ] 通过 npm run lint。
-- [ ] 通过 npx prettier --check apps/tauri packages/core packages/shared packages/storage。
-- [ ] 通过 npm run test:tauri。
-- [ ] 通过 cargo clippy --locked --all-targets --all-features -- -D warnings。
+- [x] MCP tool result、CLI stdout/stderr、workspace snapshot 和日志均无凭据明文。
+- [x] 错误消息不包含密码、私钥内容、完整 terminal transcript 或敏感 prompt。
+- [x] 并发、取消、窗口关闭、session revision 变化和 profile 删除均有回归覆盖。
+- [x] 通过 npm run typecheck -w @fileterm/tauri。
+- [x] 通过 npm run lint。
+- [x] 通过 npx prettier --check apps/tauri packages/core packages/shared packages/storage。
+- [x] 通过 npm run test:tauri。
+- [x] 通过 cargo clippy --locked --all-targets --all-features -- -D warnings。
 
 ## 15. 风险与应对
 
@@ -957,6 +958,14 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [ ] macOS 打包后的 headless/application type 与 Dock 图标行为待人工验证。
 - [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
+### 阶段 3 补充：Agent 请求生命周期
+
+- [x] Agent 请求无论传入 `requiresApproval=false` 还是省略该字段，都强制进入桌面端审批策略。
+- [x] 通过 `cancel_request` 按 request ID 设置取消标记；等待 desktop bridge 响应时以短轮询及时结束 Agent 等待。
+- [x] 取消只停止 Agent 等待和后续输出，不回滚桌面端已经接受或开始执行的操作。
+- [x] 拒绝重复 request ID，进度事件和最终结果均绑定原 request ID。
+- [x] 增加 Agent 审批/取消/ID 校验单测，并通过 CLI 子进程回归。
+
 ### 阶段 4：CLI 凭据输入硬化
 
 - [x] `--sudo-password-stdin` / `--su-password-stdin` 作为无值参数读取一行 stdin，并限制长度、编码和控制字符。
@@ -964,4 +973,12 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 补充 stdin 解析、长度边界和来源冲突测试。
 - [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
-阶段 1-4 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为仍待人工验证。
+### 阶段 5：CLI 子进程回归与文档收口
+
+- [x] 增加 `tests/cli.rs`，验证 `fileterm cli --help`、`fileterm agent --help` 的 headless 分发和 stdout/stderr 边界。
+- [x] 验证 Agent 无桌面 runtime 时仍输出单条最终 JSONL 错误，不启动 GUI。
+- [x] 验证 CLI 明文密码参数冲突和 stdin 密码读取的非零退出、错误输出和密码脱敏。
+- [x] 同步架构地图、ADR 和本计划中的 Agent 审批、取消、进程模型与验证状态。
+- [x] 自动化质量门禁已通过；macOS/Windows/Linux 打包交互和真实 SSH/FTP/网络设备测试按约定跳过。
+
+阶段 1-5 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为、真实 SSH/FTP/设备连接仍待目标环境人工验证。

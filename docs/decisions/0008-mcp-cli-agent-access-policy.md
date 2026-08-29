@@ -51,7 +51,7 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 
 ### 4. 常驻 Agent 解决重复 CLI 进程问题
 
-桌面 GUI 进程负责持有连接、会话、秘密和审批队列。`fileterm agent` 是一个不启动 GUI 的常驻 JSONL 进程，通过同一个本地 authenticated desktop bridge 处理多个 request ID；每个请求拥有独立 progress 和最终结果，输出按行原子化写出。
+桌面 GUI 进程负责持有连接、会话、秘密和审批队列。`fileterm agent` 是一个不启动 GUI 的常驻 JSONL 进程，通过同一个本地 authenticated desktop bridge 处理多个 request ID；每个请求拥有独立 progress 和最终结果，输出按行原子化写出。Agent 请求可通过 `cancel_request` 按 request ID 取消仍在等待的 Agent 结果，取消不回滚桌面端已经接受或开始执行的操作。
 
 一次性 CLI 保留用于 shell 脚本和手动调试，不承诺“零进程”。设置页和 Agent 注册说明优先推荐常驻 Agent 或 MCP，以避免 AI 为每个动作重新 spawn FileTerm CLI。
 
@@ -63,6 +63,7 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 - token 使用常时比较；非 loopback peer、非法 descriptor、超大消息和超出并发上限的请求直接拒绝。
 - bridge 结果、Agent progress、CLI 输出和 workspace snapshot 不包含 profile secret、私钥、密码或完整 terminal transcript。
 - Agent 请求只能调用已注册 action；参数仍经过严格 schema、长度和路径校验。
+- Agent 请求的 `requiresApproval` 仅为兼容字段，桌面端收到 Agent 请求时始终强制使用审批策略；`cancel_request` 只影响 Agent 等待与输出，不撤销桌面端已经开始的远程操作。
 
 ## 影响
 
@@ -77,6 +78,7 @@ sudo/su 是普通 exec 的受控特例：保存的凭据或主窗口安全 promp
 
 - 一次性 CLI 本身仍是一个进程；要减少进程数量必须使用常驻 Agent 或 MCP。
 - FileTerm 不通过后台 bridge 自动回答 MFA、验证码、安装器确认或任意终端输入。
+- Agent 取消是 best-effort 的请求生命周期控制，不是远程命令回滚机制。
 - macOS 打包产物的 application type、Dock 图标行为以及真实 SSH/FTP/网络设备连接仍需要目标环境人工验收。
 
 ## 实现位置
