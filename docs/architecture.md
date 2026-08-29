@@ -260,7 +260,7 @@ fileterm mcp                    fileterm <cmd>
               应用内审批对话框
 ```
 
-- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（约 2220 行，手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
+- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
 - 同一份桌面可执行文件同时承担 GUI、MCP server、常驻 Agent 和一次性 CLI 四种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；`agent` → `run_agent_stdio`；由共享 `is_cli_command` 维护的其他子命令白名单（包括 `exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增非 GUI 子命令必须同时更新入口分发、共享白名单、对应路由和精确 `--help` 输出，避免把外部 Agent 请求误启动成桌面窗口。
 - `fileterm agent` 是不初始化 Tauri GUI 的常驻 JSONL bridge，使用固定 worker pool 处理多个 request ID；每个请求的 progress 和最终结果均带回同一个 ID。Agent 请求始终强制遵循桌面端审批策略，并可用 `cancel_request` 停止仍在等待的 Agent 请求；取消不回滚桌面端已经接受或开始执行的操作。一次性 CLI 仍保留用于脚本和手动调试，但设置页优先推荐 Agent/MCP，不能把一次性 CLI 宣称为零进程接口。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
