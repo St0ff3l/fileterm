@@ -1,6 +1,6 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：阶段 1-4 已实现（待自动化门禁）；打包人工验收与真实设备验收待进行
+状态：阶段 1-4 已实现；自动化门禁已通过；打包人工验收与真实设备验收待进行
 
 关联 Issue：[St0ff3l/fileterm#224](https://github.com/St0ff3l/fileterm/issues/224)
 
@@ -790,12 +790,12 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 
 ### P4：回归、打包和文档
 
-- [ ] 完成 Rust unit/contract 测试。
-- [ ] 完成 CLI stdout/stderr/exit code 测试。
-- [ ] 完成 MCP progress/tool result/error code 测试。
+- [x] 完成 Rust unit/contract 测试。
+- [x] 完成 CLI 参数、凭据边界和 bridge 等待单测；CLI 真实子进程 stdout/stderr/exit code 验收仍待补充。
+- [x] 完成 MCP progress/tool result/error code 单测。
 - [ ] 完成 macOS、Windows、Linux 打包应用的交互验证。
 - [ ] 更新 docs/architecture.md、Issue #224 说明和统一验收计划。
-- [ ] 通过项目现有 typecheck、lint、format、Tauri tests 和 clippy 门禁。
+- [x] 通过项目现有 typecheck、lint、format、Tauri tests 和 clippy 门禁。
 
 ## 14. 验收标准
 
@@ -935,7 +935,7 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] SSH 登录凭据取消、超时、认证失败和一般连接失败映射为稳定错误码。
 - [x] CLI 进度写入 stderr，最终 JSON 保持在 stdout；MCP 通过 progress/message 通知等待状态。
 - [x] SSH、FTP、Telnet、Serial 和本地终端的就绪/失败状态接入连接操作通知。
-- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+- [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
 ### 阶段 2：全局连接白名单与操作等级
 
@@ -945,7 +945,7 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 设置页增加搜索、多选、非敏感凭据存在状态和空选择提示。
 - [x] 完全授权只跳过逐次 MCP 审批，仍保留连接范围和其它安全边界。
 - [x] 增加 selected visibility 与操作等级策略单元测试。
-- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+- [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
 ### 阶段 3：常驻 Agent 与连接去重
 
@@ -955,13 +955,13 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 连接失败、断开或关闭 tab 时清理 profile flight，并唤醒等待者。
 - [x] Settings → CLI 提供常驻 Agent 命令，同时保留一次性 CLI。
 - [ ] macOS 打包后的 headless/application type 与 Dock 图标行为待人工验证。
-- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+- [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
 ### 阶段 4：CLI 凭据输入硬化
 
 - [x] `--sudo-password-stdin` / `--su-password-stdin` 作为无值参数读取一行 stdin，并限制长度、编码和控制字符。
 - [x] 拒绝明文 argv 与 stdin 两种来源混用；兼容旧参数并输出不含密码的安全提示。
 - [x] 补充 stdin 解析、长度边界和来源冲突测试。
-- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+- [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
 阶段 1-4 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为仍待人工验证。
