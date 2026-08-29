@@ -1,6 +1,6 @@
 # 网络设备 SSH 兼容 MVP 计划
 
-> 状态：Active（本任务代码目标已完成；实体设备验证留作后续）
+> 状态：Active（本任务代码目标已完成；实体设备和型号级行为验证留作后续）
 > 关联：Refs #201
 > 范围：H3C/Comware、Huawei/VRP、Cisco，以及实际提供 SSH/Telnet/Serial CLI 的其他网络设备
 
@@ -15,6 +15,8 @@ MVP 必须具备：
 - 关闭 SFTP 浏览、CWD 跟随、Shell 探测、Shell 集成和资源监控；
 - 允许选择 `vt100`、`ansi`、`xterm` 等 terminal type；
 - 可选的 SSH Banner 自动识别，在打开额外 channel 之前完成判断；
+- 对已开启 legacy SSH 兼容且识别为 Comware 的连接，支持旧设备所需的
+  `diffie-hellman-group-exchange-sha1` `1024/1024/8192` 请求范围；
 - 主终端与 SFTP、exec、监控等可选能力相互隔离，后者失败不能关闭终端。
 
 这已经足够覆盖 #201 的核心问题：设备登录后保持交互，不会因为 FileTerm 把交换机当成
@@ -189,10 +191,12 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 
 - [ ] 使用 H3C/Comware、Huawei/VRP、Cisco 实机验证 SSH 登录、PTY、换行、resize 和断线行为。
 - [ ] 再验证实际提供 CLI 的 TP-Link、水星、腾达、中兴、NETGEAR 型号。
-- [ ] 只有真实握手日志证明需要时，才增加最小范围的旧 KEX/host key/cipher 兼容；Netcatty #1045 的精确 Comware GEX 请求留作后续专项。
+- [x] 增加精确的 Comware legacy GEX 兼容：仅在显式开启 legacy SSH 兼容且远端 Banner
+  匹配 `Comware-*` 时，对 SHA-1 GEX 请求 `1024/1024/8192`；普通连接和其他 KEX 保持默认参数。
 - [ ] 分页、prompt、enable/config 和型号 profile 另开计划，不塞进本 MVP。
 
-> 2026-08-29 范围收敛：本 MVP 仅保留通用 SHA-1 legacy fallback，不实现精确的 Comware GEX 参数请求；只有后续实机握手日志确认必要时，才单独评估 Netcatty #1045 的专项兼容。
+> 2026-08-29 范围收敛：本 MVP 已包含最小范围的 Comware GEX 专项兼容，但仍不扩大旧
+> KEX、host key 或 cipher 的全局允许范围；实机握手和型号级行为继续留在后续验证。
 
 ## 7. 测试与验收
 
@@ -207,7 +211,9 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 - [x] 未知 Banner：手动 network-device 可用，普通 server 不因 Banner 被误分类。
 - [x] SFTP、exec、metrics 独立失败时，只关闭对应 capability，不关闭 terminal。
 - [x] 旧 profile、snapshot、bridge、renderer 表单和能力矩阵通过 contract/type 测试。
-- [ ] H3C/Comware 精确 GEX 参数请求（`1024/1024/8192`）留作后续专项；当前仅验证通用 SHA-1 legacy fallback，默认 SSH 算法不放宽。
+- [x] H3C/Comware 精确 GEX 参数请求（`1024/1024/8192`）：russh 兼容分支覆盖参数选择、
+  普通 peer/非 SHA-1 GEX 不受影响，网络设备协议 fixture 覆盖 Comware 握手路径；默认 SSH
+  算法不放宽。
 
 > 2026-08-29 自动化验收记录：`npm run typecheck -w @fileterm/tauri`、`npm run lint`、`npx prettier --check apps/tauri packages/core packages/shared packages/storage`、`npm run test:tauri`（484 unit + 20 contract）、`cargo clippy --locked --all-targets --all-features -- -D warnings` 均通过。metrics 后台通道启动或运行失败时只撤销 `resource_monitoring` capability 并广播最新 snapshot，SSH 主终端和隧道保持独立。以上网络设备结论是代码路径、russh 协议 fixture 和策略级 mock 结论；没有实体设备时，不扩大为全品牌支持。
 
@@ -241,7 +247,9 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 3. SFTP、exec、监控不可用时，主终端不会被判定为连接失败。
 4. 普通 Linux/Windows SSH 的现有能力不回归。
 5. 自动识别可用但不是唯一入口，手动模式可以覆盖。
-6. 未经实体设备验证，不在发布说明中扩大为“全品牌支持”。
+6. 老 Comware 的 SHA-1 GEX 兼容只在显式 legacy 选项和精确 Banner 匹配时启用，不能影响
+   普通连接的安全默认值。
+7. 未经实体设备验证，不在发布说明中扩大为“全品牌支持”。
 
 以上代码条件已满足；Phase 3 的实机条目仍保持未勾选，只表示尚未取得型号级实测证据，
 不再阻塞本任务交付。

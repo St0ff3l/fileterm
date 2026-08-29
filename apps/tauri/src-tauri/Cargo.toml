@@ -136,3 +136,6 @@ gdk = "0.18"
 
 [dev-dependencies]
 rand = "0.10"
+
+[patch.crates-io]
+russh = { path = "../../../vendor/russh" }

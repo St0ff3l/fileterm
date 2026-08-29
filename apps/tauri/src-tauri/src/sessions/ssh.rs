@@ -3699,6 +3699,9 @@ async fn open_session(
         inactivity_timeout,
         keepalive_interval: keepalive.interval,
         keepalive_max: keepalive.max_misses,
+        // Netcatty #1045 的 Comware GEX 兼容只在显式开启 legacyAlgorithms
+        // 后生效，并且由 russh 在握手前按远端 identification 精确匹配。
+        comware_legacy_gex: legacy_algorithms,
         preferred: if legacy_algorithms {
             build_legacy_preferred()
         } else {
@@ -11338,7 +11341,10 @@ mod tests {
             auth_rejection_time: Duration::from_millis(1),
             ..Default::default()
         };
-        server_config.server_id = russh::SshId::Standard(Cow::Borrowed("SSH-2.0-HUAWEI-VRP"));
+        server_config.server_id = russh::SshId::Standard(Cow::Borrowed("SSH-2.0-Comware-7.1"));
+        // Force the legacy GEX algorithm so this fixture exercises the same
+        // handshake branch used by older Comware peers.
+        server_config.preferred.kex = Cow::Owned(vec![russh::kex::DH_GEX_SHA1]);
         server_config.keys.push(
             PrivateKey::random(&mut rand::rng(), russh::keys::ssh_key::Algorithm::Ed25519).unwrap(),
         );
@@ -11358,8 +11364,11 @@ mod tests {
         });
 
         let remote_sshid = Arc::new(Mutex::new(Vec::new()));
+        let mut client_config = client::Config::default();
+        client_config.preferred = build_legacy_preferred();
+        client_config.comware_legacy_gex = true;
         let mut handle = client::connect(
-            Arc::new(client::Config::default()),
+            Arc::new(client_config),
             address,
             CaptureRemoteSshId {
                 remote_sshid: remote_sshid.clone(),
@@ -11379,7 +11388,7 @@ mod tests {
         assert!(authenticated.success());
 
         let identification = normalize_ssh_identification(&remote_sshid.lock().unwrap());
-        assert_eq!(identification, "SSH-2.0-HUAWEI-VRP");
+        assert_eq!(identification, "SSH-2.0-Comware-7.1");
         let profile = serde_json::json!({
             "type": "ssh",
             "deviceMode": "auto",
@@ -11391,7 +11400,7 @@ mod tests {
         let resolution = resolve_ssh_device_mode(&profile, identification.as_bytes());
         assert_eq!(resolution.mode, ResolvedSshDeviceMode::NetworkDevice);
         assert_eq!(resolution.source, "banner");
-        assert_eq!(resolution.family, Some("huawei"));
+        assert_eq!(resolution.family, Some("h3c-comware"));
         let effective_profile = profile_with_resolved_device_mode(&profile, resolution);
         assert_eq!(effective_profile["deviceMode"], "network-device");
         assert!(!effective_exec_channel_enabled(&effective_profile));

@@ -983,7 +983,7 @@ const zhCN = {
     '用于读取系统信息、root 文件视图、终端目录跟随和用户状态同步。它会额外建立一条 SSH 命令连接；仅在连接后立即断开时才建议关闭。',
   legacyAlgorithms: '兼容旧服务器算法（SHA-1）',
   legacyAlgorithmsHint:
-    '老服务器（OpenSSH 4.x/5.x 时代）只支持 SHA-1 类 MAC/KEX，默认仅 SHA-2 会导致握手被拒。开启后追加 SHA-1 算法到列表末尾，SHA-2 仍优先；网络设备模式也沿用这组通用 legacy fallback。仅在连接失败时启用。',
+    '老服务器（OpenSSH 4.x/5.x 时代）只支持 SHA-1 类 MAC/KEX，默认仅 SHA-2 会导致握手被拒。开启后追加 SHA-1 算法到列表末尾，SHA-2 仍优先；Comware 设备还会在 SHA-1 GEX 下使用 1024/1024/8192 请求。仅在连接失败时启用。',
   autoReconnect: '断线后自动重连',
   autoReconnectHint: '会话意外断线时后台自动重新连接，适合需要长期保持的后台会话。主动关闭标签不会触发重连。',
   reconnectEnter: '回车重连',
@@ -2740,7 +2740,7 @@ const enUS: typeof zhCN = {
     'Used for system info, root file access, terminal directory following, and user-state sync. It opens one additional SSH command connection; turn it off only if the login disconnects immediately.',
   legacyAlgorithms: 'Legacy server algorithms (SHA-1)',
   legacyAlgorithmsHint:
-    'Old servers (OpenSSH 4.x/5.x era) only support SHA-1 MAC/KEX; the default SHA-2-only list causes handshake rejection. When enabled, SHA-1 algorithms are appended to the end of the preference list while SHA-2 stays preferred. Network-device mode uses the same generic legacy fallback. Enable only if the connection fails.',
+    'Old servers (OpenSSH 4.x/5.x era) only support SHA-1 MAC/KEX; the default SHA-2-only list causes handshake rejection. When enabled, SHA-1 algorithms are appended to the end of the preference list while SHA-2 stays preferred. Comware devices also use the 1024/1024/8192 request for SHA-1 GEX. Enable only if the connection fails.',
   autoReconnect: 'Auto-reconnect on disconnect',
   autoReconnectHint:
     'Automatically reconnects in the background when the session drops unexpectedly. Closing the tab intentionally will not trigger a reconnect.',
