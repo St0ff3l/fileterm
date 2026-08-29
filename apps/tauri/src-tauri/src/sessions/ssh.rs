@@ -11364,9 +11364,11 @@ mod tests {
         });
 
         let remote_sshid = Arc::new(Mutex::new(Vec::new()));
-        let mut client_config = client::Config::default();
-        client_config.preferred = build_legacy_preferred();
-        client_config.comware_legacy_gex = true;
+        let client_config = client::Config {
+            preferred: build_legacy_preferred(),
+            comware_legacy_gex: true,
+            ..Default::default()
+        };
         let mut handle = client::connect(
             Arc::new(client_config),
             address,
