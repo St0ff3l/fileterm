@@ -135,6 +135,8 @@ pub struct McpAgentPreferences {
     pub connection_scope: String,
     #[serde(default = "default_mcp_operation_policy")]
     pub operation_policy: String,
+    #[serde(default)]
+    pub allowed_profile_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_profile_id: Option<String>,
 }
@@ -144,6 +146,7 @@ pub struct McpAgentPreferences {
 pub struct McpAgentPreferencesInput {
     pub connection_scope: Option<String>,
     pub operation_policy: Option<String>,
+    pub allowed_profile_ids: Option<Vec<String>>,
     pub default_profile_id: Option<Option<String>>,
 }
 
@@ -152,6 +155,7 @@ impl Default for McpAgentPreferences {
         Self {
             connection_scope: default_mcp_connection_scope(),
             operation_policy: default_mcp_operation_policy(),
+            allowed_profile_ids: Vec::new(),
             default_profile_id: None,
         }
     }
@@ -936,11 +940,28 @@ fn default_legacy_algorithms() -> bool {
 }
 
 fn default_mcp_connection_scope() -> String {
-    "all-saved-connections".to_string()
+    "selected-connections".to_string()
 }
 
 fn default_mcp_operation_policy() -> String {
     "approved-operations".to_string()
+}
+
+fn normalize_mcp_allowed_profile_ids(profile_ids: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for profile_id in profile_ids {
+        let profile_id = profile_id.trim();
+        if profile_id.is_empty() || profile_id.len() > 256 {
+            continue;
+        }
+        if !normalized.iter().any(|existing| existing == profile_id) {
+            normalized.push(profile_id.to_string());
+        }
+        if normalized.len() >= 256 {
+            break;
+        }
+    }
+    normalized
 }
 
 fn default_overview_show_stats() -> bool {
@@ -1124,16 +1145,18 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     if !matches!(
         preferences.mcp_agent.connection_scope.as_str(),
-        "all-saved-connections" | "active-session" | "default-connection"
+        "all-saved-connections" | "selected-connections" | "active-session" | "default-connection"
     ) {
         preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
     }
     if !matches!(
         preferences.mcp_agent.operation_policy.as_str(),
-        "read-only" | "approved-operations"
+        "read-only" | "approved-operations" | "full-access"
     ) {
         preferences.mcp_agent.operation_policy = default_mcp_operation_policy();
     }
+    preferences.mcp_agent.allowed_profile_ids =
+        normalize_mcp_allowed_profile_ids(preferences.mcp_agent.allowed_profile_ids);
     preferences.mcp_agent.default_profile_id =
         preferences
             .mcp_agent
@@ -2116,6 +2139,9 @@ pub fn app_set_ui_preferences(
         }
         if let Some(operation_policy) = mcp_agent.operation_policy {
             preferences.mcp_agent.operation_policy = operation_policy;
+        }
+        if let Some(allowed_profile_ids) = mcp_agent.allowed_profile_ids {
+            preferences.mcp_agent.allowed_profile_ids = allowed_profile_ids;
         }
         if let Some(default_profile_id) = mcp_agent.default_profile_id {
             preferences.mcp_agent.default_profile_id = default_profile_id;
@@ -6155,7 +6181,36 @@ pub async fn app_delete_profile(
 ) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
     crate::services::profile_ops::delete_profile(&app, &profile_id)?;
+    if let Err(error) = clear_deleted_profile_from_mcp_policy(&app, &profile_id) {
+        crate::services::logging::warn(
+            &app,
+            "ui-preferences",
+            format!("failed to clean deleted profile from MCP policy: {error}"),
+        );
+    }
     get_workspace_snapshot_and_emit(&app).await
+}
+
+fn clear_deleted_profile_from_mcp_policy(
+    app: &AppHandle,
+    profile_id: &str,
+) -> Result<(), AppError> {
+    let mut preferences = app_get_ui_preferences(app.clone())?;
+    let original_len = preferences.mcp_agent.allowed_profile_ids.len();
+    preferences
+        .mcp_agent
+        .allowed_profile_ids
+        .retain(|allowed_id| allowed_id != profile_id);
+    if preferences.mcp_agent.allowed_profile_ids.len() == original_len {
+        return Ok(());
+    }
+
+    let path = crate::storage::state_path(app)?;
+    let content = serde_json::to_string_pretty(&preferences)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
+    let _ = app.emit("app:ui-preferences-changed", &preferences);
+    Ok(())
 }
 
 #[tauri::command]
@@ -7149,6 +7204,7 @@ mod ui_preferences_tests {
             mcp_agent: McpAgentPreferences {
                 connection_scope: "not-a-scope".to_string(),
                 operation_policy: "not-a-policy".to_string(),
+                allowed_profile_ids: vec![" profile-1 ".to_string(), "profile-1".to_string()],
                 default_profile_id: Some("  ".to_string()),
             },
             overview_show_stats: true,
@@ -7160,11 +7216,15 @@ mod ui_preferences_tests {
 
         assert_eq!(
             preferences.mcp_agent.connection_scope,
-            "all-saved-connections"
+            "selected-connections"
         );
         assert_eq!(
             preferences.mcp_agent.operation_policy,
             "approved-operations"
+        );
+        assert_eq!(
+            preferences.mcp_agent.allowed_profile_ids,
+            vec!["profile-1".to_string()]
         );
         assert_eq!(preferences.mcp_agent.default_profile_id, None);
     }
@@ -7187,6 +7247,7 @@ mod ui_preferences_tests {
             mcp_agent: McpAgentPreferences {
                 connection_scope: "default-connection".to_string(),
                 operation_policy: "read-only".to_string(),
+                allowed_profile_ids: Vec::new(),
                 default_profile_id: None,
             },
             overview_show_stats: true,

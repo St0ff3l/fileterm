@@ -61,12 +61,14 @@ const MCP_SCOPE_DENIED: &str = "MCP_SCOPE_DENIED";
 struct McpAccessPolicy {
     connection_scope: String,
     operation_policy: String,
+    allowed_profile_ids: HashSet<String>,
     default_profile_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
 enum McpVisibilityScope {
     AllSavedConnections,
+    SelectedConnections,
     ActiveSession,
     DefaultConnection,
 }
@@ -90,7 +92,9 @@ impl McpVisibility {
     fn allows_profile(&self, profile_id: Option<&str>) -> bool {
         match self.scope {
             McpVisibilityScope::AllSavedConnections => true,
-            McpVisibilityScope::ActiveSession | McpVisibilityScope::DefaultConnection => {
+            McpVisibilityScope::SelectedConnections
+            | McpVisibilityScope::ActiveSession
+            | McpVisibilityScope::DefaultConnection => {
                 profile_id.is_some_and(|profile_id| self.profile_ids.contains(profile_id))
             }
         }
@@ -99,10 +103,9 @@ impl McpVisibility {
     fn allows_tab(&self, tab_id: Option<&str>) -> bool {
         match self.scope {
             McpVisibilityScope::AllSavedConnections => true,
-            McpVisibilityScope::ActiveSession => {
-                tab_id.is_some_and(|tab_id| self.tab_ids.contains(tab_id))
-            }
-            McpVisibilityScope::DefaultConnection => {
+            McpVisibilityScope::SelectedConnections
+            | McpVisibilityScope::ActiveSession
+            | McpVisibilityScope::DefaultConnection => {
                 tab_id.is_some_and(|tab_id| self.tab_ids.contains(tab_id))
             }
         }
@@ -111,6 +114,10 @@ impl McpVisibility {
     fn allows_transfer_value(&self, transfer: &Value) -> bool {
         match self.scope {
             McpVisibilityScope::AllSavedConnections => true,
+            McpVisibilityScope::SelectedConnections => {
+                self.allows_tab(transfer.get("tabId").and_then(Value::as_str))
+                    || self.allows_profile(transfer.get("profileId").and_then(Value::as_str))
+            }
             McpVisibilityScope::ActiveSession => {
                 self.allows_tab(transfer.get("tabId").and_then(Value::as_str))
             }
@@ -123,6 +130,10 @@ impl McpVisibility {
     fn allows_transfer_task(&self, task: &crate::services::transfers::TransferTask) -> bool {
         match self.scope {
             McpVisibilityScope::AllSavedConnections => true,
+            McpVisibilityScope::SelectedConnections => {
+                self.allows_tab(task.tab_id.as_deref())
+                    || self.allows_profile(task.profile_id.as_deref())
+            }
             McpVisibilityScope::ActiveSession => self.allows_tab(task.tab_id.as_deref()),
             McpVisibilityScope::DefaultConnection => {
                 self.allows_profile(task.profile_id.as_deref())
@@ -504,8 +515,8 @@ async fn dispatch_bridge_request(
     progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
 ) -> Result<Value, String> {
     let progress_token = request.progress_token.clone();
-    enforce_mcp_access_policy(app, &request).await?;
-    if request.requires_approval && action_requires_approval(&request.action) {
+    let policy = enforce_mcp_access_policy(app, &request).await?;
+    if should_request_mcp_approval(&policy, &request) {
         request_mcp_approval(app, &request.action, &request.params).await?;
     }
 
@@ -560,7 +571,10 @@ async fn dispatch_bridge_request(
 /// FileTerm settings. This check belongs on the desktop bridge rather than in
 /// the stdio MCP child process so MCP, the explicit CLI and future local
 /// clients share the same decision point.
-async fn enforce_mcp_access_policy(app: &AppHandle, request: &BridgeRequest) -> Result<(), String> {
+async fn enforce_mcp_access_policy(
+    app: &AppHandle,
+    request: &BridgeRequest,
+) -> Result<McpAccessPolicy, String> {
     let policy = mcp_access_policy(app)?;
     if policy.operation_policy == "read-only" && action_requires_approval(&request.action) {
         return Err(format!(
@@ -569,13 +583,17 @@ async fn enforce_mcp_access_policy(app: &AppHandle, request: &BridgeRequest) -> 
     }
 
     match policy.connection_scope.as_str() {
-        "all-saved-connections" => Ok(()),
-        "active-session" => enforce_active_session_scope(app, request).await,
-        "default-connection" => enforce_default_connection_scope(app, request, &policy).await,
-        _ => Err(format!(
-            "{MCP_SCOPE_DENIED}: invalid saved connection scope"
-        )),
+        "all-saved-connections" => {}
+        "selected-connections" => enforce_selected_connection_scope(app, request, &policy).await?,
+        "active-session" => enforce_active_session_scope(app, request).await?,
+        "default-connection" => enforce_default_connection_scope(app, request, &policy).await?,
+        _ => {
+            return Err(format!(
+                "{MCP_SCOPE_DENIED}: invalid saved connection scope"
+            ))
+        }
     }
+    Ok(policy)
 }
 
 fn mcp_access_policy(app: &AppHandle) -> Result<McpAccessPolicy, String> {
@@ -584,8 +602,96 @@ fn mcp_access_policy(app: &AppHandle) -> Result<McpAccessPolicy, String> {
     Ok(McpAccessPolicy {
         connection_scope: preferences.mcp_agent.connection_scope,
         operation_policy: preferences.mcp_agent.operation_policy,
+        allowed_profile_ids: preferences
+            .mcp_agent
+            .allowed_profile_ids
+            .into_iter()
+            .collect(),
         default_profile_id: preferences.mcp_agent.default_profile_id,
     })
+}
+
+fn should_request_mcp_approval(policy: &McpAccessPolicy, request: &BridgeRequest) -> bool {
+    policy.operation_policy == "approved-operations"
+        && request.requires_approval
+        && action_requires_approval(&request.action)
+}
+
+async fn enforce_selected_connection_scope(
+    app: &AppHandle,
+    request: &BridgeRequest,
+    policy: &McpAccessPolicy,
+) -> Result<(), String> {
+    if matches!(
+        request.action.as_str(),
+        "get_command_templates"
+            | "list_transfers"
+            | "wait_for_transfer"
+            | "pause_transfer"
+            | "resume_transfer"
+            | "discard_transfer"
+            | "clear_transfers"
+    ) {
+        return Ok(());
+    }
+    if request.action == "list_connections" {
+        return Ok(());
+    }
+    if request.action == "open_connection" {
+        let requested_profile = required_string(&request.params, "profile_id", 256)?;
+        return policy
+            .allowed_profile_ids
+            .contains(&requested_profile)
+            .then_some(())
+            .ok_or_else(|| {
+                format!(
+                    "{MCP_SCOPE_DENIED}: this Agent is limited to its selected saved connections"
+                )
+            });
+    }
+    if request.action == "wait_for_connection" {
+        return enforce_connection_operation_scope(
+            app,
+            request,
+            None,
+            Some(&policy.allowed_profile_ids),
+        )
+        .await;
+    }
+    if request.action == "get_session_context" {
+        let requested_profile = optional_string(&request.params, "profile_id", 256)?;
+        return requested_profile
+            .as_deref()
+            .is_none_or(|profile_id| policy.allowed_profile_ids.contains(profile_id))
+            .then_some(())
+            .ok_or_else(|| {
+                format!(
+                    "{MCP_SCOPE_DENIED}: this Agent is limited to its selected saved connections"
+                )
+            });
+    }
+
+    let tab_id = required_string(&request.params, "tab_id", 256)?;
+    let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+        .await
+        .map_err(public_app_error)?;
+    let profile_id = snapshot
+        .get("tabs")
+        .and_then(Value::as_array)
+        .and_then(|tabs| {
+            tabs.iter()
+                .find(|tab| tab.get("id").and_then(Value::as_str) == Some(tab_id.as_str()))
+        })
+        .and_then(|tab| tab.get("profileId"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{MCP_SCOPE_DENIED}: requested session was not found"))?;
+    policy
+        .allowed_profile_ids
+        .contains(profile_id)
+        .then_some(())
+        .ok_or_else(|| {
+            format!("{MCP_SCOPE_DENIED}: this Agent is limited to its selected saved connections")
+        })
 }
 
 async fn enforce_active_session_scope(
@@ -613,7 +719,7 @@ async fn enforce_active_session_scope(
         ));
     }
     if request.action == "wait_for_connection" {
-        return enforce_connection_operation_scope(app, request, None).await;
+        return enforce_connection_operation_scope(app, request, None, None).await;
     }
     let active_tab_id = active_session_tab_id(app).await?;
     let requested_tab_id = optional_string(&request.params, "tab_id", 256)?;
@@ -665,7 +771,8 @@ async fn enforce_default_connection_scope(
             });
     }
     if request.action == "wait_for_connection" {
-        return enforce_connection_operation_scope(app, request, Some(default_profile_id)).await;
+        return enforce_connection_operation_scope(app, request, Some(default_profile_id), None)
+            .await;
     }
     let snapshot = crate::commands::get_workspace_snapshot(app.clone())
         .await
@@ -696,6 +803,7 @@ async fn enforce_connection_operation_scope(
     app: &AppHandle,
     request: &BridgeRequest,
     required_profile_id: Option<&str>,
+    allowed_profile_ids: Option<&HashSet<String>>,
 ) -> Result<(), String> {
     let operation_id = required_string(&request.params, "operation_id", 256)?;
     let info = app
@@ -710,6 +818,15 @@ async fn enforce_connection_operation_scope(
                 "{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's default connection"
             ));
         }
+    }
+    if let Some(allowed_profile_ids) = allowed_profile_ids {
+        if !allowed_profile_ids.contains(&info.profile_id) {
+            return Err(format!(
+                "{MCP_SCOPE_DENIED}: this Agent is limited to its selected saved connections"
+            ));
+        }
+    }
+    if required_profile_id.is_some() || allowed_profile_ids.is_some() {
         return Ok(());
     }
 
@@ -758,6 +875,33 @@ async fn mcp_visibility(app: &AppHandle) -> Result<McpVisibility, String> {
     let policy = mcp_access_policy(app)?;
     match policy.connection_scope.as_str() {
         "all-saved-connections" => Ok(McpVisibility::all_saved_connections()),
+        "selected-connections" => {
+            let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+                .await
+                .map_err(public_app_error)?;
+            let existing_profile_ids = snapshot
+                .get("profiles")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|profile| profile.get("id").and_then(Value::as_str))
+                .collect::<HashSet<_>>();
+            let profile_ids = policy
+                .allowed_profile_ids
+                .iter()
+                .filter(|profile_id| existing_profile_ids.contains(profile_id.as_str()))
+                .cloned()
+                .collect::<HashSet<_>>();
+            let tab_ids = profile_ids
+                .iter()
+                .flat_map(|profile_id| session_tab_ids_for_profile(&snapshot, profile_id))
+                .collect::<HashSet<_>>();
+            Ok(McpVisibility {
+                scope: McpVisibilityScope::SelectedConnections,
+                profile_ids,
+                tab_ids,
+            })
+        }
         "active-session" => {
             let snapshot = crate::commands::get_workspace_snapshot(app.clone())
                 .await
@@ -2587,6 +2731,9 @@ fn print_cli_help() {
     println!(
         "When FileTerm opens its secure sudo/su prompt, `exec` waits and reports input-required on stderr; enter the password in the FileTerm window and do not retry the command."
     );
+    println!(
+        "Connection lifecycle: `fileterm open --profile-id ID [--wait-for-ready true|false] [--timeout-ms N]`; resume with `fileterm wait-connection --operation-id ID [--timeout-ms N]`."
+    );
 }
 
 fn print_cli_command_help(command: &str) {
@@ -3216,13 +3363,15 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 mod tests {
     use super::{
         bridge_request_timeout, handle_jsonrpc_request, initialize_result, mcp_error_code,
-        mcp_error_is_retryable, optional_string, pagination, tool_definitions, tool_error_result,
-        validate_tool_arguments, write_mcp_progress, BridgeProgress, BridgeRequest,
+        mcp_error_is_retryable, optional_string, pagination, should_request_mcp_approval,
+        tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
+        BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility, McpVisibilityScope,
         MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
         SUDO_PASSWORD_CANCELLED,
         SUDO_PASSWORD_NEEDED,
     };
     use serde_json::{json, Value};
+    use std::collections::HashSet;
 
     #[test]
     fn tools_are_prefixed_and_have_strict_schemas() {
@@ -3285,6 +3434,43 @@ mod tests {
         assert_eq!(pagination(&json!({})).unwrap(), (20, 0));
         assert!(pagination(&json!({ "limit": 0 })).is_err());
         assert!(pagination(&json!({ "limit": 101 })).is_err());
+    }
+
+    #[test]
+    fn selected_visibility_is_limited_to_allowed_profiles_and_tabs() {
+        let visibility = McpVisibility {
+            scope: McpVisibilityScope::SelectedConnections,
+            profile_ids: HashSet::from(["profile-1".to_string()]),
+            tab_ids: HashSet::from(["tab-1".to_string()]),
+        };
+        assert!(visibility.allows_profile(Some("profile-1")));
+        assert!(!visibility.allows_profile(Some("profile-2")));
+        assert!(visibility.allows_tab(Some("tab-1")));
+        assert!(!visibility.allows_tab(Some("tab-2")));
+        assert!(visibility.allows_transfer_value(&json!({ "tabId": "tab-1" })));
+        assert!(!visibility.allows_transfer_value(&json!({ "tabId": "tab-2" })));
+    }
+
+    #[test]
+    fn full_access_skips_per_action_approval_but_approved_policy_does_not() {
+        let request = BridgeRequest {
+            action: "write_remote_file".to_string(),
+            params: json!({}),
+            requires_approval: true,
+            progress_token: None,
+        };
+        let full_access = McpAccessPolicy {
+            connection_scope: "selected-connections".to_string(),
+            operation_policy: "full-access".to_string(),
+            allowed_profile_ids: HashSet::new(),
+            default_profile_id: None,
+        };
+        let approved_operations = McpAccessPolicy {
+            operation_policy: "approved-operations".to_string(),
+            ..full_access.clone()
+        };
+        assert!(!should_request_mcp_approval(&full_access, &request));
+        assert!(should_request_mcp_approval(&approved_operations, &request));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：阶段 1 已实现（待自动化门禁）；阶段 2-4 规划中
+状态：阶段 1-2 已实现（待自动化门禁）；阶段 3-4 规划中
 
 关联 Issue：[St0ff3l/fileterm#224](https://github.com/St0ff3l/fileterm/issues/224)
 
@@ -929,4 +929,14 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] SSH、FTP、Telnet、Serial 和本地终端的就绪/失败状态接入连接操作通知。
 - [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
-阶段 1 的实现不改变 GUI 直接打开连接的立即返回语义，也没有把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。阶段 2 的全局连接白名单、阶段 3 的常驻 Agent bridge 与连接去重仍未开始。
+### 阶段 2：全局连接白名单与操作等级
+
+- [x] `packages/core` 与 Rust 偏好模型增加 `selected-connections`、`allowedProfileIds` 和 `full-access`。
+- [x] Rust bridge route 在进入 action handler 前校验选中 profile；列表、会话、传输和等待结果使用同一范围过滤。
+- [x] 删除 profile 时自动从 Agent 允许列表清理，旧配置不会因为缺失字段而扩大到全部连接。
+- [x] 设置页增加搜索、多选、非敏感凭据存在状态和空选择提示。
+- [x] 完全授权只跳过逐次 MCP 审批，仍保留连接范围和其它安全边界。
+- [x] 增加 selected visibility 与操作等级策略单元测试。
+- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+
+阶段 1-2 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。阶段 3 的常驻 Agent bridge 与连接去重、阶段 4 的 CLI 凭据输入硬化仍未开始。

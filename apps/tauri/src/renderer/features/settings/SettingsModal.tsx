@@ -585,6 +585,19 @@ function aiProviderRequestUrlPreview(draft: AiProviderDraft) {
   }
 }
 
+function maskAgentProfileHost(host: string) {
+  const value = host.trim()
+  if (!value) return ''
+  if (value.length <= 4) return `•••${value.slice(-1)}`
+  return `${value.slice(0, 2)}…${value.slice(-2)}`
+}
+
+function agentProfileTarget(profile: ConnectionProfile) {
+  if (profile.type === 'serial') return profile.devicePath
+  const host = maskAgentProfileHost(profile.host)
+  return host ? `${host}:${profile.port}` : profile.type.toUpperCase()
+}
+
 export function SettingsModal({
   theme,
   themeConfig,
@@ -666,6 +679,7 @@ export function SettingsModal({
   }))
   const [mcpAgentSetup, setMcpAgentSetup] = useState<McpAgentSetup | null>(null)
   const [mcpAgentProfiles, setMcpAgentProfiles] = useState<ConnectionProfile[]>([])
+  const [mcpAgentProfileSearch, setMcpAgentProfileSearch] = useState('')
   const [mcpAgentOperation, setMcpAgentOperation] = useState<'load' | 'save' | null>(null)
   const [mcpAgentMessage, setMcpAgentMessage] = useState<string | null>(null)
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
@@ -738,6 +752,14 @@ export function SettingsModal({
       }).map((item) => item.tab)
     )
   }, [locale, settingsSearchQuery])
+
+  const filteredMcpAgentProfiles = useMemo(() => {
+    const query = mcpAgentProfileSearch.trim().toLocaleLowerCase()
+    if (!query) return mcpAgentProfiles
+    return mcpAgentProfiles.filter((profile) =>
+      `${profile.name} ${profile.host} ${profile.type} ${profile.port}`.toLocaleLowerCase().includes(query)
+    )
+  }, [mcpAgentProfileSearch, mcpAgentProfiles])
 
   useEffect(() => {
     if (!desktopApi) return
@@ -1779,7 +1801,11 @@ export function SettingsModal({
     if (
       nextPreferences.connectionScope === previousPreferences.connectionScope &&
       nextPreferences.operationPolicy === previousPreferences.operationPolicy &&
-      nextPreferences.defaultProfileId === previousPreferences.defaultProfileId
+      nextPreferences.defaultProfileId === previousPreferences.defaultProfileId &&
+      nextPreferences.allowedProfileIds.length === previousPreferences.allowedProfileIds.length &&
+      nextPreferences.allowedProfileIds.every(
+        (profileId, index) => profileId === previousPreferences.allowedProfileIds[index]
+      )
     ) {
       return
     }
@@ -2686,6 +2712,7 @@ export function SettingsModal({
                           disabled={!desktopApi || mcpAgentOperation !== null}
                           options={[
                             { value: 'all-saved-connections', label: t.agentMcpScopeAll },
+                            { value: 'selected-connections', label: t.agentMcpScopeSelected },
                             { value: 'active-session', label: t.agentMcpScopeActive },
                             {
                               value: 'default-connection',
@@ -2706,11 +2733,70 @@ export function SettingsModal({
                         <small>
                           {mcpAgentPreferences.connectionScope === 'all-saved-connections'
                             ? t.agentMcpScopeAllHint
-                            : mcpAgentPreferences.connectionScope === 'active-session'
-                              ? t.agentMcpScopeActiveHint
-                              : t.agentMcpScopeDefaultHint}
+                            : mcpAgentPreferences.connectionScope === 'selected-connections'
+                              ? t.agentMcpScopeSelectedHint
+                              : mcpAgentPreferences.connectionScope === 'active-session'
+                                ? t.agentMcpScopeActiveHint
+                                : t.agentMcpScopeDefaultHint}
                         </small>
                       </label>
+
+                      {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
+                        <div className="agent-mcp-selected-connections">
+                          <div className="agent-mcp-selected-connections-heading">
+                            <span>{t.agentMcpSelectedConnections}</span>
+                            <small>
+                              {formatMessage(t.agentMcpSelectedConnectionCount, {
+                                count: mcpAgentPreferences.allowedProfileIds.length
+                              })}
+                            </small>
+                          </div>
+                          <input
+                            aria-label={t.agentMcpSelectedConnections}
+                            className="agent-mcp-profile-search"
+                            disabled={!desktopApi || mcpAgentOperation !== null}
+                            placeholder={t.agentMcpSelectedConnectionsSearchPlaceholder}
+                            type="search"
+                            value={mcpAgentProfileSearch}
+                            onChange={(event) => setMcpAgentProfileSearch(event.target.value)}
+                          />
+                          <div className="agent-mcp-profile-list" role="group">
+                            {filteredMcpAgentProfiles.map((profile) => {
+                              const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
+                              return (
+                                <label key={profile.id} className="agent-mcp-profile-option">
+                                  <input
+                                    checked={selected}
+                                    disabled={!desktopApi || mcpAgentOperation !== null}
+                                    type="checkbox"
+                                    onChange={() => {
+                                      const allowedProfileIds = selected
+                                        ? mcpAgentPreferences.allowedProfileIds.filter((id) => id !== profile.id)
+                                        : [...mcpAgentPreferences.allowedProfileIds, profile.id]
+                                      saveMcpAgentPreferences({ allowedProfileIds })
+                                    }}
+                                  />
+                                  <span className="agent-mcp-profile-copy">
+                                    <strong>{profile.name || profile.type.toUpperCase()}</strong>
+                                    <small>
+                                      {profile.type.toUpperCase()} · {agentProfileTarget(profile)} ·{' '}
+                                      {profile.hasSavedPassword
+                                        ? t.agentMcpCredentialSaved
+                                        : t.agentMcpCredentialPrompt}
+                                    </small>
+                                  </span>
+                                </label>
+                              )
+                            })}
+                            {!filteredMcpAgentProfiles.length ? (
+                              <small className="agent-mcp-profile-empty">{t.agentMcpSelectedConnectionsEmpty}</small>
+                            ) : null}
+                          </div>
+                          {!mcpAgentPreferences.allowedProfileIds.length ? (
+                            <small className="agent-mcp-profile-warning">{t.agentMcpSelectedConnectionsNone}</small>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       {mcpAgentPreferences.connectionScope === 'default-connection' ? (
                         <label>
@@ -2737,7 +2823,8 @@ export function SettingsModal({
                           disabled={!desktopApi || mcpAgentOperation !== null}
                           options={[
                             { value: 'read-only', label: t.agentMcpReadOnly },
-                            { value: 'approved-operations', label: t.agentMcpApprovedOperations }
+                            { value: 'approved-operations', label: t.agentMcpApprovedOperations },
+                            { value: 'full-access', label: t.agentMcpFullAccess }
                           ]}
                           value={mcpAgentPreferences.operationPolicy}
                           onChange={(value) =>
@@ -2749,7 +2836,9 @@ export function SettingsModal({
                         <small>
                           {mcpAgentPreferences.operationPolicy === 'read-only'
                             ? t.agentMcpReadOnlyHint
-                            : t.agentMcpApprovedOperationsHint}
+                            : mcpAgentPreferences.operationPolicy === 'full-access'
+                              ? t.agentMcpFullAccessHint
+                              : t.agentMcpApprovedOperationsHint}
                         </small>
                       </label>
                     </div>
