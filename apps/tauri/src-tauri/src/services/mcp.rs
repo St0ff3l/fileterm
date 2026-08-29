@@ -22,9 +22,12 @@ use std::{
     io::{self, BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use subtle::ConstantTimeEq;
 use tauri::AppHandle;
@@ -44,6 +47,7 @@ const MCP_TRANSFER_WAIT_TIMEOUT: Duration = Duration::from_secs(125);
 const MCP_CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(125);
 const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
+const AGENT_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const MCP_DEFAULT_PAGE_SIZE: usize = 20;
 const MCP_MAX_PAGE_SIZE: usize = 100;
 const MCP_MAX_FILE_CONTENT_BYTES: usize = 512 * 1024;
@@ -57,6 +61,7 @@ const MCP_CONNECTION_OPERATION_NOT_READY: &str = "FILETERM_CONNECTION_OPERATION_
 const MCP_CONNECTION_WAITING: &str = "FILETERM_CONNECTION_WAITING";
 const MCP_POLICY_READ_ONLY: &str = "MCP_POLICY_READ_ONLY";
 const MCP_SCOPE_DENIED: &str = "MCP_SCOPE_DENIED";
+const FILETERM_AGENT_REQUEST_CANCELLED: &str = "FILETERM_AGENT_REQUEST_CANCELLED";
 
 #[derive(Clone, Debug)]
 struct McpAccessPolicy {
@@ -181,6 +186,95 @@ struct AgentRequest {
     requires_approval: bool,
     #[serde(default)]
     progress_token: Option<Value>,
+}
+
+struct AgentJob {
+    request: AgentRequest,
+    cancellation: Arc<AtomicBool>,
+    controls: AgentRequestControls,
+}
+
+#[derive(Clone, Default)]
+struct AgentRequestControls {
+    active: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+}
+
+impl AgentRequestControls {
+    fn register(&self, id: &Value) -> Result<Arc<AtomicBool>, String> {
+        let key = agent_request_key(id)?;
+        let mut active = self
+            .active
+            .lock()
+            .map_err(|_| "FileTerm Agent request registry is unavailable".to_string())?;
+        if active.contains_key(&key) {
+            return Err("FileTerm Agent request id is already in use".to_string());
+        }
+        let cancellation = Arc::new(AtomicBool::new(false));
+        active.insert(key, Arc::clone(&cancellation));
+        Ok(cancellation)
+    }
+
+    fn cancel(&self, id: &Value) -> Result<bool, String> {
+        let key = agent_request_key(id)?;
+        let active = self
+            .active
+            .lock()
+            .map_err(|_| "FileTerm Agent request registry is unavailable".to_string())?;
+        if let Some(cancellation) = active.get(&key) {
+            cancellation.store(true, Ordering::Release);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn remove(&self, id: &Value) {
+        let Ok(key) = agent_request_key(id) else {
+            return;
+        };
+        if let Ok(mut active) = self.active.lock() {
+            active.remove(&key);
+        }
+    }
+}
+
+fn agent_request_key(id: &Value) -> Result<String, String> {
+    match id {
+        Value::String(value) if !value.is_empty() && value.len() <= 256 => {
+            if value.chars().any(char::is_control) {
+                Err("FileTerm Agent request id must not contain control characters".to_string())
+            } else {
+                Ok(format!("s:{value}"))
+            }
+        }
+        Value::Number(_) => serde_json::to_string(id)
+            .map_err(|_| "FileTerm Agent request id must be a string or number".to_string())
+            .and_then(|value| {
+                if value.len() > 256 {
+                    Err("FileTerm Agent request id must be at most 256 bytes".to_string())
+                } else {
+                    Ok(format!("n:{value}"))
+                }
+            }),
+        Value::String(_) => Err(
+            "FileTerm Agent request id must be a non-empty string of at most 256 bytes".to_string(),
+        ),
+        _ => Err("FileTerm Agent request id must be a string or number".to_string()),
+    }
+}
+
+fn validate_agent_cancel_params(params: &Value) -> Result<Value, String> {
+    let object = params
+        .as_object()
+        .ok_or_else(|| "cancel_request params must be a JSON object".to_string())?;
+    if object.len() != 1 || !object.contains_key("request_id") {
+        return Err("cancel_request params require only request_id".to_string());
+    }
+    let request_id = object
+        .get("request_id")
+        .ok_or_else(|| "cancel_request requires request_id".to_string())?;
+    agent_request_key(request_id)?;
+    Ok(request_id.clone())
 }
 
 fn empty_json_object() -> Value {
@@ -2391,13 +2485,14 @@ pub fn run_agent(arguments: &[String]) -> Result<(), String> {
         .any(|argument| argument == "--help" || argument == "-h")
     {
         println!(
-            "Usage: fileterm agent\n\nRun the persistent FileTerm Agent bridge over JSONL. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and exits when stdin closes."
+            "Usage: fileterm agent\n\nRun the persistent FileTerm Agent bridge over JSONL. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nCancel a pending request:\n  {{\"id\":\"cancel-1\",\"action\":\"cancel_request\",\"params\":{{\"request_id\":\"request-1\"}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. Agent requests always use the in-app approval policy; the incoming requiresApproval field cannot disable approval. Cancellation stops waiting for the Agent result, but cannot roll back work already accepted by the desktop app. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and exits when stdin closes."
         );
         return Ok(());
     }
 
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
-    let (job_sender, job_receiver) = std::sync::mpsc::channel::<Option<AgentRequest>>();
+    let controls = AgentRequestControls::default();
+    let (job_sender, job_receiver) = std::sync::mpsc::channel::<Option<AgentJob>>();
     let job_receiver = Arc::new(Mutex::new(job_receiver));
     let mut workers = Vec::with_capacity(MCP_MAX_CONCURRENT_CLIENTS);
 
@@ -2414,10 +2509,10 @@ pub fn run_agent(arguments: &[String]) -> Result<(), String> {
                     };
                     receiver.recv()
                 };
-                let Ok(Some(request)) = job else {
+                let Ok(Some(job)) = job else {
                     break;
                 };
-                process_agent_request(request, &stdout);
+                process_agent_request(job, &stdout);
             })
             .map_err(|error| format!("Unable to start FileTerm Agent worker: {error}"))?;
         workers.push(worker);
@@ -2464,9 +2559,62 @@ pub fn run_agent(arguments: &[String]) -> Result<(), String> {
             .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
             continue;
         }
-        job_sender
-            .send(Some(request))
-            .map_err(|_| "FileTerm Agent workers stopped unexpectedly".to_string())?;
+        if request.action == "cancel_request" {
+            let target_id = match validate_agent_cancel_params(&request.params) {
+                Ok(target_id) => target_id,
+                Err(error) => {
+                    write_agent_value(
+                        &stdout,
+                        &json!({ "id": request.id, "ok": false, "error": error }),
+                    )
+                    .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+                    continue;
+                }
+            };
+            let cancel_request_id = request.id.clone();
+            if let Err(error) = controls.register(&cancel_request_id) {
+                write_agent_value(
+                    &stdout,
+                    &json!({ "id": request.id, "ok": false, "error": error }),
+                )
+                .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+                continue;
+            }
+            let cancelled = controls.cancel(&target_id)?;
+            write_agent_value(
+                &stdout,
+                &json!({
+                    "id": request.id,
+                    "ok": true,
+                    "result": { "requestId": target_id, "cancelled": cancelled }
+                }),
+            )
+            .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+            controls.remove(&cancel_request_id);
+            continue;
+        }
+
+        let request_id = request.id.clone();
+        let cancellation = match controls.register(&request.id) {
+            Ok(cancellation) => cancellation,
+            Err(error) => {
+                write_agent_value(
+                    &stdout,
+                    &json!({ "id": request.id, "ok": false, "error": error }),
+                )
+                .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+                continue;
+            }
+        };
+        let job = AgentJob {
+            request,
+            cancellation,
+            controls: controls.clone(),
+        };
+        if job_sender.send(Some(job)).is_err() {
+            controls.remove(&request_id);
+            return Err("FileTerm Agent workers stopped unexpectedly".to_string());
+        }
     }
     drop(job_sender);
 
@@ -2479,9 +2627,7 @@ pub fn run_agent(arguments: &[String]) -> Result<(), String> {
 }
 
 fn validate_agent_request(request: &AgentRequest) -> Result<(), String> {
-    if request.id.is_null() {
-        return Err("FileTerm Agent request requires a non-null id".to_string());
-    }
+    agent_request_key(&request.id)?;
     if request.action.trim().is_empty() || request.action.len() > 256 {
         return Err("FileTerm Agent request requires a valid action".to_string());
     }
@@ -2491,22 +2637,42 @@ fn validate_agent_request(request: &AgentRequest) -> Result<(), String> {
     Ok(())
 }
 
-fn process_agent_request(request: AgentRequest, stdout: &Arc<Mutex<io::BufWriter<io::Stdout>>>) {
-    let AgentRequest {
-        id,
-        action,
-        params,
-        requires_approval,
-        progress_token,
-    } = request;
-    let bridge_request = BridgeRequest {
-        action,
-        params,
-        requires_approval,
-        progress_token,
-    };
+fn agent_bridge_request(request: &AgentRequest) -> BridgeRequest {
+    // Read the compatibility field deliberately, but ignore its value: an
+    // Agent cannot opt out of the desktop approval policy.
+    let _caller_requested_approval = request.requires_approval;
+    BridgeRequest {
+        action: request.action.clone(),
+        params: request.params.clone(),
+        // Agent requests are always subject to the desktop approval policy.
+        // Keep the incoming field for wire compatibility, but never trust a
+        // caller to turn the approval gate off.
+        requires_approval: true,
+        progress_token: request.progress_token.clone(),
+    }
+}
+
+fn process_agent_request(job: AgentJob, stdout: &Arc<Mutex<io::BufWriter<io::Stdout>>>) {
+    let AgentJob {
+        request,
+        cancellation,
+        controls,
+    } = job;
+    let id = request.id.clone();
     let request_id = id.clone();
+    if cancellation.load(Ordering::Acquire) {
+        let _ = write_agent_value(
+            stdout,
+            &json!({ "id": id, "ok": false, "error": FILETERM_AGENT_REQUEST_CANCELLED }),
+        );
+        controls.remove(&request_id);
+        return;
+    }
+    let bridge_request = agent_bridge_request(&request);
     let mut on_progress = |progress: &BridgeProgress| {
+        if cancellation.load(Ordering::Acquire) {
+            return;
+        }
         let mut value = serde_json::to_value(progress).unwrap_or_else(|_| {
             json!({
                 "kind": "progress",
@@ -2521,11 +2687,22 @@ fn process_agent_request(request: AgentRequest, stdout: &Arc<Mutex<io::BufWriter
         }
         let _ = write_agent_value(stdout, &value);
     };
-    let response = match call_desktop_bridge_with_progress(bridge_request, &mut on_progress) {
-        Ok(result) => json!({ "id": id, "ok": true, "result": result }),
+    let response = match call_desktop_bridge_with_progress_and_cancellation(
+        bridge_request,
+        &mut on_progress,
+        Some(&cancellation),
+    ) {
+        Ok(result) if !cancellation.load(Ordering::Acquire) => {
+            json!({ "id": id, "ok": true, "result": result })
+        }
+        Err(_) if cancellation.load(Ordering::Acquire) => {
+            json!({ "id": id, "ok": false, "error": FILETERM_AGENT_REQUEST_CANCELLED })
+        }
+        Ok(_) => json!({ "id": id, "ok": false, "error": FILETERM_AGENT_REQUEST_CANCELLED }),
         Err(error) => json!({ "id": id, "ok": false, "error": error }),
     };
     let _ = write_agent_value(stdout, &response);
+    controls.remove(&request_id);
 }
 
 fn write_agent_value(
@@ -3559,6 +3736,20 @@ fn call_desktop_bridge_with_progress<F>(
 where
     F: FnMut(&BridgeProgress),
 {
+    call_desktop_bridge_with_progress_and_cancellation(request, on_progress, None)
+}
+
+fn call_desktop_bridge_with_progress_and_cancellation<F>(
+    request: BridgeRequest,
+    on_progress: &mut F,
+    cancellation: Option<&AtomicBool>,
+) -> Result<Value, String>
+where
+    F: FnMut(&BridgeProgress),
+{
+    if cancellation_requested(cancellation) {
+        return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+    }
     let runtime_path = runtime_descriptor_path()?;
     let descriptor_content = fs::read_to_string(&runtime_path).map_err(|_| {
         "FileTerm desktop app is not running. Open FileTerm, then retry this MCP tool.".to_string()
@@ -3578,13 +3769,24 @@ where
     if !address.ip().is_loopback() {
         return Err("FileTerm MCP rejected a non-local runtime address.".to_string());
     }
+    if cancellation_requested(cancellation) {
+        return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+    }
 
     let request_timeout = MCP_CLIENT_TIMEOUT;
     let mut stream = StdTcpStream::connect_timeout(&address, MCP_BRIDGE_TIMEOUT).map_err(|_| {
         "FileTerm desktop app is unavailable. Open or restart FileTerm, then retry this MCP tool.".to_string()
     })?;
+    if cancellation_requested(cancellation) {
+        return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+    }
+    let read_timeout = if cancellation.is_some() {
+        AGENT_CANCEL_POLL_INTERVAL
+    } else {
+        request_timeout
+    };
     stream
-        .set_read_timeout(Some(request_timeout))
+        .set_read_timeout(Some(read_timeout))
         .map_err(|_| "Unable to configure FileTerm MCP connection".to_string())?;
     stream
         .set_write_timeout(Some(request_timeout))
@@ -3605,14 +3807,48 @@ where
         .map_err(|_| {
             "Unable to send the request to FileTerm. Restart FileTerm and retry.".to_string()
         })?;
+    if cancellation_requested(cancellation) {
+        return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+    }
 
     let mut reader = BufReader::new(stream);
     let mut response_line = String::new();
+    let response_deadline = Instant::now() + request_timeout;
     loop {
-        response_line.clear();
-        reader.read_line(&mut response_line).map_err(|_| {
-            "FileTerm did not respond to the MCP request. Retry shortly.".to_string()
-        })?;
+        if cancellation_requested(cancellation) {
+            return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+        }
+        let read_result = reader.read_line(&mut response_line);
+        match read_result {
+            Ok(0) => {
+                return Err(
+                    "FileTerm did not respond to the MCP request. Retry shortly.".to_string(),
+                )
+            }
+            Ok(_) => {}
+            Err(error)
+                if cancellation.is_some()
+                    && matches!(
+                        error.kind(),
+                        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+                    ) =>
+            {
+                if cancellation_requested(cancellation) {
+                    return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+                }
+                if Instant::now() >= response_deadline {
+                    return Err(
+                        "FileTerm did not respond to the MCP request. Retry shortly.".to_string(),
+                    );
+                }
+                continue;
+            }
+            Err(_) => {
+                return Err(
+                    "FileTerm did not respond to the MCP request. Retry shortly.".to_string(),
+                )
+            }
+        }
         if response_line.len() > MCP_MAX_MESSAGE_BYTES {
             return Err("FileTerm MCP response exceeds the size limit.".to_string());
         }
@@ -3625,13 +3861,17 @@ where
                     "FileTerm returned an invalid MCP progress event. Restart FileTerm and retry."
                         .to_string()
                 })?;
+            if cancellation_requested(cancellation) {
+                return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+            }
             on_progress(&progress);
+            response_line.clear();
             continue;
         }
         let response: BridgeResponse = serde_json::from_value(response_value).map_err(|_| {
             "FileTerm returned an invalid MCP response. Restart FileTerm and retry.".to_string()
         })?;
-        return if response.ok {
+        let result = if response.ok {
             response
                 .result
                 .ok_or_else(|| "FileTerm returned an empty MCP response.".to_string())
@@ -3640,7 +3880,15 @@ where
                 .error
                 .unwrap_or_else(|| "FileTerm could not complete the MCP request.".to_string()))
         };
+        if cancellation_requested(cancellation) {
+            return Err(FILETERM_AGENT_REQUEST_CANCELLED.to_string());
+        }
+        return result;
     }
+}
+
+fn cancellation_requested(cancellation: Option<&AtomicBool>) -> bool {
+    cancellation.is_some_and(|cancellation| cancellation.load(Ordering::Acquire))
 }
 
 fn write_mcp_progress<W: Write>(writer: &mut W, progress: &BridgeProgress) -> io::Result<()> {
@@ -3717,6 +3965,11 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::{
+        agent_bridge_request, agent_request_key, cli_exec_action, decode_cli_secret_bytes,
+        parse_cli_options_with_flags, validate_agent_cancel_params, validate_agent_request,
+        AgentRequest, AgentRequestControls,
+    };
+    use super::{
         bridge_request_timeout, handle_jsonrpc_request, initialize_result, mcp_error_code,
         mcp_error_is_retryable, optional_string, pagination, should_request_mcp_approval,
         tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
@@ -3724,10 +3977,6 @@ mod tests {
         MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
         SUDO_PASSWORD_CANCELLED,
         SUDO_PASSWORD_NEEDED,
-    };
-    use super::{
-        cli_exec_action, decode_cli_secret_bytes, parse_cli_options_with_flags,
-        validate_agent_request, AgentRequest,
     };
     use serde_json::{json, Value};
     use std::collections::HashSet;
@@ -3755,6 +4004,49 @@ mod tests {
         }))
         .unwrap();
         assert!(validate_agent_request(&invalid_params).is_err());
+    }
+
+    #[test]
+    fn agent_requests_cannot_disable_desktop_approval() {
+        let request = serde_json::from_value::<AgentRequest>(json!({
+            "id": "request-1",
+            "action": "write_remote_file",
+            "params": {},
+            "requiresApproval": false
+        }))
+        .unwrap();
+        assert!(validate_agent_request(&request).is_ok());
+        assert!(agent_bridge_request(&request).requires_approval);
+    }
+
+    #[test]
+    fn agent_request_cancellation_is_single_use_and_id_scoped() {
+        let controls = AgentRequestControls::default();
+        let request_id = json!("request-1");
+        let cancellation = controls.register(&request_id).unwrap();
+        assert!(!cancellation.load(std::sync::atomic::Ordering::Acquire));
+        assert!(controls.cancel(&request_id).unwrap());
+        assert!(cancellation.load(std::sync::atomic::Ordering::Acquire));
+        assert!(!controls.cancel(&json!("request-2")).unwrap());
+        controls.remove(&request_id);
+        assert!(!controls.cancel(&request_id).unwrap());
+        assert!(controls.register(&request_id).is_ok());
+    }
+
+    #[test]
+    fn agent_cancel_requests_validate_target_ids() {
+        assert_eq!(
+            validate_agent_cancel_params(&json!({ "request_id": 7 })).unwrap(),
+            json!(7)
+        );
+        assert!(validate_agent_cancel_params(&json!({})).is_err());
+        assert!(validate_agent_cancel_params(&json!({
+            "request_id": "request-1",
+            "extra": true
+        }))
+        .is_err());
+        assert!(validate_agent_cancel_params(&json!({ "request_id": true })).is_err());
+        assert!(agent_request_key(&Value::Null).is_err());
     }
 
     #[test]
