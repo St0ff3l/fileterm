@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -2664,21 +2664,7 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
         "reconnect" => cli_action("reconnect_session", options, &["tab-id"], &["tab-id"]),
         "disconnect" => cli_action("disconnect_session", options, &["tab-id"], &["tab-id"]),
         "close" => cli_action("close_session", options, &["tab-id"], &["tab-id"]),
-        "exec" | "execute" => cli_action(
-            "execute_remote_command",
-            options,
-            &[
-                "tab-id",
-                "command",
-                "cwd",
-                "timeout-ms",
-                "sudo-password",
-                "su-password",
-                "save-sudo-password",
-                "save-su-password",
-            ],
-            &["tab-id", "command"],
-        ),
+        "exec" | "execute" => cli_exec_action(options),
         "command-template" => cli_action(
             "execute_command_template",
             options,
@@ -2847,6 +2833,74 @@ fn cli_action(
     print_cli_result(call_desktop_bridge(cli_bridge_request(action, params))?)
 }
 
+fn cli_exec_action(arguments: &[String]) -> Result<(), String> {
+    if has_cli_help(arguments) {
+        print_cli_command_help("execute_remote_command");
+        return Ok(());
+    }
+    let (values, stdin_flags) = parse_cli_options_with_flags(
+        arguments,
+        &[
+            "tab-id",
+            "command",
+            "cwd",
+            "timeout-ms",
+            "sudo-password",
+            "su-password",
+            "save-sudo-password",
+            "save-su-password",
+            "sudo-password-stdin",
+            "su-password-stdin",
+        ],
+        &["sudo-password-stdin", "su-password-stdin"],
+    )?;
+    for key in ["tab-id", "command"] {
+        if !values.contains_key(key) {
+            return Err(format!("exec requires --{key} <value>"));
+        }
+    }
+
+    let use_sudo_stdin = stdin_flags.contains("sudo-password-stdin");
+    let use_su_stdin = stdin_flags.contains("su-password-stdin");
+    if use_sudo_stdin && use_su_stdin {
+        return Err(
+            "--sudo-password-stdin and --su-password-stdin cannot be used together".to_string(),
+        );
+    }
+    if use_sudo_stdin && values.contains_key("sudo-password") {
+        return Err("Use either --sudo-password or --sudo-password-stdin, not both".to_string());
+    }
+    if use_su_stdin && values.contains_key("su-password") {
+        return Err("Use either --su-password or --su-password-stdin, not both".to_string());
+    }
+
+    let mut params = cli_values_to_params(&values)?;
+    let params = params
+        .as_object_mut()
+        .ok_or_else(|| "exec parameters must be a JSON object".to_string())?;
+    if use_sudo_stdin {
+        params.insert(
+            "sudo_password".to_string(),
+            Value::String(read_cli_secret_from_stdin("--sudo-password-stdin")?),
+        );
+    }
+    if use_su_stdin {
+        params.insert(
+            "su_password".to_string(),
+            Value::String(read_cli_secret_from_stdin("--su-password-stdin")?),
+        );
+    }
+    if values.contains_key("sudo-password") || values.contains_key("su-password") {
+        eprintln!(
+            "Warning: --sudo-password/--su-password is visible to local process inspection and may be saved in shell history; prefer the matching --*-password-stdin option."
+        );
+    }
+    print_cli_result(call_desktop_bridge(cli_bridge_request(
+        "execute_remote_command",
+        Value::Object(params.clone()),
+    ))?)
+}
+
 fn cli_call_action(arguments: &[String]) -> Result<(), String> {
     let action = arguments
         .first()
@@ -2912,7 +2966,16 @@ fn parse_cli_options(
     arguments: &[String],
     allowed: &[&str],
 ) -> Result<HashMap<String, String>, String> {
+    parse_cli_options_with_flags(arguments, allowed, &[]).map(|(values, _)| values)
+}
+
+fn parse_cli_options_with_flags(
+    arguments: &[String],
+    allowed: &[&str],
+    flags: &[&str],
+) -> Result<(HashMap<String, String>, HashSet<String>), String> {
     let mut values = HashMap::new();
+    let mut present_flags = HashSet::new();
     let mut index = 0;
     while index < arguments.len() {
         let argument = &arguments[index];
@@ -2923,8 +2986,13 @@ fn parse_cli_options(
         if !allowed.contains(&key) {
             return Err(format!("Unknown option --{key}"));
         }
-        if values.contains_key(key) {
+        if values.contains_key(key) || present_flags.contains(key) {
             return Err(format!("Option --{key} may only be provided once"));
+        }
+        if flags.contains(&key) {
+            present_flags.insert(key.to_string());
+            index += 1;
+            continue;
         }
         let value = arguments
             .get(index + 1)
@@ -2936,7 +3004,65 @@ fn parse_cli_options(
         values.insert(key.to_string(), value.clone());
         index += 2;
     }
-    Ok(values)
+    Ok((values, present_flags))
+}
+
+const CLI_STDIN_SECRET_MAX_BYTES: usize = 4 * 1024;
+
+/// Read exactly one newline-delimited secret for a one-shot CLI request.
+/// Reading is bounded before decoding so a redirected stdin cannot make the
+/// CLI allocate an unbounded buffer. The delimiter is removed, while all
+/// other password characters—including spaces—are preserved for the backend
+/// validator.
+fn read_cli_secret_from_stdin(option: &str) -> Result<String, String> {
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+    let mut bytes = Vec::with_capacity(CLI_STDIN_SECRET_MAX_BYTES);
+    let mut terminated = false;
+    loop {
+        let mut byte = [0_u8; 1];
+        let read = reader
+            .read(&mut byte)
+            .map_err(|_| format!("{option} could not read a password from stdin"))?;
+        if read == 0 {
+            break;
+        }
+        if byte[0] == b'\n' {
+            terminated = true;
+            break;
+        }
+        bytes.push(byte[0]);
+        if bytes.len() > CLI_STDIN_SECRET_MAX_BYTES {
+            return Err(format!("{option} password exceeds the 4 KiB limit"));
+        }
+    }
+    decode_cli_secret_bytes(option, bytes, terminated)
+}
+
+fn decode_cli_secret_bytes(
+    option: &str,
+    mut bytes: Vec<u8>,
+    terminated: bool,
+) -> Result<String, String> {
+    if bytes.len() > CLI_STDIN_SECRET_MAX_BYTES {
+        return Err(format!("{option} password exceeds the 4 KiB limit"));
+    }
+    if terminated && bytes.last() == Some(&b'\r') {
+        bytes.pop();
+    }
+    if bytes.is_empty() {
+        return Err(format!(
+            "{option} requires a non-empty password line on stdin"
+        ));
+    }
+    let value = String::from_utf8(bytes)
+        .map_err(|_| format!("{option} password must be valid UTF-8 text"))?;
+    if value.chars().any(char::is_control) {
+        return Err(format!(
+            "{option} password contains unsupported control characters"
+        ));
+    }
+    Ok(value)
 }
 
 fn parse_cli_usize(key: &str, value: &str) -> Result<usize, String> {
@@ -2973,7 +3099,7 @@ fn print_cli_command_help(command: &str) {
             "Usage: fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n       fileterm ls --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]"
         ),
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
-        "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD --save-sudo-password true] [--su-password PASSWORD --save-su-password true]"),
+        "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD | --sudo-password-stdin] [--save-sudo-password true] [--su-password PASSWORD | --su-password-stdin] [--save-su-password true]\n       --*-password-stdin reads one password line from stdin; prefer it for scripts and Agent-generated commands."),
         "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
         "wait_for_connection" => println!("Usage: fileterm wait-connection --operation-id ID [--timeout-ms N]"),
         "open_connection" => println!("Usage: fileterm open --profile-id PROFILE_ID [--wait-for-ready true|false] [--timeout-ms N]"),
@@ -3599,7 +3725,10 @@ mod tests {
         SUDO_PASSWORD_CANCELLED,
         SUDO_PASSWORD_NEEDED,
     };
-    use super::{validate_agent_request, AgentRequest};
+    use super::{
+        cli_exec_action, decode_cli_secret_bytes, parse_cli_options_with_flags,
+        validate_agent_request, AgentRequest,
+    };
     use serde_json::{json, Value};
     use std::collections::HashSet;
 
@@ -3626,6 +3755,61 @@ mod tests {
         }))
         .unwrap();
         assert!(validate_agent_request(&invalid_params).is_err());
+    }
+
+    #[test]
+    fn cli_password_stdin_flags_are_valueless_and_bounded() {
+        let arguments = vec![
+            "--tab-id".to_string(),
+            "tab-1".to_string(),
+            "--command".to_string(),
+            "sudo id".to_string(),
+            "--sudo-password-stdin".to_string(),
+            "--save-sudo-password".to_string(),
+            "true".to_string(),
+        ];
+        let (values, flags) = parse_cli_options_with_flags(
+            &arguments,
+            &[
+                "tab-id",
+                "command",
+                "save-sudo-password",
+                "sudo-password",
+                "sudo-password-stdin",
+            ],
+            &["sudo-password-stdin"],
+        )
+        .unwrap();
+        assert_eq!(values.get("tab-id"), Some(&"tab-1".to_string()));
+        assert_eq!(values.get("save-sudo-password"), Some(&"true".to_string()));
+        assert!(flags.contains("sudo-password-stdin"));
+
+        assert_eq!(
+            decode_cli_secret_bytes("--sudo-password-stdin", b"  secret  \r".to_vec(), true)
+                .unwrap(),
+            "  secret  "
+        );
+        assert!(decode_cli_secret_bytes("--sudo-password-stdin", Vec::new(), true).is_err());
+        assert!(
+            decode_cli_secret_bytes("--sudo-password-stdin", vec![b'x'; 4 * 1024 + 1], false)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn cli_password_argv_and_stdin_sources_cannot_be_combined() {
+        let arguments = vec![
+            "--tab-id".to_string(),
+            "tab-1".to_string(),
+            "--command".to_string(),
+            "sudo id".to_string(),
+            "--sudo-password".to_string(),
+            "secret".to_string(),
+            "--sudo-password-stdin".to_string(),
+        ];
+        let error = cli_exec_action(&arguments).unwrap_err();
+        assert!(error.contains("either --sudo-password or --sudo-password-stdin"));
+        assert!(!error.contains("secret"));
     }
 
     #[test]

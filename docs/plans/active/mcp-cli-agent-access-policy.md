@@ -1,6 +1,6 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：阶段 1-3 已实现（待自动化门禁）；阶段 4 规划中
+状态：阶段 1-4 已实现（待自动化门禁）；打包人工验收与真实设备验收待进行
 
 关联 Issue：[St0ff3l/fileterm#224](https://github.com/St0ff3l/fileterm/issues/224)
 
@@ -554,10 +554,18 @@ FileTerm 主窗口安全 prompt
 
 当前 CLI 支持 --sudo-password / --su-password。这不会进入命令文本和最终 JSON，但命令行参数可能被本机进程观察或写入 shell history。
 
-后续硬化建议：
+已增加 stdin 输入方式：
 
-- 增加 stdin 或一次性 JSON 输入方式。
-- 对明文 argv 参数保留兼容但给出安全提示。
+```bash
+printf '%s\n' "$SUDO_PASSWORD" | fileterm exec --tab-id TAB_ID --command 'sudo systemctl restart app' --sudo-password-stdin
+printf '%s\n' "$SU_PASSWORD" | fileterm exec --tab-id TAB_ID --command 'su - deploy -c "./deploy.sh"' --su-password-stdin
+```
+
+`--sudo-password-stdin` 和 `--su-password-stdin` 都只读取 stdin 的第一行，保留密码中的空格，不把密码放进 argv、stdout、stderr 或最终 JSON；输入长度限制为 4 KiB。脚本和 Agent 生成命令应优先使用这种方式。两个 stdin 选项不能同时使用，也不能和对应的明文参数混用。
+
+兼容性约束：
+
+- --sudo-password / --su-password 仍保留兼容，但 CLI 会在 stderr 给出风险提示；密码不会被打印。
 - 不在 Agent 生成的默认调用中使用明文 argv。
 
 ## 10. Agent / CLI 进程模型
@@ -775,10 +783,10 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 
 ### P3：CLI 凭据输入硬化
 
-- [ ] 增加 sudo/su 密码 stdin 输入方式。
-- [ ] 对 --sudo-password / --su-password argv 方式增加安全提示和文档警告。
-- [ ] 不在 Agent 默认生成的命令中使用明文 argv。
-- [ ] 现有一次性字段和加密 profile 行为保持兼容。
+- [x] 增加 sudo/su 密码 stdin 输入方式，限制为单行且有 4 KiB 上限。
+- [x] 对 --sudo-password / --su-password argv 方式增加 stderr 安全提示和文档警告。
+- [x] 不在 Agent 默认生成的命令中使用明文 argv。
+- [x] 现有一次性字段和加密 profile 行为保持兼容。
 
 ### P4：回归、打包和文档
 
@@ -949,4 +957,11 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [ ] macOS 打包后的 headless/application type 与 Dock 图标行为待人工验证。
 - [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
-阶段 1-3 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。阶段 4 的 CLI 凭据输入硬化仍未开始。
+### 阶段 4：CLI 凭据输入硬化
+
+- [x] `--sudo-password-stdin` / `--su-password-stdin` 作为无值参数读取一行 stdin，并限制长度、编码和控制字符。
+- [x] 拒绝明文 argv 与 stdin 两种来源混用；兼容旧参数并输出不含密码的安全提示。
+- [x] 补充 stdin 解析、长度边界和来源冲突测试。
+- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+
+阶段 1-4 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为仍待人工验证。
