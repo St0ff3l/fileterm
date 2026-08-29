@@ -1,0 +1,121 @@
+/* Shared card-style radio control used by settings and other desktop forms. */
+.radio-card-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.radio-card-group__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 66px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.radio-card-group__option:hover:not(.is-disabled) {
+  border-color: color-mix(in srgb, var(--focus-outline) 65%, var(--border-light));
+  background: color-mix(in srgb, var(--focus-outline) 6%, var(--bg-primary));
+}
+
+.radio-card-group__option:focus-within {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.radio-card-group__option.is-selected {
+  border-color: var(--focus-outline);
+  background: color-mix(in srgb, var(--focus-outline) 10%, var(--bg-primary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-outline) 24%, transparent);
+}
+
+.radio-card-group__option.is-disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.radio-card-group__input {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  flex: 0 0 14px;
+  margin: 1px 0 0;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-main);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.radio-card-group__input::after {
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 999px;
+  background: var(--focus-outline);
+  content: '';
+  transform: scale(0);
+  transition: transform 0.16s ease;
+}
+
+.radio-card-group__input:checked {
+  border-color: var(--focus-outline);
+  background: var(--bg-main);
+}
+
+.radio-card-group__input:checked::after {
+  transform: scale(1);
+}
+
+.radio-card-group__input:disabled {
+  cursor: not-allowed;
+}
+
+.radio-card-group__input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+.radio-card-group__input:hover:not(:disabled):not(:checked) {
+  border-color: var(--text-muted);
+}
+
+.radio-card-group__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.radio-card-group__copy strong {
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.radio-card-group__copy small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+}

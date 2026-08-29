@@ -41,6 +41,7 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { FeedbackText } from '../common/FeedbackText'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
+import { RadioCardGroup } from '../common/RadioCardGroup'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
 import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import { waitForMinimumBusyDuration } from '../common/operation-timing'
@@ -781,6 +782,19 @@ export function SettingsModal({
       value: 'full-access' as const,
       label: t.agentMcpExecutionFull,
       description: t.agentMcpExecutionFullDescription
+    }
+  ]
+
+  const mcpConnectionScopeOptions = [
+    {
+      value: 'all-saved-connections' as const,
+      label: t.agentMcpConnectionModeAll,
+      description: t.agentMcpConnectionModeAllHint
+    },
+    {
+      value: 'selected-connections' as const,
+      label: t.agentMcpConnectionModeSelected,
+      description: t.agentMcpConnectionModeSelectedHint
     }
   ]
 
@@ -2742,51 +2756,15 @@ export function SettingsModal({
                             <p>{t.agentMcpExecutionPolicyDescription}</p>
                           </div>
                         </div>
-                        <div
-                          aria-label={t.agentMcpExecutionPolicyTitle}
+                        <RadioCardGroup
+                          ariaLabel={t.agentMcpExecutionPolicyTitle}
                           className="agent-mcp-policy-options"
-                          role="radiogroup"
-                        >
-                          {mcpExecutionPolicyOptions.map((option, index) => {
-                            const selected = mcpAgentPreferences.operationPolicy === option.value
-                            return (
-                              <button
-                                key={option.value}
-                                aria-checked={selected}
-                                className={`agent-mcp-policy-option ${selected ? 'is-selected' : ''}`}
-                                disabled={!desktopApi || mcpAgentOperation !== null}
-                                role="radio"
-                                tabIndex={selected ? 0 : -1}
-                                type="button"
-                                onClick={() => saveMcpAgentPreferences({ operationPolicy: option.value })}
-                                onKeyDown={(event) => {
-                                  const direction =
-                                    event.key === 'ArrowRight' || event.key === 'ArrowDown'
-                                      ? 1
-                                      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-                                        ? -1
-                                        : 0
-                                  if (!direction) return
-                                  event.preventDefault()
-                                  const nextOption =
-                                    mcpExecutionPolicyOptions[
-                                      (index + direction + mcpExecutionPolicyOptions.length) %
-                                        mcpExecutionPolicyOptions.length
-                                    ]
-                                  if (nextOption) {
-                                    saveMcpAgentPreferences({ operationPolicy: nextOption.value })
-                                  }
-                                }}
-                              >
-                                <span aria-hidden="true" className="agent-mcp-policy-option-indicator" />
-                                <span className="agent-mcp-policy-option-copy">
-                                  <strong>{option.label}</strong>
-                                  <small>{option.description}</small>
-                                </span>
-                              </button>
-                            )
-                          })}
-                        </div>
+                          disabled={!desktopApi || mcpAgentOperation !== null}
+                          name="agent-mcp-execution-policy"
+                          options={mcpExecutionPolicyOptions}
+                          value={mcpAgentPreferences.operationPolicy}
+                          onChange={(value) => saveMcpAgentPreferences({ operationPolicy: value })}
+                        />
                         <p
                           className={`agent-mcp-policy-notice ${
                             mcpAgentPreferences.operationPolicy === 'full-access' ? 'is-warning' : ''
@@ -2850,58 +2828,15 @@ export function SettingsModal({
                               : t.agentMcpConnectionModeAllStatus}
                           </span>
                         </div>
-                        <div
-                          aria-label={t.agentMcpAllowedConnectionsTitle}
+                        <RadioCardGroup
+                          ariaLabel={t.agentMcpAllowedConnectionsTitle}
                           className="agent-mcp-policy-options agent-mcp-connection-options"
-                          role="radiogroup"
-                        >
-                          {[
-                            {
-                              value: 'all-saved-connections' as const,
-                              label: t.agentMcpConnectionModeAll,
-                              description: t.agentMcpConnectionModeAllHint
-                            },
-                            {
-                              value: 'selected-connections' as const,
-                              label: t.agentMcpConnectionModeSelected,
-                              description: t.agentMcpConnectionModeSelectedHint
-                            }
-                          ].map((option, index, options) => {
-                            const selected = mcpAgentPreferences.connectionScope === option.value
-                            return (
-                              <button
-                                key={option.value}
-                                aria-checked={selected}
-                                className={`agent-mcp-policy-option ${selected ? 'is-selected' : ''}`}
-                                disabled={!desktopApi || mcpAgentOperation !== null}
-                                role="radio"
-                                tabIndex={selected ? 0 : -1}
-                                type="button"
-                                onClick={() => saveMcpAgentPreferences({ connectionScope: option.value })}
-                                onKeyDown={(event) => {
-                                  const direction =
-                                    event.key === 'ArrowRight' || event.key === 'ArrowDown'
-                                      ? 1
-                                      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-                                        ? -1
-                                        : 0
-                                  if (!direction) return
-                                  event.preventDefault()
-                                  const nextOption = options[(index + direction + options.length) % options.length]
-                                  if (nextOption) {
-                                    saveMcpAgentPreferences({ connectionScope: nextOption.value })
-                                  }
-                                }}
-                              >
-                                <span aria-hidden="true" className="agent-mcp-policy-option-indicator" />
-                                <span className="agent-mcp-policy-option-copy">
-                                  <strong>{option.label}</strong>
-                                  <small>{option.description}</small>
-                                </span>
-                              </button>
-                            )
-                          })}
-                        </div>
+                          disabled={!desktopApi || mcpAgentOperation !== null}
+                          name="agent-mcp-connection-scope"
+                          options={mcpConnectionScopeOptions}
+                          value={mcpAgentPreferences.connectionScope}
+                          onChange={(value) => saveMcpAgentPreferences({ connectionScope: value })}
+                        />
 
                         {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
                           <div className="agent-mcp-selected-connections">

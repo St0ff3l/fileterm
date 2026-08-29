@@ -14,5 +14,6 @@
 @import './features/workstation-skin.css';
 @import './features/close-button.css';
 @import './features/feedback-text.css';
+@import './features/common-controls.css';
 @import './features/ai-copilot.css';
 @import './features/security.css';
