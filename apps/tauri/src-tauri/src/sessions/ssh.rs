@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use russh::client::{Handle, Handler};
-use russh::keys::PrivateKeyWithHashAlg;
+use russh::keys::{PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh::{Channel, ChannelMsg, ChannelWriteHalf, Disconnect, Sig};
 use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::fs::Metadata as SftpMetadata;
@@ -1116,9 +1116,9 @@ impl Handler for ClientHandler {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &russh::keys::PublicKey,
+        server_public_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
-        let fp = fingerprint_sha256_base64(server_public_key);
+        let fp = fingerprint_sha256_base64(&server_public_key.public_key());
         crate::services::logging::session(
             &self.app,
             "DEBUG",
@@ -3680,6 +3680,7 @@ fn build_legacy_preferred() -> russh::Preferred {
 
     russh::Preferred {
         kex: Cow::Owned(kex_list),
+        host_key_certificates: russh::Preferred::DEFAULT.host_key_certificates.clone(),
         key: russh::Preferred::DEFAULT.key.clone(),
         cipher: russh::Preferred::DEFAULT.cipher.clone(),
         mac: Cow::Owned(mac_list),
@@ -11226,7 +11227,7 @@ mod tests {
 
         async fn check_server_key(
             &mut self,
-            _server_public_key: &russh::keys::PublicKey,
+            _server_public_key: &russh::keys::PublicKeyOrCertificate,
         ) -> Result<bool, Self::Error> {
             Ok(true)
         }
@@ -11376,7 +11377,7 @@ mod tests {
 
         async fn check_server_key(
             &mut self,
-            _server_public_key: &russh::keys::PublicKey,
+            _server_public_key: &russh::keys::PublicKeyOrCertificate,
         ) -> Result<bool, Self::Error> {
             Ok(true)
         }

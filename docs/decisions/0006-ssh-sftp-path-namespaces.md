@@ -103,13 +103,12 @@ SFTP 协议本身不会返回“当前虚拟根对应 shell 物理路径的哪�
 
 因此，FileTerm 只对已知路径形状做有限候选探测；如果没有候选能成功列目录，就保留当前 SFTP 路径并记录 `CWD follow failed`。用户仍可关闭“跟随终端”，在文件面板中手动浏览 SFTP `/` 或实际可见的 Home/共享文件夹。
 
-## 同类产品的处理方式
+## 常见客户端的处理方式
 
 同类产品通常不会把 Shell 物理路径直接当成 SFTP 路径：
 
-- WinSCP 将远程目录作为独立的 SFTP 会话目录；“Synchronize browsing”是可选的浏览同步功能，未要求时仍由用户分别指定远端目录。[WinSCP 目录设置](https://winscp.net/eng/docs/ui_login_directories)
-- MobaXterm 曾提供“Follow SSH path”式的跟随能力，同时保留禁用该功能的选项；这说明跟随是额外策略，不是 SSH/SFTP 的协议保证。[MobaXterm 官方更新记录](https://mobaxterm.mobatek.net/download-home-edition.html)
-- Cyberduck 的常见方向是“从当前 SFTP 浏览目录打开终端”，把浏览器当前目录作为 `cd` 目标，而不是把 Shell 的物理 CWD 反向写回 SFTP 面板。[Cyberduck SFTP 文档](https://docs.cyberduck.io/protocols/sftp/)
+- 常见客户端会把远程目录作为独立的 SFTP 会话目录；浏览同步通常是可选策略，未启用时仍由用户分别指定远端目录。
+- 另一类客户端支持从当前 SFTP 浏览目录打开终端，把浏览器当前目录作为 `cd` 目标，而不是把 Shell 的物理 CWD 反向写回 SFTP 面板。
 
 FileTerm 采用折中方案：默认保留跟随体验，但只有在 SFTP 成功确认路径后才更新文件面板；无法确认时不做破坏性猜测。
 
@@ -141,6 +140,3 @@ ls -ld /volumeN/<shared-folder>
 - [Synology：My Drive (home) 与 homes 的路径区别](https://kb.synology.com/en-nz/DSM/tutorial/Drive_difference_between_homes_My_Drive_home_folders)
 - [Synology：共享文件夹说明](https://kb.synology.com/en-global/DSM/help/DSM/AdminCenter/file_share_desc?version=6)
 - [OpenSSH `sshd_config`：`ChrootDirectory`](https://man7.org/linux/man-pages/man5/sshd_config.5.html)
-- [WinSCP：Directories 页面](https://winscp.net/eng/docs/ui_login_directories)
-- [MobaXterm：官方更新记录](https://mobaxterm.mobatek.net/download-home-edition.html)
-- [Cyberduck：SFTP](https://docs.cyberduck.io/protocols/sftp/)

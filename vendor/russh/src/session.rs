@@ -128,6 +128,26 @@ impl ChannelFlushResult {
 }
 
 impl<C> CommonSession<C> {
+    pub(crate) fn has_any_pending_data(&self) -> bool {
+        self.encrypted
+            .as_ref()
+            .is_some_and(Encrypted::has_any_pending_data)
+    }
+
+    /// Channel-scoped messages (`CHANNEL_DATA`, `CHANNEL_EOF`, `CHANNEL_CLOSE`,
+    /// `CHANNEL_REQUEST`, ...) operate on an already-open channel. An
+    /// authenticated peer must not be able to drive channel callbacks
+    /// (`data`, `exit_status`, `channel_close`, ...) for a recipient id that
+    /// was never opened or whose local open is still waiting for peer
+    /// confirmation. The encrypted channel table is authoritative for the SSH
+    /// protocol state.
+    pub(crate) fn is_established_channel(&self, channel: ChannelId) -> bool {
+        self.encrypted
+            .as_ref()
+            .and_then(|enc| enc.channels.get(&channel))
+            .is_some_and(|channel| channel.confirmed)
+    }
+
     pub fn newkeys(&mut self, newkeys: NewKeys) {
         if let Some(ref mut enc) = self.encrypted {
             enc.exchange = Some(newkeys.exchange);
@@ -435,6 +455,12 @@ impl Encrypted {
         }
     }
 
+    pub(crate) fn has_any_pending_data(&self) -> bool {
+        self.channels
+            .values()
+            .any(|channel| !channel.pending_data.is_empty())
+    }
+
     /// Push the largest amount of `&buf0[from..]` that can fit into
     /// the window, dividing it into packets if it is too large, and
     /// return the length that was written.
@@ -448,9 +474,7 @@ impl Encrypted {
         if from >= buf0.len() {
             return Ok(0);
         }
-        let window_end = from
-            .checked_add(channel.recipient_window_size as usize)
-            .unwrap_or(usize::MAX);
+        let window_end = from.saturating_add(channel.recipient_window_size as usize);
         let end = std::cmp::min(buf0.len(), window_end);
         #[allow(clippy::indexing_slicing)] // length checked
         let mut buf = &buf0[from..end];
@@ -510,9 +534,7 @@ impl Encrypted {
             return Ok(0);
         }
         let buf0 = buf0.as_ref();
-        let window_end = from
-            .checked_add(channel.recipient_window_size as usize)
-            .unwrap_or(usize::MAX);
+        let window_end = from.saturating_add(channel.recipient_window_size as usize);
         let end = std::cmp::min(buf0.len(), window_end);
         #[allow(clippy::indexing_slicing)] // length checked
         let mut buf = &buf0[from..end];

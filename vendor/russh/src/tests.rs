@@ -17,6 +17,7 @@ mod compress {
 
     use super::server::{Server as _, Session};
     use super::*;
+    use crate::cert::PublicKeyOrCertificate;
     use crate::cipher::MAXIMUM_DECOMPRESSED_PACKET_LEN;
     use crate::server::Msg;
 
@@ -150,7 +151,7 @@ mod compress {
 
         async fn check_server_key(
             &mut self,
-            _server_public_key: &crate::keys::ssh_key::PublicKey,
+            _server_public_key: &PublicKeyOrCertificate,
         ) -> Result<bool, Self::Error> {
             // println!("check_server_key: {:?}", server_public_key);
             Ok(true)
@@ -159,6 +160,7 @@ mod compress {
 
     fn preferred_zlib() -> Preferred {
         Preferred {
+            host_key_certificates: Cow::Borrowed(&[]),
             compression: Cow::Borrowed(&[
                 crate::compression::ZLIB,
                 crate::compression::ZLIB_LEGACY,
@@ -174,6 +176,8 @@ mod channels {
     use server::Session;
     use ssh_key::PrivateKey;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    use crate::cert::PublicKeyOrCertificate;
 
     use super::*;
 
@@ -254,7 +258,7 @@ mod channels {
 
             async fn check_server_key(
                 &mut self,
-                _server_public_key: &crate::keys::ssh_key::PublicKey,
+                _server_public_key: &PublicKeyOrCertificate,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
@@ -334,7 +338,7 @@ mod channels {
 
             async fn check_server_key(
                 &mut self,
-                _server_public_key: &crate::keys::ssh_key::PublicKey,
+                _server_public_key: &PublicKeyOrCertificate,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
@@ -430,7 +434,7 @@ mod channels {
 
             async fn check_server_key(
                 &mut self,
-                _server_public_key: &crate::keys::ssh_key::PublicKey,
+                _server_public_key: &PublicKeyOrCertificate,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
@@ -516,7 +520,7 @@ mod channels {
 
             async fn check_server_key(
                 &mut self,
-                _server_public_key: &crate::keys::ssh_key::PublicKey,
+                _server_public_key: &PublicKeyOrCertificate,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
@@ -588,7 +592,7 @@ mod channels {
 
             async fn check_server_key(
                 &mut self,
-                _server_public_key: &crate::keys::ssh_key::PublicKey,
+                _server_public_key: &PublicKeyOrCertificate,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
@@ -851,22 +855,27 @@ pub(crate) mod raw_no_crypto {
         }
 
         pub(crate) async fn connect_without_kex() -> Self {
+            Self::connect_without_kex_with_config(no_crypto_server_config()).await
+        }
+
+        pub(crate) async fn connect_without_kex_with_config(
+            config: Arc<server::Config>,
+        ) -> Self {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let addr = listener.local_addr().unwrap();
             let events = Arc::new(Mutex::new(Vec::new()));
             let server_events = events.clone();
             let server_task = tokio::spawn(async move {
                 let (socket, _) = listener.accept().await.unwrap();
-                let running =
-                    server::run_stream(
-                        no_crypto_server_config(),
-                        socket,
-                        MalformedInputServer {
-                            events: server_events,
-                        },
-                    )
-                    .await
-                    .unwrap();
+                let running = server::run_stream(
+                    config,
+                    socket,
+                    MalformedInputServer {
+                        events: server_events,
+                    },
+                )
+                .await
+                .unwrap();
                 running.await
             });
 
@@ -944,6 +953,67 @@ pub(crate) mod raw_no_crypto {
         }
     }
 
+    pub(crate) const MSG_IGNORE: u8 = 2;
+
+    fn strict_kex_server_config() -> Arc<server::Config> {
+        let mut config = server::Config::default();
+        config.inactivity_timeout = None;
+        config
+            .keys
+            .push(PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap());
+        Arc::new(config)
+    }
+
+    /// KEXINIT advertising algorithms the default server config accepts, so
+    /// that negotiation succeeds and the server waits for KEX_ECDH_INIT.
+    fn real_kexinit_payload(kex_names: &[&str]) -> Vec<u8> {
+        let mut payload = Vec::new();
+        payload.push(MSG_KEXINIT);
+        payload.extend_from_slice(&[0; 16]);
+        encode_name_list(&mut payload, kex_names);
+        encode_name_list(&mut payload, &["ssh-ed25519"]);
+        encode_name_list(&mut payload, &["aes256-ctr"]);
+        encode_name_list(&mut payload, &["aes256-ctr"]);
+        encode_name_list(&mut payload, &["hmac-sha2-256"]);
+        encode_name_list(&mut payload, &["hmac-sha2-256"]);
+        encode_name_list(&mut payload, &["none"]);
+        encode_name_list(&mut payload, &["none"]);
+        encode_name_list(&mut payload, &[]);
+        encode_name_list(&mut payload, &[]);
+        payload.push(0);
+        push_u32(&mut payload, 0);
+        payload
+    }
+
+    async fn ignore_during_initial_kex(kex_names: &[&str]) -> ServerSignal {
+        let mut session = RawSession::connect_without_kex_with_config(strict_kex_server_config())
+            .await;
+        session
+            .send_packet(&real_kexinit_payload(kex_names))
+            .await
+            .unwrap();
+        session.send_packet(&[MSG_IGNORE]).await.unwrap();
+        session.result().await
+    }
+
+    /// Strict kex forbids any non-KEX message during the initial exchange.
+    #[tokio::test]
+    async fn ignore_during_initial_strict_kex_is_rejected() {
+        assert!(matches!(
+            ignore_during_initial_kex(&["curve25519-sha256", "kex-strict-c-v00@openssh.com"]).await,
+            ServerSignal::ProtocolError { .. }
+        ));
+    }
+
+    /// ... and without it, SSH_MSG_IGNORE is still legal at any time.
+    #[tokio::test]
+    async fn ignore_during_initial_kex_is_allowed_without_strict_kex() {
+        assert!(matches!(
+            ignore_during_initial_kex(&["curve25519-sha256"]).await,
+            ServerSignal::Survived { .. }
+        ));
+    }
+
     fn no_crypto_server_config() -> Arc<server::Config> {
         let mut config = server::Config::default();
         config.inactivity_timeout = None;
@@ -958,6 +1028,7 @@ pub(crate) mod raw_no_crypto {
 
     fn no_crypto_preferred() -> Preferred {
         Preferred {
+            host_key_certificates: Cow::Borrowed(&[]),
             kex: Cow::Owned(vec![kex::NONE]),
             key: Cow::Owned(vec![Algorithm::Ed25519]),
             cipher: Cow::Owned(vec![cipher::NONE]),
@@ -1130,7 +1201,11 @@ pub(crate) mod raw_no_crypto {
                 Ok(ServerSignal::Closed { .. } | ServerSignal::ProtocolError { .. })
             ),
             "{message}: {result:?}; handler events: {:?}",
-            result.as_ref().ok().map(ServerSignal::events).unwrap_or(&[])
+            result
+                .as_ref()
+                .ok()
+                .map(ServerSignal::events)
+                .unwrap_or(&[])
         );
     }
 
@@ -1231,18 +1306,15 @@ mod future_certificate {
     use std::process::Stdio;
     use std::sync::Arc;
 
-    use ssh_key::{certificate, PrivateKey};
+    use ssh_key::{PrivateKey, certificate};
 
+    use crate::cert::PublicKeyOrCertificate;
     use crate::keys::agent::client::AgentClient;
-    use crate::{client, server};
     use crate::server::Session;
+    use crate::{client, server};
 
     /// Helper to spawn an ssh-agent
-    async fn spawn_agent() -> (
-        tokio::process::Child,
-        std::path::PathBuf,
-        tempfile::TempDir,
-    ) {
+    async fn spawn_agent() -> (tokio::process::Child, std::path::PathBuf, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let agent_path = dir.path().join("agent");
         let agent = tokio::process::Command::new("ssh-agent")
@@ -1374,7 +1446,10 @@ mod future_certificate {
                     if cert.key_id() == "test-user-cert" {
                         Ok(server::Auth::Accept)
                     } else {
-                        Ok(server::Auth::Reject { proceed_with_methods: None, partial_success: false })
+                        Ok(server::Auth::Reject {
+                            proceed_with_methods: None,
+                            partial_success: false,
+                        })
                     }
                 }
 
@@ -1404,7 +1479,7 @@ mod future_certificate {
 
             async fn check_server_key(
                 &mut self,
-                _server_public_key: &ssh_key::PublicKey,
+                _server_public_key: &PublicKeyOrCertificate,
             ) -> Result<bool, Self::Error> {
                 Ok(true)
             }
@@ -1425,10 +1500,16 @@ mod future_certificate {
             .unwrap();
 
         // 7. Verify authentication succeeded
-        assert!(auth_result.success(), "Certificate authentication should succeed");
+        assert!(
+            auth_result.success(),
+            "Certificate authentication should succeed"
+        );
 
         // Clean up
-        session.disconnect(crate::Disconnect::ByApplication, "", "").await.unwrap();
+        session
+            .disconnect(crate::Disconnect::ByApplication, "", "")
+            .await
+            .unwrap();
         drop(session);
         server_join.abort();
         agent.kill().await.unwrap();

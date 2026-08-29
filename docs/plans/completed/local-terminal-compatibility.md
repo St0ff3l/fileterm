@@ -29,7 +29,7 @@
 ### P1：输出与尺寸稳定性
 
 - [x] 本地 PTY 使用独立 bounded output pump，不能因为 Tauri Channel 或 WebView 变慢而阻塞输入和 Ctrl+C；队列饱和只限频记录并丢弃输出帧。
-- [x] 为批量输出设置 16ms 时间窗口和 32KiB 单批硬上限，并在丢帧恢复时保留可见的 resync/diagnostic 语义。丢帧时使用跨 read 的状态机扫描被丢数据里的 DECSET/DECRST alt screen 切换序列（`\x1b[?47h/l`、`1047h/l`、`1049h/l`），在下一次恢复发送的帧里标注「终端状态可能不一致，建议 `reset` 或 Ctrl+L 重新同步」（参考 Netcatty `ptyOutputBuffer` 的 `droppedOutputMayAffectTerminalState` 语义）。
+- [x] 为批量输出设置 16ms 时间窗口和 32KiB 单批硬上限，并在丢帧恢复时保留可见的 resync/diagnostic 语义。丢帧时使用跨 read 的状态机扫描被丢数据里的 DECSET/DECRST alt screen 切换序列（`\x1b[?47h/l`、`1047h/l`、`1049h/l`），在下一次恢复发送的帧里标注「终端状态可能不一致，建议 `reset` 或 Ctrl+L 重新同步」，并保留丢帧可能影响终端状态的诊断信息。
 - [x] renderer 负责实际网格的首次 resize，后端对重复尺寸去重，并避免关闭后的迟到 resize。
 
 ### P1：产品化与回归
@@ -114,25 +114,25 @@ Windows/Linux/macOS 的打包产物验收仍需要对应实体机或 CI runner�
 
 `AltScreenTransitionScanner` 在每个 PTY reader chunk 上运行，并保留未完成的 CSI 状态，因此 `ESC [`、参数和 `h/l` 即使跨 read 或跨“正常发送/丢帧”边界也能识别。它检测 DECSET/DECRST 风格的 alternate screen 切换序列（`\x1b[?47h/l`、`1047h/l`、`1049h/l`，含组合模式如 `\x1b[?1;1049h`）。丢帧期间命中时设置 `LocalOutputDropState.saw_alt_screen_change`，在下一次成功发送的 `LocalOutputChunk.dropped_alt_screen_change` 里携带。`append_local_output_chunk` 在丢帧提示后追加一行「dropped output may include alternate screen transitions; terminal state may be inconsistent — run `reset` or Ctrl+L to resync」。这对 vim/less/nano 等 TUI 程序在输出爆发时丢帧的恢复很重要：如果丢了 enter/leave alt screen 序列，renderer 的终端网格状态会跟实际不一致。
 
-## 与 Netcatty 的对比
+## 本地 PTY 稳定性对照
 
-参考 [binaricat/Netcatty](https://github.com/binaricat/Netcatty)（Electron + React + node-pty）的本地 PTY 实现，对比 FileTerm 当前方案：
+下面保留常见本地 PTY 实现中的稳定性关注点，对比 FileTerm 当前方案：
 
-| 维度                 | Netcatty                                                                                | FileTerm                                                                             | 评估                                            |
-| -------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| 丢帧 alt screen 检测 | `ptyOutputBuffer` 扫描 alt screen 序列，meta 标记 `droppedOutputMayAffectTerminalState` | `AltScreenTransitionScanner` 扫描，`dropped_alt_screen_change` 标记，文本提示 resync | 已对齐                                          |
-| 进程树终止           | `ptyProcessTree` 先 `ps`/`@vscode/windows-process-tree` list 再 kill（异步，有竞态）    | POSIX `kill(-pgid)` 进程组 / Windows Job Object（原子，无竞态）                      | FileTerm 更优                                   |
-| 紧急输入             | `terminalUrgentInputChannel` 独立 MessagePort                                           | 输入与输出分离，输入直接 write PTY master                                            | 已对齐                                          |
-| OSC 7 解析           | 前端 xterm.js 解析                                                                      | 后端 `LocalOsc7CwdTracker`，BEL/ST 双终止符 + percent-decode + 跨 chunk + 16KB 上限  | FileTerm 更健壮                                 |
-| Shell 发现           | `shellDiscovery.cjs` 跨平台发现（/etc/shells、Windows 注册表）                          | `default_shell()` 仅返回默认 shell                                                   | FileTerm 暂不做（产品功能，非稳定性）           |
-| flush 策略           | `setImmediate` 事件循环回合 + 软上限切换短定时器                                        | 16ms 时间窗口 + 32KiB 硬上限                                                         | 可接受（Tauri Channel 同步 send，无跨进程开销） |
-| session generation   | `sessionOutputGenerations` + tombstone TTL 60s                                          | `LocalTerminalRuntimeGate` runtime_id + gate 双校验                                  | 已对齐                                          |
+| 维度                 | 常见实现做法                                     | FileTerm                                                                             | 评估                                  |
+| -------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------- |
+| 丢帧 alt screen 检测 | 跨输出批次扫描 alt screen 序列并保留状态诊断信息 | `AltScreenTransitionScanner` 扫描，`dropped_alt_screen_change` 标记，文本提示 resync | 已覆盖                                |
+| 进程树终止           | 先枚举进程树再终止，存在异步竞态                 | POSIX `kill(-pgid)` 进程组 / Windows Job Object（原子，无竞态）                      | FileTerm 更优                         |
+| 紧急输入             | 使用独立输入通道，避免输出阻塞输入               | 输入与输出分离，输入直接 write PTY master                                            | 已覆盖                                |
+| OSC 7 解析           | 由终端输出解析工作目录                           | 后端 `LocalOsc7CwdTracker`，BEL/ST 双终止符 + percent-decode + 跨 chunk + 16KB 上限  | FileTerm 更健壮                       |
+| Shell 发现           | 跨平台发现可用 shell                             | `default_shell()` 仅返回默认 shell                                                   | FileTerm 暂不做（产品功能，非稳定性） |
+| flush 策略           | 事件循环回合配合软上限和短定时器                 | 16ms 时间窗口 + 32KiB 硬上限                                                         | 可接受（Tauri Channel 同步 send）     |
+| session generation   | 输出代际标记配合过期回收                         | `LocalTerminalRuntimeGate` runtime_id + gate 双校验                                  | 已覆盖                                |
 
 **不需要借鉴的**：
 
 - 进程树 list-then-kill：竞态窗口比进程组方案大。
-- `setImmediate` flush：Tauri Channel 不像 Electron MessagePort 有跨进程开销，16ms 延迟对交互式回显可接受。
+- 事件循环回合 flush：Tauri Channel 的同步 send 已足够，16ms 延迟对交互式回显可接受。
 
 **暂不做的**：
 
-- Shell 发现（`shellDiscovery`）：当前 plan 不要求 UI shell 选择器，用户可通过 `openLocalTerminal({ shell })` 传入。未来本地终端配置面板可考虑。
+- Shell 发现：当前 plan 不要求 UI shell 选择器，用户可通过 `openLocalTerminal({ shell })` 传入。未来本地终端配置面板可考虑。
