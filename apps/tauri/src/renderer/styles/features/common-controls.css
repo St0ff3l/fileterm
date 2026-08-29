@@ -47,7 +47,9 @@
   opacity: 0.58;
 }
 
-.radio-card-group__input {
+.selection-control,
+.ssh-checkbox input,
+.checkbox-row input {
   position: relative;
   display: block;
   width: 14px;
@@ -55,11 +57,12 @@
   min-width: 14px;
   min-height: 14px;
   flex: 0 0 14px;
-  margin: 1px 0 0;
+  margin: 0;
   padding: 0;
   border: 1px solid var(--border-light);
   border-radius: 999px;
   background: var(--bg-main);
+  box-sizing: border-box;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
@@ -69,7 +72,14 @@
     opacity 0.2s ease;
 }
 
-.radio-card-group__input::after {
+.selection-control {
+  flex-basis: 14px;
+  margin-top: 1px;
+}
+
+.selection-control::after,
+.ssh-checkbox input::after,
+.checkbox-row input::after {
   position: absolute;
   inset: 2.5px;
   border-radius: 999px;
@@ -79,25 +89,40 @@
   transition: transform 0.16s ease;
 }
 
-.radio-card-group__input:checked {
+.selection-control:checked,
+.ssh-checkbox input:checked,
+.checkbox-row input:checked {
   border-color: var(--focus-outline);
   background: var(--bg-main);
 }
 
-.radio-card-group__input:checked::after {
+.selection-control:checked::after,
+.ssh-checkbox input:checked::after,
+.checkbox-row input:checked::after {
   transform: scale(1);
 }
 
-.radio-card-group__input:disabled {
+.selection-control:disabled,
+.ssh-checkbox input:disabled,
+.checkbox-row input:disabled {
   cursor: not-allowed;
 }
 
-.radio-card-group__input:focus-visible {
+.ssh-checkbox input:disabled,
+.checkbox-row input:disabled {
+  opacity: 0.4;
+}
+
+.selection-control:focus-visible,
+.ssh-checkbox input:focus-visible,
+.checkbox-row input:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
-.radio-card-group__input:hover:not(:disabled):not(:checked) {
+.selection-control:hover:not(:disabled):not(:checked),
+.ssh-checkbox input:hover:not(:disabled):not(:checked),
+.checkbox-row input:hover:not(:disabled):not(:checked) {
   border-color: var(--text-muted);
 }
 

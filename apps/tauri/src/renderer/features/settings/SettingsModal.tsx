@@ -43,6 +43,7 @@ import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition 
 import { targetsNestedManagerControl } from '../common/manager-interactions'
 import { RadioCardGroup } from '../common/RadioCardGroup'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import { waitForMinimumBusyDuration } from '../common/operation-timing'
 import { SecuritySettingsPanel } from '../security/SecuritySettingsPanel'
@@ -2857,7 +2858,7 @@ export function SettingsModal({
                                 const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
                                 return (
                                   <label key={profile.id} className="agent-mcp-profile-option">
-                                    <input
+                                    <SelectionControl
                                       checked={selected}
                                       disabled={!desktopApi || mcpAgentOperation !== null}
                                       type="checkbox"

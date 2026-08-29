@@ -3382,14 +3382,6 @@
   background: color-mix(in srgb, var(--focus-outline) 8%, transparent);
 }
 
-.agent-mcp-profile-option > input {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--folder-accent);
-}
-
 .agent-mcp-profile-copy {
   display: grid;
   min-width: 0;

@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react'
+import { SelectionControl } from './SelectionControl'
 
 export type RadioCardOption<Value extends string> = {
   value: Value
@@ -44,9 +45,8 @@ export function RadioCardGroup<Value extends string>({
             key={option.value}
             className={`radio-card-group__option ${selected ? 'is-selected' : ''} ${optionDisabled ? 'is-disabled' : ''}`.trim()}
           >
-            <input
+            <SelectionControl
               checked={selected}
-              className="radio-card-group__input"
               disabled={optionDisabled}
               name={name ?? generatedNameId}
               type="radio"
