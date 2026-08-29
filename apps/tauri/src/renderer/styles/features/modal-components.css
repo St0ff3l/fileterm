@@ -533,20 +533,6 @@
     border-color 0.2s ease;
 }
 
-.file-permission-dialog__switch-track::before {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 2px;
-  width: 33px;
-  bottom: 1px;
-  height: auto;
-  border-radius: 999px 0 0 999px;
-  background: var(--copy-link);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
 .file-permission-dialog__switch-track::after {
   content: '';
   position: absolute;
@@ -562,8 +548,8 @@
     background 0.2s ease;
 }
 
-.file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track::before {
-  opacity: 1;
+.file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track {
+  background: var(--copy-link);
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track::after {
