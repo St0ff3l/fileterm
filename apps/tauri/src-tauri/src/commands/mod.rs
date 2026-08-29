@@ -3467,6 +3467,7 @@ fn start_session_worker(
 }
 
 async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState, tab_id: &str) {
+    state.connection_operations.forget_tab(tab_id).await;
     crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
     if let Some((_, cancellation)) = state
         .serial_transfer_cancellations

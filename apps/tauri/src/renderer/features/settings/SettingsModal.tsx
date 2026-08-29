@@ -2932,6 +2932,31 @@ export function SettingsModal({
                               </button>
                             </div>
                           </div>
+                          <div className="agent-mcp-direct-cli-command">
+                            <div>
+                              <strong>{t.agentMcpPersistentTitle}</strong>
+                              <p>{t.agentMcpPersistentDescription}</p>
+                            </div>
+                            <small>{t.agentMcpPersistentPath}</small>
+                            <div className="agent-mcp-registration">
+                              <code>{mcpAgentSetup.filetermCommand} agent</code>
+                              <button
+                                aria-label={t.agentMcpPersistentCopy}
+                                className="copy-icon-button agent-mcp-copy-button"
+                                disabled={!desktopApi}
+                                title={t.agentMcpPersistentCopy}
+                                type="button"
+                                onClick={() =>
+                                  copyMcpAgentCommand(
+                                    `${mcpAgentSetup.filetermCommand} agent`,
+                                    t.agentMcpPersistentCopied
+                                  )
+                                }
+                              >
+                                <AppIcon name="copy" size={14} strokeWidth={2} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ) : null}

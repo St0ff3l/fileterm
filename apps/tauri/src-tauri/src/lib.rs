@@ -7,6 +7,10 @@ pub fn run_mcp_stdio(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_stdio(arguments)
 }
 
+pub fn run_agent_stdio(arguments: &[String]) -> Result<(), String> {
+    crate::services::mcp::run_agent(arguments)
+}
+
 pub fn run_cli(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_cli(arguments)
 }
@@ -20,7 +24,8 @@ pub fn is_cli_command(argument: Option<&str>) -> bool {
     matches!(
         argument,
         Some(
-            "cli"
+            "agent"
+                | "cli"
                 | "connections"
                 | "sessions"
                 | "directory"
@@ -2446,6 +2451,7 @@ mod tests {
         assert!(super::is_cli_command(Some("exec")));
         assert!(super::is_cli_command(Some("wait-transfer")));
         assert!(super::is_cli_command(Some("cli")));
+        assert!(super::is_cli_command(Some("agent")));
         assert!(!super::is_cli_command(Some("mcp")));
         assert!(!super::is_cli_command(Some("unknown")));
     }

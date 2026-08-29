@@ -1,6 +1,6 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：阶段 1-2 已实现（待自动化门禁）；阶段 3-4 规划中
+状态：阶段 1-3 已实现（待自动化门禁）；阶段 4 规划中
 
 关联 Issue：[St0ff3l/fileterm#224](https://github.com/St0ff3l/fileterm/issues/224)
 
@@ -773,14 +773,14 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 - [ ] macOS 验证 headless agent 不产生额外 GUI 图标；必要时构建独立 sidecar。
 - [ ] 保留一次性 CLI，并在设置页和文档中推荐 MCP/Agent 常驻模式。
 
-### P2：CLI 凭据输入硬化
+### P3：CLI 凭据输入硬化
 
 - [ ] 增加 sudo/su 密码 stdin 输入方式。
 - [ ] 对 --sudo-password / --su-password argv 方式增加安全提示和文档警告。
 - [ ] 不在 Agent 默认生成的命令中使用明文 argv。
 - [ ] 现有一次性字段和加密 profile 行为保持兼容。
 
-### P3：回归、打包和文档
+### P4：回归、打包和文档
 
 - [ ] 完成 Rust unit/contract 测试。
 - [ ] 完成 CLI stdout/stderr/exit code 测试。
@@ -939,4 +939,14 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 增加 selected visibility 与操作等级策略单元测试。
 - [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
-阶段 1-2 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。阶段 3 的常驻 Agent bridge 与连接去重、阶段 4 的 CLI 凭据输入硬化仍未开始。
+### 阶段 3：常驻 Agent 与连接去重
+
+- [x] `fileterm agent` 使用有界 worker pool 常驻读取 JSONL，并复用同一个 desktop bridge。
+- [x] request ID、独立 progress 和最终结果支持并行调用，输出按行原子化写出。
+- [x] 同一 profile 的并发 `open_connection` 复用一个 connection operation、tab、worker 和凭据 prompt。
+- [x] 连接失败、断开或关闭 tab 时清理 profile flight，并唤醒等待者。
+- [x] Settings → CLI 提供常驻 Agent 命令，同时保留一次性 CLI。
+- [ ] macOS 打包后的 headless/application type 与 Dock 图标行为待人工验证。
+- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+
+阶段 1-3 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。阶段 4 的 CLI 凭据输入硬化仍未开始。

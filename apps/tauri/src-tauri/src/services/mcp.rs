@@ -22,7 +22,8 @@ use std::{
     io::{self, BufRead, BufReader, Write},
     net::{SocketAddr, TcpStream as StdTcpStream},
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
+    thread,
     time::Duration,
 };
 use subtle::ConstantTimeEq;
@@ -167,6 +168,23 @@ struct BridgeRequest {
     requires_approval: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     progress_token: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AgentRequest {
+    id: Value,
+    action: String,
+    #[serde(default = "empty_json_object")]
+    params: Value,
+    #[serde(default, alias = "requires_approval")]
+    requires_approval: bool,
+    #[serde(default)]
+    progress_token: Option<Value>,
+}
+
+fn empty_json_object() -> Value {
+    json!({})
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1426,33 +1444,58 @@ async fn open_connection(
     progress_token: Option<Value>,
 ) -> Result<Value, String> {
     let profile_id = required_string(params, "profile_id", 256)?;
-    let operation = app
+    let (operation, created) = app
         .state::<crate::services::workspace::WorkspaceState>()
         .connection_operations
-        .begin(profile_id.clone())
+        .begin_or_join(profile_id.clone())
         .await;
-    let (tab_id, snapshot) = match crate::commands::app_open_profile_with_operation(
-        app.clone(),
-        profile_id,
-        operation.id.clone(),
-    )
-    .await
-    {
-        Ok(opened) => opened,
-        Err(error) => {
-            app.state::<crate::services::workspace::WorkspaceState>()
-                .connection_operations
-                .fail_for_operation(&operation.id, FILETERM_CONNECTION_FAILED)
-                .await;
-            return Err(public_app_error(error));
+    let (tab_id, snapshot) = if created {
+        match crate::commands::app_open_profile_with_operation(
+            app.clone(),
+            profile_id,
+            operation.id.clone(),
+        )
+        .await
+        {
+            Ok((tab_id, snapshot)) => (Some(tab_id), snapshot),
+            Err(error) => {
+                app.state::<crate::services::workspace::WorkspaceState>()
+                    .connection_operations
+                    .fail_for_operation(&operation.id, FILETERM_CONNECTION_FAILED)
+                    .await;
+                return Err(public_app_error(error));
+            }
         }
+    } else {
+        let info = app
+            .state::<crate::services::workspace::WorkspaceState>()
+            .connection_operations
+            .info(&operation.id)
+            .await
+            .map_err(|error| format!("{MCP_CONNECTION_OPERATION_NOT_FOUND}: {error}"))?;
+        let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+            .await
+            .map_err(public_app_error)?;
+        (info.tab_id, snapshot)
     };
     let wait_for_ready = optional_bool(params, "wait_for_ready")?.unwrap_or(true);
     if !wait_for_ready {
+        let status = match operation.receiver.borrow().clone() {
+            ConnectionOperationState::Connected => "connected",
+            ConnectionOperationState::Pending | ConnectionOperationState::Connecting => {
+                "connecting"
+            }
+            ConnectionOperationState::Failed { code } => {
+                return Err(format!(
+                    "{code}: FileTerm could not establish the saved connection (operation_id={})",
+                    operation.id
+                ));
+            }
+        };
         return Ok(connection_operation_result(
-            compact_snapshot(&snapshot, Some(&tab_id), "open_connection"),
+            compact_snapshot(&snapshot, tab_id.as_deref(), "open_connection"),
             &operation.id,
-            "connecting",
+            status,
             false,
         ));
     }
@@ -1500,22 +1543,19 @@ async fn wait_for_connection_operation(
         ));
     }
 
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+
     let info = app
         .state::<crate::services::workspace::WorkspaceState>()
         .connection_operations
         .info(operation_id)
         .await
         .map_err(|error| format!("{MCP_CONNECTION_OPERATION_NOT_FOUND}: {error}"))?;
-    let Some(tab_id) = info.tab_id.as_deref() else {
-        return Err(format!(
-            "{MCP_CONNECTION_OPERATION_NOT_READY}: connection worker has not been attached"
-        ));
-    };
     if let Some(sender) = progress_sender {
         let _ = sender.send(BridgeProgress::connection_waiting(progress_token));
     }
 
-    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+    let mut tab_id = info.tab_id;
     let mut receiver = info.receiver;
     loop {
         let state = {
@@ -1524,6 +1564,14 @@ async fn wait_for_connection_operation(
         };
         match state {
             ConnectionOperationState::Connected => {
+                let Some(tab_id) = tab_id.as_deref() else {
+                    // The registry publishes Connecting only after attaching
+                    // the tab, but keep this path defensive for a future
+                    // operation source that may complete without a tab.
+                    return Err(format!(
+                        "{MCP_CONNECTION_OPERATION_NOT_READY}: connection worker has no visible tab"
+                    ));
+                };
                 let snapshot = crate::commands::get_workspace_snapshot(app.clone())
                     .await
                     .map_err(public_app_error)?;
@@ -1543,7 +1591,17 @@ async fn wait_for_connection_operation(
         }
 
         match tokio::time::timeout_at(deadline, receiver.changed()).await {
-            Ok(Ok(())) => {}
+            Ok(Ok(())) => {
+                if tab_id.is_none() {
+                    tab_id = app
+                        .state::<crate::services::workspace::WorkspaceState>()
+                        .connection_operations
+                        .info(operation_id)
+                        .await
+                        .map_err(|error| format!("{MCP_CONNECTION_OPERATION_NOT_FOUND}: {error}"))?
+                        .tab_id;
+                }
+            }
             Ok(Err(_)) => {
                 return Err(format!(
                     "{FILETERM_CONNECTION_FAILED}: connection operation ended unexpectedly (operation_id={operation_id})"
@@ -1553,8 +1611,12 @@ async fn wait_for_connection_operation(
                 let snapshot = crate::commands::get_workspace_snapshot(app.clone())
                     .await
                     .map_err(public_app_error)?;
+                let compact = tab_id
+                    .as_deref()
+                    .map(|tab_id| compact_snapshot(&snapshot, Some(tab_id), operation_name))
+                    .unwrap_or_else(|| json!({ "operation": operation_name, "session": null }));
                 return Ok(connection_operation_result(
-                    compact_snapshot(&snapshot, Some(tab_id), operation_name),
+                    compact,
                     operation_id,
                     "connecting",
                     true,
@@ -2316,6 +2378,173 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Entry point for the persistent Agent bridge. Unlike the one-shot CLI,
+/// this process reads request/response JSONL and keeps a bounded worker pool
+/// alive, so an Agent can send several concurrent actions through one
+/// `fileterm agent` process. Each request still uses the authenticated
+/// desktop bridge and the same Rust-side policy evaluator as MCP/CLI.
+pub fn run_agent(arguments: &[String]) -> Result<(), String> {
+    if arguments
+        .iter()
+        .any(|argument| argument == "--help" || argument == "-h")
+    {
+        println!(
+            "Usage: fileterm agent\n\nRun the persistent FileTerm Agent bridge over JSONL. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and exits when stdin closes."
+        );
+        return Ok(());
+    }
+
+    let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
+    let (job_sender, job_receiver) = std::sync::mpsc::channel::<Option<AgentRequest>>();
+    let job_receiver = Arc::new(Mutex::new(job_receiver));
+    let mut workers = Vec::with_capacity(MCP_MAX_CONCURRENT_CLIENTS);
+
+    for index in 0..MCP_MAX_CONCURRENT_CLIENTS {
+        let job_receiver = Arc::clone(&job_receiver);
+        let stdout = Arc::clone(&stdout);
+        let worker = thread::Builder::new()
+            .name(format!("fileterm-agent-{index}"))
+            .spawn(move || loop {
+                let job = {
+                    let receiver = match job_receiver.lock() {
+                        Ok(receiver) => receiver,
+                        Err(_) => break,
+                    };
+                    receiver.recv()
+                };
+                let Ok(Some(request)) = job else {
+                    break;
+                };
+                process_agent_request(request, &stdout);
+            })
+            .map_err(|error| format!("Unable to start FileTerm Agent worker: {error}"))?;
+        workers.push(worker);
+    }
+
+    let stdin = io::stdin();
+    for line in stdin.lock().lines() {
+        let line = line.map_err(|error| format!("Unable to read FileTerm Agent input: {error}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        if line.len() > MCP_MAX_MESSAGE_BYTES {
+            write_agent_value(
+                &stdout,
+                &json!({
+                    "id": Value::Null,
+                    "ok": false,
+                    "error": "FileTerm Agent request exceeds the size limit"
+                }),
+            )
+            .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+            continue;
+        }
+        let request = match serde_json::from_str::<AgentRequest>(&line) {
+            Ok(request) => request,
+            Err(_) => {
+                write_agent_value(
+                    &stdout,
+                    &json!({
+                        "id": Value::Null,
+                        "ok": false,
+                        "error": "Invalid FileTerm Agent request"
+                    }),
+                )
+                .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+                continue;
+            }
+        };
+        if let Err(error) = validate_agent_request(&request) {
+            write_agent_value(
+                &stdout,
+                &json!({ "id": request.id, "ok": false, "error": error }),
+            )
+            .map_err(|error| format!("Unable to write FileTerm Agent response: {error}"))?;
+            continue;
+        }
+        job_sender
+            .send(Some(request))
+            .map_err(|_| "FileTerm Agent workers stopped unexpectedly".to_string())?;
+    }
+    drop(job_sender);
+
+    for worker in workers {
+        worker
+            .join()
+            .map_err(|_| "FileTerm Agent worker panicked".to_string())?;
+    }
+    Ok(())
+}
+
+fn validate_agent_request(request: &AgentRequest) -> Result<(), String> {
+    if request.id.is_null() {
+        return Err("FileTerm Agent request requires a non-null id".to_string());
+    }
+    if request.action.trim().is_empty() || request.action.len() > 256 {
+        return Err("FileTerm Agent request requires a valid action".to_string());
+    }
+    if !request.params.is_object() {
+        return Err("FileTerm Agent params must be a JSON object".to_string());
+    }
+    Ok(())
+}
+
+fn process_agent_request(request: AgentRequest, stdout: &Arc<Mutex<io::BufWriter<io::Stdout>>>) {
+    let AgentRequest {
+        id,
+        action,
+        params,
+        requires_approval,
+        progress_token,
+    } = request;
+    let bridge_request = BridgeRequest {
+        action,
+        params,
+        requires_approval,
+        progress_token,
+    };
+    let request_id = id.clone();
+    let mut on_progress = |progress: &BridgeProgress| {
+        let mut value = serde_json::to_value(progress).unwrap_or_else(|_| {
+            json!({
+                "kind": "progress",
+                "event": "request-progress",
+                "status": "working",
+                "code": "FILETERM_AGENT_PROGRESS",
+                "message": "FileTerm Agent request is still running"
+            })
+        });
+        if let Some(object) = value.as_object_mut() {
+            object.insert("id".to_string(), request_id.clone());
+        }
+        let _ = write_agent_value(stdout, &value);
+    };
+    let response = match call_desktop_bridge_with_progress(bridge_request, &mut on_progress) {
+        Ok(result) => json!({ "id": id, "ok": true, "result": result }),
+        Err(error) => json!({ "id": id, "ok": false, "error": error }),
+    };
+    let _ = write_agent_value(stdout, &response);
+}
+
+fn write_agent_value(
+    stdout: &Arc<Mutex<io::BufWriter<io::Stdout>>>,
+    value: &Value,
+) -> io::Result<()> {
+    let payload = serde_json::to_vec(value).map_err(|error| io::Error::other(error.to_string()))?;
+    if payload.len() > MCP_MAX_MESSAGE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "FileTerm Agent response exceeds the size limit",
+        ));
+    }
+    let mut stdout = stdout
+        .lock()
+        .map_err(|_| io::Error::other("FileTerm Agent output is unavailable"))?;
+    stdout.write_all(&payload)?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()
 }
 
 /// Entry point for the small FileTerm CLI. The CLI intentionally
@@ -3370,8 +3599,34 @@ mod tests {
         SUDO_PASSWORD_CANCELLED,
         SUDO_PASSWORD_NEEDED,
     };
+    use super::{validate_agent_request, AgentRequest};
     use serde_json::{json, Value};
     use std::collections::HashSet;
+
+    #[test]
+    fn agent_requests_require_ids_and_object_params() {
+        let valid = serde_json::from_value::<AgentRequest>(json!({
+            "id": "request-1",
+            "action": "list_connections"
+        }))
+        .unwrap();
+        assert!(validate_agent_request(&valid).is_ok());
+
+        let missing_id = serde_json::from_value::<AgentRequest>(json!({
+            "id": null,
+            "action": "list_connections"
+        }))
+        .unwrap();
+        assert!(validate_agent_request(&missing_id).is_err());
+
+        let invalid_params = serde_json::from_value::<AgentRequest>(json!({
+            "id": "request-2",
+            "action": "list_connections",
+            "params": []
+        }))
+        .unwrap();
+        assert!(validate_agent_request(&invalid_params).is_err());
+    }
 
     #[test]
     fn tools_are_prefixed_and_have_strict_schemas() {
