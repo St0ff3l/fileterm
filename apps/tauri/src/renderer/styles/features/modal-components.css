@@ -549,7 +549,7 @@
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track {
-  background: var(--copy-link);
+  background: var(--button-primary-bg);
 }
 
 .file-permission-dialog__switch input:checked + .file-permission-dialog__switch-track::after {
