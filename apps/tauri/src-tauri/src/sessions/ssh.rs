@@ -464,44 +464,83 @@ fn normalize_ssh_identification(remote_sshid: &[u8]) -> String {
     normalized
 }
 
-fn identification_contains_token(identification: &str, token: &str) -> bool {
-    identification
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .any(|part| part == token)
+fn starts_with_ascii_word_boundary(value: &str, prefix: &str) -> bool {
+    let Some(rest) = value.strip_prefix(prefix) else {
+        return false;
+    };
+
+    rest.chars()
+        .next()
+        .is_none_or(|character| !character.is_ascii_alphanumeric() && character != '_')
 }
 
-/// Match only conservative, vendor-level SSH software identifiers. This
-/// function never treats a generic OpenSSH banner as a network device and it
-/// never emits a vendor command; a match only selects the raw terminal path.
+/// Match the conservative vendor-level SSH software identifiers used by
+/// Netcatty's real banner classifier. The SSH protocol prefix is stripped
+/// before matching because both Netcatty and russh expose the software part
+/// separately in different code paths. A match only selects the raw terminal
+/// path; it never emits a vendor command.
 fn detect_network_device_family(remote_sshid: &str) -> Option<&'static str> {
-    let identification = remote_sshid.to_ascii_lowercase();
-    if identification.contains("h3c")
-        || identification.contains("comware")
-        || identification.contains("3com")
-        || identification_contains_token(&identification, "mpssh")
-    {
-        return Some("h3c-comware");
+    let identification = remote_sshid.trim().to_ascii_lowercase();
+    let software = identification
+        .strip_prefix("ssh-2.0-")
+        .or_else(|| identification.strip_prefix("ssh-1.99-"))
+        .unwrap_or(identification.as_str());
+
+    if software.is_empty() {
+        return None;
     }
-    // Older Huawei VRP firmware can advertise a dash-only software name,
-    // resulting in the full identification `SSH-1.99--`. Netcatty treats
-    // this exact legacy form as Huawei; keep the match narrow so arbitrary
-    // unknown SSH banners do not get classified as network devices.
-    if identification == "-"
-        || identification == "ssh-1.99--"
-        || identification.contains("huawei")
-        || identification_contains_token(&identification, "vrp")
-    {
-        return Some("huawei");
-    }
-    if identification.contains("cisco")
-        || identification.contains("ios-xe")
-        || identification.contains("ios xe")
-        || identification.contains("nx-os")
-        || identification.contains("nxos")
-        || identification_contains_token(&identification, "ios")
+
+    // Keep these prefixes aligned with Netcatty's detectVendorFromSshVersion
+    // rules. In particular, do not classify arbitrary OpenSSH strings that
+    // merely contain "ios", "cisco" or "comware".
+    if software.starts_with("cisco-")
+        || software.starts_with("cisco_")
+        || software.starts_with("ciscoios_")
+        || starts_with_ascii_word_boundary(software, "cisco_wlc")
     {
         return Some("cisco");
     }
+    if starts_with_ascii_word_boundary(software, "netscreen") {
+        return Some("juniper");
+    }
+
+    // Older Huawei VRP firmware can advertise a dash-only software name,
+    // resulting in the full identification `SSH-2.0--` or `SSH-1.99--`.
+    if software == "-"
+        || software.starts_with("huawei-")
+        || software.starts_with("huawei_")
+        || software.starts_with("vrp-")
+    {
+        return Some("huawei");
+    }
+    if software.starts_with("h3c-")
+        || software.starts_with("h3c_")
+        || software.starts_with("h3c ")
+        || software.starts_with("comware-")
+        || software.starts_with("3com") && software[4..].trim_start().starts_with("os")
+    {
+        return Some("h3c-comware");
+    }
+    if software.starts_with("mpssh_") {
+        // mpSSH is HPE iLO, not H3C/Comware.
+        return Some("hpe");
+    }
+    if starts_with_ascii_word_boundary(software, "rosssh") {
+        return Some("mikrotik");
+    }
+    if software.starts_with("fortissh_") {
+        return Some("fortinet");
+    }
+    if software.starts_with("paloaltonetworks_") || software.starts_with("paloaltonetworks-") {
+        return Some("paloalto");
+    }
+    if software.starts_with("zyxel") && software[5..].trim_start().starts_with("ssh") {
+        return Some("zyxel");
+    }
+    if starts_with_ascii_word_boundary(software, "rgos_ssh") {
+        return Some("ruijie");
+    }
+
     None
 }
 
@@ -10413,21 +10452,32 @@ mod tests {
     }
 
     #[test]
-    fn ssh_banner_detection_matches_only_conservative_vendor_patterns() {
+    fn ssh_banner_detection_matches_netcatty_conservative_vendor_patterns() {
         let cases = [
             ("SSH-2.0-Cisco-1.25", Some("cisco")),
-            ("SSH-2.0-Cisco IOS-XE", Some("cisco")),
-            ("SSH-2.0-NX-OS", Some("cisco")),
+            ("SSH-2.0-CiscoIOS_1.0", Some("cisco")),
+            ("SSH-2.0-CISCO_WLC", Some("cisco")),
+            ("SSH-2.0-NetScreen-5.0", Some("juniper")),
             ("SSH-2.0-HUAWEI-VRP", Some("huawei")),
             ("SSH-2.0-VRP-Software", Some("huawei")),
+            ("SSH-2.0--", Some("huawei")),
             ("SSH-1.99--", Some("huawei")),
             ("-", Some("huawei")),
             ("SSH-2.0-Comware-7.1", Some("h3c-comware")),
             ("SSH-2.0-H3C-SecPath", Some("h3c-comware")),
             ("SSH-2.0-3Com OS-3.0", Some("h3c-comware")),
-            ("SSH-2.0-mpSSH_1.0", Some("h3c-comware")),
+            ("SSH-2.0-mpSSH_1.0", Some("hpe")),
+            ("SSH-2.0-ROSSSH", Some("mikrotik")),
+            ("SSH-2.0-FortiSSH_1.0", Some("fortinet")),
+            ("SSH-2.0-PaloAltoNetworks_1.0", Some("paloalto")),
+            ("SSH-2.0-Zyxel SSH_1.0", Some("zyxel")),
+            ("SSH-2.0-RGOS_SSH", Some("ruijie")),
+            ("  SSH-2.0-Cisco-1.25  ", Some("cisco")),
             ("SSH-2.0-OpenSSH_9.9", None),
             ("SSH-2.0-dropbear", None),
+            ("SSH-2.0-OpenSSH_CiscoIOS_1.0", None),
+            ("SSH-2.0-IPSSH-1.0", None),
+            ("SSH-2.0-NotComware-1.0", None),
         ];
 
         for (identification, expected_family) in cases {
@@ -10454,7 +10504,7 @@ mod tests {
 
     #[test]
     fn manual_ssh_device_mode_overrides_banner_and_auto_falls_back_safely() {
-        let cisco_banner = b"SSH-2.0-Cisco IOS-XE";
+        let cisco_banner = b"SSH-2.0-Cisco-1.25";
         assert_eq!(
             resolve_ssh_device_mode(&serde_json::json!({}), cisco_banner),
             SshDeviceModeResolution {

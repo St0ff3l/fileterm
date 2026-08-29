@@ -1,12 +1,20 @@
-# 网络设备 SSH 兼容 MVP 计划
+# 网络设备 SSH 兼容计划
 
-> 状态：Active（本任务代码目标已完成；实体设备和型号级行为验证留作后续）
+> 状态：Completed（代码目标已完成；没有实体设备和型号级实测）
 > 关联：Refs #201
-> 范围：H3C/Comware、Huawei/VRP、Cisco，以及实际提供 SSH/Telnet/Serial CLI 的其他网络设备
+> 范围：只对齐 Netcatty 与 NyaTerm 已有实现，不扩展为全品牌、全型号支持。
+
+实际参考：[Netcatty #540](https://github.com/binaricat/Netcatty/pull/540)、
+[Netcatty #680](https://github.com/binaricat/Netcatty/pull/680)、
+[Netcatty #1052](https://github.com/binaricat/Netcatty/pull/1052)、
+[Netcatty #1045](https://github.com/binaricat/Netcatty/pull/1045)、
+[NyaTerm SSH 文档](https://nyaterm.app/en/docs/guide/ssh-connection/) 和
+[NyaTerm SSH 源码](https://github.com/nyakang/nyaterm/tree/main/src-tauri/src/core/ssh)。
 
 ## 1. 范围判断
 
-第一版只做到“网络设备模式”的基础兼容，不做全厂商命令库。
+本计划的目标是把 Netcatty 的网络设备会话处理与 NyaTerm 的 SSH profile / 能力隔离合并到
+FileTerm，不做超出两者真实实现的网络设备功能。
 
 MVP 必须具备：
 
@@ -15,21 +23,12 @@ MVP 必须具备：
 - 关闭 SFTP 浏览、CWD 跟随、Shell 探测、Shell 集成和资源监控；
 - 允许选择 `vt100`、`ansi`、`xterm` 等 terminal type；
 - 可选的 SSH Banner 自动识别，在打开额外 channel 之前完成判断；
-- 对已开启 legacy SSH 兼容且识别为 Comware 的连接，支持旧设备所需的
+- 对已开启 legacy SSH 兼容且识别为 Comware 的连接，支持 Netcatty #1045 所需的
   `diffie-hellman-group-exchange-sha1` `1024/1024/8192` 请求范围；
 - 主终端与 SFTP、exec、监控等可选能力相互隔离，后者失败不能关闭终端。
 
-这已经足够覆盖 #201 的核心问题：设备登录后保持交互，不会因为 FileTerm 把交换机当成
-Linux/Windows 服务器而发送不兼容命令。
-
-暂不做：
-
-- 厂商命令大全；
-- 自动关闭分页；
-- 自动进入 enable/config 模式；
-- 复杂 prompt 状态机；
-- 按品牌推断所有型号和固件的行为；
-- 全局启用 DSA、CBC、3DES 等弱 SSH 算法。
+这覆盖 #201 的核心问题：设备登录后保持交互，不会因为 FileTerm 把交换机当成
+Linux/Windows 服务器而发送不兼容命令。本计划不追踪品牌或型号特定的额外命令策略。
 
 FileTerm 当前已经有 Telnet 和 Serial 会话；本计划先解决 SSH 网络设备模式，不为了统一
 概念而重写现有 Telnet/Serial controller。
@@ -63,7 +62,7 @@ type SshTerminalType = 'xterm-256color' | 'xterm' | 'vt100' | 'vt220' | 'ansi' |
 - `deviceMode?: SshDeviceMode`：旧 profile 缺省按 `server` 处理；
 - `terminalType?: SshTerminalType`：服务器默认保持 `xterm-256color`，网络设备默认 `vt100`；
 - `networkDeviceVendor?: 'auto' | 'generic' | 'cisco' | 'huawei' | 'h3c-comware' | 'custom'`：
-  只用于识别和后续扩展，不代表所有型号都已适配。
+  只作为本地识别提示，不触发厂商命令，也不代表所有型号都已适配。
 
 `getConnectionCapabilities` 不能只看 `profile.type`，还必须看有效的 SSH device mode：
 
@@ -123,19 +122,26 @@ TCP/socket
 pattern，则把该本地配置视为网络设备模式提示；默认厂商族 `auto` 仍保持未知即普通服务器的
 安全 fallback。这个提示只改变连接路径，不会触发任何厂商命令。
 
-第一版只维护少量保守 pattern：
+识别规则与 Netcatty 的真实 `detectVendorFromSshVersion` 保持一致：
 
-| 设备族      | 识别线索示例                        |
-| ----------- | ----------------------------------- |
-| Cisco       | `Cisco-*`、IOS、IOS-XE、NX-OS 标识  |
-| Huawei      | `HUAWEI-*`、`HUAWEI-VRP*`、`VRP-*`  |
-| H3C/Comware | `Comware-*`、`3Com OS-*`、`mpSSH_*` |
+| 设备族      | 识别线索示例                                       |
+| ----------- | -------------------------------------------------- |
+| Cisco       | `Cisco-*`、`CiscoIOS_*`、`CISCO_WLC`               |
+| Juniper     | `NetScreen`                                        |
+| Huawei      | `-`、`HUAWEI-*`、`HUAWEI_*`、`VRP-*`               |
+| H3C/Comware | `H3C-*`、`H3C_*`、`H3C *`、`Comware-*`、`3Com OS*` |
+| HPE         | `mpSSH_*`                                          |
+| MikroTik    | `ROSSSH`                                           |
+| Fortinet    | `FortiSSH_*`                                       |
+| Palo Alto   | `PaloAltoNetworks_*` / `PaloAltoNetworks-*`        |
+| Zyxel       | `Zyxel SSH*`                                       |
+| Ruijie      | `RGOS_SSH`                                         |
 
 自动识别未知时：
 
 - 不把未知设备强行判定为 Linux；
 - 用户手动选择 `network-device` 时优先级最高；
-- 可以先按普通服务器连接，但必须有明确的诊断日志和可停止探测的保护；
+- `OpenSSH_*`、`Dropbear` 以及没有明确设备标记的 JUNOS/NX-OS 保持未知；
 - 不因为品牌字段填写了某个值就自动发送厂商命令。
 
 ## 5. UI 与诊断
@@ -172,31 +178,23 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 - [x] Rust 在主 shell 前确定有效 mode；network-device 跳过所有服务器探测和 SFTP 初始化。
 - [x] PTY 使用 profile terminal type；网络设备命令路径不使用 POSIX wrapper。
 - [x] renderer 增加连接对象和 terminal type；隐藏或置灰不适用能力。
-- [x] 补 H3C/Huawei mock 策略和协议行为，确认 network-device 保留主终端能力；实体设备验证留在 Phase 3。
+- [x] 补 H3C/Huawei mock 策略和协议行为，确认 network-device 保留主终端能力。
 
-> 2026-08-28 实施记录：手动网络设备模式已落地。H3C/Huawei 已完成策略级和 russh 协议级 mock 覆盖（强制关闭 exec、资源监控和 SFTP，终端使用 raw PTY surface，并验证输入输出、PTY terminal type、resize 与可选 channel 拒绝不会影响主终端）；自动识别、终端类型选择和 capability 裁剪在 Phase 2 完成，真实设备和完整 worker 端到端验证留在 Phase 3。运行时能力裁剪不会覆盖已保存的连接偏好，网络设备 / 普通服务器模式切换可保留原 SFTP、Exec 和监控设置。
+> 2026-08-28 实施记录：手动网络设备模式已落地。H3C/Huawei 已完成策略级和 russh 协议级 mock 覆盖（强制关闭 exec、资源监控和 SFTP，终端使用 raw PTY surface，并验证输入输出、PTY terminal type、resize 与可选 channel 拒绝不会影响主终端）；自动识别、终端类型选择和 capability 裁剪在 Phase 2 完成。运行时能力裁剪不会覆盖已保存的连接偏好，网络设备 / 普通服务器模式切换可保留原 SFTP、Exec 和监控设置。
 
 ### Phase 2：Banner 自动识别
 
 - [x] 在握手阶段提取并规范化远端 identification。
-- [x] 增加 Cisco、Huawei、H3C/Comware pattern 和单元测试。
+- [x] 增加 Netcatty 已有的 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、
+      Palo Alto、Zyxel、Ruijie pattern 和单元测试。
 - [x] 自动识别结果在任何 exec、CWD、指标或 SFTP 探测之前生效。
 - [x] 手动 mode 覆盖自动结果；未知设备保持安全 fallback。
 
-> 2026-08-28 实施记录：`ClientHandler::kex_done` 保存 russh 的远端 SSH identification，解析器只匹配保守的 Cisco、Huawei/VRP、H3C/Comware/3Com/mpSSH 线索，并将规范化结果写入运行时有效 profile。解析发生在主 PTY 建立前，因此识别出的网络设备不会进入平台探测、CWD 注入、指标、SFTP 或 exec 路径；`server` 手动模式始终覆盖 Banner，`auto` 未命中且厂商族仍为 `auto` 时按普通服务器兼容路径处理，明确厂商族提示则作为本地 network-device fallback。auto profile 未显式选择 terminal type 时，最终按识别结果使用网络设备 `vt100` 或服务器 `xterm-256color` 默认值。
+> 2026-08-28 实施记录：`ClientHandler::kex_done` 保存 russh 的远端 SSH identification，解析器按 Netcatty 的保守规则匹配 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、Palo Alto、Zyxel、Ruijie 线索，并将规范化结果写入运行时有效 profile。解析发生在主 PTY 建立前，因此识别出的网络设备不会进入平台探测、CWD 注入、指标、SFTP 或 exec 路径；`server` 手动模式始终覆盖 Banner，`auto` 未命中且厂商族仍为 `auto` 时按普通服务器兼容路径处理，明确厂商族提示则作为本地 network-device fallback。auto profile 未显式选择 terminal type 时，最终按识别结果使用网络设备 `vt100` 或服务器 `xterm-256color` 默认值。
 
-> 2026-08-29 对照 Netcatty #1046/#1052 补充：自动识别新增老 Huawei VRP 的精确短横线 Banner（`SSH-1.99--` 及原始 `-` 形式），避免这类设备回退到服务器探测路径；匹配保持精确，不把任意未知 Banner 当成 Huawei。
-
-### Phase 3：真实设备验证与必要的专项修复
-
-- [ ] 使用 H3C/Comware、Huawei/VRP、Cisco 实机验证 SSH 登录、PTY、换行、resize 和断线行为。
-- [ ] 再验证实际提供 CLI 的 TP-Link、水星、腾达、中兴、NETGEAR 型号。
-- [x] 增加精确的 Comware legacy GEX 兼容：仅在显式开启 legacy SSH 兼容且远端 Banner
-  匹配 `Comware-*` 时，对 SHA-1 GEX 请求 `1024/1024/8192`；普通连接和其他 KEX 保持默认参数。
-- [ ] 分页、prompt、enable/config 和型号 profile 另开计划，不塞进本 MVP。
-
-> 2026-08-29 范围收敛：本 MVP 已包含最小范围的 Comware GEX 专项兼容，但仍不扩大旧
-> KEX、host key 或 cipher 的全局允许范围；实机握手和型号级行为继续留在后续验证。
+> 2026-08-29 对照 Netcatty #1052/#1045 补充：自动识别支持老 Huawei VRP 的精确短横线
+> Banner（`SSH-2.0--`、`SSH-1.99--` 及原始 `-` 形式），并完成 Comware legacy GEX 兼容；
+> 匹配保持精确，不把任意未知 Banner 当成网络设备，也不扩大全局弱算法范围。
 
 ## 7. 测试与验收
 
@@ -204,27 +202,25 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 
 - [x] 普通 Linux/Windows SSH：原有 CWD、SFTP、指标和文件区不回归（既有 OpenSSH fixture 与全量 Tauri 测试通过）。
 - [x] network-device：策略路径不发送 `/etc/os-release`、`uname`、CWD marker、metrics script 或 POSIX wrapper。
-- [x] H3C/Huawei mock：额外 exec/SFTP 被拒绝时，能力模型和 russh 协议 fixture 保留主 PTY 和 SSH 隧道 surface（实体设备交互留待 Phase 3）。
+- [x] H3C/Huawei mock：额外 exec/SFTP 被拒绝时，能力模型和 russh 协议 fixture 保留主 PTY 和 SSH 隧道 surface。
 - [x] terminal type：网络设备默认 `vt100`，profile 选择值传给 SSH `request_pty`。
-- [x] Banner：Cisco/Huawei/Comware 在第一个可选 channel 前完成识别。
-- [x] 老 Huawei VRP 的短横线 Banner（`SSH-1.99--`）在自动模式下识别为网络设备。
+- [x] Banner：Netcatty 已有的设备族在第一个可选 channel 前完成识别。
+- [x] 老 Huawei VRP 的短横线 Banner（`SSH-2.0--`、`SSH-1.99--`）在自动模式下识别为网络设备。
 - [x] 未知 Banner：手动 network-device 可用，普通 server 不因 Banner 被误分类。
 - [x] SFTP、exec、metrics 独立失败时，只关闭对应 capability，不关闭 terminal。
 - [x] 旧 profile、snapshot、bridge、renderer 表单和能力矩阵通过 contract/type 测试。
 - [x] H3C/Comware 精确 GEX 参数请求（`1024/1024/8192`）：russh 兼容分支覆盖参数选择、
-  普通 peer/非 SHA-1 GEX 不受影响，网络设备协议 fixture 覆盖 Comware 握手路径；默认 SSH
-  算法不放宽。
+      普通 peer/非 SHA-1 GEX 不受影响，网络设备协议 fixture 覆盖 Comware 握手路径；默认 SSH
+      算法不放宽。
 
-> 2026-08-29 自动化验收记录：`npm run typecheck -w @fileterm/tauri`、`npm run lint`、`npx prettier --check apps/tauri packages/core packages/shared packages/storage`、`npm run test:tauri`（484 unit + 20 contract）、`cargo clippy --locked --all-targets --all-features -- -D warnings` 均通过。metrics 后台通道启动或运行失败时只撤销 `resource_monitoring` capability 并广播最新 snapshot，SSH 主终端和隧道保持独立。以上网络设备结论是代码路径、russh 协议 fixture 和策略级 mock 结论；没有实体设备时，不扩大为全品牌支持。
+> 2026-08-29 自动化验收记录：`npm run typecheck -w @fileterm/tauri`、`npm run lint`、`npx prettier --check apps/tauri packages/core packages/shared packages/storage`、`npm run test:tauri`、`cargo clippy --locked --all-targets --all-features -- -D warnings` 均通过。metrics 后台通道启动或运行失败时只撤销 `resource_monitoring` capability 并广播最新 snapshot，SSH 主终端和隧道保持独立。以上网络设备结论是代码路径、russh 协议 fixture 和策略级 mock 结论；没有实体设备时，不扩大为全品牌支持。
 
 同日使用 Playwright 对本地 renderer 的连接表单做了 Tauri mock smoke：网络设备模式隐藏 Remote Path、Exec、SFTP、监控和服务器凭据入口，保留 Tunnel；厂商族选择、自动识别回退和 `vt100`/`xterm-256color` 终端默认值均通过，说明文字布局也完成截图复核。另用 MemoryProfileRepository 做了保存 round-trip 断言，确认网络设备模式不会覆盖用户原有的 SFTP、Exec、监控和 Shell integration 偏好。该 smoke 不替代实体设备验证。
 
-### 实体设备记录
+### 验证边界
 
-每台设备记录：品牌、型号、固件、协议、SSH identification、terminal type、登录首屏、
-是否会关闭 exec、是否提供 SFTP、是否出现分页、断线原因和最终结论。
-
-没有实体设备时，只能宣称“mock/协议层通过”，不能宣称某个品牌全部支持。
+当前没有实体设备，因此验收结论只覆盖代码路径、mock 和协议 fixture；不宣称某个品牌或
+型号的全面实机兼容。
 
 ### 项目门禁
 
@@ -249,10 +245,5 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 5. 自动识别可用但不是唯一入口，手动模式可以覆盖。
 6. 老 Comware 的 SHA-1 GEX 兼容只在显式 legacy 选项和精确 Banner 匹配时启用，不能影响
    普通连接的安全默认值。
-7. 未经实体设备验证，不在发布说明中扩大为“全品牌支持”。
 
-以上代码条件已满足；Phase 3 的实机条目仍保持未勾选，只表示尚未取得型号级实测证据，
-不再阻塞本任务交付。
-
-Issue #201 只使用 `Refs #201` 关联；代码合入、发布和真实设备验证完成后，再由维护者决定
-是否关闭 issue。
+以上代码条件已满足；没有实体设备不阻塞代码目标，但限制了实机兼容结论。
