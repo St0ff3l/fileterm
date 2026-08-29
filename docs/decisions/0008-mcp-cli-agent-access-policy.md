@@ -16,14 +16,17 @@ FileTerm 同时提供桌面 GUI、本地 MCP 子进程和一次性 CLI。外部 
 
 策略持久化在 `UiPreferences.mcpAgent`，只包含非敏感数据：
 
-- `connectionScope`：全部已保存连接、选中的已保存连接、当前活动会话或默认连接。
-- `allowedProfileIds`：选中模式下允许访问的 profile ID。
-- `defaultProfileId`：默认连接模式使用的 profile ID。
-- `operationPolicy`：只读、受控操作或完全授权。
+- `connectionScope`：全部已保存连接，或明确选中的已保存连接。
+- `allowedProfileIds`：指定连接模式下允许访问的 profile ID。
+- `operationPolicy`：只读、受控操作或完全访问。
+
+设置页将这两个维度展示为两张独立策略卡片：第一张选择 MCP 执行权限并提供能力对照，第二张选择“所有连接 / 指定连接”并维护白名单。连接自身的协议能力和 FileTerm 安全校验继续作为更高优先级的硬上限，不新增每条连接的 MCP 专属权限。
+
+旧版本的 `active-session` 和 `default-connection` 只作为读取时的迁移输入：前者转成空白的指定连接白名单并保持拒绝访问，后者把旧的 `defaultProfileId` 转成单个允许的 profile；迁移后的模型不再序列化 `defaultProfileId`。
 
 策略在 desktop bridge 的 action route 入口执行，而不是只在 renderer 隐藏按钮。MCP、一次性 CLI 和常驻 Agent 都使用同一个策略评估器；profile 删除后授权 ID 自动清理，旧配置缺失字段时采用 fail-closed 默认值。
 
-完全授权只跳过逐次操作审批，不能绕过连接范围、session revision、路径校验、凭据边界或 terminal 输入限制。
+完全访问只跳过逐次操作审批，不能绕过连接范围、session revision、路径校验、凭据边界或 terminal 输入限制。
 
 ### 2. 三种调用来源具有明确且不互相扩大权限的语义
 

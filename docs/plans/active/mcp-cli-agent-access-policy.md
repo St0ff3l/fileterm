@@ -1,6 +1,6 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：阶段 0-5 的代码、自动化回归与文档已完成；打包人工验收与真实设备验收待进行
+状态：阶段 0-6 的代码、自动化回归与文档已完成；打包人工验收与真实设备验收待进行
 
 关联 Issue：#224
 
@@ -95,16 +95,16 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 
 ### 2.3 当前权限策略
 
-当前 Agent 偏好包含连接范围和操作等级两个维度：
+当前 Agent 偏好包含连接白名单和操作等级两个维度；设置页按两张独立策略卡片展示：
 
-| 维度     | 当前值                                                                          |
-| -------- | ------------------------------------------------------------------------------- |
-| 连接范围 | all-saved-connections、selected-connections、active-session、default-connection |
-| 操作策略 | read-only、approved-operations、full-access                                     |
+| 维度       | 当前值                                      |
+| ---------- | ------------------------------------------- |
+| 连接白名单 | all-saved-connections、selected-connections |
+| 操作策略   | read-only、approved-operations、full-access |
 
-当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按范围过滤。
+第一张卡片是 MCP 执行权限和能力对照，第二张卡片是“所有连接 / 指定连接”的全局白名单。当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按白名单过滤。连接自身的协议能力和 FileTerm 安全校验不在 MCP 卡片中重复配置，而是继续作为硬上限。
 
-当前实现已经补齐逐个连接选择和第三档“完全授权”策略；仍然不区分具体 MCP client，所有 MCP client 共享 FileTerm 全局设置。一次性 CLI 保留显式用户调用语义，常驻 Agent 则强制使用桌面审批策略。
+当前实现已经补齐逐个连接选择和第三档“完全访问”策略；仍然不区分具体 MCP client，所有 MCP client 共享 FileTerm 全局设置。一次性 CLI 保留显式用户调用语义，常驻 Agent 则强制使用桌面审批策略。
 
 ### 2.4 当前凭据处理
 
@@ -435,10 +435,10 @@ connection-failed
 
 ### 8.1 连接范围
 
-在现有范围基础上增加逐个选择模式：
+连接策略收敛为“全部已保存连接”和“指定连接”两种模式：
 
 ```ts
-type McpConnectionScope = 'all-saved-connections' | 'selected-connections' | 'active-session' | 'default-connection'
+type McpConnectionScope = 'all-saved-connections' | 'selected-connections'
 ```
 
 偏好增加：
@@ -448,7 +448,6 @@ interface McpAgentPreferences {
   connectionScope: McpConnectionScope
   allowedProfileIds: string[]
   operationPolicy: McpOperationPolicy
-  defaultProfileId?: string
 }
 ```
 
@@ -462,17 +461,19 @@ allowedProfileIds 只保存稳定 profile ID，不保存主机密码或连接 se
 - profile 未选择时，不能通过 open_connection、tab、transfer、tunnel 或 call 间接访问。
 - 连接列表、会话列表、传输列表和等待传输结果必须使用同一过滤器。
 - 选择了 profile 但 profile 没有密码时，允许进入 SSH 凭据等待流程；“选中”不等于“已保存密码”。
-- 新安装默认采用 fail-closed 的选择模式，建议初始没有允许连接；已有用户的显式旧策略不得被静默扩大。
+- 新安装默认采用 fail-closed 的指定连接模式，初始没有允许连接；已有用户的显式旧策略不得被静默扩大。
+- 旧的 `active-session` 配置迁移为空白指定连接白名单；旧的 `default-connection` 配置迁移为只包含原 `defaultProfileId` 的指定连接白名单。
+- 连接编辑页不增加 MCP 专属权限字段；连接自身的协议能力和 FileTerm 安全校验继续限制 MCP/CLI 的有效能力。
 
 ### 8.2 操作等级
 
-建议目标为三档：
+设置页提供三档执行权限和一张能力对照表：
 
 | 等级     | 读取 | 写入/删除 | 远程命令           | 传输/隧道      | 是否审批                                                                       |
 | -------- | ---- | --------- | ------------------ | -------------- | ------------------------------------------------------------------------------ |
 | 只读     | 允许 | 拒绝      | 只允许明确只读查询 | 只允许查询状态 | 不需要                                                                         |
 | 受控操作 | 允许 | 允许      | 允许               | 允许           | MCP/Agent bridge 需要 FileTerm 审批                                            |
-| 完全授权 | 允许 | 允许      | 允许               | 允许           | 不重复弹操作审批，但仍受连接范围、session revision、输入校验和凭据安全边界约束 |
+| 完全访问 | 允许 | 允许      | 允许               | 允许           | 不重复弹操作审批，但仍受连接范围、session revision、输入校验和凭据安全边界约束 |
 
 现有 approved-operations 映射到“受控操作”。full-access 只表示免除逐次操作审批，不表示：
 
@@ -706,12 +707,13 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 在现有 Agent / MCP 设置区域增加：
 
-- 连接范围选择。
-- 已保存连接搜索和多选列表。
+- “MCP 执行权限”策略卡：只读 / 受控操作 / 完全访问，以及查询、变更、传输、隧道和审批跳过能力对照。
+- “允许 MCP / CLI 访问的连接”策略卡：所有连接 / 指定连接。
+- 指定连接模式下的已保存连接搜索和多选列表。
 - 每个连接展示名称、协议、host 脱敏摘要和凭据存在状态。
-- 操作等级选择：只读 / 受控操作 / 完全授权。
 - “未选择连接”时的明确提示。
 - 已删除 profile 的授权项自动清理或显示待清理状态。
+- 连接自身协议能力和 FileTerm 安全校验的说明，不在 MCP 页面复制一套 per-connection MCP 权限。
 
 不得展示：
 
@@ -766,7 +768,7 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 - [x] 增加已保存连接多选列表。
 - [x] 展示非敏感凭据存在状态。
-- [x] 增加只读 / 受控操作 / 完全授权说明。
+- [x] 增加只读 / 受控操作 / 完全访问说明。
 - [x] 增加连接 operation 等待中的 UI 状态和错误提示。
 - [x] 确保等待状态不泄漏 prompt 内容和密码。
 
@@ -827,7 +829,7 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 - [x] selected profile 的连接列表、会话、传输和隧道结果均按同一白名单过滤。
 - [x] 只读策略拒绝写入、删除、远程命令和危险传输操作。
 - [x] 受控操作策略在 MCP/Agent bridge 触发 FileTerm 审批。
-- [x] 完全授权只跳过逐次审批，不绕过连接范围、session revision、路径和凭据安全边界。
+- [x] 完全访问只跳过逐次审批，不绕过连接范围、session revision、路径和凭据安全边界。
 - [x] 两个不同 MCP client 看到并使用同一份全局策略。
 
 ### 14.4 并发与进程
@@ -944,7 +946,7 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] Rust bridge route 在进入 action handler 前校验选中 profile；列表、会话、传输和等待结果使用同一范围过滤。
 - [x] 删除 profile 时自动从 Agent 允许列表清理，旧配置不会因为缺失字段而扩大到全部连接。
 - [x] 设置页增加搜索、多选、非敏感凭据存在状态和空选择提示。
-- [x] 完全授权只跳过逐次 MCP 审批，仍保留连接范围和其它安全边界。
+- [x] 完全访问只跳过逐次 MCP 审批，仍保留连接范围和其它安全边界。
 - [x] 增加 selected visibility 与操作等级策略单元测试。
 - [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
@@ -981,4 +983,14 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 同步架构地图、ADR 和本计划中的 Agent 审批、取消、进程模型与验证状态。
 - [x] 自动化质量门禁已通过；macOS/Windows/Linux 打包交互和真实 SSH/FTP/网络设备测试按约定跳过。
 
-阶段 1-5 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为、真实 SSH/FTP/设备连接仍待目标环境人工验证。
+### 阶段 6：DBX 式全局策略展示与模型收敛
+
+- [x] 将设置页拆成“MCP 执行权限”和“允许 MCP / CLI 访问的连接”两张全局策略卡片。
+- [x] 执行权限提供只读、受控操作、完全访问三档，并展示能力对照与硬边界提示。
+- [x] 连接访问提供所有连接 / 指定连接两档；指定模式保留搜索、多选、选中计数和空白拒绝提示。
+- [x] 移除 active-session / default-connection 作为新的 MCP 权限选项，不增加 per-connection MCP 专属权限。
+- [x] 旧配置安全迁移：default-connection 转为单 profile 白名单，active-session 转为空白白名单；迁移后不再序列化旧字段。
+- [x] Rust route、列表可见性和 transfer 过滤统一使用两档连接策略。
+- [ ] macOS/Windows/Linux 打包后的设置页视觉、键盘操作和真实连接策略仍待人工验收。
+
+阶段 1-6 的实现均不把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。sudo/su 仍支持明确的一次性凭据，但脚本和 Agent 应使用 stdin 方式；macOS 打包后的 headless/application type 与 Dock 图标行为、真实 SSH/FTP/设备连接仍待目标环境人工验证。

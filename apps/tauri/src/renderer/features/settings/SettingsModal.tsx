@@ -761,6 +761,37 @@ export function SettingsModal({
     )
   }, [mcpAgentProfileSearch, mcpAgentProfiles])
 
+  const selectedMcpAgentProfileCount = useMemo(
+    () => mcpAgentProfiles.filter((profile) => mcpAgentPreferences.allowedProfileIds.includes(profile.id)).length,
+    [mcpAgentPreferences.allowedProfileIds, mcpAgentProfiles]
+  )
+
+  const mcpExecutionPolicyOptions = [
+    {
+      value: 'read-only' as const,
+      label: t.agentMcpExecutionReadOnly,
+      description: t.agentMcpExecutionReadOnlyDescription
+    },
+    {
+      value: 'approved-operations' as const,
+      label: t.agentMcpExecutionApproved,
+      description: t.agentMcpExecutionApprovedDescription
+    },
+    {
+      value: 'full-access' as const,
+      label: t.agentMcpExecutionFull,
+      description: t.agentMcpExecutionFullDescription
+    }
+  ]
+
+  const mcpCapabilityRows = [
+    { label: t.agentMcpCapabilityQuery, readOnly: true, approved: true, full: true },
+    { label: t.agentMcpCapabilityRemoteChanges, readOnly: false, approved: true, full: true },
+    { label: t.agentMcpCapabilityTransfers, readOnly: false, approved: true, full: true },
+    { label: t.agentMcpCapabilityTunnels, readOnly: false, approved: true, full: true },
+    { label: t.agentMcpCapabilitySkipApproval, readOnly: false, approved: false, full: true }
+  ]
+
   useEffect(() => {
     if (!desktopApi) return
 
@@ -1801,7 +1832,6 @@ export function SettingsModal({
     if (
       nextPreferences.connectionScope === previousPreferences.connectionScope &&
       nextPreferences.operationPolicy === previousPreferences.operationPolicy &&
-      nextPreferences.defaultProfileId === previousPreferences.defaultProfileId &&
       nextPreferences.allowedProfileIds.length === previousPreferences.allowedProfileIds.length &&
       nextPreferences.allowedProfileIds.every(
         (profileId, index) => profileId === previousPreferences.allowedProfileIds[index]
@@ -2704,143 +2734,227 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="agent-mcp-form">
-                      <label>
-                        <span>{t.agentMcpConnectionScope}</span>
-                        <DropdownSelect
-                          className="agent-mcp-select"
-                          disabled={!desktopApi || mcpAgentOperation !== null}
-                          options={[
-                            { value: 'all-saved-connections', label: t.agentMcpScopeAll },
-                            { value: 'selected-connections', label: t.agentMcpScopeSelected },
-                            { value: 'active-session', label: t.agentMcpScopeActive },
-                            {
-                              value: 'default-connection',
-                              label: t.agentMcpScopeDefault,
-                              disabled: !mcpAgentProfiles.length
-                            }
-                          ]}
-                          value={mcpAgentPreferences.connectionScope}
-                          onChange={(value) => {
-                            saveMcpAgentPreferences({
-                              connectionScope: value as McpAgentPreferences['connectionScope'],
-                              ...(value === 'default-connection' && !mcpAgentPreferences.defaultProfileId
-                                ? { defaultProfileId: mcpAgentProfiles[0]?.id }
-                                : {})
-                            })
-                          }}
-                        />
-                        <small>
-                          {mcpAgentPreferences.connectionScope === 'all-saved-connections'
-                            ? t.agentMcpScopeAllHint
-                            : mcpAgentPreferences.connectionScope === 'selected-connections'
-                              ? t.agentMcpScopeSelectedHint
-                              : mcpAgentPreferences.connectionScope === 'active-session'
-                                ? t.agentMcpScopeActiveHint
-                                : t.agentMcpScopeDefaultHint}
-                        </small>
-                      </label>
-
-                      {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
-                        <div className="agent-mcp-selected-connections">
-                          <div className="agent-mcp-selected-connections-heading">
-                            <span>{t.agentMcpSelectedConnections}</span>
-                            <small>
-                              {formatMessage(t.agentMcpSelectedConnectionCount, {
-                                count: mcpAgentPreferences.allowedProfileIds.length
-                              })}
-                            </small>
+                    <div className="agent-mcp-policy-stack">
+                      <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-execution-policy-title">
+                        <div className="agent-mcp-policy-heading">
+                          <div>
+                            <h4 id="agent-mcp-execution-policy-title">{t.agentMcpExecutionPolicyTitle}</h4>
+                            <p>{t.agentMcpExecutionPolicyDescription}</p>
                           </div>
-                          <input
-                            aria-label={t.agentMcpSelectedConnections}
-                            className="agent-mcp-profile-search"
-                            disabled={!desktopApi || mcpAgentOperation !== null}
-                            placeholder={t.agentMcpSelectedConnectionsSearchPlaceholder}
-                            type="search"
-                            value={mcpAgentProfileSearch}
-                            onChange={(event) => setMcpAgentProfileSearch(event.target.value)}
+                        </div>
+                        <div
+                          aria-label={t.agentMcpExecutionPolicyTitle}
+                          className="agent-mcp-policy-options"
+                          role="radiogroup"
+                        >
+                          {mcpExecutionPolicyOptions.map((option, index) => {
+                            const selected = mcpAgentPreferences.operationPolicy === option.value
+                            return (
+                              <button
+                                key={option.value}
+                                aria-checked={selected}
+                                className={`agent-mcp-policy-option ${selected ? 'is-selected' : ''}`}
+                                disabled={!desktopApi || mcpAgentOperation !== null}
+                                role="radio"
+                                tabIndex={selected ? 0 : -1}
+                                type="button"
+                                onClick={() => saveMcpAgentPreferences({ operationPolicy: option.value })}
+                                onKeyDown={(event) => {
+                                  const direction =
+                                    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                                      ? 1
+                                      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                                        ? -1
+                                        : 0
+                                  if (!direction) return
+                                  event.preventDefault()
+                                  const nextOption =
+                                    mcpExecutionPolicyOptions[
+                                      (index + direction + mcpExecutionPolicyOptions.length) %
+                                        mcpExecutionPolicyOptions.length
+                                    ]
+                                  if (nextOption) {
+                                    saveMcpAgentPreferences({ operationPolicy: nextOption.value })
+                                  }
+                                }}
+                              >
+                                <span aria-hidden="true" className="agent-mcp-policy-option-indicator" />
+                                <span className="agent-mcp-policy-option-copy">
+                                  <strong>{option.label}</strong>
+                                  <small>{option.description}</small>
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p
+                          className={`agent-mcp-policy-notice ${
+                            mcpAgentPreferences.operationPolicy === 'full-access' ? 'is-warning' : ''
+                          }`}
+                        >
+                          <AppIcon
+                            name={mcpAgentPreferences.operationPolicy === 'full-access' ? 'shield' : 'shield-check'}
+                            size={14}
+                            strokeWidth={2}
                           />
-                          <div className="agent-mcp-profile-list" role="group">
-                            {filteredMcpAgentProfiles.map((profile) => {
-                              const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
-                              return (
-                                <label key={profile.id} className="agent-mcp-profile-option">
-                                  <input
-                                    checked={selected}
-                                    disabled={!desktopApi || mcpAgentOperation !== null}
-                                    type="checkbox"
-                                    onChange={() => {
-                                      const allowedProfileIds = selected
-                                        ? mcpAgentPreferences.allowedProfileIds.filter((id) => id !== profile.id)
-                                        : [...mcpAgentPreferences.allowedProfileIds, profile.id]
-                                      saveMcpAgentPreferences({ allowedProfileIds })
-                                    }}
-                                  />
-                                  <span className="agent-mcp-profile-copy">
-                                    <strong>{profile.name || profile.type.toUpperCase()}</strong>
-                                    <small>
-                                      {profile.type.toUpperCase()} · {agentProfileTarget(profile)} ·{' '}
-                                      {profile.hasSavedPassword
-                                        ? t.agentMcpCredentialSaved
-                                        : t.agentMcpCredentialPrompt}
-                                    </small>
+                          <span>
+                            {mcpAgentPreferences.operationPolicy === 'full-access'
+                              ? t.agentMcpExecutionFullWarning
+                              : t.agentMcpExecutionBoundary}
+                          </span>
+                        </p>
+                        <div className="agent-mcp-capability">
+                          <h5>{t.agentMcpCapabilityTitle}</h5>
+                          <div
+                            aria-label={t.agentMcpCapabilityTitle}
+                            className="agent-mcp-capability-table"
+                            role="table"
+                          >
+                            <div className="agent-mcp-capability-row is-header" role="row">
+                              <span role="columnheader">{t.agentMcpCapabilityHeader}</span>
+                              <span role="columnheader">{t.agentMcpCapabilityReadOnly}</span>
+                              <span role="columnheader">{t.agentMcpCapabilityApproved}</span>
+                              <span role="columnheader">{t.agentMcpCapabilityFull}</span>
+                            </div>
+                            {mcpCapabilityRows.map((row) => (
+                              <div key={row.label} className="agent-mcp-capability-row" role="row">
+                                <span role="cell">{row.label}</span>
+                                {[row.readOnly, row.approved, row.full].map((allowed, index) => (
+                                  <span
+                                    key={`${row.label}-${index}`}
+                                    aria-label={allowed ? t.agentMcpCapabilityAllowed : t.agentMcpCapabilityDenied}
+                                    className={`agent-mcp-capability-value ${allowed ? 'is-allowed' : 'is-denied'}`}
+                                    role="cell"
+                                  >
+                                    <AppIcon name={allowed ? 'check' : 'close'} size={13} strokeWidth={2.2} />
                                   </span>
-                                </label>
-                              )
-                            })}
-                            {!filteredMcpAgentProfiles.length ? (
-                              <small className="agent-mcp-profile-empty">{t.agentMcpSelectedConnectionsEmpty}</small>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </section>
+
+                      <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-allowed-connections-title">
+                        <div className="agent-mcp-policy-heading agent-mcp-connections-heading">
+                          <div>
+                            <h4 id="agent-mcp-allowed-connections-title">{t.agentMcpAllowedConnectionsTitle}</h4>
+                            <p>{t.agentMcpAllowedConnectionsDescription}</p>
+                          </div>
+                          <span className="agent-mcp-policy-count">
+                            {mcpAgentPreferences.connectionScope === 'selected-connections'
+                              ? formatMessage(t.agentMcpSelectedConnectionCount, {
+                                  count: selectedMcpAgentProfileCount,
+                                  total: mcpAgentProfiles.length
+                                })
+                              : t.agentMcpConnectionModeAllStatus}
+                          </span>
+                        </div>
+                        <div
+                          aria-label={t.agentMcpAllowedConnectionsTitle}
+                          className="agent-mcp-policy-options agent-mcp-connection-options"
+                          role="radiogroup"
+                        >
+                          {[
+                            {
+                              value: 'all-saved-connections' as const,
+                              label: t.agentMcpConnectionModeAll,
+                              description: t.agentMcpConnectionModeAllHint
+                            },
+                            {
+                              value: 'selected-connections' as const,
+                              label: t.agentMcpConnectionModeSelected,
+                              description: t.agentMcpConnectionModeSelectedHint
+                            }
+                          ].map((option, index, options) => {
+                            const selected = mcpAgentPreferences.connectionScope === option.value
+                            return (
+                              <button
+                                key={option.value}
+                                aria-checked={selected}
+                                className={`agent-mcp-policy-option ${selected ? 'is-selected' : ''}`}
+                                disabled={!desktopApi || mcpAgentOperation !== null}
+                                role="radio"
+                                tabIndex={selected ? 0 : -1}
+                                type="button"
+                                onClick={() => saveMcpAgentPreferences({ connectionScope: option.value })}
+                                onKeyDown={(event) => {
+                                  const direction =
+                                    event.key === 'ArrowRight' || event.key === 'ArrowDown'
+                                      ? 1
+                                      : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+                                        ? -1
+                                        : 0
+                                  if (!direction) return
+                                  event.preventDefault()
+                                  const nextOption = options[(index + direction + options.length) % options.length]
+                                  if (nextOption) {
+                                    saveMcpAgentPreferences({ connectionScope: nextOption.value })
+                                  }
+                                }}
+                              >
+                                <span aria-hidden="true" className="agent-mcp-policy-option-indicator" />
+                                <span className="agent-mcp-policy-option-copy">
+                                  <strong>{option.label}</strong>
+                                  <small>{option.description}</small>
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
+                          <div className="agent-mcp-selected-connections">
+                            <div className="agent-mcp-selected-connections-heading">
+                              <span>{t.agentMcpSelectedConnections}</span>
+                            </div>
+                            <input
+                              aria-label={t.agentMcpSelectedConnections}
+                              className="agent-mcp-profile-search"
+                              disabled={!desktopApi || mcpAgentOperation !== null}
+                              placeholder={t.agentMcpSelectedConnectionsSearchPlaceholder}
+                              type="search"
+                              value={mcpAgentProfileSearch}
+                              onChange={(event) => setMcpAgentProfileSearch(event.target.value)}
+                            />
+                            <div className="agent-mcp-profile-list" role="group">
+                              {filteredMcpAgentProfiles.map((profile) => {
+                                const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
+                                return (
+                                  <label key={profile.id} className="agent-mcp-profile-option">
+                                    <input
+                                      checked={selected}
+                                      disabled={!desktopApi || mcpAgentOperation !== null}
+                                      type="checkbox"
+                                      onChange={() => {
+                                        const allowedProfileIds = selected
+                                          ? mcpAgentPreferences.allowedProfileIds.filter((id) => id !== profile.id)
+                                          : [...mcpAgentPreferences.allowedProfileIds, profile.id]
+                                        saveMcpAgentPreferences({ allowedProfileIds })
+                                      }}
+                                    />
+                                    <span className="agent-mcp-profile-copy">
+                                      <strong>{profile.name || profile.type.toUpperCase()}</strong>
+                                      <small>
+                                        {profile.type.toUpperCase()} · {agentProfileTarget(profile)} ·{' '}
+                                        {profile.hasSavedPassword
+                                          ? t.agentMcpCredentialSaved
+                                          : t.agentMcpCredentialPrompt}
+                                      </small>
+                                    </span>
+                                  </label>
+                                )
+                              })}
+                              {!filteredMcpAgentProfiles.length ? (
+                                <small className="agent-mcp-profile-empty">{t.agentMcpSelectedConnectionsEmpty}</small>
+                              ) : null}
+                            </div>
+                            {!selectedMcpAgentProfileCount ? (
+                              <small className="agent-mcp-profile-warning">{t.agentMcpSelectedConnectionsNone}</small>
                             ) : null}
                           </div>
-                          {!mcpAgentPreferences.allowedProfileIds.length ? (
-                            <small className="agent-mcp-profile-warning">{t.agentMcpSelectedConnectionsNone}</small>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {mcpAgentPreferences.connectionScope === 'default-connection' ? (
-                        <label>
-                          <span>{t.agentMcpDefaultConnection}</span>
-                          <DropdownSelect
-                            className="agent-mcp-select"
-                            disabled={!desktopApi || mcpAgentOperation !== null || !mcpAgentProfiles.length}
-                            options={mcpAgentProfiles.map((profile) => ({
-                              value: profile.id,
-                              label: `${profile.name || profile.host}:${profile.port}`
-                            }))}
-                            placeholder={t.agentMcpDefaultConnectionPlaceholder}
-                            value={mcpAgentPreferences.defaultProfileId ?? ''}
-                            onChange={(value) => saveMcpAgentPreferences({ defaultProfileId: value })}
-                          />
-                          {!mcpAgentProfiles.length ? <small>{t.agentMcpNoProfiles}</small> : null}
-                        </label>
-                      ) : null}
-
-                      <label>
-                        <span>{t.agentMcpOperationPolicy}</span>
-                        <DropdownSelect
-                          className="agent-mcp-select"
-                          disabled={!desktopApi || mcpAgentOperation !== null}
-                          options={[
-                            { value: 'read-only', label: t.agentMcpReadOnly },
-                            { value: 'approved-operations', label: t.agentMcpApprovedOperations },
-                            { value: 'full-access', label: t.agentMcpFullAccess }
-                          ]}
-                          value={mcpAgentPreferences.operationPolicy}
-                          onChange={(value) =>
-                            saveMcpAgentPreferences({
-                              operationPolicy: value as McpAgentPreferences['operationPolicy']
-                            })
-                          }
-                        />
-                        <small>
-                          {mcpAgentPreferences.operationPolicy === 'read-only'
-                            ? t.agentMcpReadOnlyHint
-                            : mcpAgentPreferences.operationPolicy === 'full-access'
-                              ? t.agentMcpFullAccessHint
-                              : t.agentMcpApprovedOperationsHint}
-                        </small>
-                      </label>
+                        ) : null}
+                      </section>
                     </div>
 
                     <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>

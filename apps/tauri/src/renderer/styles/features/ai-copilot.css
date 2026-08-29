@@ -3135,6 +3135,245 @@
   color: var(--text-muted);
 }
 
+.agent-mcp-policy-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-mcp-policy-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.agent-mcp-policy-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-mcp-policy-heading > div {
+  min-width: 0;
+}
+
+.agent-mcp-policy-heading h4,
+.agent-mcp-capability h5 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.agent-mcp-policy-heading p {
+  max-width: 720px;
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.agent-mcp-policy-count {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.agent-mcp-policy-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.agent-mcp-connection-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agent-mcp-policy-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 66px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.agent-mcp-policy-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--focus-outline) 65%, var(--border-light));
+  background: color-mix(in srgb, var(--focus-outline) 6%, var(--bg-primary));
+}
+
+.agent-mcp-policy-option:focus-visible {
+  outline: none;
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.agent-mcp-policy-option.is-selected {
+  border-color: var(--focus-outline);
+  background: color-mix(in srgb, var(--focus-outline) 10%, var(--bg-primary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-outline) 24%, transparent);
+}
+
+.agent-mcp-policy-option:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.agent-mcp-policy-option-indicator {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin-top: 1px;
+  border: 1px solid var(--border-light);
+  border-radius: 50%;
+  background: var(--bg-card);
+}
+
+.agent-mcp-policy-option.is-selected .agent-mcp-policy-option-indicator {
+  border-color: var(--focus-outline);
+  background: var(--focus-outline);
+}
+
+.agent-mcp-policy-option.is-selected .agent-mcp-policy-option-indicator::after {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  content: '';
+}
+
+.agent-mcp-policy-option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.agent-mcp-policy-option-copy strong {
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.agent-mcp-policy-option-copy small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.agent-mcp-policy-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--focus-outline) 25%, var(--border-light));
+  border-radius: 7px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--focus-outline) 5%, var(--bg-primary));
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.agent-mcp-policy-notice > .app-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--focus-outline);
+}
+
+.agent-mcp-policy-notice.is-warning {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border-light));
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 7%, var(--bg-primary));
+}
+
+.agent-mcp-policy-notice.is-warning > .app-icon {
+  color: var(--warning);
+}
+
+.agent-mcp-capability {
+  display: grid;
+  gap: 7px;
+}
+
+.agent-mcp-capability-table {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+}
+
+.agent-mcp-capability-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(68px, 0.65fr));
+  align-items: center;
+  min-height: 34px;
+  border-top: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.agent-mcp-capability-row:first-child {
+  border-top: 0;
+}
+
+.agent-mcp-capability-row.is-header {
+  min-height: 30px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--focus-outline) 5%, var(--bg-primary));
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.agent-mcp-capability-row > span {
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.agent-mcp-capability-row > span:not(:first-child) {
+  text-align: center;
+}
+
+.agent-mcp-capability-value {
+  display: grid;
+  place-items: center;
+}
+
+.agent-mcp-capability-value.is-allowed {
+  color: var(--success);
+}
+
+.agent-mcp-capability-value.is-denied {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 .agent-mcp-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3215,7 +3454,7 @@
   background: var(--input-bg, var(--bg-primary));
 }
 
-.agent-mcp-form .agent-mcp-profile-option {
+.agent-mcp-profile-option {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -3228,7 +3467,7 @@
   cursor: pointer;
 }
 
-.agent-mcp-form .agent-mcp-profile-option:hover {
+.agent-mcp-profile-option:hover {
   background: color-mix(in srgb, var(--focus-outline) 8%, transparent);
 }
 
@@ -3428,6 +3667,23 @@
 @media (max-width: 720px) {
   .agent-mcp-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-mcp-policy-options,
+  .agent-mcp-connection-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-mcp-connections-heading {
+    flex-direction: column;
+  }
+
+  .agent-mcp-capability-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, minmax(44px, 0.4fr));
+  }
+
+  .agent-mcp-capability-row > span {
+    padding: 6px;
   }
 }
 

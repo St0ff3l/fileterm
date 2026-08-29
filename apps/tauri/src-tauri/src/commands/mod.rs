@@ -137,8 +137,11 @@ pub struct McpAgentPreferences {
     pub operation_policy: String,
     #[serde(default)]
     pub allowed_profile_ids: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_profile_id: Option<String>,
+    /// Read old persisted `defaultProfileId` values only long enough to
+    /// migrate legacy MCP scope settings. It is never returned to clients or
+    /// written back to disk.
+    #[serde(rename = "defaultProfileId", default, skip_serializing)]
+    pub legacy_default_profile_id: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -147,7 +150,6 @@ pub struct McpAgentPreferencesInput {
     pub connection_scope: Option<String>,
     pub operation_policy: Option<String>,
     pub allowed_profile_ids: Option<Vec<String>>,
-    pub default_profile_id: Option<Option<String>>,
 }
 
 impl Default for McpAgentPreferences {
@@ -156,7 +158,7 @@ impl Default for McpAgentPreferences {
             connection_scope: default_mcp_connection_scope(),
             operation_policy: default_mcp_operation_policy(),
             allowed_profile_ids: Vec::new(),
-            default_profile_id: None,
+            legacy_default_profile_id: None,
         }
     }
 }
@@ -1143,11 +1145,34 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     ) {
         preferences.connection_defaults.reconnect_mode = default_reconnect_mode();
     }
-    if !matches!(
-        preferences.mcp_agent.connection_scope.as_str(),
-        "all-saved-connections" | "selected-connections" | "active-session" | "default-connection"
-    ) {
-        preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
+    // DBX-style MCP policy has only two connection modes: all saved
+    // connections or an explicit allowlist. Migrate the two older runtime
+    // target modes when loading preferences. An active-session policy has no
+    // stable saved profile to recover, so it fails closed with an empty
+    // allowlist; a default-connection policy can be preserved exactly.
+    let legacy_default_profile_id = preferences
+        .mcp_agent
+        .legacy_default_profile_id
+        .take()
+        .and_then(|profile_id| {
+            let trimmed = profile_id.trim();
+            (!trimmed.is_empty() && trimmed.len() <= 256).then(|| trimmed.to_string())
+        });
+    match preferences.mcp_agent.connection_scope.as_str() {
+        "all-saved-connections" | "selected-connections" => {}
+        "active-session" => {
+            preferences.mcp_agent.connection_scope = "selected-connections".to_string();
+            preferences.mcp_agent.allowed_profile_ids.clear();
+        }
+        "default-connection" => {
+            preferences.mcp_agent.connection_scope = "selected-connections".to_string();
+            if let Some(profile_id) = legacy_default_profile_id {
+                preferences.mcp_agent.allowed_profile_ids.push(profile_id);
+            }
+        }
+        _ => {
+            preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
+        }
     }
     if !matches!(
         preferences.mcp_agent.operation_policy.as_str(),
@@ -1157,19 +1182,6 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     }
     preferences.mcp_agent.allowed_profile_ids =
         normalize_mcp_allowed_profile_ids(preferences.mcp_agent.allowed_profile_ids);
-    preferences.mcp_agent.default_profile_id =
-        preferences
-            .mcp_agent
-            .default_profile_id
-            .and_then(|profile_id| {
-                let trimmed = profile_id.trim();
-                (!trimmed.is_empty() && trimmed.len() <= 256).then(|| trimmed.to_string())
-            });
-    if preferences.mcp_agent.connection_scope == "default-connection"
-        && preferences.mcp_agent.default_profile_id.is_none()
-    {
-        preferences.mcp_agent.connection_scope = "active-session".to_string();
-    }
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
     preferences.local_terminal_shells =
@@ -2142,9 +2154,6 @@ pub fn app_set_ui_preferences(
         }
         if let Some(allowed_profile_ids) = mcp_agent.allowed_profile_ids {
             preferences.mcp_agent.allowed_profile_ids = allowed_profile_ids;
-        }
-        if let Some(default_profile_id) = mcp_agent.default_profile_id {
-            preferences.mcp_agent.default_profile_id = default_profile_id;
         }
     }
     if let Some(overview_show_stats) = input.overview_show_stats {
@@ -7252,7 +7261,7 @@ mod ui_preferences_tests {
                 connection_scope: "not-a-scope".to_string(),
                 operation_policy: "not-a-policy".to_string(),
                 allowed_profile_ids: vec![" profile-1 ".to_string(), "profile-1".to_string()],
-                default_profile_id: Some("  ".to_string()),
+                legacy_default_profile_id: Some("  ".to_string()),
             },
             overview_show_stats: true,
             overview_show_recent: true,
@@ -7273,11 +7282,14 @@ mod ui_preferences_tests {
             preferences.mcp_agent.allowed_profile_ids,
             vec!["profile-1".to_string()]
         );
-        assert_eq!(preferences.mcp_agent.default_profile_id, None);
+        assert_eq!(preferences.mcp_agent.legacy_default_profile_id, None);
+        let serialized = serde_json::to_value(&preferences.mcp_agent)
+            .expect("normalized MCP preferences should serialize");
+        assert!(serialized.get("defaultProfileId").is_none());
     }
 
     #[test]
-    fn default_connection_scope_without_profile_falls_back_to_active_session() {
+    fn legacy_default_connection_scope_migrates_to_selected_allowlist() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
@@ -7295,7 +7307,7 @@ mod ui_preferences_tests {
                 connection_scope: "default-connection".to_string(),
                 operation_policy: "read-only".to_string(),
                 allowed_profile_ids: Vec::new(),
-                default_profile_id: None,
+                legacy_default_profile_id: Some("profile-1".to_string()),
             },
             overview_show_stats: true,
             overview_show_recent: true,
@@ -7304,8 +7316,51 @@ mod ui_preferences_tests {
             overview_section_order: default_overview_section_order(),
         });
 
-        assert_eq!(preferences.mcp_agent.connection_scope, "active-session");
+        assert_eq!(
+            preferences.mcp_agent.connection_scope,
+            "selected-connections"
+        );
         assert_eq!(preferences.mcp_agent.operation_policy, "read-only");
+        assert_eq!(
+            preferences.mcp_agent.allowed_profile_ids,
+            vec!["profile-1".to_string()]
+        );
+        assert_eq!(preferences.mcp_agent.legacy_default_profile_id, None);
+    }
+
+    #[test]
+    fn legacy_active_session_scope_fails_closed_to_empty_allowlist() {
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
+            auto_check_updates: true,
+            update_channel: default_update_channel(),
+            terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences {
+                connection_scope: "active-session".to_string(),
+                operation_policy: "read-only".to_string(),
+                allowed_profile_ids: vec!["stale-profile".to_string()],
+                legacy_default_profile_id: None,
+            },
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert_eq!(
+            preferences.mcp_agent.connection_scope,
+            "selected-connections"
+        );
+        assert!(preferences.mcp_agent.allowed_profile_ids.is_empty());
     }
 
     #[test]

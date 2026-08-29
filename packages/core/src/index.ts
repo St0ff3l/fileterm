@@ -269,9 +269,8 @@ export const DEFAULT_LOCAL_TERMINAL_SHELLS: LocalTerminalShellPreferences = {
   linux: '/bin/bash'
 }
 
-/** Scope exposed to externally launched MCP Agents such as Codex and Claude. */
-export type McpConnectionScope =
-  'all-saved-connections' | 'selected-connections' | 'active-session' | 'default-connection'
+/** Saved connections exposed to externally launched MCP Agents such as Codex and Claude. */
+export type McpConnectionScope = 'all-saved-connections' | 'selected-connections'
 
 /** Whether an external MCP Agent may request state-changing operations. */
 export type McpOperationPolicy = 'read-only' | 'approved-operations' | 'full-access'
@@ -282,8 +281,6 @@ export interface McpAgentPreferences {
   operationPolicy: McpOperationPolicy
   /** Saved connection profiles that an Agent may access in selected mode. */
   allowedProfileIds: string[]
-  /** Saved connection profile used when `connectionScope` is `default-connection`. */
-  defaultProfileId?: string
 }
 
 export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
