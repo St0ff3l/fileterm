@@ -2778,16 +2778,7 @@ pub async fn app_export_connections_as_files(
             crate::services::connections::export_filename(name, id, &mut used_names)
         );
         let payload = if format == "compatible" {
-            serde_json::json!({
-                "id": profile.get("id"), "name": profile.get("name"),
-                "description": profile.get("note"), "conection_type": profile.get("type"),
-                "host": profile.get("host"), "port": profile.get("port"),
-                "user_name": profile.get("username"), "terminal_encoding": profile.get("encoding"),
-                "authentication_type": profile.get("authType"), "password": profile.get("password"),
-                "private_key_path": profile.get("privateKeyPath"), "passphrase": profile.get("passphrase"),
-                "exec_channel_enable": profile.get("enableExecChannel"),
-                "port_forwarding_list": profile.get("forwards"),
-            })
+            crate::services::connections::build_compatible_profile_payload(&profile)
         } else {
             serde_json::json!({
                 "schemaVersion": 1,
@@ -3421,11 +3412,39 @@ pub async fn app_execute_remote_command(
     serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
 }
 
-fn create_tab_layout(profile_type: &str) -> String {
+fn create_tab_layout(profile: &serde_json::Value) -> String {
+    let profile_type = profile.get("type").and_then(Value::as_str).unwrap_or("ssh");
     match profile_type {
+        "ssh"
+            if crate::services::workspace::ConnectionCapabilities::is_network_device_profile(
+                profile,
+            ) =>
+        {
+            "terminal-only".to_string()
+        }
         "ssh" => "terminal-file".to_string(),
         "ftp" => "file-only".to_string(),
         _ => "terminal-only".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tab_layout_tests {
+    use super::create_tab_layout;
+
+    #[test]
+    fn network_device_ssh_profiles_start_with_terminal_only_layout() {
+        assert_eq!(
+            create_tab_layout(&serde_json::json!({
+                "type": "ssh",
+                "deviceMode": "network-device"
+            })),
+            "terminal-only"
+        );
+        assert_eq!(
+            create_tab_layout(&serde_json::json!({ "type": "ssh" })),
+            "terminal-file"
+        );
     }
 }
 
@@ -3607,14 +3626,13 @@ async fn spawn_session_for_profile(
         .unwrap_or("SSH Session");
 
     let tab_id = format!("tab-{}", uuid::Uuid::new_v4());
-    let capabilities =
-        crate::services::workspace::ConnectionCapabilities::for_session_type(profile_type);
+    let capabilities = crate::services::workspace::ConnectionCapabilities::for_profile(profile);
     let new_tab = crate::services::WorkspaceTab {
         id: tab_id.clone(),
         profile_id: profile_id.to_string(),
         session_type: profile_type.to_string(),
         title: name.to_string(),
-        layout: create_tab_layout(profile_type),
+        layout: create_tab_layout(profile),
         status: crate::services::WorkspaceTabStatus::Connecting,
         pane_root: None,
         pane_root_tab_id,
@@ -3664,12 +3682,15 @@ async fn spawn_session_for_profile(
             crate::services::SessionSnapshot {
                 profile_id: profile_id.to_string(),
                 ai_session_revision: "0".to_string(),
+                device_mode: crate::services::workspace::configured_device_mode_for_profile(
+                    profile,
+                ),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: "连接主机...\r\n".to_string(),
                 remote_path: initial_remote_path,
                 shell_cwd: None,
-                follow_shell_cwd: true,
+                follow_shell_cwd: capabilities.shell_integration,
                 remote_files_loading: false,
                 remote_files: Vec::new(),
                 sftp_unavailable_reason: None,
@@ -3783,6 +3804,7 @@ async fn spawn_local_terminal_tab(
             crate::services::SessionSnapshot {
                 profile_id: "__local_terminal__".to_string(),
                 ai_session_revision: "0".to_string(),
+                device_mode: None,
                 access_host: launch.cwd.clone(),
                 summary: launch.shell.clone(),
                 terminal_transcript: crate::sessions::terminal::local_terminal_startup_transcript()
@@ -4726,7 +4748,13 @@ pub async fn app_reconnect_tab(
             // the worker and append another reconnect banner.
             let should_start = {
                 let mut tabs = state.tabs.write().await;
-                claim_reconnect_tab(&mut tabs, &tab_id)
+                let should_start = claim_reconnect_tab(&mut tabs, &tab_id);
+                if should_start {
+                    if let Some(tab) = tabs.iter_mut().find(|tab| tab.id == tab_id) {
+                        tab.layout = create_tab_layout(profile);
+                    }
+                }
+                should_start
             };
             if !should_start {
                 return get_workspace_snapshot(app).await;
@@ -4744,12 +4772,22 @@ pub async fn app_reconnect_tab(
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(&tab_id) {
                     session.connected = false;
+                    session.device_mode =
+                        crate::services::workspace::configured_device_mode_for_profile(profile);
                     session.remote_files_loading = false;
                     session.shell_user = None;
+                    if crate::services::workspace::ConnectionCapabilities::is_network_device_profile(
+                        profile,
+                    ) {
+                        session.shell_cwd = None;
+                    }
                     session.file_access_mode = "user".to_string();
                     session.has_reusable_sudo_auth = false;
                     session.reconnect_mode =
                         crate::services::workspace::reconnect_mode_for_profile(profile);
+                    session.capabilities =
+                        crate::services::workspace::ConnectionCapabilities::for_profile(profile);
+                    session.follow_shell_cwd = session.capabilities.shell_integration;
                     // Append a reconnect separator instead of wiping history.
                     if !session.terminal_transcript.is_empty() {
                         session
@@ -5254,8 +5292,16 @@ pub async fn app_set_follow_shell_cwd(
     let cwd_to_follow = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&tab_id) {
-            session.follow_shell_cwd = enabled;
-            if enabled && session.shell_cwd.as_deref() != Some(session.remote_path.as_str()) {
+            // Network-device and exec-disabled SSH sessions deliberately do
+            // not expose shell integration. Keep this command-side gate in
+            // addition to the renderer capability checks so a stale/legacy
+            // FileManager request cannot re-enable CWD tracking after the
+            // worker has classified the session.
+            let effective_enabled = enabled && session.capabilities.shell_integration;
+            session.follow_shell_cwd = effective_enabled;
+            if effective_enabled
+                && session.shell_cwd.as_deref() != Some(session.remote_path.as_str())
+            {
                 session
                     .shell_cwd
                     .clone()

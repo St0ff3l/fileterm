@@ -15,7 +15,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, LazyLock,
+    Arc, LazyLock, Mutex as StdMutex,
 };
 use std::time::{Duration, Instant};
 
@@ -44,7 +44,7 @@ use super::{
 };
 use crate::services::{
     transfers::is_root_upload_staging_path,
-    workspace::{RemoteDiskSpace, RemoteFileCapabilities},
+    workspace::{ConnectionCapabilities, RemoteDiskSpace, RemoteFileCapabilities},
     WorkspaceTabStatus,
 };
 
@@ -88,6 +88,20 @@ const TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD: usize = 64 * 1024;
 const INITIAL_CAPABILITY_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 type SshShellWriteHalf = ChannelWriteHalf<russh::client::Msg>;
+type SharedRemoteSshId = Arc<StdMutex<Option<Vec<u8>>>>;
+
+struct OpenSshSession {
+    handle: Handle<ClientHandler>,
+    remote_sshid: Vec<u8>,
+}
+
+fn read_shared_remote_sshid(remote_sshid: &SharedRemoteSshId) -> Vec<u8> {
+    remote_sshid
+        .lock()
+        .ok()
+        .and_then(|value| value.clone())
+        .unwrap_or_default()
+}
 
 fn default_sftp_capabilities() -> RemoteFileCapabilities {
     RemoteFileCapabilities {
@@ -401,6 +415,309 @@ fn resource_monitoring_enabled(profile: &Value) -> bool {
 
 fn exec_channel_enabled(profile: &Value) -> bool {
     profile.get("enableExecChannel").and_then(Value::as_bool) != Some(false)
+}
+
+fn is_network_device_profile(profile: &Value) -> bool {
+    ConnectionCapabilities::is_network_device_profile(profile)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ResolvedSshDeviceMode {
+    Server,
+    NetworkDevice,
+}
+
+impl ResolvedSshDeviceMode {
+    fn as_profile_value(self) -> &'static str {
+        match self {
+            Self::Server => "server",
+            Self::NetworkDevice => "network-device",
+        }
+    }
+
+    fn as_log_value(self) -> &'static str {
+        self.as_profile_value()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SshDeviceModeResolution {
+    mode: ResolvedSshDeviceMode,
+    source: &'static str,
+    family: Option<&'static str>,
+}
+
+/// Keep the SSH identification safe for diagnostics and matching. russh has
+/// already validated the protocol line, but retaining only printable ASCII
+/// and a bounded length keeps a malformed peer from injecting log controls.
+fn normalize_ssh_identification(remote_sshid: &[u8]) -> String {
+    let mut normalized = String::with_capacity(remote_sshid.len().min(255));
+    for character in String::from_utf8_lossy(remote_sshid).chars() {
+        if !(character == ' ' || character.is_ascii_graphic()) {
+            continue;
+        }
+        if normalized.len() + character.len_utf8() > 255 {
+            break;
+        }
+        normalized.push(character);
+    }
+    normalized
+}
+
+fn identification_contains_token(identification: &str, token: &str) -> bool {
+    identification
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .any(|part| part == token)
+}
+
+/// Match only conservative, vendor-level SSH software identifiers. This
+/// function never treats a generic OpenSSH banner as a network device and it
+/// never emits a vendor command; a match only selects the raw terminal path.
+fn detect_network_device_family(remote_sshid: &str) -> Option<&'static str> {
+    let identification = remote_sshid.to_ascii_lowercase();
+    if identification.contains("h3c")
+        || identification.contains("comware")
+        || identification.contains("3com")
+        || identification_contains_token(&identification, "mpssh")
+    {
+        return Some("h3c-comware");
+    }
+    // Older Huawei VRP firmware can advertise a dash-only software name,
+    // resulting in the full identification `SSH-1.99--`. Netcatty treats
+    // this exact legacy form as Huawei; keep the match narrow so arbitrary
+    // unknown SSH banners do not get classified as network devices.
+    if identification == "-"
+        || identification == "ssh-1.99--"
+        || identification.contains("huawei")
+        || identification_contains_token(&identification, "vrp")
+    {
+        return Some("huawei");
+    }
+    if identification.contains("cisco")
+        || identification.contains("ios-xe")
+        || identification.contains("ios xe")
+        || identification.contains("nx-os")
+        || identification.contains("nxos")
+        || identification_contains_token(&identification, "ios")
+    {
+        return Some("cisco");
+    }
+    None
+}
+
+/// Turn an explicit vendor selection into a conservative mode hint. The
+/// default `auto` value intentionally returns `None`: an unrecognised banner
+/// must continue to use the legacy server fallback. A non-default selection
+/// is an explicit user choice, so it may classify a device whose SSH
+/// identification is generic (for example, an embedded Dropbear build)
+/// without sending any vendor-specific command.
+fn configured_network_device_vendor(profile: &Value) -> Option<&'static str> {
+    match profile.get("networkDeviceVendor").and_then(Value::as_str) {
+        Some("generic") => Some("generic"),
+        Some("cisco") => Some("cisco"),
+        Some("huawei") => Some("huawei"),
+        Some("h3c-comware") => Some("h3c-comware"),
+        Some("custom") => Some("custom"),
+        _ => None,
+    }
+}
+
+fn resolve_ssh_device_mode(profile: &Value, remote_sshid: &[u8]) -> SshDeviceModeResolution {
+    match profile.get("deviceMode").and_then(Value::as_str) {
+        Some("network-device") => SshDeviceModeResolution {
+            mode: ResolvedSshDeviceMode::NetworkDevice,
+            source: "manual",
+            family: configured_network_device_vendor(profile),
+        },
+        Some("auto") => {
+            let identification = normalize_ssh_identification(remote_sshid);
+            match detect_network_device_family(&identification) {
+                Some(family) => SshDeviceModeResolution {
+                    mode: ResolvedSshDeviceMode::NetworkDevice,
+                    source: "banner",
+                    family: Some(family),
+                },
+                None => match configured_network_device_vendor(profile) {
+                    Some(family) => SshDeviceModeResolution {
+                        mode: ResolvedSshDeviceMode::NetworkDevice,
+                        source: "vendor-hint",
+                        family: Some(family),
+                    },
+                    None => SshDeviceModeResolution {
+                        mode: ResolvedSshDeviceMode::Server,
+                        source: "auto-fallback",
+                        family: None,
+                    },
+                },
+            }
+        }
+        Some("server") => SshDeviceModeResolution {
+            mode: ResolvedSshDeviceMode::Server,
+            source: "manual",
+            family: None,
+        },
+        None | Some(_) => SshDeviceModeResolution {
+            mode: ResolvedSshDeviceMode::Server,
+            source: "legacy-default",
+            family: None,
+        },
+    }
+}
+
+fn profile_with_resolved_device_mode(
+    profile: &Value,
+    resolution: SshDeviceModeResolution,
+) -> Value {
+    let mut effective_profile = profile.clone();
+    if let Some(object) = effective_profile.as_object_mut() {
+        object.insert(
+            "deviceMode".to_string(),
+            Value::String(resolution.mode.as_profile_value().to_string()),
+        );
+    }
+    effective_profile
+}
+
+fn log_ssh_device_mode_resolution(
+    app: &AppHandle,
+    tab_id: &str,
+    profile: &Value,
+    remote_sshid: &[u8],
+    resolution: SshDeviceModeResolution,
+) {
+    let configured_mode = match profile.get("deviceMode").and_then(Value::as_str) {
+        Some("auto") => "auto",
+        Some("network-device") => "network-device",
+        Some("server") => "server",
+        _ => "legacy-default",
+    };
+    let identification = normalize_ssh_identification(remote_sshid);
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!(
+            "device mode resolved mode={} source={} configured={} family={} identification={}",
+            resolution.mode.as_log_value(),
+            resolution.source,
+            configured_mode,
+            resolution.family.unwrap_or("unknown"),
+            if identification.is_empty() {
+                "unknown"
+            } else {
+                identification.as_str()
+            }
+        ),
+    );
+}
+
+async fn apply_resolved_device_mode_to_workspace(app: &AppHandle, tab_id: &str, profile: &Value) {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let mut capabilities = ConnectionCapabilities::for_profile(profile);
+    if !effective_exec_channel_enabled(profile) {
+        capabilities.resource_monitoring = false;
+        capabilities.shell_integration = false;
+    }
+    let layout = if capabilities.files {
+        "terminal-file"
+    } else {
+        "terminal-only"
+    };
+
+    {
+        let mut tabs = state.tabs.write().await;
+        if let Some(tab) = tabs.iter_mut().find(|tab| tab.id == tab_id) {
+            tab.layout = layout.to_string();
+        }
+    }
+    {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(tab_id) {
+            session.device_mode =
+                crate::services::workspace::configured_device_mode_for_profile(profile);
+            session.capabilities = capabilities.clone();
+            session.follow_shell_cwd = capabilities.shell_integration;
+            if is_network_device_profile(profile) {
+                session.shell_cwd = None;
+                session.shell_user = None;
+                session.remote_files_loading = false;
+                session.remote_files.clear();
+                session.remote_capabilities = None;
+                session.system_metrics = None;
+                session.sftp_unavailable_reason = None;
+                session.has_reusable_sudo_auth = false;
+            }
+        }
+    }
+}
+
+fn effective_exec_channel_enabled(profile: &Value) -> bool {
+    !is_network_device_profile(profile) && exec_channel_enabled(profile)
+}
+
+fn effective_resource_monitoring_enabled(profile: &Value) -> bool {
+    effective_exec_channel_enabled(profile) && resource_monitoring_enabled(profile)
+}
+
+async fn disable_resource_monitoring_capability(
+    app: &AppHandle,
+    tab_id: &str,
+    reason: impl Into<String>,
+) {
+    let reason = reason.into();
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let changed = {
+        let mut sessions = state.sessions.write().await;
+        if let Some(session) = sessions.get_mut(tab_id) {
+            let changed = session.capabilities.resource_monitoring;
+            session.capabilities.resource_monitoring = false;
+            if changed {
+                session.system_metrics = None;
+            }
+            changed
+        } else {
+            false
+        }
+    };
+
+    if !changed {
+        return;
+    }
+
+    crate::services::logging::session(
+        app,
+        "WARN",
+        "metrics",
+        tab_id,
+        format!("resource monitoring disabled: {reason}"),
+    );
+    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
+        let _ = app.emit("workspace:snapshot", snapshot);
+    }
+}
+
+fn effective_sftp_enabled(profile: &Value) -> bool {
+    !is_network_device_profile(profile)
+        && profile.get("sftpEnabled").and_then(Value::as_bool) != Some(false)
+}
+
+fn ssh_terminal_type(profile: &Value) -> &'static str {
+    let default_terminal_type = if is_network_device_profile(profile) {
+        "vt100"
+    } else {
+        "xterm-256color"
+    };
+
+    match profile.get("terminalType").and_then(Value::as_str) {
+        Some("xterm-256color") => "xterm-256color",
+        Some("xterm") => "xterm",
+        Some("vt100") => "vt100",
+        Some("vt220") => "vt220",
+        Some("ansi") => "ansi",
+        Some("linux") => "linux",
+        _ => default_terminal_type,
+    }
 }
 
 const DEFAULT_RESOURCE_MONITORING_INTERVAL_SECONDS: u64 = 1;
@@ -732,6 +1049,7 @@ pub struct ClientHandler {
     trusted_fingerprint: Option<String>,
     host_verification_waiting: Arc<AtomicBool>,
     interaction_timeout: Duration,
+    remote_sshid: SharedRemoteSshId,
     /// The WebView that owns this SSH interaction. Connection tests run in a
     /// standalone form window, so broadcasting the request to every WebView
     /// can race with window startup and leave the handshake waiting forever.
@@ -744,6 +1062,18 @@ pub type ClientHandle = Handle<ClientHandler>;
 
 impl Handler for ClientHandler {
     type Error = russh::Error;
+
+    async fn kex_done(
+        &mut self,
+        _shared_secret: Option<&[u8]>,
+        _names: &russh::Names,
+        session: &mut russh::client::Session,
+    ) -> Result<(), Self::Error> {
+        if let Ok(mut remote_sshid) = self.remote_sshid.lock() {
+            *remote_sshid = Some(session.remote_sshid().to_vec());
+        }
+        Ok(())
+    }
 
     async fn check_server_key(
         &mut self,
@@ -2852,6 +3182,7 @@ fn new_client_handler(
     host_verification_waiting: Arc<AtomicBool>,
     interaction_timeout: Duration,
     interaction_window_label: Option<String>,
+    remote_sshid: SharedRemoteSshId,
 ) -> ClientHandler {
     ClientHandler {
         app: app.clone(),
@@ -2863,6 +3194,7 @@ fn new_client_handler(
         host_verification_waiting,
         interaction_timeout,
         interaction_window_label,
+        remote_sshid,
     }
 }
 
@@ -3303,7 +3635,7 @@ async fn open_session(
     tab_id: &str,
     interaction_timeout: Duration,
     interaction_window_label: Option<String>,
-) -> Result<Handle<ClientHandler>, String> {
+) -> Result<OpenSshSession, String> {
     let mut effective_profile = profile.clone();
     ensure_password_credentials(&mut effective_profile, app, tab_id, interaction_timeout).await?;
     let profile = &effective_profile;
@@ -3434,7 +3766,7 @@ async fn open_session(
         // host itself could be resolved via another open_session call) and
         // Rust requires indirection for recursive async fns to avoid
         // infinitely-sized futures.
-        let jump_handle = Box::pin(open_session(
+        let jump_session = Box::pin(open_session(
             &jump_profile,
             app,
             tab_id,
@@ -3442,6 +3774,7 @@ async fn open_session(
             interaction_window_label.clone(),
         ))
         .await?;
+        let jump_handle = jump_session.handle;
         crate::services::logging::session(
             app,
             "INFO",
@@ -3456,7 +3789,8 @@ async fn open_session(
         // 发送 disconnect 消息，服务端可能残留半开 session 直到 TCP 超时。
         // target / retry handle 也需要显式 disconnect，否则目标机的
         // MaxStartups 统计可能虚高，极端情况下导致后续连接被拒绝。
-        let target_result: Result<Handle<ClientHandler>, String> = async {
+        let target_result: Result<OpenSshSession, String> = async {
+            let remote_sshid = Arc::new(StdMutex::new(None));
             let target_host_verification_waiting = Arc::new(AtomicBool::new(false));
             let mut target_handle = connect_target_through_jump(
                 &jump_handle,
@@ -3471,6 +3805,7 @@ async fn open_session(
                     target_host_verification_waiting,
                     interaction_timeout,
                     interaction_window_label.clone(),
+                    remote_sshid.clone(),
                 ),
                 &host,
                 port,
@@ -3488,7 +3823,10 @@ async fn open_session(
             )
             .await?
             {
-                AuthenticationResult::Authenticated => Ok(target_handle),
+                AuthenticationResult::Authenticated => Ok(OpenSshSession {
+                    handle: target_handle,
+                    remote_sshid: read_shared_remote_sshid(&remote_sshid),
+                }),
                 AuthenticationResult::NeedsFreshKeyboardInteractive => {
                     // russh cannot switch from a rejected password/public-key
                     // exchange to keyboard-interactive on the same handle.
@@ -3503,6 +3841,7 @@ async fn open_session(
                         ),
                     )
                     .await;
+                    let retry_remote_sshid = Arc::new(StdMutex::new(None));
                     let retry_host_verification_waiting = Arc::new(AtomicBool::new(false));
                     let mut retry_handle = connect_target_through_jump(
                         &jump_handle,
@@ -3517,6 +3856,7 @@ async fn open_session(
                             retry_host_verification_waiting,
                             interaction_timeout,
                             interaction_window_label.clone(),
+                            retry_remote_sshid.clone(),
                         ),
                         &host,
                         port,
@@ -3536,7 +3876,10 @@ async fn open_session(
                     )
                     .await?
                     {
-                        Ok(retry_handle)
+                        Ok(OpenSshSession {
+                            handle: retry_handle,
+                            remote_sshid: read_shared_remote_sshid(&retry_remote_sshid),
+                        })
                     } else {
                         let _ = timeout(
                             Duration::from_secs(3),
@@ -3567,7 +3910,7 @@ async fn open_session(
         .await;
 
         match target_result {
-            Ok(handle) => return Ok(handle),
+            Ok(session) => return Ok(session),
             Err(error) => {
                 // 显式断开跳板机 session，3s 超时防止 disconnect 本身卡住
                 // （网络已中断时 russh 可能无法发送 disconnect 消息）。
@@ -3591,6 +3934,14 @@ async fn open_session(
         connect_ssh_transport(profile, &host, port),
     )
     .await?;
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!("socket connected target={host}:{port}"),
+    );
+    let remote_sshid = Arc::new(StdMutex::new(None));
     let host_verification_waiting = Arc::new(AtomicBool::new(false));
     let mut handle = wait_for_ssh_handshake_with_network_timeout(
         "SSH protocol handshake",
@@ -3611,6 +3962,7 @@ async fn open_session(
                     host_verification_waiting,
                     interaction_timeout,
                     interaction_window_label.clone(),
+                    remote_sshid.clone(),
                 ),
             )
             .await
@@ -3618,8 +3970,12 @@ async fn open_session(
         },
     )
     .await?;
+    crate::services::logging::session(app, "INFO", "ssh", tab_id, "SSH handshake completed");
     match try_authenticate(&mut handle, &username, &auth_type, profile, app, tab_id).await? {
-        AuthenticationResult::Authenticated => Ok(handle),
+        AuthenticationResult::Authenticated => Ok(OpenSshSession {
+            handle,
+            remote_sshid: read_shared_remote_sshid(&remote_sshid),
+        }),
         AuthenticationResult::NeedsFreshKeyboardInteractive => {
             // See the equivalent jump-host path above: reconnect before
             // keyboard-interactive fallback so russh never stalls on a
@@ -3639,6 +3995,14 @@ async fn open_session(
                 connect_ssh_transport(profile, &host, port),
             )
             .await?;
+            crate::services::logging::session(
+                app,
+                "INFO",
+                "ssh",
+                tab_id,
+                format!("socket connected for authentication retry target={host}:{port}"),
+            );
+            let retry_remote_sshid = Arc::new(StdMutex::new(None));
             let retry_host_verification_waiting = Arc::new(AtomicBool::new(false));
             let mut retry_handle = wait_for_ssh_handshake_with_network_timeout(
                 "SSH protocol re-handshake",
@@ -3659,6 +4023,7 @@ async fn open_session(
                             retry_host_verification_waiting,
                             interaction_timeout,
                             interaction_window_label,
+                            retry_remote_sshid.clone(),
                         ),
                     )
                     .await
@@ -3680,7 +4045,10 @@ async fn open_session(
             )
             .await?
             {
-                Ok(retry_handle)
+                Ok(OpenSshSession {
+                    handle: retry_handle,
+                    remote_sshid: read_shared_remote_sshid(&retry_remote_sshid),
+                })
             } else {
                 let _ = timeout(
                     Duration::from_secs(3),
@@ -3716,7 +4084,7 @@ pub async fn test_connection(
     interaction_window_label: String,
 ) -> Result<(), String> {
     crate::services::logging::session(app, "INFO", "ssh", tab_id, "connection test started");
-    let handle = match open_session(
+    let session = match open_session(
         profile,
         app,
         tab_id,
@@ -3737,6 +4105,10 @@ pub async fn test_connection(
             return Err(error);
         }
     };
+    let handle = session.handle;
+    let remote_sshid = session.remote_sshid;
+    let resolution = resolve_ssh_device_mode(profile, &remote_sshid);
+    log_ssh_device_mode_resolution(app, tab_id, profile, &remote_sshid, resolution);
     let _ = timeout(
         Duration::from_secs(3),
         handle.disconnect(Disconnect::ByApplication, "connection test complete", "en"),
@@ -4733,14 +5105,12 @@ async fn run_worker_loop(
         .and_then(|u| u.as_str())
         .unwrap_or("root")
         .to_string();
-    let exec_channel_enabled = exec_channel_enabled(profile);
-    let operation_timeout = file_operation_timeout(profile);
 
     // ── Main session (single SSH session multiplexes shell + SFTP + metrics) ─
     // Servers with strict MaxSessions reject parallel sessions, so we reuse
     // one authenticated handle for every channel. The handle is wrapped in
     // `Arc` so the background metrics task can share it with the main loop.
-    let handle: Arc<Handle<ClientHandler>> = match open_session(
+    let session = match open_session(
         profile,
         app,
         tab_id,
@@ -4749,7 +5119,7 @@ async fn run_worker_loop(
     )
     .await
     {
-        Ok(h) => Arc::new(h),
+        Ok(h) => h,
         Err(error) => {
             crate::services::logging::session(
                 app,
@@ -4762,6 +5132,27 @@ async fn run_worker_loop(
         }
     };
     crate::services::logging::session(app, "INFO", "ssh", tab_id, "SSH session established");
+    let remote_sshid = session.remote_sshid;
+    let handle: Arc<Handle<ClientHandler>> = Arc::new(session.handle);
+    let resolution = resolve_ssh_device_mode(profile, &remote_sshid);
+    log_ssh_device_mode_resolution(app, tab_id, profile, &remote_sshid, resolution);
+    let effective_profile = profile_with_resolved_device_mode(profile, resolution);
+    let profile = &effective_profile;
+    apply_resolved_device_mode_to_workspace(app, tab_id, profile).await;
+    let network_device_mode = is_network_device_profile(profile);
+    let exec_channel_enabled = effective_exec_channel_enabled(profile);
+    let terminal_type = ssh_terminal_type(profile);
+    let operation_timeout = file_operation_timeout(profile);
+    crate::services::logging::session(
+        app,
+        "INFO",
+        "ssh",
+        tab_id,
+        format!(
+            "effective SSH session mode={} terminal_type={terminal_type}",
+            resolution.mode.as_log_value()
+        ),
+    );
 
     // ── Shell channel ──────────────────────────────────────────────────────
     // 三步都加 timeout：服务器在 PTY 协商阶段卡住（嵌入式 dropbear /
@@ -4785,7 +5176,7 @@ async fn run_worker_loop(
         SHELL_INIT_STEP_TIMEOUT,
         shell_channel.request_pty(
             true,
-            "xterm-256color",
+            terminal_type,
             80,
             24,
             0,
@@ -4860,7 +5251,16 @@ async fn run_worker_loop(
     // channel.wait() 循环读取且无内层 timeout。服务器在 exec 模式下卡住
     // 时整个 probe 会永久 await，worker 永远起不来。超时后回落到
     // "unknown"，shell CWD 注入会被 fail-closed 门控跳过，终端仍可用。
-    let platform = if exec_channel_enabled {
+    let platform = if network_device_mode {
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "metrics",
+            tab_id,
+            "network-device mode; skipping platform probe",
+        );
+        "unknown".to_string()
+    } else if exec_channel_enabled {
         match timeout(
             PLATFORM_PROBE_TIMEOUT,
             super::system_metrics::probe_remote_platform(&handle),
@@ -4954,11 +5354,15 @@ async fn run_worker_loop(
             .unwrap_or_else(|| {
                 crate::services::workspace::initial_remote_path_for_profile(profile)
             });
-        let existing_shell_cwd = sessions
-            .get(tab_id)
-            .and_then(|session| session.shell_cwd.clone());
+        let existing_shell_cwd = if network_device_mode {
+            None
+        } else {
+            sessions
+                .get(tab_id)
+                .and_then(|session| session.shell_cwd.clone())
+        };
         let mut capabilities =
-            crate::services::workspace::ConnectionCapabilities::for_session_type("ssh");
+            crate::services::workspace::ConnectionCapabilities::for_profile(profile);
         if !exec_channel_enabled {
             capabilities.resource_monitoring = false;
             capabilities.shell_integration = false;
@@ -4972,6 +5376,9 @@ async fn run_worker_loop(
                     .unwrap_or("")
                     .to_string(),
                 ai_session_revision: state.ai_session_revision(tab_id).await.to_string(),
+                device_mode: crate::services::workspace::configured_device_mode_for_profile(
+                    profile,
+                ),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: existing_transcript,
@@ -4986,10 +5393,11 @@ async fn run_worker_loop(
                 // A saved sudo password is already a reusable credential for
                 // the file toolbar. Keep only this non-secret presence bit in
                 // the public snapshot; the password itself stays worker-local.
-                has_reusable_sudo_auth: profile
-                    .get("sudoPassword")
-                    .and_then(Value::as_str)
-                    .is_some_and(|password| !password.is_empty()),
+                has_reusable_sudo_auth: !network_device_mode
+                    && profile
+                        .get("sudoPassword")
+                        .and_then(Value::as_str)
+                        .is_some_and(|password| !password.is_empty()),
                 login_user: profile
                     .get("username")
                     .and_then(Value::as_str)
@@ -5018,11 +5426,17 @@ async fn run_worker_loop(
     // the channel into its protocol stream. A failed SFTP negotiation must
     // not tear down an otherwise healthy SSH shell: Electron keeps terminal
     // and tunnel features available while exposing the file-channel error.
-    let sftp_enabled = profile
-        .get("sftpEnabled")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-    let (sftp_arc, sftp_unavailable_reason) = if !sftp_enabled {
+    let sftp_enabled = effective_sftp_enabled(profile);
+    let (sftp_arc, sftp_unavailable_reason) = if network_device_mode {
+        crate::services::logging::session(
+            app,
+            "INFO",
+            "sftp",
+            tab_id,
+            "network-device mode; skipping SFTP channel",
+        );
+        (None, None)
+    } else if !sftp_enabled {
         let reason = "SFTP disabled for this connection profile".to_string();
         crate::services::logging::session(
             app,
@@ -5378,7 +5792,7 @@ async fn run_worker_loop(
     // The remote side controls the 1s cadence via `sleep 1`, so data arrives
     // at a rock-steady interval regardless of SSH RTT.
     let metrics_shutdown = Arc::new(tokio::sync::Notify::new());
-    if exec_channel_enabled && resource_monitoring_enabled(profile) {
+    if effective_resource_monitoring_enabled(profile) {
         let metrics_shutdown_clone = metrics_shutdown.clone();
         let metrics_handle = Arc::clone(&handle);
         let metrics_app = app.clone();
@@ -5813,40 +6227,42 @@ async fn run_worker_loop(
                     // than replaying a stale partial command after recovery.
                     deferred_terminal_input.clear();
                 }
-                let previous_pending_command = pending_root_access_command.clone();
-                if capture_root_access_password_input(
-                    &data,
-                    &mut awaiting_root_access_auth,
-                    &mut pending_sudo_password,
-                    &mut recent_terminal_input,
-                    &mut root_password,
-                    &mut last_authenticated_root_access,
-                    &mut pending_root_access_command,
-                ) {
-                    cache_root_password_for_auth(
-                        last_authenticated_root_access.as_ref(),
-                        &root_password,
-                        &mut sudo_password,
-                        &mut su_password,
-                    );
-                    let mut sessions = state.sessions.write().await;
-                    if let Some(session) = sessions.get_mut(tab_id) {
-                        session.has_reusable_sudo_auth = matches!(
+                if !network_device_mode {
+                    let previous_pending_command = pending_root_access_command.clone();
+                    if capture_root_access_password_input(
+                        &data,
+                        &mut awaiting_root_access_auth,
+                        &mut pending_sudo_password,
+                        &mut recent_terminal_input,
+                        &mut root_password,
+                        &mut last_authenticated_root_access,
+                        &mut pending_root_access_command,
+                    ) {
+                        cache_root_password_for_auth(
                             last_authenticated_root_access.as_ref(),
-                            Some(auth) if auth.method == RootFileAccessMethod::Sudo
-                        ) && root_password.is_some();
-                    }
-                }
-                if pending_root_access_command != previous_pending_command {
-                    if let Some(auth) = pending_root_access_command.as_ref() {
-                        crate::services::logging::ssh_debug(
-                            app,
-                            tab_id,
-                            format!(
-                                "interactive privilege command tracked method={:?} target_user={} interactive_shell={}",
-                                auth.method, auth.target_user, auth.interactive_shell
-                            ),
+                            &root_password,
+                            &mut sudo_password,
+                            &mut su_password,
                         );
+                        let mut sessions = state.sessions.write().await;
+                        if let Some(session) = sessions.get_mut(tab_id) {
+                            session.has_reusable_sudo_auth = matches!(
+                                last_authenticated_root_access.as_ref(),
+                                Some(auth) if auth.method == RootFileAccessMethod::Sudo
+                            ) && root_password.is_some();
+                        }
+                    }
+                    if pending_root_access_command != previous_pending_command {
+                        if let Some(auth) = pending_root_access_command.as_ref() {
+                            crate::services::logging::ssh_debug(
+                                app,
+                                tab_id,
+                                format!(
+                                    "interactive privilege command tracked method={:?} target_user={} interactive_shell={}",
+                                    auth.method, auth.target_user, auth.interactive_shell
+                                ),
+                            );
+                        }
                     }
                 }
                 if contains_interrupt_byte(&data) {
@@ -5903,41 +6319,43 @@ async fn run_worker_loop(
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(cmd) => {
-                        if let WorkerCmd::WriteTerminal(data) = &cmd {
-                            let previous_pending_command = pending_root_access_command.clone();
-                            if capture_root_access_password_input(
-                                data,
-                                &mut awaiting_root_access_auth,
-                                &mut pending_sudo_password,
-                                &mut recent_terminal_input,
-                                &mut root_password,
-                                &mut last_authenticated_root_access,
-                                &mut pending_root_access_command,
-                            ) {
-                                cache_root_password_for_auth(
-                                    last_authenticated_root_access.as_ref(),
-                                    &root_password,
-                                    &mut sudo_password,
-                                    &mut su_password,
-                                );
-                                let mut sessions = state.sessions.write().await;
-                                if let Some(session) = sessions.get_mut(tab_id) {
-                                    session.has_reusable_sudo_auth = matches!(
+                        if !network_device_mode {
+                            if let WorkerCmd::WriteTerminal(data) = &cmd {
+                                let previous_pending_command = pending_root_access_command.clone();
+                                if capture_root_access_password_input(
+                                    data,
+                                    &mut awaiting_root_access_auth,
+                                    &mut pending_sudo_password,
+                                    &mut recent_terminal_input,
+                                    &mut root_password,
+                                    &mut last_authenticated_root_access,
+                                    &mut pending_root_access_command,
+                                ) {
+                                    cache_root_password_for_auth(
                                         last_authenticated_root_access.as_ref(),
-                                        Some(auth) if auth.method == RootFileAccessMethod::Sudo
-                                    ) && root_password.is_some();
-                                }
-                            }
-                            if pending_root_access_command != previous_pending_command {
-                                if let Some(auth) = pending_root_access_command.as_ref() {
-                                    crate::services::logging::ssh_debug(
-                                        app,
-                                        tab_id,
-                                        format!(
-                                            "interactive privilege command tracked method={:?} target_user={} interactive_shell={}",
-                                            auth.method, auth.target_user, auth.interactive_shell
-                                        ),
+                                        &root_password,
+                                        &mut sudo_password,
+                                        &mut su_password,
                                     );
+                                    let mut sessions = state.sessions.write().await;
+                                    if let Some(session) = sessions.get_mut(tab_id) {
+                                        session.has_reusable_sudo_auth = matches!(
+                                            last_authenticated_root_access.as_ref(),
+                                            Some(auth) if auth.method == RootFileAccessMethod::Sudo
+                                        ) && root_password.is_some();
+                                    }
+                                }
+                                if pending_root_access_command != previous_pending_command {
+                                    if let Some(auth) = pending_root_access_command.as_ref() {
+                                        crate::services::logging::ssh_debug(
+                                            app,
+                                            tab_id,
+                                            format!(
+                                                "interactive privilege command tracked method={:?} target_user={} interactive_shell={}",
+                                                auth.method, auth.target_user, auth.interactive_shell
+                                            ),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -6048,60 +6466,64 @@ async fn run_worker_loop(
                     Some(ChannelMsg::Data { data }) => {
                         let bytes = data.as_ref();
                         let text = String::from_utf8_lossy(bytes);
-                        let previous_awaiting_auth = awaiting_root_access_auth.clone();
-                        if track_root_access_prompt_from_terminal(
-                            &text,
-                            &mut sudo_prompt_buffer,
-                            &mut awaiting_root_access_auth,
-                            &mut pending_sudo_password,
-                            &mut root_password,
-                            &mut last_authenticated_root_access,
-                            &mut pending_root_access_command,
-                        ) {
-                            cache_root_password_for_auth(
-                                last_authenticated_root_access.as_ref(),
-                                &root_password,
-                                &mut sudo_password,
-                                &mut su_password,
-                            );
-                            let mut sessions = state.sessions.write().await;
-                            if let Some(session) = sessions.get_mut(tab_id) {
-                                session.has_reusable_sudo_auth = false;
+                        let (new_cwd, new_user) = if network_device_mode {
+                            (None, None)
+                        } else {
+                            let previous_awaiting_auth = awaiting_root_access_auth.clone();
+                            if track_root_access_prompt_from_terminal(
+                                &text,
+                                &mut sudo_prompt_buffer,
+                                &mut awaiting_root_access_auth,
+                                &mut pending_sudo_password,
+                                &mut root_password,
+                                &mut last_authenticated_root_access,
+                                &mut pending_root_access_command,
+                            ) {
+                                cache_root_password_for_auth(
+                                    last_authenticated_root_access.as_ref(),
+                                    &root_password,
+                                    &mut sudo_password,
+                                    &mut su_password,
+                                );
+                                let mut sessions = state.sessions.write().await;
+                                if let Some(session) = sessions.get_mut(tab_id) {
+                                    session.has_reusable_sudo_auth = false;
+                                }
                             }
-                        }
-                        if autofill_root_access_password(
-                            &shell_writer,
-                            &mut awaiting_root_access_auth,
-                            &mut pending_sudo_password,
-                            &mut root_password,
-                            &sudo_password,
-                            &su_password,
-                        )
-                        .await?
-                        {
-                            crate::services::logging::ssh_debug(
-                                app,
-                                tab_id,
-                                "interactive privilege password filled from connection profile",
-                            );
-                        }
-                        if awaiting_root_access_auth != previous_awaiting_auth {
-                            if let Some(auth) = awaiting_root_access_auth.as_ref() {
+                            if autofill_root_access_password(
+                                &shell_writer,
+                                &mut awaiting_root_access_auth,
+                                &mut pending_sudo_password,
+                                &mut root_password,
+                                &sudo_password,
+                                &su_password,
+                            )
+                            .await?
+                            {
                                 crate::services::logging::ssh_debug(
                                     app,
                                     tab_id,
-                                    format!(
-                                        "root auth prompt tracked method={:?} target_user={} pending_command={:?}",
-                                        auth.method,
-                                        auth.target_user,
-                                        pending_root_access_command
-                                            .as_ref()
-                                            .map(|pending| pending.method)
-                                    ),
+                                    "interactive privilege password filled from connection profile",
                                 );
                             }
-                        }
-                        let (new_cwd, new_user) = track_cwd_and_user(&text, &mut cwd_buffer);
+                            if awaiting_root_access_auth != previous_awaiting_auth {
+                                if let Some(auth) = awaiting_root_access_auth.as_ref() {
+                                    crate::services::logging::ssh_debug(
+                                        app,
+                                        tab_id,
+                                        format!(
+                                            "root auth prompt tracked method={:?} target_user={} pending_command={:?}",
+                                            auth.method,
+                                            auth.target_user,
+                                            pending_root_access_command
+                                                .as_ref()
+                                                .map(|pending| pending.method)
+                                        ),
+                                    );
+                                }
+                            }
+                            track_cwd_and_user(&text, &mut cwd_buffer)
+                        };
                         let deferred_cwd_to_follow = if new_user.is_some() {
                             pending_cwd_marker_without_user.take()
                         } else {
@@ -6464,41 +6886,43 @@ async fn run_worker_loop(
                         // the auth detector so `su -` credentials are captured
                         // before the file exec channel is opened.
                         let text = String::from_utf8_lossy(data.as_ref());
-                        if track_root_access_prompt_from_terminal(
-                            &text,
-                            &mut sudo_prompt_buffer,
-                            &mut awaiting_root_access_auth,
-                            &mut pending_sudo_password,
-                            &mut root_password,
-                            &mut last_authenticated_root_access,
-                            &mut pending_root_access_command,
-                        ) {
-                            cache_root_password_for_auth(
-                                last_authenticated_root_access.as_ref(),
-                                &root_password,
-                                &mut sudo_password,
-                                &mut su_password,
-                            );
-                            let mut sessions = state.sessions.write().await;
-                            if let Some(session) = sessions.get_mut(tab_id) {
-                                session.has_reusable_sudo_auth = false;
+                        if !network_device_mode {
+                            if track_root_access_prompt_from_terminal(
+                                &text,
+                                &mut sudo_prompt_buffer,
+                                &mut awaiting_root_access_auth,
+                                &mut pending_sudo_password,
+                                &mut root_password,
+                                &mut last_authenticated_root_access,
+                                &mut pending_root_access_command,
+                            ) {
+                                cache_root_password_for_auth(
+                                    last_authenticated_root_access.as_ref(),
+                                    &root_password,
+                                    &mut sudo_password,
+                                    &mut su_password,
+                                );
+                                let mut sessions = state.sessions.write().await;
+                                if let Some(session) = sessions.get_mut(tab_id) {
+                                    session.has_reusable_sudo_auth = false;
+                                }
                             }
-                        }
-                        if autofill_root_access_password(
-                            &shell_writer,
-                            &mut awaiting_root_access_auth,
-                            &mut pending_sudo_password,
-                            &mut root_password,
-                            &sudo_password,
-                            &su_password,
-                        )
-                        .await?
-                        {
-                            crate::services::logging::ssh_debug(
-                                app,
-                                tab_id,
-                                "interactive privilege password filled from connection profile",
-                            );
+                            if autofill_root_access_password(
+                                &shell_writer,
+                                &mut awaiting_root_access_auth,
+                                &mut pending_sudo_password,
+                                &mut root_password,
+                                &sudo_password,
+                                &su_password,
+                            )
+                            .await?
+                            {
+                                crate::services::logging::ssh_debug(
+                                    app,
+                                    tab_id,
+                                    "interactive privilege password filled from connection profile",
+                                );
+                            }
                         }
                         batch_buffer.extend_from_slice(data.as_ref());
                         if batch_buffer.len() >= TERMINAL_BATCH_BUFFER_FLUSH_THRESHOLD {

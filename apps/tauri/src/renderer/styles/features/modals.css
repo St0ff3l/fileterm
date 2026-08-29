@@ -760,6 +760,11 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   font-size: 13px;
 }
 
+.terminal-key-box label > .ssh-terminal-type-hint {
+  grid-column: 2;
+  margin-left: 0;
+}
+
 .ssh-checkbox {
   display: flex;
   align-items: center;

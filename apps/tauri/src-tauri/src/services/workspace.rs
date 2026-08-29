@@ -289,6 +289,37 @@ pub struct RemoteFileCapabilities {
 }
 
 impl ConnectionCapabilities {
+    /// Return whether an SSH profile explicitly targets an interactive network
+    /// device instead of a POSIX/Windows server. Missing and unknown values
+    /// deliberately fall back to the legacy server behavior.
+    pub fn is_network_device_profile(profile: &serde_json::Value) -> bool {
+        profile.get("type").and_then(serde_json::Value::as_str) == Some("ssh")
+            && profile
+                .get("deviceMode")
+                .and_then(serde_json::Value::as_str)
+                == Some("network-device")
+    }
+
+    pub fn for_profile(profile: &serde_json::Value) -> Self {
+        if Self::is_network_device_profile(profile) {
+            return Self {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: true,
+            };
+        }
+
+        Self::for_session_type(
+            profile
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("ssh"),
+        )
+    }
+
     pub fn for_session_type(session_type: &str) -> Self {
         match session_type {
             "ssh" => Self {
@@ -334,6 +365,11 @@ pub struct SessionSnapshot {
     /// Monotonic terminal-target identity. This must not change for ordinary
     /// terminal output; it changes only when the interactive target changes.
     pub ai_session_revision: String,
+    /// Effective SSH session mode after banner resolution. `auto` is never
+    /// exposed here: a connected session is either a normal server or a
+    /// network device, while a connecting legacy snapshot keeps this empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_mode: Option<String>,
     pub access_host: String,
     pub summary: String,
     pub terminal_transcript: String,
@@ -376,6 +412,24 @@ pub fn reconnect_mode_for_profile(profile: &serde_json::Value) -> Option<String>
             .unwrap_or("none")
             .to_string(),
     )
+}
+
+/// Return the explicit SSH mode that is safe to expose while a session is
+/// reconnecting. Auto detection is resolved only after the SSH handshake, so
+/// callers must clear the old effective mode until the new banner is known.
+pub fn configured_device_mode_for_profile(profile: &serde_json::Value) -> Option<String> {
+    if profile.get("type").and_then(serde_json::Value::as_str) != Some("ssh") {
+        return None;
+    }
+
+    match profile
+        .get("deviceMode")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("server") => Some("server".to_string()),
+        Some("network-device") => Some("network-device".to_string()),
+        _ => None,
+    }
 }
 
 /// Initial browser path for file-capable sessions. SSH follows Electron's
@@ -765,8 +819,9 @@ impl WorkspaceState {
 #[cfg(test)]
 mod tests {
     use super::{
-        initial_remote_path_for_profile, reconnect_mode_for_profile, ConnectionCapabilities,
-        PaneNode, SplitDirection, TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
+        configured_device_mode_for_profile, initial_remote_path_for_profile,
+        reconnect_mode_for_profile, ConnectionCapabilities, PaneNode, SplitDirection,
+        TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
     };
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
@@ -787,6 +842,41 @@ mod tests {
         assert_eq!(value["shellIntegration"], true);
         assert_eq!(value["fileAccess"], true);
         assert_eq!(value["tunnels"], true);
+    }
+
+    #[test]
+    fn network_device_profiles_expose_only_terminal_and_tunnels() {
+        let profile = serde_json::json!({
+            "type": "ssh",
+            "deviceMode": "network-device"
+        });
+
+        assert!(ConnectionCapabilities::is_network_device_profile(&profile));
+        assert_eq!(
+            ConnectionCapabilities::for_profile(&profile),
+            ConnectionCapabilities {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: true,
+            }
+        );
+    }
+
+    #[test]
+    fn missing_or_auto_device_mode_keeps_legacy_server_capabilities() {
+        for profile in [
+            serde_json::json!({ "type": "ssh" }),
+            serde_json::json!({ "type": "ssh", "deviceMode": "auto" }),
+        ] {
+            assert!(!ConnectionCapabilities::is_network_device_profile(&profile));
+            assert_eq!(
+                ConnectionCapabilities::for_profile(&profile),
+                ConnectionCapabilities::for_session_type("ssh")
+            );
+        }
     }
 
     #[test]
@@ -843,6 +933,28 @@ mod tests {
                 "reconnectMode": "auto"
             })),
             Some("auto".to_string())
+        );
+    }
+
+    #[test]
+    fn configured_device_mode_does_not_publish_auto_before_handshake() {
+        assert_eq!(
+            configured_device_mode_for_profile(&serde_json::json!({
+                "type": "ssh",
+                "deviceMode": "network-device"
+            })),
+            Some("network-device".to_string())
+        );
+        assert_eq!(
+            configured_device_mode_for_profile(&serde_json::json!({
+                "type": "ssh",
+                "deviceMode": "auto"
+            })),
+            None
+        );
+        assert_eq!(
+            configured_device_mode_for_profile(&serde_json::json!({ "type": "ftp" })),
+            None
         );
     }
 

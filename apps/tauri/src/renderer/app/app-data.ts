@@ -52,6 +52,8 @@ export const defaultForm: CreateProfileInput = {
   passphrase: '',
   trustedHostFingerprint: '',
   authType: 'password',
+  deviceMode: 'server',
+  networkDeviceVendor: 'auto',
   encoding: 'UTF-8',
   backspaceKey: 'ASCII',
   deleteKey: 'VT220',
@@ -75,7 +77,9 @@ export const defaultForm: CreateProfileInput = {
   securityMode: 'none',
   transferMode: 'passive',
   certificateFingerprint: '',
-  terminalType: 'xterm-256color',
+  // Leave the auto-detect terminal unset so the backend can choose vt100 for
+  // a detected network device and xterm-256color for an ordinary server.
+  terminalType: undefined,
   crNul: true,
   loginScript: '',
   proxy: { type: 'none', host: '', port: 1080, username: '' },
@@ -166,6 +170,7 @@ export function profileToForm(
 ): CreateProfileInput {
   const sshConnectionSettings =
     profile.type === 'ssh' ? connectionSettingsForProfile(profile, connectionDefaults) : DEFAULT_SSH_CONNECTION_DEFAULTS
+  const isNetworkDevice = profile.type === 'ssh' && profile.deviceMode === 'network-device'
   return {
     type: profile.type,
     name: profile.name,
@@ -181,6 +186,8 @@ export function profileToForm(
     useEmptyPassword: profile.type === 'ssh' ? sshConnectionSettings.useEmptyPassword : false,
     trustedHostFingerprint: profile.type === 'ssh' ? (profile.trustedHostFingerprint ?? '') : '',
     authType: profile.type === 'ssh' ? (profile.authType === 'system' ? 'password' : profile.authType) : 'password',
+    deviceMode: profile.type === 'ssh' ? (profile.deviceMode ?? 'server') : undefined,
+    networkDeviceVendor: profile.type === 'ssh' ? (profile.networkDeviceVendor ?? 'auto') : undefined,
     privateKeyId: profile.type === 'ssh' ? (profile.privateKeyId ?? '') : '',
     privateKeyPath: profile.type === 'ssh' ? (profile.privateKeyPath ?? '') : '',
     passphrase: profile.type === 'ssh' ? (profile.passphrase ?? '') : '',
@@ -213,7 +220,14 @@ export function profileToForm(
     securityMode: profile.type === 'ftp' ? (profile.securityMode ?? (profile.secure ? 'explicit' : 'none')) : 'none',
     transferMode: profile.type === 'ftp' ? (profile.transferMode ?? 'passive') : 'passive',
     certificateFingerprint: profile.type === 'ftp' ? (profile.certificateFingerprint ?? '') : '',
-    terminalType: profile.type === 'telnet' ? (profile.terminalType ?? 'xterm-256color') : 'xterm-256color',
+    terminalType:
+      profile.type === 'ssh'
+        ? profile.deviceMode === 'auto'
+          ? profile.terminalType
+          : (profile.terminalType ?? (isNetworkDevice ? 'vt100' : 'xterm-256color'))
+        : profile.type === 'telnet'
+          ? (profile.terminalType ?? 'xterm-256color')
+          : 'xterm-256color',
     crNul: profile.type === 'telnet' ? (profile.crNul ?? true) : true,
     loginScript: profile.type === 'telnet' ? (profile.loginScript ?? '') : '',
     proxy:

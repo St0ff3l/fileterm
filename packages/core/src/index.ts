@@ -20,6 +20,12 @@ export interface LocalTerminalLaunchOptions {
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 export type FtpTransferMode = 'passive' | 'active'
 export type TelnetTerminalType = 'xterm-256color' | 'vt100' | 'vt220' | 'ansi'
+/** SSH session target. `auto` resolves conservatively from the SSH identification. */
+export type SshDeviceMode = 'auto' | 'server' | 'network-device'
+/** Terminal type requested by an SSH PTY. Network devices commonly prefer vt100. */
+export type SshTerminalType = 'xterm-256color' | 'xterm' | 'vt100' | 'vt220' | 'ansi' | 'linux'
+/** Optional vendor family hint for network-device terminal behavior. */
+export type SshNetworkDeviceVendor = 'auto' | 'generic' | 'cisco' | 'huawei' | 'h3c-comware' | 'custom'
 export type TelnetNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
@@ -306,6 +312,12 @@ export interface McpAgentSetup {
 
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
+  /** Explicit session target. Missing keeps legacy server behavior; auto resolves after handshake. */
+  deviceMode?: SshDeviceMode
+  /** PTY terminal type sent during SSH shell setup. */
+  terminalType?: SshTerminalType
+  /** Optional vendor hint retained for network-device profiles. */
+  networkDeviceVendor?: SshNetworkDeviceVendor
   username: string
   authType: SshAuthType
   note?: string
@@ -465,8 +477,21 @@ export interface SerialTransferProgress {
 
 export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
 
-export const getConnectionCapabilities = (profile: Pick<ConnectionProfile, 'type'>): ConnectionCapabilities => {
+export const getConnectionCapabilities = (profile: {
+  type: SessionType
+  deviceMode?: SshDeviceMode
+}): ConnectionCapabilities => {
   if (profile.type === 'ssh') {
+    if (profile.deviceMode === 'network-device') {
+      return {
+        terminal: true,
+        files: false,
+        resourceMonitoring: false,
+        shellIntegration: false,
+        fileAccess: false,
+        tunnels: true
+      }
+    }
     return {
       terminal: true,
       files: true,
@@ -844,6 +869,8 @@ export interface SessionSnapshot {
   profileId: string
   /** Monotonic terminal-target identity; unchanged by ordinary output chunks. */
   aiSessionRevision?: string
+  /** Effective SSH mode after banner resolution; absent while auto is connecting. */
+  deviceMode?: SshDeviceMode
   accessHost?: string
   summary: string
   terminalTranscript?: string
@@ -1092,7 +1119,10 @@ export interface CreateProfileInput {
   transferMode?: FtpTransferMode
   certificateFingerprint?: string
   encoding?: string
-  terminalType?: TelnetTerminalType
+  /** SSH PTY terminal type; Telnet uses the compatible subset of these values. */
+  terminalType?: SshTerminalType
+  deviceMode?: SshDeviceMode
+  networkDeviceVendor?: SshNetworkDeviceVendor
   crNul?: boolean
   loginScript?: string
   backspaceKey?: string

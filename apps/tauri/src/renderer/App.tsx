@@ -681,7 +681,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         activeProfile.enableResourceMonitoring ??
         connectionDefaults.enableResourceMonitoring)
       : false
-  const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
+  const isResourceMonitoringAvailable = Boolean(
+    activeProfile?.type === 'ssh' &&
+    activeProfile.deviceMode !== 'network-device' &&
+    activeSshResourceMonitoring &&
+    activeSession?.capabilities?.resourceMonitoring !== false
+  )
   // Sidebar metrics are per-connection. Profiles created before this field
   // existed fall back to the legacy global preference, which the settings
   // dialog no longer writes, so existing connections keep their display.
@@ -1358,7 +1363,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const buildProfilePayload = (requireSaveFields: boolean): CreateProfileInput | null => {
     const normalizedHost = normalizeConnectionHost(form.host)
     const requiresHost = form.type !== 'serial'
-    const requiresRemotePath = form.type === 'ssh' || form.type === 'ftp'
+    const requiresRemotePath = form.type === 'ftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
 
     if (
       (requireSaveFields && (!form.name || !form.group)) ||
