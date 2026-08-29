@@ -1,6 +1,6 @@
 # 网络设备 SSH 兼容 MVP 计划
 
-> 状态：Active
+> 状态：Active（本任务代码目标已完成；实体设备验证留作后续）
 > 关联：Refs #201
 > 范围：H3C/Comware、Huawei/VRP、Cisco，以及实际提供 SSH/Telnet/Serial CLI 的其他网络设备
 
@@ -77,6 +77,9 @@ type SshTerminalType = 'xterm-256color' | 'xterm' | 'vt100' | 'vt220' | 'ansi' |
 即使旧配置中的 `enableExecChannel`、`enableResourceMonitoring`、`sftpEnabled` 为 true，
 网络设备模式下的有效能力仍由 mode 决定，不能只相信 renderer 的旧勾选状态。
 
+网络设备模式只裁剪运行时有效能力，不覆盖用户保存的 SFTP、Exec、监控和 Shell
+integration 偏好；切回普通服务器模式时应能恢复原配置。
+
 ## 4. SSH 后端行为
 
 连接顺序调整为：
@@ -113,6 +116,10 @@ TCP/socket
 
 `auto` 模式只能使用 SSH 握手阶段已经拿到的远端 identification/banner，不能为了识别设备
 额外打开 exec channel，也不能等首屏探测失败后再补救。
+
+如果用户在 `auto` 模式明确选择了非 `auto` 的厂商族提示，且 identification 未命中保守
+pattern，则把该本地配置视为网络设备模式提示；默认厂商族 `auto` 仍保持未知即普通服务器的
+安全 fallback。这个提示只改变连接路径，不会触发任何厂商命令。
 
 第一版只维护少量保守 pattern：
 
@@ -158,39 +165,53 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 
 ### Phase 1：手动网络设备模式（先解决 #201）
 
-- [ ] 在 `packages/core` 增加 device mode 和 SSH terminal type。
-- [ ] 更新 profile 默认值、迁移逻辑、`CreateProfileInput` 和 workspace capabilities。
-- [ ] Rust 在主 shell 前确定有效 mode；network-device 跳过所有服务器探测和 SFTP 初始化。
-- [ ] PTY 使用 profile terminal type；网络设备命令路径不使用 POSIX wrapper。
-- [ ] renderer 增加连接对象和 terminal type；隐藏或置灰不适用能力。
-- [ ] 补 H3C/Huawei mock 行为，确认登录后主终端持续可用。
+- [x] 在 `packages/core` 增加 device mode 和 SSH terminal type。
+- [x] 更新 profile 默认值、迁移逻辑、`CreateProfileInput` 和 workspace capabilities。
+- [x] Rust 在主 shell 前确定有效 mode；network-device 跳过所有服务器探测和 SFTP 初始化。
+- [x] PTY 使用 profile terminal type；网络设备命令路径不使用 POSIX wrapper。
+- [x] renderer 增加连接对象和 terminal type；隐藏或置灰不适用能力。
+- [x] 补 H3C/Huawei mock 策略和协议行为，确认 network-device 保留主终端能力；实体设备验证留在 Phase 3。
+
+> 2026-08-28 实施记录：手动网络设备模式已落地。H3C/Huawei 已完成策略级和 russh 协议级 mock 覆盖（强制关闭 exec、资源监控和 SFTP，终端使用 raw PTY surface，并验证输入输出、PTY terminal type、resize 与可选 channel 拒绝不会影响主终端）；自动识别、终端类型选择和 capability 裁剪在 Phase 2 完成，真实设备和完整 worker 端到端验证留在 Phase 3。运行时能力裁剪不会覆盖已保存的连接偏好，网络设备 / 普通服务器模式切换可保留原 SFTP、Exec 和监控设置。
 
 ### Phase 2：Banner 自动识别
 
-- [ ] 在握手阶段提取并规范化远端 identification。
-- [ ] 增加 Cisco、Huawei、H3C/Comware pattern 和单元测试。
-- [ ] 自动识别结果在任何 exec、CWD、指标或 SFTP 探测之前生效。
-- [ ] 手动 mode 覆盖自动结果；未知设备保持安全 fallback。
+- [x] 在握手阶段提取并规范化远端 identification。
+- [x] 增加 Cisco、Huawei、H3C/Comware pattern 和单元测试。
+- [x] 自动识别结果在任何 exec、CWD、指标或 SFTP 探测之前生效。
+- [x] 手动 mode 覆盖自动结果；未知设备保持安全 fallback。
+
+> 2026-08-28 实施记录：`ClientHandler::kex_done` 保存 russh 的远端 SSH identification，解析器只匹配保守的 Cisco、Huawei/VRP、H3C/Comware/3Com/mpSSH 线索，并将规范化结果写入运行时有效 profile。解析发生在主 PTY 建立前，因此识别出的网络设备不会进入平台探测、CWD 注入、指标、SFTP 或 exec 路径；`server` 手动模式始终覆盖 Banner，`auto` 未命中且厂商族仍为 `auto` 时按普通服务器兼容路径处理，明确厂商族提示则作为本地 network-device fallback。auto profile 未显式选择 terminal type 时，最终按识别结果使用网络设备 `vt100` 或服务器 `xterm-256color` 默认值。
+
+> 2026-08-29 对照 Netcatty #1046/#1052 补充：自动识别新增老 Huawei VRP 的精确短横线 Banner（`SSH-1.99--` 及原始 `-` 形式），避免这类设备回退到服务器探测路径；匹配保持精确，不把任意未知 Banner 当成 Huawei。
 
 ### Phase 3：真实设备验证与必要的专项修复
 
 - [ ] 使用 H3C/Comware、Huawei/VRP、Cisco 实机验证 SSH 登录、PTY、换行、resize 和断线行为。
 - [ ] 再验证实际提供 CLI 的 TP-Link、水星、腾达、中兴、NETGEAR 型号。
-- [ ] 只有真实握手日志证明需要时，才增加最小范围的旧 KEX/host key/cipher 兼容。
+- [ ] 只有真实握手日志证明需要时，才增加最小范围的旧 KEX/host key/cipher 兼容；Netcatty #1045 的精确 Comware GEX 请求留作后续专项。
 - [ ] 分页、prompt、enable/config 和型号 profile 另开计划，不塞进本 MVP。
+
+> 2026-08-29 范围收敛：本 MVP 仅保留通用 SHA-1 legacy fallback，不实现精确的 Comware GEX 参数请求；只有后续实机握手日志确认必要时，才单独评估 Netcatty #1045 的专项兼容。
 
 ## 7. 测试与验收
 
 ### 自动化
 
-- [ ] 普通 Linux/Windows SSH：原有 CWD、SFTP、指标和文件区不回归。
-- [ ] network-device：没有 `/etc/os-release`、`uname`、CWD marker、metrics script 或 POSIX wrapper。
-- [ ] H3C/Huawei mock：额外 exec 被拒绝或关闭时，主 PTY 仍能输入输出。
-- [ ] terminal type：网络设备默认 `vt100`，profile 选择值正确传给 PTY。
-- [ ] Banner：Cisco/Huawei/Comware 在第一个可选 channel 前完成识别。
-- [ ] 未知 Banner：手动 network-device 可用，普通 server 不因旧算法需求被误分类。
-- [ ] SFTP、exec、metrics 独立失败时，只关闭对应 capability，不关闭 terminal。
-- [ ] 旧 profile、snapshot、bridge、renderer 表单和能力矩阵通过 contract/type 测试。
+- [x] 普通 Linux/Windows SSH：原有 CWD、SFTP、指标和文件区不回归（既有 OpenSSH fixture 与全量 Tauri 测试通过）。
+- [x] network-device：策略路径不发送 `/etc/os-release`、`uname`、CWD marker、metrics script 或 POSIX wrapper。
+- [x] H3C/Huawei mock：额外 exec/SFTP 被拒绝时，能力模型和 russh 协议 fixture 保留主 PTY 和 SSH 隧道 surface（实体设备交互留待 Phase 3）。
+- [x] terminal type：网络设备默认 `vt100`，profile 选择值传给 SSH `request_pty`。
+- [x] Banner：Cisco/Huawei/Comware 在第一个可选 channel 前完成识别。
+- [x] 老 Huawei VRP 的短横线 Banner（`SSH-1.99--`）在自动模式下识别为网络设备。
+- [x] 未知 Banner：手动 network-device 可用，普通 server 不因 Banner 被误分类。
+- [x] SFTP、exec、metrics 独立失败时，只关闭对应 capability，不关闭 terminal。
+- [x] 旧 profile、snapshot、bridge、renderer 表单和能力矩阵通过 contract/type 测试。
+- [ ] H3C/Comware 精确 GEX 参数请求（`1024/1024/8192`）留作后续专项；当前仅验证通用 SHA-1 legacy fallback，默认 SSH 算法不放宽。
+
+> 2026-08-29 自动化验收记录：`npm run typecheck -w @fileterm/tauri`、`npm run lint`、`npx prettier --check apps/tauri packages/core packages/shared packages/storage`、`npm run test:tauri`（484 unit + 20 contract）、`cargo clippy --locked --all-targets --all-features -- -D warnings` 均通过。metrics 后台通道启动或运行失败时只撤销 `resource_monitoring` capability 并广播最新 snapshot，SSH 主终端和隧道保持独立。以上网络设备结论是代码路径、russh 协议 fixture 和策略级 mock 结论；没有实体设备时，不扩大为全品牌支持。
+
+同日使用 Playwright 对本地 renderer 的连接表单做了 Tauri mock smoke：网络设备模式隐藏 Remote Path、Exec、SFTP、监控和服务器凭据入口，保留 Tunnel；厂商族选择、自动识别回退和 `vt100`/`xterm-256color` 终端默认值均通过，说明文字布局也完成截图复核。另用 MemoryProfileRepository 做了保存 round-trip 断言，确认网络设备模式不会覆盖用户原有的 SFTP、Exec、监控和 Shell integration 偏好。该 smoke 不替代实体设备验证。
 
 ### 实体设备记录
 
@@ -213,7 +234,7 @@ cargo clippy --locked --all-targets --all-features -- -D warnings
 
 ## 8. Definition of Done
 
-MVP 完成条件：
+本任务的代码完成条件（不依赖实体设备）：
 
 1. 用户能在 SSH profile 中选择网络设备模式和 terminal type。
 2. H3C/Huawei 类设备登录后，FileTerm 不发送 Linux/Windows 探测命令，终端保持可交互。
@@ -221,6 +242,9 @@ MVP 完成条件：
 4. 普通 Linux/Windows SSH 的现有能力不回归。
 5. 自动识别可用但不是唯一入口，手动模式可以覆盖。
 6. 未经实体设备验证，不在发布说明中扩大为“全品牌支持”。
+
+以上代码条件已满足；Phase 3 的实机条目仍保持未勾选，只表示尚未取得型号级实测证据，
+不再阻塞本任务交付。
 
 Issue #201 只使用 `Refs #201` 关联；代码合入、发布和真实设备验证完成后，再由维护者决定
 是否关闭 issue。
