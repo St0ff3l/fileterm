@@ -47,9 +47,7 @@
   opacity: 0.58;
 }
 
-.selection-control,
-.ssh-checkbox input,
-.checkbox-row input {
+input.selection-control {
   position: relative;
   display: block;
   width: 14px;
@@ -72,14 +70,21 @@
     opacity 0.2s ease;
 }
 
-.selection-control {
+input.selection-control {
   flex-basis: 14px;
   margin-top: 1px;
 }
 
-.selection-control::after,
-.ssh-checkbox input::after,
-.checkbox-row input::after {
+input.selection-control--large {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  flex-basis: 18px;
+  margin-top: 0;
+}
+
+input.selection-control::after {
   position: absolute;
   inset: 2.5px;
   border-radius: 999px;
@@ -89,41 +94,74 @@
   transition: transform 0.16s ease;
 }
 
-.selection-control:checked,
-.ssh-checkbox input:checked,
-.checkbox-row input:checked {
+input.selection-control--large::after {
+  inset: 3px;
+}
+
+input.selection-control:checked {
   border-color: var(--focus-outline);
   background: var(--bg-main);
 }
 
-.selection-control:checked::after,
-.ssh-checkbox input:checked::after,
-.checkbox-row input:checked::after {
+input.selection-control:checked::after {
   transform: scale(1);
 }
 
-.selection-control:disabled,
-.ssh-checkbox input:disabled,
-.checkbox-row input:disabled {
+input.selection-control:disabled {
   cursor: not-allowed;
-}
-
-.ssh-checkbox input:disabled,
-.checkbox-row input:disabled {
   opacity: 0.4;
 }
 
-.selection-control:focus-visible,
-.ssh-checkbox input:focus-visible,
-.checkbox-row input:focus-visible {
+input.selection-control:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--input-focus-ring);
 }
 
-.selection-control:hover:not(:disabled):not(:checked),
-.ssh-checkbox input:hover:not(:disabled):not(:checked),
-.checkbox-row input:hover:not(:disabled):not(:checked) {
+input.selection-control:hover:not(:disabled):not(:checked) {
   border-color: var(--text-muted);
+}
+
+/* Compact target pickers keep their slightly stronger ring and indeterminate
+ * dash while sharing the same native SelectionControl semantics. */
+input.selection-control--target {
+  border-width: 1.2px;
+  margin-top: 0;
+  box-shadow: var(--control-shadow);
+}
+
+input.selection-control--target:hover {
+  border-color: var(--border-dark);
+  background: var(--bg-hover);
+}
+
+input.selection-control--target:checked {
+  border-color: var(--focus-outline);
+  background: transparent;
+}
+
+input.selection-control--target::after {
+  transition: transform 0.16s cubic-bezier(0.12, 0.4, 0.29, 1.46);
+}
+
+input.selection-control--target:indeterminate {
+  border-color: var(--focus-outline);
+  background: transparent;
+}
+
+input.selection-control--target:indeterminate::after {
+  inset: auto;
+  top: 5px;
+  left: 3px;
+  width: 6px;
+  height: 1.5px;
+  border: 0;
+  border-radius: 0;
+  background: var(--copy-link);
+  transform: scale(1);
+}
+
+input.selection-control--target:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .radio-card-group__copy {

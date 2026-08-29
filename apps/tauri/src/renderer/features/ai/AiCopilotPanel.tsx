@@ -15,6 +15,7 @@ import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { AppIcon, type AppIconName } from '../common/AppIcon'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { AiCopilotCopyButton } from './AiCopilotCopyButton'
@@ -150,7 +151,7 @@ function AiCopilotToolActivity({
           {approval.target ? <small>{`${t.aiCopilotToolApprovalTarget}：${approval.target}`}</small> : null}
           {approval.requiresRiskAcknowledgement ? (
             <label className="ai-copilot-tool-risk-ack">
-              <input
+              <SelectionControl
                 checked={riskAcknowledged}
                 disabled={isResolvingApproval || isExecutingTerminalCommand}
                 type="checkbox"

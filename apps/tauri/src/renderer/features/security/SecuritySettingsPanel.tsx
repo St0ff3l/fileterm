@@ -5,6 +5,7 @@ import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { FeedbackText } from '../common/FeedbackText'
+import { SelectionControl } from '../common/SelectionControl'
 import { waitForMinimumBusyDuration } from '../common/operation-timing'
 import { SessionLockScreen } from './SessionLockScreen'
 
@@ -417,7 +418,7 @@ export function SecuritySettingsPanel({
               <p>{t.securityEnableLockHint}</p>
             </div>
             <label className="ssh-checkbox security-checkbox-wrapper" title={t.securityEnableLock}>
-              <input
+              <SelectionControl
                 checked={lockEnabled}
                 disabled={isLoading || isSecurityMutationInFlight || (!hasLockPassword && !lockPassword)}
                 onChange={(event) => {

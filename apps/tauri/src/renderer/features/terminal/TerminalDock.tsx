@@ -3,6 +3,7 @@ import type { CommandExecutionOptions, TerminalCommandHistoryEntry, WorkspaceTab
 import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
+import { SelectionControl } from '../common/SelectionControl'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
 import { summarizeSendTarget } from '../common/session-send-targets'
@@ -582,7 +583,8 @@ export function TerminalDock({
   const renderOptionsPanel = () => (
     <div className="terminal-dock-panel terminal-dock-options">
       <label className="terminal-dock-option-row">
-        <input
+        <SelectionControl
+          className="selection-control--target"
           checked={preferences.clearAfterSend}
           type="checkbox"
           onChange={(event) => updatePreferences((prev) => ({ ...prev, clearAfterSend: event.currentTarget.checked }))}

@@ -1573,15 +1573,6 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   height: 36px;
 }
 
-.checkbox-row input {
-  width: auto;
-  height: auto;
-}
-
-.checkbox-row input {
-  margin-top: 0;
-}
-
 .flat-button,
 .primary-button {
   display: inline-flex;

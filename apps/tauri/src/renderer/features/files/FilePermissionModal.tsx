@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PermissionChangeOptions } from '@fileterm/core'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent } from '../common/StableButtonContent'
 import { t } from '../../i18n'
 
@@ -177,16 +178,27 @@ export function FilePermissionModal({
               {supportsRecursive && recursive ? (
                 <div className="file-permission-dialog__apply-grid">
                   <label className="ssh-checkbox file-permission-dialog__apply-option">
-                    <input checked={applyTo === 'all'} type="radio" onChange={() => setApplyTo('all')} />
+                    <SelectionControl
+                      checked={applyTo === 'all'}
+                      name="permission-apply-to"
+                      type="radio"
+                      onChange={() => setApplyTo('all')}
+                    />
                     <span>{t.permissionApplyAll}</span>
                   </label>
                   <label className="ssh-checkbox file-permission-dialog__apply-option">
-                    <input checked={applyTo === 'files'} type="radio" onChange={() => setApplyTo('files')} />
+                    <SelectionControl
+                      checked={applyTo === 'files'}
+                      name="permission-apply-to"
+                      type="radio"
+                      onChange={() => setApplyTo('files')}
+                    />
                     <span>{t.permissionApplyFiles}</span>
                   </label>
                   <label className="ssh-checkbox file-permission-dialog__apply-option">
-                    <input
+                    <SelectionControl
                       checked={applyTo === 'directories'}
+                      name="permission-apply-to"
                       type="radio"
                       onChange={() => setApplyTo('directories')}
                     />
@@ -271,7 +283,7 @@ function PermissionCell({
 }) {
   return (
     <label className="ssh-checkbox file-permission-dialog__matrix-cell">
-      <input
+      <SelectionControl
         aria-label={label}
         checked={checked}
         type="checkbox"

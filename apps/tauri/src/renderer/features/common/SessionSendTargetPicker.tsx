@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from '../../i18n'
 import { AppIcon } from './AppIcon'
+import { SelectionControl } from './SelectionControl'
 import type { SendScope, SessionSendTarget } from './session-send-targets'
 
 export function SessionSendTargetPicker({
@@ -150,7 +151,8 @@ export function SessionSendTargetPicker({
                       <>
                         <div className="session-send-target-header">
                           <label className="session-send-target-header-label">
-                            <input
+                            <SelectionControl
+                              className="selection-control--target"
                               type="checkbox"
                               checked={selectedTabIds.length === targets.length}
                               ref={(el) => {
@@ -182,7 +184,8 @@ export function SessionSendTargetPicker({
                                 key={target.tabId}
                                 className={`session-send-target-item ${checked ? 'is-checked' : ''} ${target.isCurrent ? 'is-current' : ''}`}
                               >
-                                <input
+                                <SelectionControl
+                                  className="selection-control--target"
                                   checked={checked}
                                   type="checkbox"
                                   onChange={(event) => {
@@ -221,7 +224,8 @@ export function SessionSendTargetPicker({
         {/* Remember Selection on same line for popover mode in select mode */}
         {popover && showRememberSelection && scope === 'selected-ssh' && (
           <label className="session-send-target-remember-inline">
-            <input
+            <SelectionControl
+              className="selection-control--target"
               checked={rememberSelection ?? false}
               type="checkbox"
               onChange={(event) => onRememberSelectionChange?.(event.currentTarget.checked)}
@@ -233,7 +237,8 @@ export function SessionSendTargetPicker({
 
       {!popover && showRememberSelection ? (
         <label className="session-send-target-remember">
-          <input
+          <SelectionControl
+            className="selection-control--target"
             checked={rememberSelection ?? false}
             type="checkbox"
             onChange={(event) => onRememberSelectionChange?.(event.currentTarget.checked)}

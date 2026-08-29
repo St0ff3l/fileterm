@@ -11,6 +11,7 @@ import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { CloseButton } from '../common/CloseButton'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
+import { SelectionControl } from '../common/SelectionControl'
 import { SessionSendTargetPicker } from '../common/SessionSendTargetPicker'
 import { StableButtonContent } from '../common/StableButtonContent'
 import type { SendScope, SessionSendTarget } from '../common/session-send-targets'
@@ -711,7 +712,7 @@ export function CommandCenter({
                   </div>
                   <div className="command-pane-actions">
                     <label className="command-toggle">
-                      <input
+                      <SelectionControl
                         checked={appendCarriageReturn}
                         type="checkbox"
                         onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}
@@ -784,7 +785,7 @@ export function CommandCenter({
                   </div>
                   <div className="command-pane-actions">
                     <label className="command-toggle">
-                      <input
+                      <SelectionControl
                         checked={appendCarriageReturn}
                         type="checkbox"
                         onChange={(event) => setAppendCarriageReturn(event.currentTarget.checked)}

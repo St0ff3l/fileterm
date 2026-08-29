@@ -1529,9 +1529,8 @@
   line-height: 1.35;
 }
 
-.ai-copilot-tool-risk-ack input {
+.ai-copilot-tool-risk-ack input.selection-control {
   flex: none;
-  accent-color: var(--focus-outline);
   margin: 1px 0 0;
 }
 
@@ -2819,7 +2818,7 @@
   color: var(--accent-highlight);
 }
 
-.ai-settings-form input,
+.ai-settings-form input:not(.selection-control),
 .ai-settings-form select {
   width: 100%;
   height: 36px;
@@ -2834,13 +2833,13 @@
   font-size: 12px;
 }
 
-.ai-settings-form input:focus,
+.ai-settings-form input:not(.selection-control):focus,
 .ai-settings-form select:focus {
   border-color: var(--focus-outline);
   box-shadow: 0 0 0 3px var(--accent-focus-ring);
 }
 
-.ai-settings-form input::placeholder {
+.ai-settings-form input:not(.selection-control)::placeholder {
   color: var(--text-soft);
 }
 
@@ -2862,7 +2861,7 @@
   cursor: pointer;
 }
 
-.ai-settings-toggle-row input {
+.ai-settings-toggle-row input.selection-control {
   margin: 2px 0 0;
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { SshKeyPassphrasePromptRequest } from '@fileterm/core'
 import { t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent } from '../common/StableButtonContent'
 
 export function SshKeyPassphraseModal({
@@ -55,7 +56,7 @@ export function SshKeyPassphraseModal({
           />
         </label>
         <label className="ssh-checkbox">
-          <input
+          <SelectionControl
             checked={savePassphrase}
             disabled={isSubmitting}
             type="checkbox"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SerialTransferMode, SerialTransferProgress } from '@fileterm/core'
 import { formatMessage, localizeSerialTerminalText, t } from '../../i18n'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonLabel } from '../common/StableButtonContent'
 
 const MODES: SerialTransferMode[] = ['raw', 'xmodem', 'ymodem', 'zmodem', 'kermit']
@@ -192,7 +193,7 @@ export function SerialTransferPanel({
           <>
             <div className="serial-transfer-panel__warning">{t.serialTransferXmodemWarning}</div>
             <label className="serial-transfer-panel__option">
-              <input
+              <SelectionControl
                 checked={preserveXmodemPadding}
                 disabled={busy}
                 type="checkbox"

@@ -1,38 +1,27 @@
-import type { ChangeEventHandler } from 'react'
+import type { InputHTMLAttributes, Ref } from 'react'
 
 export type SelectionControlType = 'checkbox' | 'radio'
+export type SelectionControlSize = 'default' | 'large'
+
+export type SelectionControlProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'className' | 'size' | 'type'> & {
+  className?: string
+  ref?: Ref<HTMLInputElement>
+  size?: SelectionControlSize
+  type: SelectionControlType
+}
 
 /**
  * Shared native selection input. The visual indicator is supplied by the
  * common control skin, while the browser keeps the correct checkbox/radio
  * semantics and keyboard behavior.
  */
-export function SelectionControl({
-  checked,
-  className,
-  disabled = false,
-  name,
-  onChange,
-  type,
-  value
-}: {
-  checked: boolean
-  className?: string
-  disabled?: boolean
-  name?: string
-  onChange: ChangeEventHandler<HTMLInputElement>
-  type: SelectionControlType
-  value?: string
-}) {
+export function SelectionControl({ className, ref, size = 'default', type, ...inputProps }: SelectionControlProps) {
   return (
     <input
-      checked={checked}
-      className={`selection-control selection-control--${type} ${className ?? ''}`.trim()}
-      disabled={disabled}
-      name={name}
+      {...inputProps}
+      ref={ref}
+      className={`selection-control selection-control--${type} selection-control--${size} ${className ?? ''}`.trim()}
       type={type}
-      value={value}
-      onChange={onChange}
     />
   )
 }

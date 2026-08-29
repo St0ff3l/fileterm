@@ -59,6 +59,7 @@ function retainOpenTabUiState<T>(state: Record<string, T>, openTabIds: Set<strin
 }
 import { CloseButton } from './features/common/CloseButton'
 import { ConfirmActionDialog } from './features/common/ConfirmActionDialog'
+import { SelectionControl } from './features/common/SelectionControl'
 import type { SendScope } from './features/common/session-send-targets'
 import { resolveSelectedTabIds } from './features/common/session-send-targets'
 import { TabBar, type TabBarProps, type TabContextTarget } from './features/layout/TabBar'
@@ -2413,7 +2414,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
               {actionApprovalRequests[0].details ? <pre>{actionApprovalRequests[0].details}</pre> : null}
               {actionApprovalRequests[0].requiresRiskAcknowledgement ? (
                 <label className="confirm-action-dialog__warning">
-                  <input
+                  <SelectionControl
                     checked={riskAcknowledgedRequestId === actionApprovalRequests[0].requestId}
                     disabled={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
                     onChange={(event) =>

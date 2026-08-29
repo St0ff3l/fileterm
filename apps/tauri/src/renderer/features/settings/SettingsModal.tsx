@@ -2552,7 +2552,7 @@ export function SettingsModal({
 
                   <div className="ai-settings-toggle-list">
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.enabled}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ enabled: event.target.checked })}
@@ -2563,7 +2563,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.isDefault}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ isDefault: event.target.checked })}
@@ -2574,7 +2574,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.allowNoAuth}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ allowNoAuth: event.target.checked })}
@@ -2585,7 +2585,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.allowInsecureHttp}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ allowInsecureHttp: event.target.checked })}
@@ -3030,7 +3030,7 @@ export function SettingsModal({
                   <div className="advanced-toggle-list">
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.useEmptyPassword}
                           onChange={(event) => setConnectionDefault('useEmptyPassword', event.target.checked)}
                           type="checkbox"
@@ -3041,7 +3041,7 @@ export function SettingsModal({
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.enableExecChannel}
                           onChange={(event) => setConnectionDefault('enableExecChannel', event.target.checked)}
                           type="checkbox"
@@ -3052,7 +3052,7 @@ export function SettingsModal({
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.enableResourceMonitoring}
                           onChange={(event) => setConnectionDefault('enableResourceMonitoring', event.target.checked)}
                           type="checkbox"
@@ -3091,7 +3091,7 @@ export function SettingsModal({
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.legacyAlgorithms}
                           onChange={(event) => setConnectionDefault('legacyAlgorithms', event.target.checked)}
                           type="checkbox"
@@ -3106,7 +3106,7 @@ export function SettingsModal({
                     <div className="advanced-toggle-list">
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={connectionDefaults.reconnectMode === 'none'}
                             name="global-reconnect-mode"
                             onChange={() => setConnectionDefault('reconnectMode', 'none')}
@@ -3118,7 +3118,7 @@ export function SettingsModal({
                       </div>
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={connectionDefaults.reconnectMode === 'enter'}
                             name="global-reconnect-mode"
                             onChange={() => setConnectionDefault('reconnectMode', 'enter')}
@@ -3130,7 +3130,7 @@ export function SettingsModal({
                       </div>
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={connectionDefaults.reconnectMode === 'auto'}
                             name="global-reconnect-mode"
                             onChange={() => setConnectionDefault('reconnectMode', 'auto')}
@@ -3679,7 +3679,7 @@ export function SettingsModal({
                       <p>{t.lockTerminalZoomHint}</p>
                     </span>
                     <span className="command-toggle overview-preference-toggle">
-                      <input
+                      <SelectionControl
                         checked={terminalZoomLocked}
                         disabled={!desktopApi || isSavingTerminalZoomPreference}
                         onChange={(event) => setTerminalZoomLockPreference(event.target.checked)}
@@ -3701,7 +3701,7 @@ export function SettingsModal({
                       <p>{t.rememberFilePanelRatioHint}</p>
                     </span>
                     <span className="command-toggle overview-preference-toggle">
-                      <input
+                      <SelectionControl
                         checked={filePanelRememberRatio}
                         disabled={!desktopApi || isSavingFilePanelPreference}
                         onChange={(event) => setFilePanelRememberRatioPreference(event.target.checked)}
@@ -3769,7 +3769,7 @@ export function SettingsModal({
                           <p>{sectionMeta.hint}</p>
                         </span>
                         <span className="command-toggle overview-preference-toggle">
-                          <input
+                          <SelectionControl
                             checked={checked}
                             disabled={!desktopApi || isSavingOverviewPreference}
                             onChange={(event) => {
@@ -3896,7 +3896,7 @@ export function SettingsModal({
                       </label>
                       <div className="webdav-sync-options">
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             checked={syncConfig.enabled}
                             onChange={(event) => setSyncConfig({ ...syncConfig, enabled: event.target.checked })}
@@ -3904,7 +3904,7 @@ export function SettingsModal({
                           {t.enableWebdavSync}
                         </label>
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             checked={syncConfig.allowInsecureTls === true}
                             onChange={(event) =>
@@ -4184,7 +4184,7 @@ export function SettingsModal({
                       </label>
                       <div className="webdav-sync-options">
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             checked={s3Config.enabled}
                             onChange={(event) => setS3Config({ ...s3Config, enabled: event.target.checked })}
@@ -4192,7 +4192,7 @@ export function SettingsModal({
                           {t.enableS3Backup}
                         </label>
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             disabled={s3Config.provider === 'cloudflare-r2' || s3Config.provider === 'bitiful-s4'}
                             checked={s3Config.pathStyleAccessEnabled}

@@ -5,6 +5,7 @@ import { extractCommandParams, sortByOrder } from './command-utils'
 import { CommandCodeEditor } from './CommandCodeEditor'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent } from '../common/StableButtonContent'
 
 export const emptyCommandForm: CommandTemplateInput = {
@@ -192,8 +193,9 @@ export function CommandEditorModal({
           </div>
         </div>
         <label className="command-editor-field full command-editor-checkbox-row">
-          <input
+          <SelectionControl
             checked={form.appendCarriageReturn ?? true}
+            size="large"
             type="checkbox"
             onChange={(event) => {
               const { checked } = event.target

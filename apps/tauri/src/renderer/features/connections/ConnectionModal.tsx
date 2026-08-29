@@ -17,6 +17,7 @@ import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
 import { FeedbackText } from '../common/FeedbackText'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent } from '../common/StableButtonContent'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
@@ -734,7 +735,7 @@ export function ConnectionModal({
                         {form.rs485Mode === 'half-duplex' ? (
                           <>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.rs485RtsOnSend !== false}
                                 type="checkbox"
                                 onChange={(event) =>
@@ -983,7 +984,7 @@ export function ConnectionModal({
                       {form.authType === 'password' ? (
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={effectiveConnectionSetting(form, connectionDefaults, 'useEmptyPassword')}
                               type="checkbox"
                               onChange={(event) => {
@@ -1003,7 +1004,7 @@ export function ConnectionModal({
                         <>
                           <div className="advanced-toggle-row">
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={effectiveConnectionSetting(form, connectionDefaults, 'enableExecChannel')}
                                 type="checkbox"
                                 onChange={(event) => setSshConnectionSetting('enableExecChannel', event.target.checked)}
@@ -1014,7 +1015,7 @@ export function ConnectionModal({
                           </div>
                           <div className="advanced-toggle-row">
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={effectiveConnectionSetting(
                                   form,
                                   connectionDefaults,
@@ -1074,7 +1075,7 @@ export function ConnectionModal({
                           </div>
                           <div className="advanced-toggle-row">
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.sftpEnabled !== false}
                                 type="checkbox"
                                 onChange={(event) =>
@@ -1093,7 +1094,7 @@ export function ConnectionModal({
                       )}
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={effectiveConnectionSetting(form, connectionDefaults, 'legacyAlgorithms')}
                             type="checkbox"
                             onChange={(event) => setSshConnectionSetting('legacyAlgorithms', event.target.checked)}
@@ -1108,7 +1109,7 @@ export function ConnectionModal({
                       <div className="advanced-toggle-list">
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'none'}
                               name="connection-reconnect-mode"
                               type="radio"
@@ -1120,7 +1121,7 @@ export function ConnectionModal({
                         </div>
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={
                                 effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'enter'
                               }
@@ -1134,7 +1135,7 @@ export function ConnectionModal({
                         </div>
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={effectiveConnectionSetting(form, connectionDefaults, 'reconnectMode') === 'auto'}
                               name="connection-reconnect-mode"
                               type="radio"
@@ -1214,7 +1215,7 @@ export function ConnectionModal({
                         </div>
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={form.keepaliveEnabled !== false}
                               type="checkbox"
                               onChange={(event) =>
@@ -1338,7 +1339,7 @@ export function ConnectionModal({
                       <div className="advanced-toggle-list">
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={(form.reconnectMode ?? 'none') === 'none'}
                               name="network-reconnect-mode"
                               type="radio"
@@ -1350,7 +1351,7 @@ export function ConnectionModal({
                         </div>
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={form.reconnectMode === 'enter'}
                               name="network-reconnect-mode"
                               type="radio"
@@ -1362,7 +1363,7 @@ export function ConnectionModal({
                         </div>
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={form.reconnectMode === 'auto'}
                               name="network-reconnect-mode"
                               type="radio"
@@ -1442,7 +1443,7 @@ export function ConnectionModal({
                         </div>
                         <div className="advanced-toggle-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={form.keepaliveEnabled !== false}
                               type="checkbox"
                               onChange={(event) =>
@@ -1549,7 +1550,7 @@ export function ConnectionModal({
                         </label>
                         <div className="advanced-toggle-row serial-local-echo-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={form.lineMode === true}
                               type="checkbox"
                               onChange={(event) => setForm((prev) => ({ ...prev, lineMode: event.target.checked }))}
@@ -1573,7 +1574,7 @@ export function ConnectionModal({
                         </label>
                         <div className="advanced-toggle-row serial-local-echo-row">
                           <label className="ssh-checkbox advanced-toggle-label">
-                            <input
+                            <SelectionControl
                               checked={form.localEcho === true}
                               type="checkbox"
                               onChange={(event) => setForm((prev) => ({ ...prev, localEcho: event.target.checked }))}
@@ -1586,7 +1587,7 @@ export function ConnectionModal({
                           <div className="reconnect-mode-group__label">{t.serialControlStatus}</div>
                           <div className="advanced-toggle-list">
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.dtrOnOpen !== false}
                                 type="checkbox"
                                 onChange={(event) => setForm((prev) => ({ ...prev, dtrOnOpen: event.target.checked }))}
@@ -1594,7 +1595,7 @@ export function ConnectionModal({
                               <span className="advanced-toggle-name">{t.serialDtrOnOpen}</span>
                             </label>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.rtsOnOpen === true}
                                 disabled={form.flowControl === 'hardware' || form.rs485Mode === 'half-duplex'}
                                 type="checkbox"
@@ -1603,7 +1604,7 @@ export function ConnectionModal({
                               <span className="advanced-toggle-name">{t.serialRtsOnOpen}</span>
                             </label>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.dtrOnClose === true}
                                 type="checkbox"
                                 onChange={(event) => setForm((prev) => ({ ...prev, dtrOnClose: event.target.checked }))}
@@ -1611,7 +1612,7 @@ export function ConnectionModal({
                               <span className="advanced-toggle-name">{t.serialDtrOnClose}</span>
                             </label>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.rtsOnClose === true}
                                 disabled={form.flowControl === 'hardware' || form.rs485Mode === 'half-duplex'}
                                 type="checkbox"
@@ -1755,7 +1756,7 @@ export function ConnectionModal({
                           <div className="advanced-toggle-list">
                             <div className="advanced-toggle-row">
                               <label className="ssh-checkbox advanced-toggle-label">
-                                <input
+                                <SelectionControl
                                   checked={(form.reconnectMode ?? 'none') === 'none'}
                                   name="serial-reconnect-mode"
                                   type="radio"
@@ -1767,7 +1768,7 @@ export function ConnectionModal({
                             </div>
                             <div className="advanced-toggle-row">
                               <label className="ssh-checkbox advanced-toggle-label">
-                                <input
+                                <SelectionControl
                                   checked={form.reconnectMode === 'enter'}
                                   name="serial-reconnect-mode"
                                   type="radio"
@@ -1779,7 +1780,7 @@ export function ConnectionModal({
                             </div>
                             <div className="advanced-toggle-row">
                               <label className="ssh-checkbox advanced-toggle-label">
-                                <input
+                                <SelectionControl
                                   checked={form.reconnectMode === 'auto'}
                                   name="serial-reconnect-mode"
                                   type="radio"
@@ -1901,7 +1902,7 @@ export function ConnectionModal({
                               />
                             </label>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.crNul !== false}
                                 type="checkbox"
                                 onChange={(event) => setForm((prev) => ({ ...prev, crNul: event.target.checked }))}
@@ -1935,7 +1936,7 @@ export function ConnectionModal({
                   <legend>{t.sessionLogs}</legend>
                   <div className="ssh-grid single">
                     <label className="ssh-checkbox advanced-toggle-label">
-                      <input
+                      <SelectionControl
                         checked={form.sessionLogEnabled === true}
                         onChange={(event) =>
                           setForm((previous) => ({ ...previous, sessionLogEnabled: event.target.checked }))
@@ -1984,7 +1985,7 @@ export function ConnectionModal({
                         {form.type === 'serial' ? (
                           <div className="session-log-serial-options">
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.sessionLogIncludeInput === true}
                                 onChange={(event) =>
                                   setForm((previous) => ({
@@ -1997,7 +1998,7 @@ export function ConnectionModal({
                               <span className="advanced-toggle-name">{t.serialSessionLogIncludeInput}</span>
                             </label>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.sessionLogTimestamps === true}
                                 onChange={(event) =>
                                   setForm((previous) => ({
@@ -2010,7 +2011,7 @@ export function ConnectionModal({
                               <span className="advanced-toggle-name">{t.serialSessionLogTimestamps}</span>
                             </label>
                             <label className="ssh-checkbox advanced-toggle-label">
-                              <input
+                              <SelectionControl
                                 checked={form.sessionLogRaw === true}
                                 onChange={(event) =>
                                   setForm((previous) => ({ ...previous, sessionLogRaw: event.target.checked }))
@@ -2281,7 +2282,7 @@ function TunnelRuleEditor({
         )}
       </div>
       <label className="tunnel-autostart ssh-checkbox">
-        <input
+        <SelectionControl
           type="checkbox"
           checked={rule.autoStart}
           onChange={(event) => onChange({ autoStart: event.target.checked })}

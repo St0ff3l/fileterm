@@ -5,6 +5,7 @@ import { t, type LocaleMessages } from '../../i18n'
 import { AppIcon } from './AppIcon'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from './manager-drag'
 import { targetsNestedManagerControl } from './manager-interactions'
+import { SelectionControl } from './SelectionControl'
 
 /** Meter cards rendered inside the sidebar metric scroll region. */
 const RESOURCE_MONITORING_METER_OPTIONS: Array<{
@@ -182,7 +183,7 @@ export function ResourceMonitoringMetricsEditor({
       <label className="resource-monitoring-panel-row">
         <span className="resource-monitoring-panel-name">{t.resourceMonitoringItems}</span>
         <span className="command-toggle resource-monitoring-panel-toggle">
-          <input
+          <SelectionControl
             checked={metersEnabled}
             disabled={disabled}
             onChange={(event) => toggleMeterSection(event.target.checked)}
@@ -250,7 +251,7 @@ export function ResourceMonitoringMetricsEditor({
                     <strong>{t[item.labelKey]}</strong>
                   </span>
                   <label className="command-toggle resource-monitoring-item-toggle">
-                    <input
+                    <SelectionControl
                       checked={metrics.includes(key)}
                       disabled={disabled}
                       onChange={(event) => toggleMetric(key, event.target.checked)}
@@ -267,7 +268,7 @@ export function ResourceMonitoringMetricsEditor({
         <label className="resource-monitoring-panel-row" key={key}>
           <span className="resource-monitoring-panel-name">{t[labelKey]}</span>
           <span className="command-toggle resource-monitoring-panel-toggle">
-            <input
+            <SelectionControl
               checked={metrics.includes(key)}
               disabled={disabled}
               onChange={(event) => toggleMetric(key, event.target.checked)}
