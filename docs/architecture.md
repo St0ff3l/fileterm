@@ -234,7 +234,7 @@ platform probe
 
 ## 4.5 MCP / CLI 外部 Agent 桥接边界
 
-FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；`ActionApprovalSource` 只有 `Mcp` 与 `AiCopilot`。
+FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI/Agent 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；Agent 的受控操作映射到同一桌面审批边界。
 
 ```txt
 外部 Agent                        shell 脚本
@@ -261,7 +261,8 @@ fileterm mcp                    fileterm <cmd>
 ```
 
 - 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（约 2220 行，手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
-- 同一份桌面可执行文件同时承担 GUI、MCP server、CLI 三种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；由共享 `is_cli_command` 维护的子命令白名单（包括 `exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增 CLI 子命令必须同时更新共享白名单、`run_cli` 路由和对应的精确 `--help` 输出，避免把非 GUI 命令误启动成桌面窗口。
+- 同一份桌面可执行文件同时承担 GUI、MCP server、常驻 Agent 和一次性 CLI 四种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；`agent` → `run_agent_stdio`；由共享 `is_cli_command` 维护的其他子命令白名单（包括 `exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增非 GUI 子命令必须同时更新入口分发、共享白名单、对应路由和精确 `--help` 输出，避免把外部 Agent 请求误启动成桌面窗口。
+- `fileterm agent` 是不初始化 Tauri GUI 的常驻 JSONL bridge，使用有界 worker pool 处理多个 request ID；每个请求的 progress 和最终结果均带回同一个 ID。一次性 CLI 仍保留用于脚本和手动调试，但设置页优先推荐 Agent/MCP，不能把一次性 CLI 宣称为零进程接口。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
 - `mcp-runtime.json` 路径在三平台：macOS `$HOME/Library/Application Support/com.fileterm.desktop/`、Windows NSIS 安装版 `%APPDATA%\com.fileterm.desktop\`、Windows portable 当前 `fileterm.exe` 旁的 `config\`、Linux `$XDG_DATA_HOME/com.fileterm.desktop/` 或 `$HOME/.local/share/com.fileterm.desktop/`。CLI 端用 `#[cfg(target_os)]` 读取对应路径，依赖 `tauri.conf.json` 的 identifier 保持 `com.fileterm.desktop` 不变；可用 `FILETERM_MCP_RUNTIME_FILE` 环境变量覆盖。
 - 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，并通过 `notifications/progress` / `notifications/message` 报告外部命令等待 FileTerm 前台密码输入的状态；未实现 `resources/*` / `prompts/*`。
@@ -272,7 +273,7 @@ fileterm mcp                    fileterm <cmd>
 - 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 单次读写超时 5s、需审批/前台密码输入的请求最长等待 125s、client 超时 130s（设计上大于最长 bridge 等待，保证审批或密码输入超时不触发 client 读超时）。
 - **MCP 与 CLI 的关键差异**：MCP `tools/call` 的写操作必须经桌面审批对话框（外部 Agent 调用，需要二次确认）；CLI 是用户显式启动，视为已授权，不重复弹审批。两者共用同一份 action 路由和 bridge 实现。
 - **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。纯对话请求不携带 Provider tools；半自动 / 全自动使用 Rust-owned 的 `tool-call -> approval/guardrail -> isolated exec -> tool-result` 循环，工具调用绑定 L2、leaf/root、CWD/user 和 `sessionRevision`。详见 `docs/plans/completed/ai-copilot-modes.md`。
-- 当前完成度：核心代码已构建、已注册，且覆盖协议、交互提示识别、脱敏与审计纯函数测试；真实 Claude Code / Codex CLI 端到端及 macOS / Windows / Linux 的打包产物手工验收仍待完成。
+- 当前完成度：核心代码已构建、已注册，且覆盖协议、连接去重、访问策略、交互提示识别、脱敏与审计纯函数测试；CLI 子进程输出回归和打包产物手工验收按发行候选门禁继续维护，真实 SSH/FTP/网络设备连接按目标环境验收。
 
 ## 5. 当前仓库结构
 

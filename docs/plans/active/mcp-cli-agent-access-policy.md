@@ -736,12 +736,12 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 
 ### P0：契约、策略和状态机设计
 
-- [ ] 确认 selected-connections、allowedProfileIds 和三档操作等级的数据模型。
-- [ ] 确认 ConnectionOperation、等待者、deadline、取消和去重状态机。
-- [ ] 确认 MCP、CLI、Agent 三种 source 的审批语义。
-- [ ] 定义稳定错误码、progress 消息和统一脱敏结果。
-- [ ] 明确 CLI open 默认等待还是显式 --wait 的兼容策略。
-- [ ] 更新 packages/core 类型草案和架构决策记录。
+- [x] 确认 selected-connections、allowedProfileIds 和三档操作等级的数据模型。
+- [x] 确认 ConnectionOperation、等待者、deadline、取消和去重状态机。
+- [x] 确认 MCP、CLI、Agent 三种 source 的审批语义。
+- [x] 定义稳定错误码、progress 消息和统一脱敏结果。
+- [x] 明确 CLI open 默认等待还是显式 --wait 的兼容策略。
+- [x] 更新 packages/core 类型草案和架构决策记录（ADR-0008）。
 
 ### P1：SSH 登录凭据等待闭环
 
