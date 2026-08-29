@@ -1,6 +1,6 @@
 # MCP / CLI Agent 访问控制与连接凭据闭环计划
 
-状态：规划中
+状态：阶段 1 已实现（待自动化门禁）；阶段 2-4 规划中
 
 关联 Issue：[St0ff3l/fileterm#224](https://github.com/St0ff3l/fileterm/issues/224)
 
@@ -916,3 +916,17 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 ```
 
 这条路径同时解决 Issue #224 的权限控制问题、SSH 登录凭据断链问题，以及 AI 并行调用 CLI 时的进程膨胀问题。
+
+## 18. 实施进度
+
+### 阶段 1：SSH 连接等待闭环
+
+- [x] 增加 desktop runtime 内的短期 `ConnectionOperation` 注册表，只保存 operation ID、profile ID、tab ID 和非敏感状态。
+- [x] 外部 `open_connection` 默认等待连接就绪；可用 `wait_for_ready=false` 立即返回 operation ID。
+- [x] 增加 `wait_for_connection` MCP tool 与 `fileterm wait-connection` CLI 命令，等待超时后可继续等待。
+- [x] SSH 登录凭据取消、超时、认证失败和一般连接失败映射为稳定错误码。
+- [x] CLI 进度写入 stderr，最终 JSON 保持在 stdout；MCP 通过 progress/message 通知等待状态。
+- [x] SSH、FTP、Telnet、Serial 和本地终端的就绪/失败状态接入连接操作通知。
+- [ ] 完成全仓质量门禁；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
+
+阶段 1 的实现不改变 GUI 直接打开连接的立即返回语义，也没有把 SSH 登录密码新增到 CLI 参数、MCP 参数或结果中。阶段 2 的全局连接白名单、阶段 3 的常驻 Agent bridge 与连接去重仍未开始。

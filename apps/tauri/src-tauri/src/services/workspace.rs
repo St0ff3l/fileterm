@@ -1,3 +1,4 @@
+use crate::services::connection_operations::ConnectionOperationRegistry;
 use crate::services::transfers::TransferTask;
 use crate::sessions::WorkerCmd;
 use serde::{Deserialize, Serialize};
@@ -484,6 +485,9 @@ pub struct WorkspaceState {
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions: Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
+    /// Event-driven state for connection opens requested by CLI/MCP callers.
+    /// It carries no credentials or terminal output.
+    pub connection_operations: Arc<ConnectionOperationRegistry>,
     /// One-time password prompts for cross-device remote backup encryption.
     /// These are intentionally separate from terminal and remote-exec input.
     pub pending_backup_passwords: Arc<RwLock<HashMap<String, PendingBackupPassword>>>,
@@ -589,6 +593,7 @@ impl Default for WorkspaceState {
             local_terminal_runtime_gates: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_launches: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
+            connection_operations: Arc::new(ConnectionOperationRegistry::default()),
             pending_backup_passwords: Arc::new(RwLock::new(HashMap::new())),
             backup_password_renderer_registration: Arc::new(RwLock::new(None)),
             pending_sudo_passwords: Arc::new(RwLock::new(HashMap::new())),

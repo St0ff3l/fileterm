@@ -10,6 +10,9 @@ use crate::services::action_review::{
     ACTION_APPROVAL_TIMEOUT, SUDO_AUTH_FAILURE, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
     SU_AUTH_FAILURE, SU_PASSWORD_CANCELLED, SU_PASSWORD_NEEDED,
 };
+use crate::services::connection_operations::{
+    ConnectionOperationState, FILETERM_CONNECTION_FAILED, FILETERM_CONNECTION_WAIT_TIMEOUT,
+};
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -35,8 +38,9 @@ const MCP_RUNTIME_FILE: &str = "mcp-runtime.json";
 const MCP_PROTOCOL_VERSION: u32 = 1;
 const MCP_JSONRPC_PROTOCOL_VERSION: &str = "2025-06-18";
 const MCP_BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
-const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(130);
+const MCP_CLIENT_TIMEOUT: Duration = Duration::from_secs(250);
 const MCP_TRANSFER_WAIT_TIMEOUT: Duration = Duration::from_secs(125);
+const MCP_CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(125);
 const MCP_MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
 const MCP_MAX_CONCURRENT_CLIENTS: usize = 8;
 const MCP_DEFAULT_PAGE_SIZE: usize = 20;
@@ -44,7 +48,12 @@ const MCP_MAX_PAGE_SIZE: usize = 100;
 const MCP_MAX_FILE_CONTENT_BYTES: usize = 512 * 1024;
 const MCP_TRANSFER_WAIT_DEFAULT_MS: u64 = 30_000;
 const MCP_TRANSFER_WAIT_MAX_MS: u64 = 120_000;
+const MCP_CONNECTION_WAIT_DEFAULT_MS: u64 = 120_000;
+const MCP_CONNECTION_WAIT_MAX_MS: u64 = 120_000;
 const MCP_TRANSFER_NOT_FOUND: &str = "FILETERM_TRANSFER_NOT_FOUND";
+const MCP_CONNECTION_OPERATION_NOT_FOUND: &str = "FILETERM_CONNECTION_OPERATION_NOT_FOUND";
+const MCP_CONNECTION_OPERATION_NOT_READY: &str = "FILETERM_CONNECTION_OPERATION_NOT_READY";
+const MCP_CONNECTION_WAITING: &str = "FILETERM_CONNECTION_WAITING";
 const MCP_POLICY_READ_ONLY: &str = "MCP_POLICY_READ_ONLY";
 const MCP_SCOPE_DENIED: &str = "MCP_SCOPE_DENIED";
 
@@ -189,6 +198,17 @@ impl BridgeProgress {
             message: format!(
                 "FileTerm opened a secure {method} password prompt in the main window. Enter the password there; the command is waiting and will continue after submission."
             ),
+            progress_token,
+        }
+    }
+
+    fn connection_waiting(progress_token: Option<Value>) -> Self {
+        Self {
+            kind: "progress".to_string(),
+            event: "connection-waiting".to_string(),
+            status: "waiting".to_string(),
+            code: MCP_CONNECTION_WAITING.to_string(),
+            message: "FileTerm is waiting for the saved connection to become ready. If a secure SSH credential prompt appears in the FileTerm window, complete it there; the CLI/MCP request remains pending.".to_string(),
             progress_token,
         }
     }
@@ -368,6 +388,13 @@ fn bridge_request_timeout(request: &BridgeRequest) -> Duration {
         // stdio client receives the final task snapshot instead of a socket
         // timeout at the boundary.
         MCP_TRANSFER_WAIT_TIMEOUT
+    } else if request.action == "wait_for_connection" {
+        MCP_CONNECTION_WAIT_TIMEOUT
+    } else if request.action == "open_connection" {
+        // MCP approval happens before the connection worker starts. Reserve
+        // both windows so an approved SSH profile can still reach its secure
+        // credential prompt and return a final connection result.
+        ACTION_APPROVAL_TIMEOUT + MCP_CONNECTION_WAIT_TIMEOUT
     } else if action_requires_approval(&request.action) {
         ACTION_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
     } else {
@@ -490,8 +517,13 @@ async fn dispatch_bridge_request(
         "read_remote_file" => read_remote_file(app, &request.params).await,
         "list_transfers" => list_transfers(app, &request.params).await,
         "wait_for_transfer" => wait_for_transfer(app, &request.params).await,
+        "wait_for_connection" => {
+            wait_for_connection(app, &request.params, progress_sender, progress_token).await
+        }
         "list_ssh_tunnels" => list_ssh_tunnels(app, &request.params).await,
-        "open_connection" => open_connection(app, &request.params).await,
+        "open_connection" => {
+            open_connection(app, &request.params, progress_sender, progress_token).await
+        }
         "activate_session" => activate_session(app, &request.params).await,
         "reconnect_session" => reconnect_session(app, &request.params).await,
         "disconnect_session" => disconnect_session(app, &request.params).await,
@@ -580,6 +612,9 @@ async fn enforce_active_session_scope(
             "{MCP_SCOPE_DENIED}: active-session scope cannot open another saved connection"
         ));
     }
+    if request.action == "wait_for_connection" {
+        return enforce_connection_operation_scope(app, request, None).await;
+    }
     let active_tab_id = active_session_tab_id(app).await?;
     let requested_tab_id = optional_string(&request.params, "tab_id", 256)?;
     match requested_tab_id {
@@ -629,6 +664,9 @@ async fn enforce_default_connection_scope(
                 )
             });
     }
+    if request.action == "wait_for_connection" {
+        return enforce_connection_operation_scope(app, request, Some(default_profile_id)).await;
+    }
     let snapshot = crate::commands::get_workspace_snapshot(app.clone())
         .await
         .map_err(public_app_error)?;
@@ -652,6 +690,36 @@ async fn enforce_default_connection_scope(
         .ok_or_else(|| {
             format!("{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's default connection")
         })
+}
+
+async fn enforce_connection_operation_scope(
+    app: &AppHandle,
+    request: &BridgeRequest,
+    required_profile_id: Option<&str>,
+) -> Result<(), String> {
+    let operation_id = required_string(&request.params, "operation_id", 256)?;
+    let info = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_operations
+        .info(&operation_id)
+        .await
+        .map_err(|error| format!("{MCP_SCOPE_DENIED}: {error}"))?;
+    if let Some(profile_id) = required_profile_id {
+        if info.profile_id != profile_id {
+            return Err(format!(
+                "{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's default connection"
+            ));
+        }
+        return Ok(());
+    }
+
+    let active_tab_id = active_session_tab_id(app).await?;
+    if info.tab_id.as_deref() != Some(active_tab_id.as_str()) {
+        return Err(format!(
+            "{MCP_SCOPE_DENIED}: this Agent is limited to FileTerm's active session"
+        ));
+    }
+    Ok(())
 }
 
 async fn active_session_tab_id(app: &AppHandle) -> Result<String, String> {
@@ -1207,12 +1275,169 @@ async fn list_ssh_tunnels(app: &AppHandle, params: &Value) -> Result<Value, Stri
     Ok(json!({ "tabId": tab_id, "items": items }))
 }
 
-async fn open_connection(app: &AppHandle, params: &Value) -> Result<Value, String> {
+async fn open_connection(
+    app: &AppHandle,
+    params: &Value,
+    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_token: Option<Value>,
+) -> Result<Value, String> {
     let profile_id = required_string(params, "profile_id", 256)?;
-    let snapshot = crate::commands::app_open_profile(app.clone(), profile_id.clone())
+    let operation = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_operations
+        .begin(profile_id.clone())
+        .await;
+    let (tab_id, snapshot) = match crate::commands::app_open_profile_with_operation(
+        app.clone(),
+        profile_id,
+        operation.id.clone(),
+    )
+    .await
+    {
+        Ok(opened) => opened,
+        Err(error) => {
+            app.state::<crate::services::workspace::WorkspaceState>()
+                .connection_operations
+                .fail_for_operation(&operation.id, FILETERM_CONNECTION_FAILED)
+                .await;
+            return Err(public_app_error(error));
+        }
+    };
+    let wait_for_ready = optional_bool(params, "wait_for_ready")?.unwrap_or(true);
+    if !wait_for_ready {
+        return Ok(connection_operation_result(
+            compact_snapshot(&snapshot, Some(&tab_id), "open_connection"),
+            &operation.id,
+            "connecting",
+            false,
+        ));
+    }
+    wait_for_connection_operation(
+        app,
+        &operation.id,
+        params,
+        progress_sender,
+        progress_token,
+        "open_connection",
+    )
+    .await
+}
+
+async fn wait_for_connection(
+    app: &AppHandle,
+    params: &Value,
+    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_token: Option<Value>,
+) -> Result<Value, String> {
+    let operation_id = required_string(params, "operation_id", 256)?;
+    wait_for_connection_operation(
+        app,
+        &operation_id,
+        params,
+        progress_sender,
+        progress_token,
+        "wait_for_connection",
+    )
+    .await
+}
+
+async fn wait_for_connection_operation(
+    app: &AppHandle,
+    operation_id: &str,
+    params: &Value,
+    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_token: Option<Value>,
+    operation_name: &str,
+) -> Result<Value, String> {
+    let timeout_ms = optional_u64(params, "timeout_ms")?.unwrap_or(MCP_CONNECTION_WAIT_DEFAULT_MS);
+    if !(1_000..=MCP_CONNECTION_WAIT_MAX_MS).contains(&timeout_ms) {
+        return Err(format!(
+            "timeout_ms must be between 1000 and {MCP_CONNECTION_WAIT_MAX_MS}"
+        ));
+    }
+
+    let info = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .connection_operations
+        .info(operation_id)
         .await
-        .map_err(public_app_error)?;
-    Ok(compact_snapshot(&snapshot, None, "open_connection"))
+        .map_err(|error| format!("{MCP_CONNECTION_OPERATION_NOT_FOUND}: {error}"))?;
+    let Some(tab_id) = info.tab_id.as_deref() else {
+        return Err(format!(
+            "{MCP_CONNECTION_OPERATION_NOT_READY}: connection worker has not been attached"
+        ));
+    };
+    if let Some(sender) = progress_sender {
+        let _ = sender.send(BridgeProgress::connection_waiting(progress_token));
+    }
+
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+    let mut receiver = info.receiver;
+    loop {
+        let state = {
+            let borrowed_state = receiver.borrow();
+            borrowed_state.clone()
+        };
+        match state {
+            ConnectionOperationState::Connected => {
+                let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+                    .await
+                    .map_err(public_app_error)?;
+                return Ok(connection_operation_result(
+                    compact_snapshot(&snapshot, Some(tab_id), operation_name),
+                    operation_id,
+                    "connected",
+                    false,
+                ));
+            }
+            ConnectionOperationState::Failed { code } => {
+                return Err(format!(
+                    "{code}: FileTerm could not establish the saved connection (operation_id={operation_id})"
+                ));
+            }
+            ConnectionOperationState::Pending | ConnectionOperationState::Connecting => {}
+        }
+
+        match tokio::time::timeout_at(deadline, receiver.changed()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => {
+                return Err(format!(
+                    "{FILETERM_CONNECTION_FAILED}: connection operation ended unexpectedly (operation_id={operation_id})"
+                ));
+            }
+            Err(_) => {
+                let snapshot = crate::commands::get_workspace_snapshot(app.clone())
+                    .await
+                    .map_err(public_app_error)?;
+                return Ok(connection_operation_result(
+                    compact_snapshot(&snapshot, Some(tab_id), operation_name),
+                    operation_id,
+                    "connecting",
+                    true,
+                ));
+            }
+        }
+    }
+}
+
+fn connection_operation_result(
+    mut result: Value,
+    operation_id: &str,
+    status: &str,
+    timed_out: bool,
+) -> Value {
+    if let Some(object) = result.as_object_mut() {
+        object.insert(
+            "connectionOperationId".to_string(),
+            Value::String(operation_id.to_string()),
+        );
+        object.insert(
+            "connectionStatus".to_string(),
+            Value::String(status.to_string()),
+        );
+        object.insert("timedOut".to_string(), Value::Bool(timed_out));
+    }
+    result
 }
 
 async fn activate_session(app: &AppHandle, params: &Value) -> Result<Value, String> {
@@ -2049,8 +2274,19 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
             &["transfer-id", "timeout-ms"],
             &["transfer-id"],
         ),
+        "wait-connection" => cli_action(
+            "wait_for_connection",
+            options,
+            &["operation-id", "timeout-ms"],
+            &["operation-id"],
+        ),
         "tunnels" => cli_action("list_ssh_tunnels", options, &["tab-id"], &["tab-id"]),
-        "open" => cli_action("open_connection", options, &["profile-id"], &["profile-id"]),
+        "open" => cli_action(
+            "open_connection",
+            options,
+            &["profile-id", "wait-for-ready", "timeout-ms"],
+            &["profile-id"],
+        ),
         "activate" => cli_action("activate_session", options, &["tab-id"], &["tab-id"]),
         "reconnect" => cli_action("reconnect_session", options, &["tab-id"], &["tab-id"]),
         "disconnect" => cli_action("disconnect_session", options, &["tab-id"], &["tab-id"]),
@@ -2281,6 +2517,7 @@ fn cli_values_to_params(values: &HashMap<String, String>) -> Result<Value, Strin
                     .collect(),
             ),
             "recursive" => Value::Bool(parse_cli_bool("recursive", value)?),
+            "wait-for-ready" => Value::Bool(parse_cli_bool("wait-for-ready", value)?),
             "save-sudo-password" | "save-su-password" => Value::Bool(parse_cli_bool(key, value)?),
             "limit" | "offset" | "timeout-ms" => json!(parse_cli_usize(key, value)?),
             _ => Value::String(value.clone()),
@@ -2362,6 +2599,8 @@ fn print_cli_command_help(command: &str) {
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
         "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD --save-sudo-password true] [--su-password PASSWORD --save-su-password true]"),
         "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
+        "wait_for_connection" => println!("Usage: fileterm wait-connection --operation-id ID [--timeout-ms N]"),
+        "open_connection" => println!("Usage: fileterm open --profile-id PROFILE_ID [--wait-for-ready true|false] [--timeout-ms N]"),
         "write_remote_file" => println!("Usage: fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT [--encoding utf-8]"),
         "upload_file" => println!("Usage: fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH [--target-name NAME]"),
         "download_file" => println!("Usage: fileterm download --tab-id TAB_ID --remote-path PATH --local-directory PATH [--target-name NAME]"),
@@ -2454,6 +2693,7 @@ fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> 
         | "fileterm_list_transfers"
         | "fileterm_get_command_templates" => &["limit", "offset"],
         "fileterm_wait_for_transfer" => &["transfer_id", "timeout_ms"],
+        "fileterm_wait_for_connection" => &["operation_id", "timeout_ms"],
         "fileterm_get_session_context" => &["profile_id"],
         "fileterm_list_remote_directory" => &["tab_id", "path", "limit", "offset"],
         "fileterm_read_remote_file" => &["tab_id", "path", "encoding"],
@@ -2462,7 +2702,7 @@ fn validate_tool_arguments(name: &str, arguments: &Value) -> Result<(), String> 
         | "fileterm_reconnect_session"
         | "fileterm_disconnect_session"
         | "fileterm_close_session" => &["tab_id"],
-        "fileterm_open_connection" => &["profile_id"],
+        "fileterm_open_connection" => &["profile_id", "wait_for_ready", "timeout_ms"],
         "fileterm_execute_remote_command" => &[
             "tab_id",
             "command",
@@ -2549,6 +2789,13 @@ fn mcp_error_code(error: &str) -> &'static str {
         SU_PASSWORD_CANCELLED,
         SUDO_AUTH_FAILURE,
         SU_AUTH_FAILURE,
+        crate::services::connection_operations::SSH_CREDENTIALS_NEEDED,
+        crate::services::connection_operations::SSH_CREDENTIALS_CANCELLED,
+        crate::services::connection_operations::SSH_CREDENTIALS_TIMEOUT,
+        crate::services::connection_operations::SSH_AUTH_FAILURE,
+        FILETERM_CONNECTION_WAIT_TIMEOUT,
+        MCP_CONNECTION_OPERATION_NOT_FOUND,
+        MCP_CONNECTION_OPERATION_NOT_READY,
         "REMOTE_INTERACTIVE_INPUT_REQUIRED",
         MCP_TRANSFER_NOT_FOUND,
     ] {
@@ -2579,7 +2826,10 @@ fn mcp_error_is_retryable(code: &str) -> bool {
         "FILETERM_APP_UNAVAILABLE"
             | "FILETERM_BRIDGE_BUSY"
             | "FILETERM_REQUEST_TIMEOUT"
+            | FILETERM_CONNECTION_WAIT_TIMEOUT
             | "FILETERM_SESSION_DISCONNECTED"
+            | crate::services::connection_operations::SSH_CREDENTIALS_NEEDED
+            | crate::services::connection_operations::SSH_CREDENTIALS_TIMEOUT
             | SUDO_PASSWORD_NEEDED
             | SU_PASSWORD_NEEDED
             | "REMOTE_INTERACTIVE_INPUT_REQUIRED"
@@ -2618,13 +2868,21 @@ fn tool_definitions() -> Vec<Value> {
             "transfer_id": { "type": "string" },
             "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": MCP_TRANSFER_WAIT_MAX_MS, "default": MCP_TRANSFER_WAIT_DEFAULT_MS }
         }), &["transfer_id"], true, false, true, false),
+        tool_definition("fileterm_wait_for_connection", "Wait for a FileTerm connection", "Wait locally for a saved connection opened by FileTerm CLI/MCP to become connected. SSH credential prompts stay in the FileTerm window; the operation id can be waited on again after a bounded timeout.", json!({
+            "operation_id": { "type": "string" },
+            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": MCP_CONNECTION_WAIT_MAX_MS, "default": MCP_CONNECTION_WAIT_DEFAULT_MS }
+        }), &["operation_id"], true, false, true, false),
         tool_definition("fileterm_list_ssh_tunnels", "List SSH tunnels", "List tunnels attached to an open SSH session.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], true, false, true, false),
-        tool_definition("fileterm_open_connection", "Open a FileTerm connection", "Open a saved profile in a new FileTerm session. The user must approve the connection attempt.", json!({ "profile_id": { "type": "string" } }), &["profile_id"], false, false, false, true),
+        tool_definition("fileterm_open_connection", "Open a FileTerm connection", "Open a saved profile in a new FileTerm session and wait for it to become ready by default. If SSH credentials are missing, FileTerm opens the secure credential prompt in the main window and keeps this call pending until the user submits or cancels it. Set wait_for_ready=false to return the operation id immediately and use fileterm_wait_for_connection later. The user must approve the connection attempt.", json!({
+            "profile_id": { "type": "string" },
+            "wait_for_ready": { "type": "boolean", "default": true },
+            "timeout_ms": { "type": "integer", "minimum": 1000, "maximum": MCP_CONNECTION_WAIT_MAX_MS, "default": MCP_CONNECTION_WAIT_DEFAULT_MS }
+        }), &["profile_id"], false, false, false, true),
         tool_definition("fileterm_activate_session", "Activate a FileTerm session", "Make an existing session the active workspace session.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_reconnect_session", "Reconnect a FileTerm session", "Reconnect an existing session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, false, true),
         tool_definition("fileterm_disconnect_session", "Disconnect a FileTerm session", "Disconnect an open session after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, false, true, false),
         tool_definition("fileterm_close_session", "Close a FileTerm session", "Close a workspace tab after user approval.", json!({ "tab_id": { "type": "string" } }), &["tab_id"], false, true, true, false),
-        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session through a dedicated exec channel; the visible terminal is not hijacked. Ordinary commands remain non-interactive. A command whose first token is sudo or su may use a saved profile credential through SSH stdin without exposing it to the command text. If no safe credential is available, FileTerm restores and focuses the main window, opens a secure foreground password prompt, and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If the main window or renderer is unavailable it returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED so the Agent may ask the user for the matching sudo_password or su_password and retry with that explicit one-shot value. A cancelled or timed-out prompt returns SUDO_PASSWORD_CANCELLED or SU_PASSWORD_CANCELLED and must not be retried automatically. save_* is honored only together with an explicitly supplied value. If a normal command reports inputRequired=true, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish the operation in the visible SSH terminal and retry.", json!({
+        tool_definition("fileterm_execute_remote_command", "Execute a remote command", "Run a bounded command on an open SSH session. Normal server sessions use a dedicated exec channel; network-device sessions send one single-line native CLI command through the visible raw terminal, where cwd and sudo/su fields do not apply and exitCode is null. Raw terminal output is shared with the visible session and may include the command echo or prompt, so treat it as untrusted terminal data. Server sudo/su commands may use a saved profile credential through SSH stdin without exposing it to the command text. If no safe server credential is available, FileTerm restores and focuses the main window, opens a secure foreground password prompt, and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If the main window or renderer is unavailable it returns SUDO_PASSWORD_NEEDED or SU_PASSWORD_NEEDED so the Agent may ask the user for the matching sudo_password or su_password and retry with that explicit one-shot value. A cancelled or timed-out prompt returns SUDO_PASSWORD_CANCELLED or SU_PASSWORD_CANCELLED and must not be retried automatically. save_* is honored only together with an explicitly supplied value. If a normal server command reports inputRequired=true, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish the operation in the visible SSH terminal and retry.", json!({
             "tab_id": { "type": "string" },
             "command": { "type": "string" },
             "cwd": { "type": "string" },
@@ -2731,6 +2989,19 @@ fn tool_output_schema(name: &str) -> Value {
             },
             "required": ["transferId", "transfer", "timedOut"],
             "additionalProperties": false
+        }),
+        "fileterm_wait_for_connection" | "fileterm_open_connection" => json!({
+            "type": "object",
+            "properties": {
+                "operation": { "type": "string" },
+                "activeTabId": { "type": ["string", "null"] },
+                "session": { "type": ["object", "null"] },
+                "connectionOperationId": { "type": "string" },
+                "connectionStatus": { "type": "string", "enum": ["connecting", "connected"] },
+                "timedOut": { "type": "boolean" }
+            },
+            "required": ["connectionOperationId", "connectionStatus", "timedOut"],
+            "additionalProperties": true
         }),
         "fileterm_list_connections"
         | "fileterm_get_command_templates"
@@ -2947,7 +3218,8 @@ mod tests {
         bridge_request_timeout, handle_jsonrpc_request, initialize_result, mcp_error_code,
         mcp_error_is_retryable, optional_string, pagination, tool_definitions, tool_error_result,
         validate_tool_arguments, write_mcp_progress, BridgeProgress, BridgeRequest,
-        MCP_BRIDGE_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION, SUDO_PASSWORD_CANCELLED,
+        MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
+        SUDO_PASSWORD_CANCELLED,
         SUDO_PASSWORD_NEEDED,
     };
     use serde_json::{json, Value};
@@ -3087,6 +3359,14 @@ mod tests {
             })
         )
         .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_wait_for_connection",
+            &json!({
+                "operation_id": "connection-1",
+                "timeout_ms": 30_000
+            })
+        )
+        .is_ok());
     }
 
     #[test]
@@ -3118,6 +3398,24 @@ mod tests {
             progress_token: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
+    }
+
+    #[test]
+    fn opening_and_waiting_for_a_connection_have_bounded_foreground_timeouts() {
+        let open = BridgeRequest {
+            action: "open_connection".to_string(),
+            params: json!({ "profile_id": "profile-1" }),
+            requires_approval: false,
+            progress_token: None,
+        };
+        let wait = BridgeRequest {
+            action: "wait_for_connection".to_string(),
+            params: json!({ "operation_id": "connection-1" }),
+            requires_approval: false,
+            progress_token: None,
+        };
+        assert!(bridge_request_timeout(&open) > MCP_CONNECTION_WAIT_TIMEOUT);
+        assert_eq!(bridge_request_timeout(&wait), MCP_CONNECTION_WAIT_TIMEOUT);
     }
 
     #[test]
@@ -3153,5 +3451,14 @@ mod tests {
             SUDO_PASSWORD_CANCELLED
         );
         assert!(!mcp_error_is_retryable(SUDO_PASSWORD_CANCELLED));
+        assert_eq!(
+            mcp_error_code("SSH_CREDENTIALS_NEEDED: enter credentials in FileTerm"),
+            "SSH_CREDENTIALS_NEEDED"
+        );
+        assert!(mcp_error_is_retryable("SSH_CREDENTIALS_NEEDED"));
+        assert_eq!(
+            mcp_error_code("FILETERM_CONNECTION_OPERATION_NOT_FOUND: missing"),
+            "FILETERM_CONNECTION_OPERATION_NOT_FOUND"
+        );
     }
 }

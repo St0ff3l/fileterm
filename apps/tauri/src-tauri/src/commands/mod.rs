@@ -3566,6 +3566,7 @@ async fn spawn_session_for_profile(
     profile: &serde_json::Value,
     profile_id: &str,
     pane_root_tab_id: Option<String>,
+    connection_operation_id: Option<&str>,
 ) -> Result<String, AppError> {
     let resolved_profile = resolve_profile_for_session(app, profile)?;
     let profile = &resolved_profile;
@@ -3618,6 +3619,14 @@ async fn spawn_session_for_profile(
         .and_then(|u| u.as_str())
         .unwrap_or("root");
     let initial_remote_path = crate::services::workspace::initial_remote_path_for_profile(profile);
+
+    if let Some(operation_id) = connection_operation_id {
+        state
+            .connection_operations
+            .attach_tab(operation_id, &tab_id)
+            .await
+            .map_err(AppError::Command)?;
+    }
 
     {
         let mut tabs = state.tabs.write().await;
@@ -4120,7 +4129,7 @@ pub async fn app_open_profile(
     // open a connection, not whether the later network handshake succeeds.
     crate::services::profile_ops::touch_profile(&app, &profile_id)?;
 
-    let tab_id = spawn_session_for_profile(&app, &state, profile, &profile_id, None).await?;
+    let tab_id = spawn_session_for_profile(&app, &state, profile, &profile_id, None, None).await?;
 
     {
         let mut active = state.active_tab_id.write().await;
@@ -4128,6 +4137,40 @@ pub async fn app_open_profile(
     }
 
     get_workspace_snapshot_and_emit(&app).await
+}
+
+/// Open a saved profile for an external CLI/MCP caller and return the tab id
+/// together with the initial workspace snapshot. The operation id is attached
+/// before the worker starts, so a fast connection cannot race the wait path.
+pub async fn app_open_profile_with_operation(
+    app: AppHandle,
+    profile_id: String,
+    connection_operation_id: String,
+) -> Result<(String, serde_json::Value), AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+    let profiles = read_json_array(&app, "profiles.json")?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+
+    crate::services::profile_ops::touch_profile(&app, &profile_id)?;
+    let tab_id = spawn_session_for_profile(
+        &app,
+        &state,
+        profile,
+        &profile_id,
+        None,
+        Some(&connection_operation_id),
+    )
+    .await?;
+    {
+        let mut active = state.active_tab_id.write().await;
+        *active = Some(tab_id.clone());
+    }
+    let snapshot = get_workspace_snapshot_and_emit(&app).await?;
+    Ok((tab_id, snapshot))
 }
 
 /// 分屏：基于当前 profile 新建一个独立 session，并在 pane tree 中把 source leaf
@@ -4218,8 +4261,15 @@ pub async fn app_split_tab(
                 .iter()
                 .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
                 .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
-            spawn_session_for_profile(&app, &state, profile, &profile_id, Some(pane_root_tab_id))
-                .await?
+            spawn_session_for_profile(
+                &app,
+                &state,
+                profile,
+                &profile_id,
+                Some(pane_root_tab_id),
+                None,
+            )
+            .await?
         }
         "local" => {
             let mut launch = state

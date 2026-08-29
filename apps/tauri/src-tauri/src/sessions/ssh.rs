@@ -597,6 +597,12 @@ pub fn start_ssh_worker(
                     format!("worker failed: {e}"),
                 );
                 emit_terminal_data(&app, &tid, &format!("连接失败: {}\r\n", e)).await;
+                let failure_code =
+                    crate::services::connection_operations::ssh_connection_error_code(&e);
+                app.state::<crate::services::workspace::WorkspaceState>()
+                    .connection_operations
+                    .fail_for_tab(&tid, failure_code)
+                    .await;
                 WorkspaceTabStatus::Error
             }
         };
@@ -1587,6 +1593,22 @@ async fn update_tab_status_and_emit(app: &AppHandle, tab_id: &str, status: Works
     }
     if target_changed {
         state.touch_ai_session_revision(tab_id).await;
+    }
+    let operation_state = if matches!(
+        status,
+        WorkspaceTabStatus::Error | WorkspaceTabStatus::Closed
+    ) {
+        crate::services::connection_operations::ConnectionOperationState::Failed {
+            code: crate::services::connection_operations::FILETERM_CONNECTION_FAILED.to_string(),
+        }
+    } else {
+        crate::services::connection_operations::ConnectionOperationState::Connecting
+    };
+    if !connected {
+        state
+            .connection_operations
+            .publish_for_tab(tab_id, operation_state)
+            .await;
     }
     let payload = serde_json::json!({
         "tabId": tab_id.to_string(),
@@ -4982,6 +5004,14 @@ async fn run_worker_loop(
             },
         );
     }
+
+    state
+        .connection_operations
+        .publish_for_tab(
+            tab_id,
+            crate::services::connection_operations::ConnectionOperationState::Connected,
+        )
+        .await;
 
     // ── SFTP subsystem ─────────────────────────────────────────────────────
     // russh-sftp 2.3 needs an explicit subsystem request before converting

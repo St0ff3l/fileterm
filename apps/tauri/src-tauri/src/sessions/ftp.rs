@@ -1285,6 +1285,17 @@ async fn set_ftp_state(
             session.remote_files = files;
         }
     }
+    let operation_state = if connected {
+        crate::services::connection_operations::ConnectionOperationState::Connected
+    } else {
+        crate::services::connection_operations::ConnectionOperationState::Failed {
+            code: crate::services::connection_operations::FILETERM_CONNECTION_FAILED.to_string(),
+        }
+    };
+    state
+        .connection_operations
+        .publish_for_tab(tab_id, operation_state)
+        .await;
     if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
         let _ = app.emit("workspace:snapshot", snapshot);
     }
