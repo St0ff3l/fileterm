@@ -536,10 +536,11 @@
 .file-permission-dialog__switch-track::before {
   content: '';
   position: absolute;
-  top: 2px;
+  top: 1px;
   left: 2px;
-  width: 24px;
-  height: 18px;
+  width: 33px;
+  bottom: 1px;
+  height: auto;
   border-radius: 999px 0 0 999px;
   background: var(--copy-link);
   opacity: 0;
