@@ -1,20 +1,12 @@
 # 网络设备 SSH 兼容计划
 
 > 状态：Completed（代码目标已完成；没有实体设备和型号级实测）
-> 关联：Refs #201
-> 范围：只对齐 Netcatty 与 NyaTerm 已有实现，不扩展为全品牌、全型号支持。
-
-实际参考：[Netcatty #540](https://github.com/binaricat/Netcatty/pull/540)、
-[Netcatty #680](https://github.com/binaricat/Netcatty/pull/680)、
-[Netcatty #1052](https://github.com/binaricat/Netcatty/pull/1052)、
-[Netcatty #1045](https://github.com/binaricat/Netcatty/pull/1045)、
-[NyaTerm SSH 文档](https://nyaterm.app/en/docs/guide/ssh-connection/) 和
-[NyaTerm SSH 源码](https://github.com/nyakang/nyaterm/tree/main/src-tauri/src/core/ssh)。
+> 范围：只对齐已有网络设备 SSH 实现中的能力，不扩展为全品牌、全型号支持。
 
 ## 1. 范围判断
 
-本计划的目标是把 Netcatty 的网络设备会话处理与 NyaTerm 的 SSH profile / 能力隔离合并到
-FileTerm，不做超出两者真实实现的网络设备功能。
+本计划的目标是把成熟 SSH 网络设备实现中的会话处理、profile 和能力隔离合并到 FileTerm，
+不做超出已有实现的网络设备功能。
 
 MVP 必须具备：
 
@@ -23,12 +15,12 @@ MVP 必须具备：
 - 关闭 SFTP 浏览、CWD 跟随、Shell 探测、Shell 集成和资源监控；
 - 允许选择 `vt100`、`ansi`、`xterm` 等 terminal type；
 - 可选的 SSH Banner 自动识别，在打开额外 channel 之前完成判断；
-- 对已开启 legacy SSH 兼容且识别为 Comware 的连接，支持 Netcatty #1045 所需的
+- 对已开启 legacy SSH 兼容且识别为 Comware 的连接，支持旧设备所需的
   `diffie-hellman-group-exchange-sha1` `1024/1024/8192` 请求范围；
 - 主终端与 SFTP、exec、监控等可选能力相互隔离，后者失败不能关闭终端。
 
-这覆盖 #201 的核心问题：设备登录后保持交互，不会因为 FileTerm 把交换机当成
-Linux/Windows 服务器而发送不兼容命令。本计划不追踪品牌或型号特定的额外命令策略。
+这覆盖核心问题：设备登录后保持交互，不会因为 FileTerm 把交换机当成 Linux/Windows
+服务器而发送不兼容命令。本计划不追踪品牌或型号特定的额外命令策略。
 
 FileTerm 当前已经有 Telnet 和 Serial 会话；本计划先解决 SSH 网络设备模式，不为了统一
 概念而重写现有 Telnet/Serial controller。
@@ -122,7 +114,7 @@ TCP/socket
 pattern，则把该本地配置视为网络设备模式提示；默认厂商族 `auto` 仍保持未知即普通服务器的
 安全 fallback。这个提示只改变连接路径，不会触发任何厂商命令。
 
-识别规则与 Netcatty 的真实 `detectVendorFromSshVersion` 保持一致：
+识别规则采用真实实现中使用的保守 `detectVendorFromSshVersion` 前缀规则：
 
 | 设备族      | 识别线索示例                                       |
 | ----------- | -------------------------------------------------- |
@@ -171,7 +163,7 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 
 ## 6. 实施阶段
 
-### Phase 1：手动网络设备模式（先解决 #201）
+### Phase 1：手动网络设备模式
 
 - [x] 在 `packages/core` 增加 device mode 和 SSH terminal type。
 - [x] 更新 profile 默认值、迁移逻辑、`CreateProfileInput` 和 workspace capabilities。
@@ -185,14 +177,14 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 ### Phase 2：Banner 自动识别
 
 - [x] 在握手阶段提取并规范化远端 identification。
-- [x] 增加 Netcatty 已有的 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、
+- [x] 增加已覆盖的 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、
       Palo Alto、Zyxel、Ruijie pattern 和单元测试。
 - [x] 自动识别结果在任何 exec、CWD、指标或 SFTP 探测之前生效。
 - [x] 手动 mode 覆盖自动结果；未知设备保持安全 fallback。
 
-> 2026-08-28 实施记录：`ClientHandler::kex_done` 保存 russh 的远端 SSH identification，解析器按 Netcatty 的保守规则匹配 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、Palo Alto、Zyxel、Ruijie 线索，并将规范化结果写入运行时有效 profile。解析发生在主 PTY 建立前，因此识别出的网络设备不会进入平台探测、CWD 注入、指标、SFTP 或 exec 路径；`server` 手动模式始终覆盖 Banner，`auto` 未命中且厂商族仍为 `auto` 时按普通服务器兼容路径处理，明确厂商族提示则作为本地 network-device fallback。auto profile 未显式选择 terminal type 时，最终按识别结果使用网络设备 `vt100` 或服务器 `xterm-256color` 默认值。
+> 2026-08-28 实施记录：`ClientHandler::kex_done` 保存 russh 的远端 SSH identification，解析器按保守前缀规则匹配 Cisco、Juniper、Huawei、H3C/Comware、HPE、MikroTik、Fortinet、Palo Alto、Zyxel、Ruijie 线索，并将规范化结果写入运行时有效 profile。解析发生在主 PTY 建立前，因此识别出的网络设备不会进入平台探测、CWD 注入、指标、SFTP 或 exec 路径；`server` 手动模式始终覆盖 Banner，`auto` 未命中且厂商族仍为 `auto` 时按普通服务器兼容路径处理，明确厂商族提示则作为本地 network-device fallback。auto profile 未显式选择 terminal type 时，最终按识别结果使用网络设备 `vt100` 或服务器 `xterm-256color` 默认值。
 
-> 2026-08-29 对照 Netcatty #1052/#1045 补充：自动识别支持老 Huawei VRP 的精确短横线
+> 2026-08-29 补充：自动识别支持老 Huawei VRP 的精确短横线
 > Banner（`SSH-2.0--`、`SSH-1.99--` 及原始 `-` 形式），并完成 Comware legacy GEX 兼容；
 > 匹配保持精确，不把任意未知 Banner 当成网络设备，也不扩大全局弱算法范围。
 
@@ -204,7 +196,7 @@ TCP、SSH 握手、认证、PTY、shell 和可选 channel 失败。
 - [x] network-device：策略路径不发送 `/etc/os-release`、`uname`、CWD marker、metrics script 或 POSIX wrapper。
 - [x] H3C/Huawei mock：额外 exec/SFTP 被拒绝时，能力模型和 russh 协议 fixture 保留主 PTY 和 SSH 隧道 surface。
 - [x] terminal type：网络设备默认 `vt100`，profile 选择值传给 SSH `request_pty`。
-- [x] Banner：Netcatty 已有的设备族在第一个可选 channel 前完成识别。
+- [x] Banner：已覆盖的设备族在第一个可选 channel 前完成识别。
 - [x] 老 Huawei VRP 的短横线 Banner（`SSH-2.0--`、`SSH-1.99--`）在自动模式下识别为网络设备。
 - [x] 未知 Banner：手动 network-device 可用，普通 server 不因 Banner 被误分类。
 - [x] SFTP、exec、metrics 独立失败时，只关闭对应 capability，不关闭 terminal。
