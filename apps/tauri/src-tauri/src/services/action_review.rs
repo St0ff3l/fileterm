@@ -1,19 +1,20 @@
-//! Shared one-time action approval and bounded remote exec support.
+//! Shared one-time action approval and bounded remote command support.
 //!
 //! MCP requests originate outside the renderer, while Copilot starts from a
 //! visible tool activity. Both flows still need the same fail-closed
-//! approval queue and the same dedicated SSH exec boundary. Keeping those
-//! primitives here prevents either surface from silently gaining a shortcut
-//! around user confirmation or the visible terminal.
+//! approval queue. Server commands use the dedicated SSH exec boundary, while
+//! network-device commands use the visible raw PTY; keeping both routes here
+//! prevents either surface from silently gaining a shortcut around user
+//! confirmation or the visible terminal.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 use crate::sessions::WorkerCmd;
 use crate::AppError;
@@ -26,6 +27,9 @@ pub const DEFAULT_REMOTE_EXEC_TIMEOUT_MS: u64 = 60_000;
 pub const MIN_REMOTE_EXEC_TIMEOUT_MS: u64 = 1_000;
 pub const MAX_REMOTE_EXEC_TIMEOUT_MS: u64 = 120_000;
 const MAX_REMOTE_EXEC_SECRET_BYTES: usize = 4 * 1024;
+const NETWORK_DEVICE_RAW_OUTPUT_BYTES: usize = 64 * 1024;
+const NETWORK_DEVICE_RAW_IDLE_SETTLE: Duration = Duration::from_millis(200);
+const NETWORK_DEVICE_RAW_POLL_INTERVAL: Duration = Duration::from_millis(50);
 pub const SUDO_PASSWORD_NEEDED: &str = "SUDO_PASSWORD_NEEDED";
 pub const SU_PASSWORD_NEEDED: &str = "SU_PASSWORD_NEEDED";
 pub const SUDO_PASSWORD_CANCELLED: &str = "SUDO_PASSWORD_CANCELLED";
@@ -37,6 +41,15 @@ pub const SU_AUTH_FAILURE: &str = "SU_AUTH_FAILURE";
 /// that operation in the visible SSH terminal and retry the non-interactive
 /// command afterwards.
 pub const REMOTE_INTERACTIVE_INPUT_REQUIRED: &str = "REMOTE_INTERACTIVE_INPUT_REQUIRED";
+/// Network-device sessions do not have a POSIX working directory. Callers
+/// must send the native CLI command without a `cd` context.
+pub const NETWORK_DEVICE_CWD_UNSUPPORTED: &str = "NETWORK_DEVICE_CWD_UNSUPPORTED";
+/// sudo/su credentials are meaningful only for a server shell and must never
+/// be routed into a network-device terminal command.
+pub const NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED: &str = "NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED";
+/// Raw network-device commands must stay single-line so one tool call cannot
+/// smuggle a second command through the visible terminal.
+pub const NETWORK_DEVICE_COMMAND_INVALID: &str = "NETWORK_DEVICE_COMMAND_INVALID";
 
 /// Optional progress callback fired after FileTerm has restored the main
 /// window and before the local sudo/su prompt starts waiting. AI Copilot and
@@ -296,6 +309,9 @@ pub struct RemoteExecResult {
     pub exit_code: Option<u32>,
     pub timed_out: bool,
     pub output_truncated: bool,
+    /// True when the command was sent through the visible network-device PTY.
+    /// Network CLIs do not provide a reliable process exit code on this path.
+    pub raw_terminal: bool,
     /// The isolated non-interactive channel detected a supported input prompt
     /// in its bounded output. This is only a routing hint for the Agent; no
     /// input value is ever collected or returned on this path.
@@ -304,16 +320,16 @@ pub struct RemoteExecResult {
     pub input_kind: Option<String>,
 }
 
-/// Run one explicit command through the SSH worker's independent exec
-/// channel. It never writes to the interactive PTY and the worker retains a
-/// bounded output buffer, reported as `outputTruncated` to callers.
+/// Run one explicit command through the SSH command boundary. Server sessions
+/// use the independent exec channel; network-device sessions send the native
+/// CLI command through the already-open raw PTY and collect its quiet output.
 pub async fn execute_remote_command(
     app: &AppHandle,
     request: RemoteExecRequest,
 ) -> Result<RemoteExecResult, AppError> {
     let tab_id = validate_remote_exec_tab_id(&request.tab_id)?;
     let command = validate_remote_exec_command(&request.command)?;
-    let cwd = validate_remote_exec_cwd(request.cwd)?;
+    let requested_cwd = validate_remote_exec_cwd(request.cwd)?;
 
     let timeout_ms = request
         .timeout_ms
@@ -332,13 +348,16 @@ pub async fn execute_remote_command(
             "Remote command execution is only supported for SSH sessions".to_string(),
         ));
     }
-    ensure_expected_session_revision(
-        &state,
-        &tab_id,
-        request.expected_session_revision.as_deref(),
-    )
-    .await?;
-    let (cwd, profile_id, host, shell_user) = {
+    // External CLI/MCP callers do not carry the AI context revision, but they
+    // still need the same target binding: a disconnect/reconnect while the
+    // command is waiting must not make it run against a replacement session
+    // that happens to reuse the same tab ID.
+    let bound_session_revision = match request.expected_session_revision.clone() {
+        Some(expected) => Some(expected),
+        None => Some(state.ai_session_revision(&tab_id).await.to_string()),
+    };
+    ensure_expected_session_revision(&state, &tab_id, bound_session_revision.as_deref()).await?;
+    let (cwd, profile_id, host, shell_user, network_device) = {
         let sessions = state.sessions.read().await;
         let session = sessions
             .get(&tab_id)
@@ -348,13 +367,50 @@ pub async fn execute_remote_command(
                 "FileTerm SSH session is not connected".to_string(),
             ));
         }
+        let network_device = session.device_mode.as_deref() == Some("network-device");
+        if !network_device && !session.capabilities.shell_integration {
+            return Err(AppError::Command(
+                "Remote command execution is disabled for this SSH session".to_string(),
+            ));
+        }
         (
-            cwd.or_else(|| session.shell_cwd.clone()),
+            requested_cwd.clone().or_else(|| {
+                (!network_device)
+                    .then(|| session.shell_cwd.clone())
+                    .flatten()
+            }),
             session.profile_id.clone(),
             session.access_host.clone(),
             session.shell_user.clone(),
+            network_device,
         )
     };
+
+    if network_device {
+        let command = validate_network_device_command(&request.command)?;
+        if requested_cwd.is_some() {
+            return Err(AppError::Command(
+                NETWORK_DEVICE_CWD_UNSUPPORTED.to_string(),
+            ));
+        }
+        if request.sudo_password.is_some()
+            || request.su_password.is_some()
+            || request.save_sudo_password
+            || request.save_su_password
+        {
+            return Err(AppError::Command(
+                NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED.to_string(),
+            ));
+        }
+        return execute_network_device_command(
+            &state,
+            &tab_id,
+            &command,
+            timeout_ms,
+            bound_session_revision.as_deref(),
+        )
+        .await;
+    }
 
     let initial_prepared = prepare_remote_exec(
         app,
@@ -382,7 +438,7 @@ pub async fn execute_remote_command(
                 app,
                 &state,
                 &tab_id,
-                request.expected_session_revision.as_deref(),
+                bound_session_revision.as_deref(),
                 kind,
                 &host,
                 shell_user.as_deref(),
@@ -391,12 +447,8 @@ pub async fn execute_remote_command(
                 request.privileged_prompt_notice.clone(),
             )
             .await?;
-            ensure_expected_session_revision(
-                &state,
-                &tab_id,
-                request.expected_session_revision.as_deref(),
-            )
-            .await?;
+            ensure_expected_session_revision(&state, &tab_id, bound_session_revision.as_deref())
+                .await?;
             prepare_remote_exec(
                 app,
                 &profile_id,
@@ -410,12 +462,7 @@ pub async fn execute_remote_command(
         Err(error) => return Err(error),
     };
 
-    ensure_expected_session_revision(
-        &state,
-        &tab_id,
-        request.expected_session_revision.as_deref(),
-    )
-    .await?;
+    ensure_expected_session_revision(&state, &tab_id, bound_session_revision.as_deref()).await?;
 
     let result = crate::commands::send_worker_cmd_with_response_timeout(
         app,
@@ -454,6 +501,106 @@ pub async fn execute_remote_command(
         }
     }
     Ok(parsed)
+}
+
+/// Send one single-line native network-device command to the existing shell
+/// PTY. There is no portable command delimiter or exit-code protocol for
+/// Cisco/Huawei/Comware CLIs, so completion is inferred from a quiet period
+/// after the PTY starts producing new transcript data, matching the raw-PTY
+/// behavior used by Netcatty for network-device agent commands.
+async fn execute_network_device_command(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    command: &str,
+    timeout_ms: u64,
+    expected_session_revision: Option<&str>,
+) -> Result<RemoteExecResult, AppError> {
+    ensure_expected_session_revision(state, tab_id, expected_session_revision).await?;
+    let transcript_before = terminal_transcript_snapshot(state, tab_id)
+        .await
+        .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
+    crate::commands::send_exact_terminal_input(state, tab_id, format!("{command}\r")).await?;
+
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    let mut latest_transcript = transcript_before.clone();
+    let mut last_change_at = None;
+    let mut timed_out = false;
+
+    loop {
+        // A reconnect can replace the terminal sender while this bounded
+        // quiet-period wait is in progress. Abort as soon as the identity
+        // changes so a stale request cannot wait out the whole timeout or
+        // report output from the replacement session.
+        ensure_expected_session_revision(state, tab_id, expected_session_revision).await?;
+        if let Some(transcript) = terminal_transcript_snapshot(state, tab_id).await {
+            if transcript != latest_transcript {
+                latest_transcript = transcript;
+                last_change_at = Some(Instant::now());
+            }
+            if last_change_at
+                .is_some_and(|changed_at| changed_at.elapsed() >= NETWORK_DEVICE_RAW_IDLE_SETTLE)
+            {
+                break;
+            }
+        } else {
+            return Err(AppError::Command(
+                "FileTerm session was not found".to_string(),
+            ));
+        }
+
+        if Instant::now() >= deadline {
+            timed_out = true;
+            break;
+        }
+        sleep(NETWORK_DEVICE_RAW_POLL_INTERVAL).await;
+    }
+
+    let transcript_after = terminal_transcript_snapshot(state, tab_id)
+        .await
+        .unwrap_or(latest_transcript);
+    ensure_expected_session_revision(state, tab_id, expected_session_revision).await?;
+    let output = terminal_transcript_delta(&transcript_before, &transcript_after);
+    let (output, output_truncated) = truncate_network_device_output(output);
+
+    Ok(RemoteExecResult {
+        output,
+        exit_code: None,
+        timed_out,
+        output_truncated,
+        raw_terminal: true,
+        input_required: false,
+        input_kind: None,
+    })
+}
+
+async fn terminal_transcript_snapshot(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+) -> Option<String> {
+    state
+        .sessions
+        .read()
+        .await
+        .get(tab_id)
+        .map(|session| session.terminal_transcript.clone())
+}
+
+fn terminal_transcript_delta(before: &str, after: &str) -> String {
+    after
+        .strip_prefix(before)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| after.to_string())
+}
+
+fn truncate_network_device_output(output: String) -> (String, bool) {
+    if output.len() <= NETWORK_DEVICE_RAW_OUTPUT_BYTES {
+        return (output, false);
+    }
+    let mut start = output.len() - NETWORK_DEVICE_RAW_OUTPUT_BYTES;
+    while start < output.len() && !output.is_char_boundary(start) {
+        start += 1;
+    }
+    (output[start..].to_string(), true)
 }
 
 async fn ensure_expected_session_revision(
@@ -778,6 +925,15 @@ fn validate_remote_exec_command(raw_command: &str) -> Result<String, AppError> {
     Ok(command)
 }
 
+fn validate_network_device_command(raw_command: &str) -> Result<String, AppError> {
+    if raw_command.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            NETWORK_DEVICE_COMMAND_INVALID.to_string(),
+        ));
+    }
+    validate_remote_exec_command(raw_command)
+}
+
 fn validate_remote_exec_cwd(cwd: Option<String>) -> Result<Option<String>, AppError> {
     let cwd = cwd
         .map(|value| value.trim().to_string())
@@ -815,6 +971,10 @@ fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> 
         .get("outputTruncated")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let raw_terminal = value
+        .get("rawTerminal")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let input_kind = value
         .get("inputKind")
         .and_then(Value::as_str)
@@ -830,6 +990,7 @@ fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> 
         exit_code,
         timed_out,
         output_truncated,
+        raw_terminal,
         input_required,
         input_kind,
     })
@@ -839,9 +1000,10 @@ fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> 
 mod tests {
     use super::{
         detect_privileged_auth_failure, parse_remote_exec_result, privileged_command_kind,
-        resolve_privileged_password, validate_privileged_password, validate_remote_exec_command,
-        validate_remote_exec_cwd, validate_remote_exec_tab_id, wrap_sudo_command,
-        ActionApprovalDecision, ActionApprovalSource, PrivilegedCommandKind, SUDO_AUTH_FAILURE,
+        resolve_privileged_password, validate_network_device_command, validate_privileged_password,
+        validate_remote_exec_command, validate_remote_exec_cwd, validate_remote_exec_tab_id,
+        wrap_sudo_command, ActionApprovalDecision, ActionApprovalSource, PrivilegedCommandKind,
+        SUDO_AUTH_FAILURE,
     };
     use crate::AppError;
     use serde_json::json;
@@ -872,6 +1034,7 @@ mod tests {
         assert_eq!(result.exit_code, Some(0));
         assert!(!result.timed_out);
         assert!(result.output_truncated);
+        assert!(!result.raw_terminal);
         assert!(!result.input_required);
         assert_eq!(result.input_kind, None);
     }
@@ -902,6 +1065,16 @@ mod tests {
         .expect("invalid input kind should not break result parsing");
         assert!(!invalid_kind.input_required);
         assert_eq!(invalid_kind.input_kind, None);
+    }
+
+    #[test]
+    fn network_device_commands_are_single_line_and_marked_raw() {
+        assert_eq!(
+            validate_network_device_command("display version").unwrap(),
+            "display version"
+        );
+        assert!(validate_network_device_command("display version\r").is_err());
+        assert!(validate_network_device_command("display\nversion").is_err());
     }
 
     #[test]

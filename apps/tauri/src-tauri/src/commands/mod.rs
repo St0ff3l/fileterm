@@ -54,7 +54,7 @@ const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
 /// missing callback id and can leave renderer cleanup half-finished.
 const CHILD_WINDOW_DESTROY_DELAY: Duration = Duration::from_millis(25);
 
-async fn send_terminal_input(
+pub(crate) async fn send_terminal_input(
     state: &crate::services::workspace::WorkspaceState,
     tab_id: &str,
     data: String,
@@ -75,6 +75,32 @@ async fn send_terminal_input(
 
     // Telnet and serial still use their protocol worker queue. SSH owns the
     // dedicated low-latency input channel above.
+    let sender = state
+        .workers
+        .read()
+        .await
+        .get(tab_id)
+        .cloned()
+        .ok_or_else(|| AppError::Storage("Terminal session not found".to_string()))?;
+    timeout(
+        WORKER_CMD_SEND_TIMEOUT,
+        sender.send(WorkerCmd::WriteTerminal(data)),
+    )
+    .await
+    .map_err(|_| AppError::Storage("Terminal worker busy".to_string()))?
+    .map_err(|error| AppError::Storage(error.to_string()))
+}
+
+/// Send one exact terminal write through the worker command queue. This is
+/// intentionally separate from `send_terminal_input`: the interactive input
+/// channel coalesces queued keystrokes for latency, while Agent-issued
+/// network-device commands must never merge with user input or another raw
+/// command before reaching the visible PTY.
+pub(crate) async fn send_exact_terminal_input(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    data: String,
+) -> Result<(), AppError> {
     let sender = state
         .workers
         .read()
@@ -3385,9 +3411,10 @@ pub(crate) async fn mcp_list_remote_directory(
     }))
 }
 
-/// Execute a bounded command through a dedicated SSH exec channel. This is
-/// separate from the interactive terminal so an external CLI/MCP caller
-/// receives deterministic output without stealing the user's PTY input.
+/// Execute a bounded command through the SSH command boundary. Ordinary
+/// servers use a dedicated exec channel; network-device sessions send the
+/// native command through their already-visible raw PTY because they do not
+/// expose a POSIX shell or a portable process-exit protocol.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn app_execute_remote_command(

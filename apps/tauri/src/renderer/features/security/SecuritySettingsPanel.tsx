@@ -16,7 +16,7 @@ type SecurityActionFeedback = {
   message: string
 }
 
-const DEFAULT_IDLE_LOCK_MINUTES = 10
+const DEFAULT_IDLE_LOCK_MINUTES = 0
 const IDLE_LOCK_PRESET_MINUTES = [1, 2, 3, 5, 10, 20, 30, 60, 90, 120, 150, 180, 0] as const
 
 function formatIdleLockOption(minutes: number) {
@@ -198,7 +198,7 @@ export function SecuritySettingsPanel({
       setActionFeedback({ target: 'session', kind: 'error', message })
       return
     }
-    if (lockEnabled && !settings?.hasLockPassword && !lockPassword) {
+    if ((lockEnabled || idleLockMinutes > 0) && !settings?.hasLockPassword && !lockPassword) {
       const message = t.securityLockPasswordRequired
       setErrorMessage(message)
       setActionFeedback({ target: 'session', kind: 'error', message })
@@ -325,6 +325,7 @@ export function SecuritySettingsPanel({
       const next = await desktopApi.setSecuritySettings({
         clearLockPassword: true,
         currentLockPassword: lockResetCurrentPassword,
+        idleLockMinutes: 0,
         lockEnabled: false
       })
       applySettings(next)
@@ -432,27 +433,25 @@ export function SecuritySettingsPanel({
             </label>
           </div>
 
-          {lockEnabled ? (
-            <div className="security-preference-row">
-              <div className="security-preference-copy">
-                <strong>{t.securityIdleLockMinutes}</strong>
-                <p>{t.securityIdleLockMinutesHint}</p>
-              </div>
-              <DropdownSelect
-                ariaLabel={t.securityIdleLockMinutes}
-                className="security-idle-lock-select"
-                disabled={isLoading || isSecurityMutationInFlight}
-                onChange={(value) => {
-                  setIdleLockMinutes(normalizeIdleLockMinutes(Number.parseInt(value, 10)))
-                  setErrorMessage(null)
-                  setFeedbackMessage(null)
-                  setActionFeedback(null)
-                }}
-                options={idleLockOptions}
-                value={String(normalizeIdleLockMinutes(idleLockMinutes))}
-              />
+          <div className="security-preference-row">
+            <div className="security-preference-copy">
+              <strong>{t.securityIdleLockMinutes}</strong>
+              <p>{t.securityIdleLockMinutesHint}</p>
             </div>
-          ) : null}
+            <DropdownSelect
+              ariaLabel={t.securityIdleLockMinutes}
+              className="security-idle-lock-select"
+              disabled={isLoading || isSecurityMutationInFlight || (!hasLockPassword && !lockPassword)}
+              onChange={(value) => {
+                setIdleLockMinutes(normalizeIdleLockMinutes(Number.parseInt(value, 10)))
+                setErrorMessage(null)
+                setFeedbackMessage(null)
+                setActionFeedback(null)
+              }}
+              options={idleLockOptions}
+              value={String(normalizeIdleLockMinutes(idleLockMinutes))}
+            />
+          </div>
 
           <div
             className={`security-form-grid security-password-grid${hasLockPassword ? ' security-password-grid--changing' : ''}`}

@@ -73,6 +73,7 @@ export function useWorkspaceModals({
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
   const [windowCloseConfirm, setWindowCloseConfirm] = useState<WindowCloseConfirmState | null>(null)
   const connectionDefaultsRef = useRef(connectionDefaults)
+  const initializedConnectionFormKeyRef = useRef<string | null>(null)
   connectionDefaultsRef.current = connectionDefaults
 
   const connectionGroupOptions = useMemo(
@@ -87,9 +88,19 @@ export function useWorkspaceModals({
 
   useEffect(() => {
     if (!isConnectionFormWindow) {
+      initializedConnectionFormKeyRef.current = null
       return
     }
 
+    // A standalone connection form is initialized after its first library
+    // snapshot. Later workspace events (for example transfer updates) may
+    // replace the profiles array, but must never discard text the user has
+    // already entered in this window.
+    if (!hasLoadedInitialSnapshot) {
+      return
+    }
+
+    const formKey = `${formWindowMode}:${formWindowProfileId ?? ''}`
     if (formWindowMode === 'edit') {
       const profile = profiles.find((item) => item.id === formWindowProfileId)
       if (!profile) {
@@ -101,15 +112,25 @@ export function useWorkspaceModals({
         return
       }
 
+      if (initializedConnectionFormKeyRef.current === formKey) {
+        return
+      }
+
       setEditingProfileId(profile.id)
       setForm(profileToForm(profile, connectionDefaultsRef.current))
       setFormError(null)
+      initializedConnectionFormKeyRef.current = formKey
+      return
+    }
+
+    if (initializedConnectionFormKeyRef.current === formKey) {
       return
     }
 
     setEditingProfileId(null)
     setForm(createDefaultForm(connectionDefaultsRef.current))
     setFormError(null)
+    initializedConnectionFormKeyRef.current = formKey
   }, [formWindowMode, formWindowProfileId, hasLoadedInitialSnapshot, isConnectionFormWindow, profiles])
 
   const updateForm = (updater: CreateProfileInput | ((current: CreateProfileInput) => CreateProfileInput)) => {

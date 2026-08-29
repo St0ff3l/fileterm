@@ -25,6 +25,7 @@ import type {
   CommandSendPreferences,
   TransferTask,
   SessionMetricsUpdate,
+  RemoteFilesUpdate,
   SshInteractionRequest,
   RemoteExecCredentials,
   SudoPasswordRequest,
@@ -84,6 +85,7 @@ let latestNativeDropPaths: string[] = []
 let latestNativeDropAt = 0
 const currentWindow = getCurrentWindow()
 const terminalDataListeners = new Set<(payload: TerminalDataPayload) => void>()
+const securitySettingsListeners = new Set<(settings: SecuritySettings) => void>()
 let terminalDataChannel: Channel<TerminalDataPayload> | null = null
 let terminalDataRegistration: Promise<void> | null = null
 let terminalDataRetryTimer: ReturnType<typeof setTimeout> | null = null
@@ -371,6 +373,30 @@ function subscribeReady<T>(eventName: string, listener: (payload: T) => void): P
     })
 }
 
+function notifyLocalSecuritySettingsListeners(settings: SecuritySettings) {
+  for (const listener of [...securitySettingsListeners]) {
+    try {
+      listener(settings)
+    } catch (error) {
+      // A renderer listener must not turn a successful Rust write into a
+      // rejected bridge call. This path carries only non-secret status flags.
+      console.error('Failed to apply local security settings update:', error)
+    }
+  }
+}
+
+function subscribeSecuritySettings(listener: (settings: SecuritySettings) => void) {
+  // Register locally before starting Tauri's asynchronous native listener.
+  // The same-window save path can therefore update the session guard even if
+  // the native event registration is still in flight.
+  securitySettingsListeners.add(listener)
+  const unlistenNative = subscribe('app:security-settings-changed', listener)
+  return () => {
+    securitySettingsListeners.delete(listener)
+    unlistenNative()
+  }
+}
+
 export async function createTauriApi(): Promise<FileTermDesktopApi> {
   const [nativePlatform, arch, runtimeVersion, appVersion, appName] = await Promise.all([
     invoke<string>('app_get_platform'),
@@ -397,10 +423,17 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     getUiPreferences: () => invoke<UiPreferences>('app_get_ui_preferences'),
     setUiPreferences: (input: UiPreferencesInput) => invoke<UiPreferences>('app_set_ui_preferences', { input }),
     getSecuritySettings: () => invoke<SecuritySettings>('app_get_security_settings'),
-    setSecuritySettings: (input: SecuritySettingsInput) =>
-      invoke<SecuritySettings>('app_set_security_settings', { input }),
+    setSecuritySettings: async (input: SecuritySettingsInput) => {
+      const settings = await invoke<SecuritySettings>('app_set_security_settings', { input })
+      notifyLocalSecuritySettingsListeners(settings)
+      return settings
+    },
     verifySecurityPassword: (password: string) => invoke<boolean>('app_verify_security_password', { password }),
-    resetSecurityBackupPassword: () => invoke<SecuritySettings>('app_reset_security_backup_password'),
+    resetSecurityBackupPassword: async () => {
+      const settings = await invoke<SecuritySettings>('app_reset_security_backup_password')
+      notifyLocalSecuritySettingsListeners(settings)
+      return settings
+    },
     listLocalTerminalShells: () => invoke<LocalTerminalShellOption[]>('app_list_local_terminal_shells'),
     getMcpAgentSetup: () => invoke<McpAgentSetup>('app_get_mcp_agent_setup'),
     listAiProviders: () => invoke<AiProviderSummary[]>('app_list_ai_providers'),
@@ -667,6 +700,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
         exitCode: number | null
         timedOut: boolean
         outputTruncated: boolean
+        rawTerminal: boolean
         inputRequired: boolean
         inputKind?: 'secret' | 'text'
       }>('app_execute_remote_command', {
@@ -765,8 +799,7 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     getDroppedFilePaths: (files: File[]) => takeNativeDropPaths(files),
     onUiPreferencesChanged: (listener: (preferences: UiPreferences) => void) =>
       subscribe('app:ui-preferences-changed', listener),
-    onSecuritySettingsChanged: (listener: (settings: SecuritySettings) => void) =>
-      subscribe('app:security-settings-changed', listener),
+    onSecuritySettingsChanged: (listener: (settings: SecuritySettings) => void) => subscribeSecuritySettings(listener),
     onWindowMaximizedChange: (listener: (isMaximized: boolean) => void) =>
       subscribe('app:window-maximized-change', listener),
     onFileEditorCloseRequest: (listener: () => void) => subscribe('app:file-editor-close-request', listener),
@@ -778,6 +811,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     onWorkspaceSnapshot: (listener: (snapshot: WorkspaceSnapshot) => void) => subscribe('workspace:snapshot', listener),
     onSessionMetrics: (listener: (payload: SessionMetricsUpdate) => void) =>
       subscribe('workspace:sessionMetrics', listener),
+    onRemoteFilesChanged: (listener: (payload: RemoteFilesUpdate) => void) =>
+      subscribe('workspace:remote-files', listener),
     onSshInteraction: (listener: (request: SshInteractionRequest) => void) =>
       subscribeReady('ssh:interaction', listener),
     onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>

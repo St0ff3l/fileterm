@@ -917,6 +917,13 @@ export interface SessionMetricsUpdate {
   mode?: 'replace' | 'append'
 }
 
+/** Incremental remote-directory update; avoids replacing the whole workspace snapshot. */
+export interface RemoteFilesUpdate {
+  tabId: string
+  path: string
+  files: RemoteFileItem[]
+}
+
 export interface ConnectionLibrarySnapshot {
   profiles: ConnectionProfile[]
   folders: ConnectionFolder[]
@@ -2012,6 +2019,8 @@ export interface AiContextTarget {
   user?: string
   cwd?: string
   connected: boolean
+  /** Effective SSH network-device mode bound to this one-time context target. */
+  networkDevice?: boolean
 }
 
 /** A best-effort sanitization applied before terminal text can leave the device. */
@@ -2388,6 +2397,8 @@ export interface FileTermDesktopApi {
     exitCode: number | null
     timedOut: boolean
     outputTruncated: boolean
+    /** True when the command was sent through the visible network-device PTY. */
+    rawTerminal: boolean
     /** The non-interactive channel saw a supported input prompt. */
     inputRequired: boolean
     /** A bounded routing hint; the input itself is never returned. */
@@ -2505,6 +2516,7 @@ export interface FileTermDesktopApi {
   onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
+  onRemoteFilesChanged(listener: (payload: RemoteFilesUpdate) => void): () => void
   /** Resolves only after the SSH interaction listener is registered in Tauri. */
   onSshInteraction(listener: (request: SshInteractionRequest) => void): Promise<() => void>
   onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>

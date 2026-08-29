@@ -7,8 +7,9 @@
 
 use crate::services::action_review::{
     request_action_approval, ActionApprovalDecision, ActionApprovalDetails, ActionApprovalSource,
-    ACTION_APPROVAL_TIMEOUT, SUDO_AUTH_FAILURE, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
-    SU_AUTH_FAILURE, SU_PASSWORD_CANCELLED, SU_PASSWORD_NEEDED,
+    ACTION_APPROVAL_TIMEOUT, NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED,
+    NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED, SUDO_AUTH_FAILURE, SUDO_PASSWORD_CANCELLED,
+    SUDO_PASSWORD_NEEDED, SU_AUTH_FAILURE, SU_PASSWORD_CANCELLED, SU_PASSWORD_NEEDED,
 };
 use crate::services::connection_operations::{
     ConnectionOperationState, FILETERM_CONNECTION_FAILED, FILETERM_CONNECTION_WAIT_TIMEOUT,
@@ -30,7 +31,7 @@ use std::{
     time::{Duration, Instant},
 };
 use subtle::ConstantTimeEq;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
     net::{TcpListener, TcpStream},
@@ -1962,6 +1963,7 @@ fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
         "sessionType": tab.get("sessionType"),
         "status": tab.get("status"),
         "connected": session.get("connected"),
+        "deviceMode": session.get("deviceMode"),
         "remotePath": session.get("remotePath"),
         "shellCwd": session.get("shellCwd"),
         "shellUser": session.get("shellUser"),
@@ -3040,7 +3042,7 @@ fn print_cli_result(result: Value) -> Result<(), String> {
 
 fn print_cli_help() {
     println!(
-        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses an independent non-interactive SSH channel and never writes the visible terminal transcript. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
+        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses a dedicated non-interactive SSH channel for ordinary servers. A network-device session instead sends one single-line native CLI command through the visible raw terminal and returns `rawTerminal=true` with `exitCode=null`; its output can include the command echo and prompt. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt, and apply only to ordinary server sessions. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
         env!("CARGO_PKG_VERSION")
     );
     println!(
@@ -3111,7 +3113,7 @@ fn initialize_result(_params: &Value) -> Result<Value, String> {
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
         "capabilities": { "tools": {}, "logging": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded non-interactive commands; saved sudo/su credentials are consumed through SSH stdin without entering command text. If no saved credential is available, FileTerm opens a secure password prompt in the main window and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If no local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：普通后台 exec 不接管通用交互输入；sudo/su 缺少凭据时会自动打开 FileTerm 主窗口安全输入框，并在工具仍等待时发送状态通知；不要重复调用，先让用户完成窗口输入。危险密码不要写入命令文本或工具结果。"
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded commands: normal SSH servers use a dedicated non-interactive exec channel, while network-device sessions send one single-line native CLI command through the visible raw terminal and return rawTerminal=true with exitCode=null. Network-device cwd and sudo/su fields do not apply; complete enable, confirmation, password, or other interactive steps in the visible terminal. Saved sudo/su credentials are consumed through SSH stdin only for server sessions, never entered into command text. If no saved credential is available, FileTerm opens a secure password prompt in the main window and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If no local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a server command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：网络设备命令走当前可见 raw PTY，不注入 POSIX 的 cd、shell 包装或探测命令；普通后台 exec 不接管服务器的通用交互输入；sudo/su 缺少凭据时会自动打开 FileTerm 主窗口安全输入框，并在工具仍等待时发送状态通知；不要重复调用，先让用户完成窗口输入。危险密码不要写入命令文本或工具结果。"
     }))
 }
 
@@ -3251,6 +3253,9 @@ fn mcp_error_code(error: &str) -> &'static str {
         SU_PASSWORD_CANCELLED,
         SUDO_AUTH_FAILURE,
         SU_AUTH_FAILURE,
+        NETWORK_DEVICE_CWD_UNSUPPORTED,
+        NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED,
+        NETWORK_DEVICE_COMMAND_INVALID,
         crate::services::connection_operations::SSH_CREDENTIALS_NEEDED,
         crate::services::connection_operations::SSH_CREDENTIALS_CANCELLED,
         crate::services::connection_operations::SSH_CREDENTIALS_TIMEOUT,
@@ -3431,10 +3436,11 @@ fn tool_output_schema(name: &str) -> Value {
                             "exitCode": { "type": ["integer", "null"], "minimum": 0 },
                             "timedOut": { "type": "boolean" },
                             "outputTruncated": { "type": "boolean" },
+                            "rawTerminal": { "type": "boolean" },
                             "inputRequired": { "type": "boolean" },
                             "inputKind": { "type": "string", "enum": ["secret", "text"] }
                         },
-                        "required": ["output", "exitCode", "timedOut", "outputTruncated", "inputRequired"],
+                        "required": ["output", "exitCode", "timedOut", "outputTruncated", "rawTerminal", "inputRequired"],
                         "additionalProperties": false
                     }
                 },
@@ -3758,7 +3764,7 @@ mod tests {
         tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
         BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility, McpVisibilityScope,
         MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
-        SUDO_PASSWORD_CANCELLED,
+        NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED, SUDO_PASSWORD_CANCELLED,
         SUDO_PASSWORD_NEEDED,
     };
     use serde_json::{json, Value};
@@ -3923,6 +3929,17 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|field| field == "inputRequired")
+        );
+        assert!(
+            remote_tool["outputSchema"]["properties"]["result"]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field == "rawTerminal")
+        );
+        assert_eq!(
+            remote_tool["outputSchema"]["properties"]["result"]["properties"]["rawTerminal"],
+            json!({ "type": "boolean" })
         );
         assert_eq!(
             remote_tool["outputSchema"]["properties"]["result"]["properties"]["inputKind"],
@@ -4159,5 +4176,18 @@ mod tests {
             mcp_error_code("FILETERM_CONNECTION_OPERATION_NOT_FOUND: missing"),
             "FILETERM_CONNECTION_OPERATION_NOT_FOUND"
         );
+    }
+
+    #[test]
+    fn network_device_command_errors_preserve_stable_codes() {
+        assert_eq!(
+            mcp_error_code(NETWORK_DEVICE_CWD_UNSUPPORTED),
+            NETWORK_DEVICE_CWD_UNSUPPORTED
+        );
+        assert_eq!(
+            mcp_error_code(NETWORK_DEVICE_COMMAND_INVALID),
+            NETWORK_DEVICE_COMMAND_INVALID
+        );
+        assert!(!mcp_error_is_retryable(NETWORK_DEVICE_CWD_UNSUPPORTED));
     }
 }
