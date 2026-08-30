@@ -2057,6 +2057,7 @@ export type AiToolCallStatus =
   | 'executed'
   | 'executed-in-terminal'
   | 'failed'
+  | 'cancelled'
   | 'timeout'
   | 'target-changed'
   | 'input-required'

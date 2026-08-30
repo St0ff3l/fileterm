@@ -133,6 +133,7 @@ const zhCN = {
   aiCopilotToolExecuted: '已执行',
   aiCopilotToolExecutedInTerminal: '已在终端执行',
   aiCopilotToolExecutedInTerminalDescription: '命令已在当前可见终端执行，Copilot 不会再通过后台通道重复执行。',
+  aiCopilotToolCancelled: '已取消',
   aiCopilotToolRejected: '未执行',
   aiCopilotToolFailed: '执行失败',
   aiCopilotContextLockedByMode: '协作与自动模式需要附带终端上下文',
@@ -1851,6 +1852,7 @@ const enUS: typeof zhCN = {
   aiCopilotToolExecutedInTerminal: 'Executed in terminal',
   aiCopilotToolExecutedInTerminalDescription:
     'The command was executed in the visible terminal; Copilot will not execute it again through the background channel.',
+  aiCopilotToolCancelled: 'Cancelled',
   aiCopilotToolRejected: 'Not executed',
   aiCopilotToolFailed: 'Execution failed',
   aiCopilotContextLockedByMode: 'Semi-auto and autopilot modes include terminal context',

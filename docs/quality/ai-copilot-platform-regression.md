@@ -25,7 +25,7 @@ fixture 覆盖普通 SSE、停止/重试、Markdown、tool-call、tool-result �
 - [ ] 全自动不出现 `0/20` 或累计次数栏；危险命令限制开关默认开启，关闭后仍保留目标 revision 和空命令校验。
 - [ ] Copilot 工具活动显示 proposal、执行状态、退出码、截断标记和原因；不显示旧命令卡或 Review 操作。
 - [ ] 普通 exec 的输出不混入可见 SSH tab transcript，也不改变用户正在看的 PTY。
-- [ ] sudo/su 分别验证 profile 加密值、主窗口自动恢复/聚焦后的安全输入、Copilot 对话区等待说明和工具状态、窗口/renderer 不可用时的聊天回退、用户明确的一次性字段和可选保存；密码不出现在命令文本或 tool result。
+- [ ] sudo/su 分别验证 profile 加密值、主窗口自动恢复/聚焦后的安全输入、Copilot 对话区等待说明和工具状态；内置 Copilot 不接收一次性密码字段，窗口/renderer 不可用时停止本轮并等待明确重试；MCP/CLI 才验证用户明确的一次性字段和可选保存；密码不出现在命令文本或 tool result。
 - [ ] MFA、验证码、确认、安装器和 REPL 命令返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`；不创建临时 interactive PTY，不要求用户把输入粘贴到错误的终端。
 - [ ] 切换 tab、分屏、CWD、登录用户、重连或关闭窗口时，旧 tool call 因目标 revision 变化而 fail closed。
 - [ ] 代理、断网、睡眠恢复、窗口关闭和 Provider 重试不会留下流式请求或审批状态。

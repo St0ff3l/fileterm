@@ -457,9 +457,16 @@
 }
 
 .home-content-body .manager-inline.settings-modal .settings-search {
-  flex: 1 1 auto !important;
-  width: auto !important;
+  flex: 0 1 280px !important;
+  width: 280px !important;
   min-width: 0 !important;
+}
+
+@media (max-width: 760px) {
+  .home-content-body .manager-inline.settings-modal .settings-search {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
 }
 
 /* 布局:填充剩余高度,内部各自滚动，包装为带圆角的卡片 */

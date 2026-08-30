@@ -80,11 +80,16 @@ function AiCopilotToolActivity({
   const [isExecutingTerminalCommand, setIsExecutingTerminalCommand] = useState(false)
   const result = activity.result
   const status = result?.status ?? 'pending'
+  // Only a semi-automatic proposal has a live approval gate that can be
+  // delegated to the visible terminal. Fully automatic calls are already
+  // running through the isolated route; exposing this button while their
+  // result is pending would execute the same command a second time.
+  const canDelegateToTerminal = Boolean(activity.proposal.approvalRequestId && onExecuteTerminalCommand)
   const canExecuteTerminalCommand = Boolean(
-    onExecuteTerminalCommand && !/[\r\n]/.test(activity.proposal.command) && !isExecutingTerminalCommand
+    canDelegateToTerminal && !/[\r\n]/.test(activity.proposal.command) && !isExecutingTerminalCommand
   )
   const executeTerminalCommandButton =
-    onExecuteTerminalCommand && !result ? (
+    canDelegateToTerminal && onExecuteTerminalCommand && !result ? (
       <button
         aria-label={t.aiCopilotWriteTerminalInput}
         aria-busy={isExecutingTerminalCommand}
@@ -114,9 +119,11 @@ function AiCopilotToolActivity({
         ? t.aiCopilotToolWaitingForInput
         : status === 'executed-in-terminal'
           ? t.aiCopilotToolExecutedInTerminal
-          : status === 'rejected' || status === 'auto-blocked'
-            ? t.aiCopilotToolRejected
-            : t.aiCopilotToolFailed
+          : status === 'cancelled'
+            ? t.aiCopilotToolCancelled
+            : status === 'rejected' || status === 'auto-blocked'
+              ? t.aiCopilotToolRejected
+              : t.aiCopilotToolFailed
     : approval
       ? t.aiCopilotToolApprovalPending
       : t.aiCopilotToolPending

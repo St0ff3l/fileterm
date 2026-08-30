@@ -324,6 +324,7 @@ struct PreparedRemoteExec {
     stdin: Option<String>,
     request_pty: bool,
     kind: Option<PrivilegedCommandKind>,
+    used_saved_password: bool,
     save_password: Option<(String, PrivilegedCommandKind, String)>,
 }
 
@@ -530,6 +531,23 @@ async fn execute_remote_command_inner(
     let parsed = parse_remote_exec_result(result)?;
     if let Some(kind) = prepared.kind {
         if detect_privileged_auth_failure(&parsed.output, kind) {
+            if prepared.used_saved_password {
+                let clear_result = match kind {
+                    PrivilegedCommandKind::Sudo => {
+                        crate::services::profile_ops::set_sudo_password(app, &profile_id, None)
+                    }
+                    PrivilegedCommandKind::Su => {
+                        crate::services::profile_ops::set_su_password(app, &profile_id, None)
+                    }
+                };
+                if let Err(error) = clear_result {
+                    crate::services::logging::warn(
+                        app,
+                        "security",
+                        format!("failed to clear invalid saved privileged password: {error}"),
+                    );
+                }
+            }
             return Err(AppError::Command(
                 match kind {
                     PrivilegedCommandKind::Sudo => SUDO_AUTH_FAILURE,
@@ -965,9 +983,9 @@ fn detect_privileged_auth_failure(output: &str, kind: PrivilegedCommandKind) -> 
     let patterns: &[&str] = match kind {
         PrivilegedCommandKind::Sudo => &[
             "sorry, try again",
-            "sudo: incorrect password",
-            "sudo: authentication failure",
-            "sudo: a password is required",
+            "incorrect password",
+            "authentication failure",
+            "a password is required",
         ],
         PrivilegedCommandKind::Su => &[
             "su: authentication failure",
@@ -1002,6 +1020,7 @@ fn prepare_remote_exec(
             stdin: None,
             request_pty: false,
             kind: None,
+            used_saved_password: false,
             save_password: None,
         });
     };
@@ -1038,6 +1057,7 @@ fn prepare_remote_exec(
             crate::services::profile_ops::read_su_password(app, profile_id)?
         }
     };
+    let used_saved_password = explicit_password.is_none() && saved_password.is_some();
     let password = resolve_privileged_password(kind, explicit_password, saved_password)?;
 
     let save_password = if save_password {
@@ -1053,6 +1073,7 @@ fn prepare_remote_exec(
         stdin: Some(format!("{password}\n")),
         request_pty: matches!(kind, PrivilegedCommandKind::Su),
         kind: Some(kind),
+        used_saved_password,
         save_password,
     })
 }
@@ -1297,6 +1318,14 @@ mod tests {
     fn privileged_auth_failures_are_classified_without_returning_remote_output() {
         assert!(detect_privileged_auth_failure(
             "sudo: incorrect password",
+            PrivilegedCommandKind::Sudo
+        ));
+        assert!(detect_privileged_auth_failure(
+            "sudo: 3 incorrect password attempts",
+            PrivilegedCommandKind::Sudo
+        ));
+        assert!(detect_privileged_auth_failure(
+            "sudo: authentication failure",
             PrivilegedCommandKind::Sudo
         ));
         assert!(detect_privileged_auth_failure(

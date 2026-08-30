@@ -23,13 +23,13 @@ FileTerm Copilot 已收敛为统一的 `tool-call → 审批/护栏 → 独立 e
 
 普通 exec 永不接管可见 PTY，也不自动切换到另一个交互通道。检测到通用输入提示时返回稳定错误 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，由用户在可见 SSH tab 完成操作后重试。
 
-sudo/su 是普通 exec 的受控特例，凭据按以下顺序解析：
+sudo/su 是普通 exec 的受控特例。MCP/CLI 凭据按以下顺序解析；内置 Copilot 不接收一次性密码字段：
 
 1. 调用方明确提供的一次性 `sudo_password` / `su_password`；
 2. 连接 profile 的加密 secret；
 3. FileTerm 主窗口安全输入，可选择保存到连接管理器；缺少凭据时自动恢复、解除最小化并聚焦主窗口后展示。
 
-Copilot 对话区会先显示“等待前台输入”的说明，工具活动同步显示结构化状态；实际工具回合保持等待，直到用户在前台安全输入框完成操作。主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` 或 `SU_PASSWORD_NEEDED`，由 Copilot/MCP 询问密码并用一次性字段重试；用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`，不自动重试。密码不进入命令文本或工具结果。MFA、验证码、确认提示、安装器和 REPL 不走聊天输入，仍回到可见 SSH tab。
+Copilot 对话区会先显示“等待前台输入”的说明，工具活动同步显示结构化状态；实际工具回合保持等待，直到用户在前台安全输入框完成操作。内置 Copilot 不接收或转发密码；主窗口/renderer 不可用时停止本轮并等待用户明确重试。MCP/CLI 才会在 `SUDO_PASSWORD_NEEDED` 或 `SU_PASSWORD_NEEDED` 后询问密码并用一次性字段重试；用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`，不自动重试。密码不进入命令文本或工具结果。MFA、验证码、确认提示、安装器和 REPL 不走聊天输入，仍回到可见 SSH tab。
 
 ## 主要代码边界
 

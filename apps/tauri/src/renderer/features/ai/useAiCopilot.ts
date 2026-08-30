@@ -80,7 +80,6 @@ export function useAiCopilot() {
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [usage, setUsage] = useState<{ inputTokens?: number; outputTokens?: number } | null>(null)
   const [toolActivities, setToolActivities] = useState<AiToolActivity[]>([])
@@ -96,6 +95,8 @@ export function useAiCopilot() {
   const activeAssistantMessageIdRef = useRef<string | null>(null)
   const activeRequestIdRef = useRef<string | null>(null)
   const requestCompletedRef = useRef(false)
+  const chatInFlightRef = useRef(false)
+  const cancelRequestedRef = useRef(false)
   const unmountedRef = useRef(false)
   const modeStateRef = useRef<AiCopilotModeState | null>(null)
   const mountedRef = useRef(true)
@@ -125,7 +126,7 @@ export function useAiCopilot() {
   const loadConversation = useCallback(
     async (conversationId: string) => {
       const desktopApi = window.fileterm
-      if (!desktopApi || isStreaming) return
+      if (!desktopApi || isStreaming || chatInFlightRef.current) return
       setErrorMessage(null)
       try {
         const next = await desktopApi.getAiConversation(conversationId)
@@ -202,6 +203,8 @@ export function useAiCopilot() {
     unmountedRef.current = false
     return () => {
       unmountedRef.current = true
+      chatInFlightRef.current = false
+      cancelRequestedRef.current = true
       const requestId = activeRequestIdRef.current
       activeRequestIdRef.current = null
       // Closing the Copilot surface must also stop its provider request. The
@@ -322,6 +325,8 @@ export function useAiCopilot() {
       if (event.type === 'completed') {
         activeAssistantMessageIdRef.current = null
         activeRequestIdRef.current = null
+        chatInFlightRef.current = false
+        cancelRequestedRef.current = false
         requestCompletedRef.current = true
         const completedConversation = preserveLocalConversationTitle(conversationRef.current, event.conversation)
         applyConversation(completedConversation)
@@ -333,7 +338,6 @@ export function useAiCopilot() {
               : completedConversation
           return replaceConversationSummary(current, conversation)
         })
-        setActiveRequestId(null)
         setIsStreaming(false)
         setErrorMessage(null)
         setToolActivities([])
@@ -423,8 +427,9 @@ export function useAiCopilot() {
       }
       activeAssistantMessageIdRef.current = null
       activeRequestIdRef.current = null
+      chatInFlightRef.current = false
+      cancelRequestedRef.current = false
       requestCompletedRef.current = true
-      setActiveRequestId(null)
       setIsStreaming(false)
       clearToolApprovalState()
       // A user stop (or a surface teardown) is a successful cancellation
@@ -451,9 +456,10 @@ export function useAiCopilot() {
       const result = await request(conversationId, providerId, (event) => onStreamEvent(conversationId, event))
       if (!mountedRef.current || unmountedRef.current) {
         void window.fileterm?.cancelAiChat(result.requestId).catch(() => undefined)
+      } else if (cancelRequestedRef.current && !requestCompletedRef.current) {
+        void window.fileterm?.cancelAiChat(result.requestId).catch(() => undefined)
       } else if (!requestCompletedRef.current) {
         activeRequestIdRef.current = result.requestId
-        setActiveRequestId(result.requestId)
       }
       return result
     },
@@ -520,7 +526,9 @@ export function useAiCopilot() {
       const desktopApi = window.fileterm
       const content = value.trim()
       const providerId = selectedProviderIdRef.current
-      if (!desktopApi || !content || !providerId || isStreaming) return false
+      if (!desktopApi || !content || !providerId || isStreaming || chatInFlightRef.current) return false
+      chatInFlightRef.current = true
+      cancelRequestedRef.current = false
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       const preview =
         options.contextSnapshotId && options.contextPreview?.snapshotId === options.contextSnapshotId
@@ -616,8 +624,9 @@ export function useAiCopilot() {
           setErrorMessage(toMessage(error))
           setIsStreaming(false)
           activeRequestIdRef.current = null
+          chatInFlightRef.current = false
+          cancelRequestedRef.current = false
           requestCompletedRef.current = true
-          setActiveRequestId(null)
           if (options.contextSnapshotId) {
             setContextPreview((current) => (current?.snapshotId === options.contextSnapshotId ? null : current))
           }
@@ -673,7 +682,9 @@ export function useAiCopilot() {
       const desktopApi = window.fileterm
       const currentConversation = conversationRef.current
       const providerId = selectedProviderIdRef.current
-      if (!desktopApi || !currentConversation || !providerId || isStreaming) return false
+      if (!desktopApi || !currentConversation || !providerId || isStreaming || chatInFlightRef.current) return false
+      chatInFlightRef.current = true
+      cancelRequestedRef.current = false
       const mode = options.mode ?? modeStateRef.current?.mode ?? 'pure-conversation'
       setErrorMessage(null)
       setUsage(null)
@@ -704,8 +715,9 @@ export function useAiCopilot() {
           setErrorMessage(toMessage(error))
           setIsStreaming(false)
           activeRequestIdRef.current = null
+          chatInFlightRef.current = false
+          cancelRequestedRef.current = false
           requestCompletedRef.current = true
-          setActiveRequestId(null)
         }
         return false
       }
@@ -757,15 +769,18 @@ export function useAiCopilot() {
 
   const stop = useCallback(async () => {
     const desktopApi = window.fileterm
-    if (!desktopApi || !activeRequestId) return
+    const requestId = activeRequestIdRef.current
+    if (!desktopApi || (!requestId && !chatInFlightRef.current)) return
+    cancelRequestedRef.current = true
+    if (!requestId) return
     try {
-      await desktopApi.cancelAiChat(activeRequestId)
+      await desktopApi.cancelAiChat(requestId)
     } catch (error) {
       if (mountedRef.current) {
         setErrorMessage(toMessage(error))
       }
     }
-  }, [activeRequestId])
+  }, [])
 
   const resolveToolApproval = useCallback(async (requestId: string, approved: boolean, riskAcknowledged = false) => {
     const desktopApi = window.fileterm
@@ -830,7 +845,7 @@ export function useAiCopilot() {
       // Keep the active stream's conversation intact, but allow housekeeping
       // of an idle history item while another conversation is generating.
       const isDeletingActiveConversation = conversationRef.current?.id === conversationId
-      if (!desktopApi || (isStreaming && isDeletingActiveConversation)) return false
+      if (!desktopApi || (chatInFlightRef.current && isDeletingActiveConversation)) return false
       setErrorMessage(null)
       try {
         await desktopApi.deleteAiConversation(conversationId)
@@ -858,7 +873,7 @@ export function useAiCopilot() {
   const deleteMessage = useCallback(
     async (conversationId: string, messageId: string) => {
       const desktopApi = window.fileterm
-      if (!desktopApi || isStreaming || conversationRef.current?.id !== conversationId) return false
+      if (!desktopApi || chatInFlightRef.current || conversationRef.current?.id !== conversationId) return false
       setErrorMessage(null)
       try {
         const updated = await desktopApi.deleteAiMessage({ conversationId, messageId })
@@ -879,7 +894,7 @@ export function useAiCopilot() {
   )
 
   const newChat = useCallback(() => {
-    if (isStreaming) return
+    if (isStreaming || chatInFlightRef.current) return
     activeAssistantMessageIdRef.current = null
     setErrorMessage(null)
     setUsage(null)

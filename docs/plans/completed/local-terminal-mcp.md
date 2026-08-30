@@ -13,7 +13,7 @@
 - Rust 负责本机 PTY、进程生命周期、输入和 resize，renderer 复用 `TerminalView`。
 - MCP/CLI 的普通远程 exec 使用独立 SSH exec channel，不写入可见 SSH tab transcript。
 - 可见 SSH tab PTY 是用户操作通道，承载登录、MFA、验证码、确认和 REPL；普通 exec 检测到通用输入时返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，不创建临时 interactive PTY。
-- sudo/su 使用一次性显式密码、加密 profile 或 FileTerm 主窗口安全输入；Copilot/MCP 在缺少 sudo/su 凭据时可以询问用户后用一次性字段重试。
+- sudo/su 使用加密 profile 或 FileTerm 主窗口安全输入；内置 Copilot 不接收或转发一次性密码字段，缺少凭据且 prompt 不可用时停止本轮并等待明确重试；MCP/CLI 才允许用户明确提供一次性字段。
 - FTP、Telnet、Serial 不伪装成支持远程 exec。
 
 ## 已完成
