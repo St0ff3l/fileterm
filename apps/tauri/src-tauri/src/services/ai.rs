@@ -3177,6 +3177,13 @@ fn classify_command_risk(command: &str) -> AiCommandRisk {
     }
 }
 
+/// The external bridge uses the same local Copilot classifier when deciding
+/// whether a Basic safe command can run without another FileTerm approval.
+/// Unknown, mutating, destructive, and privileged commands remain gated.
+pub(crate) fn is_basic_safe_command(command: &str) -> bool {
+    matches!(classify_command_risk(command), AiCommandRisk::ReadOnly)
+}
+
 fn conservative_command_risk(command: &str, ai_risk: Option<AiCommandRisk>) -> AiCommandRisk {
     let local_risk = classify_command_risk(command);
     let Some(ai_risk) = ai_risk else {
@@ -5739,27 +5746,27 @@ mod tests {
         conservative_command_risk, context_mode_reads_terminal_transcript,
         copilot_mode_state_is_current, copilot_tool_call_arguments, decrypt_provider_secrets,
         default_ai_mode_state, encrypt_provider_secrets, ensure_conversation_fits,
-        normalize_ai_title_suggestion, normalize_base_url, normalize_conversation_title,
-        now_millis, openai_chat_tool_schema, process_anthropic_payload, process_openai_payload,
-        process_openai_responses_payload, provider_history_messages,
-        provider_history_messages_with_tools, provider_is_usable, provider_summary,
-        prune_expired_context_snapshots, public_mode_state, repair_default_provider,
-        responses_input_items_with_tools, responses_tool_schema, sanitize_recent_terminal_output,
-        stream_anthropic_messages, stream_anthropic_messages_with_tools, stream_error_event,
-        stream_openai_compatible_chat, stream_openai_compatible_chat_with_tools,
-        stream_openai_responses, stream_openai_responses_with_tools, system_prompt,
-        test_openai_compatible_chat, title_from_user_message, title_summary_chat_messages,
-        title_summary_history_items, validate_context_for_mode, validate_message_id,
-        write_json_file, AiChatResponseMode, AiCommandRisk, AiContextAttachment, AiContextMode,
-        AiContextRedactionKind, AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage,
-        AiMessageRole, AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary,
-        AiStreamEvent, ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot,
-        StoredAiModeState, StoredAiProvider, StoredConversation, StoredProviderConfig,
-        StoredProviderSecret, StoredProviderSecrets, ToolLoopResult, ToolLoopTurn,
-        ANTHROPIC_API_VERSION, ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL,
-        CONVERSATION_SCHEMA_VERSION, COPILOT_EXECUTE_REMOTE_COMMAND_TOOL,
-        MAX_AI_TITLE_SUGGESTION_LENGTH, MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES,
-        MAX_CONVERSATION_TITLE_LENGTH,
+        is_basic_safe_command, normalize_ai_title_suggestion, normalize_base_url,
+        normalize_conversation_title, now_millis, openai_chat_tool_schema,
+        process_anthropic_payload, process_openai_payload, process_openai_responses_payload,
+        provider_history_messages, provider_history_messages_with_tools, provider_is_usable,
+        provider_summary, prune_expired_context_snapshots, public_mode_state,
+        repair_default_provider, responses_input_items_with_tools, responses_tool_schema,
+        sanitize_recent_terminal_output, stream_anthropic_messages,
+        stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
+        stream_openai_compatible_chat_with_tools, stream_openai_responses,
+        stream_openai_responses_with_tools, system_prompt, test_openai_compatible_chat,
+        title_from_user_message, title_summary_chat_messages, title_summary_history_items,
+        validate_context_for_mode, validate_message_id, write_json_file, AiChatResponseMode,
+        AiCommandRisk, AiContextAttachment, AiContextMode, AiContextRedactionKind,
+        AiContextRegistry, AiContextTarget, AiCopilotMode, AiMessage, AiMessageRole,
+        AiPromptContext, AiProviderKind, AiProviderSecretPatch, AiProviderSummary, AiStreamEvent,
+        ChatStreamResult, ProviderToolCall, SseDecoder, StoredAiContextSnapshot, StoredAiModeState,
+        StoredAiProvider, StoredConversation, StoredProviderConfig, StoredProviderSecret,
+        StoredProviderSecrets, ToolLoopResult, ToolLoopTurn, ANTHROPIC_API_VERSION,
+        ANTHROPIC_DEFAULT_MAX_TOKENS, CONTEXT_SNAPSHOT_TTL, CONVERSATION_SCHEMA_VERSION,
+        COPILOT_EXECUTE_REMOTE_COMMAND_TOOL, MAX_AI_TITLE_SUGGESTION_LENGTH,
+        MAX_CONTEXT_PREVIEW_BYTES, MAX_CONTEXT_PREVIEW_LINES, MAX_CONVERSATION_TITLE_LENGTH,
     };
     use reqwest::Client;
     use serde_json::{json, Value};
@@ -5952,6 +5959,28 @@ mod tests {
             conservative_command_risk("some-command", Some(AiCommandRisk::Destructive)),
             AiCommandRisk::Destructive
         );
+    }
+
+    #[test]
+    fn external_basic_safe_commands_follow_the_copilot_classifier() {
+        for command in ["pwd", "uname -a", "git status"] {
+            assert!(
+                is_basic_safe_command(command),
+                "{command} should be automatic"
+            );
+        }
+        for command in [
+            "sudo id",
+            "rm -rf /tmp/fileterm",
+            "reboot",
+            "mkdir /tmp/fileterm",
+            "some-command",
+        ] {
+            assert!(
+                !is_basic_safe_command(command),
+                "{command} should require approval"
+            );
+        }
     }
 
     #[test]

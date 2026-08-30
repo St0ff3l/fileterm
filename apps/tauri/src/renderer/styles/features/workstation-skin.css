@@ -1342,14 +1342,33 @@ textarea:focus-visible,
 }
 
 .system-info-workspace {
-  min-height: 100%;
-  padding: 26px 28px 30px;
-  overflow: auto;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .system-info-workspace-empty {
   display: grid;
   place-items: center;
+  padding: 26px 28px 30px;
+}
+
+.system-info-scroll {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: 26px 28px 30px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.system-info-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .system-info-empty {
@@ -1524,7 +1543,8 @@ textarea:focus-visible,
     grid-template-rows: minmax(260px, 1fr) 250px;
   }
 
-  .system-info-workspace {
+  .system-info-scroll,
+  .system-info-workspace-empty {
     padding: 18px 16px 22px;
   }
 

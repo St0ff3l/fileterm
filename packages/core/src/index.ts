@@ -269,13 +269,13 @@ export const DEFAULT_LOCAL_TERMINAL_SHELLS: LocalTerminalShellPreferences = {
   linux: '/bin/bash'
 }
 
-/** Saved connections exposed to externally launched MCP Agents such as Codex and Claude. */
+/** Saved connections exposed to external Agent, MCP and CLI callers such as Codex and Claude. */
 export type McpConnectionScope = 'all-saved-connections' | 'selected-connections'
 
-/** Whether an external MCP Agent may request state-changing operations. */
-export type McpOperationPolicy = 'read-only' | 'approved-operations' | 'full-access'
+/** Whether an external Agent, MCP client or FileTerm CLI may request state-changing operations. */
+export type McpOperationPolicy = 'read-only' | 'basic-safe-operations' | 'full-access'
 
-/** Non-secret local policy for an external MCP Agent connection. */
+/** Non-secret local policy shared by external Agent, MCP and FileTerm CLI callers. */
 export interface McpAgentPreferences {
   connectionScope: McpConnectionScope
   operationPolicy: McpOperationPolicy
@@ -286,7 +286,7 @@ export interface McpAgentPreferences {
 export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
   connectionScope: 'selected-connections',
   allowedProfileIds: [],
-  operationPolicy: 'approved-operations'
+  operationPolicy: 'basic-safe-operations'
 }
 
 export type McpAgentClientId = 'claude-code' | 'codex-cli' | 'opencode'

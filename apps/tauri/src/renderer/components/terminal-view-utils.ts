@@ -98,12 +98,21 @@ export function splitPaneShortcutsForPlatform(platform: string | undefined) {
   if (platform === 'darwin') {
     return { vertical: '⌘D', horizontal: '⇧⌘D', closePane: '⌘W' }
   }
-  if (platform === 'win32') {
-    // 与 Windows Terminal / pwsh 默认一致：Alt+Shift++ 垂直、Alt+Shift+- 水平、
-    // Ctrl+Shift+W 关闭当前 pane。
-    return { vertical: 'Alt+Shift++', horizontal: 'Alt+Shift+-', closePane: 'Ctrl+Shift+W' }
-  }
-  return { vertical: 'Ctrl+Shift+D', horizontal: 'Ctrl+Alt+Shift+D', closePane: 'Ctrl+Shift+W' }
+  // Keep the Windows Terminal-style split keys on Windows and Linux. The
+  // former Ctrl+Shift+D binding conflicts with OpenCode's delete-line action
+  // and is also a plausible shortcut for other alternate-screen TUIs.
+  return { vertical: 'Alt+Shift++', horizontal: 'Alt+Shift+-', closePane: 'Ctrl+Shift+W' }
+}
+
+/**
+ * Find is an application action, so do not take Ctrl+F from the remote TUI:
+ * readline, OpenCode and Gemini all use it for cursor movement. Keep the
+ * application shortcut identical on every platform so Ctrl+F and
+ * Ctrl+Shift+F have predictable ownership in SSH and local terminals.
+ */
+export function isTerminalFindShortcut(event: KeyboardEvent) {
+  const matchesKey = event.key.toLowerCase() === 'f' || event.code === 'KeyF'
+  return event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey && matchesKey
 }
 
 /**

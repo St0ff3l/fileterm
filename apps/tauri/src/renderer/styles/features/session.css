@@ -194,7 +194,8 @@
 }
 
 .terminal-host .xterm-viewport {
-  overflow-y: auto !important;
+  /* xterm.js 6 owns scrolling through .xterm-scrollable-element. Keep the
+     legacy viewport sizing rule without overriding xterm's scroll contract. */
   min-height: 0;
 }
 
@@ -204,8 +205,7 @@
 }
 
 .terminal-host .xterm .xterm-scrollable-element > .scrollbar {
-  display: block !important;
-  width: 8px !important;
+  display: none !important;
 }
 
 .terminal-host .xterm .xterm-scrollable-element > .scrollbar.horizontal {

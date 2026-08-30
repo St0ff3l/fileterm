@@ -5,6 +5,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+#[cfg(target_os = "windows")]
+use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -151,9 +153,9 @@ pub struct SshConnectionDefaultsInput {
     pub legacy_algorithms: Option<bool>,
 }
 
-/// Non-secret boundary applied to MCP clients that are launched by external
-/// Agents. It deliberately does not contain connection credentials or any
-/// executable configuration path.
+/// Non-secret boundary shared by MCP clients, the FileTerm CLI and external
+/// Agent bridges. It deliberately does not contain connection credentials or
+/// any executable configuration path.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct McpAgentPreferences {
@@ -972,7 +974,18 @@ fn default_mcp_connection_scope() -> String {
 }
 
 fn default_mcp_operation_policy() -> String {
-    "approved-operations".to_string()
+    "basic-safe-operations".to_string()
+}
+
+fn normalize_mcp_operation_policy(operation_policy: &str) -> String {
+    match operation_policy {
+        "read-only" => "read-only".to_string(),
+        // Keep the previous persisted value readable, but write the clearer
+        // policy name back whenever preferences are saved.
+        "approved-operations" | "basic-safe-operations" => "basic-safe-operations".to_string(),
+        "full-access" => "full-access".to_string(),
+        _ => default_mcp_operation_policy(),
+    }
 }
 
 fn normalize_mcp_allowed_profile_ids(profile_ids: Vec<String>) -> Vec<String> {
@@ -1200,12 +1213,8 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
             preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
         }
     }
-    if !matches!(
-        preferences.mcp_agent.operation_policy.as_str(),
-        "read-only" | "approved-operations" | "full-access"
-    ) {
-        preferences.mcp_agent.operation_policy = default_mcp_operation_policy();
-    }
+    preferences.mcp_agent.operation_policy =
+        normalize_mcp_operation_policy(&preferences.mcp_agent.operation_policy);
     preferences.mcp_agent.allowed_profile_ids =
         normalize_mcp_allowed_profile_ids(preferences.mcp_agent.allowed_profile_ids);
     preferences.overview_section_order =
@@ -1399,7 +1408,7 @@ where
     let direct = std::path::PathBuf::from(command);
     if direct.components().count() > 1
         && direct.is_file()
-        && !is_embedded_desktop_app_cli(command, &direct)
+        && is_usable_local_cli_candidate(command, &direct)
     {
         return Some(direct);
     }
@@ -1413,12 +1422,86 @@ where
     for directory in directories {
         for extension in extensions {
             let candidate = directory.join(format!("{command}{extension}"));
-            if candidate.is_file() && !is_embedded_desktop_app_cli(command, &candidate) {
+            if candidate.is_file() && is_usable_local_cli_candidate(command, &candidate) {
                 return Some(candidate);
             }
         }
     }
     None
+}
+
+fn is_usable_local_cli_candidate(command: &str, candidate: &Path) -> bool {
+    if is_embedded_desktop_app_cli(command, candidate) || is_invalid_windows_executable(candidate) {
+        return false;
+    }
+
+    if command.eq_ignore_ascii_case("claude") {
+        let native_binary = candidate
+            .parent()
+            .map(|parent| {
+                parent
+                    .join("node_modules")
+                    .join("@anthropic-ai")
+                    .join("claude-code")
+                    .join("bin")
+                    .join("claude.exe")
+            })
+            .filter(|path| path != candidate);
+
+        if is_claude_native_stub(candidate)
+            || native_binary.as_deref().is_some_and(|path| {
+                path.is_file()
+                    && (is_claude_native_stub(path) || is_invalid_windows_executable(path))
+            })
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Claude Code's npm wrapper leaves this small shell script in place when its
+/// platform-native optional dependency is missing. It has an `.exe` suffix on
+/// Windows, but is not an executable at all; do not report it as an installed
+/// CLI. The same marker can also be reached through npm's generated shims.
+fn is_claude_native_stub(candidate: &Path) -> bool {
+    const STUB_MARKER: &[u8] = b"claude native binary not installed.";
+    let Ok(metadata) = std::fs::metadata(candidate) else {
+        return false;
+    };
+    if metadata.len() > 4096 {
+        return false;
+    }
+
+    std::fs::read(candidate)
+        .map(|contents| {
+            contents
+                .windows(STUB_MARKER.len())
+                .any(|window| window == STUB_MARKER)
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn is_invalid_windows_executable(candidate: &Path) -> bool {
+    if !candidate
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    {
+        return false;
+    }
+
+    let Ok(mut file) = std::fs::File::open(candidate) else {
+        return true;
+    };
+    let mut header = [0_u8; 2];
+    file.read_exact(&mut header).is_err() || header != [b'M', b'Z']
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_invalid_windows_executable(_candidate: &Path) -> bool {
+    false
 }
 
 /// ChatGPT for macOS ships an internal `codex` executable in its app bundle.
@@ -6516,6 +6599,31 @@ mod mcp_agent_setup_tests {
     }
 
     #[test]
+    fn ignores_claude_npm_stub_when_native_binary_is_missing() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-claude-stub-{}", uuid::Uuid::new_v4()));
+        let npm_bin = root.join("npm");
+        let native_bin = npm_bin.join("node_modules/@anthropic-ai/claude-code/bin");
+        std::fs::create_dir_all(&native_bin)
+            .expect("Claude native bin directory should be created");
+        std::fs::write(
+            npm_bin.join("claude"),
+            b"#!/bin/sh\nexec node_modules/@anthropic-ai/claude-code/bin/claude.exe\n",
+        )
+        .expect("Claude npm shim should be written");
+        std::fs::write(
+            native_bin.join("claude.exe"),
+            b"echo \"Error: claude native binary not installed.\" >&2\nexit 1\n",
+        )
+        .expect("Claude fallback stub should be written");
+
+        let resolved = resolve_local_cli_from_paths("claude", vec![npm_bin]);
+
+        assert_eq!(resolved, None);
+        std::fs::remove_dir_all(root).expect("temporary Claude stub directory should be removed");
+    }
+
+    #[test]
     fn ignores_codex_bundled_inside_a_macos_desktop_app() {
         let root =
             std::env::temp_dir().join(format!("fileterm-codex-app-{}", uuid::Uuid::new_v4()));
@@ -6977,8 +7085,8 @@ mod ui_preferences_tests {
         default_local_terminal_shells, default_overview_section_order,
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
-        normalize_resource_monitoring_metric_order, normalize_theme_config,
-        normalize_ui_preferences, resolve_profile_with_connection_defaults,
+        normalize_mcp_operation_policy, normalize_resource_monitoring_metric_order,
+        normalize_theme_config, normalize_ui_preferences, resolve_profile_with_connection_defaults,
         LocalTerminalShellPreferences, McpAgentPreferences, SavedTheme, SshConnectionDefaults,
         UiPreferences, UiPreferencesInput,
     };
@@ -7303,7 +7411,7 @@ mod ui_preferences_tests {
         );
         assert_eq!(
             preferences.mcp_agent.operation_policy,
-            "approved-operations"
+            "basic-safe-operations"
         );
         assert_eq!(
             preferences.mcp_agent.allowed_profile_ids,
@@ -7313,6 +7421,10 @@ mod ui_preferences_tests {
         let serialized = serde_json::to_value(&preferences.mcp_agent)
             .expect("normalized MCP preferences should serialize");
         assert!(serialized.get("defaultProfileId").is_none());
+        assert_eq!(
+            normalize_mcp_operation_policy("approved-operations"),
+            "basic-safe-operations"
+        );
     }
 
     #[test]

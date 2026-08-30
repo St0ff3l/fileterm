@@ -25,6 +25,7 @@ import {
   getShiftedTerminalInput,
   getLastVisibleTerminalLine,
   getVimVisualSelection,
+  isTerminalFindShortcut,
   isShiftedTerminalInputData,
   isFocusTrackingSequence,
   isOsc52TargetSupported,
@@ -57,11 +58,11 @@ type TerminalResizeOptions = {
 
 type TerminalLifecycleOptions = {
   isMac: boolean
-  isWin: boolean
+  isWindowsPty: boolean
   isActive: boolean
   bootText: string
   hostRef: MutableRef<HTMLDivElement | null>
-  setViewportElement(value: HTMLElement | null): void
+  setTerminalScrollableElement(value: HTMLElement | null): void
   terminalRef: MutableRef<Terminal | null>
   fitAddonRef: MutableRef<FitAddon | null>
   terminalLogColorizerRef: MutableRef<TerminalLogColorizer | null>
@@ -129,7 +130,6 @@ type TerminalLifecycleOptions = {
   runPaste(): Promise<void>
   openFind(): void
   closeFind(): void
-  runClear(): void
   runSplitPane(direction: 'row' | 'column'): void
   runClosePane(): void
   runCloseTab(): void
@@ -140,11 +140,11 @@ let terminalUnderPointer: Terminal | null = null
 
 export function useTerminalLifecycle({
   isMac,
-  isWin,
+  isWindowsPty,
   isActive,
   bootText,
   hostRef,
-  setViewportElement,
+  setTerminalScrollableElement,
   terminalRef,
   fitAddonRef,
   terminalLogColorizerRef,
@@ -212,7 +212,6 @@ export function useTerminalLifecycle({
   runPaste,
   openFind,
   closeFind,
-  runClear,
   runSplitPane,
   runClosePane,
   runCloseTab
@@ -238,6 +237,14 @@ export function useTerminalLifecycle({
       macOptionClickForcesSelection: true,
       reflowCursorLine: false,
       scrollback: 6000,
+      // FileTerm's local Windows sessions use ConPTY. xterm.js needs this
+      // hint to preserve the screen rows that ConPTY reprints during a
+      // resize, especially when a kept-alive tab becomes visible again.
+      windowsPty: isWindowsPty ? { backend: 'conpty' } : {},
+      // Keep ED2 from moving an interactive TUI's cleared screen into the
+      // scrollback. This is the behavior expected by modern TUIs and keeps
+      // the viewport stable when they repaint after tab/size changes.
+      scrollOnEraseInDisplay: false,
       overviewRuler: { width: 0 },
       linkHandler: {
         activate: (_event, uri) => {
@@ -265,10 +272,8 @@ export function useTerminalLifecycle({
     terminal.open(hostRef.current)
     const terminalLogColorizer = new TerminalLogColorizer(terminal, getTerminalLogColorPalette(terminal.options.theme))
     terminalLogColorizerRef.current = terminalLogColorizer
-    const xtermViewport = hostRef.current.querySelector('.xterm-viewport') as HTMLElement | null
-    if (xtermViewport) {
-      setViewportElement(xtermViewport)
-    }
+    const xtermScrollableElement = hostRef.current.querySelector('.xterm-scrollable-element') as HTMLElement | null
+    setTerminalScrollableElement(xtermScrollableElement ?? terminal.element ?? null)
     const terminalTextarea = terminal.textarea
     const onCompositionStart = () => {
       imeCompositionActiveRef.current = true
@@ -634,9 +639,7 @@ export function useTerminalLifecycle({
 
       const matchesCopy = isTerminalClipboardShortcut(event, isMac, 'copy')
       const matchesPaste = isTerminalClipboardShortcut(event, isMac, 'paste')
-      const matchesFind = isMac
-        ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'f'
-        : event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'f'
+      const matchesFind = isTerminalFindShortcut(event)
       const terminalZoomOperation = getTerminalZoomOperation(event)
       if (event.ctrlKey || event.metaKey || terminalZoomOperation) {
         logTerminalZoom(terminal, 'key-xterm-received', {
@@ -696,21 +699,15 @@ export function useTerminalLifecycle({
 
       const matchesSplitVertical = isMac
         ? event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'd'
-        : isWin
-          ? (event.altKey &&
-              event.shiftKey &&
-              (event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd')) ||
-            (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd')
-          : event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'd'
+        : event.altKey &&
+          event.shiftKey &&
+          (event.key === '+' || event.key === '=' || event.code === 'Equal' || event.code === 'NumpadAdd')
 
       const matchesSplitHorizontal = isMac
         ? event.metaKey && event.shiftKey && event.key.toLowerCase() === 'd'
-        : isWin
-          ? (event.altKey &&
-              event.shiftKey &&
-              (event.key === '-' || event.key === '_' || event.code === 'Minus' || event.code === 'NumpadSubtract')) ||
-            (event.ctrlKey && event.altKey && event.shiftKey && event.key.toLowerCase() === 'd')
-          : event.ctrlKey && event.altKey && event.shiftKey && event.key.toLowerCase() === 'd'
+        : event.altKey &&
+          event.shiftKey &&
+          (event.key === '-' || event.key === '_' || event.code === 'Minus' || event.code === 'NumpadSubtract')
 
       if (matchesSplitVertical) {
         event.preventDefault()
@@ -1213,6 +1210,26 @@ export function useTerminalLifecycle({
       const lastObservedRect = lastObservedHostRectRef.current
       lastObservedHostRectRef.current = { left, top, right, bottom, width, height }
 
+      const hostBecameUsable =
+        isActiveRef.current &&
+        width > 0 &&
+        height > 0 &&
+        Boolean(!lastObservedRect || lastObservedRect.width <= 0 || lastObservedRect.height <= 0)
+      if (hostBecameUsable) {
+        // WebKitGTK/WKWebView can report the hidden keep-alive surface as
+        // zero-sized first and a usable box only after the visibility change.
+        // Rebuild the cached glyph atlas at that boundary instead of waiting
+        // for another terminal write to make the missing canvas repaint.
+        terminal.clearTextureAtlas()
+        scheduleResize(true)
+        window.requestAnimationFrame(() => {
+          if (isActiveRef.current) {
+            terminal.refresh(0, Math.max(terminal.rows - 1, 0))
+          }
+        })
+        return
+      }
+
       const widthChanged = Boolean(
         lastObservedRect && Math.abs(lastObservedRect.width - width) > TERMINAL_RESIZE_PIXEL_EPSILON
       )
@@ -1447,13 +1464,53 @@ export function useTerminalLifecycle({
       })
       return true
     }
+    const forwardRetargetedTerminalWheel = (event: WheelEvent) => {
+      if (!isActiveRef.current || isEventInsideTerminal(event)) {
+        return false
+      }
+
+      // WebView2/WebKitGTK can retarget a compositor wheel to the document
+      // root. Re-dispatch it on xterm so xterm keeps the protocol decision:
+      // normal-buffer scrollback, alternate-screen cursor-key fallback, or
+      // application mouse reporting. This is important for TUIs that own the
+      // wheel (OpenCode, Qwen Code, Claude Code, Kimi Code, Antigravity, etc.).
+      const element = terminal.element
+      if (!element) {
+        return false
+      }
+
+      const forwardedEvent = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        ctrlKey: event.ctrlKey,
+        deltaMode: event.deltaMode,
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        deltaZ: event.deltaZ,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        shiftKey: event.shiftKey
+      })
+
+      element.dispatchEvent(forwardedEvent)
+      logTerminalRender(terminal, 'retargeted-wheel-forwarded', {
+        bufferType: terminal.buffer.active.type,
+        mouseTrackingMode: terminal.modes.mouseTrackingMode,
+        tabId: tabIdRef.current
+      })
+      return true
+    }
     const onWheel = (event: WheelEvent) => {
       const matchesTerminal = isTerminalGestureTarget(event)
       if (!matchesTerminal) {
         return
       }
 
-      if (!consumeTerminalWheelZoom(event, 'window')) {
+      if (!consumeTerminalWheelZoom(event, 'window') && !forwardRetargetedTerminalWheel(event)) {
         return
       }
 
@@ -1464,13 +1521,13 @@ export function useTerminalLifecycle({
     // scrollback or a remote mouse-reporting sequence. This is the primary
     // path; the window listener above remains for platform-retargeted events.
     terminal.attachCustomWheelEventHandler((event) => {
-      if (!consumeTerminalWheelZoom(event, 'xterm')) {
-        return true
+      if (consumeTerminalWheelZoom(event, 'xterm')) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        return false
       }
 
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      return false
+      return true
     })
 
     let previousGestureScale = 1
@@ -1568,7 +1625,6 @@ export function useTerminalLifecycle({
         return
       }
 
-      const key = event.key.toLowerCase()
       const matchesCopy = isTerminalClipboardShortcut(event, isMac, 'copy')
       const matchesPaste = isTerminalClipboardShortcut(event, isMac, 'paste')
       const isFocusedTerminal = isTerminalShortcutTarget(event)
@@ -1612,11 +1668,6 @@ export function useTerminalLifecycle({
           void runPaste()
         }
         return
-      }
-
-      if (document.activeElement === terminal.textarea && !isMac && event.ctrlKey && !event.shiftKey && key === 'l') {
-        event.preventDefault()
-        runClear()
       }
     }
 
@@ -1815,10 +1866,11 @@ export function useTerminalLifecycle({
       terminalLogColorizerRef.current = null
       searchAddonRef.current = null
       fitAddonRef.current = null
+      setTerminalScrollableElement(null)
       terminalRef.current = null
       terminal.dispose()
     }
-  }, [isMac])
+  }, [isMac, isWindowsPty])
 
   // A kept-alive terminal must not retain focus after its workspace is hidden.
   // Otherwise the hidden xterm textarea can continue to receive keyboard input

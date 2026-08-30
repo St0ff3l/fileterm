@@ -37,7 +37,7 @@ claude mcp add --scope user fileterm -- /Applications/FileTerm.app/Contents/MacO
 codex mcp add fileterm -- /Applications/FileTerm.app/Contents/MacOS/fileterm mcp
 ```
 
-MCP 修改、执行、传输和隧道操作仍等待 FileTerm 审批；CLI 是用户显式启动的 JSON 接口，不重复弹审批。MCP/CLI 不返回连接凭据或 terminal transcript。
+基础安全操作下，MCP/CLI 的查询和由内置 Copilot 规则判定为只读的普通远程命令自动执行；变更、破坏性、提权或未知命令，以及修改、会话变更、传输、隧道和 sudo/su 操作回 FileTerm 主窗口审批；完全访问跳过包括 sudo/su 操作在内的逐次审批，但 sudo/su 密码仍可能需要输入。MCP/CLI 不返回连接凭据或 terminal transcript。
 
 ## 验收范围（已转移）
 

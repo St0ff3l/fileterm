@@ -6,13 +6,13 @@
 
 ### 已采用包
 
-| 包                       | 当前用途                                    | 实现位置                                                                                                        | 维护结论                                                                       |
-| ------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `@xterm/xterm`           | 终端主体渲染、输入、selection、控制序列解析 | `apps/tauri/src/renderer/components/TerminalView.tsx`、`apps/electron/src/renderer/components/TerminalView.tsx` | 实时 PTY 数据必须原样交给 xterm 解析，renderer 不改写 `\r` / `\n` 控制流。     |
-| `@xterm/addon-fit`       | 根据容器尺寸计算行列数                      | `TerminalView.tsx`                                                                                              | 配合 `ResizeObserver` 使用；resize 后必须把同一套 `cols/rows` 同步给后端 PTY。 |
-| `@xterm/addon-search`    | 终端内搜索                                  | `TerminalView.tsx`                                                                                              | 绑定 `Cmd/Ctrl+F` 的终端搜索 UI，支持上一条/下一条、大小写和正则。             |
-| `@xterm/addon-unicode11` | Unicode 11 宽字符支持                       | `TerminalView.tsx`                                                                                              | 用于中文、Emoji、Powerline / Oh My Zsh 字符宽度计算，减少光标错位。            |
-| `@xterm/addon-web-links` | HTTP/HTTPS 链接识别                         | `TerminalView.tsx`                                                                                              | 终端输出中的链接可点击并通过浏览器打开。                                       |
+| 包                       | 当前用途                                    | 实现位置                                                                                                        | 维护结论                                                                                      |
+| ------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `@xterm/xterm`           | 终端主体渲染、输入、selection、控制序列解析 | `apps/tauri/src/renderer/components/TerminalView.tsx`、`apps/electron/src/renderer/components/TerminalView.tsx` | 实时 PTY 数据必须原样交给 xterm 解析，renderer 不改写 `\r` / `\n` 控制流。                    |
+| `@xterm/addon-fit`       | 根据容器尺寸计算行列数                      | `TerminalView.tsx`                                                                                              | 配合 `ResizeObserver` 使用；resize 后必须把同一套 `cols/rows` 同步给后端 PTY。                |
+| `@xterm/addon-search`    | 终端内搜索                                  | `TerminalView.tsx`                                                                                              | 绑定 `Ctrl+Shift+F` 的终端搜索 UI；`Ctrl+F` 保留给远程 CLI，支持上一条/下一条、大小写和正则。 |
+| `@xterm/addon-unicode11` | Unicode 11 宽字符支持                       | `TerminalView.tsx`                                                                                              | 用于中文、Emoji、Powerline / Oh My Zsh 字符宽度计算，减少光标错位。                           |
+| `@xterm/addon-web-links` | HTTP/HTTPS 链接识别                         | `TerminalView.tsx`                                                                                              | 终端输出中的链接可点击并通过浏览器打开。                                                      |
 
 ### 当前终端实例配置
 
@@ -22,6 +22,11 @@
 allowProposedApi: true
 scrollback: 6000
 reflowCursorLine: false
+scrollOnEraseInDisplay: false
+// 仅本地 Windows/ConPTY 会设置：
+windowsPty: {
+  backend: 'conpty'
+}
 ```
 
 维护结论：
@@ -29,6 +34,14 @@ reflowCursorLine: false
 - `scrollback` 不能设为 `0`，否则历史输出和用户回看体验会退化。
 - `allowProposedApi` 已保留，便于 xterm 内部 reflow / viewport 能力正常工作。
 - `reflowCursorLine: false` 用于降低 readline 当前输入行在 resize 时被重新折行污染的概率。
+- 本地 Windows PTY 使用 ConPTY 时显式设置 `windowsPty.backend`，避免 xterm 在恢复标签页或调整尺寸时丢失 ConPTY 重绘行；远程 SSH 即使登录的是 Windows，也不套用此配置。
+- `scrollOnEraseInDisplay: false` 保持全屏 TUI 的 ED2 擦屏在当前视口完成，不把旧画面伪装成新的 scrollback。
+
+标签页切换约束：
+
+- 顶层本地和远程终端都由工作区 keep-alive 保留，不因切换标签页销毁 xterm 实例。
+- 切回标签页时，先等待布局恢复，再强制同步尺寸、清理 texture atlas、刷新并聚焦；滚动条读取 xterm buffer，而不是读取已经被隐藏或替换的旧 DOM scrollTop。
+- 普通滚轮事件交给 xterm 决定是 scrollback、alternate-screen 光标滚动还是远程 mouse-reporting，renderer 不为某一个 CLI 硬编码控制序列。
 
 ### 尺寸同步原则
 
@@ -72,7 +85,7 @@ FileTerm 当前采用“拖拽期间冻结列数，稳定后同步真实宽度�
 - 单行 `\r` 进度条
 - 三行进度条 + 拖拽窗口
 - bash/readline 上下键历史记录
-- 终端搜索和普通 selection
+- 终端搜索、普通 selection 和标签页切换后的滚动恢复
 
 ## 2. 文件编辑器：Monaco Editor
 

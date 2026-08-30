@@ -112,6 +112,8 @@ type ThemePresetVariant = ThemeConfig['variant']
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
 const THEME_CONFIG_EXPORT_PREFIX = 'fileterm-theme-v1:'
 const THEME_CONFIG_IMPORT_PREFIXES = [THEME_CONFIG_EXPORT_PREFIX, 'codex-theme-v1:'] as const
+const FILETERM_CLI_AGENT_SKILL_URL =
+  'https://github.com/St0ff3l/fileterm/blob/main/.agents/skills/fileterm-cli-agent/SKILL.md'
 
 const ANSI_COLOR_NAMES: TerminalAnsiColorName[] = [
   'black',
@@ -775,9 +777,9 @@ export function SettingsModal({
       description: t.agentMcpExecutionReadOnlyDescription
     },
     {
-      value: 'approved-operations' as const,
-      label: t.agentMcpExecutionApproved,
-      description: t.agentMcpExecutionApprovedDescription
+      value: 'basic-safe-operations' as const,
+      label: t.agentMcpExecutionBasicSafe,
+      description: t.agentMcpExecutionBasicSafeDescription
     },
     {
       value: 'full-access' as const,
@@ -800,11 +802,12 @@ export function SettingsModal({
   ]
 
   const mcpCapabilityRows = [
-    { label: t.agentMcpCapabilityQuery, readOnly: true, approved: true, full: true },
-    { label: t.agentMcpCapabilityRemoteChanges, readOnly: false, approved: true, full: true },
-    { label: t.agentMcpCapabilityTransfers, readOnly: false, approved: true, full: true },
-    { label: t.agentMcpCapabilityTunnels, readOnly: false, approved: true, full: true },
-    { label: t.agentMcpCapabilitySkipApproval, readOnly: false, approved: false, full: true }
+    { label: t.agentMcpCapabilityQuery, readOnly: true, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityRemoteCommands, readOnly: false, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityRemoteChanges, readOnly: false, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityTunnels, readOnly: false, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityDangerousCommands, readOnly: false, basicSafe: false, full: true },
+    { label: t.agentMcpCapabilitySkipApproval, readOnly: false, basicSafe: false, full: true }
   ]
 
   useEffect(() => {
@@ -2707,6 +2710,144 @@ export function SettingsModal({
                 <h3>{t.agentMcpSettings}</h3>
                 <p className="settings-tools-hint">{t.agentMcpDescription}</p>
 
+                <div className="agent-mcp-policy-stack agent-mcp-shared-policy">
+                  <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-execution-policy-title">
+                    <div className="agent-mcp-policy-heading">
+                      <div>
+                        <h4 id="agent-mcp-execution-policy-title">{t.agentMcpExecutionPolicyTitle}</h4>
+                        <p>{t.agentMcpExecutionPolicyDescription}</p>
+                      </div>
+                    </div>
+                    <RadioCardGroup
+                      ariaLabel={t.agentMcpExecutionPolicyTitle}
+                      className="agent-mcp-policy-options"
+                      disabled={!desktopApi || mcpAgentOperation !== null}
+                      name="agent-mcp-execution-policy"
+                      options={mcpExecutionPolicyOptions}
+                      value={mcpAgentPreferences.operationPolicy}
+                      onChange={(value) => saveMcpAgentPreferences({ operationPolicy: value })}
+                    />
+                    <p
+                      className={`agent-mcp-policy-notice ${
+                        mcpAgentPreferences.operationPolicy === 'full-access' ? 'is-warning' : ''
+                      }`}
+                    >
+                      <AppIcon
+                        name={mcpAgentPreferences.operationPolicy === 'full-access' ? 'shield' : 'shield-check'}
+                        size={14}
+                        strokeWidth={2}
+                      />
+                      <span>
+                        {mcpAgentPreferences.operationPolicy === 'full-access'
+                          ? t.agentMcpExecutionFullWarning
+                          : t.agentMcpExecutionBoundary}
+                      </span>
+                    </p>
+                    <div className="agent-mcp-capability">
+                      <h5>{t.agentMcpCapabilityTitle}</h5>
+                      <div aria-label={t.agentMcpCapabilityTitle} className="agent-mcp-capability-table" role="table">
+                        <div className="agent-mcp-capability-row is-header" role="row">
+                          <span role="columnheader">{t.agentMcpCapabilityHeader}</span>
+                          <span role="columnheader">{t.agentMcpCapabilityReadOnly}</span>
+                          <span role="columnheader">{t.agentMcpCapabilityBasicSafe}</span>
+                          <span role="columnheader">{t.agentMcpCapabilityFull}</span>
+                        </div>
+                        {mcpCapabilityRows.map((row) => (
+                          <div key={row.label} className="agent-mcp-capability-row" role="row">
+                            <span role="cell">{row.label}</span>
+                            {[row.readOnly, row.basicSafe, row.full].map((allowed, index) => (
+                              <span
+                                key={`${row.label}-${index}`}
+                                aria-label={allowed ? t.agentMcpCapabilityAllowed : t.agentMcpCapabilityDenied}
+                                className={`agent-mcp-capability-value ${allowed ? 'is-allowed' : 'is-denied'}`}
+                                role="cell"
+                              >
+                                <AppIcon name={allowed ? 'check' : 'close'} size={13} strokeWidth={2.2} />
+                              </span>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-allowed-connections-title">
+                    <div className="agent-mcp-policy-heading agent-mcp-connections-heading">
+                      <div>
+                        <h4 id="agent-mcp-allowed-connections-title">{t.agentMcpAllowedConnectionsTitle}</h4>
+                        <p>{t.agentMcpAllowedConnectionsDescription}</p>
+                      </div>
+                      <span className="agent-mcp-policy-count">
+                        {mcpAgentPreferences.connectionScope === 'selected-connections'
+                          ? formatMessage(t.agentMcpSelectedConnectionCount, {
+                              count: selectedMcpAgentProfileCount,
+                              total: mcpAgentProfiles.length
+                            })
+                          : t.agentMcpConnectionModeAllStatus}
+                      </span>
+                    </div>
+                    <RadioCardGroup
+                      ariaLabel={t.agentMcpAllowedConnectionsTitle}
+                      className="agent-mcp-policy-options agent-mcp-connection-options"
+                      disabled={!desktopApi || mcpAgentOperation !== null}
+                      name="agent-mcp-connection-scope"
+                      options={mcpConnectionScopeOptions}
+                      value={mcpAgentPreferences.connectionScope}
+                      onChange={(value) => saveMcpAgentPreferences({ connectionScope: value })}
+                    />
+
+                    {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
+                      <div className="agent-mcp-selected-connections">
+                        <div className="agent-mcp-selected-connections-heading">
+                          <span>{t.agentMcpSelectedConnections}</span>
+                        </div>
+                        <input
+                          aria-label={t.agentMcpSelectedConnections}
+                          className="agent-mcp-profile-search"
+                          disabled={!desktopApi || mcpAgentOperation !== null}
+                          placeholder={t.agentMcpSelectedConnectionsSearchPlaceholder}
+                          type="search"
+                          value={mcpAgentProfileSearch}
+                          onChange={(event) => setMcpAgentProfileSearch(event.target.value)}
+                        />
+                        <div className="agent-mcp-profile-list" role="group">
+                          {filteredMcpAgentProfiles.map((profile) => {
+                            const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
+                            return (
+                              <label key={profile.id} className="agent-mcp-profile-option">
+                                <SelectionControl
+                                  checked={selected}
+                                  disabled={!desktopApi || mcpAgentOperation !== null}
+                                  type="checkbox"
+                                  onChange={() => {
+                                    const allowedProfileIds = selected
+                                      ? mcpAgentPreferences.allowedProfileIds.filter((id) => id !== profile.id)
+                                      : [...mcpAgentPreferences.allowedProfileIds, profile.id]
+                                    saveMcpAgentPreferences({ allowedProfileIds })
+                                  }}
+                                />
+                                <span className="agent-mcp-profile-copy">
+                                  <strong>{profile.name || profile.type.toUpperCase()}</strong>
+                                  <small>
+                                    {profile.type.toUpperCase()} · {agentProfileTarget(profile)} ·{' '}
+                                    {profile.hasSavedPassword ? t.agentMcpCredentialSaved : t.agentMcpCredentialPrompt}
+                                  </small>
+                                </span>
+                              </label>
+                            )
+                          })}
+                          {!filteredMcpAgentProfiles.length ? (
+                            <small className="agent-mcp-profile-empty">{t.agentMcpSelectedConnectionsEmpty}</small>
+                          ) : null}
+                        </div>
+                        {!selectedMcpAgentProfileCount ? (
+                          <small className="agent-mcp-profile-warning">{t.agentMcpSelectedConnectionsNone}</small>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </section>
+                </div>
+
                 <div className="agent-mcp-subtabs" role="tablist" aria-label={t.agentMcpSubTabs}>
                   <button
                     id="agent-mcp-tab-mcp"
@@ -2749,150 +2890,6 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="agent-mcp-policy-stack">
-                      <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-execution-policy-title">
-                        <div className="agent-mcp-policy-heading">
-                          <div>
-                            <h4 id="agent-mcp-execution-policy-title">{t.agentMcpExecutionPolicyTitle}</h4>
-                            <p>{t.agentMcpExecutionPolicyDescription}</p>
-                          </div>
-                        </div>
-                        <RadioCardGroup
-                          ariaLabel={t.agentMcpExecutionPolicyTitle}
-                          className="agent-mcp-policy-options"
-                          disabled={!desktopApi || mcpAgentOperation !== null}
-                          name="agent-mcp-execution-policy"
-                          options={mcpExecutionPolicyOptions}
-                          value={mcpAgentPreferences.operationPolicy}
-                          onChange={(value) => saveMcpAgentPreferences({ operationPolicy: value })}
-                        />
-                        <p
-                          className={`agent-mcp-policy-notice ${
-                            mcpAgentPreferences.operationPolicy === 'full-access' ? 'is-warning' : ''
-                          }`}
-                        >
-                          <AppIcon
-                            name={mcpAgentPreferences.operationPolicy === 'full-access' ? 'shield' : 'shield-check'}
-                            size={14}
-                            strokeWidth={2}
-                          />
-                          <span>
-                            {mcpAgentPreferences.operationPolicy === 'full-access'
-                              ? t.agentMcpExecutionFullWarning
-                              : t.agentMcpExecutionBoundary}
-                          </span>
-                        </p>
-                        <div className="agent-mcp-capability">
-                          <h5>{t.agentMcpCapabilityTitle}</h5>
-                          <div
-                            aria-label={t.agentMcpCapabilityTitle}
-                            className="agent-mcp-capability-table"
-                            role="table"
-                          >
-                            <div className="agent-mcp-capability-row is-header" role="row">
-                              <span role="columnheader">{t.agentMcpCapabilityHeader}</span>
-                              <span role="columnheader">{t.agentMcpCapabilityReadOnly}</span>
-                              <span role="columnheader">{t.agentMcpCapabilityApproved}</span>
-                              <span role="columnheader">{t.agentMcpCapabilityFull}</span>
-                            </div>
-                            {mcpCapabilityRows.map((row) => (
-                              <div key={row.label} className="agent-mcp-capability-row" role="row">
-                                <span role="cell">{row.label}</span>
-                                {[row.readOnly, row.approved, row.full].map((allowed, index) => (
-                                  <span
-                                    key={`${row.label}-${index}`}
-                                    aria-label={allowed ? t.agentMcpCapabilityAllowed : t.agentMcpCapabilityDenied}
-                                    className={`agent-mcp-capability-value ${allowed ? 'is-allowed' : 'is-denied'}`}
-                                    role="cell"
-                                  >
-                                    <AppIcon name={allowed ? 'check' : 'close'} size={13} strokeWidth={2.2} />
-                                  </span>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </section>
-
-                      <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-allowed-connections-title">
-                        <div className="agent-mcp-policy-heading agent-mcp-connections-heading">
-                          <div>
-                            <h4 id="agent-mcp-allowed-connections-title">{t.agentMcpAllowedConnectionsTitle}</h4>
-                            <p>{t.agentMcpAllowedConnectionsDescription}</p>
-                          </div>
-                          <span className="agent-mcp-policy-count">
-                            {mcpAgentPreferences.connectionScope === 'selected-connections'
-                              ? formatMessage(t.agentMcpSelectedConnectionCount, {
-                                  count: selectedMcpAgentProfileCount,
-                                  total: mcpAgentProfiles.length
-                                })
-                              : t.agentMcpConnectionModeAllStatus}
-                          </span>
-                        </div>
-                        <RadioCardGroup
-                          ariaLabel={t.agentMcpAllowedConnectionsTitle}
-                          className="agent-mcp-policy-options agent-mcp-connection-options"
-                          disabled={!desktopApi || mcpAgentOperation !== null}
-                          name="agent-mcp-connection-scope"
-                          options={mcpConnectionScopeOptions}
-                          value={mcpAgentPreferences.connectionScope}
-                          onChange={(value) => saveMcpAgentPreferences({ connectionScope: value })}
-                        />
-
-                        {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
-                          <div className="agent-mcp-selected-connections">
-                            <div className="agent-mcp-selected-connections-heading">
-                              <span>{t.agentMcpSelectedConnections}</span>
-                            </div>
-                            <input
-                              aria-label={t.agentMcpSelectedConnections}
-                              className="agent-mcp-profile-search"
-                              disabled={!desktopApi || mcpAgentOperation !== null}
-                              placeholder={t.agentMcpSelectedConnectionsSearchPlaceholder}
-                              type="search"
-                              value={mcpAgentProfileSearch}
-                              onChange={(event) => setMcpAgentProfileSearch(event.target.value)}
-                            />
-                            <div className="agent-mcp-profile-list" role="group">
-                              {filteredMcpAgentProfiles.map((profile) => {
-                                const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
-                                return (
-                                  <label key={profile.id} className="agent-mcp-profile-option">
-                                    <SelectionControl
-                                      checked={selected}
-                                      disabled={!desktopApi || mcpAgentOperation !== null}
-                                      type="checkbox"
-                                      onChange={() => {
-                                        const allowedProfileIds = selected
-                                          ? mcpAgentPreferences.allowedProfileIds.filter((id) => id !== profile.id)
-                                          : [...mcpAgentPreferences.allowedProfileIds, profile.id]
-                                        saveMcpAgentPreferences({ allowedProfileIds })
-                                      }}
-                                    />
-                                    <span className="agent-mcp-profile-copy">
-                                      <strong>{profile.name || profile.type.toUpperCase()}</strong>
-                                      <small>
-                                        {profile.type.toUpperCase()} · {agentProfileTarget(profile)} ·{' '}
-                                        {profile.hasSavedPassword
-                                          ? t.agentMcpCredentialSaved
-                                          : t.agentMcpCredentialPrompt}
-                                      </small>
-                                    </span>
-                                  </label>
-                                )
-                              })}
-                              {!filteredMcpAgentProfiles.length ? (
-                                <small className="agent-mcp-profile-empty">{t.agentMcpSelectedConnectionsEmpty}</small>
-                              ) : null}
-                            </div>
-                            {!selectedMcpAgentProfileCount ? (
-                              <small className="agent-mcp-profile-warning">{t.agentMcpSelectedConnectionsNone}</small>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </section>
-                    </div>
-
                     <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
                       <h4>{t.agentMcpClients}</h4>
                       {mcpAgentSetup?.clients.map((client) => (
@@ -2924,7 +2921,7 @@ export function SettingsModal({
                           <div className="agent-mcp-client-actions">
                             <small className="agent-mcp-registration-hint">{t.agentMcpRegistrationDescription}</small>
                             <button
-                              className="settings-secondary-button agent-mcp-launch-button"
+                              className="ai-settings-secondary-button agent-mcp-launch-button"
                               disabled={!client.available || !onLaunchLocalAgent}
                               title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
                               type="button"
@@ -2982,25 +2979,18 @@ export function SettingsModal({
                               </button>
                             </div>
                           </div>
-                          <div className="agent-mcp-direct-cli-command">
-                            <div>
-                              <strong>{t.agentMcpPersistentTitle}</strong>
-                              <p>{t.agentMcpPersistentDescription}</p>
-                            </div>
-                            <small>{t.agentMcpPersistentPath}</small>
+                          <div className="agent-mcp-direct-cli-command agent-mcp-doc-reference">
+                            <small>{t.agentMcpCliSkillPath}</small>
                             <div className="agent-mcp-registration">
-                              <code>{mcpAgentSetup.filetermCommand} agent</code>
+                              <code>{FILETERM_CLI_AGENT_SKILL_URL}</code>
                               <button
-                                aria-label={t.agentMcpPersistentCopy}
+                                aria-label={t.agentMcpCliSkillCopy}
                                 className="copy-icon-button agent-mcp-copy-button"
                                 disabled={!desktopApi}
-                                title={t.agentMcpPersistentCopy}
+                                title={t.agentMcpCliSkillCopy}
                                 type="button"
                                 onClick={() =>
-                                  copyMcpAgentCommand(
-                                    `${mcpAgentSetup.filetermCommand} agent`,
-                                    t.agentMcpPersistentCopied
-                                  )
+                                  copyMcpAgentCommand(FILETERM_CLI_AGENT_SKILL_URL, t.agentMcpCliSkillCopied)
                                 }
                               >
                                 <AppIcon name="copy" size={14} strokeWidth={2} />

@@ -109,10 +109,14 @@ impl ActionApprovalDecision {
             (_, Self::DelegatedToTerminal) => {
                 "Copilot command was delegated to the visible terminal"
             }
-            (ActionApprovalSource::Mcp, Self::Rejected) => "MCP operation was rejected by the user",
-            (ActionApprovalSource::Mcp, Self::Dismissed) => "MCP approval dialog was closed",
+            (ActionApprovalSource::Mcp, Self::Rejected) => {
+                "FileTerm external operation was rejected by the user"
+            }
+            (ActionApprovalSource::Mcp, Self::Dismissed) => {
+                "FileTerm external approval dialog was closed"
+            }
             (ActionApprovalSource::Mcp, Self::TimedOut) => {
-                "MCP approval timed out; the operation was not started"
+                "FileTerm external approval timed out; the operation was not started"
             }
             (ActionApprovalSource::AiCopilot, Self::Rejected) => {
                 "Copilot tool call was rejected by the user"
@@ -157,6 +161,14 @@ pub async fn request_action_approval_with_id(
         .write()
         .await
         .insert(request_id.clone(), sender);
+
+    if matches!(source, ActionApprovalSource::Mcp) {
+        // MCP, one-shot CLI, and the persistent Agent all use the legacy
+        // `Mcp` approval source on the wire. Bring the shared FileTerm
+        // approval back to the main window so a hidden or unfocused desktop
+        // window cannot leave the external caller waiting invisibly.
+        crate::show_main_window(app);
+    }
 
     let payload = ActionApprovalRequest {
         request_id: request_id.clone(),
@@ -1012,7 +1024,7 @@ mod tests {
     fn approval_rejections_remain_specific_to_the_initiating_surface() {
         assert_eq!(
             ActionApprovalDecision::Rejected.rejection_message(ActionApprovalSource::Mcp),
-            "MCP operation was rejected by the user"
+            "FileTerm external operation was rejected by the user"
         );
         assert_eq!(
             ActionApprovalDecision::TimedOut.rejection_message(ActionApprovalSource::AiCopilot),

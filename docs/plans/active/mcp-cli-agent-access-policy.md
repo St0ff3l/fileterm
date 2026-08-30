@@ -85,8 +85,8 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 - 使用运行时 descriptor 中的 token 认证。
 - MCP/CLI 不返回连接凭据和 terminal transcript。
 - action route 前执行连接范围和只读策略。
-- MCP 写操作、远程命令、传输、隧道和会话状态变化默认经过桌面审批。
-- CLI 作为显式启动的接口，目前不重复弹 MCP 审批。
+- MCP 写操作、会话状态变化、文件/传输变更、隧道和 sudo/su 默认经过桌面审批；普通远程命令自动执行。
+- CLI 作为显式启动的接口仍受共用策略约束；基础安全操作中的查询和普通远程命令自动执行，其它变更同样回 FileTerm 主窗口审批。
 
 代码入口：
 
@@ -97,14 +97,14 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 
 当前 Agent 偏好包含连接白名单和操作等级两个维度；设置页按两张独立策略卡片展示：
 
-| 维度       | 当前值                                      |
-| ---------- | ------------------------------------------- |
-| 连接白名单 | all-saved-connections、selected-connections |
-| 操作策略   | read-only、approved-operations、full-access |
+| 维度       | 当前值                                        |
+| ---------- | --------------------------------------------- |
+| 连接白名单 | all-saved-connections、selected-connections   |
+| 操作策略   | read-only、basic-safe-operations、full-access |
 
-第一张卡片是 MCP 执行权限和能力对照，第二张卡片是“所有连接 / 指定连接”的全局白名单。当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按白名单过滤。连接自身的协议能力和 FileTerm 安全校验不在 MCP 卡片中重复配置，而是继续作为硬上限。
+第一张卡片是 Agent / MCP / CLI 共用执行权限和能力对照，第二张卡片是“所有连接 / 指定连接”的全局白名单。当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按白名单过滤。连接自身的协议能力和 FileTerm 安全校验不在共用策略卡片中重复配置，而是继续作为硬上限。
 
-当前实现已经补齐逐个连接选择和第三档“完全访问”策略；仍然不区分具体 MCP client，所有 MCP client 共享 FileTerm 全局设置。一次性 CLI 保留显式用户调用语义，常驻 Agent 则强制使用桌面审批策略。
+当前实现已经补齐逐个连接选择、基础安全操作和第三档“完全访问”策略；仍然不区分具体 MCP client，MCP、一次性 CLI 和常驻 Agent 共享 FileTerm 全局设置与 Rust policy evaluator。基础安全操作下查询和普通远程命令自动执行，会话/文件/传输变更、隧道、提权和未知操作统一回 FileTerm 主窗口确认。
 
 ### 2.4 当前凭据处理
 
@@ -284,7 +284,7 @@ FileTerm 主窗口安全 prompt
 主窗口不可用时返回 SUDO_PASSWORD_NEEDED / SU_PASSWORD_NEEDED
 ```
 
-MCP 在执行前先审批；CLI 保持当前显式 CLI 语义，不弹 MCP 审批。两者都能在主窗口 prompt 可用时保持原调用等待，并在用户输入后拿到最终命令结果。
+基础安全操作下，MCP/CLI/Agent 的查询和由内置 Copilot 规则判定为只读的普通远程命令自动执行；变更、破坏性、提权或未知命令，以及会话/文件/传输变更、隧道和 sudo/su 操作进入同一 FileTerm 主窗口审批。三者都能在主窗口 prompt 可用时保持原调用等待，并在用户输入后拿到最终命令结果。
 
 ### 6.5 普通命令需要通用交互输入
 
@@ -469,13 +469,13 @@ allowedProfileIds 只保存稳定 profile ID，不保存主机密码或连接 se
 
 设置页提供三档执行权限和一张能力对照表：
 
-| 等级     | 读取 | 写入/删除 | 远程命令           | 传输/隧道      | 是否审批                                                                       |
-| -------- | ---- | --------- | ------------------ | -------------- | ------------------------------------------------------------------------------ |
-| 只读     | 允许 | 拒绝      | 只允许明确只读查询 | 只允许查询状态 | 不需要                                                                         |
-| 受控操作 | 允许 | 允许      | 允许               | 允许           | MCP/Agent bridge 需要 FileTerm 审批                                            |
-| 完全访问 | 允许 | 允许      | 允许               | 允许           | 不重复弹操作审批，但仍受连接范围、session revision、输入校验和凭据安全边界约束 |
+| 等级         | 读取 | 写入/删除 | 远程命令                                                                 | 传输/隧道      | 是否审批                                                                                          |
+| ------------ | ---- | --------- | ------------------------------------------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
+| 只读         | 允许 | 拒绝      | 只允许明确只读查询                                                       | 只允许查询状态 | 不需要                                                                                            |
+| 基础安全操作 | 允许 | 允许      | Copilot 判定的普通安全命令自动；变更、破坏性、提权或未知命令需主窗口确认 | 允许           | 会话/文件/传输变更、隧道和未知操作需要 FileTerm 主窗口审批                                        |
+| 完全访问     | 允许 | 允许      | 允许                                                                     | 允许           | 跳过包括 sudo/su 操作在内的逐次审批，但仍受连接范围、session revision、输入校验和凭据安全边界约束 |
 
-现有 approved-operations 映射到“受控操作”。full-access 只表示免除逐次操作审批，不表示：
+旧版 `approved-operations` 读取时迁移为 `basic-safe-operations`。full-access 只表示免除逐次操作审批（包括 sudo/su 操作确认），不表示绕过 sudo/su 密码输入或其它安全边界：
 
 - 可以访问未保存或未选择的主机。
 - 可以读取密码。
@@ -502,7 +502,7 @@ BridgeRequest 可以增加内部 source 字段用于审计和审批来源，但�
 
 推荐分两类入口：
 
-1. 一次性 fileterm command：保留脚本兼容性，用户显式运行，不重复 MCP 审批。
+1. 一次性 fileterm command：保留脚本兼容性；查询和普通远程命令自动执行，其它变更遵循基础安全操作的 FileTerm 主窗口审批。
 2. 常驻 fileterm agent：面向 AI，使用与 MCP 相同的全局策略、审批和等待语义。
 
 这样既不破坏现有 CLI，也不会把“AI 调 CLI”继续当成一个没有来源信息的特殊旁路。若后续确认所有 CLI 都应视为 Agent，则可以把一次性 CLI 也切换到统一审批，但必须单独做兼容性迁移。
@@ -703,11 +703,11 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 ## 12. Renderer 设计
 
-### 12.1 Agent / MCP 设置
+### 12.1 Agent / MCP / CLI 设置
 
-在现有 Agent / MCP 设置区域增加：
+在现有 Agent / MCP / CLI 设置区域增加：
 
-- “MCP 执行权限”策略卡：只读 / 受控操作 / 完全访问，以及查询、变更、传输、隧道和审批跳过能力对照。
+- “Agent / MCP / CLI 共用执行权限”策略卡：只读 / 基础安全操作 / 完全访问，以及查询、变更、传输、隧道和审批跳过能力对照。
 - “允许 MCP / CLI 访问的连接”策略卡：所有连接 / 指定连接。
 - 指定连接模式下的已保存连接搜索和多选列表。
 - 每个连接展示名称、协议、host 脱敏摘要和凭据存在状态。
@@ -761,14 +761,14 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 - [x] 在 Rust bridge route 前执行 selected profile 校验。
 - [x] 对 connections、sessions、transfers、tunnels 和 wait 操作统一过滤。
 - [x] 增加三档操作等级及对应的 action classification。
-- [x] 让 MCP 和 Agent bridge 使用同一份 policy evaluator。
+- [x] 让 MCP、CLI 和 Agent bridge 使用同一份 policy evaluator。
 - [x] 增加 unselected profile、删除 profile、重命名 profile 和默认 profile 变化测试。
 
 ### P1：Renderer 设置和凭据交互状态
 
 - [x] 增加已保存连接多选列表。
 - [x] 展示非敏感凭据存在状态。
-- [x] 增加只读 / 受控操作 / 完全访问说明。
+- [x] 增加只读 / 基础安全操作 / 完全访问说明。
 - [x] 增加连接 operation 等待中的 UI 状态和错误提示。
 - [x] 确保等待状态不泄漏 prompt 内容和密码。
 
@@ -828,8 +828,8 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 - [x] 未选中的已保存 profile 无法被 MCP/Agent 访问。
 - [x] selected profile 的连接列表、会话、传输和隧道结果均按同一白名单过滤。
 - [x] 只读策略拒绝写入、删除、远程命令和危险传输操作。
-- [x] 受控操作策略在 MCP/Agent bridge 触发 FileTerm 审批。
-- [x] 完全访问只跳过逐次审批，不绕过连接范围、session revision、路径和凭据安全边界。
+- [x] 基础安全操作策略在 MCP/CLI/Agent bridge 对 Copilot 判定的普通安全命令自动执行；对变更、破坏性、提权或未知命令，以及会话/文件/传输变更、隧道、sudo/su 和未知操作触发 FileTerm 主窗口审批。
+- [x] 完全访问只跳过包括 sudo/su 操作确认在内的逐次审批，不绕过 sudo/su 密码、连接范围、session revision、路径和凭据安全边界。
 - [x] 两个不同 MCP client 看到并使用同一份全局策略。
 
 ### 14.4 并发与进程
@@ -859,7 +859,7 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 | SSH prompt 等待导致 CLI/MCP 长时间挂起      | 统一 deadline、progress、取消和 wait_for_connection 恢复路径                              |
 | 用户输入后 session 已重连或 revision 已变化 | prompt 绑定 tab、profile 和 session revision，失效时拒绝提交                              |
 | 并发 open 重复创建 tab                      | profile-scoped connection flight 和幂等结果                                               |
-| AI 绕过 MCP 改用一次性 CLI                  | 一次性 CLI 至少强制连接范围和只读策略；AI 推荐使用 MCP/Agent bridge                       |
+| AI 绕过 MCP 改用一次性 CLI                  | 一次性 CLI 与 MCP/Agent 共用基础安全操作策略和连接范围；AI 推荐使用 MCP/Agent bridge      |
 | 选择列表和实际 route 不一致                 | Rust route、列表过滤和 UI 使用同一个 policy evaluator                                     |
 | CLI 密码参数出现在 argv                     | 增加 stdin 输入方式，Agent 默认不使用明文 argv                                            |
 | headless 子进程仍显示 FileTerm 图标         | 使用独立 sidecar 并对 macOS bundle/application type 做手工验收                            |
@@ -946,7 +946,7 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] Rust bridge route 在进入 action handler 前校验选中 profile；列表、会话、传输和等待结果使用同一范围过滤。
 - [x] 删除 profile 时自动从 Agent 允许列表清理，旧配置不会因为缺失字段而扩大到全部连接。
 - [x] 设置页增加搜索、多选、非敏感凭据存在状态和空选择提示。
-- [x] 完全访问只跳过逐次 MCP 审批，仍保留连接范围和其它安全边界。
+- [x] 完全访问只跳过包括 sudo/su 操作确认在内的逐次审批，仍保留 sudo/su 密码、连接范围和其它安全边界。
 - [x] 增加 selected visibility 与操作等级策略单元测试。
 - [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
@@ -985,8 +985,8 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 
 ### 阶段 6：全局策略展示与模型收敛
 
-- [x] 将设置页拆成“MCP 执行权限”和“允许 MCP / CLI 访问的连接”两张全局策略卡片。
-- [x] 执行权限提供只读、受控操作、完全访问三档，并展示能力对照与硬边界提示。
+- [x] 将设置页拆成“Agent / MCP / CLI 共用执行权限”和“允许 MCP / CLI 访问的连接”两张全局策略卡片，并将两张卡片置于 MCP / CLI 子标签页之上。
+- [x] 执行权限提供只读、基础安全操作、完全访问三档，并展示能力对照与硬边界提示。
 - [x] 连接访问提供所有连接 / 指定连接两档；指定模式保留搜索、多选、选中计数和空白拒绝提示。
 - [x] 移除 active-session / default-connection 作为新的 MCP 权限选项，不增加 per-connection MCP 专属权限。
 - [x] 旧配置安全迁移：default-connection 转为单 profile 白名单，active-session 转为空白白名单；迁移后不再序列化旧字段。

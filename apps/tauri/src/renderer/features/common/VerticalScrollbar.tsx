@@ -1,8 +1,35 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type RefObject,
+  type WheelEvent as ReactWheelEvent
+} from 'react'
 import { t } from '../../i18n'
 
 const MIN_THUMB_HEIGHT = 24
 const AUTO_HIDE_DELAY_MS = 900
+
+export type VerticalScrollMetrics = {
+  scrollTop: number
+  scrollHeight: number
+  clientHeight: number
+}
+
+/**
+ * Adapter for scrollable widgets whose state is not exposed through a native
+ * element, such as xterm.js 6's internal scroll model.
+ */
+export type VerticalScrollController = {
+  getElement?(): HTMLElement | null
+  getMetrics(): VerticalScrollMetrics | null
+  scrollTo(scrollTop: number): void
+  scrollBy(delta: number): void
+  subscribe(listener: () => void): () => void
+}
 
 type ScrollMetrics = {
   maxScrollTop: number
@@ -17,10 +44,12 @@ const EMPTY_METRICS: ScrollMetrics = { maxScrollTop: 0, trackHeight: 0, thumbHei
 export function VerticalScrollbar({
   ariaLabel = t.scrollContent,
   scrollRef,
+  scrollController,
   topInset = 0
 }: {
   ariaLabel?: string
-  scrollRef: RefObject<HTMLElement | null>
+  scrollRef?: RefObject<HTMLElement | null>
+  scrollController?: VerticalScrollController | null
   /** Reserves a fixed header above the scrollable content. */
   topInset?: number
 }) {
@@ -32,6 +61,23 @@ export function VerticalScrollbar({
   const metricsRef = useRef<ScrollMetrics>(EMPTY_METRICS)
   const scrollbarRef = useRef<HTMLDivElement | null>(null)
   const thumbRef = useRef<HTMLDivElement | null>(null)
+
+  const readScrollMetrics = useCallback((): VerticalScrollMetrics | null => {
+    if (scrollController) {
+      return scrollController.getMetrics()
+    }
+
+    const element = scrollRef?.current
+    if (!element) {
+      return null
+    }
+
+    return {
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop
+    }
+  }, [scrollController, scrollRef])
 
   const reveal = useCallback(() => {
     if (hideTimerRef.current !== null) {
@@ -70,7 +116,7 @@ export function VerticalScrollbar({
 
       const scrollbar = scrollbarRef.current
       if (scrollbar) {
-        scrollbar.setAttribute('aria-valuenow', `${Math.round(scrollRef.current?.scrollTop ?? 0)}`)
+        scrollbar.setAttribute('aria-valuenow', `${Math.round(readScrollMetrics()?.scrollTop ?? 0)}`)
       }
 
       const staticMetricsChanged =
@@ -81,24 +127,24 @@ export function VerticalScrollbar({
         setMetrics(next)
       }
     },
-    [scrollRef]
+    [readScrollMetrics]
   )
 
   const updateMetrics = useCallback(() => {
-    const element = scrollRef.current
-    if (!element || element.clientHeight <= 0) {
+    const current = readScrollMetrics()
+    if (!current || current.clientHeight <= 0) {
       publishMetrics(EMPTY_METRICS)
       return
     }
 
-    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+    const maxScrollTop = Math.max(0, current.scrollHeight - current.clientHeight)
     if (maxScrollTop === 0) {
       publishMetrics(EMPTY_METRICS)
       return
     }
 
-    const trackHeight = Math.max(0, element.clientHeight - topInset)
-    const scrollableContentHeight = Math.max(trackHeight, element.scrollHeight - topInset)
+    const trackHeight = Math.max(0, current.clientHeight - topInset)
+    const scrollableContentHeight = Math.max(trackHeight, current.scrollHeight - topInset)
     if (trackHeight === 0) {
       publishMetrics(EMPTY_METRICS)
       return
@@ -109,33 +155,39 @@ export function VerticalScrollbar({
       Math.max(MIN_THUMB_HEIGHT, (trackHeight * trackHeight) / scrollableContentHeight)
     )
     const maxThumbTop = trackHeight - thumbHeight
-    const scrollTop = Math.max(0, Math.min(maxScrollTop, element.scrollTop))
+    const scrollTop = Math.max(0, Math.min(maxScrollTop, current.scrollTop))
     publishMetrics({
       maxScrollTop,
       trackHeight,
       thumbHeight,
       thumbTop: (scrollTop / maxScrollTop) * maxThumbTop
     })
-  }, [publishMetrics, scrollRef, topInset])
+  }, [publishMetrics, readScrollMetrics, topInset])
 
   const updateThumbPosition = useCallback(() => {
-    const element = scrollRef.current
+    const currentScroll = readScrollMetrics()
     const current = metricsRef.current
-    if (!element || current.maxScrollTop === 0) return
+    if (!currentScroll || current.maxScrollTop === 0) return
 
     const maxThumbTop = current.trackHeight - current.thumbHeight
     if (maxThumbTop <= 0) return
 
-    const scrollTop = Math.max(0, Math.min(current.maxScrollTop, element.scrollTop))
+    const scrollTop = Math.max(0, Math.min(current.maxScrollTop, currentScroll.scrollTop))
     publishMetrics({
       ...current,
       thumbTop: (scrollTop / current.maxScrollTop) * maxThumbTop
     })
-  }, [publishMetrics, scrollRef])
+  }, [publishMetrics, readScrollMetrics])
 
   useEffect(() => {
-    const element = scrollRef.current
-    if (!element) return
+    const element = scrollController?.getElement?.() ?? scrollRef?.current ?? null
+    if (!element && !scrollController) {
+      // A kept-alive terminal can dispose its xterm instance before this
+      // component unmounts. Do not leave the previous controller's thumb
+      // rendered against a now-detached terminal.
+      publishMetrics(EMPTY_METRICS)
+      return
+    }
 
     let frame = 0
     const scheduleMetricsUpdate = () => {
@@ -147,38 +199,66 @@ export function VerticalScrollbar({
       frame = requestAnimationFrame(updateThumbPosition)
     }
     const resizeObserver = new ResizeObserver(scheduleMetricsUpdate)
-    const handleScroll = () => {
+    const handleNativeScroll = () => {
       reveal()
       scheduleThumbUpdate()
     }
+    const handleControllerChange = () => {
+      reveal()
+      // An xterm write can change the buffer length without changing the
+      // viewport position. Recompute the full model so the scrollbar can
+      // appear as soon as scrollback is created.
+      scheduleMetricsUpdate()
+    }
 
     scheduleMetricsUpdate()
-    element.addEventListener('scroll', handleScroll, { passive: true })
-    resizeObserver.observe(element)
-    if (element.firstElementChild) resizeObserver.observe(element.firstElementChild)
+    if (scrollController) {
+      const unsubscribe = scrollController.subscribe(handleControllerChange)
+      if (element) {
+        resizeObserver.observe(element)
+        if (element.firstElementChild) resizeObserver.observe(element.firstElementChild)
+      }
+
+      return () => {
+        cancelAnimationFrame(frame)
+        unsubscribe()
+        resizeObserver.disconnect()
+      }
+    }
+
+    element?.addEventListener('scroll', handleNativeScroll, { passive: true })
+    if (element) {
+      resizeObserver.observe(element)
+      if (element.firstElementChild) resizeObserver.observe(element.firstElementChild)
+    }
 
     return () => {
       cancelAnimationFrame(frame)
-      element.removeEventListener('scroll', handleScroll)
+      element?.removeEventListener('scroll', handleNativeScroll)
       resizeObserver.disconnect()
     }
-  }, [reveal, scrollRef, updateMetrics, updateThumbPosition])
+  }, [reveal, scrollController, scrollRef, updateMetrics, updateThumbPosition])
 
   const setScrollFromThumbTop = (thumbTop: number) => {
-    const element = scrollRef.current
+    const currentScroll = readScrollMetrics()
     const current = metricsRef.current
-    if (!element || current.maxScrollTop === 0) return
+    if (!currentScroll || current.maxScrollTop === 0) return
 
     const maxThumbTop = current.trackHeight - current.thumbHeight
     if (maxThumbTop <= 0) return
-    element.scrollTop = (Math.max(0, Math.min(maxThumbTop, thumbTop)) / maxThumbTop) * current.maxScrollTop
+    const nextScrollTop = (Math.max(0, Math.min(maxThumbTop, thumbTop)) / maxThumbTop) * current.maxScrollTop
+    if (scrollController) {
+      scrollController.scrollTo(nextScrollTop)
+    } else if (scrollRef?.current) {
+      scrollRef.current.scrollTop = nextScrollTop
+    }
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const element = scrollRef.current
-    if (!element) return
+    const current = readScrollMetrics()
+    if (!current) return
 
-    const page = Math.max(32, element.clientHeight - 32)
+    const page = Math.max(32, current.clientHeight - 32)
     const offsets: Record<string, number> = {
       ArrowDown: 32,
       ArrowUp: -32,
@@ -186,14 +266,47 @@ export function VerticalScrollbar({
       PageUp: -page
     }
     if (event.key === 'Home') {
-      element.scrollTop = 0
+      if (scrollController) {
+        scrollController.scrollTo(0)
+      } else if (scrollRef?.current) {
+        scrollRef.current.scrollTop = 0
+      }
     } else if (event.key === 'End') {
-      element.scrollTop = element.scrollHeight
+      if (scrollController) {
+        scrollController.scrollTo(current.scrollHeight)
+      } else if (scrollRef?.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
     } else if (event.key in offsets) {
-      element.scrollBy({ top: offsets[event.key] })
+      if (scrollController) {
+        scrollController.scrollBy(offsets[event.key])
+      } else {
+        scrollRef?.current?.scrollBy({ top: offsets[event.key] })
+      }
     } else {
       return
     }
+    event.preventDefault()
+  }
+
+  const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const current = readScrollMetrics()
+    if (!current || current.scrollHeight <= current.clientHeight || event.deltaY === 0) {
+      return
+    }
+
+    const delta =
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? event.deltaY * current.clientHeight
+          : event.deltaY
+    if (scrollController) {
+      scrollController.scrollBy(delta)
+    } else {
+      scrollRef?.current?.scrollBy({ top: delta })
+    }
+    reveal()
     event.preventDefault()
   }
 
@@ -207,13 +320,14 @@ export function VerticalScrollbar({
       aria-orientation="vertical"
       aria-valuemax={Math.round(renderedMetrics.maxScrollTop)}
       aria-valuemin={0}
-      aria-valuenow={Math.round(scrollRef.current?.scrollTop ?? 0)}
+      aria-valuenow={Math.round(readScrollMetrics()?.scrollTop ?? 0)}
       className={`vertical-scrollbar${isVisible ? ' is-visible' : ''}`}
       onBlur={() => {
         if (!dragRef.current) reveal()
       }}
       onFocus={reveal}
       onKeyDown={handleKeyDown}
+      onWheel={handleWheel}
       onPointerEnter={reveal}
       onPointerLeave={() => {
         if (!dragRef.current) reveal()

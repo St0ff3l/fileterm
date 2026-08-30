@@ -2965,6 +2965,8 @@
   cursor: pointer;
   border-radius: 7px;
   border: 1px solid var(--border-light);
+  appearance: none;
+  -webkit-appearance: none;
   transition: all 0.15s ease;
 }
 
@@ -3149,6 +3151,11 @@
   background: var(--bg-card);
 }
 
+.agent-mcp-shared-policy .agent-mcp-policy-card {
+  gap: 9px;
+  padding: 12px;
+}
+
 .agent-mcp-policy-heading {
   display: flex;
   align-items: flex-start;
@@ -3193,6 +3200,23 @@
   gap: 8px;
 }
 
+.agent-mcp-shared-policy .agent-mcp-policy-options {
+  gap: 6px;
+}
+
+.agent-mcp-shared-policy .radio-card-group__option {
+  min-height: 58px;
+  padding: 9px;
+}
+
+.agent-mcp-shared-policy .radio-card-group__copy {
+  gap: 3px;
+}
+
+.agent-mcp-shared-policy .radio-card-group__copy small {
+  line-height: 1.35;
+}
+
 .agent-mcp-connection-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -3209,6 +3233,11 @@
   background: color-mix(in srgb, var(--focus-outline) 5%, var(--bg-primary));
   font-size: 10px;
   line-height: 1.5;
+}
+
+.agent-mcp-shared-policy .agent-mcp-policy-notice {
+  padding: 7px 9px;
+  line-height: 1.35;
 }
 
 .agent-mcp-policy-notice > .app-icon {
@@ -3232,6 +3261,10 @@
   gap: 7px;
 }
 
+.agent-mcp-shared-policy .agent-mcp-capability {
+  gap: 5px;
+}
+
 .agent-mcp-capability-table {
   display: grid;
   overflow: hidden;
@@ -3249,6 +3282,10 @@
   font-size: 10px;
 }
 
+.agent-mcp-shared-policy .agent-mcp-capability-row {
+  min-height: 31px;
+}
+
 .agent-mcp-capability-row:first-child {
   border-top: 0;
 }
@@ -3264,6 +3301,10 @@
 .agent-mcp-capability-row > span {
   min-width: 0;
   padding: 7px 9px;
+}
+
+.agent-mcp-shared-policy .agent-mcp-capability-row > span {
+  padding: 6px 8px;
 }
 
 .agent-mcp-capability-row > span:not(:first-child) {
@@ -3418,9 +3459,13 @@
 
 .agent-mcp-launch-button {
   flex: 0 0 auto;
+  height: 28px;
   min-height: 28px;
   padding: 0 9px;
   font-size: 11px;
+  font-weight: var(--button-font-weight, 500);
+  line-height: var(--button-line-height, 1.2);
+  white-space: nowrap;
 }
 
 /* Keep the native shell layout-only. Styling both the shell and its select

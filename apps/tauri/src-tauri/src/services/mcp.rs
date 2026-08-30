@@ -11,6 +11,7 @@ use crate::services::action_review::{
     NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED, SUDO_AUTH_FAILURE, SUDO_PASSWORD_CANCELLED,
     SUDO_PASSWORD_NEEDED, SU_AUTH_FAILURE, SU_PASSWORD_CANCELLED, SU_PASSWORD_NEEDED,
 };
+use crate::services::ai::is_basic_safe_command;
 use crate::services::connection_operations::{
     ConnectionOperationState, FILETERM_CONNECTION_FAILED, FILETERM_CONNECTION_WAIT_TIMEOUT,
 };
@@ -502,7 +503,11 @@ fn bridge_request_timeout(request: &BridgeRequest) -> Duration {
         // both windows so an approved SSH profile can still reach its secure
         // credential prompt and return a final connection result.
         ACTION_APPROVAL_TIMEOUT + MCP_CONNECTION_WAIT_TIMEOUT
-    } else if action_requires_approval(&request.action) {
+    } else if request.action == "execute_remote_command"
+        || action_requires_approval(&request.action, &request.params)
+    {
+        // A normal command does not need an approval dialog in Basic safe
+        // operations, but it can still use the full bounded exec window.
         ACTION_APPROVAL_TIMEOUT + MCP_BRIDGE_TIMEOUT
     } else {
         MCP_BRIDGE_TIMEOUT
@@ -672,9 +677,11 @@ async fn enforce_mcp_access_policy(
     request: &BridgeRequest,
 ) -> Result<McpAccessPolicy, String> {
     let policy = mcp_access_policy(app)?;
-    if policy.operation_policy == "read-only" && action_requires_approval(&request.action) {
+    if policy.operation_policy == "read-only"
+        && !action_is_read_only(&request.action, &request.params)
+    {
         return Err(format!(
-            "{MCP_POLICY_READ_ONLY}: FileTerm is configured to allow only read-only Agent operations"
+            "{MCP_POLICY_READ_ONLY}: FileTerm is configured to allow only read-only external operations"
         ));
     }
 
@@ -705,9 +712,11 @@ fn mcp_access_policy(app: &AppHandle) -> Result<McpAccessPolicy, String> {
 }
 
 fn should_request_mcp_approval(policy: &McpAccessPolicy, request: &BridgeRequest) -> bool {
-    policy.operation_policy == "approved-operations"
-        && request.requires_approval
-        && action_requires_approval(&request.action)
+    matches!(
+        policy.operation_policy.as_str(),
+        "basic-safe-operations" | "approved-operations"
+    ) && request.requires_approval
+        && action_requires_approval(&request.action, &request.params)
 }
 
 async fn enforce_selected_connection_scope(
@@ -849,35 +858,40 @@ async fn mcp_visibility(app: &AppHandle) -> Result<McpVisibility, String> {
     }
 }
 
-fn action_requires_approval(action: &str) -> bool {
+fn action_requires_approval(action: &str, params: &Value) -> bool {
+    match action {
+        // Basic observation and workspace-context actions are automatic in
+        // the middle policy.
+        action if action_is_read_only(action, params) => false,
+        // Ordinary safe remote commands use the same local classifier as the
+        // built-in Copilot. Mutating, destructive, privileged, and unknown
+        // commands return to the FileTerm approval dialog.
+        "execute_remote_command" => params
+            .get("command")
+            .and_then(Value::as_str)
+            .map(|command| !is_basic_safe_command(command))
+            .unwrap_or(true),
+        // A saved template is rendered later by the command-template route;
+        // keep it approval-gated because its final command is not available at
+        // this policy boundary and its positional arguments may change it.
+        // Unknown/future actions also stay approval-gated by default.
+        _ => true,
+    }
+}
+
+fn action_is_read_only(action: &str, _params: &Value) -> bool {
     matches!(
         action,
-        "open_connection"
-            | "reconnect_session"
-            | "disconnect_session"
-            | "close_session"
-            | "execute_remote_command"
-            | "execute_command_template"
-            | "write_remote_file"
-            | "create_remote_directory"
-            | "create_remote_file"
-            | "copy_remote_path"
-            | "move_remote_path"
-            | "rename_remote_path"
-            | "delete_remote_path"
-            | "change_remote_permissions"
-            | "set_remote_file_access_mode"
-            | "upload_file"
-            | "download_file"
-            | "download_remote_directory"
-            | "pause_transfer"
-            | "resume_transfer"
-            | "discard_transfer"
-            | "clear_transfers"
-            | "create_ssh_tunnel"
-            | "start_ssh_tunnel"
-            | "stop_ssh_tunnel"
-            | "delete_ssh_tunnel"
+        "list_connections"
+            | "get_session_context"
+            | "get_command_templates"
+            | "list_remote_directory"
+            | "read_remote_file"
+            | "list_transfers"
+            | "wait_for_transfer"
+            | "wait_for_connection"
+            | "list_ssh_tunnels"
+            | "activate_session"
     )
 }
 
@@ -1054,10 +1068,51 @@ async fn approval_details(
         "start_ssh_tunnel" => "启动 SSH 隧道".to_string(),
         "stop_ssh_tunnel" => "停止 SSH 隧道".to_string(),
         "delete_ssh_tunnel" => "删除 SSH 隧道".to_string(),
-        _ => return Err("Unsupported FileTerm MCP approval action".to_string()),
+        _ => format!("外部客户端请求未识别的 FileTerm 操作：{action}"),
     };
+    let details = details.or_else(|| {
+        (!matches!(
+            action,
+            "open_connection"
+                | "reconnect_session"
+                | "disconnect_session"
+                | "close_session"
+                | "execute_remote_command"
+                | "execute_command_template"
+                | "write_remote_file"
+                | "create_remote_directory"
+                | "create_remote_file"
+                | "copy_remote_path"
+                | "move_remote_path"
+                | "rename_remote_path"
+                | "delete_remote_path"
+                | "change_remote_permissions"
+                | "set_remote_file_access_mode"
+                | "upload_file"
+                | "download_file"
+                | "download_remote_directory"
+                | "pause_transfer"
+                | "resume_transfer"
+                | "discard_transfer"
+                | "clear_transfers"
+                | "create_ssh_tunnel"
+                | "start_ssh_tunnel"
+                | "stop_ssh_tunnel"
+                | "delete_ssh_tunnel"
+        ))
+        .then(|| {
+            format!(
+                "操作：{}\n参数：{}",
+                action,
+                truncate_text(
+                    &serde_json::to_string(params).unwrap_or_else(|_| "null".to_string()),
+                    4 * 1024
+                )
+            )
+        })
+    });
     Ok(ActionApprovalDetails {
-        title: "MCP 外部操作需要确认".to_string(),
+        title: "FileTerm 外部操作需要确认".to_string(),
         summary,
         target: target.or(tab_id),
         details,
@@ -2770,7 +2825,10 @@ fn cli_bridge_request(action: &str, params: Value) -> BridgeRequest {
     BridgeRequest {
         action: action.to_string(),
         params,
-        requires_approval: false,
+        // Direct CLI is still an external bridge caller. Read-only actions
+        // pass automatically in the basic-safe policy; side effects use the
+        // same FileTerm approval dialog as MCP and the persistent Agent.
+        requires_approval: true,
         progress_token: None,
     }
 }
@@ -3042,7 +3100,7 @@ fn print_cli_result(result: Value) -> Result<(), String> {
 
 fn print_cli_help() {
     println!(
-        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses a dedicated non-interactive SSH channel for ordinary servers. A network-device session instead sends one single-line native CLI command through the visible raw terminal and returns `rawTerminal=true` with `exitCode=null`; its output can include the command echo and prompt. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt, and apply only to ordinary server sessions. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. MCP mutation tools use the in-app approval dialog.\nUse `fileterm cli <command>` as an equivalent spelling.",
+        "FileTerm CLI {}\n\nUsage:\n  fileterm connections [--limit N] [--offset N]\n  fileterm sessions [--profile-id PROFILE_ID]\n  fileterm directory --tab-id TAB_ID [--path REMOTE_PATH] [--limit N] [--offset N]\n  fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]\n  fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N]\n  fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT\n  fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH\n  fileterm download --tab-id TAB_ID --remote-path REMOTE_PATH --local-directory PATH\n  fileterm transfers [--limit N] [--offset N]\n  fileterm wait-transfer --transfer-id ID [--timeout-ms N]\n  fileterm mkdir|touch|copy|move|rename|delete|chmod|access ...\n  fileterm tunnels|create-tunnel|start-tunnel|stop-tunnel|delete-tunnel ...\n  fileterm call ACTION --params-json JSON\n  fileterm mcp\n\n`exec` uses a dedicated non-interactive SSH channel for ordinary servers. A network-device session instead sends one single-line native CLI command through the visible raw terminal and returns `rawTerminal=true` with `exitCode=null`; its output can include the command echo and prompt. If a command needs generic input such as MFA, a confirmation, or a REPL answer, it returns REMOTE_INTERACTIVE_INPUT_REQUIRED; finish that operation in the visible SSH terminal and retry. Sudo/su credentials use explicit trusted parameters, encrypted profiles, or the FileTerm main-window secure prompt, and apply only to ordinary server sessions. CLI operations are explicit user-invoked JSON commands and require a running FileTerm desktop app. The shared policy runs queries and ordinary safe commands automatically; dangerous, privileged, mutating or unrecognized commands, session changes, file or transfer changes, tunnels, sudo/su and unknown actions use the FileTerm main-window approval unless Full access is selected.\nUse `fileterm cli <command>` as an equivalent spelling.",
         env!("CARGO_PKG_VERSION")
     );
     println!(
@@ -3113,7 +3171,7 @@ fn initialize_result(_params: &Value) -> Result<Value, String> {
         "protocolVersion": MCP_JSONRPC_PROTOCOL_VERSION,
         "capabilities": { "tools": {}, "logging": {} },
         "serverInfo": { "name": "fileterm-mcp-server", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. MCP writes, remote commands, transfers, tunnels, and session state changes always pause for explicit approval in the FileTerm window and time out closed. Use fileterm_execute_remote_command for bounded commands: normal SSH servers use a dedicated non-interactive exec channel, while network-device sessions send one single-line native CLI command through the visible raw terminal and return rawTerminal=true with exitCode=null. Network-device cwd and sudo/su fields do not apply; complete enable, confirmation, password, or other interactive steps in the visible terminal. Saved sudo/su credentials are consumed through SSH stdin only for server sessions, never entered into command text. If no saved credential is available, FileTerm opens a secure password prompt in the main window and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If no local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a server command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：网络设备命令走当前可见 raw PTY，不注入 POSIX 的 cd、shell 包装或探测命令；普通后台 exec 不接管服务器的通用交互输入；sudo/su 缺少凭据时会自动打开 FileTerm 主窗口安全输入框，并在工具仍等待时发送状态通知；不要重复调用，先让用户完成窗口输入。危险密码不要写入命令文本或工具结果。"
+        "instructions": "Use FileTerm tools to inspect or operate already-saved and already-open connections. Credentials and terminal transcripts are never returned. The shared Agent/MCP/CLI policy runs connection, session, directory, file and transfer-state queries and ordinary safe remote commands automatically in Basic safe operations; dangerous, privileged, mutating or unrecognized commands, session changes, file or transfer changes, tunnels, sudo/su and unknown operations return to the FileTerm main-window approval. Read-only blocks those side effects, while Full access skips per-operation approval including sudo/su operations; sudo/su passwords may still be required. Connection scope and FileTerm safety checks still apply. Use fileterm_execute_remote_command for bounded commands: normal SSH servers use a dedicated non-interactive exec channel, while network-device sessions send one single-line native CLI command through the visible raw terminal and return rawTerminal=true with exitCode=null. Network-device cwd and sudo/su fields do not apply; complete enable, confirmation, password, or other interactive steps in the visible terminal. Saved sudo/su credentials are consumed through SSH stdin only for server sessions, never entered into command text. If no saved credential is available, FileTerm opens a secure password prompt in the main window and sends a progress/log notification while the tool call waits; tell the user to complete that prompt and do not retry the command while it is pending. If no local prompt is available, an Agent may ask the user for a sudo/su password and pass that explicit one-shot value in the matching tool field; never put it in the command text or repeat it in a result. If a server command needs MFA, confirmation, an installer prompt, passwd, SSH authentication, or another generic interactive input, the tool returns REMOTE_INTERACTIVE_INPUT_REQUIRED; tell the user to finish it in the visible SSH terminal and retry. 中文规则：网络设备命令走当前可见 raw PTY，不注入 POSIX 的 cd、shell 包装或探测命令；普通后台 exec 不接管服务器的通用交互输入；sudo/su 缺少凭据时会自动打开 FileTerm 主窗口安全输入框，并在工具仍等待时发送状态通知；不要重复调用，先让用户完成窗口输入。危险密码不要写入命令文本或工具结果。"
     }))
 }
 
@@ -3754,18 +3812,18 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        agent_bridge_request, agent_request_key, cli_exec_action, decode_cli_secret_bytes,
-        parse_cli_options_with_flags, validate_agent_cancel_params, validate_agent_request,
-        AgentRequest, AgentRequestControls,
+        action_is_read_only, bridge_request_timeout, handle_jsonrpc_request, initialize_result,
+        mcp_error_code, mcp_error_is_retryable, optional_string, pagination,
+        should_request_mcp_approval, tool_definitions, tool_error_result, validate_tool_arguments,
+        write_mcp_progress, BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility,
+        McpVisibilityScope, MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT,
+        MCP_JSONRPC_PROTOCOL_VERSION, NETWORK_DEVICE_COMMAND_INVALID,
+        NETWORK_DEVICE_CWD_UNSUPPORTED, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
     };
     use super::{
-        bridge_request_timeout, handle_jsonrpc_request, initialize_result, mcp_error_code,
-        mcp_error_is_retryable, optional_string, pagination, should_request_mcp_approval,
-        tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
-        BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility, McpVisibilityScope,
-        MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
-        NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED, SUDO_PASSWORD_CANCELLED,
-        SUDO_PASSWORD_NEEDED,
+        agent_bridge_request, agent_request_key, cli_bridge_request, cli_exec_action,
+        decode_cli_secret_bytes, parse_cli_options_with_flags, validate_agent_cancel_params,
+        validate_agent_request, AgentRequest, AgentRequestControls,
     };
     use serde_json::{json, Value};
     use std::collections::HashSet;
@@ -3806,6 +3864,12 @@ mod tests {
         .unwrap();
         assert!(validate_agent_request(&request).is_ok());
         assert!(agent_bridge_request(&request).requires_approval);
+    }
+
+    #[test]
+    fn direct_cli_requests_use_the_shared_approval_gate() {
+        assert!(cli_bridge_request("execute_remote_command", json!({})).requires_approval);
+        assert!(cli_bridge_request("list_connections", json!({})).requires_approval);
     }
 
     #[test]
@@ -3983,7 +4047,7 @@ mod tests {
     }
 
     #[test]
-    fn full_access_skips_per_action_approval_but_approved_policy_does_not() {
+    fn basic_safe_operations_gate_side_effects_but_allow_observations() {
         let request = BridgeRequest {
             action: "write_remote_file".to_string(),
             params: json!({}),
@@ -3995,12 +4059,78 @@ mod tests {
             operation_policy: "full-access".to_string(),
             allowed_profile_ids: HashSet::new(),
         };
-        let approved_operations = McpAccessPolicy {
-            operation_policy: "approved-operations".to_string(),
+        let basic_safe_operations = McpAccessPolicy {
+            operation_policy: "basic-safe-operations".to_string(),
             ..full_access.clone()
         };
+        let observation = BridgeRequest {
+            action: "list_remote_directory".to_string(),
+            ..request.clone()
+        };
+        let ordinary_command = BridgeRequest {
+            action: "execute_remote_command".to_string(),
+            params: json!({ "command": "uname -a" }),
+            ..request.clone()
+        };
+        let privileged_command = BridgeRequest {
+            action: "execute_remote_command".to_string(),
+            params: json!({ "command": "sudo id" }),
+            ..request.clone()
+        };
+        let destructive_command = BridgeRequest {
+            action: "execute_remote_command".to_string(),
+            params: json!({ "command": "rm -rf /tmp/fileterm" }),
+            ..request.clone()
+        };
+        let restart_command = BridgeRequest {
+            action: "execute_remote_command".to_string(),
+            params: json!({ "command": "reboot" }),
+            ..request.clone()
+        };
+        let unknown = BridgeRequest {
+            action: "future_action".to_string(),
+            ..request.clone()
+        };
         assert!(!should_request_mcp_approval(&full_access, &request));
-        assert!(should_request_mcp_approval(&approved_operations, &request));
+        assert!(should_request_mcp_approval(
+            &basic_safe_operations,
+            &request
+        ));
+        assert!(!should_request_mcp_approval(
+            &basic_safe_operations,
+            &observation
+        ));
+        assert!(!should_request_mcp_approval(
+            &basic_safe_operations,
+            &ordinary_command
+        ));
+        assert!(should_request_mcp_approval(
+            &basic_safe_operations,
+            &privileged_command
+        ));
+        assert!(should_request_mcp_approval(
+            &basic_safe_operations,
+            &destructive_command
+        ));
+        assert!(should_request_mcp_approval(
+            &basic_safe_operations,
+            &restart_command
+        ));
+        assert!(!action_is_read_only(
+            &ordinary_command.action,
+            &ordinary_command.params
+        ));
+        assert!(should_request_mcp_approval(
+            &basic_safe_operations,
+            &unknown
+        ));
+        assert!(should_request_mcp_approval(
+            &McpAccessPolicy {
+                operation_policy: "approved-operations".to_string(),
+                ..full_access
+            },
+            &request
+        ));
     }
 
     #[test]
@@ -4097,7 +4227,8 @@ mod tests {
         );
         assert_eq!(unavailable["structuredContent"]["error"]["retryable"], true);
 
-        let rejected = tool_error_result("MCP operation was rejected by the user".to_string());
+        let rejected =
+            tool_error_result("FileTerm external operation was rejected by the user".to_string());
         assert_eq!(
             rejected["structuredContent"]["error"]["code"],
             "FILETERM_OPERATION_REJECTED"
@@ -4110,7 +4241,18 @@ mod tests {
         let request = BridgeRequest {
             action: "execute_remote_command".to_string(),
             params: json!({}),
-            requires_approval: false,
+            requires_approval: true,
+            progress_token: None,
+        };
+        assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
+    }
+
+    #[test]
+    fn ordinary_cli_exec_keeps_the_bridge_open_for_bounded_execution() {
+        let request = BridgeRequest {
+            action: "execute_remote_command".to_string(),
+            params: json!({ "command": "uname -a" }),
+            requires_approval: true,
             progress_token: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
