@@ -4,6 +4,7 @@ import { TransferCenter } from './TransferCenter'
 export function TransferCenterHost({
   activeProfileId,
   activeTabId,
+  activeTabStatus,
   desktopApi,
   fullWidth,
   isPending,
@@ -15,6 +16,7 @@ export function TransferCenterHost({
 }: {
   activeProfileId?: string
   activeTabId: string | null
+  activeTabStatus: WorkspaceTab['status'] | null
   desktopApi?: FileTermDesktopApi
   fullWidth: boolean
   isPending: boolean
@@ -28,6 +30,7 @@ export function TransferCenterHost({
     <TransferCenter
       activeProfileId={activeProfileId}
       activeTabId={activeTabId}
+      activeTabStatus={activeTabStatus}
       desktopApi={desktopApi}
       fullWidth={fullWidth}
       isPending={isPending}

@@ -835,6 +835,8 @@ const zhCN = {
   sudoPasswordPrivacy: '仅本次：密码只用于当前命令。保存并执行：密码会加密保存到此连接，后续执行可复用。',
   sudoPasswordOneTime: '仅本次执行',
   sudoPasswordSaveAndExecute: '保存并执行',
+  actionApprovalTarget: '执行目标',
+  actionApprovalCommand: '命令',
   actionApprovalRiskAcknowledgement: '我已知晓该操作可能修改系统或数据，并确认继续。',
   backupPasswordTitle: '输入远程备份主密码',
   backupPasswordUploadDescription:
@@ -868,6 +870,7 @@ const zhCN = {
   emptyTerminal: '打开 SSH 连接后将在这里显示终端。',
   emptyFiles: '打开连接后将在这里显示远程文件。',
   transferTasks: '传输任务',
+  sessionId: '会话 ID',
   runningTasks: '个任务运行中',
   updating: '更新中...',
   connectionManager: '连接管理器',
@@ -2578,6 +2581,8 @@ const enUS: typeof zhCN = {
     'One-time: use the password only for this command. Save and execute: encrypt it in this connection for later use.',
   sudoPasswordOneTime: 'Run once',
   sudoPasswordSaveAndExecute: 'Save and execute',
+  actionApprovalTarget: 'Target',
+  actionApprovalCommand: 'Command',
   actionApprovalRiskAcknowledgement:
     'I understand that this operation may modify the system or data and confirm that I want to continue.',
   backupPasswordTitle: 'Enter remote backup password',
@@ -2612,6 +2617,7 @@ const enUS: typeof zhCN = {
   emptyTerminal: 'The SSH terminal will appear here after you open a connection.',
   emptyFiles: 'Remote files will appear here after you open a connection.',
   transferTasks: 'Transfers',
+  sessionId: 'Session ID',
   runningTasks: 'tasks running',
   updating: 'Updating...',
   connectionManager: 'Connection Manager',

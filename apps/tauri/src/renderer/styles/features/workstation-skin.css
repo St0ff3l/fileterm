@@ -269,11 +269,6 @@ textarea:focus-visible,
   border: 0;
 }
 
-.tab-dot {
-  width: 5px;
-  height: 5px;
-}
-
 .tab-close,
 .row-delete,
 .icon-button {

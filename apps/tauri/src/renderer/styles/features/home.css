@@ -456,6 +456,12 @@
   width: 280px !important;
 }
 
+.home-content-body .manager-inline.settings-modal .settings-search {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
 /* 布局:填充剩余高度,内部各自滚动，包装为带圆角的卡片 */
 .home-content-body .manager-inline .connection-manager-layout {
   display: grid !important;

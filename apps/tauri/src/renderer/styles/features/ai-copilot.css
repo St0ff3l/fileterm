@@ -767,10 +767,12 @@
 
 .ai-copilot-context-switch {
   display: inline-flex;
-  height: 28px;
+  height: 26px;
+  width: max-content;
   max-width: 100%;
   flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-start;
   gap: 5px;
   padding: 0 8px;
   border: 1px solid var(--border-light);
@@ -814,10 +816,6 @@
   min-width: max-content;
   color: var(--text-soft);
   font-size: 8px;
-}
-
-.ai-copilot-context-switch-state .stable-button-label {
-  min-width: max-content;
 }
 
 .ai-copilot-context-switch.is-active .ai-copilot-context-switch-state {

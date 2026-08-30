@@ -8,6 +8,37 @@
   border: 0;
 }
 
+/* Shared connection state marker used by tabs and session context badges. */
+.status-indicator {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-indicator--md {
+  width: 8px;
+  height: 8px;
+}
+
+.status-indicator[data-status='connected'] {
+  background: var(--success);
+  box-shadow:
+    0 0 4px rgba(57, 217, 138, 0.9),
+    0 0 10px rgba(57, 217, 138, 0.68);
+}
+
+.status-indicator[data-status='disconnected'] {
+  background: var(--danger);
+  box-shadow: 0 0 6px rgba(226, 91, 91, 0.35);
+}
+
+.status-indicator[data-status='connecting'] {
+  background: var(--warning);
+  box-shadow: 0 0 6px rgba(231, 198, 91, 0.35);
+}
+
 .radio-card-group__option {
   display: flex;
   align-items: flex-start;

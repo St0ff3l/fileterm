@@ -1672,6 +1672,7 @@
 .transfer-strip {
   grid-column: 2;
   grid-row: 3;
+  min-width: 0;
   height: 24px;
   padding: 0 20px;
   border-top: 1px solid var(--border-light);
@@ -1682,6 +1683,60 @@
   justify-content: space-between;
   flex-shrink: 0;
   align-self: end;
+}
+
+.transfer-strip-context {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  align-items: center;
+  gap: 10px;
+}
+
+.transfer-strip-context > strong {
+  flex: 0 0 auto;
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.transfer-session-id {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(52vw, 560px);
+  height: 18px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 7px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  user-select: text;
+}
+
+.transfer-session-id-label {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.transfer-session-id code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-main);
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .transfer-strip.full-width {

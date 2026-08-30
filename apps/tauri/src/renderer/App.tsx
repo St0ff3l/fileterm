@@ -2134,6 +2134,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         <TransferCenterHost
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}
+          activeTabStatus={activeTab?.status ?? null}
           desktopApi={desktopApi}
           fullWidth={!shouldShowSystemSidebar}
           isPending={isBusy}
@@ -2405,13 +2406,24 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       />
       {isMainWorkspaceWindow && actionApprovalRequests[0] ? (
         <ConfirmActionDialog
+          className="external-operation-confirmation"
           confirmLabel={t.confirm}
           confirmVariant={actionApprovalRequests[0].destructive ? 'danger' : 'primary'}
           description={
-            <div>
-              <p>{actionApprovalRequests[0].summary}</p>
-              {actionApprovalRequests[0].target ? <p>目标：{actionApprovalRequests[0].target}</p> : null}
-              {actionApprovalRequests[0].details ? <pre>{actionApprovalRequests[0].details}</pre> : null}
+            <div className="external-operation-confirmation__content">
+              <p className="external-operation-confirmation__summary">{actionApprovalRequests[0].summary}</p>
+              {actionApprovalRequests[0].target ? (
+                <div className="external-operation-confirmation__field">
+                  <span className="external-operation-confirmation__label">{t.actionApprovalTarget}</span>
+                  <div className="external-operation-confirmation__value">{actionApprovalRequests[0].target}</div>
+                </div>
+              ) : null}
+              {actionApprovalRequests[0].details ? (
+                <div className="external-operation-confirmation__field">
+                  <span className="external-operation-confirmation__label">{t.actionApprovalCommand}</span>
+                  <pre className="external-operation-confirmation__command">{actionApprovalRequests[0].details}</pre>
+                </div>
+              ) : null}
               {actionApprovalRequests[0].requiresRiskAcknowledgement ? (
                 <label className="confirm-action-dialog__warning">
                   <SelectionControl

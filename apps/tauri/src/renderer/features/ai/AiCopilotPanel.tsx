@@ -996,14 +996,7 @@ export function AiCopilotPanel({
                     </span>
                     <span>{t.aiCopilotReferenceTerminal}</span>
                     <span className="ai-copilot-context-switch-state">
-                      <StableButtonLabel
-                        busy={isContextPreviewing}
-                        busyLabel={t.aiCopilotContextPreparing}
-                        label={referenceTerminal ? t.aiCopilotReferenceTerminalOn : t.aiCopilotReferenceTerminalOff}
-                        reserveLabel={
-                          referenceTerminal ? t.aiCopilotReferenceTerminalOff : t.aiCopilotReferenceTerminalOn
-                        }
-                      />
+                      {referenceTerminal ? t.aiCopilotReferenceTerminalOn : t.aiCopilotReferenceTerminalOff}
                     </span>
                   </button>
                   <span className="ai-copilot-context-dock-hint">

@@ -77,6 +77,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
   - `useWorkspaceTabs.ts`、`useWorkspaceModals.ts`、`useFileOperations.ts`
   - `useSshInteractions.ts`、`useFileEditor.ts`、`useWorkspaceIpcSync.ts`
   - `useWorkspaceDataOps.ts`
+- Renderer 通用组件：`apps/tauri/src/renderer/features/common/`；跨功能组件的样式统一维护在 `apps/tauri/src/renderer/styles/features/common-controls.css`。
 - Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`，不得反向依赖 Electron 组件。
 - 领域类型：`packages/core`
 - 存储抽象：`packages/storage`

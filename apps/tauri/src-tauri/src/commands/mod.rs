@@ -4308,8 +4308,10 @@ pub async fn app_open_profile(
 }
 
 /// Open a saved profile for an external CLI/MCP caller and return the tab id
-/// together with the initial workspace snapshot. The operation id is attached
-/// before the worker starts, so a fast connection cannot race the wait path.
+/// together with the initial workspace snapshot. The session is deliberately
+/// non-active; the caller must explicitly activate it before using a visible
+/// terminal route. The operation id is attached before the worker starts, so a
+/// fast connection cannot race the wait path.
 pub async fn app_open_profile_with_operation(
     app: AppHandle,
     profile_id: String,
@@ -4333,10 +4335,6 @@ pub async fn app_open_profile_with_operation(
         Some(&connection_operation_id),
     )
     .await?;
-    {
-        let mut active = state.active_tab_id.write().await;
-        *active = Some(tab_id.clone());
-    }
     let snapshot = get_workspace_snapshot_and_emit(&app).await?;
     Ok((tab_id, snapshot))
 }

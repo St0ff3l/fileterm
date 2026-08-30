@@ -58,6 +58,66 @@
   word-break: break-word;
 }
 
+.confirm-action-dialog.external-operation-confirmation {
+  width: min(620px, calc(100vw - 32px));
+  padding: 28px 30px 24px;
+  border-radius: 18px;
+}
+
+.external-operation-confirmation__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.external-operation-confirmation__summary {
+  color: var(--dialog-description);
+}
+
+.external-operation-confirmation__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.external-operation-confirmation__label {
+  color: var(--dialog-title);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.external-operation-confirmation__value,
+.external-operation-confirmation__command {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--input-border, var(--dialog-footer-border));
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--input-text, var(--dialog-title));
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.external-operation-confirmation__value {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+.external-operation-confirmation__command {
+  max-height: min(260px, 32vh);
+  overflow: auto;
+  font-family: var(--font-mono, 'JetBrains Mono', Monaco, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .confirm-action-dialog__warning {
   color: var(--dialog-warning-text);
   margin-bottom: 12px;
@@ -143,7 +203,8 @@
 }
 
 @media (max-width: 640px) {
-  .confirm-action-dialog {
+  .confirm-action-dialog,
+  .confirm-action-dialog.external-operation-confirmation {
     width: min(100%, 360px);
     padding: 20px;
     border-radius: 16px;

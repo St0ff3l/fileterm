@@ -20,6 +20,10 @@ use crate::sessions::WorkerCmd;
 use crate::AppError;
 
 pub const ACTION_APPROVAL_TIMEOUT: Duration = Duration::from_secs(120);
+/// Keep the foreground credential dialog alive long enough for a user to
+/// switch back to FileTerm, enter the password, and submit it. This is still
+/// bounded so an abandoned request cannot wait forever.
+pub const PRIVILEGED_PASSWORD_PROMPT_TIMEOUT: Duration = Duration::from_secs(300);
 const MAX_REMOTE_EXEC_COMMAND_BYTES: usize = 64 * 1024;
 const MAX_REMOTE_EXEC_CWD_BYTES: usize = 4 * 1024;
 const MAX_REMOTE_EXEC_TAB_ID_BYTES: usize = 256;
@@ -47,9 +51,18 @@ pub const NETWORK_DEVICE_CWD_UNSUPPORTED: &str = "NETWORK_DEVICE_CWD_UNSUPPORTED
 /// sudo/su credentials are meaningful only for a server shell and must never
 /// be routed into a network-device terminal command.
 pub const NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED: &str = "NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED";
+/// Network-device sessions have no isolated SSH exec channel. Callers must
+/// choose the explicit visible-terminal route for those commands.
+pub const NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED: &str = "NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED";
 /// Raw network-device commands must stay single-line so one tool call cannot
 /// smuggle a second command through the visible terminal.
 pub const NETWORK_DEVICE_COMMAND_INVALID: &str = "NETWORK_DEVICE_COMMAND_INVALID";
+/// Visible Agent commands must stay single-line so one tool call cannot
+/// smuggle a second command through the interactive terminal.
+pub const VISIBLE_TERMINAL_COMMAND_INVALID: &str = "VISIBLE_TERMINAL_COMMAND_INVALID";
+/// Writing to a terminal is allowed only after the caller explicitly makes it
+/// the active workspace session.
+pub const VISIBLE_TERMINAL_SESSION_NOT_ACTIVE: &str = "VISIBLE_TERMINAL_SESSION_NOT_ACTIVE";
 
 /// Optional progress callback fired after FileTerm has restored the main
 /// window and before the local sudo/su prompt starts waiting. AI Copilot and
@@ -332,12 +345,31 @@ pub struct RemoteExecResult {
     pub input_kind: Option<String>,
 }
 
-/// Run one explicit command through the SSH command boundary. Server sessions
-/// use the independent exec channel; network-device sessions send the native
-/// CLI command through the already-open raw PTY and collect its quiet output.
+/// Run one explicit command through the normal FileTerm command boundary.
+/// Server sessions use the independent exec channel; network-device sessions
+/// retain the established raw-PTY fallback used by the renderer and Copilot.
 pub async fn execute_remote_command(
     app: &AppHandle,
     request: RemoteExecRequest,
+) -> Result<RemoteExecResult, AppError> {
+    execute_remote_command_inner(app, request, true).await
+}
+
+/// Run one command through the MCP background route. Unlike the normal
+/// FileTerm/Copilot route, this function never falls back to the visible PTY
+/// for a network-device session; the caller must choose the explicit visible
+/// terminal tool instead.
+pub async fn execute_background_remote_command(
+    app: &AppHandle,
+    request: RemoteExecRequest,
+) -> Result<RemoteExecResult, AppError> {
+    execute_remote_command_inner(app, request, false).await
+}
+
+async fn execute_remote_command_inner(
+    app: &AppHandle,
+    request: RemoteExecRequest,
+    allow_network_device_fallback: bool,
 ) -> Result<RemoteExecResult, AppError> {
     let tab_id = validate_remote_exec_tab_id(&request.tab_id)?;
     let command = validate_remote_exec_command(&request.command)?;
@@ -399,6 +431,11 @@ pub async fn execute_remote_command(
     };
 
     if network_device {
+        if !allow_network_device_fallback {
+            return Err(AppError::Command(
+                NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED.to_string(),
+            ));
+        }
         let command = validate_network_device_command(&request.command)?;
         if requested_cwd.is_some() {
             return Err(AppError::Command(
@@ -513,6 +550,118 @@ pub async fn execute_remote_command(
         }
     }
     Ok(parsed)
+}
+
+/// Resolve a visible-terminal target and require that it is the session the
+/// workspace currently exposes as active. This is shared by the direct MCP
+/// visible-command route and legacy visible command-template calls so an
+/// external caller cannot write to a background tab by accident.
+pub async fn ensure_visible_terminal_session_active(
+    app: &AppHandle,
+    raw_tab_id: &str,
+) -> Result<String, AppError> {
+    let (tab_id, _) = visible_terminal_session_context(app, raw_tab_id).await?;
+    Ok(tab_id)
+}
+
+async fn visible_terminal_session_context(
+    app: &AppHandle,
+    raw_tab_id: &str,
+) -> Result<(String, bool), AppError> {
+    let tab_id = validate_remote_exec_tab_id(raw_tab_id)?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let (root_tab_id, session_type) = {
+        let tabs = state.tabs.read().await;
+        let tab = tabs
+            .iter()
+            .find(|tab| tab.id == tab_id)
+            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
+        (
+            tab.pane_root_tab_id
+                .clone()
+                .unwrap_or_else(|| tab.id.clone()),
+            tab.session_type.clone(),
+        )
+    };
+    let (connected, network_device) = {
+        let sessions = state.sessions.read().await;
+        let session = sessions
+            .get(&tab_id)
+            .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
+        (
+            session.connected,
+            session.device_mode.as_deref() == Some("network-device"),
+        )
+    };
+    if session_type != "ssh" {
+        return Err(AppError::Command(
+            "Visible command execution is only supported for SSH sessions".to_string(),
+        ));
+    }
+    if !connected {
+        return Err(AppError::Command(
+            "FileTerm SSH session is not connected".to_string(),
+        ));
+    }
+
+    let active_tab_id = state.active_tab_id.read().await.clone();
+    let active_pane_tab_id = state
+        .active_pane_tab_id_by_root
+        .read()
+        .await
+        .get(&root_tab_id)
+        .cloned();
+    let active_pane_matches = active_pane_tab_id
+        .as_deref()
+        .map_or(root_tab_id == tab_id, |active_id| active_id == tab_id);
+    if active_tab_id.as_deref() != Some(root_tab_id.as_str()) || !active_pane_matches {
+        return Err(AppError::Command(
+            VISIBLE_TERMINAL_SESSION_NOT_ACTIVE.to_string(),
+        ));
+    }
+    Ok((tab_id, network_device))
+}
+
+/// Send one explicit command to the already-active visible SSH terminal.
+/// Unlike `execute_remote_command`, this route deliberately does not create a
+/// separate exec channel or collect a command result for server sessions: the
+/// terminal owns the prompt, echo, output and any follow-up interaction.
+pub async fn execute_visible_terminal_command(
+    app: &AppHandle,
+    raw_tab_id: &str,
+    raw_command: &str,
+    timeout_ms: Option<u64>,
+) -> Result<RemoteExecResult, AppError> {
+    let command = validate_visible_terminal_command(raw_command)?;
+    let timeout_ms = timeout_ms
+        .unwrap_or(DEFAULT_REMOTE_EXEC_TIMEOUT_MS)
+        .clamp(MIN_REMOTE_EXEC_TIMEOUT_MS, MAX_REMOTE_EXEC_TIMEOUT_MS);
+    let (tab_id, network_device) = visible_terminal_session_context(app, raw_tab_id).await?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+
+    let expected_session_revision = state.ai_session_revision(&tab_id).await.to_string();
+    ensure_expected_session_revision(&state, &tab_id, Some(&expected_session_revision)).await?;
+    if network_device {
+        return execute_network_device_command(
+            &state,
+            &tab_id,
+            &command,
+            timeout_ms,
+            Some(&expected_session_revision),
+        )
+        .await;
+    }
+
+    crate::commands::send_exact_terminal_input(&state, &tab_id, format!("{command}\r")).await?;
+    Ok(RemoteExecResult {
+        output: String::new(),
+        exit_code: None,
+        timed_out: false,
+        output_truncated: false,
+        raw_terminal: true,
+        input_required: false,
+        input_kind: None,
+    })
 }
 
 /// Send one single-line native network-device command to the existing shell
@@ -709,7 +858,7 @@ async fn request_sudo_password_prompt(
         notice(needed_code);
     }
 
-    let response = match timeout(Duration::from_secs(120), receiver).await {
+    let response = match timeout(PRIVILEGED_PASSWORD_PROMPT_TIMEOUT, receiver).await {
         Ok(Ok(response)) => response,
         Ok(Err(_)) | Err(_) => {
             state
@@ -946,6 +1095,15 @@ fn validate_network_device_command(raw_command: &str) -> Result<String, AppError
     validate_remote_exec_command(raw_command)
 }
 
+fn validate_visible_terminal_command(raw_command: &str) -> Result<String, AppError> {
+    if raw_command.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            VISIBLE_TERMINAL_COMMAND_INVALID.to_string(),
+        ));
+    }
+    validate_remote_exec_command(raw_command)
+}
+
 fn validate_remote_exec_cwd(cwd: Option<String>) -> Result<Option<String>, AppError> {
     let cwd = cwd
         .map(|value| value.trim().to_string())
@@ -1014,8 +1172,9 @@ mod tests {
         detect_privileged_auth_failure, parse_remote_exec_result, privileged_command_kind,
         resolve_privileged_password, validate_network_device_command, validate_privileged_password,
         validate_remote_exec_command, validate_remote_exec_cwd, validate_remote_exec_tab_id,
-        wrap_sudo_command, ActionApprovalDecision, ActionApprovalSource, PrivilegedCommandKind,
-        SUDO_AUTH_FAILURE,
+        validate_visible_terminal_command, wrap_sudo_command, ActionApprovalDecision,
+        ActionApprovalSource, PrivilegedCommandKind, SUDO_AUTH_FAILURE,
+        VISIBLE_TERMINAL_COMMAND_INVALID,
     };
     use crate::AppError;
     use serde_json::json;
@@ -1087,6 +1246,19 @@ mod tests {
         );
         assert!(validate_network_device_command("display version\r").is_err());
         assert!(validate_network_device_command("display\nversion").is_err());
+    }
+
+    #[test]
+    fn visible_terminal_commands_are_single_line() {
+        assert_eq!(
+            validate_visible_terminal_command("uname -a").unwrap(),
+            "uname -a"
+        );
+        let error = validate_visible_terminal_command("printf 'first\nsecond'").unwrap_err();
+        assert!(matches!(
+            error,
+            AppError::Command(message) if message == VISIBLE_TERMINAL_COMMAND_INVALID
+        ));
     }
 
     #[test]

@@ -5,6 +5,7 @@ import { t } from '../../i18n'
 import { handleHorizontalWheelScroll } from '../common/horizontal-scroll'
 import { CloseButton } from '../common/CloseButton'
 import { AppIcon } from '../common/AppIcon'
+import { StatusIndicator } from '../common/StatusIndicator'
 import { usePointerSortFallback } from '../../hooks/usePointerSortFallback'
 
 export type OrderedTabEntry =
@@ -210,7 +211,7 @@ export function TabBar({
               >
                 <span>{index + 1}</span>
                 <strong>{getSessionTabTitle(entry.tab)}</strong>
-                <span className={`tab-dot ${tabStatusClass(entry.tab.status)}`} />
+                <StatusIndicator aria-hidden="true" status={tabStatusClass(entry.tab.status)} />
                 <CloseButton
                   aria-label={`${t.closeTab} ${getSessionTabTitle(entry.tab)}`}
                   onClick={(event) => onCloseSessionTab(event, entry.tab.id)}

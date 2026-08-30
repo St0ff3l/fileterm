@@ -1172,12 +1172,6 @@
   border-left-color: transparent;
 }
 
-.tab-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
 .tab-close,
 .row-delete,
 .icon-button {

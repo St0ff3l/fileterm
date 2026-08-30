@@ -348,12 +348,13 @@ GUI 内部继续可以使用立即返回的 open 行为；MCP 和 Agent-facing C
 ```json
 {
   "profile_id": "profile-1",
+  "execution_mode": "background",
   "wait_for_ready": true,
   "timeout_ms": 120000
 }
 ```
 
-默认 wait_for_ready 为 true。保留 wait_for_ready 为 false 给只需要创建 tab 的客户端。
+`execution_mode` 必须由 Agent 在第一次打开连接前向用户询问，取值为 `background` 或 `visible-terminal`。`open_connection` 默认等待连接完成，但创建的 session 始终保持非活动状态，不自动抢占当前前台 tab。`background` 后续只能配合独立 SSH exec 的 `fileterm_execute_remote_command`；`visible-terminal` 后续必须先调用 `fileterm_activate_session`，再调用只向可见终端写入单行命令的 `fileterm_execute_visible_command`。网络设备没有后台 exec 能力，只能使用可见终端路径。保留 wait_for_ready 为 false 给只需要创建 tab 的客户端。
 
 返回值只包含：
 
