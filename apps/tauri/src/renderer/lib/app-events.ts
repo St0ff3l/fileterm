@@ -30,9 +30,7 @@ export const APP_EVENT = {
   /** 请求最后聚焦的终端调整字号。 */
   terminalZoom: 'fileterm:terminal-zoom',
   /** 导入字体的 @font-face 已更新，需要重新测量画布文字。 */
-  importedFontsChanged: 'fileterm:imported-fonts-changed',
-  /** AI 命令交给当前 TerminalDock；默认仅填入，execute=true 时走现有发送流程。 */
-  aiInsertTerminalCommand: 'fileterm:ai-insert-terminal-command'
+  importedFontsChanged: 'fileterm:imported-fonts-changed'
 } as const
 
 export type AppEventName = (typeof APP_EVENT)[keyof typeof APP_EVENT]
@@ -52,13 +50,6 @@ export interface AppEventDetailMap {
   [APP_EVENT.terminalFind]: never
   [APP_EVENT.terminalZoom]: TerminalZoomOperation
   [APP_EVENT.importedFontsChanged]: never
-  [APP_EVENT.aiInsertTerminalCommand]: {
-    tabId: string
-    command: string
-    execute?: boolean
-    onComplete?: () => void
-    onError?: () => void
-  }
 }
 
 /** 派发一个类型化的应用事件。`detail` 为 `never` 的事件不需要传第二参。 */

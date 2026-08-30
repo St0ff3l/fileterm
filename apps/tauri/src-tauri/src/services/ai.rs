@@ -3481,6 +3481,17 @@ fn copilot_tool_error_result(
     copilot_tool_result(call_id, "invalid", Some(reason))
 }
 
+fn copilot_tool_blocked_after_failure(call_id: &str) -> (ToolLoopResult, AiToolCallResult) {
+    copilot_tool_result(
+        call_id,
+        "auto-blocked",
+        Some(
+            "前一个工具调用未成功，本次响应中的剩余工具调用已阻止；如需继续，请用户明确重试。"
+                .to_string(),
+        ),
+    )
+}
+
 async fn execute_copilot_tool_call(
     app: &AppHandle,
     prepared: &PreparedChatRequest,
@@ -3588,11 +3599,12 @@ async fn execute_copilot_tool_call(
             proposal.risk,
             AiCommandRisk::Destructive | AiCommandRisk::Privileged
         );
-        let decision = match crate::services::action_review::request_action_approval_with_id(
+        let approval_request_id = approval_request_id
+            .clone()
+            .expect("semi-automatic Copilot calls always have an approval request ID");
+        let approval = crate::services::action_review::request_action_approval_with_id_and_target(
             app,
-            approval_request_id
-                .clone()
-                .expect("semi-automatic Copilot calls always have an approval request ID"),
+            approval_request_id.clone(),
             crate::services::action_review::ActionApprovalSource::AiCopilot,
             "ai_copilot_execute_remote_command",
             crate::services::action_review::ActionApprovalDetails {
@@ -3617,18 +3629,37 @@ async fn execute_copilot_tool_call(
                 ),
                 requires_risk_acknowledgement: risk_requires_acknowledgement,
             },
-        )
-        .await
-        {
-            Ok(decision) => decision,
-            Err(error) => {
-                return Ok(copilot_tool_result(
-                    &proposal.id,
-                    "failed",
-                    Some(sanitize_review_error(&error.to_string())),
-                ))
+            Some(
+                crate::services::action_review::ActionApprovalTargetBinding {
+                    tab_id: proposal.target.tab_id.clone(),
+                    session_revision: proposal.target.session_revision.clone(),
+                    command: proposal.command.clone(),
+                },
+            ),
+        );
+        let decision = tokio::select! {
+            _ = cancellation.cancelled() => {
+                let _ = crate::services::action_review::resolve_action_approval_decision(
+                    app,
+                    &approval_request_id,
+                    crate::services::action_review::ActionApprovalDecision::Dismissed,
+                ).await;
+                return Err(request_cancelled_error());
+            }
+            result = approval => match result {
+                Ok(decision) => decision,
+                Err(error) => {
+                    return Ok(copilot_tool_result(
+                        &proposal.id,
+                        "failed",
+                        Some(sanitize_review_error(&error.to_string())),
+                    ))
+                }
             }
         };
+        if cancellation.is_cancelled() {
+            return Err(request_cancelled_error());
+        }
         if matches!(
             decision,
             crate::services::action_review::ActionApprovalDecision::DelegatedToTerminal
@@ -3640,6 +3671,9 @@ async fn execute_copilot_tool_call(
                 cancellation,
             )
             .await;
+            if cancellation.is_cancelled() {
+                return Err(request_cancelled_error());
+            }
             return Ok(copilot_tool_result(
                 &proposal.id,
                 "executed-in-terminal",
@@ -3672,6 +3706,9 @@ async fn execute_copilot_tool_call(
                     cancellation,
                 )
                 .await;
+                if cancellation.is_cancelled() {
+                    return Err(request_cancelled_error());
+                }
                 return Ok(copilot_tool_result(
                     &proposal.id,
                     "executed-in-terminal",
@@ -3792,7 +3829,7 @@ async fn execute_copilot_tool_call(
         },
     );
     let started_at = Instant::now();
-    let execution = crate::services::action_review::execute_remote_command(
+    let execution = crate::services::action_review::execute_remote_command_cancellable(
         app,
         crate::services::action_review::RemoteExecRequest {
             tab_id: proposal.target.tab_id.clone(),
@@ -3811,8 +3848,12 @@ async fn execute_copilot_tool_call(
             allow_local_privileged_prompt: true,
             privileged_prompt_notice: Some(privileged_prompt_notice),
         },
+        cancellation,
     )
     .await;
+    if cancellation.is_cancelled() {
+        return Err(request_cancelled_error());
+    }
     let duration = started_at.elapsed();
     let duration_ms = u64::try_from(duration.as_millis()).unwrap_or(u64::MAX);
     let (loop_result, tool_result) = match execution {
@@ -4085,8 +4126,14 @@ async fn run_chat_request(
         let mut results = Vec::with_capacity(stream.tool_calls.len());
         let mut iteration_tool_activities = Vec::new();
         for call in &stream.tool_calls {
-            let (loop_result, public_result) =
-                execute_copilot_tool_call(app, prepared, call, channel, cancellation).await?;
+            let (loop_result, public_result) = if tool_calls_allowed {
+                execute_copilot_tool_call(app, prepared, call, channel, cancellation).await?
+            } else {
+                copilot_tool_blocked_after_failure(&call.id)
+            };
+            if cancellation.is_cancelled() {
+                return Err(request_cancelled_error());
+            }
             if let Some(activity) = persisted_copilot_tool_activity(prepared, call, &public_result)
             {
                 iteration_tool_activities.push(activity);
@@ -5715,16 +5762,16 @@ mod tests {
         ai_error, anthropic_history_messages_with_tools, anthropic_tool_schema, apply_secret_patch,
         cancellation_or_request_error, classify_command_risk, command_has_unsafe_input,
         conservative_command_risk, context_mode_reads_terminal_transcript,
-        copilot_mode_state_is_current, copilot_tool_call_arguments,
-        copilot_tool_result_allows_follow_up, decrypt_provider_secrets, default_ai_mode_state,
-        encrypt_provider_secrets, ensure_conversation_fits, is_basic_safe_command,
-        normalize_ai_title_suggestion, normalize_base_url, normalize_conversation_title,
-        now_millis, openai_chat_tool_schema, process_anthropic_payload, process_openai_payload,
-        process_openai_responses_payload, provider_history_messages,
-        provider_history_messages_with_tools, provider_is_usable, provider_safe_tool_arguments,
-        provider_summary, prune_expired_context_snapshots, public_mode_state,
-        repair_default_provider, responses_input_items_with_tools, responses_tool_schema,
-        sanitize_recent_terminal_output, stream_anthropic_messages,
+        copilot_mode_state_is_current, copilot_tool_blocked_after_failure,
+        copilot_tool_call_arguments, copilot_tool_result_allows_follow_up,
+        decrypt_provider_secrets, default_ai_mode_state, encrypt_provider_secrets,
+        ensure_conversation_fits, is_basic_safe_command, normalize_ai_title_suggestion,
+        normalize_base_url, normalize_conversation_title, now_millis, openai_chat_tool_schema,
+        process_anthropic_payload, process_openai_payload, process_openai_responses_payload,
+        provider_history_messages, provider_history_messages_with_tools, provider_is_usable,
+        provider_safe_tool_arguments, provider_summary, prune_expired_context_snapshots,
+        public_mode_state, repair_default_provider, responses_input_items_with_tools,
+        responses_tool_schema, sanitize_recent_terminal_output, stream_anthropic_messages,
         stream_anthropic_messages_with_tools, stream_error_event, stream_openai_compatible_chat,
         stream_openai_compatible_chat_with_tools, stream_openai_responses,
         stream_openai_responses_with_tools, system_prompt, system_prompt_for_request,
@@ -5955,6 +6002,17 @@ mod tests {
         }
         let (_, result) = super::copilot_tool_result("call-1", "executed", None);
         assert!(copilot_tool_result_allows_follow_up(&result));
+    }
+
+    #[test]
+    fn remaining_tool_calls_are_explicitly_blocked_after_a_non_success() {
+        let (loop_result, public_result) = copilot_tool_blocked_after_failure("call-2");
+
+        assert_eq!(loop_result.call_id, "call-2");
+        assert!(loop_result.content.contains("auto-blocked"));
+        assert_eq!(public_result.proposal_id, "call-2");
+        assert_eq!(public_result.status, "auto-blocked");
+        assert!(!copilot_tool_result_allows_follow_up(&public_result));
     }
 
     #[test]

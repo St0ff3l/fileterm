@@ -799,19 +799,24 @@ export function useAiCopilot() {
     }
   }, [])
 
-  const resolveToolApprovalAsTerminal = useCallback(async (requestId: string) => {
+  const executeAiTerminalHandoff = useCallback(async (requestId: string, tabId: string, command: string) => {
     const desktopApi = window.fileterm
     const request = toolApprovalRequestsRef.current.find((item) => item.requestId === requestId)
-    if (!desktopApi || !request || resolvingToolApprovalIdsRef.current.has(requestId)) return
+    if (!desktopApi) throw new Error('FileTerm desktop bridge is unavailable')
+    if (!request) throw new Error('Copilot approval is no longer pending')
+    if (resolvingToolApprovalIdsRef.current.has(requestId)) {
+      throw new Error('Copilot approval is already being handled')
+    }
 
     resolvingToolApprovalIdsRef.current.add(requestId)
     setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
     try {
-      await desktopApi.resolveAiTerminalHandoff(requestId)
+      await desktopApi.executeAiTerminalHandoff(requestId, tabId, command)
     } catch (error) {
       resolvingToolApprovalIdsRef.current.delete(requestId)
       setResolvingToolApprovalIds(new Set(resolvingToolApprovalIdsRef.current))
       if (mountedRef.current) setErrorMessage(toMessage(error))
+      throw error
     }
   }, [])
 
@@ -941,7 +946,7 @@ export function useAiCopilot() {
     setContextAttach,
     setDangerousCommandRestrictions,
     resolveToolApproval,
-    resolveToolApprovalAsTerminal,
+    executeAiTerminalHandoff,
     retry,
     stop
   }

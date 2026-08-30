@@ -15,6 +15,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 use tokio::time::{sleep, timeout};
+use tokio_util::sync::CancellationToken;
 
 use crate::sessions::WorkerCmd;
 use crate::AppError;
@@ -63,6 +64,12 @@ pub const VISIBLE_TERMINAL_COMMAND_INVALID: &str = "VISIBLE_TERMINAL_COMMAND_INV
 /// Writing to a terminal is allowed only after the caller explicitly makes it
 /// the active workspace session.
 pub const VISIBLE_TERMINAL_SESSION_NOT_ACTIVE: &str = "VISIBLE_TERMINAL_SESSION_NOT_ACTIVE";
+/// A Copilot terminal handoff must consume a still-pending approval exactly
+/// once. This is returned when the renderer races an expiry, cancellation, or
+/// another approval resolution.
+pub const AI_TERMINAL_HANDOFF_NOT_PENDING: &str = "AI_TERMINAL_HANDOFF_NOT_PENDING";
+/// Stable cancellation code shared by the Copilot prompt and exec boundary.
+pub const AI_REQUEST_CANCELLED: &str = "AI_REQUEST_CANCELLED";
 
 /// Optional progress callback fired after FileTerm has restored the main
 /// window and before the local sudo/su prompt starts waiting. AI Copilot and
@@ -85,6 +92,13 @@ pub struct ActionApprovalDetails {
     pub details: Option<String>,
     pub destructive: bool,
     pub requires_risk_acknowledgement: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ActionApprovalTargetBinding {
+    pub tab_id: String,
+    pub session_revision: String,
+    pub command: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -166,14 +180,35 @@ pub async fn request_action_approval_with_id(
     operation: impl Into<String>,
     details: ActionApprovalDetails,
 ) -> Result<ActionApprovalDecision, AppError> {
+    request_action_approval_with_id_and_target(app, request_id, source, operation, details, None)
+        .await
+}
+
+/// Queue a one-time approval and bind it to the exact Copilot target and
+/// command that may later be handed to the visible terminal. The binding is
+/// kept in Rust next to the oneshot sender so a stale renderer card cannot
+/// substitute a different command or tab.
+pub async fn request_action_approval_with_id_and_target(
+    app: &AppHandle,
+    request_id: String,
+    source: ActionApprovalSource,
+    operation: impl Into<String>,
+    details: ActionApprovalDetails,
+    terminal_handoff: Option<ActionApprovalTargetBinding>,
+) -> Result<ActionApprovalDecision, AppError> {
     let operation = operation.into();
     let (sender, receiver) = oneshot::channel();
+    let handoff_gate = Arc::new(tokio::sync::Mutex::new(()));
+    let has_terminal_handoff = terminal_handoff.is_some();
     let state = app.state::<crate::services::workspace::WorkspaceState>();
-    state
-        .pending_action_approvals
-        .write()
-        .await
-        .insert(request_id.clone(), sender);
+    state.pending_action_approvals.write().await.insert(
+        request_id.clone(),
+        crate::services::workspace::PendingActionApproval {
+            sender,
+            terminal_handoff,
+            handoff_gate: handoff_gate.clone(),
+        },
+    );
 
     if matches!(source, ActionApprovalSource::Mcp) {
         // MCP, one-shot CLI, and the persistent Agent all use the legacy
@@ -205,10 +240,14 @@ pub async fn request_action_approval_with_id(
         )));
     }
 
-    let decision = match timeout(ACTION_APPROVAL_TIMEOUT, receiver).await {
-        Ok(Ok(decision)) => decision,
-        Ok(Err(_)) => ActionApprovalDecision::Dismissed,
-        Err(_) => ActionApprovalDecision::TimedOut,
+    let decision = if has_terminal_handoff {
+        wait_for_terminal_handoff_approval(&state, &request_id, receiver, handoff_gate).await
+    } else {
+        match timeout(ACTION_APPROVAL_TIMEOUT, receiver).await {
+            Ok(Ok(decision)) => decision,
+            Ok(Err(_)) => ActionApprovalDecision::Dismissed,
+            Err(_) => ActionApprovalDecision::TimedOut,
+        }
     };
     state
         .pending_action_approvals
@@ -270,21 +309,123 @@ pub async fn resolve_action_approval_decision(
         let mut pending = state.pending_action_approvals.write().await;
         pending.remove(request_id)
     };
-    if let Some(sender) = sender {
-        let _ = sender.send(decision);
+    if let Some(pending) = sender {
+        let _ = pending.sender.send(decision);
     }
     Ok(())
 }
 
-/// Resolve a Copilot approval by handing the command to the already-visible
-/// terminal. The Copilot tool loop receives a distinct result and must not
-/// open its independent SSH exec channel afterwards.
-pub async fn resolve_action_approval_as_terminal(
+/// Wait for a Copilot approval while making timeout and visible-terminal
+/// handoff claim the same per-request gate. The timeout branch keeps the
+/// oneshot receiver alive until it has acquired that gate and removed the
+/// pending entry; if a handoff already owns the gate, it must finish (or
+/// reject) before the approval waiter can conclude that the request expired.
+async fn wait_for_terminal_handoff_approval(
+    state: &crate::services::workspace::WorkspaceState,
+    request_id: &str,
+    mut receiver: oneshot::Receiver<ActionApprovalDecision>,
+    handoff_gate: Arc<tokio::sync::Mutex<()>>,
+) -> ActionApprovalDecision {
+    let approval_timeout = sleep(ACTION_APPROVAL_TIMEOUT);
+    tokio::pin!(approval_timeout);
+    tokio::select! {
+        response = &mut receiver => response.unwrap_or(ActionApprovalDecision::Dismissed),
+        _ = &mut approval_timeout => {
+            let _handoff_guard = handoff_gate.lock().await;
+            let removed = state
+                .pending_action_approvals
+                .write()
+                .await
+                .remove(request_id);
+            if removed.is_some() {
+                ActionApprovalDecision::TimedOut
+            } else {
+                // A normal approval resolver or the handoff already owns the
+                // request and will send its decision through this receiver.
+                drop(_handoff_guard);
+                receiver.await.unwrap_or(ActionApprovalDecision::Dismissed)
+            }
+        }
+    }
+}
+
+/// Atomically consume a Copilot approval and send its exact command to the
+/// currently active visible terminal. The Rust side validates the approval's
+/// target, command, active pane, and session revision before writing to the
+/// PTY; the renderer cannot execute first and resolve the approval later.
+pub async fn execute_ai_terminal_handoff(
     app: &AppHandle,
     request_id: &str,
+    raw_tab_id: &str,
+    raw_command: &str,
 ) -> Result<(), AppError> {
-    resolve_action_approval_decision(app, request_id, ActionApprovalDecision::DelegatedToTerminal)
+    let request_id = request_id.trim();
+    if request_id.is_empty() || request_id.len() > 200 || request_id.chars().any(char::is_control) {
+        return Err(AppError::Command(
+            "Invalid action approval request".to_string(),
+        ));
+    }
+    let tab_id = validate_remote_exec_tab_id(raw_tab_id)?;
+    let command = validate_visible_terminal_command(raw_command)?;
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    // Look up the gate before claiming the map entry, then hold it through
+    // every validation and the final PTY enqueue. The timeout path follows
+    // the same map-read -> gate -> map-write order, so only one side can win
+    // the expiry/handoff race.
+    let handoff_gate = state
+        .pending_action_approvals
+        .read()
         .await
+        .get(request_id)
+        .map(|pending| pending.handoff_gate.clone())
+        .ok_or_else(|| AppError::Command(AI_TERMINAL_HANDOFF_NOT_PENDING.to_string()))?;
+    let _handoff_guard = handoff_gate.lock().await;
+    let pending = state
+        .pending_action_approvals
+        .write()
+        .await
+        .remove(request_id)
+        .ok_or_else(|| AppError::Command(AI_TERMINAL_HANDOFF_NOT_PENDING.to_string()))?;
+
+    let Some(binding) = pending.terminal_handoff.clone() else {
+        let _ = pending.sender.send(ActionApprovalDecision::Rejected);
+        return Err(AppError::Command(
+            "Copilot approval is not eligible for terminal handoff".to_string(),
+        ));
+    };
+    if binding.tab_id != tab_id || binding.command != command {
+        let _ = pending.sender.send(ActionApprovalDecision::Rejected);
+        return Err(AppError::Command(
+            "Copilot terminal handoff target no longer matches the approved command".to_string(),
+        ));
+    }
+
+    if let Err(error) = ensure_visible_terminal_session_active(app, &tab_id).await {
+        let _ = pending.sender.send(ActionApprovalDecision::Rejected);
+        return Err(error);
+    }
+    let current_revision = state.ai_session_revision(&tab_id).await.to_string();
+    if current_revision != binding.session_revision {
+        let _ = pending.sender.send(ActionApprovalDecision::Rejected);
+        return Err(AppError::Command("AI_AUTO_MODE_TARGET_CHANGED".to_string()));
+    }
+
+    if let Err(error) = crate::commands::send_exact_active_terminal_input(
+        &state,
+        &tab_id,
+        Some(&binding.session_revision),
+        format!("{command}\r"),
+    )
+    .await
+    {
+        let _ = pending.sender.send(ActionApprovalDecision::Rejected);
+        return Err(error);
+    }
+
+    let _ = pending
+        .sender
+        .send(ActionApprovalDecision::DelegatedToTerminal);
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -353,7 +494,19 @@ pub async fn execute_remote_command(
     app: &AppHandle,
     request: RemoteExecRequest,
 ) -> Result<RemoteExecResult, AppError> {
-    execute_remote_command_inner(app, request, true).await
+    execute_remote_command_inner(app, request, true, None).await
+}
+
+/// Run one Copilot command with the request-scoped cancellation token wired
+/// through approval, secure password input, the network-device wait, and the
+/// isolated SSH exec task. External callers keep using the non-cancellable
+/// wrapper above so their existing timeout/error semantics stay unchanged.
+pub async fn execute_remote_command_cancellable(
+    app: &AppHandle,
+    request: RemoteExecRequest,
+    cancellation: &CancellationToken,
+) -> Result<RemoteExecResult, AppError> {
+    execute_remote_command_inner(app, request, true, Some(cancellation)).await
 }
 
 /// Run one command through the MCP background route. Unlike the normal
@@ -364,14 +517,16 @@ pub async fn execute_background_remote_command(
     app: &AppHandle,
     request: RemoteExecRequest,
 ) -> Result<RemoteExecResult, AppError> {
-    execute_remote_command_inner(app, request, false).await
+    execute_remote_command_inner(app, request, false, None).await
 }
 
 async fn execute_remote_command_inner(
     app: &AppHandle,
     request: RemoteExecRequest,
     allow_network_device_fallback: bool,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<RemoteExecResult, AppError> {
+    check_cancellation(cancellation)?;
     let tab_id = validate_remote_exec_tab_id(&request.tab_id)?;
     let command = validate_remote_exec_command(&request.command)?;
     let requested_cwd = validate_remote_exec_cwd(request.cwd)?;
@@ -452,12 +607,14 @@ async fn execute_remote_command_inner(
                 NETWORK_DEVICE_PRIVILEGE_UNSUPPORTED.to_string(),
             ));
         }
+        ensure_visible_terminal_session_active(app, &tab_id).await?;
         return execute_network_device_command(
             &state,
             &tab_id,
             &command,
             timeout_ms,
             bound_session_revision.as_deref(),
+            cancellation,
         )
         .await;
     }
@@ -495,8 +652,10 @@ async fn execute_remote_command_inner(
                 cwd.as_deref(),
                 &command,
                 request.privileged_prompt_notice.clone(),
+                cancellation,
             )
             .await?;
+            check_cancellation(cancellation)?;
             ensure_expected_session_revision(&state, &tab_id, bound_session_revision.as_deref())
                 .await?;
             prepare_remote_exec(
@@ -514,20 +673,23 @@ async fn execute_remote_command_inner(
 
     ensure_expected_session_revision(&state, &tab_id, bound_session_revision.as_deref()).await?;
 
-    let result = crate::commands::send_worker_cmd_with_response_timeout(
+    let result = crate::commands::send_worker_cmd_with_response_timeout_cancellable(
         app,
         &tab_id,
         Duration::from_millis(timeout_ms.saturating_add(5_000)),
+        cancellation,
         |respond_to| WorkerCmd::ExecuteRemoteCommand {
             command: prepared.command.clone(),
             cwd,
             timeout_ms,
             stdin: prepared.stdin.clone(),
             request_pty: prepared.request_pty,
+            cancellation: cancellation.cloned(),
             respond_to,
         },
     )
     .await?;
+    check_cancellation(cancellation)?;
     let parsed = parse_remote_exec_result(result)?;
     if let Some(kind) = prepared.kind {
         if detect_privileged_auth_failure(&parsed.output, kind) {
@@ -666,11 +828,18 @@ pub async fn execute_visible_terminal_command(
             &command,
             timeout_ms,
             Some(&expected_session_revision),
+            None,
         )
         .await;
     }
 
-    crate::commands::send_exact_terminal_input(&state, &tab_id, format!("{command}\r")).await?;
+    crate::commands::send_exact_active_terminal_input(
+        &state,
+        &tab_id,
+        Some(&expected_session_revision),
+        format!("{command}\r"),
+    )
+    .await?;
     Ok(RemoteExecResult {
         output: String::new(),
         exit_code: None,
@@ -693,12 +862,21 @@ async fn execute_network_device_command(
     command: &str,
     timeout_ms: u64,
     expected_session_revision: Option<&str>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<RemoteExecResult, AppError> {
+    check_cancellation(cancellation)?;
     ensure_expected_session_revision(state, tab_id, expected_session_revision).await?;
     let transcript_before = terminal_transcript_snapshot(state, tab_id)
         .await
         .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
-    crate::commands::send_exact_terminal_input(state, tab_id, format!("{command}\r")).await?;
+    check_cancellation(cancellation)?;
+    crate::commands::send_exact_active_terminal_input(
+        state,
+        tab_id,
+        expected_session_revision,
+        format!("{command}\r"),
+    )
+    .await?;
 
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
     let mut latest_transcript = transcript_before.clone();
@@ -706,6 +884,7 @@ async fn execute_network_device_command(
     let mut timed_out = false;
 
     loop {
+        check_cancellation(cancellation)?;
         // A reconnect can replace the terminal sender while this bounded
         // quiet-period wait is in progress. Abort as soon as the identity
         // changes so a stale request cannot wait out the whole timeout or
@@ -731,13 +910,21 @@ async fn execute_network_device_command(
             timed_out = true;
             break;
         }
-        sleep(NETWORK_DEVICE_RAW_POLL_INTERVAL).await;
+        if let Some(cancellation) = cancellation {
+            tokio::select! {
+                _ = cancellation.cancelled() => return Err(remote_exec_cancelled_error()),
+                _ = sleep(NETWORK_DEVICE_RAW_POLL_INTERVAL) => {}
+            }
+        } else {
+            sleep(NETWORK_DEVICE_RAW_POLL_INTERVAL).await;
+        }
     }
 
     let transcript_after = terminal_transcript_snapshot(state, tab_id)
         .await
         .unwrap_or(latest_transcript);
     ensure_expected_session_revision(state, tab_id, expected_session_revision).await?;
+    check_cancellation(cancellation)?;
     let output = terminal_transcript_delta(&transcript_before, &transcript_after);
     let (output, output_truncated) = truncate_network_device_output(output);
 
@@ -819,6 +1006,7 @@ async fn request_sudo_password_prompt(
     cwd: Option<&str>,
     command: &str,
     privileged_prompt_notice: Option<PrivilegedPromptNotice>,
+    cancellation: Option<&CancellationToken>,
 ) -> Result<(String, bool), AppError> {
     let needed_code = match kind {
         PrivilegedCommandKind::Sudo => SUDO_PASSWORD_NEEDED,
@@ -876,7 +1064,22 @@ async fn request_sudo_password_prompt(
         notice(needed_code);
     }
 
-    let response = match timeout(PRIVILEGED_PASSWORD_PROMPT_TIMEOUT, receiver).await {
+    let response = match cancellation {
+        Some(cancellation) => tokio::select! {
+            _ = cancellation.cancelled() => {
+                state
+                    .pending_sudo_passwords
+                    .write()
+                    .await
+                    .remove(&request_id);
+                emit_sudo_password_prompt_cancelled(app, &request_id);
+                return Err(remote_exec_cancelled_error());
+            }
+            response = timeout(PRIVILEGED_PASSWORD_PROMPT_TIMEOUT, receiver) => response,
+        },
+        None => timeout(PRIVILEGED_PASSWORD_PROMPT_TIMEOUT, receiver).await,
+    };
+    let response = match response {
         Ok(Ok(response)) => response,
         Ok(Err(_)) | Err(_) => {
             state
@@ -884,6 +1087,7 @@ async fn request_sudo_password_prompt(
                 .write()
                 .await
                 .remove(&request_id);
+            emit_sudo_password_prompt_cancelled(app, &request_id);
             return Err(AppError::Command(
                 match kind {
                     PrivilegedCommandKind::Sudo => SUDO_PASSWORD_CANCELLED,
@@ -893,6 +1097,7 @@ async fn request_sudo_password_prompt(
             ));
         }
     };
+    check_cancellation(cancellation)?;
     if response.cancelled {
         return Err(AppError::Command(
             match kind {
@@ -913,6 +1118,24 @@ async fn request_sudo_password_prompt(
     })?;
     validate_privileged_password(&password)?;
     Ok((password, response.save))
+}
+
+fn remote_exec_cancelled_error() -> AppError {
+    AppError::Command(AI_REQUEST_CANCELLED.to_string())
+}
+
+fn check_cancellation(cancellation: Option<&CancellationToken>) -> Result<(), AppError> {
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        return Err(remote_exec_cancelled_error());
+    }
+    Ok(())
+}
+
+fn emit_sudo_password_prompt_cancelled(app: &AppHandle, request_id: &str) {
+    let _ = app.emit(
+        "sudo:password-request-cancelled",
+        serde_json::json!({ "requestId": request_id }),
+    );
 }
 
 fn main_window_exists(app: &AppHandle) -> bool {
@@ -1190,15 +1413,16 @@ fn parse_remote_exec_result(value: Value) -> Result<RemoteExecResult, AppError> 
 #[cfg(test)]
 mod tests {
     use super::{
-        detect_privileged_auth_failure, parse_remote_exec_result, privileged_command_kind,
-        resolve_privileged_password, validate_network_device_command, validate_privileged_password,
-        validate_remote_exec_command, validate_remote_exec_cwd, validate_remote_exec_tab_id,
-        validate_visible_terminal_command, wrap_sudo_command, ActionApprovalDecision,
-        ActionApprovalSource, PrivilegedCommandKind, SUDO_AUTH_FAILURE,
-        VISIBLE_TERMINAL_COMMAND_INVALID,
+        check_cancellation, detect_privileged_auth_failure, parse_remote_exec_result,
+        privileged_command_kind, resolve_privileged_password, validate_network_device_command,
+        validate_privileged_password, validate_remote_exec_command, validate_remote_exec_cwd,
+        validate_remote_exec_tab_id, validate_visible_terminal_command, wrap_sudo_command,
+        ActionApprovalDecision, ActionApprovalSource, PrivilegedCommandKind, AI_REQUEST_CANCELLED,
+        SUDO_AUTH_FAILURE, VISIBLE_TERMINAL_COMMAND_INVALID,
     };
     use crate::AppError;
     use serde_json::json;
+    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn approval_rejections_remain_specific_to_the_initiating_surface() {
@@ -1210,6 +1434,19 @@ mod tests {
             ActionApprovalDecision::TimedOut.rejection_message(ActionApprovalSource::AiCopilot),
             "Copilot approval timed out; the command was not started"
         );
+    }
+
+    #[test]
+    fn remote_exec_cancellation_is_checked_before_any_side_effect() {
+        let cancellation = CancellationToken::new();
+        assert!(check_cancellation(Some(&cancellation)).is_ok());
+
+        cancellation.cancel();
+        assert!(matches!(
+            check_cancellation(Some(&cancellation)),
+            Err(AppError::Command(message)) if message == AI_REQUEST_CANCELLED
+        ));
+        assert!(check_cancellation(None).is_ok());
     }
 
     #[test]

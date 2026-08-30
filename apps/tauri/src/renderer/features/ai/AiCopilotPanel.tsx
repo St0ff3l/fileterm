@@ -10,7 +10,6 @@ import type {
   WorkspaceTab
 } from '@fileterm/core'
 import { t } from '../../i18n'
-import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { CloseButton } from '../common/CloseButton'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 import { AppIcon, type AppIconName } from '../common/AppIcon'
@@ -84,7 +83,7 @@ function AiCopilotToolActivity({
   // delegated to the visible terminal. Fully automatic calls are already
   // running through the isolated route; exposing this button while their
   // result is pending would execute the same command a second time.
-  const canDelegateToTerminal = Boolean(activity.proposal.approvalRequestId && onExecuteTerminalCommand)
+  const canDelegateToTerminal = Boolean(approval && activity.proposal.approvalRequestId && onExecuteTerminalCommand)
   const canExecuteTerminalCommand = Boolean(
     canDelegateToTerminal && !/[\r\n]/.test(activity.proposal.command) && !isExecutingTerminalCommand
   )
@@ -330,7 +329,7 @@ export function AiCopilotPanel({
     setContextAttach,
     setDangerousCommandRestrictions,
     resolveToolApproval,
-    resolveToolApprovalAsTerminal,
+    executeAiTerminalHandoff,
     retry,
     stop
   } = useAiCopilot()
@@ -487,30 +486,19 @@ export function AiCopilotPanel({
       return Promise.reject(new Error(t.aiCopilotCommandWriteUnavailable))
     }
 
-    return new Promise<void>((resolve, reject) => {
-      dispatchAppEvent(APP_EVENT.aiInsertTerminalCommand, {
-        tabId: targetTabId,
-        command: activity.proposal.command,
-        execute: true,
-        onComplete: () => {
-          const approvalRequestId = activity.proposal.approvalRequestId
-          const handoff = approvalRequestId ? resolveToolApprovalAsTerminal(approvalRequestId) : Promise.resolve()
-          void handoff
-            .then(() => {
-              showCommandActionMessage(t.aiCopilotTerminalInputWritten)
-              resolve()
-            })
-            .catch((error) => {
-              showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
-              reject(error)
-            })
-        },
-        onError: () => {
-          showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
-          reject(new Error(t.aiCopilotTerminalInputWriteFailed))
-        }
+    const approvalRequestId = activity.proposal.approvalRequestId
+    if (!approvalRequestId) {
+      showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+      return Promise.reject(new Error(t.aiCopilotTerminalInputWriteFailed))
+    }
+    return executeAiTerminalHandoff(approvalRequestId, targetTabId, activity.proposal.command)
+      .then(() => {
+        showCommandActionMessage(t.aiCopilotTerminalInputWritten)
       })
-    })
+      .catch((error) => {
+        showCommandActionMessage(t.aiCopilotTerminalInputWriteFailed)
+        throw error
+      })
   }
 
   const saveConversationTitle = async () => {

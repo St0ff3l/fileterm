@@ -496,6 +496,17 @@ pub struct PendingSudoPassword {
     pub sender: oneshot::Sender<SudoPasswordResponse>,
 }
 
+pub struct PendingActionApproval {
+    pub sender: oneshot::Sender<crate::services::action_review::ActionApprovalDecision>,
+    /// Copilot-only binding used by the atomic visible-terminal handoff.
+    /// External MCP approvals intentionally leave this unset.
+    pub terminal_handoff: Option<crate::services::action_review::ActionApprovalTargetBinding>,
+    /// Serializes the approval timeout's final claim with the terminal
+    /// handoff's validation and PTY write. The handoff holds this through its
+    /// bounded write so an expiry cannot drop the receiver mid-operation.
+    pub handoff_gate: Arc<Mutex<()>>,
+}
+
 pub struct WorkspaceState {
     pub tabs: Arc<RwLock<Vec<WorkspaceTab>>>,
     pub active_tab_id: Arc<RwLock<Option<String>>>,
@@ -555,14 +566,7 @@ pub struct WorkspaceState {
     /// `app_resolve_action_approval` or the Copilot terminal-handoff command.
     /// Dropping or timing out a request denies it, so there is no durable
     /// approval state.
-    pub pending_action_approvals: Arc<
-        RwLock<
-            HashMap<
-                String,
-                oneshot::Sender<crate::services::action_review::ActionApprovalDecision>,
-            >,
-        >,
-    >,
+    pub pending_action_approvals: Arc<RwLock<HashMap<String, PendingActionApproval>>>,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A

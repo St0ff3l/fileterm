@@ -7033,6 +7033,7 @@ async fn run_worker_loop(
 /// Execute one explicit remote command on an independent SSH exec channel.
 /// The interactive PTY remains owned by the terminal, so an external CLI/MCP
 /// call cannot steal terminal input or mix its output into the user's shell.
+#[allow(clippy::too_many_arguments)]
 fn spawn_remote_command(
     handle: &Arc<Handle<ClientHandler>>,
     command: String,
@@ -7040,6 +7041,7 @@ fn spawn_remote_command(
     timeout_ms: u64,
     stdin: Option<String>,
     request_pty: bool,
+    cancellation: Option<tokio_util::sync::CancellationToken>,
     respond_to: oneshot::Sender<Result<Value, String>>,
 ) {
     let handle = Arc::clone(handle);
@@ -7049,15 +7051,24 @@ fn spawn_remote_command(
         .unwrap_or(command);
     let timeout_duration = Duration::from_millis(timeout_ms);
     tokio::spawn(async move {
-        let result = match super::system_metrics::exec_command_with_stdin_status_timeout_detailed(
+        let exec = super::system_metrics::exec_command_with_stdin_status_timeout_detailed(
             &handle,
             &command,
             stdin.as_deref().unwrap_or(""),
             request_pty,
             timeout_duration,
-        )
-        .await
-        {
+        );
+        let result = match cancellation {
+            Some(cancellation) if cancellation.is_cancelled() => {
+                Err("AI_REQUEST_CANCELLED".to_string())
+            }
+            Some(cancellation) => tokio::select! {
+                _ = cancellation.cancelled() => Err("AI_REQUEST_CANCELLED".to_string()),
+                result = exec => result,
+            },
+            None => exec.await,
+        };
+        let result = match result {
             Ok(result) => {
                 let input_kind =
                     detect_remote_exec_input_kind(&result.output).map(ToOwned::to_owned);
@@ -7179,6 +7190,7 @@ async fn handle_worker_cmd_without_sftp(
             timeout_ms,
             stdin,
             request_pty,
+            cancellation,
             respond_to,
         } => {
             if exec_channel_enabled {
@@ -7189,6 +7201,7 @@ async fn handle_worker_cmd_without_sftp(
                     timeout_ms,
                     stdin,
                     request_pty,
+                    cancellation,
                     respond_to,
                 );
             } else {
@@ -7408,6 +7421,7 @@ async fn handle_worker_cmd(
             timeout_ms,
             stdin,
             request_pty,
+            cancellation,
             respond_to,
         } => {
             if exec_channel_enabled {
@@ -7418,6 +7432,7 @@ async fn handle_worker_cmd(
                     timeout_ms,
                     stdin,
                     request_pty,
+                    cancellation,
                     respond_to,
                 );
             } else {

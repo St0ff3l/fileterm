@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { CommandExecutionOptions, TerminalCommandHistoryEntry, WorkspaceTab } from '@fileterm/core'
-import { APP_EVENT, dispatchAppEvent, onAppEvent } from '../../lib/app-events'
+import { APP_EVENT, dispatchAppEvent } from '../../lib/app-events'
 import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { SelectionControl } from '../common/SelectionControl'
@@ -367,39 +367,6 @@ export function TerminalDock({
     window.requestAnimationFrame(() => inputRef.current?.focus())
     return true
   }
-
-  useEffect(() => {
-    return onAppEvent(
-      APP_EVENT.aiInsertTerminalCommand,
-      ({ tabId, command: nextCommand, execute, onComplete, onError }) => {
-        if (tabId !== activeTab.id || activeTab.sessionType !== 'ssh') {
-          return
-        }
-
-        setPanel(null)
-        if (!execute) {
-          setCommand(nextCommand)
-          window.requestAnimationFrame(() => inputRef.current?.focus())
-          onComplete?.()
-          return
-        }
-
-        // Copilot must use the same send path as a user pressing Enter: this
-        // records history, applies the current target scope, and writes the
-        // carriage return through the existing terminal command boundary.
-        setCommand(nextCommand)
-        void sendCommand(nextCommand, 'current')
-          .then((sent) => {
-            if (sent) {
-              onComplete?.()
-            } else {
-              onError?.()
-            }
-          })
-          .catch(() => onError?.())
-      }
-    )
-  }, [activeTab.id, activeTab.sessionType, sendCommand])
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {

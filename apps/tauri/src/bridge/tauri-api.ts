@@ -783,7 +783,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       invoke<void>('app_resolve_mcp_approval', { requestId, approved }),
     resolveActionApproval: (requestId: string, approved: boolean) =>
       invoke<void>('app_resolve_action_approval', { requestId, approved }),
-    resolveAiTerminalHandoff: (requestId: string) => invoke<void>('app_resolve_ai_terminal_handoff', { requestId }),
+    executeAiTerminalHandoff: (requestId: string, tabId: string, command: string) =>
+      invoke<void>('app_execute_ai_terminal_handoff', { requestId, tabId, command }),
     setRemoteFileAccessMode: (tabId: string, mode: 'user' | 'root', options?: RemoteFileAccessOptions) =>
       invoke<WorkspaceSnapshot>('app_set_remote_file_access_mode', { tabId, mode, options }),
     listSshTunnels: (tabId: string) => invoke<SshTunnelSnapshot[]>('app_list_ssh_tunnels', { tabId }),
@@ -817,6 +818,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
       subscribeReady('ssh:interaction', listener),
     onSudoPasswordPrompt: (listener: (request: SudoPasswordRequest) => void) =>
       subscribeReady('sudo:password-request', listener),
+    onSudoPasswordPromptCancelled: (listener: (payload: { requestId: string }) => void) =>
+      subscribe('sudo:password-request-cancelled', listener),
     onBackupPasswordRequest: (listener: (request: BackupPasswordRequest) => void) =>
       subscribeReady('backup:password-request', listener),
     onActionApprovalRequest: (listener: (request: ActionApprovalRequest) => void) =>

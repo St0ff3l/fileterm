@@ -1281,6 +1281,10 @@ export interface SudoPasswordRequest {
   command: string
 }
 
+export interface SudoPasswordPromptCancelled {
+  requestId: string
+}
+
 export type BackupPasswordOperation = 'upload' | 'download'
 
 /** One-time password request for a cross-device WebDAV/S3 backup. */
@@ -2502,8 +2506,8 @@ export interface FileTermDesktopApi {
   resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
-  /** Hand a pending Copilot command to the already-visible terminal. */
-  resolveAiTerminalHandoff(requestId: string): Promise<void>
+  /** Atomically hand a pending Copilot command to the already-visible terminal. */
+  executeAiTerminalHandoff(requestId: string, tabId: string, command: string): Promise<void>
   /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
@@ -2521,6 +2525,7 @@ export interface FileTermDesktopApi {
   /** Resolves only after the SSH interaction listener is registered in Tauri. */
   onSshInteraction(listener: (request: SshInteractionRequest) => void): Promise<() => void>
   onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>
+  onSudoPasswordPromptCancelled(listener: (payload: SudoPasswordPromptCancelled) => void): () => void
   /** Resolves only after the main renderer has registered the password prompt listener. */
   onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>
   onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void
