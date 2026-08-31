@@ -211,7 +211,7 @@ pub struct SshConnectionDefaultsInput {
 }
 
 /// Non-secret boundary shared by MCP clients, the FileTerm CLI and external
-/// Agent bridges. It deliberately does not contain connection credentials or
+/// MCP and CLI bridges. It deliberately does not contain connection credentials or
 /// any executable configuration path.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

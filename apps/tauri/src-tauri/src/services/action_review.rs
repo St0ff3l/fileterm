@@ -211,7 +211,7 @@ pub async fn request_action_approval_with_id_and_target(
     );
 
     if matches!(source, ActionApprovalSource::Mcp) {
-        // MCP, one-shot CLI, and the persistent Agent all use the legacy
+        // MCP, one-shot CLI, and CLI JSONL all use the shared
         // `Mcp` approval source on the wire. Bring the shared FileTerm
         // approval back to the main window so a hidden or unfocused desktop
         // window cannot leave the external caller waiting invisibly.

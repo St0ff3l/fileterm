@@ -53,19 +53,19 @@ fn cli_help_is_headless_and_keeps_stdout_clean() {
 }
 
 #[test]
-fn agent_help_documents_one_process_and_cancellation() {
-    let output = run_fileterm(&["agent", "--help"], None);
+fn cli_jsonl_help_documents_one_process_and_cancellation() {
+    let output = run_fileterm(&["cli", "--jsonl", "--help"], None);
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("persistent FileTerm Agent bridge"));
+    assert!(stdout.contains("persistent FileTerm CLI JSONL bridge"));
     assert!(stdout.contains("cancel_request"));
     assert!(output.stderr.is_empty());
 }
 
 #[test]
-fn agent_reuses_one_process_for_multiple_jsonl_requests_without_starting_the_gui() {
+fn cli_jsonl_reuses_one_process_for_multiple_jsonl_requests_without_starting_the_gui() {
     let output = run_fileterm(
-        &["agent"],
+        &["cli", "--jsonl"],
         Some(
             br#"{"id":"request-1","action":"list_connections","params":{}}
 {"id":"request-2","action":"list_connections","params":{}}
@@ -78,7 +78,8 @@ fn agent_reuses_one_process_for_multiple_jsonl_requests_without_starting_the_gui
     let mut responses = stdout
         .lines()
         .map(|line| {
-            serde_json::from_str::<serde_json::Value>(line).expect("Agent response should be JSON")
+            serde_json::from_str::<serde_json::Value>(line)
+                .expect("CLI JSONL response should be JSON")
         })
         .collect::<Vec<_>>();
     assert_eq!(responses.len(), 2);
@@ -89,9 +90,17 @@ fn agent_reuses_one_process_for_multiple_jsonl_requests_without_starting_the_gui
         assert_eq!(response["ok"], false);
         assert!(response["error"]
             .as_str()
-            .expect("Agent error should be text")
+            .expect("CLI JSONL error should be text")
             .contains("desktop app is not running"));
     }
+}
+
+#[test]
+fn removed_agent_command_is_rejected_without_starting_the_gui() {
+    let output = run_fileterm(&["agent", "--help"], None);
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Unknown FileTerm CLI command: agent"));
 }
 
 #[test]

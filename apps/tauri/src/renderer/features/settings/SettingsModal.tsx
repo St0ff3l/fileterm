@@ -112,8 +112,7 @@ type ThemePresetVariant = ThemeConfig['variant']
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
 const THEME_CONFIG_EXPORT_PREFIX = 'fileterm-theme-v1:'
 const THEME_CONFIG_IMPORT_PREFIXES = [THEME_CONFIG_EXPORT_PREFIX, 'codex-theme-v1:'] as const
-const FILETERM_CLI_AGENT_SKILL_URL =
-  'https://github.com/St0ff3l/fileterm/blob/main/.agents/skills/fileterm-cli-agent/SKILL.md'
+const FILETERM_CLI_SKILL_URL = 'https://github.com/St0ff3l/fileterm/blob/main/docs/fileterm-cli.md'
 
 const ANSI_COLOR_NAMES: TerminalAnsiColorName[] = [
   'black',
@@ -2961,16 +2960,14 @@ export function SettingsModal({
                           <div className="agent-mcp-direct-cli-command agent-mcp-doc-reference">
                             <small>{t.agentMcpCliSkillPath}</small>
                             <div className="agent-mcp-registration">
-                              <code>{FILETERM_CLI_AGENT_SKILL_URL}</code>
+                              <code>{FILETERM_CLI_SKILL_URL}</code>
                               <button
                                 aria-label={t.agentMcpCliSkillCopy}
                                 className="copy-icon-button agent-mcp-copy-button"
                                 disabled={!desktopApi}
                                 title={t.agentMcpCliSkillCopy}
                                 type="button"
-                                onClick={() =>
-                                  copyMcpAgentCommand(FILETERM_CLI_AGENT_SKILL_URL, t.agentMcpCliSkillCopied)
-                                }
+                                onClick={() => copyMcpAgentCommand(FILETERM_CLI_SKILL_URL, t.agentMcpCliSkillCopied)}
                               >
                                 <AppIcon name="copy" size={14} strokeWidth={2} />
                               </button>
@@ -2979,7 +2976,7 @@ export function SettingsModal({
                           <div className="agent-mcp-direct-cli-command agent-mcp-persistent-agent-command">
                             <small>{t.agentMcpPersistentAgentPath}</small>
                             <div className="agent-mcp-registration">
-                              <code>{mcpAgentSetup.filetermCommand} agent</code>
+                              <code>{mcpAgentSetup.filetermCommand} cli --jsonl</code>
                               <button
                                 aria-label={t.agentMcpPersistentAgentCopy}
                                 className="copy-icon-button agent-mcp-copy-button"
@@ -2988,7 +2985,7 @@ export function SettingsModal({
                                 type="button"
                                 onClick={() =>
                                   copyMcpAgentCommand(
-                                    `${mcpAgentSetup.filetermCommand} agent`,
+                                    `${mcpAgentSetup.filetermCommand} cli --jsonl`,
                                     t.agentMcpPersistentAgentCopied
                                   )
                                 }
@@ -3000,7 +2997,7 @@ export function SettingsModal({
                           <div className="agent-mcp-direct-cli-command">
                             <small>{t.agentMcpDirectCliPath}</small>
                             <div className="agent-mcp-registration">
-                              <code>{mcpAgentSetup.filetermCommand} --help</code>
+                              <code>{mcpAgentSetup.filetermCommand} cli --help</code>
                               <button
                                 aria-label={t.agentMcpDirectCliCopy}
                                 className="copy-icon-button agent-mcp-copy-button"
@@ -3009,7 +3006,7 @@ export function SettingsModal({
                                 type="button"
                                 onClick={() =>
                                   copyMcpAgentCommand(
-                                    `${mcpAgentSetup.filetermCommand} --help`,
+                                    `${mcpAgentSetup.filetermCommand} cli --help`,
                                     t.agentMcpDirectCliCopied
                                   )
                                 }

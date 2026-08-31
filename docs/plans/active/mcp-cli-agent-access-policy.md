@@ -1,4 +1,4 @@
-# MCP / CLI Agent 访问控制与连接凭据闭环计划
+# MCP / CLI 外部客户端访问控制与连接凭据闭环计划
 
 状态：阶段 0-6 的代码、自动化回归与文档已完成；打包人工验收与真实设备验收待进行
 
@@ -25,7 +25,7 @@ Issue #224 需要解决的不是“给 MCP 再配置一个密码”，而是建�
         ↓
 缺少 SSH 登录凭据时由 FileTerm 主窗口安全输入
         ↓
-原始 MCP/Agent 调用保持等待并收到最终 Connected/Error 结果
+原始 MCP/CLI 调用保持等待并收到最终 Connected/Error 结果
         ↓
 多个并行调用复用连接任务，避免重复建连和重复启动 GUI 进程
 ```
@@ -95,16 +95,16 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 
 ### 2.3 当前权限策略
 
-当前 Agent 偏好包含连接白名单和操作等级两个维度；设置页按两张独立策略卡片展示：
+当前 MCP / CLI 偏好包含连接白名单和操作等级两个维度；设置页按两张独立策略卡片展示：
 
 | 维度       | 当前值                                        |
 | ---------- | --------------------------------------------- |
 | 连接白名单 | all-saved-connections、selected-connections   |
 | 操作策略   | read-only、basic-safe-operations、full-access |
 
-第一张卡片是 Agent / MCP / CLI 共用执行权限和能力对照，第二张卡片是“所有连接 / 指定连接”的全局白名单。当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按白名单过滤。连接自身的协议能力和 FileTerm 安全校验不在共用策略卡片中重复配置，而是继续作为硬上限。
+第一张卡片是 MCP / CLI 共用执行权限和能力对照，第二张卡片是“所有连接 / 指定连接”的全局白名单。当前已有“只能访问保存连接”的基础：打开连接使用 profile_id，由 Rust 从保存的 profile 中查找；列表和会话信息也会按白名单过滤。连接自身的协议能力和 FileTerm 安全校验不在共用策略卡片中重复配置，而是继续作为硬上限。
 
-当前实现已经补齐逐个连接选择、基础安全操作和第三档“完全访问”策略；仍然不区分具体 MCP client，MCP、一次性 CLI 和常驻 Agent 共享 FileTerm 全局设置与 Rust policy evaluator。基础安全操作下查询和普通远程命令自动执行，会话/文件/传输变更、隧道、提权和未知操作统一回 FileTerm 主窗口确认。
+当前实现已经补齐逐个连接选择、基础安全操作和第三档“完全访问”策略；仍然不区分具体客户端，MCP、一次性 CLI 和 CLI JSONL 共享 FileTerm 全局设置与 Rust policy evaluator。基础安全操作下查询和普通远程命令自动执行，会话/文件/传输变更、隧道、提权和未知操作统一回 FileTerm 主窗口确认。
 
 ### 2.4 当前凭据处理
 
@@ -127,11 +127,11 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 - AI 只能访问 FileTerm 已保存的连接，不能通过 MCP/CLI 临时构造任意主机、用户名或凭据。
 - 用户可以从已保存连接中选择允许 Agent 访问的服务器。
 - 所有 MCP 客户端共享 FileTerm 的全局连接范围和操作等级策略。
-- MCP 和 Agent-facing CLI 在缺少 SSH 登录凭据时，可以等待 FileTerm 主窗口的安全输入，并收到最终连接结果。
+- MCP 和 CLI JSONL 在缺少 SSH 登录凭据时，可以等待 FileTerm 主窗口的安全输入，并收到最终连接结果。
 - 已保存密码时不弹框；明确配置空密码时按空密码策略处理。
 - sudo/su 继续使用现有的独立、安全凭据链路，不复用 SSH 登录密码。
 - 同一 profile 的并行打开请求复用同一个连接任务、tab 和凭据 prompt。
-- AI 常驻使用 MCP 或 Agent bridge 时，不因每个请求都创建一个新的 GUI 进程。
+- AI 常驻使用 MCP 或 CLI JSONL bridge 时，不因每个请求都创建一个新的 GUI 进程。
 
 ### 3.2 安全目标
 
@@ -150,7 +150,7 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 - 不在第一版引入每个 MCP client 独立的权限配置；第一版所有 MCP 客户端共用全局策略。
 - 不强制把用户在 SSH 登录 prompt 中输入的密码永久保存；默认仍按一次性内存凭据处理。
 - 不把 FTP、Telnet、Serial 伪装成支持 SSH 远程 exec 或 sudo/su。
-- 不要求一次性 CLI 完全消失；保留它作为脚本兼容入口，Agent 优先使用 MCP 或常驻 Agent bridge。
+- 不要求一次性 CLI 完全消失；保留它作为脚本入口，外部 Agent 优先使用 MCP 或 CLI JSONL bridge。
 
 ## 5. 关键设计原则
 
@@ -284,7 +284,7 @@ FileTerm 主窗口安全 prompt
 主窗口不可用时返回 SUDO_PASSWORD_NEEDED / SU_PASSWORD_NEEDED
 ```
 
-基础安全操作下，MCP/CLI/Agent 的查询和由内置 Copilot 规则判定为只读的普通远程命令自动执行；变更、破坏性、提权或未知命令，以及会话/文件/传输变更、隧道和 sudo/su 操作进入同一 FileTerm 主窗口审批。三者都能在主窗口 prompt 可用时保持原调用等待，并在用户输入后拿到最终命令结果。
+基础安全操作下，MCP/CLI/CLI JSONL 的查询和由内置 Copilot 规则判定为只读的普通远程命令自动执行；变更、破坏性、提权或未知命令，以及会话/文件/传输变更、隧道和 sudo/su 操作进入同一 FileTerm 主窗口审批。三者都能在主窗口 prompt 可用时保持原调用等待，并在用户输入后拿到最终命令结果。
 
 ### 6.5 普通命令需要通用交互输入
 
@@ -337,7 +337,7 @@ ConnectionOperation 不保存密码文本。密码仍只存在当前 worker 的�
 - worker 因用户取消、窗口关闭或 deadline 到期后发送 Cancelled / TimedOut。
 - 任何等待者都通过同一个 operation 获得结果。
 
-GUI 内部继续可以使用立即返回的 open 行为；MCP 和 Agent-facing CLI 使用可等待的 bridge action，避免阻塞整个桌面 UI command。
+GUI 内部继续可以使用立即返回的 open 行为；MCP 和 CLI JSONL 使用可等待的 bridge action，避免阻塞整个桌面 UI command。
 
 ### 7.3 外部 API 建议
 
@@ -372,7 +372,7 @@ GUI 内部继续可以使用立即返回的 open 行为；MCP 和 Agent-facing C
 
 #### CLI
 
-建议把 Agent-facing open 默认改为等待，并提供显式的快速返回选项：
+建议把 CLI JSONL 的 open 默认改为等待，并提供显式的快速返回选项：
 
 ```bash
 fileterm open --profile-id PROFILE_ID
@@ -504,9 +504,9 @@ BridgeRequest 可以增加内部 source 字段用于审计和审批来源，但�
 推荐分两类入口：
 
 1. 一次性 fileterm command：保留脚本兼容性；查询和普通远程命令自动执行，其它变更遵循基础安全操作的 FileTerm 主窗口审批。
-2. 常驻 fileterm agent：面向 AI，使用与 MCP 相同的全局策略、审批和等待语义。
+2. 常驻 `fileterm cli --jsonl`：面向 AI，使用与 MCP 相同的全局策略、审批和等待语义。
 
-这样既不破坏现有 CLI，也不会把“AI 调 CLI”继续当成一个没有来源信息的特殊旁路。外部 Agent 不得按每个动作启动一次性 CLI；它必须使用 MCP 或常驻 `fileterm agent`。一次性 CLI 仍保留给用户显式调用和 shell 脚本，并继续使用同一套权限评估。
+这样既不增加新的顶层命令，也不会把“AI 调 CLI”继续当成一个没有来源信息的特殊旁路。外部 Agent 不得按每个动作启动一次性 CLI；它必须使用 MCP 或常驻 `fileterm cli --jsonl`。一次性 CLI 仍保留给用户显式调用和 shell 脚本，并继续使用同一套权限评估。
 
 ## 9. 凭据安全策略
 
@@ -575,27 +575,27 @@ SSH 密码闭环修复本身不能消除这个问题。它只能让每个 CLI �
 
 ### 10.2 推荐目标
 
-增加常驻 Agent-facing 入口：
+在同一个 CLI 入口增加 JSONL 常驻模式：
 
 ```text
-fileterm agent
+fileterm cli --jsonl
         ↓
 一个常驻 headless 进程
         ↓
 复用本地 desktop bridge 连接
         ↓
-按 request_id 多路复用 MCP/Agent 请求
+按 request_id 多路复用 MCP/CLI JSONL 请求
 ```
 
 目标能力：
 
-- 一个 agent 进程处理多个请求。
+- 一个 CLI JSONL 进程处理多个请求。
 - 请求之间通过 request ID 区分 progress 和最终结果。
-- Agent 可发送 `cancel_request` 请求取消仍在等待中的 request ID；取消返回后，原请求以 `FILETERM_AGENT_REQUEST_CANCELLED` 结束。
+- CLI JSONL 可发送 `cancel_request` 请求取消仍在等待中的 request ID；取消返回后，原请求以 `FILETERM_CLI_JSONL_REQUEST_CANCELLED` 结束。
 - 仍然由 FileTerm GUI 主进程持有 profile secret、SSH session 和 approval queue。
-- Agent 进程不得初始化 GUI 窗口或创建额外桌面 runtime。
-- 取消只结束 Agent 等待和输出，不回滚桌面端已经接受或开始执行的操作。
-- 如果 macOS 应用包仍把 headless 子进程展示为 GUI 图标，则构建独立的 fileterm-agent sidecar，并验证其 application type / bundle 行为。
+- CLI JSONL 进程不得初始化 GUI 窗口或创建额外桌面 runtime。
+- 取消只结束 CLI JSONL 等待和输出，不回滚桌面端已经接受或开始执行的操作。
+- 如果 macOS 应用包仍把 headless 子进程展示为 GUI 图标，则再验证 application type / bundle 行为；当前不引入 daemon 或 sidecar。
 
 ### 10.3 一次性 CLI 的定位
 
@@ -605,7 +605,7 @@ fileterm agent
 - 用户手动调试。
 - 不支持常驻进程的外部调用方。
 
-它不会被强行宣称为“零进程”接口，也不是外部 Agent 的调用通道。文档和 Agent 配置必须推荐 MCP 或 `fileterm agent`；Agent 不得为每个动作重新 spawn CLI。
+它不会被强行宣称为“零进程”接口；外部 Agent 的调用通道是 `fileterm cli --jsonl` 或 MCP。Agent 不得为每个动作重新 spawn 一次性 CLI。
 
 ### 10.4 进程模型与连接去重的关系
 
@@ -621,7 +621,7 @@ fileterm agent
 一个 tab、一个 worker、一个凭据 prompt
 ```
 
-这能降低重复建连和重复弹框，但不能完全避免操作系统显示四个 CLI 进程；进程图标问题仍需要常驻 Agent 或独立 headless sidecar 解决。
+这能降低重复建连和重复弹框，但不能完全避免错误启动四个一次性 CLI 进程；正确的做法是让 Agent 复用一个 `fileterm cli --jsonl` 进程。
 
 ## 11. Bridge 与数据契约
 
@@ -692,7 +692,7 @@ source 用于审计、等待和审批语义，不用于绕过连接范围策略�
 - 退出码 0：调用成功。
 - 非零退出码：调用失败；错误文本包含稳定错误码，但不包含 secret。
 
-Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 request ID；取消请求本身返回 `cancelled: true/false`，被取消的请求最终返回 `FILETERM_AGENT_REQUEST_CANCELLED`。
+CLI JSONL 的输出沿用同一边界：progress 和最终结果都带原 request ID；取消请求本身返回 `cancelled: true/false`，被取消的请求最终返回 `FILETERM_CLI_JSONL_REQUEST_CANCELLED`。
 
 ### 11.4 MCP 输出约定
 
@@ -704,11 +704,11 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 ## 12. Renderer 设计
 
-### 12.1 Agent / MCP / CLI 设置
+### 12.1 MCP / CLI 设置
 
-在现有 Agent / MCP / CLI 设置区域增加：
+在现有 MCP / CLI 设置区域增加：
 
-- “Agent / MCP / CLI 共用执行权限”策略卡：只读 / 基础安全操作 / 完全访问，以及查询、变更、传输、隧道和审批跳过能力对照。
+- “MCP / CLI 共用执行权限”策略卡：只读 / 基础安全操作 / 完全访问，以及查询、变更、传输、隧道和审批跳过能力对照。
 - “允许 MCP / CLI 访问的连接”策略卡：所有连接 / 指定连接。
 - 指定连接模式下的已保存连接搜索和多选列表。
 - 每个连接展示名称、协议、host 脱敏摘要和凭据存在状态。
@@ -740,7 +740,7 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 - [x] 确认 selected-connections、allowedProfileIds 和三档操作等级的数据模型。
 - [x] 确认 ConnectionOperation、等待者、deadline、取消和去重状态机。
-- [x] 确认 MCP、CLI、Agent 三种 source 的审批语义。
+- [x] 确认 MCP、一次性 CLI、CLI JSONL 三种 source 的审批语义。
 - [x] 定义稳定错误码、progress 消息和统一脱敏结果。
 - [x] 明确 CLI open 默认等待还是显式 --wait 的兼容策略。
 - [x] 更新 packages/core 类型草案和架构决策记录（ADR-0008）。
@@ -762,7 +762,7 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 - [x] 在 Rust bridge route 前执行 selected profile 校验。
 - [x] 对 connections、sessions、transfers、tunnels 和 wait 操作统一过滤。
 - [x] 增加三档操作等级及对应的 action classification。
-- [x] 让 MCP、CLI 和 Agent bridge 使用同一份 policy evaluator。
+- [x] 让 MCP、CLI 和 CLI JSONL bridge 使用同一份 policy evaluator。
 - [x] 增加 unselected profile、删除 profile、重命名 profile 和默认 profile 变化测试。
 
 ### P1：Renderer 设置和凭据交互状态
@@ -773,15 +773,15 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 - [x] 增加连接 operation 等待中的 UI 状态和错误提示。
 - [x] 确保等待状态不泄漏 prompt 内容和密码。
 
-### P2：Agent 常驻进程与连接去重
+### P2：CLI JSONL 常驻进程与连接去重
 
-- [x] 设计 fileterm agent 的 stdio multiplexing 或本地 socket 契约。
+- [x] 设计 `fileterm cli --jsonl` 的 stdio multiplexing 契约。
 - [x] 复用 desktop bridge 的认证和 policy evaluator。
 - [x] 支持多个 request ID、独立 progress、取消和最终结果。
 - [x] 完成 profile-scoped connection flight 去重。
 - [x] 验证同一 profile 四个并发请求只创建一个 tab / worker / credential prompt。
 - [ ] macOS 验证 headless agent 不产生额外 GUI 图标；必要时构建独立 sidecar。
-- [x] 保留一次性 CLI，并在设置页和文档中推荐 MCP/Agent 常驻模式。
+- [x] 保留一次性 CLI，并在设置页和文档中推荐 MCP/CLI JSONL 常驻模式。
 
 ### P3：CLI 凭据输入硬化
 
@@ -826,10 +826,10 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 ### 14.3 权限策略
 
 - [x] 未保存 profile 无法被 open_connection 或 CLI open 访问。
-- [x] 未选中的已保存 profile 无法被 MCP/Agent 访问。
+- [x] 未选中的已保存 profile 无法被 MCP/CLI 访问。
 - [x] selected profile 的连接列表、会话、传输和隧道结果均按同一白名单过滤。
 - [x] 只读策略拒绝写入、删除、远程命令和危险传输操作。
-- [x] 基础安全操作策略在 MCP/CLI/Agent bridge 对 Copilot 判定的普通安全命令自动执行；对变更、破坏性、提权或未知命令，以及会话/文件/传输变更、隧道、sudo/su 和未知操作触发 FileTerm 主窗口审批。
+- [x] 基础安全操作策略在 MCP/CLI/CLI JSONL bridge 对 Copilot 判定的普通安全命令自动执行；对变更、破坏性、提权或未知命令，以及会话/文件/传输变更、隧道、sudo/su 和未知操作触发 FileTerm 主窗口审批。
 - [x] 完全访问只跳过包括 sudo/su 操作确认在内的逐次审批，不绕过 sudo/su 密码、连接范围、session revision、路径和凭据安全边界。
 - [x] 两个不同 MCP client 看到并使用同一份全局策略。
 
@@ -837,10 +837,10 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 - [x] 同一 profile 并发 open 只创建一个连接 operation、一个 tab 和一个密码 prompt。
 - [x] 多个等待者能收到同一最终状态，但不会共享密码文本。
-- [x] fileterm agent 能在一个常驻进程中处理多个 request ID。
-- [x] Agent 常驻模式不会为每个请求创建新的 GUI runtime。
+- [x] `fileterm cli --jsonl` 能在一个常驻进程中处理多个 request ID。
+- [x] CLI JSONL 常驻模式不会为每个请求创建新的 GUI runtime。
 - [x] 一次性 CLI 仍能独立运行并输出标准 JSON。
-- [ ] macOS 不再因推荐的 Agent 常驻模式显示多个 FileTerm GUI 图标。
+- [ ] macOS 不再因推荐的 CLI JSONL 常驻模式显示多个 FileTerm GUI 图标。
 
 ### 14.5 脱敏与质量门禁
 
@@ -855,17 +855,17 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 ## 15. 风险与应对
 
-| 风险                                        | 应对                                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| SSH prompt 等待导致 CLI/MCP 长时间挂起      | 统一 deadline、progress、取消和 wait_for_connection 恢复路径                                |
-| 用户输入后 session 已重连或 revision 已变化 | prompt 绑定 tab、profile 和 session revision，失效时拒绝提交                                |
-| 并发 open 重复创建 tab                      | profile-scoped connection flight 和幂等结果                                                 |
-| AI 绕过 MCP 改用一次性 CLI                  | Agent 接入契约禁止按请求调用一次性 CLI；CLI 仅保留给用户脚本，MCP/Agent bridge 复用常驻进程 |
-| 选择列表和实际 route 不一致                 | Rust route、列表过滤和 UI 使用同一个 policy evaluator                                       |
-| CLI 密码参数出现在 argv                     | 增加 stdin 输入方式，Agent 默认不使用明文 argv                                              |
-| headless 子进程仍显示 FileTerm 图标         | 使用独立 sidecar 并对 macOS bundle/application type 做手工验收                              |
-| 连接等待改变现有 GUI open 语义              | 只在外部 bridge 增加 wait path，GUI 保留立即返回；提供 --no-wait                            |
-| 密码缺失和普通交互输入混淆                  | SSH 建连凭据走 connection operation；普通 exec 继续返回 REMOTE_INTERACTIVE_INPUT_REQUIRED   |
+| 风险                                        | 应对                                                                                            |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SSH prompt 等待导致 CLI/MCP 长时间挂起      | 统一 deadline、progress、取消和 wait_for_connection 恢复路径                                    |
+| 用户输入后 session 已重连或 revision 已变化 | prompt 绑定 tab、profile 和 session revision，失效时拒绝提交                                    |
+| 并发 open 重复创建 tab                      | profile-scoped connection flight 和幂等结果                                                     |
+| AI 绕过 MCP 改用一次性 CLI                  | Agent 接入契约禁止按请求调用一次性 CLI；CLI 仅保留给用户脚本，MCP/CLI JSONL bridge 复用常驻进程 |
+| 选择列表和实际 route 不一致                 | Rust route、列表过滤和 UI 使用同一个 policy evaluator                                           |
+| CLI 密码参数出现在 argv                     | 增加 stdin 输入方式，CLI JSONL 默认不使用明文 argv                                              |
+| headless 子进程仍显示 FileTerm 图标         | 使用独立 sidecar 并对 macOS bundle/application type 做手工验收                                  |
+| 连接等待改变现有 GUI open 语义              | 只在外部 bridge 增加 wait path，GUI 保留立即返回；提供 --no-wait                                |
+| 密码缺失和普通交互输入混淆                  | SSH 建连凭据走 connection operation；普通 exec 继续返回 REMOTE_INTERACTIVE_INPUT_REQUIRED       |
 
 ## 16. 推荐 PR 拆分
 
@@ -881,11 +881,11 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 处理 allowedProfileIds、三档操作等级、Renderer 设置、Rust route 统一策略和迁移测试。
 
-### PR 3：Agent 常驻模式与并发去重
+### PR 3：CLI JSONL 常驻模式与并发去重
 
-建议分支：feat/fileterm-agent-runtime
+建议分支：feat/fileterm-cli-jsonl-runtime
 
-处理 fileterm agent、request multiplexing、connection flight 去重和 macOS headless 进程验证。
+处理 fileterm cli --jsonl、request multiplexing、connection flight 去重和 macOS headless 进程验证。
 
 ### PR 4：CLI 凭据输入硬化与发行验收
 
@@ -916,11 +916,11 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 而当 AI 并行发出多个操作时：
 
 ```text
-多个 MCP/Agent 请求
+多个 MCP/CLI JSONL 请求
         ↓
 一个 FileTerm desktop runtime
         ↓
-一个常驻 Agent bridge
+一个常驻 CLI JSONL bridge
         ↓
 按请求 ID 多路复用
         ↓
@@ -951,23 +951,23 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 增加 selected visibility 与操作等级策略单元测试。
 - [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
-### 阶段 3：常驻 Agent 与连接去重
+### 阶段 3：CLI JSONL 常驻与连接去重
 
-- [x] `fileterm agent` 使用有界 worker pool 常驻读取 JSONL，并复用同一个 desktop bridge。
+- [x] `fileterm cli --jsonl` 使用有界 worker pool 常驻读取 JSONL，并复用同一个 desktop bridge。
 - [x] request ID、独立 progress 和最终结果支持并行调用，输出按行原子化写出。
 - [x] 同一 profile 的并发 `open_connection` 复用一个 connection operation、tab、worker 和凭据 prompt。
 - [x] 连接失败、断开或关闭 tab 时清理 profile flight，并唤醒等待者。
-- [x] Settings → CLI 提供常驻 Agent 命令，同时保留一次性 CLI。
+- [x] Settings → CLI 提供 `fileterm cli --jsonl`，同时保留一次性 CLI。
 - [ ] macOS 打包后的 headless/application type 与 Dock 图标行为待人工验证。
 - [x] 自动化质量门禁已通过；真实 SSH/FTP/设备连接测试按约定跳过，待实际环境验收。
 
-### 阶段 3 补充：Agent 请求生命周期
+### 阶段 3 补充：CLI JSONL 请求生命周期
 
-- [x] Agent 请求无论传入 `requiresApproval=false` 还是省略该字段，都强制进入桌面端审批策略。
-- [x] 通过 `cancel_request` 按 request ID 设置取消标记；等待 desktop bridge 响应时以短轮询及时结束 Agent 等待。
-- [x] 取消只停止 Agent 等待和后续输出，不回滚桌面端已经接受或开始执行的操作。
+- [x] CLI JSONL 请求无论传入 `requiresApproval=false` 还是省略该字段，都强制进入桌面端审批策略。
+- [x] 通过 `cancel_request` 按 request ID 设置取消标记；等待 desktop bridge 响应时以短轮询及时结束 CLI JSONL 等待。
+- [x] 取消只停止 CLI JSONL 等待和后续输出，不回滚桌面端已经接受或开始执行的操作。
 - [x] 拒绝重复 request ID，进度事件和最终结果均绑定原 request ID。
-- [x] 增加 Agent 审批/取消/ID 校验单测，并通过 CLI 子进程回归。
+- [x] 增加 CLI JSONL 审批/取消/ID 校验单测，并通过 CLI 子进程回归。
 
 ### 阶段 4：CLI 凭据输入硬化
 
@@ -978,15 +978,15 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 
 ### 阶段 5：CLI 子进程回归与文档收口
 
-- [x] 增加 `tests/cli.rs`，验证 `fileterm cli --help`、`fileterm agent --help` 的 headless 分发和 stdout/stderr 边界。
-- [x] 验证 Agent 无桌面 runtime 时仍输出单条最终 JSONL 错误，不启动 GUI。
+- [x] 增加 `tests/cli.rs`，验证 `fileterm cli --help`、`fileterm cli --jsonl --help` 的 headless 分发和 stdout/stderr 边界。
+- [x] 验证 CLI JSONL 无桌面 runtime 时仍输出单条最终 JSONL 错误，不启动 GUI。
 - [x] 验证 CLI 明文密码参数冲突和 stdin 密码读取的非零退出、错误输出和密码脱敏。
-- [x] 同步架构地图、ADR 和本计划中的 Agent 审批、取消、进程模型与验证状态。
+- [x] 同步架构地图、ADR 和本计划中的 CLI JSONL 审批、取消、进程模型与验证状态。
 - [x] 自动化质量门禁已通过；macOS/Windows/Linux 打包交互和真实 SSH/FTP/网络设备测试按约定跳过。
 
 ### 阶段 6：全局策略展示与模型收敛
 
-- [x] 将设置页拆成“Agent / MCP / CLI 共用执行权限”和“允许 MCP / CLI 访问的连接”两张全局策略卡片，并将两张卡片置于 MCP / CLI 子标签页之上。
+- [x] 将设置页拆成“MCP / CLI 共用执行权限”和“允许 MCP / CLI 访问的连接”两张全局策略卡片，并将两张卡片置于 MCP / CLI 子标签页之上。
 - [x] 执行权限提供只读、基础安全操作、完全访问三档，并展示能力对照与硬边界提示。
 - [x] 连接访问提供所有连接 / 指定连接两档；指定模式保留搜索、多选、选中计数和空白拒绝提示。
 - [x] 移除 active-session / default-connection 作为新的 MCP 权限选项，不增加 per-connection MCP 专属权限。

@@ -7,73 +7,8 @@ pub fn run_mcp_stdio(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_stdio(arguments)
 }
 
-pub fn run_agent_stdio(arguments: &[String]) -> Result<(), String> {
-    crate::services::mcp::run_agent(arguments)
-}
-
 pub fn run_cli(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_cli(arguments)
-}
-
-/// Returns whether the first process argument belongs to the non-GUI CLI.
-///
-/// Keep this dispatch list in the library so the binary entrypoint and its
-/// tests share the same contract. CLI commands must be recognized before
-/// `run()` starts Tauri.
-pub fn is_cli_command(argument: Option<&str>) -> bool {
-    matches!(
-        argument,
-        Some(
-            "agent"
-                | "cli"
-                | "connections"
-                | "sessions"
-                | "directory"
-                | "ls"
-                | "read"
-                | "cat"
-                | "commands"
-                | "command-templates"
-                | "transfers"
-                | "wait-transfer"
-                | "tunnels"
-                | "open"
-                | "activate"
-                | "reconnect"
-                | "disconnect"
-                | "close"
-                | "exec"
-                | "execute"
-                | "command-template"
-                | "write"
-                | "mkdir"
-                | "touch"
-                | "copy"
-                | "move"
-                | "rename"
-                | "delete"
-                | "chmod"
-                | "access"
-                | "upload"
-                | "download"
-                | "download-directory"
-                | "pause-transfer"
-                | "resume-transfer"
-                | "discard-transfer"
-                | "cancel-transfer"
-                | "clear-transfers"
-                | "create-tunnel"
-                | "start-tunnel"
-                | "stop-tunnel"
-                | "delete-tunnel"
-                | "call"
-                | "help"
-                | "--help"
-                | "-h"
-                | "--version"
-                | "-V"
-        )
-    )
 }
 
 use crate::commands::OpenWindowInput;
@@ -2444,15 +2379,5 @@ mod tests {
         assert!(!registry.try_begin());
         registry.cancel();
         assert!(registry.try_begin());
-    }
-
-    #[test]
-    fn cli_dispatch_includes_exec_without_starting_tauri() {
-        assert!(super::is_cli_command(Some("exec")));
-        assert!(super::is_cli_command(Some("wait-transfer")));
-        assert!(super::is_cli_command(Some("cli")));
-        assert!(super::is_cli_command(Some("agent")));
-        assert!(!super::is_cli_command(Some("mcp")));
-        assert!(!super::is_cli_command(Some("unknown")));
     }
 }
