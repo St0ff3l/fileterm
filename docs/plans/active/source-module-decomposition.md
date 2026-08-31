@@ -207,6 +207,8 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
 - [x] 完成 40 个候选文件的行数与豁免类别盘点。
 - [x] 确认 SSH 由 [`ssh-module-split.md`](./ssh-module-split.md) 作为专项
       计划管理，避免重复 checklist。
+- [x] 完成第一优先级前 3 项的物理拆分：`commands`、`services/ai`、
+      `services/mcp`；均保留目录内 `mod.rs` facade，职责文件不再堆放在父目录。
 - [ ] 收口 SSH Stage 1 leaf modules、Stage 2 auth/shell state、Stage 3
       worker context/dispatch。
 - [ ] 完成 Rust 第一优先级：commands、AI、MCP、transfers、FTP。
@@ -222,3 +224,6 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
 - 2026-08-31：补充模块目录结构约束；第一优先级前 3 个 Rust 模块统一采用
   `commands/mod.rs`、`services/ai/mod.rs`、`services/mcp/mod.rs` facade，
   职责文件放入各自目录，后续拆分按同一约定执行。
+- 2026-08-31：完成第一优先级前 3 项的目录化物理拆分；函数实现保持原逻辑，
+  并通过 Rust 编译、523 个单测、6 个 CLI 测试、20 个 contract 测试、Clippy、
+  TypeScript 类型检查、Lint、Prettier 和 `npm run test:tauri`。
