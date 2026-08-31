@@ -266,4 +266,4 @@ Don't:
 - hover、active、focus 是否都有明确状态？
 - 文本是否不会撑爆按钮、tab、表格列或命令输入条？
 - 浅色/暗色主题是否都能保持对比度？
-- 新增交互是否遵守 `main -> preload -> renderer` 的能力边界？
+- 新增交互是否遵守 `Rust commands/events -> bridge -> renderer` 的能力边界？

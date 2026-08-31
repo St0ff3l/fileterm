@@ -1,69 +1,37 @@
 # 本地自动更新测试
 
-这套流程使用 `electron-builder` 的 generic provider 和本机 HTTP 服务，不会创建 GitHub Release，也不会让其他人看到测试版本。正式打包仍然使用 `package.json` 中的 GitHub provider。
+> 适用对象：Windows 签名 NSIS 应用内更新器（Tauri `tauri_plugin_updater`）。macOS / Linux 当前无应用内更新器，不在此流程内。
+
+Tauri 的更新器端点由 `services/updates.rs` 中的 `RELEASE_DOWNLOAD_BASE`（`https://github.com/St0ff3l/fileterm/releases/download`）按 release tag 推导，运行时会拉取 `<tag>/latest.json` 并校验 `<tag>/<installer>.exe.sig`。本地测试需要一个能在相同路径布局下提供 `latest.json`、安装器与签名的本地 HTTP 服务，并把 `RELEASE_DOWNLOAD_BASE` 临时指向该服务（该常量为 Rust 代码，本地测试需临时改为指向 `http://127.0.0.1:<port>` 后重新构建，测试完毕还原）。
 
 ## Windows 测试
 
-先构建 renderer 和 main：
+先分别构建两个版本（构建前用根 `package.json` 的 `version` 切换版本号并运行 `npm run sync:version`）：
 
 ```bash
-npm run build -w @fileterm/electron
+# 版本 1.0.0
+npm run release:win -w @fileterm/tauri
+# 版本 1.0.1
+npm run release:win -w @fileterm/tauri
 ```
 
-在 `apps/electron` 目录中分别构建两个版本。第一个版本安装后，再用第二个版本的文件作为本地更新源：
+`release:win` 基于 `tauri.release.windows.conf.json`（`targets: ["nsis"]`，`createUpdaterArtifacts: true`），在 `apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/` 下生成 `-setup.exe`、`-setup.exe.sig`，并由 `scripts/create-windows-updater-manifest.mjs` 生成 `latest.json`：
 
 ```bash
-cd apps/electron
-npx electron-builder --config electron-builder.update-test.yml --win --x64 \
-  --config.extraMetadata.version=1.0.0 \
-  --config.directories.output=release/update-test-v1
-npx electron-builder --config electron-builder.update-test.yml --win --x64 --config.extraMetadata.version=1.0.1
+export GITHUB_REPOSITORY=St0ff3l/fileterm
+export GITHUB_REF_NAME=v1.0.1
+node ./apps/tauri/scripts/create-windows-updater-manifest.mjs \
+  apps/tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
 ```
 
-将 `release/update-test` 目录作为更新源启动 HTTP 服务：
+将该 `nsis` 目录按 `<tag>/` 路径前缀布局后，用任意静态服务器在本地暴露（例如 `python3 -m http.server 8765`），并把 `updates.rs` 的 `RELEASE_DOWNLOAD_BASE` 临时改为 `http://127.0.0.1:8765`。
 
-```bash
-python3 -m http.server 8765 --directory release/update-test
-```
+安装 `1.0.0` 的 NSIS 安装包，启动后在设置 → 应用更新中点击检查更新。预期流程：发现 `1.0.1` → 校验签名 → 下载 → 重启并更新。
 
-开发版现在会自动读取本地更新配置，直接启动即可：
-
-```bash
-npm run dev
-```
-
-开发进程会读取 `apps/electron/dev-app-update.yml`，允许未打包的 Electron 进程访问本地 generic 更新源。若 HTTP 服务未启动，设置页会显示检查失败并保留重试按钮。
-
-安装并启动 `1.0.0` 的 NSIS 安装包，在设置 → 应用更新中点击检查更新。预期流程是：发现 `1.0.1` → 下载 → 重启并更新。
-
-测试完成后关闭 HTTP 服务即可；`release/update-test` 和 `release/update-test-v1` 都可以删除。
-
-## macOS 测试
-
-本地配置默认使用 arm64、未签名的 DMG / ZIP：
-
-```bash
-cd apps/electron
-npx electron-builder --config electron-builder.update-test.yml --mac --arm64 \
-  --config.extraMetadata.version=1.0.0 \
-  --config.directories.output=release/update-test-v1
-npx electron-builder --config electron-builder.update-test.yml --mac --arm64 \
-  --config.extraMetadata.version=1.0.1
-python3 -m http.server 8765 --directory release/update-test
-```
-
-另开一个终端运行普通开发命令：
-
-```bash
-npm run dev
-```
-
-将 `1.0.0` 的 DMG 中的应用拖入测试目录后启动，在设置 → 应用更新中检查 `1.0.1`。macOS 更新下载优先使用 ZIP，不是 DMG。
-
-未签名包可以验证更新状态、元数据读取和下载流程；如果点击“重启并更新”后被系统拒绝，这是预期的签名限制。要验证完整替换流程，需要在构建时提供 `CSC_LINK` / `CSC_KEY_PASSWORD`，并使用 Developer ID Application 证书签名。
+测试完成后关闭 HTTP 服务即可；`target/.../bundle/nsis` 产物可用 `npm run clean:release -w @fileterm/tauri` 清理，务必还原 `updates.rs` 中的 `RELEASE_DOWNLOAD_BASE`。
 
 ## 注意事项
 
 - 必须测试已安装的 NSIS 版本，不能用 `npm run dev` 或 portable 包验证覆盖安装。
-- 本地配置中的 `latest.yml` 和安装包必须位于 HTTP 服务根目录。
-- macOS 自动更新还需要签名；未签名本地构建可以看 UI，但不能据此判断重启替换链路成功。
+- 本地产物中的 `latest.json` 与安装器必须位于更新器期望的 `<tag>/` 路径下，且签名文件与安装器同名成对出现。
+- 未配置 `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 时不会生成 `.sig`，更新器会因签名校验失败拒绝更新。

@@ -48,14 +48,13 @@
 
 - macOS 菜单栏使用 `trayTemplate.png` / `trayTemplate@2x.png` template 图标，图形完整且深浅菜单栏都可见。
 - Windows 继续使用 `icon.ico` 作为应用图标，不复用 macOS template 图。
-- Tauri 打包前确认 `apps/tauri/build/` 下平台资源可被 Tauri bundler 访问；Electron 打包前确认 `apps/electron/build/` 仍在 electron-builder `files` 范围内。
+- 打包前确认 `apps/tauri/build/` 下平台资源可被 Tauri bundler 访问。
 
 ## 7. 最小验证命令
 
 ```bash
 npm run typecheck
 npm run build:tauri
-npm run build:electron
 ```
 
 如果只改文档或纯 CSS，可至少运行：

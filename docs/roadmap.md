@@ -6,9 +6,9 @@
 
 ## 当前重构进度（2026-07-17）
 
-仓库当前处于 **双运行时并行：Tauri 功能实现接近收口，真实协议与发行候选验收进行中；Electron 作为独立兼容基线保留**。
+仓库当前处于 **单运行时收口：Tauri 是唯一受维护、构建和发布的运行时，功能实现接近收口，真实协议与发行候选验收进行中**。历史 Electron 实现已从仓库彻底移除（删除提交 `2a2eb7ff`），不再保留兼容基线。
 
-- 运行时核对：Tauri 位于 `apps/tauri`（`@fileterm/tauri`），Electron `42.4.0` 位于 `apps/electron`（`@fileterm/electron`）。两者各有独立 renderer、构建和本地数据目录，均是可运行入口。
+- 运行时核对：Tauri 位于 `apps/tauri`（`@fileterm/tauri`），是唯一可运行入口，拥有独立 renderer、构建和本地数据目录。仓库中不存在 `@fileterm/electron` 或 `@fileterm/desktop` workspace。
 - Phase 0–2 的主体代码已落地：Tauri bridge/contract test、桌面壳、Rust JSON 存储、Workspace snapshot 与旧 Electron 用户数据的一次性可回滚迁移已经落地；Phase 0 在 renderer mount 前等待原生 metadata，并保留原生拖放路径直到目标成功消费，Phase 1 已补原生 File/View/Window 菜单与文件编辑器关闭取消状态；仍需实际 Tauri UI 手测，不能按“发行验收完成”表述。
 - Phase 3 的 russh SSH 主链路已实现：受管 SSH 私钥库与口令交互、shell、SFTP、MFA、host verification、系统指标、CWD/远端用户跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 出站代理及运行时 SSH `-L/-R/-D` 隧道均已接入 `apps/tauri/src-tauri`。
 - Phase 3 已有本地 OpenSSH 的认证、exec、SFTP、HTTP/SOCKS5 代理、local 与 dynamic direct-tcpip 回归；MFA 使用真实 SSH 协议夹具验证。真实 sshd 的跳板、远程转发、sudo/root、CWD 事件和完整指标流仍是发行候选手测门禁。

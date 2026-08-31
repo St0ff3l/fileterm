@@ -4,7 +4,7 @@
 
 ## 1. 项目定位
 
-FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台，围绕 `SSH / SFTP / FTP` 构建可日常使用的多标签桌面客户端。`apps/electron` 仅保留为历史代码参考，不再参与构建、测试或发布。
+FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台，围绕 `SSH / SFTP / FTP` 构建可日常使用的多标签桌面客户端。技术栈为纯 Rust + Tauri，仓库中不存在 Electron 代码目录，历史 Electron 实现已彻底移除，不得在任何文档、脚本或 CI 配置中重新引用。
 
 当前阶段：**Tauri 主链路稳定与发行收口**。质量门禁覆盖共享包与 Rust/Tauri，Windows 使用签名的 Tauri 应用内更新；macOS 继续检查后跳转 GitHub Release 下载。
 
@@ -67,18 +67,25 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
   升级该依赖时必须保留此边界，并重新运行 Rust 测试与 Clippy。
 - 连接的 `group`（文件夹名）和 `parentId`（文件夹 ID）必须双向同步，存储层负责自愈。
 
+### 文件规模边界
+
+- **1000 行提醒阈值**：修改任何源文件时，若该文件在改动前或改动后超过 1000 行，必须先停下来向用户报告当前行数，并询问是否顺带拆分，得到明确答复后再继续修改。**严禁默认继续往大文件里堆代码。**
+- **报告口径**：一句话说明行数、是否属于豁免类别、建议的拆分方向。不要主动展开成完整方案，等用户确认后再做。
+- **豁免类别**（超过 1000 行也不必提醒拆分）：样式表 `*.css`、i18n 字典、类型与常量聚合文件（如 `packages/core/src/index.ts`）、生成代码（`src-tauri/gen/schemas/`、`vendor/`）、测试文件、文档。
+- **拆分硬目标**：业务代码单文件控制在 800 行以内。数据中心型文件不受此限，但超过 3000 行时建议按域切分并保持对外 re-export 入口不变。
+- **拆分顺序**：优先按职责边界切分（如命令分发表按业务分组委托、巨型函数先收敛局部变量再拆），禁止为了降行数做无意义的机械均分。
+
 ## 4. 代码位置
 
 - Tauri Rust backend：`apps/tauri/src-tauri/src/`
 - Tauri bridge：`apps/tauri/src/bridge/tauri-api.ts`
 - Tauri renderer：`apps/tauri/src/renderer`
-- Electron 历史参考：`apps/electron/`（不得作为新实现、CI 或发行依赖）
 - Renderer hooks：`apps/tauri/src/renderer/hooks/`
   - `useWorkspaceTabs.ts`、`useWorkspaceModals.ts`、`useFileOperations.ts`
   - `useSshInteractions.ts`、`useFileEditor.ts`、`useWorkspaceIpcSync.ts`
   - `useWorkspaceDataOps.ts`
 - Renderer 通用组件：`apps/tauri/src/renderer/features/common/`；跨功能组件的样式统一维护在 `apps/tauri/src/renderer/styles/features/common-controls.css`。
-- Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`，不得反向依赖 Electron 组件。
+- Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`。
 - 领域类型：`packages/core`
 - 存储抽象：`packages/storage`
 - 共享常量：`packages/shared`

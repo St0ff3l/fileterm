@@ -202,7 +202,7 @@ renderer/styles/
 
 ### 2.3 主题切换机制
 
-项目支持亮色/暗色主题切换，但当前仓库不是通过 `.theme-dark/.theme-light` 类名控制，而是通过 `document.documentElement.dataset.theme` 和 Electron 窗口启动参数控制。
+项目支持亮色/暗色主题切换，但当前仓库不是通过 `.theme-dark/.theme-light` 类名控制，而是通过 `document.documentElement.dataset.theme` 控制（Tauri 窗口在创建时按该属性初始化主题）。
 
 ```css
 /* 默认暗色：未声明主题时也会走暗色 */

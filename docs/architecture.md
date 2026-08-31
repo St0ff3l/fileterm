@@ -17,7 +17,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 
 当前仓库已经具备 MVP 雏形，主要能力包括：
 
-当前唯一受维护、构建和发布的运行时是位于 `apps/tauri` 的 Rust + Tauri。`apps/electron` 保留为历史代码参考，不参与 CI、发行包或用户运行路径；共享包仍保持领域类型、纯工具和稳定数据格式。Tauri 已完成 Phase 0–4 的代码/contract 主体与本机协议夹具，发行仍以真实服务、实体设备、三平台 CI 和打包 UI 验收为准。
+当前唯一受维护、构建和发布的运行时是位于 `apps/tauri` 的 Rust + Tauri。历史 Electron 实现已从仓库彻底移除（删除提交 `2a2eb7ff`），不再保留任何参考目录、依赖或构建脚本；共享包仍保持领域类型、纯工具和稳定数据格式。Tauri 已完成 Phase 0–4 的代码/contract 主体与本机协议夹具，发行仍以真实服务、实体设备、三平台 CI 和打包 UI 验收为准。
 
 - Monorepo workspace 基础结构
 - Tauri 主窗口启动
@@ -56,7 +56,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 
 ### 2.1 Rust/Tauri 迁移边界
 
-- Tauri bridge 位于 `apps/tauri/src/bridge/tauri-api.ts`，Rust commands/services/sessions 位于 `apps/tauri/src-tauri/src/`；`apps/electron/` 仅供实现对照，不属于受维护运行时。
+- Tauri bridge 位于 `apps/tauri/src/bridge/tauri-api.ts`，Rust commands/services/sessions 位于 `apps/tauri/src-tauri/src/`；仓库内不存在第二个运行时目录。
 - Tauri 当前已覆盖桌面壳、JSON 存储、Workspace snapshot、可迁移的 SSH 私钥库，以及 russh SSH shell/SFTP/MFA/host verification、系统指标、CWD 跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 代理和运行时 SSH `-L/-R/-D` 隧道。
 - Tauri 已覆盖 Transfer、FTP/FTPS、Telnet、Serial、WebDAV 同步及 SSH 网络能力；Phase 3/4 的真实服务、实体设备和三平台验收仍是发行候选门禁。SFTP 被服务端拒绝时，Tauri 保留 SSH shell/隧道，并将文件通道故障单独广播到 renderer，而不误报为整条 SSH 连接失败。
 - SSH shell 与 SFTP 可能处于不同的文件系统根；`shellCwd` 保留 Shell 物理路径，`remotePath` 只保存 SFTP 命名空间路径。CWD 跟随先尝试原路径，遇到明确 `NoSuchFile` 后按实际 `/volumeN`、`/var/services` 和 Home chroot 候选探测，无法确认时保留最近有效的 SFTP 目录。完整背景、群晖示例和排查方式见 [ADR-0006](./decisions/0006-ssh-sftp-path-namespaces.md)。
@@ -100,7 +100,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - Tauri bundler
 - 文件型 profile 存储
 
-Electron 专用依赖（`ssh2`、`basic-ftp`、`serialport`、`electron-builder`）仅保留在历史参考目录 `apps/electron`；当前产品能力与发行使用 Tauri 对应 Rust crates，不应再将 Electron 依赖接入共享包或 CI。
+原 Electron 专用依赖（`ssh2`、`basic-ftp`、`serialport`、`electron-builder`）已随 `apps/electron` 一并从仓库移除；当前产品能力与发行使用 Tauri 对应 Rust crates，不应再把 Electron 依赖接回共享包或 CI。
 
 ### 已放弃或暂缓
 
@@ -296,23 +296,14 @@ fileterm/
     extensions/
       README.md
   apps/
-    desktop/
+    tauri/
       index.html
       package.json
       tsconfig.json
-      tsconfig.node.json
       vite.config.ts
       src/
-        main/
-          main.ts
-          ipc.ts
-          services/
-            file-profile-repository.ts
-            local-files-service.ts
-            session-controllers.ts
-            workspace-service.ts
-        preload/
-          preload.cts
+        bridge/
+          tauri-api.ts
         renderer/
           App.tsx
           i18n.ts
@@ -320,9 +311,18 @@ fileterm/
           vite-env.d.ts
           components/
             TerminalView.tsx
+          features/
+          hooks/
           styles/
-            app.css
             themes/
+      src-tauri/
+        src/
+          commands/
+          services/
+          sessions/
+          storage/
+          lib.rs
+          main.rs
   packages/
     core/
       src/
@@ -338,7 +338,8 @@ fileterm/
 ## 6. 仓库结构
 
 当前仓库采用以 Tauri 为唯一维护运行时的 `npm workspaces` monorepo。协议能力保留在 Rust
-session/service，不下沉为伪通用 `protocol-*` package；Electron 源码只用于必要时的历史行为对照。
+session/service，不下沉为伪通用 `protocol-*` package。历史 Electron 实现已随 `apps/electron`
+从仓库移除（删除提交 `2a2eb7ff`），需要对照旧行为时请从 git 历史检出。
 
 ```txt
 fileterm/
@@ -348,12 +349,6 @@ fileterm/
         renderer/
         bridge/
       src-tauri/
-    electron/
-      src/
-        main/
-        preload/
-        renderer/
-      # historical reference only
   packages/
     core/
     storage/
@@ -366,8 +361,8 @@ fileterm/
   - Tauri CLI、Rust 后端、Tauri bridge 与专用 React renderer
   - 只处理 Tauri 窗口、commands/events 与对应发行产物
 - `apps/electron`
-  - Electron main、preload 与专用 React renderer 的历史实现参考
-  - 不独立构建、测试或发布，也不能成为 Tauri 的运行时依赖
+  - **已删除**（提交 `2a2eb7ff`）。原 Electron main、preload 与专用 React renderer 不再存在于仓库
+  - 如需查阅历史实现，请从 git 历史中检出该提交之前的版本
 - `packages/core`
   - 领域模型
   - Session interface
@@ -386,7 +381,7 @@ fileterm/
   - 轻量共享工具
 - `apps/tauri/src/renderer`
   - Tauri 的 UI 组件、hooks、主题、终端、文件管理与窗口布局
-  - 不允许反向 import Electron；跨层只在 `packages/*` 共享无运行时依赖的类型和数据格式
+  - 跨层只在 `packages/*` 共享无运行时依赖的类型和数据格式；renderer 不允许绕过 `bridge/tauri-api.ts` 直接 `invoke`
 
 ## 7. 会话模型
 

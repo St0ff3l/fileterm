@@ -12,9 +12,9 @@
 
 - `packages/core`：需要扩展数据模型，增加对“文件夹”类型和层级/排序信息的支持。
 - `packages/storage`：需要持久化存储层级结构和顺序。
-- `apps/desktop/src/main/services`：需要增加对文件夹的 CRUD 操作，以及调整顺序/父级状态的方法。
-- `apps/desktop/src/main/ipc` & `preload.cts`：新增分组和排序相关的 IPC 接口。
-- `apps/desktop/src/renderer`：`ConnectionManagerModal` 组件需要引入 HTML5 原生拖拽 API（`draggable`, `onDragStart`, `onDragOver`, `onDrop`），并渲染树形或带缩进的列表视图，增加“新建文件夹”按钮。
+- `apps/tauri/src-tauri/src/services`：需要增加对文件夹的 CRUD 操作，以及调整顺序/父级状态的方法。
+- `apps/tauri/src/bridge`（Tauri IPC 边界；Tauri 无 `preload.cts`）：新增分组和排序相关的 IPC 接口。
+- `apps/tauri/src/renderer`：`ConnectionManagerModal` 组件需要引入 HTML5 原生拖拽 API（`draggable`, `onDragStart`, `onDragOver`, `onDrop`），并渲染树形或带缩进的列表视图，增加“新建文件夹”按钮。
 
 ## 3. 数据模型设计 (`packages/core/src/index.ts`)
 
