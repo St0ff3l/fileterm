@@ -49,17 +49,21 @@
    机械均分。
 5. 原入口保留为 facade，调用方不因物理拆分而扩大可见性；只为搬文件把
    私有类型改成 `pub` 是禁止的。
-6. 修改任何超过 1000 行的源文件前，先按 `AGENTS.md` 报告当前行数并向
+6. 同一大模块的拆分文件必须进入模块目录，采用 `mod.rs` facade 加职责文件
+   的结构，参照 `apps/tauri/src-tauri/src/sessions/ssh/`；不得在父目录用
+   模块名前缀堆放同类文件。为保持私有作用域而使用 `include!` 时，引用路径
+   也必须位于该模块目录内。
+7. 修改任何超过 1000 行的源文件前，先按 `AGENTS.md` 报告当前行数并向
    用户确认是否顺带拆分。计划文档本身不触发这一限制。
-7. 每个阶段都要有 focused tests；最终阶段执行完整质量门禁。
+8. 每个阶段都要有 focused tests；最终阶段执行完整质量门禁。
 
 ## 3. 第一优先级：超过 3000 行
 
 | 阶段 | 文件                                                                                        | 当前行数 | 目标职责边界                                                                                                                                              |
 | ---- | ------------------------------------------------------------------------------------------- | -------: | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | [`commands/mod.rs`](../../../apps/tauri/src-tauri/src/commands/mod.rs)                      |     8101 | 按 `preferences`、`workspace/session`、`files`、`transfers`、`ai`、`backup`、`window`、`platform` 分组；`commands/mod.rs` 只负责模块注册和兼容 facade。   |
-| 2    | [`services/ai.rs`](../../../apps/tauri/src-tauri/src/services/ai.rs)                        |     7547 | 拆成 provider store、conversation、context/attachments、chat loop、provider adapters、stream parser；保留服务层公开入口和敏感信息只在 Rust 侧处理的边界。 |
-| 3    | [`services/mcp.rs`](../../../apps/tauri/src-tauri/src/services/mcp.rs)                      |     4737 | 拆成 runtime/bridge、MCP protocol、policy/approval、desktop actions、CLI/JSONL；与 MCP 功能计划正交，先做物理边界，再按功能阶段演进。                     |
+| 2    | [`services/ai/mod.rs`](../../../apps/tauri/src-tauri/src/services/ai/mod.rs)                |     7547 | 拆成 provider store、conversation、context/attachments、chat loop、provider adapters、stream parser；保留服务层公开入口和敏感信息只在 Rust 侧处理的边界。 |
+| 3    | [`services/mcp/mod.rs`](../../../apps/tauri/src-tauri/src/services/mcp/mod.rs)              |     4737 | 拆成 runtime/bridge、MCP protocol、policy/approval、desktop actions、CLI/JSONL；与 MCP 功能计划正交，先做物理边界，再按功能阶段演进。                     |
 | 4    | [`SettingsModal.tsx`](../../../apps/tauri/src/renderer/features/settings/SettingsModal.tsx) |     4606 | 按设置域拆为 interface、AI、agent、sync/backup、security、terminal、connections 等 panel；Modal 只保留导航、状态组合和提交边界。                          |
 | 5    | [`services/transfers.rs`](../../../apps/tauri/src-tauri/src/services/transfers.rs)          |     3266 | 保留 `TransferService` facade，拆出 model/journal、manifest/planning、upload/download execution、cleanup/recovery；传输状态仍统一由 Rust service 管理。   |
 | 6    | [`sessions/ssh/worker.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/worker.rs)        |     3261 | 不另起计划；按现有 SSH 计划继续拆为 worker loop、dispatch、terminal、output，并完成 context 收口。                                                        |
@@ -215,3 +219,6 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
 
 - 2026-08-31：根据 `AGENTS.md` 的文件规模边界建立总计划；将原始“大文件
   列表”改为按优先级、职责、现有专项计划和验收门禁组织。
+- 2026-08-31：补充模块目录结构约束；第一优先级前 3 个 Rust 模块统一采用
+  `commands/mod.rs`、`services/ai/mod.rs`、`services/mcp/mod.rs` facade，
+  职责文件放入各自目录，后续拆分按同一约定执行。
