@@ -62,6 +62,31 @@ fn command_body<'a>(source: &'a str, name: &str) -> &'a str {
     &remainder[..end]
 }
 
+fn commands_source() -> &'static str {
+    concat!(
+        include_str!("../src/commands/terminal_input.rs"),
+        include_str!("../src/commands/connection_preferences.rs"),
+        include_str!("../src/commands/import_commands.rs"),
+        include_str!("../src/commands/interaction_commands.rs"),
+        include_str!("../src/commands/platform_commands.rs"),
+        include_str!("../src/commands/serial_commands.rs"),
+        include_str!("../src/commands/terminal_commands.rs"),
+        include_str!("../src/commands/transfer_commands.rs"),
+        include_str!("../src/commands/tunnel_commands.rs"),
+        include_str!("../src/commands/workspace_commands.rs"),
+        include_str!("../src/commands/window_commands.rs"),
+        include_str!("../src/commands/session_runtime.rs"),
+        include_str!("../src/commands/session_spawn.rs"),
+        include_str!("../src/commands/tab_layout.rs"),
+        include_str!("../src/commands/tab_lifecycle.rs"),
+        include_str!("../src/commands/ui_preferences.rs"),
+        include_str!("../src/commands/ui_preferences_commands.rs"),
+        include_str!("../src/commands/profile_commands.rs"),
+        include_str!("../src/commands/remote_file_commands.rs"),
+        include_str!("../src/commands/ai_commands.rs"),
+    )
+}
+
 // ── Secret stripping contract ────────────────────────────────────────────
 
 #[test]
@@ -344,7 +369,7 @@ fn renderer_csp_allows_runtime_styles_without_relaxing_scripts() {
 
 #[test]
 fn ui_preference_setter_returns_the_shared_contract_shape() {
-    let source = include_str!("../src/commands/mod.rs");
+    let source = commands_source();
     assert!(
         source.contains("Result<UiPreferences, AppError>"),
         "app_set_ui_preferences must return the updated preferences like Electron and FileTermDesktopApi"
@@ -362,7 +387,7 @@ fn ui_preference_setter_returns_the_shared_contract_shape() {
 
 #[test]
 fn connection_library_never_returns_profile_secrets() {
-    let source = include_str!("../src/commands/mod.rs");
+    let source = commands_source();
     let start = source
         .find("pub async fn app_get_connection_library")
         .expect("connection library command must exist");
@@ -380,7 +405,7 @@ fn connection_library_never_returns_profile_secrets() {
 
 #[test]
 fn profile_and_command_mutations_are_serialized_and_broadcast() {
-    let source = include_str!("../src/commands/mod.rs");
+    let source = commands_source();
     let mutations = [
         "app_workspace_mutation",
         "app_create_profile",
