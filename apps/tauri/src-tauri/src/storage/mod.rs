@@ -149,6 +149,6 @@ struct PendingFile {
 }
 
 include!("paths.rs");
-include!("migration.rs");
+include!("migration/mod.rs");
 include!("json_io.rs");
 include!("tests.rs");

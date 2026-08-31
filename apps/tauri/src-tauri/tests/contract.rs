@@ -630,7 +630,7 @@ fn native_drop_fallback_is_cleared_only_after_renderer_consumption() {
         bridge.contains("consume: clearNativeDropFallback"),
         "native drop events must expose an explicit acknowledgement"
     );
-    let renderer = include_str!("../../src/renderer/hooks/useFileOperations.ts");
+    let renderer = include_str!("../../src/renderer/hooks/file-operations-transfers.ts");
     assert!(
         renderer.contains("detail.consume()"),
         "the accepted remote-pane drop must acknowledge native path consumption"
