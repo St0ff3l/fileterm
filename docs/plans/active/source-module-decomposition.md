@@ -59,15 +59,15 @@
 
 ## 3. 第一优先级：超过 3000 行
 
-| 阶段 | 文件                                                                                        | 当前行数 | 目标职责边界                                                                                                                                              |
-| ---- | ------------------------------------------------------------------------------------------- | -------: | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | [`commands/mod.rs`](../../../apps/tauri/src-tauri/src/commands/mod.rs)                      |     8101 | 按 `preferences`、`workspace/session`、`files`、`transfers`、`ai`、`backup`、`window`、`platform` 分组；`commands/mod.rs` 只负责模块注册和兼容 facade。   |
-| 2    | [`services/ai/mod.rs`](../../../apps/tauri/src-tauri/src/services/ai/mod.rs)                |     7547 | 拆成 provider store、conversation、context/attachments、chat loop、provider adapters、stream parser；保留服务层公开入口和敏感信息只在 Rust 侧处理的边界。 |
-| 3    | [`services/mcp/mod.rs`](../../../apps/tauri/src-tauri/src/services/mcp/mod.rs)              |     4737 | 拆成 runtime/bridge、MCP protocol、policy/approval、desktop actions、CLI/JSONL；与 MCP 功能计划正交，先做物理边界，再按功能阶段演进。                     |
-| 4    | [`SettingsModal.tsx`](../../../apps/tauri/src/renderer/features/settings/SettingsModal.tsx) |     4606 | 按设置域拆为 interface、AI、agent、sync/backup、security、terminal、connections 等 panel；Modal 只保留导航、状态组合和提交边界。                          |
-| 5    | [`services/transfers.rs`](../../../apps/tauri/src-tauri/src/services/transfers.rs)          |     3266 | 保留 `TransferService` facade，拆出 model/journal、manifest/planning、upload/download execution、cleanup/recovery；传输状态仍统一由 Rust service 管理。   |
-| 6    | [`sessions/ssh/worker.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/worker.rs)        |     3261 | 不另起计划；按现有 SSH 计划继续拆为 worker loop、dispatch、terminal、output，并完成 context 收口。                                                        |
-| 7    | [`sessions/ftp.rs`](../../../apps/tauri/src-tauri/src/sessions/ftp.rs)                      |     3060 | 保留 FTP controller facade，拆出 worker、TLS/proxy transport、capabilities/checksum、listing、file operations；不与 SSH/SFTP 合并。                       |
+| 阶段 | 文件                                                                                                    | 盘点行数 | 目标职责边界                                                                                                                                              |
+| ---- | ------------------------------------------------------------------------------------------------------- | -------: | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | [`commands/mod.rs`](../../../apps/tauri/src-tauri/src/commands/mod.rs)                                  |     8101 | 按 `preferences`、`workspace/session`、`files`、`transfers`、`ai`、`backup`、`window`、`platform` 分组；`commands/mod.rs` 只负责模块注册和兼容 facade。   |
+| 2    | [`services/ai/mod.rs`](../../../apps/tauri/src-tauri/src/services/ai/mod.rs)                            |     7547 | 拆成 provider store、conversation、context/attachments、chat loop、provider adapters、stream parser；保留服务层公开入口和敏感信息只在 Rust 侧处理的边界。 |
+| 3    | [`services/mcp/mod.rs`](../../../apps/tauri/src-tauri/src/services/mcp/mod.rs)                          |     4737 | 拆成 runtime/bridge、MCP protocol、policy/approval、desktop actions、CLI/JSONL；与 MCP 功能计划正交，先做物理边界，再按功能阶段演进。                     |
+| 4    | [`SettingsModal/index.tsx`](../../../apps/tauri/src/renderer/features/settings/SettingsModal/index.tsx) |     4606 | 按设置域拆为 `panels/` 与 `controller/`；根 facade 保持原 import，`index.tsx` 只保留导航、provider 装配和 Modal 边界。                                    |
+| 5    | [`services/transfers/mod.rs`](../../../apps/tauri/src-tauri/src/services/transfers/mod.rs)              |     3266 | 保留 `TransferService` facade，拆出 model/journal、manifest/planning、upload/download execution、cleanup/recovery；传输状态仍统一由 Rust service 管理。   |
+| 6    | [`sessions/ssh/worker/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/worker/mod.rs)            |     3261 | 不另起计划；按现有 SSH 计划继续拆为 worker loop、dispatch、terminal、output，并完成 context 收口。                                                        |
+| 7    | [`sessions/ftp/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/ftp/mod.rs)                          |     3060 | 保留 FTP controller facade，拆出 worker、TLS/proxy transport、capabilities/checksum、listing、file operations；不与 SSH/SFTP 合并。                       |
 
 ### 3.1 SSH 处理方式
 
@@ -209,6 +209,10 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
       计划管理，避免重复 checklist。
 - [x] 完成第一优先级前 3 项的物理拆分：`commands`、`services/ai`、
       `services/mcp`；均保留目录内 `mod.rs` facade，职责文件不再堆放在父目录。
+- [x] 完成第一优先级剩余 4 项的首轮目录化拆分：`SettingsModal/`、
+      `services/transfers/`、`sessions/ftp/`、`sessions/ssh/worker/`；Settings
+      面板按域放入 `SettingsModal/panels/`，状态、副作用和提交动作继续按域放入
+      `SettingsModal/controller/`，Rust `include!` 片段均保留在所属模块目录。
 - [ ] 收口 SSH Stage 1 leaf modules、Stage 2 auth/shell state、Stage 3
       worker context/dispatch。
 - [ ] 完成 Rust 第一优先级：commands、AI、MCP、transfers、FTP。
@@ -227,3 +231,10 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
 - 2026-08-31：完成第一优先级前 3 项的目录化物理拆分；函数实现保持原逻辑，
   并通过 Rust 编译、523 个单测、6 个 CLI 测试、20 个 contract 测试、Clippy、
   TypeScript 类型检查、Lint、Prettier 和 `npm run test:tauri`。
+- 2026-08-31：开始并完成第一优先级剩余 4 项的首轮目录化拆分：传输服务、FTP
+  controller、SSH worker 和 SettingsModal 均改为所属目录内的 facade 加职责文件；
+  SettingsModal 的所有设置面板移入 `panels/`，并将原本 1740 行的 controller
+  按 AI、主题、偏好、概览、Agent、同步、安全和公共副作用拆入 `controller/`；
+  `SettingsModal/index.tsx` 收敛至导航、provider 装配和 Modal 边界，原有调用入口和
+  IPC/协议边界保持不变。SSH worker context/dispatch 深层收口仍由
+  `ssh-module-split.md` Stage 3 管理。

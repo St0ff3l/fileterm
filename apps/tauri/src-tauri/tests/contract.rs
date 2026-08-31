@@ -321,7 +321,11 @@ fn contract_events_use_namespace_colon_name() {
 
 #[test]
 fn transfer_updates_do_not_broadcast_workspace_snapshots() {
-    let source = include_str!("../src/services/transfers.rs");
+    let source = concat!(
+        include_str!("../src/services/transfers/mod.rs"),
+        include_str!("../src/services/transfers/runtime.rs"),
+        include_str!("../src/services/transfers/directory_execution.rs"),
+    );
     assert!(
         source.contains("EventTarget::webview_window(\"main\")")
             && source.contains("\"transfer:update\"")
@@ -447,11 +451,20 @@ fn profile_and_command_mutations_are_serialized_and_broadcast() {
 fn protocol_workers_publish_connected_closed_and_error_states() {
     let ssh_worker_source = concat!(
         include_str!("../src/sessions/ssh/runtime.rs"),
-        include_str!("../src/sessions/ssh/worker.rs"),
+        include_str!("../src/sessions/ssh/worker/loop.rs"),
+        include_str!("../src/sessions/ssh/worker/remote_exec.rs"),
+        include_str!("../src/sessions/ssh/worker/without_sftp.rs"),
+        include_str!("../src/sessions/ssh/worker/dispatch.rs"),
     );
     let protocols = [
         ("SSH", ssh_worker_source),
-        ("FTP", include_str!("../src/sessions/ftp.rs")),
+        (
+            "FTP",
+            concat!(
+                include_str!("../src/sessions/ftp/worker.rs"),
+                include_str!("../src/sessions/ftp/transport.rs"),
+            ),
+        ),
         ("Telnet", include_str!("../src/sessions/telnet.rs")),
         ("Serial", include_str!("../src/sessions/serial/mod.rs")),
     ];

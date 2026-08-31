@@ -13,6 +13,6 @@ include!("shell.rs");
 include!("transport.rs");
 include!("authentication.rs");
 include!("sftp.rs");
-include!("worker.rs");
+include!("worker/mod.rs");
 include!("files.rs");
 include!("tests.rs");
