@@ -1320,9 +1320,9 @@ export interface SecuritySettingsInput {
   clearBackupPassword?: boolean
 }
 
-export type ActionApprovalSource = 'mcp' | 'ai-copilot'
+export type ActionApprovalSource = 'cli' | 'mcp' | 'ai-copilot'
 
-/** One-time in-app approval shared by MCP and Copilot tool calls. */
+/** One-time in-app approval shared by CLI, MCP, and Copilot tool calls. */
 export interface ActionApprovalRequest {
   requestId: string
   source: ActionApprovalSource
@@ -2428,6 +2428,7 @@ export interface FileTermDesktopApi {
   openProfileFromManager(profileId: string): Promise<WorkspaceSnapshot>
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
   attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
+  detachSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   closeTab(tabId: string): Promise<WorkspaceSnapshot>

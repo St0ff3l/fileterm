@@ -57,6 +57,16 @@ function retainOpenTabUiState<T>(state: Record<string, T>, openTabIds: Set<strin
 
   return Object.fromEntries(entries.filter(([tabId]) => openTabIds.has(tabId)))
 }
+
+function actionApprovalSourceLabel(source: ActionApprovalRequest['source']) {
+  if (source === 'cli') {
+    return t.sessionSourceCli
+  }
+  if (source === 'mcp') {
+    return t.sessionSourceMcp
+  }
+  return 'Copilot'
+}
 import { CloseButton } from './features/common/CloseButton'
 import { ConfirmActionDialog } from './features/common/ConfirmActionDialog'
 import { SelectionControl } from './features/common/SelectionControl'
@@ -619,6 +629,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     openLocalTerminal,
     activateSessionTab,
     attachBackgroundSession,
+    detachSessionToBackground,
     closeBackgroundSession,
     reconnectSessionTab,
     confirmShortcutClose,
@@ -2145,6 +2156,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           desktopApi={desktopApi}
           fullWidth={!shouldShowSystemSidebar}
           isPending={isBusy}
+          onHideToBackground={detachSessionToBackground}
           onApplySnapshot={applySnapshot}
           onError={(scope, err) => reportError(setError, scope, err)}
           sessionTabs={visibleWorkspaceTabs.filter((tab) => tab.sessionType !== 'local')}
@@ -2419,6 +2431,14 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           description={
             <div className="external-operation-confirmation__content">
               <p className="external-operation-confirmation__summary">{actionApprovalRequests[0].summary}</p>
+              <div className="external-operation-confirmation__field">
+                <span className="external-operation-confirmation__label">{t.sessionSource}</span>
+                <div className="external-operation-confirmation__source-row">
+                  <span className={`external-operation-confirmation__source is-${actionApprovalRequests[0].source}`}>
+                    {actionApprovalSourceLabel(actionApprovalRequests[0].source)}
+                  </span>
+                </div>
+              </div>
               {actionApprovalRequests[0].target ? (
                 <div className="external-operation-confirmation__field">
                   <span className="external-operation-confirmation__label">{t.actionApprovalTarget}</span>
@@ -2450,6 +2470,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             actionApprovalRequests[0].requiresRiskAcknowledgement &&
             riskAcknowledgedRequestId !== actionApprovalRequests[0].requestId
           )}
+          initialFocus="none"
           isSubmitting={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
           onClose={() => {
             void resolveActionApproval(false)

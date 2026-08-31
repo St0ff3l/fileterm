@@ -20,6 +20,7 @@ export function TransferCenter({
   desktopApi,
   fullWidth,
   isPending,
+  onHideToBackground,
   onApplySnapshot,
   onError,
   sessionTabs,
@@ -33,6 +34,7 @@ export function TransferCenter({
   desktopApi?: FileTermDesktopApi
   fullWidth: boolean
   isPending: boolean
+  onHideToBackground?(tabId: string): void | Promise<void>
   onApplySnapshot(snapshot: WorkspaceSnapshot): void
   onError(scope: string, error: unknown): void
   sessionTabs: TransferSessionTab[]
@@ -100,6 +102,7 @@ export function TransferCenter({
           activeTabSource={activeTabSource}
           fullWidth={fullWidth}
           isPending={isPending}
+          onHideToBackground={onHideToBackground}
           onOpen={() => setShowTransfers((current) => !current)}
         />
       ) : null}

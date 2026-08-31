@@ -4923,6 +4923,42 @@ fn attach_background_session_in_tabs(
     Ok(top_level_tab_id)
 }
 
+fn detach_session_to_background_in_tabs(
+    tabs: &mut [crate::services::WorkspaceTab],
+    tab_id: &str,
+) -> Result<String, AppError> {
+    let top_level_tab_id = tabs
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .map(|tab| {
+            tab.pane_root_tab_id
+                .clone()
+                .unwrap_or_else(|| tab.id.clone())
+        })
+        .ok_or_else(|| AppError::Storage(format!("Session not found: {tab_id}")))?;
+    let tab = tabs
+        .iter_mut()
+        .find(|tab| tab.id == top_level_tab_id)
+        .ok_or_else(|| AppError::Storage(format!("Root session not found: {top_level_tab_id}")))?;
+    if tab.source.is_none() {
+        return Err(AppError::Storage(
+            "Only CLI or MCP sessions can be hidden in background".to_string(),
+        ));
+    }
+    tab.is_background = true;
+    Ok(top_level_tab_id)
+}
+
+fn next_visible_top_level_tab_id(
+    tabs: &[crate::services::WorkspaceTab],
+    hidden_tab_id: &str,
+) -> Option<String> {
+    tabs.iter()
+        .rev()
+        .find(|tab| !tab.is_background && tab.pane_root_tab_id.is_none() && tab.id != hidden_tab_id)
+        .map(|tab| tab.id.clone())
+}
+
 /// Make an externally opened background session visible in the normal
 /// workspace and focus it. The existing worker/session is reused; this only
 /// changes presentation and active-tab routing.
@@ -4940,6 +4976,33 @@ pub async fn app_attach_background_session(
     {
         let mut active = state.active_tab_id.write().await;
         *active = Some(top_level_tab_id);
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+/// Hide an externally opened session from the visible tab bar without
+/// disconnecting its existing worker. The session remains available from the
+/// Background Sessions page and can be attached again later.
+#[tauri::command]
+pub async fn app_detach_session_to_background(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let active_tab_id = state.active_tab_id.read().await.clone();
+    let (top_level_tab_id, next_active_tab_id) = {
+        let mut tabs = state.tabs.write().await;
+        let top_level_tab_id = detach_session_to_background_in_tabs(&mut tabs, &tab_id)?;
+        let next_active_tab_id = (active_tab_id.as_deref() == Some(top_level_tab_id.as_str()))
+            .then(|| next_visible_top_level_tab_id(&tabs, &top_level_tab_id))
+            .flatten();
+        (top_level_tab_id, next_active_tab_id)
+    };
+
+    if active_tab_id.as_deref() == Some(top_level_tab_id.as_str()) {
+        let mut active = state.active_tab_id.write().await;
+        *active = next_active_tab_id;
     }
 
     get_workspace_snapshot_and_emit(&app).await
@@ -7966,8 +8029,11 @@ mod external_url_tests {
 
 #[cfg(test)]
 mod background_session_tests {
-    use super::attach_background_session_in_tabs;
-    use crate::services::{WorkspaceTab, WorkspaceTabStatus};
+    use super::{
+        attach_background_session_in_tabs, detach_session_to_background_in_tabs,
+        next_visible_top_level_tab_id,
+    };
+    use crate::services::{WorkspaceSessionSource, WorkspaceTab, WorkspaceTabStatus};
 
     fn tab(id: &str, is_background: bool) -> WorkspaceTab {
         WorkspaceTab {
@@ -7982,6 +8048,12 @@ mod background_session_tests {
             pane_root: None,
             pane_root_tab_id: None,
         }
+    }
+
+    fn external_tab(id: &str, is_background: bool) -> WorkspaceTab {
+        let mut tab = tab(id, is_background);
+        tab.source = Some(WorkspaceSessionSource::Cli);
+        tab
     }
 
     #[test]
@@ -8002,5 +8074,28 @@ mod background_session_tests {
 
         assert!(attach_background_session_in_tabs(&mut tabs, "missing").is_err());
         assert!(tabs[0].is_background);
+    }
+
+    #[test]
+    fn detaching_external_session_only_changes_visibility() {
+        let mut tabs = vec![external_tab("external", false), tab("visible", false)];
+
+        assert_eq!(
+            detach_session_to_background_in_tabs(&mut tabs, "external").unwrap(),
+            "external"
+        );
+        assert!(tabs[0].is_background);
+        assert_eq!(
+            next_visible_top_level_tab_id(&tabs, "external"),
+            Some("visible".to_string())
+        );
+    }
+
+    #[test]
+    fn detaching_gui_session_is_rejected() {
+        let mut tabs = vec![tab("gui", false)];
+
+        assert!(detach_session_to_background_in_tabs(&mut tabs, "gui").is_err());
+        assert!(!tabs[0].is_background);
     }
 }

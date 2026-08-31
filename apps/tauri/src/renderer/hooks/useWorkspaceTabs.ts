@@ -1027,6 +1027,42 @@ export function useWorkspaceTabs({
     }
   }
 
+  const detachSessionToBackground = async (tabId: string) => {
+    if (!desktopApi) {
+      return
+    }
+
+    const targetTab = visibleWorkspaceTabs.find((tab) => tab.id === tabId)
+    if (!targetTab?.source) {
+      return
+    }
+
+    const nextVisibleSessionTabs = visibleWorkspaceTabs.filter((tab) => tab.id !== tabId)
+    const relatedLocalTabs = localTabsRef.current
+      .filter((tab) => tab.kind === 'system' && tab.sessionTabId === tabId)
+      .map((tab) => tab.id)
+
+    try {
+      onBusyChange(true)
+      const snapshot = await desktopApi.detachSessionToBackground(tabId)
+      applySnapshot(snapshot)
+      if (relatedLocalTabs.length) {
+        closeHomeTabs(
+          relatedLocalTabs,
+          activeLocalTabId && relatedLocalTabs.includes(activeLocalTabId) ? null : activeLocalTabId,
+          nextVisibleSessionTabs
+        )
+      } else {
+        setTabOrder((current) => current.filter((key) => key !== sessionTabKey(tabId)))
+      }
+      setActiveLocalTabId(null)
+    } catch (error) {
+      onError('隐藏后台会话', error)
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
   const closeBackgroundSession = async (tabId: string) => {
     if (!desktopApi) {
       return
@@ -1724,6 +1760,7 @@ export function useWorkspaceTabs({
     openLocalTerminal,
     activateSessionTab,
     attachBackgroundSession,
+    detachSessionToBackground,
     closeBackgroundSession,
     reconnectSessionTab,
     disconnectSessionTab,

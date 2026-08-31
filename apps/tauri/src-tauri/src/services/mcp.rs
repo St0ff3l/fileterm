@@ -653,7 +653,7 @@ async fn dispatch_bridge_request(
                 progress_token.clone(),
             ));
         }
-        request_mcp_approval(app, &request.action, &request.params).await?;
+        request_mcp_approval(app, request.source, &request.action, &request.params).await?;
     }
 
     match request.action.as_str() {
@@ -938,16 +938,27 @@ fn action_is_read_only(action: &str, _params: &Value) -> bool {
     )
 }
 
-async fn request_mcp_approval(app: &AppHandle, action: &str, params: &Value) -> Result<(), String> {
+fn action_approval_source(source: WorkspaceSessionSource) -> ActionApprovalSource {
+    match source {
+        WorkspaceSessionSource::Cli => ActionApprovalSource::Cli,
+        WorkspaceSessionSource::Mcp => ActionApprovalSource::Mcp,
+    }
+}
+
+async fn request_mcp_approval(
+    app: &AppHandle,
+    source: WorkspaceSessionSource,
+    action: &str,
+    params: &Value,
+) -> Result<(), String> {
+    let approval_source = action_approval_source(source);
     let details = approval_details(app, action, params).await?;
-    let decision = request_action_approval(app, ActionApprovalSource::Mcp, action, details)
+    let decision = request_action_approval(app, approval_source, action, details)
         .await
         .map_err(public_app_error)?;
     match decision {
         ActionApprovalDecision::Approved => Ok(()),
-        decision => Err(decision
-            .rejection_message(ActionApprovalSource::Mcp)
-            .to_string()),
+        decision => Err(decision.rejection_message(approval_source).to_string()),
     }
 }
 
@@ -4025,16 +4036,16 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_is_read_only, bridge_request_timeout, compact_session, handle_jsonrpc_request,
-        initialize_result, mcp_error_code, mcp_error_is_retryable, optional_string, pagination,
-        requested_execution_mode, should_request_mcp_approval, tool_definitions, tool_error_result,
-        validate_tool_arguments, write_mcp_progress, BridgeProgress, BridgeRequest,
-        McpAccessPolicy, McpVisibility, McpVisibilityScope, EXECUTION_MODE_BACKGROUND,
-        EXECUTION_MODE_VISIBLE_TERMINAL, MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT,
-        MCP_JSONRPC_PROTOCOL_VERSION, NETWORK_DEVICE_COMMAND_INVALID,
-        NETWORK_DEVICE_CWD_UNSUPPORTED, NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED,
-        SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED, VISIBLE_TERMINAL_COMMAND_INVALID,
-        VISIBLE_TERMINAL_SESSION_NOT_ACTIVE,
+        action_approval_source, action_is_read_only, bridge_request_timeout, compact_session,
+        handle_jsonrpc_request, initialize_result, mcp_error_code, mcp_error_is_retryable,
+        optional_string, pagination, requested_execution_mode, should_request_mcp_approval,
+        tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
+        ActionApprovalSource, BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility,
+        McpVisibilityScope, EXECUTION_MODE_BACKGROUND, EXECUTION_MODE_VISIBLE_TERMINAL,
+        MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
+        NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED,
+        NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
+        VISIBLE_TERMINAL_COMMAND_INVALID, VISIBLE_TERMINAL_SESSION_NOT_ACTIVE,
     };
     use super::{
         cli_bridge_request, cli_exec_action, cli_jsonl_bridge_request, cli_jsonl_request_key,
@@ -4068,6 +4079,18 @@ mod tests {
             progress_token: None,
         };
         assert_eq!(mcp.source, WorkspaceSessionSource::Mcp);
+    }
+
+    #[test]
+    fn cli_and_mcp_approval_requests_keep_distinct_sources() {
+        assert_eq!(
+            action_approval_source(WorkspaceSessionSource::Cli),
+            ActionApprovalSource::Cli
+        );
+        assert_eq!(
+            action_approval_source(WorkspaceSessionSource::Mcp),
+            ActionApprovalSource::Mcp
+        );
     }
 
     #[test]

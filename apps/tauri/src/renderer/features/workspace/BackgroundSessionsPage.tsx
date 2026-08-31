@@ -4,8 +4,7 @@ import { t } from '../../i18n'
 import { AppIcon } from '../common/AppIcon'
 import { ConfirmActionDialog } from '../common/ConfirmActionDialog'
 
-type BackgroundSessionFilter = 'all' | 'connected' | 'connecting' | 'inactive'
-type BackgroundSessionState = Exclude<BackgroundSessionFilter, 'all'> | 'error'
+type BackgroundSessionState = 'connected' | 'connecting' | 'inactive' | 'error'
 
 function resolveSessionState(tab: WorkspaceTab, session: SessionSnapshot | undefined): BackgroundSessionState {
   if (tab.status === 'connecting') {
@@ -73,7 +72,6 @@ export function BackgroundSessionsPage({
   onAttach(tabId: string): void | Promise<void>
   onClose(tabId: string): void | Promise<void>
 }) {
-  const [filter, setFilter] = useState<BackgroundSessionFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [pendingClose, setPendingClose] = useState<WorkspaceTab | null>(null)
   const profileById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles])
@@ -83,27 +81,9 @@ export function BackgroundSessionsPage({
     [sessions, tabs]
   )
 
-  const counts = useMemo(() => {
-    const next = { all: tabs.length, connected: 0, connecting: 0, inactive: 0 }
-    for (const state of stateByTabId.values()) {
-      if (state === 'error') {
-        next.inactive += 1
-      } else {
-        next[state] += 1
-      }
-    }
-    return next
-  }, [stateByTabId, tabs.length])
-
   const visibleTabs = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase()
     return tabs.filter((tab) => {
-      const state = stateByTabId.get(tab.id) ?? 'inactive'
-      const matchesFilter =
-        filter === 'all' || (filter === 'inactive' ? state === 'inactive' || state === 'error' : state === filter)
-      if (!matchesFilter) {
-        return false
-      }
       if (!query) {
         return true
       }
@@ -114,14 +94,7 @@ export function BackgroundSessionsPage({
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase().includes(query))
     })
-  }, [filter, profileById, searchQuery, sessions, stateByTabId, tabs])
-
-  const filterItems: Array<{ id: BackgroundSessionFilter; label: string; count: number }> = [
-    { id: 'all', label: t.allBackgroundSessions, count: counts.all },
-    { id: 'connected', label: t.backgroundSessionConnected, count: counts.connected },
-    { id: 'connecting', label: t.backgroundSessionConnecting, count: counts.connecting },
-    { id: 'inactive', label: t.backgroundSessionInactive, count: counts.inactive }
-  ]
+  }, [profileById, searchQuery, sessions, tabs])
 
   return (
     <section className="background-sessions-page manager-inline connection-manager-modal">
@@ -143,26 +116,6 @@ export function BackgroundSessionsPage({
       </div>
 
       <div className="connection-manager-layout background-sessions-layout">
-        <aside className="connection-manager-sidebar" aria-label={t.backgroundSessionFilter}>
-          {filterItems.map((item) => (
-            <button
-              key={item.id}
-              className={`connection-manager-sidebar-item ${filter === item.id ? 'active' : ''}`}
-              onClick={() => setFilter(item.id)}
-              type="button"
-            >
-              <span className="connection-manager-sidebar-icon">
-                <AppIcon
-                  name={item.id === 'all' ? 'connections' : item.id === 'connected' ? 'server' : 'history'}
-                  size={14}
-                />
-              </span>
-              <span className="connection-manager-sidebar-label">{item.label}</span>
-              <span className="connection-manager-sidebar-count">{item.count}</span>
-            </button>
-          ))}
-        </aside>
-
         <section className="connection-manager-main">
           <div className="manager-table connection-manager-table background-sessions-table">
             <div className="manager-head">
@@ -246,9 +199,7 @@ export function BackgroundSessionsPage({
               {visibleTabs.length === 0 ? (
                 <div className="background-session-empty">
                   <AppIcon name="history" size={24} />
-                  <strong>
-                    {searchQuery.trim() || filter !== 'all' ? t.noMatchingBackgroundSessions : t.noBackgroundSessions}
-                  </strong>
+                  <strong>{searchQuery.trim() ? t.noMatchingBackgroundSessions : t.noBackgroundSessions}</strong>
                   <span>{t.noBackgroundSessionsHint}</span>
                 </div>
               ) : null}

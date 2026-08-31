@@ -717,6 +717,8 @@ export async function createTauriApi(): Promise<FileTermDesktopApi> {
     openProfileFromManager: (profileId: string) => invoke<WorkspaceSnapshot>('app_open_profile', { profileId }),
     activateTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_activate_tab', { tabId }),
     attachBackgroundSession: (tabId: string) => invoke<WorkspaceSnapshot>('app_attach_background_session', { tabId }),
+    detachSessionToBackground: (tabId: string) =>
+      invoke<WorkspaceSnapshot>('app_detach_session_to_background', { tabId }),
     reconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_reconnect_tab', { tabId }),
     disconnectTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_disconnect_tab', { tabId }),
     closeTab: (tabId: string) => invoke<WorkspaceSnapshot>('app_close_tab', { tabId }),

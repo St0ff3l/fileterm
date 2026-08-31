@@ -1,5 +1,6 @@
 import type { WorkspaceSessionSource } from '@fileterm/core'
 import { t } from '../../i18n'
+import { AppIcon } from '../common/AppIcon'
 import { StatusIndicator, type StatusIndicatorStatus } from '../common/StatusIndicator'
 
 function sessionSourceLabel(source: WorkspaceSessionSource) {
@@ -13,6 +14,7 @@ export function TransferBar({
   activeTabSource,
   fullWidth = false,
   isPending,
+  onHideToBackground,
   onOpen
 }: {
   activeCount: number
@@ -21,6 +23,7 @@ export function TransferBar({
   activeTabSource?: WorkspaceSessionSource | null
   fullWidth?: boolean
   isPending: boolean
+  onHideToBackground?(tabId: string): void | Promise<void>
   onOpen(): void
 }) {
   return (
@@ -39,6 +42,21 @@ export function TransferBar({
               >
                 {sessionSourceLabel(activeTabSource)}
               </span>
+            ) : null}
+            {activeTabSource && onHideToBackground ? (
+              <button
+                aria-label={`${t.hideSessionToBackground}: ${activeTabId}`}
+                className="transfer-session-hide"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void onHideToBackground(activeTabId)
+                }}
+                title={t.hideSessionToBackground}
+                type="button"
+              >
+                <AppIcon name="eye-off" size={11} />
+              </button>
             ) : null}
           </span>
         ) : null}

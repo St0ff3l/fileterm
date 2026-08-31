@@ -74,6 +74,39 @@
   color: var(--dialog-description);
 }
 
+.external-operation-confirmation__source-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.external-operation-confirmation__source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.external-operation-confirmation__source.is-cli {
+  border-color: color-mix(in srgb, var(--accent-highlight) 42%, var(--border-light));
+  color: var(--accent-highlight);
+}
+
+.external-operation-confirmation__source.is-mcp {
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border-light));
+  color: var(--success);
+}
+
 .external-operation-confirmation__field {
   display: flex;
   flex-direction: column;

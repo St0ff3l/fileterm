@@ -77,9 +77,10 @@ pub const AI_REQUEST_CANCELLED: &str = "AI_REQUEST_CANCELLED";
 /// is ready for the user.
 pub type PrivilegedPromptNotice = Arc<dyn Fn(&str) + Send + Sync>;
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ActionApprovalSource {
+    Cli,
     Mcp,
     AiCopilot,
 }
@@ -136,13 +137,13 @@ impl ActionApprovalDecision {
             (_, Self::DelegatedToTerminal) => {
                 "Copilot command was delegated to the visible terminal"
             }
-            (ActionApprovalSource::Mcp, Self::Rejected) => {
+            (ActionApprovalSource::Cli | ActionApprovalSource::Mcp, Self::Rejected) => {
                 "FileTerm external operation was rejected by the user"
             }
-            (ActionApprovalSource::Mcp, Self::Dismissed) => {
+            (ActionApprovalSource::Cli | ActionApprovalSource::Mcp, Self::Dismissed) => {
                 "FileTerm external approval dialog was closed"
             }
-            (ActionApprovalSource::Mcp, Self::TimedOut) => {
+            (ActionApprovalSource::Cli | ActionApprovalSource::Mcp, Self::TimedOut) => {
                 "FileTerm external approval timed out; the operation was not started"
             }
             (ActionApprovalSource::AiCopilot, Self::Rejected) => {
@@ -210,11 +211,14 @@ pub async fn request_action_approval_with_id_and_target(
         },
     );
 
-    if matches!(source, ActionApprovalSource::Mcp) {
-        // MCP, one-shot CLI, and CLI JSONL all use the shared
-        // `Mcp` approval source on the wire. Bring the shared FileTerm
-        // approval back to the main window so a hidden or unfocused desktop
-        // window cannot leave the external caller waiting invisibly.
+    if matches!(
+        source,
+        ActionApprovalSource::Cli | ActionApprovalSource::Mcp
+    ) {
+        // External CLI and MCP approvals must return to the main window so a
+        // hidden or unfocused desktop window cannot leave the caller waiting
+        // invisibly. Keep the original source in the event payload for the
+        // renderer and audit log.
         crate::show_main_window(app);
     }
 
@@ -1431,8 +1435,24 @@ mod tests {
             "FileTerm external operation was rejected by the user"
         );
         assert_eq!(
+            ActionApprovalDecision::Rejected.rejection_message(ActionApprovalSource::Cli),
+            "FileTerm external operation was rejected by the user"
+        );
+        assert_eq!(
             ActionApprovalDecision::TimedOut.rejection_message(ActionApprovalSource::AiCopilot),
             "Copilot approval timed out; the command was not started"
+        );
+    }
+
+    #[test]
+    fn approval_sources_keep_cli_and_mcp_wire_labels() {
+        assert_eq!(
+            serde_json::to_value(ActionApprovalSource::Cli).unwrap(),
+            "cli"
+        );
+        assert_eq!(
+            serde_json::to_value(ActionApprovalSource::Mcp).unwrap(),
+            "mcp"
         );
     }
 

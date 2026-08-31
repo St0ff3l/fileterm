@@ -15,6 +15,7 @@ export function TransferCenterHost({
   desktopApi,
   fullWidth,
   isPending,
+  onHideToBackground,
   onApplySnapshot,
   onError,
   sessionTabs,
@@ -28,6 +29,7 @@ export function TransferCenterHost({
   desktopApi?: FileTermDesktopApi
   fullWidth: boolean
   isPending: boolean
+  onHideToBackground?(tabId: string): void | Promise<void>
   onApplySnapshot(snapshot: WorkspaceSnapshot): void
   onError(scope: string, err: unknown): void
   sessionTabs: WorkspaceTab[]
@@ -43,6 +45,7 @@ export function TransferCenterHost({
       desktopApi={desktopApi}
       fullWidth={fullWidth}
       isPending={isPending}
+      onHideToBackground={onHideToBackground}
       onApplySnapshot={onApplySnapshot}
       onError={onError}
       sessionTabs={sessionTabs.map((tab) => ({
