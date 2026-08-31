@@ -3826,6 +3826,12 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
 ///
 /// 抽取自 `app_open_profile`，供 `app_split_tab` 复用：分屏时基于当前 profile
 /// 新建一个独立 session，不共享 PTY。
+#[derive(Clone, Copy, Default)]
+struct SessionSpawnOptions {
+    is_background: bool,
+    source: Option<crate::services::WorkspaceSessionSource>,
+}
+
 async fn spawn_session_for_profile(
     app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
@@ -3833,7 +3839,7 @@ async fn spawn_session_for_profile(
     profile_id: &str,
     pane_root_tab_id: Option<String>,
     connection_operation_id: Option<&str>,
-    is_background: bool,
+    options: SessionSpawnOptions,
 ) -> Result<String, AppError> {
     let resolved_profile = resolve_profile_for_session(app, profile)?;
     let profile = &resolved_profile;
@@ -3855,7 +3861,8 @@ async fn spawn_session_for_profile(
         title: name.to_string(),
         layout: create_tab_layout(profile),
         status: crate::services::WorkspaceTabStatus::Connecting,
-        is_background,
+        is_background: options.is_background,
+        source: options.source,
         pane_root: None,
         pane_root_tab_id,
     };
@@ -4018,6 +4025,7 @@ async fn spawn_local_terminal_tab(
             layout: "terminal-only".to_string(),
             status: crate::services::WorkspaceTabStatus::Connecting,
             is_background: false,
+            source: None,
             pane_root: None,
             pane_root_tab_id,
         });
@@ -4401,8 +4409,16 @@ pub async fn app_open_profile(
     // open a connection, not whether the later network handshake succeeds.
     crate::services::profile_ops::touch_profile(&app, &profile_id)?;
 
-    let tab_id =
-        spawn_session_for_profile(&app, &state, profile, &profile_id, None, None, false).await?;
+    let tab_id = spawn_session_for_profile(
+        &app,
+        &state,
+        profile,
+        &profile_id,
+        None,
+        None,
+        SessionSpawnOptions::default(),
+    )
+    .await?;
 
     {
         let mut active = state.active_tab_id.write().await;
@@ -4423,6 +4439,7 @@ pub async fn app_open_profile_with_operation(
     profile_id: String,
     connection_operation_id: String,
     is_background: bool,
+    source: crate::services::WorkspaceSessionSource,
 ) -> Result<(String, serde_json::Value), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _library_guard = lock_library_after_transfer_hydration(&app).await?;
@@ -4440,7 +4457,10 @@ pub async fn app_open_profile_with_operation(
         &profile_id,
         None,
         Some(&connection_operation_id),
-        is_background,
+        SessionSpawnOptions {
+            is_background,
+            source: Some(source),
+        },
     )
     .await?;
     let snapshot = get_workspace_snapshot_and_emit(&app).await?;
@@ -4542,7 +4562,7 @@ pub async fn app_split_tab(
                 &profile_id,
                 Some(pane_root_tab_id),
                 None,
-                false,
+                SessionSpawnOptions::default(),
             )
             .await?
         }
@@ -6923,6 +6943,7 @@ mod split_pane_close_tests {
             layout: "terminal-file".to_string(),
             status: WorkspaceTabStatus::Connected,
             is_background: false,
+            source: None,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
         }
@@ -6941,6 +6962,7 @@ mod split_pane_close_tests {
             layout: "terminal-only".to_string(),
             status: WorkspaceTabStatus::Connected,
             is_background: false,
+            source: None,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
         }
@@ -7144,6 +7166,7 @@ mod reconnect_tests {
             layout: "terminal-file".to_string(),
             status,
             is_background: false,
+            source: None,
             pane_root: None,
             pane_root_tab_id: None,
         }
@@ -7955,6 +7978,7 @@ mod background_session_tests {
             layout: "terminal-file".to_string(),
             status: WorkspaceTabStatus::Connected,
             is_background,
+            source: None,
             pane_root: None,
             pane_root_tab_id: None,
         }

@@ -1,10 +1,16 @@
+import type { WorkspaceSessionSource } from '@fileterm/core'
 import { t } from '../../i18n'
 import { StatusIndicator, type StatusIndicatorStatus } from '../common/StatusIndicator'
+
+function sessionSourceLabel(source: WorkspaceSessionSource) {
+  return source === 'mcp' ? t.sessionSourceMcp : t.sessionSourceCli
+}
 
 export function TransferBar({
   activeCount,
   activeTabId,
   activeTabStatus,
+  activeTabSource,
   fullWidth = false,
   isPending,
   onOpen
@@ -12,6 +18,7 @@ export function TransferBar({
   activeCount: number
   activeTabId?: string | null
   activeTabStatus?: StatusIndicatorStatus | null
+  activeTabSource?: WorkspaceSessionSource | null
   fullWidth?: boolean
   isPending: boolean
   onOpen(): void
@@ -25,6 +32,14 @@ export function TransferBar({
             <StatusIndicator aria-hidden="true" status={activeTabStatus ?? 'idle'} />
             <span className="transfer-session-id-label">{t.sessionId}</span>
             <code>{activeTabId}</code>
+            {activeTabSource ? (
+              <span
+                className={`transfer-session-source is-${activeTabSource}`}
+                title={`${t.sessionSource}: ${sessionSourceLabel(activeTabSource)}`}
+              >
+                {sessionSourceLabel(activeTabSource)}
+              </span>
+            ) : null}
           </span>
         ) : null}
       </div>

@@ -1739,6 +1739,34 @@
   white-space: nowrap;
 }
 
+.transfer-session-source {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 15px;
+  padding: 0 5px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.transfer-session-source.is-cli {
+  border-color: color-mix(in srgb, var(--accent-highlight) 42%, var(--border-light));
+  color: var(--accent-highlight);
+}
+
+.transfer-session-source.is-mcp {
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border-light));
+  color: var(--success);
+}
+
 .transfer-strip.full-width {
   grid-column: 1 / -1;
 }

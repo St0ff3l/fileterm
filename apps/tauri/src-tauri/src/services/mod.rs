@@ -21,5 +21,6 @@ pub mod webdav;
 pub mod workspace;
 
 pub use workspace::{
-    PaneNode, SessionSnapshot, SplitDirection, WorkspaceState, WorkspaceTab, WorkspaceTabStatus,
+    PaneNode, SessionSnapshot, SplitDirection, WorkspaceSessionSource, WorkspaceState,
+    WorkspaceTab, WorkspaceTabStatus,
 };

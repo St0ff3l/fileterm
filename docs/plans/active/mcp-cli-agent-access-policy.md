@@ -356,6 +356,8 @@ GUI 内部继续可以使用立即返回的 open 行为；MCP 和 CLI JSONL 使�
 
 `execution_mode` 必须由 Agent 在第一次打开连接前向用户询问，取值为 `background` 或 `visible-terminal`。`open_connection` 默认等待连接完成；`background` 创建的 session 保留在 FileTerm worker 中，但不进入顶部标签栏，而是显示在 GUI 的“后台会话”页面，结果返回 `sessionId`（同时保留 `tabId`）。GUI 打开该会话或调用 `fileterm_activate_session` 会复用原 session 并 attach 到可见标签。`background` 后续只能配合独立 SSH exec 的 `fileterm_execute_remote_command`；`visible-terminal` 后续必须先调用 `fileterm_activate_session`，再调用只向可见终端写入单行命令的 `fileterm_execute_visible_command`。网络设备没有后台 exec 能力，只能使用可见终端路径。保留 wait_for_ready 为 false 给只需要创建 session 的客户端。
 
+外部来源会记录在 session 的 `source` 字段中：CLI 请求为 `cli`，MCP 请求为 `mcp`。GUI 的后台会话页面以及会话 attach 后底部的会话 ID 都显示对应的 `CLI` / `MCP` 来源标签；普通 GUI 会话不设置来源。
+
 返回值中的 `session` 会包含会话标识和后台可见性：
 
 ```json
@@ -366,6 +368,7 @@ GUI 内部继续可以使用立即返回的 open 行为；MCP 和 CLI JSONL 使�
     "sessionId": "tab-1",
     "tabId": "tab-1",
     "background": true,
+    "source": "mcp",
     "profileId": "profile-1",
     "status": "connected",
     "connected": true
@@ -504,7 +507,7 @@ allowedProfileIds 只保存稳定 profile ID，不保存主机密码或连接 se
 进入同一套 action route / approval / credential boundary
 ```
 
-BridgeRequest 可以增加内部 source 字段用于审计和审批来源，但不把它当作独立权限身份。未来如需 per-client 权限，另立安全设计，不在本计划中隐式加入。
+BridgeRequest 使用内部 `source` 字段记录审计和 UI 展示来源，但不把它当作独立权限身份。当前只有 `Mcp` 与 `Cli` 两种值；一次性 CLI 与常驻 `fileterm cli --jsonl` 都记录为 `Cli`。未来如需 per-client 权限，另立安全设计，不在本计划中隐式加入。
 
 ### 8.4 CLI 审批语义
 
@@ -650,8 +653,7 @@ struct BridgeRequest {
 
 enum BridgeSource {
     Mcp,
-    OneShotCli,
-    Agent,
+    Cli,
 }
 ```
 

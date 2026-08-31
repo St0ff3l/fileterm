@@ -21,6 +21,8 @@ FileTerm 桌面应用需要先运行。CLI 和 MCP 是连接到正在运行的 F
 
 CLI/MCP 打开的连接仍由 FileTerm App 持有 SSH/SFTP worker。后台模式不会把连接放进顶部标签栏，而是显示在 GUI 的“后台会话”页面；列表中的会话 ID 就是后续 CLI/MCP 请求使用的 `tabId`。点击“打开会话”或调用 `fileterm_activate_session` 会复用原 worker，把它挂回正常的可见标签，不会重新建立连接。
 
+后台会话列表会标注来源 `CLI` 或 `MCP`；会话被打开并显示在工作区后，底部的会话 ID 旁也会保留同一来源标识。普通 GUI 新建的会话不显示外部来源。
+
 ## AI Agent：持久在线 JSONL
 
 启动一次：

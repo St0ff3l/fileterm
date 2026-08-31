@@ -50,6 +50,16 @@ function sessionStateLabel(state: BackgroundSessionState) {
   }
 }
 
+function sessionSourceLabel(source: WorkspaceTab['source']) {
+  if (source === 'cli') {
+    return t.sessionSourceCli
+  }
+  if (source === 'mcp') {
+    return t.sessionSourceMcp
+  }
+  return '—'
+}
+
 export function BackgroundSessionsPage({
   profiles,
   tabs,
@@ -100,7 +110,7 @@ export function BackgroundSessionsPage({
 
       const profile = profileById.get(tab.profileId)
       const address = resolveSessionAddress(profile, sessions[tab.id])
-      return [tab.title, tab.id, tab.sessionType, address, profile?.username]
+      return [tab.title, tab.id, tab.sessionType, tab.source, address, profile?.username]
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase().includes(query))
     })
@@ -159,6 +169,7 @@ export function BackgroundSessionsPage({
               <span>{t.name}</span>
               <span>{t.host}</span>
               <span>{t.type}</span>
+              <span>{t.sessionSource}</span>
               <span>{t.backgroundSessionStatus}</span>
               <span>{t.sessionId}</span>
               <span>{t.actions}</span>
@@ -169,6 +180,7 @@ export function BackgroundSessionsPage({
                 const session = sessions[tab.id]
                 const state = stateByTabId.get(tab.id) ?? 'inactive'
                 const address = resolveSessionAddress(profile, session)
+                const sourceLabel = sessionSourceLabel(tab.source)
                 return (
                   <div
                     key={tab.id}
@@ -192,6 +204,9 @@ export function BackgroundSessionsPage({
                       {address}
                     </span>
                     <span className="manager-type-badge">{(profile?.type ?? tab.sessionType).toUpperCase()}</span>
+                    <span className={`background-session-source is-${tab.source ?? 'unknown'}`} title={sourceLabel}>
+                      {sourceLabel}
+                    </span>
                     <span className={`background-session-status is-${state}`}>
                       <span aria-hidden="true" className="background-session-status-dot" />
                       {sessionStateLabel(state)}

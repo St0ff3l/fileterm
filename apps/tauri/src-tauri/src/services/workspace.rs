@@ -85,12 +85,23 @@ pub struct WorkspaceTab {
     /// shown in the top-level tab bar until the user attaches them.
     #[serde(default)]
     pub is_background: bool,
+    /// External caller that created the session. Ordinary GUI sessions omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<WorkspaceSessionSource>,
     /// 分屏树根节点；普通 tab 为 None。只有分屏的根 tab 持有。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pane_root: Option<PaneNode>,
     /// 分屏 leaf 所属的顶层 workspace tab。leaf 仍保留独立 session，但绝不作为顶栏 tab。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pane_root_tab_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceSessionSource {
+    Cli,
+    #[default]
+    Mcp,
 }
 
 /// 分屏方向：row = 左右分（垂直分屏），column = 上下分（水平分屏）

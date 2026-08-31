@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FileTermDesktopApi, TransferTask, WorkspaceSnapshot, WorkspaceTab } from '@fileterm/core'
+import type {
+  FileTermDesktopApi,
+  TransferTask,
+  WorkspaceSessionSource,
+  WorkspaceSnapshot,
+  WorkspaceTab
+} from '@fileterm/core'
 import { isActiveTransfer, tabStatusClass } from '../../app/app-utils'
 import { TransferBar } from './TransferBar'
 import { TransferPopover } from './TransferPopover'
@@ -10,6 +16,7 @@ export function TransferCenter({
   activeProfileId,
   activeTabId,
   activeTabStatus,
+  activeTabSource,
   desktopApi,
   fullWidth,
   isPending,
@@ -22,6 +29,7 @@ export function TransferCenter({
   activeProfileId?: string
   activeTabId?: string | null
   activeTabStatus?: WorkspaceTab['status'] | null
+  activeTabSource?: WorkspaceSessionSource | null
   desktopApi?: FileTermDesktopApi
   fullWidth: boolean
   isPending: boolean
@@ -89,6 +97,7 @@ export function TransferCenter({
           activeCount={activeCount}
           activeTabId={activeTabId}
           activeTabStatus={activeTabStatus ? tabStatusClass(activeTabStatus) : null}
+          activeTabSource={activeTabSource}
           fullWidth={fullWidth}
           isPending={isPending}
           onOpen={() => setShowTransfers((current) => !current)}

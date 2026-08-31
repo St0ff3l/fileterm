@@ -518,6 +518,8 @@ export const getConnectionCapabilities = (profile: {
   }
 }
 
+export type WorkspaceSessionSource = 'cli' | 'mcp'
+
 export interface WorkspaceTab {
   id: string
   sessionType: WorkspaceSessionType
@@ -527,6 +529,8 @@ export interface WorkspaceTab {
   status: TabStatus
   /** CLI/MCP sessions may stay attached to the App without appearing in the tab bar. */
   isBackground?: boolean
+  /** External caller that created the session; ordinary GUI sessions omit this field. */
+  source?: WorkspaceSessionSource
   /** 分屏树根节点；普通 tab 无此字段。只有分屏的根 tab 持有。 */
   paneRoot?: PaneNode
   /** 分屏 leaf 所属的顶层 workspace tab；leaf 永不显示在顶栏。 */

@@ -2141,6 +2141,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}
           activeTabStatus={activeTab?.status ?? null}
+          activeTabSource={activeTab?.source ?? null}
           desktopApi={desktopApi}
           fullWidth={!shouldShowSystemSidebar}
           isPending={isBusy}

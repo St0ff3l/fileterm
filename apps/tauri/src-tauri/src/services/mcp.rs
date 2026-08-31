@@ -17,6 +17,7 @@ use crate::services::ai::is_basic_safe_command;
 use crate::services::connection_operations::{
     ConnectionOperationState, FILETERM_CONNECTION_FAILED, FILETERM_CONNECTION_WAIT_TIMEOUT,
 };
+use crate::services::workspace::WorkspaceSessionSource;
 use crate::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -160,6 +161,8 @@ struct BridgeRequest {
     action: String,
     #[serde(default)]
     params: Value,
+    #[serde(default)]
+    source: WorkspaceSessionSource,
     #[serde(default)]
     requires_approval: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -666,7 +669,14 @@ async fn dispatch_bridge_request(
         }
         "list_ssh_tunnels" => list_ssh_tunnels(app, &request.params).await,
         "open_connection" => {
-            open_connection(app, &request.params, progress_sender, progress_token).await
+            open_connection(
+                app,
+                &request.params,
+                request.source,
+                progress_sender,
+                progress_token,
+            )
+            .await
         }
         "activate_session" => activate_session(app, &request.params).await,
         "reconnect_session" => reconnect_session(app, &request.params).await,
@@ -1408,6 +1418,7 @@ async fn list_ssh_tunnels(app: &AppHandle, params: &Value) -> Result<Value, Stri
 async fn open_connection(
     app: &AppHandle,
     params: &Value,
+    source: WorkspaceSessionSource,
     progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
     progress_token: Option<Value>,
 ) -> Result<Value, String> {
@@ -1424,6 +1435,7 @@ async fn open_connection(
             profile_id,
             operation.id.clone(),
             execution_mode == EXECUTION_MODE_BACKGROUND,
+            source,
         )
         .await
         {
@@ -2124,6 +2136,7 @@ fn compact_session(tab: &Value, session: &Value, tab_id: &str) -> Value {
         "sessionId": tab_id,
         "tabId": tab_id,
         "background": tab.get("isBackground").and_then(Value::as_bool).unwrap_or(false),
+        "source": tab.get("source"),
         "rootTabId": tab.get("paneRootTabId").cloned().unwrap_or_else(|| Value::String(tab_id.to_string())),
         "profileId": tab.get("profileId"),
         "title": tab.get("title"),
@@ -2606,6 +2619,7 @@ fn cli_jsonl_bridge_request(request: &CliJsonlRequest) -> BridgeRequest {
     BridgeRequest {
         action: request.action.clone(),
         params: request.params.clone(),
+        source: WorkspaceSessionSource::Cli,
         // CLI JSONL requests are always subject to the desktop approval policy.
         // Keep the incoming field for wire compatibility, but never trust a
         // caller to turn the approval gate off.
@@ -2957,6 +2971,7 @@ fn cli_bridge_request(action: &str, params: Value) -> BridgeRequest {
     BridgeRequest {
         action: action.to_string(),
         params,
+        source: WorkspaceSessionSource::Cli,
         // Direct CLI is still an external bridge caller. Read-only actions
         // pass automatically in the basic-safe policy; side effects use the
         // same FileTerm approval dialog as MCP and CLI JSONL.
@@ -3335,6 +3350,7 @@ where
     let request = BridgeRequest {
         action: action.to_string(),
         params: arguments,
+        source: WorkspaceSessionSource::Mcp,
         requires_approval: true,
         progress_token,
     };
@@ -3711,10 +3727,11 @@ fn tool_output_schema(name: &str) -> Value {
                 "session": {
                     "type": ["object", "null"],
                     "properties": {
-                        "sessionId": { "type": "string" },
-                        "tabId": { "type": "string" },
-                        "background": { "type": "boolean" }
-                    },
+                    "sessionId": { "type": "string" },
+                    "tabId": { "type": "string" },
+                    "background": { "type": "boolean" },
+                    "source": { "type": "string", "enum": ["cli", "mcp"] }
+                },
                     "additionalProperties": true
                 },
                 "connectionOperationId": { "type": "string" },
@@ -4008,8 +4025,8 @@ fn runtime_descriptor_path() -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        action_is_read_only, bridge_request_timeout, handle_jsonrpc_request, initialize_result,
-        mcp_error_code, mcp_error_is_retryable, optional_string, pagination,
+        action_is_read_only, bridge_request_timeout, compact_session, handle_jsonrpc_request,
+        initialize_result, mcp_error_code, mcp_error_is_retryable, optional_string, pagination,
         requested_execution_mode, should_request_mcp_approval, tool_definitions, tool_error_result,
         validate_tool_arguments, write_mcp_progress, BridgeProgress, BridgeRequest,
         McpAccessPolicy, McpVisibility, McpVisibilityScope, EXECUTION_MODE_BACKGROUND,
@@ -4024,8 +4041,51 @@ mod tests {
         decode_cli_secret_bytes, parse_cli_options_with_flags, validate_cli_jsonl_cancel_params,
         validate_cli_jsonl_request, CliJsonlRequest, CliJsonlRequestControls,
     };
+    use crate::services::workspace::WorkspaceSessionSource;
     use serde_json::{json, Value};
     use std::collections::HashSet;
+
+    #[test]
+    fn cli_and_mcp_bridge_requests_keep_distinct_session_sources() {
+        let cli = cli_bridge_request("list_connections", json!({}));
+        assert_eq!(cli.source, WorkspaceSessionSource::Cli);
+
+        let cli_jsonl_input = CliJsonlRequest {
+            id: json!("request-1"),
+            action: "list_connections".to_string(),
+            params: json!({}),
+            requires_approval: true,
+            progress_token: None,
+        };
+        let cli_jsonl = cli_jsonl_bridge_request(&cli_jsonl_input);
+        assert_eq!(cli_jsonl.source, WorkspaceSessionSource::Cli);
+
+        let mcp = BridgeRequest {
+            action: "list_connections".to_string(),
+            params: json!({}),
+            source: WorkspaceSessionSource::Mcp,
+            requires_approval: true,
+            progress_token: None,
+        };
+        assert_eq!(mcp.source, WorkspaceSessionSource::Mcp);
+    }
+
+    #[test]
+    fn compact_session_exposes_cli_or_mcp_source_without_leaking_gui_defaults() {
+        let cli = compact_session(
+            &json!({ "source": "cli", "isBackground": true }),
+            &json!({ "connected": true }),
+            "tab-cli",
+        );
+        assert_eq!(cli["source"], "cli");
+
+        let gui = compact_session(
+            &json!({ "isBackground": false }),
+            &json!({ "connected": true }),
+            "tab-gui",
+        );
+        assert!(gui["source"].is_null());
+    }
 
     #[test]
     fn cli_jsonl_requests_require_ids_and_object_params() {
@@ -4296,6 +4356,7 @@ mod tests {
         let request = BridgeRequest {
             action: "write_remote_file".to_string(),
             params: json!({}),
+            source: WorkspaceSessionSource::Mcp,
             requires_approval: true,
             progress_token: None,
         };
@@ -4526,6 +4587,7 @@ mod tests {
         let request = BridgeRequest {
             action: "execute_remote_command".to_string(),
             params: json!({}),
+            source: WorkspaceSessionSource::Cli,
             requires_approval: true,
             progress_token: None,
         };
@@ -4537,6 +4599,7 @@ mod tests {
         let request = BridgeRequest {
             action: "execute_remote_command".to_string(),
             params: json!({ "command": "uname -a" }),
+            source: WorkspaceSessionSource::Cli,
             requires_approval: true,
             progress_token: None,
         };
@@ -4548,12 +4611,14 @@ mod tests {
         let open = BridgeRequest {
             action: "open_connection".to_string(),
             params: json!({ "profile_id": "profile-1" }),
+            source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
         };
         let wait = BridgeRequest {
             action: "wait_for_connection".to_string(),
             params: json!({ "operation_id": "connection-1" }),
+            source: WorkspaceSessionSource::Mcp,
             requires_approval: false,
             progress_token: None,
         };
