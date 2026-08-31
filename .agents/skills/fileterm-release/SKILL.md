@@ -21,7 +21,7 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 - `AGENTS.md`
 - `docs/quality/git-branch-release-convention.md`
 - `.github/workflows/release.yml`
-- 目标版本对应的 `docs/quality/release-notes-<version>.md`（如果已经存在）
+- 目标版本对应的 `docs/quality/release-notes/release-notes-<version>.md`（如果已经存在）
 
 以仓库文件为准，不要凭记忆替换发布命令、分支规则或版本同步方式。
 
@@ -32,8 +32,8 @@ description: FileTerm 专用 GitHub Release 发布流程。用于编写版本说
 - 功能、修复、文档和版本号改动先进入普通分支并提 PR 到 `main`。
 - 版本号只修改根目录 `package.json` 的 `version` 字段。
 - 修改后立即运行 `npm run sync:version`，再检查 workspace 版本和 lockfile。
-- 发布说明文件应在合入 `main` 前进入 PR，例如：
-  `docs/quality/release-notes-2.2.0-beta.1.md`。
+- 发布说明文件应在合入 `main` 前进入 PR，并统一放在 `docs/quality/release-notes/`，例如：
+  `docs/quality/release-notes/release-notes-2.2.0-beta.1.md`。
 - 不要把日常功能改动直接推到 `main` 或 `release/*`。
 
 ### 2. 发布说明正文格式
@@ -150,7 +150,7 @@ git push origin "v$VERSION"
 ```bash
 gh release create "$TAG" \
   --title "FileTerm ${VERSION}" \
-  --notes "$(cat "docs/quality/release-notes-${VERSION}.md")" \
+  --notes "$(cat "docs/quality/release-notes/release-notes-${VERSION}.md")" \
   --generate-notes \
   --prerelease
 ```

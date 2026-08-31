@@ -321,7 +321,7 @@ jobs:
             gh release delete "${tag}" -R "${repo}" --yes
           fi
 
-          notes_file="docs/quality/release-notes-${tag#v}.md"
+          notes_file="docs/quality/release-notes/release-notes-${tag#v}.md"
           # Keep repository-authored release notes while retaining GitHub's
           # generated What's Changed, Full Changelog, and Contributors blocks.
           notes_flags=(--generate-notes)
