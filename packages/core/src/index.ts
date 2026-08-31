@@ -1239,13 +1239,22 @@ export interface SshKeyboardInteractivePrompt {
   echo: boolean
 }
 
+export type SshAuthenticationTarget = 'direct' | 'jump-host' | 'target'
+
 export interface SshKeyboardInteractiveRequest {
   requestId: string
+  /** Identifies the connection attempt that owns this prompt. */
+  flowId: string
   tabId: string
   kind: 'keyboard-interactive'
   profileId: string
+  connectionName: string
+  /** Whether this factor belongs to a direct connection, jump host, or final target. */
+  authenticationTarget: SshAuthenticationTarget
   host: string
   port: number
+  /** One-based SSH keyboard-interactive challenge round. */
+  round: number
   name: string
   instructions: string
   prompts: SshKeyboardInteractivePrompt[]
@@ -1342,7 +1351,7 @@ export type SshInteractionDraft =
   | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
   | Omit<SshKeyPassphrasePromptRequest, 'requestId' | 'tabId' | 'profileId'>
-  | Omit<SshKeyboardInteractiveRequest, 'requestId' | 'tabId' | 'profileId'>
+  | Omit<SshKeyboardInteractiveRequest, 'requestId' | 'flowId' | 'tabId' | 'profileId'>
 
 export type SshHostVerificationResponse = {
   kind: 'host-verification'

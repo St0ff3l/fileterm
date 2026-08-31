@@ -19,6 +19,12 @@ export function SshKeyboardInteractiveModal({
 }) {
   const [answers, setAnswers] = useState<string[]>(() => request.prompts.map(() => ''))
   useEffect(() => setAnswers(request.prompts.map(() => '')), [request])
+  const authenticationTarget =
+    request.authenticationTarget === 'jump-host'
+      ? t.sshAuthenticationTargetJumpHost
+      : request.authenticationTarget === 'target'
+        ? t.sshAuthenticationTargetTarget
+        : t.sshAuthenticationTargetDirect
   const canSubmit =
     answers.length === request.prompts.length &&
     answers.every((answer, index) => request.prompts[index]?.echo || answer.length > 0)
@@ -26,13 +32,21 @@ export function SshKeyboardInteractiveModal({
     <div className="modal-backdrop">
       <div className="modal-card ssh-interaction-modal">
         <div className="modal-header">
-          <span>SSH keyboard-interactive</span>
+          <span>{t.sshKeyboardInteractiveTitle}</span>
           <CloseButton disabled={isSubmitting} onClick={onCancel} />
         </div>
+        {request.name ? <div className="root-access-description">{request.name}</div> : null}
         {request.instructions ? <div className="root-access-description">{request.instructions}</div> : null}
+        <div className="root-access-meta">
+          <span>{t.sshKeyboardInteractiveConnection}</span>
+          <strong>{`${authenticationTarget} · ${request.connectionName}`}</strong>
+        </div>
         <div className="root-access-meta">
           <span>{t.host}</span>
           <strong>{`${request.host}:${request.port}`}</strong>
+        </div>
+        <div className="root-access-meta">
+          <span>{t.sshKeyboardInteractiveRound.replace('{round}', String(request.round))}</span>
         </div>
         {request.prompts.map((prompt, index) => (
           <label className="file-action-field" key={`${index}-${prompt.prompt}`}>

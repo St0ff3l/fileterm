@@ -291,8 +291,13 @@ impl Default for Limits {
     }
 }
 
+// Consumers that need to continue a multi-factor authentication flow must be
+// able to inspect the server's advertised next methods after an AuthResult
+// failure. Keep these protocol result types public without changing any
+// authentication behaviour in the vendored transport.
 pub use auth::{
-    AgentAuthError, GssapiAuthenticator, GssapiError, GssapiStep, MethodKind, MethodSet, Signer,
+    AgentAuthError, AuthResult, GssapiAuthenticator, GssapiError, GssapiStep, MethodKind,
+    MethodSet, Signer,
 };
 
 /// A reason for disconnection.

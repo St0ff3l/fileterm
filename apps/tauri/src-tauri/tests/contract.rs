@@ -420,8 +420,12 @@ fn profile_and_command_mutations_are_serialized_and_broadcast() {
 
 #[test]
 fn protocol_workers_publish_connected_closed_and_error_states() {
+    let ssh_worker_source = concat!(
+        include_str!("../src/sessions/ssh/runtime.rs"),
+        include_str!("../src/sessions/ssh/worker.rs"),
+    );
     let protocols = [
-        ("SSH", include_str!("../src/sessions/ssh.rs")),
+        ("SSH", ssh_worker_source),
         ("FTP", include_str!("../src/sessions/ftp.rs")),
         ("Telnet", include_str!("../src/sessions/telnet.rs")),
         ("Serial", include_str!("../src/sessions/serial/mod.rs")),
