@@ -9,6 +9,8 @@
 
 当前新增功能计划：[AI Copilot 文件与图片附件支持计划](active/ai-copilot-attachments.md)。
 
+当前结构治理入口：[源码大文件职责拆分总计划](active/source-module-decomposition.md)。
+
 轻量任务可以直接在 issue、PR 或提交说明里描述；跨多层、跨多文件、可能持续多轮的任务应该在 `active/` 中建立执行计划。
 
 执行计划建议包含：
