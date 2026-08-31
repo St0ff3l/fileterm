@@ -19,7 +19,7 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
   } = props
   const {
     hostRef,
-    viewportElement,
+    terminalScrollController,
     findInputRef,
     hasSelection,
     contextMenu,
@@ -58,7 +58,7 @@ export const TerminalView = memo(function TerminalView(props: TerminalViewProps)
       <div className="terminal-host">
         <div className="terminal-inner" ref={hostRef} />
       </div>
-      <VerticalScrollbar scrollRef={{ current: viewportElement }} />
+      <VerticalScrollbar scrollController={terminalScrollController} />
       {findOpen ? (
         <TerminalFindBar
           findInputRef={findInputRef}

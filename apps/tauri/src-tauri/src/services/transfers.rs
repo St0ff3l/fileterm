@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, EventTarget, Manager};
 use tokio::sync::{oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
@@ -390,20 +390,18 @@ async fn persist(app: &AppHandle) -> Result<(), AppError> {
     write_journal(app, &tasks)
 }
 
-async fn emit_task(app: &AppHandle, task: TransferTask, snapshot: bool) {
-    let _ = app.emit("transfer:update", task);
-    if snapshot {
-        if let Ok(workspace) = crate::commands::get_workspace_snapshot(app.clone()).await {
-            let _ = app.emit("workspace:snapshot", workspace);
-        }
-    }
+// Transfer progress belongs to the main workspace window. Keep it separate
+// from workspace snapshots so standalone editors do not rehydrate while a
+// background upload or download advances.
+async fn emit_task(app: &AppHandle, task: TransferTask) {
+    let _ = app.emit_to(EventTarget::webview_window("main"), "transfer:update", task);
 }
 
 #[derive(Clone, Copy)]
 enum PatchDelivery {
     Silent,
     Event,
-    Snapshot,
+    PersistedEvent,
 }
 
 async fn patch_task(
@@ -423,13 +421,12 @@ async fn patch_task(
         task.updated_at = Some(now_ms());
         task.clone()
     };
-    if matches!(delivery, PatchDelivery::Snapshot) {
+    if matches!(delivery, PatchDelivery::PersistedEvent) {
         persist(app).await?;
     }
     match delivery {
         PatchDelivery::Silent => {}
-        PatchDelivery::Event => emit_task(app, task.clone(), false).await,
-        PatchDelivery::Snapshot => emit_task(app, task.clone(), true).await,
+        PatchDelivery::Event | PatchDelivery::PersistedEvent => emit_task(app, task.clone()).await,
     }
     Ok(Some(task))
 }
@@ -1189,7 +1186,7 @@ pub async fn create_upload(
         };
         state.transfers.write().await.push(task.clone());
         persist(app).await?;
-        emit_task(app, task.clone(), true).await;
+        emit_task(app, task.clone()).await;
         start(app.clone(), task.id).await?;
         return Ok(());
     }
@@ -1235,7 +1232,7 @@ pub async fn create_upload(
     };
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
-    emit_task(app, task.clone(), true).await;
+    emit_task(app, task.clone()).await;
     start(app.clone(), task.id).await?;
     Ok(())
 }
@@ -1310,7 +1307,7 @@ pub async fn create_download(
     };
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
-    emit_task(app, task.clone(), true).await;
+    emit_task(app, task.clone()).await;
     let task_id = task.id.clone();
     start(app.clone(), task_id.clone()).await?;
     Ok(task_id)
@@ -1409,7 +1406,7 @@ pub async fn create_download_directory(
     };
     state.transfers.write().await.push(task.clone());
     persist(app).await?;
-    emit_task(app, task.clone(), true).await;
+    emit_task(app, task.clone()).await;
     let task_id = task.id.clone();
     start(app.clone(), task_id.clone()).await?;
     Ok(task_id)
@@ -1578,7 +1575,7 @@ async fn run(
             task.message = Some("正在检查断点...".to_string());
             task.speed = None;
         },
-        PatchDelivery::Snapshot,
+        PatchDelivery::PersistedEvent,
     )
     .await?
     .ok_or_else(|| transfer_error("传输任务不存在"))?;
@@ -1719,7 +1716,7 @@ async fn run(
                     });
                     task.resumable = true;
                 },
-                PatchDelivery::Snapshot,
+                PatchDelivery::PersistedEvent,
             )
             .await?;
             if task.direction == "upload" {
@@ -1769,7 +1766,7 @@ async fn run(
                     task.message = Some("正在校验文件大小...".to_string());
                     task.speed = None;
                 },
-                PatchDelivery::Snapshot,
+                PatchDelivery::PersistedEvent,
             )
             .await?;
             let completed_size = if task.direction == "upload" {
@@ -1801,7 +1798,7 @@ async fn run(
                     task.status = "finalizing".to_string();
                     task.message = Some("正在替换目标文件...".to_string());
                 },
-                PatchDelivery::Snapshot,
+                PatchDelivery::PersistedEvent,
             )
             .await?;
             if task.direction == "upload" {
@@ -1836,7 +1833,7 @@ async fn run(
                     task.total_bytes = Some(source_size);
                     task.resumable = false;
                 },
-                PatchDelivery::Snapshot,
+                PatchDelivery::PersistedEvent,
             )
             .await?;
             if task.direction == "upload" {
@@ -1924,7 +1921,7 @@ async fn update_directory_manifest(
             }
         },
         if immediate {
-            PatchDelivery::Snapshot
+            PatchDelivery::PersistedEvent
         } else {
             PatchDelivery::Event
         },
@@ -1944,7 +1941,7 @@ async fn refresh_remote_listing(app: &AppHandle, tab_id: &str) -> Result<(), App
         .unwrap_or_else(|| "/".to_string());
     let files = worker_call(app, tab_id, |respond_to, cancellation| {
         WorkerCmd::ListRemoteFiles {
-            path,
+            path: path.clone(),
             cancellation,
             respond_to,
         }
@@ -1957,10 +1954,23 @@ async fn refresh_remote_listing(app: &AppHandle, tab_id: &str) -> Result<(), App
         .await
         .get_mut(tab_id)
     {
-        session.remote_files = files;
+        session.remote_files = files.clone();
     }
-    if let Ok(snapshot) = crate::commands::get_workspace_snapshot(app.clone()).await {
-        let _ = app.emit("workspace:snapshot", snapshot);
+    let payload = serde_json::json!({
+        "tabId": tab_id,
+        "path": path,
+        "files": files,
+    });
+    if let Err(error) = app.emit_to(
+        EventTarget::webview_window("main"),
+        "workspace:remote-files",
+        &payload,
+    ) {
+        crate::services::logging::warn(
+            app,
+            "transfer",
+            format!("remote listing changed but event emission failed: {error}"),
+        );
     }
     Ok(())
 }
@@ -2355,7 +2365,7 @@ async fn fail_if_running(
                 };
                 task.resumable = resumable;
             },
-            PatchDelivery::Snapshot,
+            PatchDelivery::PersistedEvent,
         )
         .await?;
         return Ok(());
@@ -2401,7 +2411,7 @@ async fn fail_if_running(
             };
             task.resumable = resumable;
         },
-        PatchDelivery::Snapshot,
+        PatchDelivery::PersistedEvent,
     )
     .await?;
     Ok(())
@@ -2426,7 +2436,7 @@ pub async fn pause(app: &AppHandle, transfer_id: String) -> Result<(), AppError>
             task.message = Some("传输已暂停，可继续".to_string());
             task.speed = None;
         },
-        PatchDelivery::Snapshot,
+        PatchDelivery::PersistedEvent,
     )
     .await?;
     crate::services::logging::warn(app, &format!("transfer:{transfer_id}"), "paused by user");
@@ -2458,7 +2468,7 @@ pub async fn pause_for_tab(app: &AppHandle, tab_id: &str, message: &str) -> Resu
                 task.message = Some(message.to_string());
                 task.speed = None;
             },
-            PatchDelivery::Snapshot,
+            PatchDelivery::PersistedEvent,
         )
         .await?;
     }
@@ -2556,7 +2566,7 @@ async fn record_cleanup_attempt(
                 }
             }
         },
-        PatchDelivery::Snapshot,
+        PatchDelivery::PersistedEvent,
     )
     .await?;
     Ok(())
@@ -2657,7 +2667,7 @@ pub async fn discard(app: &AppHandle, transfer_id: String) -> Result<(), AppErro
             task.resumable = false;
             task.cleanup_pending = true;
         },
-        PatchDelivery::Snapshot,
+        PatchDelivery::PersistedEvent,
     )
     .await?;
     crate::services::logging::warn(
@@ -2722,7 +2732,7 @@ pub async fn resume(app: &AppHandle, transfer_id: String) -> Result<(), AppError
             task.message = Some("等待继续传输".to_string());
             task.speed = None;
         },
-        PatchDelivery::Snapshot,
+        PatchDelivery::PersistedEvent,
     )
     .await?;
     crate::services::logging::info(app, &format!("transfer:{transfer_id}"), "resume queued");

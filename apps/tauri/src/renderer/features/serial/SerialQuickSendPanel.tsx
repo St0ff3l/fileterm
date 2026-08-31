@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AppIcon } from '../common/AppIcon'
+import { SelectionControl } from '../common/SelectionControl'
 import { localizeSerialTerminalText, t } from '../../i18n'
 
 type SerialMacro = { name: string; value: string }
@@ -158,7 +159,7 @@ export function SerialQuickSendPanel({
             {t.serialQuickSendNow}
           </button>
           <label className="serial-quick-panel__checkbox">
-            <input
+            <SelectionControl
               checked={appendNewline}
               disabled={looping}
               type="checkbox"

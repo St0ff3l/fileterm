@@ -275,6 +275,7 @@ fn contract_events_use_namespace_colon_name() {
         "terminal:state",
         "workspace:snapshot",
         "workspace:sessionMetrics",
+        "workspace:remote-files",
         "ssh:interaction",
         "app:window-close-request",
         "app:window-maximized-change",
@@ -291,6 +292,21 @@ fn contract_events_use_namespace_colon_name() {
             "event `{name}` must not have an empty namespace or name"
         );
     }
+}
+
+#[test]
+fn transfer_updates_do_not_broadcast_workspace_snapshots() {
+    let source = include_str!("../src/services/transfers.rs");
+    assert!(
+        source.contains("EventTarget::webview_window(\"main\")")
+            && source.contains("\"transfer:update\"")
+            && source.contains("\"workspace:remote-files\""),
+        "transfer service must publish targeted transfer/listing events"
+    );
+    assert!(
+        !source.contains("\"workspace:snapshot\""),
+        "transfer progress must not publish full workspace snapshots"
+    );
 }
 
 #[test]

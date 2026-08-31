@@ -12,6 +12,7 @@
 - `nano` / `vim` 这类全屏 TUI
 - 连接启动 transcript 的一次性回放
 - 终端内搜索、Web 链接识别、Unicode 11 字符宽度
+- 多标签页 keep-alive、xterm 6 buffer 滚动和窗口恢复后的重新绘制
 
 这些能力共用一套 `TerminalView` 写入链路，后续只要调整：
 
@@ -20,6 +21,7 @@
 - `fitAddon` 行列计算
 - PTY resize / shell ready 时机
 - xterm addon 加载顺序或搜索 UI
+- 标签页隐藏/恢复时的 DOM、canvas、texture atlas 和滚动条生命周期
 
 都可能引入回归。
 
@@ -122,11 +124,28 @@ printf 'FileTerm search Search\nhttps://example.com\nPowerline 字符 Emoji 😀
 
 通过标准：
 
-- `⌘F` / `Ctrl+F` 打开终端内搜索框，不触发文件编辑器搜索。
+- `Ctrl+Shift+F`（macOS 也相同）打开终端内搜索框，不触发文件编辑器搜索。
+- `Ctrl+F` 原样交给当前 shell / 远程 CLI，不打开 FileTerm 搜索；重点验证 readline、Codex、OpenCode、Claude Code、Qwen Code、Kimi Code 等输入框。
 - 搜索支持上一条/下一条，`Aa` 能切换大小写，`.*` 能切换正则。
 - HTTP/HTTPS 链接悬停可识别，点击能打开链接。
 - 中文、Powerline 字符和 Emoji 不明显挤压或造成光标错位。
 - 粘贴长命令并回车后，终端内不残留白色选区；普通 selection 应保持半透明灰色。
+
+### 2.8 标签页、分屏和 TUI 恢复
+
+至少准备一个本地终端和一个 SSH 终端；在其中运行一个持续刷新或全屏 TUI（例如 Codex、OpenCode、Claude Code、Qwen Code、Kimi Code、`vim`），然后反复执行：
+
+- 在本地、SSH、分屏 pane 之间来回切换 20 次以上。
+- 切换后在普通 shell scrollback 中上滚、下滚、拖动 FileTerm 滚动条，再回到底部。
+- 在 alternate screen 中滚轮，确认由 TUI 的 mouse reporting / alternate-scroll 语义处理，不被 FileTerm 搜索或自绘滚动条截走。
+- 切换期间拖动窗口、改变分屏比例，再切回原标签页。
+
+通过标准：
+
+- 本地和 SSH 的终端内容、光标、选择区、scrollback 和 TUI 状态都保留，不出现黑屏、空白、元素缺行或只剩光标。
+- 切回后首次滚轮即可生效，滚动条 thumb 与 xterm 当前 buffer 位置一致，不依赖再次输出或再次点击终端。
+- Windows 本地 ConPTY 在切换和 resize 后不出现重复行、缺行或底部状态栏消失。
+- 普通滚轮、alternate-screen 滚轮和远程 mouse reporting 三种行为不会互相污染。
 
 ## 3. 当前脆弱点
 

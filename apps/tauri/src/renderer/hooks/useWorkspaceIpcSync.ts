@@ -6,6 +6,7 @@ import {
   type OverviewSectionId,
   type PaneFocusDirection,
   type ResourceMonitoringMetric,
+  type RemoteFilesUpdate,
   type SessionMetricsUpdate,
   type SavedTheme,
   type SshConnectionDefaults,
@@ -315,6 +316,29 @@ export function useWorkspaceIpcSync({
     })
   }, [])
 
+  const applyRemoteFilesUpdate = useCallback(({ tabId, path, files }: RemoteFilesUpdate) => {
+    startTransition(() => {
+      setWorkspace((current) => {
+        const currentSession = current.sessions[tabId]
+        if (!currentSession || currentSession.remotePath !== path) {
+          return current
+        }
+
+        return {
+          ...current,
+          sessions: {
+            ...current.sessions,
+            [tabId]: {
+              ...currentSession,
+              remoteFiles: files,
+              remoteFilesLoading: false
+            }
+          }
+        }
+      })
+    })
+  }, [])
+
   const applyTransferUpdate = useCallback((transfer: TransferTask) => {
     startTransition(() => {
       setWorkspace((current) => {
@@ -596,6 +620,7 @@ export function useWorkspaceIpcSync({
     let receivedSnapshotEvent = false
     const pendingMetrics: SessionMetricsUpdate[] = []
     const pendingTransfers: TransferTask[] = []
+    const pendingRemoteFiles: RemoteFilesUpdate[] = []
 
     const processTransferUpdate = (transfer: TransferTask) => {
       const banner = uploadFailureBanner(transfer)
@@ -619,6 +644,9 @@ export function useWorkspaceIpcSync({
       for (const transfer of pendingTransfers.splice(0)) {
         processTransferUpdate(transfer)
       }
+      for (const payload of pendingRemoteFiles.splice(0)) {
+        applyRemoteFilesUpdate(payload)
+      }
     }
 
     const finishHydration = () => {
@@ -638,26 +666,42 @@ export function useWorkspaceIpcSync({
       applySnapshot(snapshot)
       finishHydration()
     })
-    const unsubscribeSessionMetrics = desktopApi.onSessionMetrics((payload) => {
-      if (canceled) {
-        return
-      }
-      if (!hydrated) {
-        pendingMetrics.push(payload)
-        return
-      }
-      applySessionMetrics(payload)
-    })
-    const unsubscribeTransferUpdate = desktopApi.onTransferUpdate((transfer) => {
-      if (canceled) {
-        return
-      }
-      if (!hydrated) {
-        pendingTransfers.push(transfer)
-        return
-      }
-      processTransferUpdate(transfer)
-    })
+    const unsubscribeSessionMetrics = isMainWorkspaceWindow
+      ? desktopApi.onSessionMetrics((payload) => {
+          if (canceled) {
+            return
+          }
+          if (!hydrated) {
+            pendingMetrics.push(payload)
+            return
+          }
+          applySessionMetrics(payload)
+        })
+      : () => undefined
+    const unsubscribeTransferUpdate = isMainWorkspaceWindow
+      ? desktopApi.onTransferUpdate((transfer) => {
+          if (canceled) {
+            return
+          }
+          if (!hydrated) {
+            pendingTransfers.push(transfer)
+            return
+          }
+          processTransferUpdate(transfer)
+        })
+      : () => undefined
+    const unsubscribeRemoteFilesChanged = isMainWorkspaceWindow
+      ? desktopApi.onRemoteFilesChanged((payload) => {
+          if (canceled) {
+            return
+          }
+          if (!hydrated) {
+            pendingRemoteFiles.push(payload)
+            return
+          }
+          applyRemoteFilesUpdate(payload)
+        })
+      : () => undefined
 
     const hydrateWorkspace = async () => {
       try {
@@ -724,12 +768,15 @@ export function useWorkspaceIpcSync({
       canceled = true
       pendingMetrics.length = 0
       pendingTransfers.length = 0
+      pendingRemoteFiles.length = 0
       unsubscribeSnapshot()
       unsubscribeSessionMetrics()
       unsubscribeTransferUpdate()
+      unsubscribeRemoteFilesChanged()
     }
   }, [
     applySessionMetrics,
+    applyRemoteFilesUpdate,
     applySnapshot,
     applyTransferUpdate,
     desktopApi,

@@ -35,6 +35,7 @@ pub enum WorkerCmd {
         timeout_ms: u64,
         stdin: Option<String>,
         request_pty: bool,
+        cancellation: Option<tokio_util::sync::CancellationToken>,
         respond_to: tokio::sync::oneshot::Sender<Result<serde_json::Value, String>>,
     },
     ListRemoteFiles {

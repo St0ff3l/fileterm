@@ -9,7 +9,7 @@ fn main() {
         }
         return;
     }
-    if fileterm_lib::is_cli_command(arguments.get(1).map(String::as_str)) {
+    if arguments.get(1).is_some() {
         if let Err(error) = fileterm_lib::run_cli(&arguments[1..]) {
             eprintln!("FileTerm CLI failed: {error}");
             std::process::exit(1);

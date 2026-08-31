@@ -3,6 +3,7 @@ pub mod ai;
 pub mod ai_guardrails;
 pub mod backup_crypto;
 pub mod backup_prompt;
+pub mod connection_operations;
 pub mod connections;
 pub mod fonts;
 pub mod logging;
@@ -20,5 +21,6 @@ pub mod webdav;
 pub mod workspace;
 
 pub use workspace::{
-    PaneNode, SessionSnapshot, SplitDirection, WorkspaceState, WorkspaceTab, WorkspaceTabStatus,
+    PaneNode, SessionSnapshot, SplitDirection, WorkspaceSessionSource, WorkspaceState,
+    WorkspaceTab, WorkspaceTabStatus,
 };

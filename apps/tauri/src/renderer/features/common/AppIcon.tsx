@@ -365,6 +365,12 @@ export function AppIcon({
           <circle {...commonProps} cx="8" cy="8" r="1.7" />
         </>
       ) : null}
+      {name === 'eye-off' ? (
+        <>
+          <path {...commonProps} d="M1.8 8s2.1-3.5 6.2-3.5S14.2 8 14.2 8 12.1 11.5 8 11.5 1.8 8 1.8 8Z" />
+          <path {...commonProps} d="m2.6 2.6 10.8 10.8" />
+        </>
+      ) : null}
       {name === 'shield' || name === 'shield-check' ? (
         <path {...commonProps} d="M8 1.9 13 3.8v3.5c0 3.1-2 5.7-5 6.8-3-1.1-5-3.7-5-6.8V3.8L8 1.9Z" />
       ) : null}

@@ -1,0 +1,215 @@
+/* Shared card-style radio control used by settings and other desktop forms. */
+.radio-card-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Shared connection state marker used by tabs and session context badges. */
+.status-indicator {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-indicator--md {
+  width: 8px;
+  height: 8px;
+}
+
+.status-indicator[data-status='connected'] {
+  background: var(--success);
+  box-shadow:
+    0 0 4px rgba(57, 217, 138, 0.9),
+    0 0 10px rgba(57, 217, 138, 0.68);
+}
+
+.status-indicator[data-status='disconnected'] {
+  background: var(--danger);
+  box-shadow: 0 0 6px rgba(226, 91, 91, 0.35);
+}
+
+.status-indicator[data-status='connecting'] {
+  background: var(--warning);
+  box-shadow: 0 0 6px rgba(231, 198, 91, 0.35);
+}
+
+.radio-card-group__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 66px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.radio-card-group__option:hover:not(.is-disabled) {
+  border-color: color-mix(in srgb, var(--focus-outline) 65%, var(--border-light));
+  background: color-mix(in srgb, var(--focus-outline) 6%, var(--bg-primary));
+}
+
+.radio-card-group__option:focus-within {
+  border-color: var(--focus-outline);
+  box-shadow: 0 0 0 3px var(--accent-focus-ring);
+}
+
+.radio-card-group__option.is-selected {
+  border-color: var(--focus-outline);
+  background: color-mix(in srgb, var(--focus-outline) 10%, var(--bg-primary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-outline) 24%, transparent);
+}
+
+.radio-card-group__option.is-disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+input.selection-control {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  flex: 0 0 14px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--bg-main);
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+
+input.selection-control {
+  flex-basis: 14px;
+  margin-top: 1px;
+}
+
+input.selection-control--large {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  flex-basis: 18px;
+  margin-top: 0;
+}
+
+input.selection-control::after {
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 999px;
+  background: var(--focus-outline);
+  content: '';
+  transform: scale(0);
+  transition: transform 0.16s ease;
+}
+
+input.selection-control--large::after {
+  inset: 3px;
+}
+
+input.selection-control:checked {
+  border-color: var(--focus-outline);
+  background: var(--bg-main);
+}
+
+input.selection-control:checked::after {
+  transform: scale(1);
+}
+
+input.selection-control:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+input.selection-control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--input-focus-ring);
+}
+
+input.selection-control:hover:not(:disabled):not(:checked) {
+  border-color: var(--text-muted);
+}
+
+/* Compact target pickers keep their slightly stronger ring and indeterminate
+ * dash while sharing the same native SelectionControl semantics. */
+input.selection-control--target {
+  border-width: 1.2px;
+  margin-top: 0;
+  box-shadow: var(--control-shadow);
+}
+
+input.selection-control--target:hover {
+  border-color: var(--border-dark);
+  background: var(--bg-hover);
+}
+
+input.selection-control--target:checked {
+  border-color: var(--focus-outline);
+  background: transparent;
+}
+
+input.selection-control--target::after {
+  transition: transform 0.16s cubic-bezier(0.12, 0.4, 0.29, 1.46);
+}
+
+input.selection-control--target:indeterminate {
+  border-color: var(--focus-outline);
+  background: transparent;
+}
+
+input.selection-control--target:indeterminate::after {
+  inset: auto;
+  top: 5px;
+  left: 3px;
+  width: 6px;
+  height: 1.5px;
+  border: 0;
+  border-radius: 0;
+  background: var(--copy-link);
+  transform: scale(1);
+}
+
+input.selection-control--target:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
+}
+
+.radio-card-group__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.radio-card-group__copy strong {
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.radio-card-group__copy small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+}

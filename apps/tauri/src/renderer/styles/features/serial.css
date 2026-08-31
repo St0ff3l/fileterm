@@ -155,7 +155,7 @@
   gap: 5px;
 }
 
-.serial-transfer-panel input {
+.serial-transfer-panel input:not(.selection-control) {
   width: 130px;
   min-height: 23px;
   padding: 2px 6px;
@@ -166,7 +166,7 @@
   font-size: 11px;
 }
 
-.serial-transfer-panel__option input {
+.serial-transfer-panel__option input:not(.selection-control) {
   width: auto;
   min-height: auto;
 }

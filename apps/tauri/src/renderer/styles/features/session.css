@@ -194,7 +194,8 @@
 }
 
 .terminal-host .xterm-viewport {
-  overflow-y: auto !important;
+  /* xterm.js 6 owns scrolling through .xterm-scrollable-element. Keep the
+     legacy viewport sizing rule without overriding xterm's scroll contract. */
   min-height: 0;
 }
 
@@ -204,8 +205,7 @@
 }
 
 .terminal-host .xterm .xterm-scrollable-element > .scrollbar {
-  display: block !important;
-  width: 8px !important;
+  display: none !important;
 }
 
 .terminal-host .xterm .xterm-scrollable-element > .scrollbar.horizontal {
@@ -624,11 +624,6 @@
 
 .terminal-dock-option-inline {
   justify-content: space-between;
-}
-
-.terminal-dock-option-row input {
-  margin: 0;
-  cursor: pointer;
 }
 
 .terminal-dock-ttl-options {
@@ -1677,6 +1672,7 @@
 .transfer-strip {
   grid-column: 2;
   grid-row: 3;
+  min-width: 0;
   height: 24px;
   padding: 0 20px;
   border-top: 1px solid var(--border-light);
@@ -1687,6 +1683,118 @@
   justify-content: space-between;
   flex-shrink: 0;
   align-self: end;
+}
+
+.transfer-strip-context {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  align-items: center;
+  gap: 10px;
+}
+
+.transfer-strip-context > strong {
+  flex: 0 0 auto;
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.transfer-session-id {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(52vw, 560px);
+  height: 18px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 7px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  user-select: text;
+}
+
+.transfer-session-id-label {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.transfer-session-id code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-main);
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transfer-session-source {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 15px;
+  padding: 0 5px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.transfer-session-source.is-cli {
+  border-color: color-mix(in srgb, var(--accent-highlight) 42%, var(--border-light));
+  color: var(--accent-highlight);
+}
+
+.transfer-session-source.is-mcp {
+  border-color: color-mix(in srgb, var(--success) 42%, var(--border-light));
+  color: var(--success);
+}
+
+.transfer-session-hide {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.transfer-session-hide:hover {
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.transfer-session-hide:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-focus-ring);
 }
 
 .transfer-strip.full-width {
@@ -2334,66 +2442,6 @@
   padding: 12px 14px;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-}
-
-.permission-checkline,
-.permission-radioline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-}
-
-.permission-checkline input,
-.permission-radioline input {
-  width: 18px;
-  height: 18px;
-  appearance: none;
-  -webkit-appearance: none;
-  margin: 0;
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
-  background: var(--bg-main);
-  position: relative;
-  flex: 0 0 auto;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    opacity 0.2s ease;
-}
-
-.permission-checkline input::after,
-.permission-radioline input::after {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 999px;
-  background: var(--primary);
-  transform: scale(0);
-  transition: transform 0.16s ease;
-}
-
-.permission-checkline input:checked,
-.permission-radioline input:checked {
-  border-color: var(--primary);
-}
-
-.permission-checkline input:checked::after,
-.permission-radioline input:checked::after {
-  transform: scale(1);
-}
-
-.permission-checkline input:disabled,
-.permission-radioline input:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.permission-checkline input:focus-visible,
-.permission-radioline input:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--input-focus-ring);
 }
 
 .context-menu {

@@ -23,3 +23,7 @@ Accepted / Proposed / Superseded
 
 带来的收益、限制和后续注意事项。
 ```
+
+当前已接受的相关决策：
+
+- [ADR-0008：MCP、CLI 与 Agent 共享访问策略和凭据边界](./0008-mcp-cli-agent-access-policy.md)

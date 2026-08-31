@@ -230,6 +230,22 @@ async fn set_terminal_state_with_snapshot(
             .touch_ai_session_revision(tab_id)
             .await;
     }
+    let operation_state = if connected {
+        crate::services::connection_operations::ConnectionOperationState::Connected
+    } else if matches!(
+        status,
+        crate::services::WorkspaceTabStatus::Error | crate::services::WorkspaceTabStatus::Closed
+    ) {
+        crate::services::connection_operations::ConnectionOperationState::Failed {
+            code: crate::services::connection_operations::FILETERM_CONNECTION_FAILED.to_string(),
+        }
+    } else {
+        crate::services::connection_operations::ConnectionOperationState::Connecting
+    };
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .connection_operations
+        .publish_for_tab(tab_id, operation_state)
+        .await;
     let _ = app.emit(
         "terminal:state",
         serde_json::json!({

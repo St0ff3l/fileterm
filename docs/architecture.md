@@ -232,18 +232,18 @@ platform probe
 - 普通远程 exec 的 `sudo` / `su` 前缀由 Rust 在独立 exec channel 中处理：sudo 使用 `-S` 通过 stdin 发送凭据，su 只在该独立 exec channel 上设置受控 PTY 标志；密码不进入命令文本、可见终端、日志或 tool result。凭据优先使用用户明确的一次性参数、加密 profile，缺失时由 Rust 恢复、解除最小化并聚焦主窗口，再展示本地安全 prompt；Copilot 对话区和工具活动都会显示等待前台输入的说明。主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`，由 Agent 按结果处理。MFA/验证码/确认/REPL 等 generic input 仍返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`。
 - 特权上传的字节流仍走登录用户可写的随机 /var/tmp SFTP staging，只有 staging → 目标断点/替换等短文件命令走 sudo/su，避免把大文件流塞进 su 的 PTY；历史 /tmp staging 任务继续兼容恢复，避免把旧断点遗留在不可访问路径。
 
-## 4.5 MCP / CLI 外部 Agent 桥接边界
+## 4.5 MCP / CLI 外部客户端桥接边界
 
-FileTerm 自带一套面向外部 Agent 的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；`ActionApprovalSource` 只有 `Mcp` 与 `AiCopilot`。
+FileTerm 自带一套面向外部客户端的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；外部客户端的基础安全操作映射到同一桌面审批边界。
 
 ```txt
-外部 Agent                        shell 脚本
-   │                                  │
-   │ stdio JSON-RPC 2025-06-18        │ argv
-   ▼                                  ▼
-fileterm mcp                    fileterm <cmd>
-   │                                  │
-   └─── call_desktop_bridge ──────────┘
+外部 Agent（MCP）       外部 Agent（CLI JSONL）    shell 脚本
+   │                         │                    │
+   │ stdio JSON-RPC          │ request/response   │ argv
+   ▼                         ▼                    ▼
+fileterm mcp             fileterm cli --jsonl fileterm cli <cmd>
+   │                         │                    │
+   └──────────── call_desktop_bridge ─────────────┘
               │
               │ read mcp-runtime.json (owner-only)
               │ TCP 127.0.0.1:随机端口
@@ -260,19 +260,20 @@ fileterm mcp                    fileterm <cmd>
               应用内审批对话框
 ```
 
-- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（约 2220 行，手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
-- 同一份桌面可执行文件同时承担 GUI、MCP server、CLI 三种角色，靠 `argv[1]` 分发：`mcp` → `run_mcp_stdio`；由共享 `is_cli_command` 维护的子命令白名单（包括 `exec` 与 `wait-transfer`）匹配 → `run_cli`；其他 → 启动桌面 GUI。新增 CLI 子命令必须同时更新共享白名单、`run_cli` 路由和对应的精确 `--help` 输出，避免把非 GUI 命令误启动成桌面窗口。
+- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
+- 同一份桌面可执行文件承担 GUI、MCP server 和 CLI 两种模式：无命令参数时启动桌面 GUI；`mcp` → `run_mcp_stdio`；其他参数先进入 `run_cli`，其中 `cli --jsonl` → `run_cli_jsonl`，其余为一次性 CLI。所有非 GUI 参数都在 Tauri 初始化前处理，避免把外部客户端请求误启动成桌面窗口。
+- `fileterm cli --jsonl` 是不初始化 Tauri GUI 的常驻 JSONL bridge，使用固定 worker pool 处理多个 request ID；每个请求的 progress 和最终结果均带回同一个 ID。CLI JSONL 请求始终强制遵循桌面端审批策略，并可用 `cancel_request` 停止仍在等待的请求；取消不回滚桌面端已经接受或开始执行的操作。外部 Agent 必须启动一次 `fileterm cli --jsonl` 或 `fileterm mcp` 并复用进程，不能按每个动作启动一次性 CLI；一次性 CLI 仅保留给用户手动调试和 shell 脚本。一次性 CLI 每次调用都会创建新的 FileTerm OS 进程，2.2.7 的 headless 分流避免启动 GUI，但不会让一次性进程变成复用连接。连接 single-flight 只能去重桌面连接任务，不能消除已经启动的进程。CLI/MCP 的后台打开请求仍由正在运行的 FileTerm App 持有同一个 session worker；它会隐藏在顶部标签栏之外，显示在“后台会话”页面，GUI 或 `fileterm_activate_session` attach 后才进入可见标签。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
 - `mcp-runtime.json` 路径在三平台：macOS `$HOME/Library/Application Support/com.fileterm.desktop/`、Windows NSIS 安装版 `%APPDATA%\com.fileterm.desktop\`、Windows portable 当前 `fileterm.exe` 旁的 `config\`、Linux `$XDG_DATA_HOME/com.fileterm.desktop/` 或 `$HOME/.local/share/com.fileterm.desktop/`。CLI 端用 `#[cfg(target_os)]` 读取对应路径，依赖 `tauri.conf.json` 的 identifier 保持 `com.fileterm.desktop` 不变；可用 `FILETERM_MCP_RUNTIME_FILE` 环境变量覆盖。
 - 协议版本固定 `2025-06-18`，server 不与 client 协商，无论 client 发什么版本都回自己的支持版本；实现 MCP 的 `initialize` / `ping` / `tools/list` / `tools/call`，并通过 `notifications/progress` / `notifications/message` 报告外部命令等待 FileTerm 前台密码输入的状态；未实现 `resources/*` / `prompts/*`。
-- 暴露 35 个 `fileterm_*` 工具，覆盖连接管理、会话状态、远程命令执行、远程文件操作、传输调度、SSH 隧道；tool annotations 标注 `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`。普通 `fileterm_execute_remote_command` 始终走独立、非交互 SSH exec channel，不污染可见 PTY；FTP / Telnet / Serial 不伪装支持远程 exec。
-- `fileterm_execute_remote_command` 使用独立、非交互 SSH exec channel；sudo/su 可接收用户明确的一次性参数或复用加密 profile。缺少凭据时，FileTerm 自动恢复、解除最小化并聚焦主窗口后进入本地安全 prompt；Copilot 对话区和 MCP/CLI bridge 都会报告等待前台输入，原始命令继续等待用户完成密码后再返回最终结果，外部 Agent 不应重复调用。主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，Agent 可以询问用户后用一次性字段重试；用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。密码不进入命令文本或 tool result。普通命令遇到 MFA、确认、安装器或 REPL 输入时返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，用户必须在可见 SSH tab 完成。
-- Agent / MCP 设置存于 `UiPreferences.mcpAgent`，只含非敏感策略：连接范围（全部已保存连接 / 当前活动会话 / 默认连接）与操作策略（仅只读 / 经确认操作）。该策略在桌面 bridge 的 action route 前执行；连接列表、会话上下文、传输列表与等待传输也必须按范围过滤，不能只依赖 renderer 隐藏。设置页仅检测本机 PATH 和常见用户安装目录，生成 Claude Code / Codex CLI / OpenCode 的可复制注册命令，不执行客户端、不自动写配置文件。
-- 设置页还可以按用户点击创建新的本地 PTY tab 并写入固定的 `claude`、`codex` 或 `opencode` 启动命令；它不是后台 Agent 进程或隐藏终端代理。密码、MFA、登录确认和 TUI 输入只会出现在这个可见的本地终端，MCP 不能触发或向该 terminal 注入任意连续键盘输入。Agent tab 使用可选、受 Rust 校验的本地 terminal title，renderer 只对枚举的受信任 client id 选择启动命令。本地 terminal 允许复用统一 pane tree 拆分，但同一树只含 local pane；每一个 pane 都启动独立 PTY/runtime、输入通道和取消令牌，不能与 SSH pane 混合或共享 shell 状态。
-- 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、bridge 单次读写超时 5s、需审批/前台密码输入的请求最长等待 125s、client 超时 130s（设计上大于最长 bridge 等待，保证审批或密码输入超时不触发 client 读超时）。
-- **MCP 与 CLI 的关键差异**：MCP `tools/call` 的写操作必须经桌面审批对话框（外部 Agent 调用，需要二次确认）；CLI 是用户显式启动，视为已授权，不重复弹审批。两者共用同一份 action 路由和 bridge 实现。
+- 暴露 37 个 `fileterm_*` 工具，覆盖连接管理、会话状态、远程命令执行、远程文件操作、传输调度、SSH 隧道；tool annotations 标注 `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`。MCP 首次调用 `fileterm_open_connection` 必须携带用户选择的 `execution_mode`（`background` / `visible-terminal`）；`background` 会创建不进入顶部标签栏的后台 session，并返回 `sessionId`（同时保留 `tabId`），`visible-terminal` 会创建可见但不活动的 session。GUI 的“后台会话”页面和 `fileterm_activate_session` 都能把后台 session attach 到可见标签，并复用原 worker。`WorkspaceTab.source` 记录外部来源 `cli` / `mcp`，后台会话页面、工作区底部会话 ID 和外部操作审批弹窗都显示对应来源标签；普通 GUI 会话不设置该字段。普通服务器的 `fileterm_execute_remote_command` 始终走独立、非交互 SSH exec channel，不污染可见 PTY；`fileterm_execute_visible_command` 只有在显式 `fileterm_activate_session` 后才向可见终端写入单行命令。网络设备没有后台 exec 能力，后台工具返回 `NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED`，必须使用可见终端路径；FTP / Telnet / Serial 不伪装支持远程 exec。
+- `fileterm_execute_remote_command` 使用独立、非交互 SSH exec channel；MCP/CLI 的 sudo/su 可接收用户明确的一次性参数或复用加密 profile。缺少凭据时，FileTerm 自动恢复、解除最小化并聚焦主窗口后进入本地安全 prompt；Copilot 对话区和 MCP/CLI bridge 都会报告等待前台输入，原始命令继续等待用户完成密码后再返回最终结果，外部 Agent 不应重复调用。内置 Copilot 永远不接收或转发密码字段，只使用已保存凭据或主窗口安全 prompt；如果 prompt 不可用，它会停止本轮并等待用户明确重试。MCP/CLI 在主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，外部 Agent 可以询问用户后用一次性字段重试；用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。密码不进入命令文本或 tool result。普通命令遇到 MFA、确认、安装器或 REPL 输入时返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED`，用户必须在可见 SSH tab 完成。旧的 `fileterm_execute_command_template` 也属于可见终端路径，MCP 调用要求目标 session 已激活。
+- MCP / CLI 设置存于 `UiPreferences.mcpAgent`，只含非敏感策略：连接白名单（全部已保存连接 / 指定已保存连接）与操作策略（仅只读 / 基础安全操作 / 完全访问）。该策略在桌面 bridge 的 action route 前执行；连接列表、会话上下文、传输列表与等待传输也必须按白名单过滤，不能只依赖 renderer 隐藏。基础安全操作自动放行查询和由内置 Copilot 规则判定为只读的普通远程命令；变更、破坏性、提权或未知命令，以及打开/重连/断开会话、文件变更、上传下载、传输管理、隧道、sudo/su 和未知 action 送回 FileTerm 主窗口审批；一次性 CLI、CLI JSONL 与 MCP 共用同一判定。设置页以两张全局策略卡片展示执行权限和允许连接，不增加 per-connection MCP 权限；旧的活动会话/默认连接配置只在读取时安全迁移。设置页仅检测本机 PATH 和常见用户安装目录，生成 Claude Code / Codex CLI / OpenCode 的可复制注册命令，不执行客户端、不自动写配置文件。
+- 设置页还可以按用户点击创建新的本地 PTY tab 并写入固定的 `claude`、`codex` 或 `opencode` 启动命令；它不是后台 CLI JSONL 进程或隐藏终端代理。密码、MFA、登录确认和 TUI 输入只会出现在这个可见的本地终端，MCP 不能触发或向该 terminal 注入任意连续键盘输入。Agent tab 使用可选、受 Rust 校验的本地 terminal title，renderer 只对枚举的受信任 client id 选择启动命令。本地 terminal 允许复用统一 pane tree 拆分，但同一树只含 local pane；每一个 pane 都启动独立 PTY/runtime、输入通道和取消令牌，不能与 SSH pane 混合或共享 shell 状态。这里的本地 PTY 只是用户点击启动的可见 Agent 终端，不改变外部 Agent 必须复用 MCP/CLI JSONL bridge 的约束。
+- 安全约束：`subtle::ConstantTimeEq` 常时 token 比较、非 loopback peer 拒绝、非 loopback descriptor 地址拒绝、单条消息上限 2 MiB、单文件读写上限 512 KiB、并发客户端上限 8、审批超时 120s、sudo/su 前台密码提示最长 300s、bridge 单次读写超时 5s、连接等待最长 125s、需审批/密码/命令执行串联时的 bridge 有界等待为 545s、CLI/MCP client 超时 600s（设计上大于最长 bridge 等待，保证审批或密码输入超时不触发 client 读超时）。
+- **MCP 与 CLI 的关键差异**：两者都使用同一份 action 路由、bridge 和全局策略；基础安全操作中的查询和由内置 Copilot 规则判定为只读的普通远程命令自动执行，变更、破坏性、提权或未知命令，以及打开/重连/断开会话、写操作、传输、隧道、sudo/su 和未知 action 回 FileTerm 主窗口审批。CLI 只是输出协议不同，不是权限绕过；完全访问才会跳过包括 sudo/su 操作在内的逐次操作审批，但 sudo/su 密码仍可能需要输入。
 - **内置 AI Copilot 不通过本机 MCP 反向调用自己**，也不 spawn `claude` / `codex` 子进程；它直接读 workspace runtime 拿会话上下文。纯对话请求不携带 Provider tools；半自动 / 全自动使用 Rust-owned 的 `tool-call -> approval/guardrail -> isolated exec -> tool-result` 循环，工具调用绑定 L2、leaf/root、CWD/user 和 `sessionRevision`。详见 `docs/plans/completed/ai-copilot-modes.md`。
-- 当前完成度：核心代码已构建、已注册，且覆盖协议、交互提示识别、脱敏与审计纯函数测试；真实 Claude Code / Codex CLI 端到端及 macOS / Windows / Linux 的打包产物手工验收仍待完成。
+- 当前完成度：核心代码已构建、已注册，覆盖协议、连接去重、访问策略、CLI JSONL 审批/取消、交互提示识别、脱敏与审计纯函数测试；`apps/tauri/src-tauri/tests/cli.rs` 覆盖 CLI/CLI JSONL 子进程 stdout、stderr 和退出码回归。打包产物手工验收与真实 SSH/FTP/网络设备连接仍按目标环境验收。
 
 ## 5. 当前仓库结构
 

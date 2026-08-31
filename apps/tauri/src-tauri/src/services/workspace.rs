@@ -1,3 +1,4 @@
+use crate::services::connection_operations::ConnectionOperationRegistry;
 use crate::services::transfers::TransferTask;
 use crate::sessions::WorkerCmd;
 use serde::{Deserialize, Serialize};
@@ -80,12 +81,27 @@ pub struct WorkspaceTab {
     pub title: String,
     pub layout: String, // "terminal-file" | "file-only" | "terminal-only"
     pub status: WorkspaceTabStatus,
+    /// External CLI/MCP sessions stay attached to the App worker but are not
+    /// shown in the top-level tab bar until the user attaches them.
+    #[serde(default)]
+    pub is_background: bool,
+    /// External caller that created the session. Ordinary GUI sessions omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<WorkspaceSessionSource>,
     /// 分屏树根节点；普通 tab 为 None。只有分屏的根 tab 持有。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pane_root: Option<PaneNode>,
     /// 分屏 leaf 所属的顶层 workspace tab。leaf 仍保留独立 session，但绝不作为顶栏 tab。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pane_root_tab_id: Option<String>,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceSessionSource {
+    Cli,
+    #[default]
+    Mcp,
 }
 
 /// 分屏方向：row = 左右分（垂直分屏），column = 上下分（水平分屏）
@@ -288,6 +304,37 @@ pub struct RemoteFileCapabilities {
 }
 
 impl ConnectionCapabilities {
+    /// Return whether an SSH profile explicitly targets an interactive network
+    /// device instead of a POSIX/Windows server. Missing and unknown values
+    /// deliberately fall back to the legacy server behavior.
+    pub fn is_network_device_profile(profile: &serde_json::Value) -> bool {
+        profile.get("type").and_then(serde_json::Value::as_str) == Some("ssh")
+            && profile
+                .get("deviceMode")
+                .and_then(serde_json::Value::as_str)
+                == Some("network-device")
+    }
+
+    pub fn for_profile(profile: &serde_json::Value) -> Self {
+        if Self::is_network_device_profile(profile) {
+            return Self {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: true,
+            };
+        }
+
+        Self::for_session_type(
+            profile
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("ssh"),
+        )
+    }
+
     pub fn for_session_type(session_type: &str) -> Self {
         match session_type {
             "ssh" => Self {
@@ -333,6 +380,11 @@ pub struct SessionSnapshot {
     /// Monotonic terminal-target identity. This must not change for ordinary
     /// terminal output; it changes only when the interactive target changes.
     pub ai_session_revision: String,
+    /// Effective SSH session mode after banner resolution. `auto` is never
+    /// exposed here: a connected session is either a normal server or a
+    /// network device, while a connecting legacy snapshot keeps this empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_mode: Option<String>,
     pub access_host: String,
     pub summary: String,
     pub terminal_transcript: String,
@@ -375,6 +427,24 @@ pub fn reconnect_mode_for_profile(profile: &serde_json::Value) -> Option<String>
             .unwrap_or("none")
             .to_string(),
     )
+}
+
+/// Return the explicit SSH mode that is safe to expose while a session is
+/// reconnecting. Auto detection is resolved only after the SSH handshake, so
+/// callers must clear the old effective mode until the new banner is known.
+pub fn configured_device_mode_for_profile(profile: &serde_json::Value) -> Option<String> {
+    if profile.get("type").and_then(serde_json::Value::as_str) != Some("ssh") {
+        return None;
+    }
+
+    match profile
+        .get("deviceMode")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("server") => Some("server".to_string()),
+        Some("network-device") => Some("network-device".to_string()),
+        _ => None,
+    }
 }
 
 /// Initial browser path for file-capable sessions. SSH follows Electron's
@@ -441,6 +511,17 @@ pub struct PendingSudoPassword {
     pub sender: oneshot::Sender<SudoPasswordResponse>,
 }
 
+pub struct PendingActionApproval {
+    pub sender: oneshot::Sender<crate::services::action_review::ActionApprovalDecision>,
+    /// Copilot-only binding used by the atomic visible-terminal handoff.
+    /// External MCP approvals intentionally leave this unset.
+    pub terminal_handoff: Option<crate::services::action_review::ActionApprovalTargetBinding>,
+    /// Serializes the approval timeout's final claim with the terminal
+    /// handoff's validation and PTY write. The handoff holds this through its
+    /// bounded write so an expiry cannot drop the receiver mid-operation.
+    pub handoff_gate: Arc<Mutex<()>>,
+}
+
 pub struct WorkspaceState {
     pub tabs: Arc<RwLock<Vec<WorkspaceTab>>>,
     pub active_tab_id: Arc<RwLock<Option<String>>>,
@@ -484,6 +565,9 @@ pub struct WorkspaceState {
     /// Pending SSH interaction requests (host-key verification, MFA prompts).
     /// The renderer resolves each one via `app_resolve_ssh_interaction`.
     pub pending_interactions: Arc<RwLock<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
+    /// Event-driven state for connection opens requested by CLI/MCP callers.
+    /// It carries no credentials or terminal output.
+    pub connection_operations: Arc<ConnectionOperationRegistry>,
     /// One-time password prompts for cross-device remote backup encryption.
     /// These are intentionally separate from terminal and remote-exec input.
     pub pending_backup_passwords: Arc<RwLock<HashMap<String, PendingBackupPassword>>>,
@@ -497,14 +581,7 @@ pub struct WorkspaceState {
     /// `app_resolve_action_approval` or the Copilot terminal-handoff command.
     /// Dropping or timing out a request denies it, so there is no durable
     /// approval state.
-    pub pending_action_approvals: Arc<
-        RwLock<
-            HashMap<
-                String,
-                oneshot::Sender<crate::services::action_review::ActionApprovalDecision>,
-            >,
-        >,
-    >,
+    pub pending_action_approvals: Arc<RwLock<HashMap<String, PendingActionApproval>>>,
     pub remote_forwards: Arc<RwLock<HashMap<String, Vec<RemoteForwardTarget>>>>,
     /// Transfer snapshots are durable domain state. Run handles are
     /// runtime-only and never serialized to the renderer or journal. A
@@ -589,6 +666,7 @@ impl Default for WorkspaceState {
             local_terminal_runtime_gates: Arc::new(RwLock::new(HashMap::new())),
             local_terminal_launches: Arc::new(RwLock::new(HashMap::new())),
             pending_interactions: Arc::new(RwLock::new(HashMap::new())),
+            connection_operations: Arc::new(ConnectionOperationRegistry::default()),
             pending_backup_passwords: Arc::new(RwLock::new(HashMap::new())),
             backup_password_renderer_registration: Arc::new(RwLock::new(None)),
             pending_sudo_passwords: Arc::new(RwLock::new(HashMap::new())),
@@ -760,8 +838,9 @@ impl WorkspaceState {
 #[cfg(test)]
 mod tests {
     use super::{
-        initial_remote_path_for_profile, reconnect_mode_for_profile, ConnectionCapabilities,
-        PaneNode, SplitDirection, TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
+        configured_device_mode_for_profile, initial_remote_path_for_profile,
+        reconnect_mode_for_profile, ConnectionCapabilities, PaneNode, SplitDirection,
+        TransferRunHandle, WorkspaceState, WorkspaceTabStatus,
     };
     use std::sync::{Arc, Mutex};
     use tauri::ipc::Channel;
@@ -782,6 +861,41 @@ mod tests {
         assert_eq!(value["shellIntegration"], true);
         assert_eq!(value["fileAccess"], true);
         assert_eq!(value["tunnels"], true);
+    }
+
+    #[test]
+    fn network_device_profiles_expose_only_terminal_and_tunnels() {
+        let profile = serde_json::json!({
+            "type": "ssh",
+            "deviceMode": "network-device"
+        });
+
+        assert!(ConnectionCapabilities::is_network_device_profile(&profile));
+        assert_eq!(
+            ConnectionCapabilities::for_profile(&profile),
+            ConnectionCapabilities {
+                terminal: true,
+                files: false,
+                resource_monitoring: false,
+                shell_integration: false,
+                file_access: false,
+                tunnels: true,
+            }
+        );
+    }
+
+    #[test]
+    fn missing_or_auto_device_mode_keeps_legacy_server_capabilities() {
+        for profile in [
+            serde_json::json!({ "type": "ssh" }),
+            serde_json::json!({ "type": "ssh", "deviceMode": "auto" }),
+        ] {
+            assert!(!ConnectionCapabilities::is_network_device_profile(&profile));
+            assert_eq!(
+                ConnectionCapabilities::for_profile(&profile),
+                ConnectionCapabilities::for_session_type("ssh")
+            );
+        }
     }
 
     #[test]
@@ -838,6 +952,28 @@ mod tests {
                 "reconnectMode": "auto"
             })),
             Some("auto".to_string())
+        );
+    }
+
+    #[test]
+    fn configured_device_mode_does_not_publish_auto_before_handshake() {
+        assert_eq!(
+            configured_device_mode_for_profile(&serde_json::json!({
+                "type": "ssh",
+                "deviceMode": "network-device"
+            })),
+            Some("network-device".to_string())
+        );
+        assert_eq!(
+            configured_device_mode_for_profile(&serde_json::json!({
+                "type": "ssh",
+                "deviceMode": "auto"
+            })),
+            None
+        );
+        assert_eq!(
+            configured_device_mode_for_profile(&serde_json::json!({ "type": "ftp" })),
+            None
         );
     }
 

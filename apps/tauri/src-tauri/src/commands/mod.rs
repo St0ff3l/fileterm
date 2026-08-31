@@ -5,6 +5,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+#[cfg(target_os = "windows")]
+use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -54,7 +56,7 @@ const LOCAL_TERMINAL_STARTUP_READY_TIMEOUT: Duration = Duration::from_secs(2);
 /// missing callback id and can leave renderer cleanup half-finished.
 const CHILD_WINDOW_DESTROY_DELAY: Duration = Duration::from_millis(25);
 
-async fn send_terminal_input(
+pub(crate) async fn send_terminal_input(
     state: &crate::services::workspace::WorkspaceState,
     tab_id: &str,
     data: String,
@@ -79,6 +81,89 @@ async fn send_terminal_input(
         .workers
         .read()
         .await
+        .get(tab_id)
+        .cloned()
+        .ok_or_else(|| AppError::Storage("Terminal session not found".to_string()))?;
+    timeout(
+        WORKER_CMD_SEND_TIMEOUT,
+        sender.send(WorkerCmd::WriteTerminal(data)),
+    )
+    .await
+    .map_err(|_| AppError::Storage("Terminal worker busy".to_string()))?
+    .map_err(|error| AppError::Storage(error.to_string()))
+}
+
+/// Send an exact command only while the requested session is still the active
+/// terminal pane. Keep the active-tab read guards through the bounded worker
+/// enqueue so a tab switch cannot land between validation and the write.
+pub(crate) async fn send_exact_active_terminal_input(
+    state: &crate::services::workspace::WorkspaceState,
+    tab_id: &str,
+    expected_session_revision: Option<&str>,
+    data: String,
+) -> Result<(), AppError> {
+    // Keep the tab read lock through validation and enqueue. Reconnect and
+    // close first claim the tab by writing this collection; if they already
+    // won that race, the status check below fails closed instead of sending
+    // into a worker that is about to be replaced.
+    let tabs = state.tabs.read().await;
+    let tab = tabs
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .ok_or_else(|| AppError::Command("FileTerm session was not found".to_string()))?;
+    if !tab.status.is_connected() {
+        return Err(AppError::Command(
+            "FileTerm SSH session is not connected".to_string(),
+        ));
+    }
+    let root_tab_id = tab
+        .pane_root_tab_id
+        .clone()
+        .unwrap_or_else(|| tab.id.clone());
+    let active_tab = state.active_tab_id.read().await;
+    if active_tab.as_deref() != Some(root_tab_id.as_str()) {
+        return Err(AppError::Command(
+            crate::services::action_review::VISIBLE_TERMINAL_SESSION_NOT_ACTIVE.to_string(),
+        ));
+    }
+    let active_panes = state.active_pane_tab_id_by_root.read().await;
+    let active_pane_matches = active_panes
+        .get(&root_tab_id)
+        .map_or(root_tab_id == tab_id, |active_id| active_id == tab_id);
+    if !active_pane_matches {
+        return Err(AppError::Command(
+            crate::services::action_review::VISIBLE_TERMINAL_SESSION_NOT_ACTIVE.to_string(),
+        ));
+    }
+
+    let sessions = state.sessions.read().await;
+    if !sessions
+        .get(tab_id)
+        .is_some_and(|session| session.connected)
+    {
+        return Err(AppError::Command(
+            "FileTerm SSH session is not connected".to_string(),
+        ));
+    }
+
+    // Keep the identity read lock through the worker enqueue. A reconnect
+    // increments this revision before installing the replacement worker; if
+    // it is allowed to pass between validation and send, an approved command
+    // can land in the replacement PTY with the same tab ID.
+    let session_revisions = state.ai_session_revisions.read().await;
+    if let Some(expected_session_revision) = expected_session_revision {
+        let current_session_revision = session_revisions
+            .get(tab_id)
+            .copied()
+            .unwrap_or_default()
+            .to_string();
+        if current_session_revision != expected_session_revision {
+            return Err(AppError::Command("AI_AUTO_MODE_TARGET_CHANGED".to_string()));
+        }
+    }
+
+    let workers = state.workers.read().await;
+    let sender = workers
         .get(tab_id)
         .cloned()
         .ok_or_else(|| AppError::Storage("Terminal session not found".to_string()))?;
@@ -125,9 +210,9 @@ pub struct SshConnectionDefaultsInput {
     pub legacy_algorithms: Option<bool>,
 }
 
-/// Non-secret boundary applied to MCP clients that are launched by external
-/// Agents. It deliberately does not contain connection credentials or any
-/// executable configuration path.
+/// Non-secret boundary shared by MCP clients, the FileTerm CLI and external
+/// MCP and CLI bridges. It deliberately does not contain connection credentials or
+/// any executable configuration path.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct McpAgentPreferences {
@@ -135,8 +220,13 @@ pub struct McpAgentPreferences {
     pub connection_scope: String,
     #[serde(default = "default_mcp_operation_policy")]
     pub operation_policy: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_profile_id: Option<String>,
+    #[serde(default)]
+    pub allowed_profile_ids: Vec<String>,
+    /// Read old persisted `defaultProfileId` values only long enough to
+    /// migrate legacy MCP scope settings. It is never returned to clients or
+    /// written back to disk.
+    #[serde(rename = "defaultProfileId", default, skip_serializing)]
+    pub legacy_default_profile_id: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -144,7 +234,7 @@ pub struct McpAgentPreferences {
 pub struct McpAgentPreferencesInput {
     pub connection_scope: Option<String>,
     pub operation_policy: Option<String>,
-    pub default_profile_id: Option<Option<String>>,
+    pub allowed_profile_ids: Option<Vec<String>>,
 }
 
 impl Default for McpAgentPreferences {
@@ -152,7 +242,8 @@ impl Default for McpAgentPreferences {
         Self {
             connection_scope: default_mcp_connection_scope(),
             operation_policy: default_mcp_operation_policy(),
-            default_profile_id: None,
+            allowed_profile_ids: Vec::new(),
+            legacy_default_profile_id: None,
         }
     }
 }
@@ -936,11 +1027,39 @@ fn default_legacy_algorithms() -> bool {
 }
 
 fn default_mcp_connection_scope() -> String {
-    "all-saved-connections".to_string()
+    "selected-connections".to_string()
 }
 
 fn default_mcp_operation_policy() -> String {
-    "approved-operations".to_string()
+    "basic-safe-operations".to_string()
+}
+
+fn normalize_mcp_operation_policy(operation_policy: &str) -> String {
+    match operation_policy {
+        "read-only" => "read-only".to_string(),
+        // Keep the previous persisted value readable, but write the clearer
+        // policy name back whenever preferences are saved.
+        "approved-operations" | "basic-safe-operations" => "basic-safe-operations".to_string(),
+        "full-access" => "full-access".to_string(),
+        _ => default_mcp_operation_policy(),
+    }
+}
+
+fn normalize_mcp_allowed_profile_ids(profile_ids: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for profile_id in profile_ids {
+        let profile_id = profile_id.trim();
+        if profile_id.is_empty() || profile_id.len() > 256 {
+            continue;
+        }
+        if !normalized.iter().any(|existing| existing == profile_id) {
+            normalized.push(profile_id.to_string());
+        }
+        if normalized.len() >= 256 {
+            break;
+        }
+    }
+    normalized
 }
 
 fn default_overview_show_stats() -> bool {
@@ -1122,31 +1241,39 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
     ) {
         preferences.connection_defaults.reconnect_mode = default_reconnect_mode();
     }
-    if !matches!(
-        preferences.mcp_agent.connection_scope.as_str(),
-        "all-saved-connections" | "active-session" | "default-connection"
-    ) {
-        preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
+    // DBX-style MCP policy has only two connection modes: all saved
+    // connections or an explicit allowlist. Migrate the two older runtime
+    // target modes when loading preferences. An active-session policy has no
+    // stable saved profile to recover, so it fails closed with an empty
+    // allowlist; a default-connection policy can be preserved exactly.
+    let legacy_default_profile_id = preferences
+        .mcp_agent
+        .legacy_default_profile_id
+        .take()
+        .and_then(|profile_id| {
+            let trimmed = profile_id.trim();
+            (!trimmed.is_empty() && trimmed.len() <= 256).then(|| trimmed.to_string())
+        });
+    match preferences.mcp_agent.connection_scope.as_str() {
+        "all-saved-connections" | "selected-connections" => {}
+        "active-session" => {
+            preferences.mcp_agent.connection_scope = "selected-connections".to_string();
+            preferences.mcp_agent.allowed_profile_ids.clear();
+        }
+        "default-connection" => {
+            preferences.mcp_agent.connection_scope = "selected-connections".to_string();
+            if let Some(profile_id) = legacy_default_profile_id {
+                preferences.mcp_agent.allowed_profile_ids.push(profile_id);
+            }
+        }
+        _ => {
+            preferences.mcp_agent.connection_scope = default_mcp_connection_scope();
+        }
     }
-    if !matches!(
-        preferences.mcp_agent.operation_policy.as_str(),
-        "read-only" | "approved-operations"
-    ) {
-        preferences.mcp_agent.operation_policy = default_mcp_operation_policy();
-    }
-    preferences.mcp_agent.default_profile_id =
-        preferences
-            .mcp_agent
-            .default_profile_id
-            .and_then(|profile_id| {
-                let trimmed = profile_id.trim();
-                (!trimmed.is_empty() && trimmed.len() <= 256).then(|| trimmed.to_string())
-            });
-    if preferences.mcp_agent.connection_scope == "default-connection"
-        && preferences.mcp_agent.default_profile_id.is_none()
-    {
-        preferences.mcp_agent.connection_scope = "active-session".to_string();
-    }
+    preferences.mcp_agent.operation_policy =
+        normalize_mcp_operation_policy(&preferences.mcp_agent.operation_policy);
+    preferences.mcp_agent.allowed_profile_ids =
+        normalize_mcp_allowed_profile_ids(preferences.mcp_agent.allowed_profile_ids);
     preferences.overview_section_order =
         normalize_overview_section_order(preferences.overview_section_order);
     preferences.local_terminal_shells =
@@ -1338,7 +1465,7 @@ where
     let direct = std::path::PathBuf::from(command);
     if direct.components().count() > 1
         && direct.is_file()
-        && !is_embedded_desktop_app_cli(command, &direct)
+        && is_usable_local_cli_candidate(command, &direct)
     {
         return Some(direct);
     }
@@ -1352,12 +1479,86 @@ where
     for directory in directories {
         for extension in extensions {
             let candidate = directory.join(format!("{command}{extension}"));
-            if candidate.is_file() && !is_embedded_desktop_app_cli(command, &candidate) {
+            if candidate.is_file() && is_usable_local_cli_candidate(command, &candidate) {
                 return Some(candidate);
             }
         }
     }
     None
+}
+
+fn is_usable_local_cli_candidate(command: &str, candidate: &Path) -> bool {
+    if is_embedded_desktop_app_cli(command, candidate) || is_invalid_windows_executable(candidate) {
+        return false;
+    }
+
+    if command.eq_ignore_ascii_case("claude") {
+        let native_binary = candidate
+            .parent()
+            .map(|parent| {
+                parent
+                    .join("node_modules")
+                    .join("@anthropic-ai")
+                    .join("claude-code")
+                    .join("bin")
+                    .join("claude.exe")
+            })
+            .filter(|path| path != candidate);
+
+        if is_claude_native_stub(candidate)
+            || native_binary.as_deref().is_some_and(|path| {
+                path.is_file()
+                    && (is_claude_native_stub(path) || is_invalid_windows_executable(path))
+            })
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Claude Code's npm wrapper leaves this small shell script in place when its
+/// platform-native optional dependency is missing. It has an `.exe` suffix on
+/// Windows, but is not an executable at all; do not report it as an installed
+/// CLI. The same marker can also be reached through npm's generated shims.
+fn is_claude_native_stub(candidate: &Path) -> bool {
+    const STUB_MARKER: &[u8] = b"claude native binary not installed.";
+    let Ok(metadata) = std::fs::metadata(candidate) else {
+        return false;
+    };
+    if metadata.len() > 4096 {
+        return false;
+    }
+
+    std::fs::read(candidate)
+        .map(|contents| {
+            contents
+                .windows(STUB_MARKER.len())
+                .any(|window| window == STUB_MARKER)
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn is_invalid_windows_executable(candidate: &Path) -> bool {
+    if !candidate
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    {
+        return false;
+    }
+
+    let Ok(mut file) = std::fs::File::open(candidate) else {
+        return true;
+    };
+    let mut header = [0_u8; 2];
+    file.read_exact(&mut header).is_err() || header != [b'M', b'Z']
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_invalid_windows_executable(_candidate: &Path) -> bool {
+    false
 }
 
 /// ChatGPT for macOS ships an internal `codex` executable in its app bundle.
@@ -2117,8 +2318,8 @@ pub fn app_set_ui_preferences(
         if let Some(operation_policy) = mcp_agent.operation_policy {
             preferences.mcp_agent.operation_policy = operation_policy;
         }
-        if let Some(default_profile_id) = mcp_agent.default_profile_id {
-            preferences.mcp_agent.default_profile_id = default_profile_id;
+        if let Some(allowed_profile_ids) = mcp_agent.allowed_profile_ids {
+            preferences.mcp_agent.allowed_profile_ids = allowed_profile_ids;
         }
     }
     if let Some(overview_show_stats) = input.overview_show_stats {
@@ -2752,16 +2953,7 @@ pub async fn app_export_connections_as_files(
             crate::services::connections::export_filename(name, id, &mut used_names)
         );
         let payload = if format == "compatible" {
-            serde_json::json!({
-                "id": profile.get("id"), "name": profile.get("name"),
-                "description": profile.get("note"), "conection_type": profile.get("type"),
-                "host": profile.get("host"), "port": profile.get("port"),
-                "user_name": profile.get("username"), "terminal_encoding": profile.get("encoding"),
-                "authentication_type": profile.get("authType"), "password": profile.get("password"),
-                "private_key_path": profile.get("privateKeyPath"), "passphrase": profile.get("passphrase"),
-                "exec_channel_enable": profile.get("enableExecChannel"),
-                "port_forwarding_list": profile.get("forwards"),
-            })
+            crate::services::connections::build_compatible_profile_payload(&profile)
         } else {
             serde_json::json!({
                 "schemaVersion": 1,
@@ -3236,6 +3428,21 @@ pub(crate) async fn send_worker_cmd_with_response_timeout<T>(
     response_timeout: Duration,
     make_cmd: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,
 ) -> Result<T, AppError> {
+    send_worker_cmd_with_response_timeout_cancellable(app, tab_id, response_timeout, None, make_cmd)
+        .await
+}
+
+/// Send a worker command with an optional request cancellation boundary. A
+/// command may already be queued while Copilot is waiting for its response;
+/// selecting cancellation here prevents the AI request from remaining stuck
+/// behind an unrelated worker operation until the normal response timeout.
+pub(crate) async fn send_worker_cmd_with_response_timeout_cancellable<T>(
+    app: &AppHandle,
+    tab_id: &str,
+    response_timeout: Duration,
+    cancellation: Option<&CancellationToken>,
+    make_cmd: impl FnOnce(oneshot::Sender<Result<T, String>>) -> WorkerCmd,
+) -> Result<T, AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let workers = state.workers.read().await;
     let sender = workers
@@ -3246,15 +3453,44 @@ pub(crate) async fn send_worker_cmd_with_response_timeout<T>(
 
     let (tx, rx) = oneshot::channel();
     let cmd = make_cmd(tx);
+    if cancellation.is_some_and(|token| token.is_cancelled()) {
+        return Err(AppError::Command(
+            crate::services::action_review::AI_REQUEST_CANCELLED.to_string(),
+        ));
+    }
+
     // 不持有 workers 读锁跨 await：clone sender 后立即释放，避免后续写锁死锁。
-    // send 必须超时，worker 卡死时前端能拿到明确错误而不是永久 hang。
-    timeout(WORKER_FILE_CMD_SEND_TIMEOUT, sender.send(cmd))
-        .await
+    // send 必须超时，worker 卡死时前端能拿到明确错误而不是永久 hang；Copilot
+    // 还要能在 send 阶段被 Stop 立即唤醒。
+    let send_result = if let Some(cancellation) = cancellation {
+        tokio::select! {
+            _ = cancellation.cancelled() => {
+                return Err(AppError::Command(
+                    crate::services::action_review::AI_REQUEST_CANCELLED.to_string(),
+                ));
+            }
+            result = timeout(WORKER_FILE_CMD_SEND_TIMEOUT, sender.send(cmd)) => result,
+        }
+    } else {
+        timeout(WORKER_FILE_CMD_SEND_TIMEOUT, sender.send(cmd)).await
+    };
+    send_result
         .map_err(|_| AppError::Storage("Worker busy: command send timeout".to_string()))?
         .map_err(|e| AppError::Storage(e.to_string()))?;
 
-    let res = timeout(response_timeout, rx)
-        .await
+    let response = if let Some(cancellation) = cancellation {
+        tokio::select! {
+            _ = cancellation.cancelled() => {
+                return Err(AppError::Command(
+                    crate::services::action_review::AI_REQUEST_CANCELLED.to_string(),
+                ));
+            }
+            result = timeout(response_timeout, rx) => result,
+        }
+    } else {
+        timeout(response_timeout, rx).await
+    };
+    let res = response
         .map_err(|_| AppError::Storage("远程操作超时，请检查连接后重试".to_string()))?
         .map_err(|e| AppError::Storage(e.to_string()))?
         .map_err(AppError::Storage)?;
@@ -3359,9 +3595,10 @@ pub(crate) async fn mcp_list_remote_directory(
     }))
 }
 
-/// Execute a bounded command through a dedicated SSH exec channel. This is
-/// separate from the interactive terminal so an external CLI/MCP caller
-/// receives deterministic output without stealing the user's PTY input.
+/// Execute a bounded command through the SSH command boundary. Ordinary
+/// servers use a dedicated exec channel; network-device sessions send the
+/// native command through their already-visible raw PTY because they do not
+/// expose a POSIX shell or a portable process-exit protocol.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn app_execute_remote_command(
@@ -3395,11 +3632,39 @@ pub async fn app_execute_remote_command(
     serde_json::to_value(result).map_err(|error| AppError::Serialization(error.to_string()))
 }
 
-fn create_tab_layout(profile_type: &str) -> String {
+fn create_tab_layout(profile: &serde_json::Value) -> String {
+    let profile_type = profile.get("type").and_then(Value::as_str).unwrap_or("ssh");
     match profile_type {
+        "ssh"
+            if crate::services::workspace::ConnectionCapabilities::is_network_device_profile(
+                profile,
+            ) =>
+        {
+            "terminal-only".to_string()
+        }
         "ssh" => "terminal-file".to_string(),
         "ftp" => "file-only".to_string(),
         _ => "terminal-only".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tab_layout_tests {
+    use super::create_tab_layout;
+
+    #[test]
+    fn network_device_ssh_profiles_start_with_terminal_only_layout() {
+        assert_eq!(
+            create_tab_layout(&serde_json::json!({
+                "type": "ssh",
+                "deviceMode": "network-device"
+            })),
+            "terminal-only"
+        );
+        assert_eq!(
+            create_tab_layout(&serde_json::json!({ "type": "ssh" })),
+            "terminal-file"
+        );
     }
 }
 
@@ -3441,6 +3706,7 @@ fn start_session_worker(
 }
 
 async fn stop_session_worker(state: &crate::services::workspace::WorkspaceState, tab_id: &str) {
+    state.connection_operations.forget_tab(tab_id).await;
     crate::sessions::local_terminal::deactivate_local_terminal_runtime(state, tab_id).await;
     if let Some((_, cancellation)) = state
         .serial_transfer_cancellations
@@ -3560,12 +3826,20 @@ pub async fn shutdown_session_workers(app: &AppHandle) {
 ///
 /// 抽取自 `app_open_profile`，供 `app_split_tab` 复用：分屏时基于当前 profile
 /// 新建一个独立 session，不共享 PTY。
+#[derive(Clone, Copy, Default)]
+struct SessionSpawnOptions {
+    is_background: bool,
+    source: Option<crate::services::WorkspaceSessionSource>,
+}
+
 async fn spawn_session_for_profile(
     app: &AppHandle,
     state: &crate::services::workspace::WorkspaceState,
     profile: &serde_json::Value,
     profile_id: &str,
     pane_root_tab_id: Option<String>,
+    connection_operation_id: Option<&str>,
+    options: SessionSpawnOptions,
 ) -> Result<String, AppError> {
     let resolved_profile = resolve_profile_for_session(app, profile)?;
     let profile = &resolved_profile;
@@ -3579,15 +3853,16 @@ async fn spawn_session_for_profile(
         .unwrap_or("SSH Session");
 
     let tab_id = format!("tab-{}", uuid::Uuid::new_v4());
-    let capabilities =
-        crate::services::workspace::ConnectionCapabilities::for_session_type(profile_type);
+    let capabilities = crate::services::workspace::ConnectionCapabilities::for_profile(profile);
     let new_tab = crate::services::WorkspaceTab {
         id: tab_id.clone(),
         profile_id: profile_id.to_string(),
         session_type: profile_type.to_string(),
         title: name.to_string(),
-        layout: create_tab_layout(profile_type),
+        layout: create_tab_layout(profile),
         status: crate::services::WorkspaceTabStatus::Connecting,
+        is_background: options.is_background,
+        source: options.source,
         pane_root: None,
         pane_root_tab_id,
     };
@@ -3619,6 +3894,14 @@ async fn spawn_session_for_profile(
         .unwrap_or("root");
     let initial_remote_path = crate::services::workspace::initial_remote_path_for_profile(profile);
 
+    if let Some(operation_id) = connection_operation_id {
+        state
+            .connection_operations
+            .attach_tab(operation_id, &tab_id)
+            .await
+            .map_err(AppError::Command)?;
+    }
+
     {
         let mut tabs = state.tabs.write().await;
         tabs.push(new_tab);
@@ -3628,12 +3911,15 @@ async fn spawn_session_for_profile(
             crate::services::SessionSnapshot {
                 profile_id: profile_id.to_string(),
                 ai_session_revision: "0".to_string(),
+                device_mode: crate::services::workspace::configured_device_mode_for_profile(
+                    profile,
+                ),
                 access_host: format!("{}:{}", host, port),
                 summary: format!("{}@{}", username, host),
                 terminal_transcript: "连接主机...\r\n".to_string(),
                 remote_path: initial_remote_path,
                 shell_cwd: None,
-                follow_shell_cwd: true,
+                follow_shell_cwd: capabilities.shell_integration,
                 remote_files_loading: false,
                 remote_files: Vec::new(),
                 sftp_unavailable_reason: None,
@@ -3738,6 +4024,8 @@ async fn spawn_local_terminal_tab(
                 .unwrap_or_else(|| "Local Terminal".to_string()),
             layout: "terminal-only".to_string(),
             status: crate::services::WorkspaceTabStatus::Connecting,
+            is_background: false,
+            source: None,
             pane_root: None,
             pane_root_tab_id,
         });
@@ -3747,6 +4035,7 @@ async fn spawn_local_terminal_tab(
             crate::services::SessionSnapshot {
                 profile_id: "__local_terminal__".to_string(),
                 ai_session_revision: "0".to_string(),
+                device_mode: None,
                 access_host: launch.cwd.clone(),
                 summary: launch.shell.clone(),
                 terminal_transcript: crate::sessions::terminal::local_terminal_startup_transcript()
@@ -4120,7 +4409,16 @@ pub async fn app_open_profile(
     // open a connection, not whether the later network handshake succeeds.
     crate::services::profile_ops::touch_profile(&app, &profile_id)?;
 
-    let tab_id = spawn_session_for_profile(&app, &state, profile, &profile_id, None).await?;
+    let tab_id = spawn_session_for_profile(
+        &app,
+        &state,
+        profile,
+        &profile_id,
+        None,
+        None,
+        SessionSpawnOptions::default(),
+    )
+    .await?;
 
     {
         let mut active = state.active_tab_id.write().await;
@@ -4128,6 +4426,45 @@ pub async fn app_open_profile(
     }
 
     get_workspace_snapshot_and_emit(&app).await
+}
+
+/// Open a saved profile for an external CLI/MCP caller and return the tab id
+/// together with the initial workspace snapshot. Background sessions remain
+/// attached to the App worker without appearing in the top-level tab bar;
+/// callers that need a visible terminal can explicitly attach the session.
+/// The operation id is attached before the worker starts, so a fast connection
+/// cannot race the wait path.
+pub async fn app_open_profile_with_operation(
+    app: AppHandle,
+    profile_id: String,
+    connection_operation_id: String,
+    is_background: bool,
+    source: crate::services::WorkspaceSessionSource,
+) -> Result<(String, serde_json::Value), AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let _library_guard = lock_library_after_transfer_hydration(&app).await?;
+    let profiles = read_json_array(&app, "profiles.json")?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
+        .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
+
+    crate::services::profile_ops::touch_profile(&app, &profile_id)?;
+    let tab_id = spawn_session_for_profile(
+        &app,
+        &state,
+        profile,
+        &profile_id,
+        None,
+        Some(&connection_operation_id),
+        SessionSpawnOptions {
+            is_background,
+            source: Some(source),
+        },
+    )
+    .await?;
+    let snapshot = get_workspace_snapshot_and_emit(&app).await?;
+    Ok((tab_id, snapshot))
 }
 
 /// 分屏：基于当前 profile 新建一个独立 session，并在 pane tree 中把 source leaf
@@ -4218,8 +4555,16 @@ pub async fn app_split_tab(
                 .iter()
                 .find(|p| p.get("id").and_then(|id| id.as_str()) == Some(&profile_id))
                 .ok_or_else(|| AppError::Storage("Profile not found".to_string()))?;
-            spawn_session_for_profile(&app, &state, profile, &profile_id, Some(pane_root_tab_id))
-                .await?
+            spawn_session_for_profile(
+                &app,
+                &state,
+                profile,
+                &profile_id,
+                Some(pane_root_tab_id),
+                None,
+                SessionSpawnOptions::default(),
+            )
+            .await?
         }
         "local" => {
             let mut launch = state
@@ -4557,6 +4902,112 @@ pub async fn app_activate_tab(
     get_workspace_snapshot(app).await
 }
 
+fn attach_background_session_in_tabs(
+    tabs: &mut [crate::services::WorkspaceTab],
+    tab_id: &str,
+) -> Result<String, AppError> {
+    let top_level_tab_id = tabs
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .map(|tab| {
+            tab.pane_root_tab_id
+                .clone()
+                .unwrap_or_else(|| tab.id.clone())
+        })
+        .ok_or_else(|| AppError::Storage(format!("Session not found: {tab_id}")))?;
+    let tab = tabs
+        .iter_mut()
+        .find(|tab| tab.id == top_level_tab_id)
+        .ok_or_else(|| AppError::Storage(format!("Root session not found: {top_level_tab_id}")))?;
+    tab.is_background = false;
+    Ok(top_level_tab_id)
+}
+
+fn detach_session_to_background_in_tabs(
+    tabs: &mut [crate::services::WorkspaceTab],
+    tab_id: &str,
+) -> Result<String, AppError> {
+    let top_level_tab_id = tabs
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .map(|tab| {
+            tab.pane_root_tab_id
+                .clone()
+                .unwrap_or_else(|| tab.id.clone())
+        })
+        .ok_or_else(|| AppError::Storage(format!("Session not found: {tab_id}")))?;
+    let tab = tabs
+        .iter_mut()
+        .find(|tab| tab.id == top_level_tab_id)
+        .ok_or_else(|| AppError::Storage(format!("Root session not found: {top_level_tab_id}")))?;
+    if tab.source.is_none() {
+        return Err(AppError::Storage(
+            "Only CLI or MCP sessions can be hidden in background".to_string(),
+        ));
+    }
+    tab.is_background = true;
+    Ok(top_level_tab_id)
+}
+
+fn next_visible_top_level_tab_id(
+    tabs: &[crate::services::WorkspaceTab],
+    hidden_tab_id: &str,
+) -> Option<String> {
+    tabs.iter()
+        .rev()
+        .find(|tab| !tab.is_background && tab.pane_root_tab_id.is_none() && tab.id != hidden_tab_id)
+        .map(|tab| tab.id.clone())
+}
+
+/// Make an externally opened background session visible in the normal
+/// workspace and focus it. The existing worker/session is reused; this only
+/// changes presentation and active-tab routing.
+#[tauri::command]
+pub async fn app_attach_background_session(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let top_level_tab_id = {
+        let mut tabs = state.tabs.write().await;
+        attach_background_session_in_tabs(&mut tabs, &tab_id)?
+    };
+
+    {
+        let mut active = state.active_tab_id.write().await;
+        *active = Some(top_level_tab_id);
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
+/// Hide an externally opened session from the visible tab bar without
+/// disconnecting its existing worker. The session remains available from the
+/// Background Sessions page and can be attached again later.
+#[tauri::command]
+pub async fn app_detach_session_to_background(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let active_tab_id = state.active_tab_id.read().await.clone();
+    let (top_level_tab_id, next_active_tab_id) = {
+        let mut tabs = state.tabs.write().await;
+        let top_level_tab_id = detach_session_to_background_in_tabs(&mut tabs, &tab_id)?;
+        let next_active_tab_id = (active_tab_id.as_deref() == Some(top_level_tab_id.as_str()))
+            .then(|| next_visible_top_level_tab_id(&tabs, &top_level_tab_id))
+            .flatten();
+        (top_level_tab_id, next_active_tab_id)
+    };
+
+    if active_tab_id.as_deref() == Some(top_level_tab_id.as_str()) {
+        let mut active = state.active_tab_id.write().await;
+        *active = next_active_tab_id;
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
+}
+
 #[tauri::command]
 pub async fn app_reconnect_tab(
     app: AppHandle,
@@ -4649,7 +5100,13 @@ pub async fn app_reconnect_tab(
             // the worker and append another reconnect banner.
             let should_start = {
                 let mut tabs = state.tabs.write().await;
-                claim_reconnect_tab(&mut tabs, &tab_id)
+                let should_start = claim_reconnect_tab(&mut tabs, &tab_id);
+                if should_start {
+                    if let Some(tab) = tabs.iter_mut().find(|tab| tab.id == tab_id) {
+                        tab.layout = create_tab_layout(profile);
+                    }
+                }
+                should_start
             };
             if !should_start {
                 return get_workspace_snapshot(app).await;
@@ -4667,12 +5124,22 @@ pub async fn app_reconnect_tab(
                 let mut sessions = state.sessions.write().await;
                 if let Some(session) = sessions.get_mut(&tab_id) {
                     session.connected = false;
+                    session.device_mode =
+                        crate::services::workspace::configured_device_mode_for_profile(profile);
                     session.remote_files_loading = false;
                     session.shell_user = None;
+                    if crate::services::workspace::ConnectionCapabilities::is_network_device_profile(
+                        profile,
+                    ) {
+                        session.shell_cwd = None;
+                    }
                     session.file_access_mode = "user".to_string();
                     session.has_reusable_sudo_auth = false;
                     session.reconnect_mode =
                         crate::services::workspace::reconnect_mode_for_profile(profile);
+                    session.capabilities =
+                        crate::services::workspace::ConnectionCapabilities::for_profile(profile);
+                    session.follow_shell_cwd = session.capabilities.shell_integration;
                     // Append a reconnect separator instead of wiping history.
                     if !session.terminal_transcript.is_empty() {
                         session
@@ -5177,8 +5644,16 @@ pub async fn app_set_follow_shell_cwd(
     let cwd_to_follow = {
         let mut sessions = state.sessions.write().await;
         if let Some(session) = sessions.get_mut(&tab_id) {
-            session.follow_shell_cwd = enabled;
-            if enabled && session.shell_cwd.as_deref() != Some(session.remote_path.as_str()) {
+            // Network-device and exec-disabled SSH sessions deliberately do
+            // not expose shell integration. Keep this command-side gate in
+            // addition to the renderer capability checks so a stale/legacy
+            // FileManager request cannot re-enable CWD tracking after the
+            // worker has classified the session.
+            let effective_enabled = enabled && session.capabilities.shell_integration;
+            session.follow_shell_cwd = effective_enabled;
+            if effective_enabled
+                && session.shell_cwd.as_deref() != Some(session.remote_path.as_str())
+            {
                 session
                     .shell_cwd
                     .clone()
@@ -5923,11 +6398,19 @@ pub async fn app_resolve_action_approval(
 }
 
 #[tauri::command]
-pub async fn app_resolve_ai_terminal_handoff(
+pub async fn app_execute_ai_terminal_handoff(
     app: AppHandle,
     request_id: String,
+    tab_id: String,
+    command: String,
 ) -> Result<(), AppError> {
-    crate::services::action_review::resolve_action_approval_as_terminal(&app, &request_id).await
+    crate::services::action_review::execute_ai_terminal_handoff(
+        &app,
+        &request_id,
+        &tab_id,
+        &command,
+    )
+    .await
 }
 
 // ==========================================
@@ -6105,7 +6588,36 @@ pub async fn app_delete_profile(
 ) -> Result<serde_json::Value, AppError> {
     let _guard = lock_library_after_transfer_hydration(&app).await?;
     crate::services::profile_ops::delete_profile(&app, &profile_id)?;
+    if let Err(error) = clear_deleted_profile_from_mcp_policy(&app, &profile_id) {
+        crate::services::logging::warn(
+            &app,
+            "ui-preferences",
+            format!("failed to clean deleted profile from MCP policy: {error}"),
+        );
+    }
     get_workspace_snapshot_and_emit(&app).await
+}
+
+fn clear_deleted_profile_from_mcp_policy(
+    app: &AppHandle,
+    profile_id: &str,
+) -> Result<(), AppError> {
+    let mut preferences = app_get_ui_preferences(app.clone())?;
+    let original_len = preferences.mcp_agent.allowed_profile_ids.len();
+    preferences
+        .mcp_agent
+        .allowed_profile_ids
+        .retain(|allowed_id| allowed_id != profile_id);
+    if preferences.mcp_agent.allowed_profile_ids.len() == original_len {
+        return Ok(());
+    }
+
+    let path = crate::storage::state_path(app)?;
+    let content = serde_json::to_string_pretty(&preferences)
+        .map_err(|error| AppError::Serialization(error.to_string()))?;
+    std::fs::write(path, content).map_err(|error| AppError::Storage(error.to_string()))?;
+    let _ = app.emit("app:ui-preferences-changed", &preferences);
+    Ok(())
 }
 
 #[tauri::command]
@@ -6328,6 +6840,31 @@ mod mcp_agent_setup_tests {
     }
 
     #[test]
+    fn ignores_claude_npm_stub_when_native_binary_is_missing() {
+        let root =
+            std::env::temp_dir().join(format!("fileterm-claude-stub-{}", uuid::Uuid::new_v4()));
+        let npm_bin = root.join("npm");
+        let native_bin = npm_bin.join("node_modules/@anthropic-ai/claude-code/bin");
+        std::fs::create_dir_all(&native_bin)
+            .expect("Claude native bin directory should be created");
+        std::fs::write(
+            npm_bin.join("claude"),
+            b"#!/bin/sh\nexec node_modules/@anthropic-ai/claude-code/bin/claude.exe\n",
+        )
+        .expect("Claude npm shim should be written");
+        std::fs::write(
+            native_bin.join("claude.exe"),
+            b"echo \"Error: claude native binary not installed.\" >&2\nexit 1\n",
+        )
+        .expect("Claude fallback stub should be written");
+
+        let resolved = resolve_local_cli_from_paths("claude", vec![npm_bin]);
+
+        assert_eq!(resolved, None);
+        std::fs::remove_dir_all(root).expect("temporary Claude stub directory should be removed");
+    }
+
+    #[test]
     fn ignores_codex_bundled_inside_a_macos_desktop_app() {
         let root =
             std::env::temp_dir().join(format!("fileterm-codex-app-{}", uuid::Uuid::new_v4()));
@@ -6468,6 +7005,8 @@ mod split_pane_close_tests {
             title: "Server".to_string(),
             layout: "terminal-file".to_string(),
             status: WorkspaceTabStatus::Connected,
+            is_background: false,
+            source: None,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
         }
@@ -6485,6 +7024,8 @@ mod split_pane_close_tests {
             title: "Local Terminal".to_string(),
             layout: "terminal-only".to_string(),
             status: WorkspaceTabStatus::Connected,
+            is_background: false,
+            source: None,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
         }
@@ -6687,6 +7228,8 @@ mod reconnect_tests {
             title: "Server".to_string(),
             layout: "terminal-file".to_string(),
             status,
+            is_background: false,
+            source: None,
             pane_root: None,
             pane_root_tab_id: None,
         }
@@ -6789,8 +7332,8 @@ mod ui_preferences_tests {
         default_local_terminal_shells, default_overview_section_order,
         default_resource_monitoring_metric_order, default_resource_monitoring_metrics,
         default_theme_config, default_update_channel, normalize_local_terminal_shells,
-        normalize_resource_monitoring_metric_order, normalize_theme_config,
-        normalize_ui_preferences, resolve_profile_with_connection_defaults,
+        normalize_mcp_operation_policy, normalize_resource_monitoring_metric_order,
+        normalize_theme_config, normalize_ui_preferences, resolve_profile_with_connection_defaults,
         LocalTerminalShellPreferences, McpAgentPreferences, SavedTheme, SshConnectionDefaults,
         UiPreferences, UiPreferencesInput,
     };
@@ -7099,7 +7642,8 @@ mod ui_preferences_tests {
             mcp_agent: McpAgentPreferences {
                 connection_scope: "not-a-scope".to_string(),
                 operation_policy: "not-a-policy".to_string(),
-                default_profile_id: Some("  ".to_string()),
+                allowed_profile_ids: vec![" profile-1 ".to_string(), "profile-1".to_string()],
+                legacy_default_profile_id: Some("  ".to_string()),
             },
             overview_show_stats: true,
             overview_show_recent: true,
@@ -7110,17 +7654,28 @@ mod ui_preferences_tests {
 
         assert_eq!(
             preferences.mcp_agent.connection_scope,
-            "all-saved-connections"
+            "selected-connections"
         );
         assert_eq!(
             preferences.mcp_agent.operation_policy,
-            "approved-operations"
+            "basic-safe-operations"
         );
-        assert_eq!(preferences.mcp_agent.default_profile_id, None);
+        assert_eq!(
+            preferences.mcp_agent.allowed_profile_ids,
+            vec!["profile-1".to_string()]
+        );
+        assert_eq!(preferences.mcp_agent.legacy_default_profile_id, None);
+        let serialized = serde_json::to_value(&preferences.mcp_agent)
+            .expect("normalized MCP preferences should serialize");
+        assert!(serialized.get("defaultProfileId").is_none());
+        assert_eq!(
+            normalize_mcp_operation_policy("approved-operations"),
+            "basic-safe-operations"
+        );
     }
 
     #[test]
-    fn default_connection_scope_without_profile_falls_back_to_active_session() {
+    fn legacy_default_connection_scope_migrates_to_selected_allowlist() {
         let preferences = normalize_ui_preferences(UiPreferences {
             theme: "default-dark".to_string(),
             locale: "zhCN".to_string(),
@@ -7137,7 +7692,8 @@ mod ui_preferences_tests {
             mcp_agent: McpAgentPreferences {
                 connection_scope: "default-connection".to_string(),
                 operation_policy: "read-only".to_string(),
-                default_profile_id: None,
+                allowed_profile_ids: Vec::new(),
+                legacy_default_profile_id: Some("profile-1".to_string()),
             },
             overview_show_stats: true,
             overview_show_recent: true,
@@ -7146,8 +7702,51 @@ mod ui_preferences_tests {
             overview_section_order: default_overview_section_order(),
         });
 
-        assert_eq!(preferences.mcp_agent.connection_scope, "active-session");
+        assert_eq!(
+            preferences.mcp_agent.connection_scope,
+            "selected-connections"
+        );
         assert_eq!(preferences.mcp_agent.operation_policy, "read-only");
+        assert_eq!(
+            preferences.mcp_agent.allowed_profile_ids,
+            vec!["profile-1".to_string()]
+        );
+        assert_eq!(preferences.mcp_agent.legacy_default_profile_id, None);
+    }
+
+    #[test]
+    fn legacy_active_session_scope_fails_closed_to_empty_allowlist() {
+        let preferences = normalize_ui_preferences(UiPreferences {
+            theme: "default-dark".to_string(),
+            locale: "zhCN".to_string(),
+            theme_config: default_theme_config(),
+            custom_themes: Vec::new(),
+            auto_check_updates: true,
+            update_channel: default_update_channel(),
+            terminal_zoom_locked: false,
+            local_terminal_shells: default_local_terminal_shells(),
+            file_panel_remember_ratio: true,
+            resource_monitoring_metrics: default_resource_monitoring_metrics(),
+            resource_monitoring_metric_order: default_resource_monitoring_metric_order(),
+            connection_defaults: SshConnectionDefaults::default(),
+            mcp_agent: McpAgentPreferences {
+                connection_scope: "active-session".to_string(),
+                operation_policy: "read-only".to_string(),
+                allowed_profile_ids: vec!["stale-profile".to_string()],
+                legacy_default_profile_id: None,
+            },
+            overview_show_stats: true,
+            overview_show_recent: true,
+            overview_show_all_connections: true,
+            overview_show_quick_actions: true,
+            overview_section_order: default_overview_section_order(),
+        });
+
+        assert_eq!(
+            preferences.mcp_agent.connection_scope,
+            "selected-connections"
+        );
+        assert!(preferences.mcp_agent.allowed_profile_ids.is_empty());
     }
 
     #[test]
@@ -7425,5 +8024,78 @@ mod external_url_tests {
             assert!(validate_external_url(denied).is_err());
         }
         assert!(validate_external_url("not a url").is_err());
+    }
+}
+
+#[cfg(test)]
+mod background_session_tests {
+    use super::{
+        attach_background_session_in_tabs, detach_session_to_background_in_tabs,
+        next_visible_top_level_tab_id,
+    };
+    use crate::services::{WorkspaceSessionSource, WorkspaceTab, WorkspaceTabStatus};
+
+    fn tab(id: &str, is_background: bool) -> WorkspaceTab {
+        WorkspaceTab {
+            id: id.to_string(),
+            profile_id: "profile-1".to_string(),
+            session_type: "ssh".to_string(),
+            title: "Server".to_string(),
+            layout: "terminal-file".to_string(),
+            status: WorkspaceTabStatus::Connected,
+            is_background,
+            source: None,
+            pane_root: None,
+            pane_root_tab_id: None,
+        }
+    }
+
+    fn external_tab(id: &str, is_background: bool) -> WorkspaceTab {
+        let mut tab = tab(id, is_background);
+        tab.source = Some(WorkspaceSessionSource::Cli);
+        tab
+    }
+
+    #[test]
+    fn attaching_background_session_only_changes_visibility_and_returns_root_id() {
+        let mut tabs = vec![tab("background", true), tab("visible", false)];
+
+        assert_eq!(
+            attach_background_session_in_tabs(&mut tabs, "background").unwrap(),
+            "background"
+        );
+        assert!(!tabs[0].is_background);
+        assert!(!tabs[1].is_background);
+    }
+
+    #[test]
+    fn attaching_unknown_session_is_rejected() {
+        let mut tabs = vec![tab("background", true)];
+
+        assert!(attach_background_session_in_tabs(&mut tabs, "missing").is_err());
+        assert!(tabs[0].is_background);
+    }
+
+    #[test]
+    fn detaching_external_session_only_changes_visibility() {
+        let mut tabs = vec![external_tab("external", false), tab("visible", false)];
+
+        assert_eq!(
+            detach_session_to_background_in_tabs(&mut tabs, "external").unwrap(),
+            "external"
+        );
+        assert!(tabs[0].is_background);
+        assert_eq!(
+            next_visible_top_level_tab_id(&tabs, "external"),
+            Some("visible".to_string())
+        );
+    }
+
+    #[test]
+    fn detaching_gui_session_is_rejected() {
+        let mut tabs = vec![tab("gui", false)];
+
+        assert!(detach_session_to_background_in_tabs(&mut tabs, "gui").is_err());
+        assert!(!tabs[0].is_background);
     }
 }

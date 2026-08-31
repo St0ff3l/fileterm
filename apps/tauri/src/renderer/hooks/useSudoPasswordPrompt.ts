@@ -42,6 +42,11 @@ export function useSudoPasswordPrompt({
     const registrationId = `sudo-password-renderer-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`
     let disposed = false
     let unsubscribe: (() => void) | undefined
+    const unsubscribeCancelled = desktopApi.onSudoPasswordPromptCancelled(({ requestId }) => {
+      setRequests((current) => current.filter((item) => item.requestId !== requestId))
+      resolvingRequestIdsRef.current.delete(requestId)
+      setResolvingRequestId((current) => (current === requestId ? null : current))
+    })
     void desktopApi
       .onSudoPasswordPrompt((nextRequest) => {
         setRequests((current) => {
@@ -70,6 +75,7 @@ export function useSudoPasswordPrompt({
     return () => {
       disposed = true
       unsubscribe?.()
+      unsubscribeCancelled()
       void desktopApi.setSudoPasswordPromptRendererReady(registrationId, false).catch(() => undefined)
     }
   }, [desktopApi])

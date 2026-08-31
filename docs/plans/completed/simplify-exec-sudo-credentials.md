@@ -21,7 +21,7 @@ FileTerm 只保留两类执行通道：
 2. profile 中的加密 `ftsec:v1:` secret；
 3. FileTerm 主窗口安全输入，可选“保存到连接管理器”；缺少凭据时自动恢复、解除最小化并聚焦主窗口后展示。
 
-Copilot 对话区和工具活动会显示等待前台输入，工具回合保持等待，直到用户完成安全输入；主窗口/renderer 不可用时返回 `SUDO_PASSWORD_NEEDED` / `SU_PASSWORD_NEEDED`，用户取消或超时返回对应的 `*_PASSWORD_CANCELLED`。Copilot 和 MCP 可以在 `*_PASSWORD_NEEDED` 后询问 sudo/su 密码，并把用户明确提供的值作为单次字段重试；取消结果不自动重试。`save_*` 只有和显式密码同时出现才生效。密码通过 SSH stdin 发送，不进入命令文本、结果或日志。
+Copilot 对话区和工具活动会显示等待前台输入，工具回合保持等待，直到用户完成安全输入；Copilot 永远不接收或转发密码字段，主窗口/renderer 不可用时停止本轮并等待用户明确重试。MCP/CLI 才会在 `*_PASSWORD_NEEDED` 后询问 sudo/su 密码，并把用户明确提供的值作为单次字段重试；取消结果不自动重试。`save_*` 只有和显式密码同时出现才生效。密码通过 SSH stdin 发送，不进入命令文本、结果或日志。
 
 通用 MFA、验证码、安装器提示、确认回答和 REPL 不属于 sudo/su 三层凭据，必须在可见 SSH tab 完成。
 
@@ -41,7 +41,7 @@ Copilot 对话区和工具活动会显示等待前台输入，工具回合保持
 - [x] 普通 exec 独立 channel、有限输出、超时/截断和输入提示。
 - [x] generic interactive-exec 的 Rust、bridge、renderer、MCP、CLI、audit 和 CI 入口删除。
 - [x] `SUDO_PASSWORD_NEEDED`、`SU_PASSWORD_NEEDED`、`REMOTE_INTERACTIVE_INPUT_REQUIRED` 稳定错误契约。
-- [x] Copilot/MCP tool schema 支持用户明确提供的 sudo/su 一次性字段和可选保存。
+- [x] MCP/CLI tool schema 支持用户明确提供的 sudo/su 一次性字段和可选保存；Copilot tool schema 不暴露凭据字段。
 - [x] Rust check/test compile、Tauri typecheck、MCP schema smoke 同步。
 
 真实三平台打包和远端生产环境回归仍归入 `docs/quality/ai-copilot-platform-regression.md`，不再重新引入 interactive-exec 作为兼容前提。

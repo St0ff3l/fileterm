@@ -59,6 +59,12 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 
 - **离线资源就地化**：所有图标、字体与基础样式资源预置在代码库中打包输出，严禁运行时动态拉取外部 CDN 资源。
 - **macOS 钥匙串规避**：禁用 safeStorage，用品牌重命名等替代机制存储凭据，避免触发 macOS 系统安全弹窗。
+- **旧 Comware SSH 兼容边界**：`vendor/russh` 基于 `russh 0.63.1`，通过
+  `[patch.crates-io]` 供 Tauri 使用。它只保留一个显式开启的窄范围兼容分支：远端 SSH
+  identification 精确匹配 Comware、且协商到 `diffie-hellman-group-exchange-sha1` 时，请求
+  `1024/1024/8192`；开启兼容选项时仍先按正常算法协商，默认安全算法不放宽。普通 Linux/Windows SSH、其他网络设备、
+  `network-device` 模式、Banner 识别和服务器探测禁用由应用层逻辑负责，不由该兼容分支改变。
+  升级该依赖时必须保留此边界，并重新运行 Rust 测试与 Clippy。
 - 连接的 `group`（文件夹名）和 `parentId`（文件夹 ID）必须双向同步，存储层负责自愈。
 
 ## 4. 代码位置
@@ -71,6 +77,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
   - `useWorkspaceTabs.ts`、`useWorkspaceModals.ts`、`useFileOperations.ts`
   - `useSshInteractions.ts`、`useFileEditor.ts`、`useWorkspaceIpcSync.ts`
   - `useWorkspaceDataOps.ts`
+- Renderer 通用组件：`apps/tauri/src/renderer/features/common/`；跨功能组件的样式统一维护在 `apps/tauri/src/renderer/styles/features/common-controls.css`。
 - Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`，不得反向依赖 Electron 组件。
 - 领域类型：`packages/core`
 - 存储抽象：`packages/storage`

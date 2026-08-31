@@ -63,6 +63,38 @@ FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分�
 - Windows/Linux 的 CJK 字体高度可能高于 macOS。检查按钮、表格行、地址栏、标签栏、状态栏和弹窗标题的 line-height，避免文字垂直截断。
 - 高 DPI 下检查图标是否发虚、1px 边框是否稳定、紧凑布局是否仍可点击。不要只依赖开发机浏览器的像素结果。
 
+### Renderer 公共组件目录
+
+跨 feature 的 renderer 公共组件统一放在 `apps/tauri/src/renderer/features/common/`。新增界面前先查下面的目录，优先组合现有组件；不要在业务 feature 中重新实现相同的交互、焦点管理或圆点控件样式。
+
+| 组件                                        | 用途与边界                                                                                      |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `AppIcon`                                   | 离线 SVG 图标入口。按钮、状态和装饰图标优先使用它，禁止新增外部 WebFont 图标依赖。              |
+| `CloseButton`                               | 统一关闭按钮的语义、尺寸、图标和 `type="button"`。                                              |
+| `ConfirmActionDialog`                       | 删除、清空、危险操作以及需要二次确认的操作；禁止使用 `window.confirm()`。                       |
+| `ContextMenu`                               | 通用右键/上下文菜单，包含定位、键盘导航、Escape 关闭和焦点恢复。                                |
+| `DropdownSelect`                            | 所有表单下拉框；负责 macOS 原生外壳及 Windows/Linux 自绘菜单。                                  |
+| `ErrorBoundary`                             | renderer 错误边界和故障兜底展示。                                                               |
+| `FeedbackText`                              | 统一成功、提示和错误反馈文字的语义与样式。                                                      |
+| `ManagerInlineFolderRow`                    | 连接/命令管理器中的文件夹行及内联编辑交互。                                                     |
+| `RadioCardGroup`                            | 卡片式单选组；内部保持原生 radio 语义和键盘行为。                                               |
+| `ResourceMonitoringMetricsEditor`           | 系统资源监控指标的启用、排序和恢复默认编辑器。                                                  |
+| `SelectionControl`                          | 统一的原生 checkbox/radio 选择控件与圆点皮肤，支持 disabled、focus、ref 和 indeterminate 状态。 |
+| `SessionSendTargetPicker`                   | 多终端发送目标选择器，包含全选、不定态和记忆选择。                                              |
+| `StableButtonContent` / `StableButtonLabel` | 按钮忙碌态、图标、标签和占位宽度的稳定布局。                                                    |
+| `VerticalScrollbar`                         | 文件区、终端区等纵向滚动区域的统一滚动条；通过 `scrollRef` 绑定。                               |
+| `WorkspaceLoadingState`                     | 工作区、文件区和异步面板的统一加载状态。                                                        |
+
+终端专用但可跨终端复用的组件位于 `apps/tauri/src/renderer/components/`：`TerminalView` 负责 xterm 容器和终端生命周期，`TerminalContextMenu` 负责终端菜单适配，`TerminalFindBar` 负责终端查找栏。它们可以组合 `features/common/` 中的公共组件，但不应把终端/xterm 逻辑下沉到通用表单组件。
+
+公共选择控件规则：
+
+- 多选或独立开关使用 `<SelectionControl type="checkbox">`；互斥选择使用 `<SelectionControl type="radio">`，同一组 radio 必须共享 `name`。
+- 默认使用 `size="default"`；只有 18px 高密度场景才使用 `size="large"`。会话目标选择器和终端 dock 这类紧凑目标列表使用 `className="selection-control--target"`，不在业务 CSS 中复制一套圆点样式。
+- 需要“全选但部分选中”时通过 ref 设置原生 `indeterminate`，不要用第三种伪造状态替代 checkbox 语义。
+- `SelectionControl` 保留原生 input 的键盘、表单和辅助技术语义；业务层只负责状态与布局。自定义轨道式开关（例如递归操作开关）可以继续使用隐藏原生 input + track，但不应冒充圆点选择控件。
+- 不得在 feature CSS 中重新写 `appearance: none`、圆形边框、中心圆点、checked/focus 状态；需要尺寸或上下文差异时扩展公共组件的 size/skin/token。
+
 ### 字体、图标、tray 与离线资源
 
 - 所有字体、图标和基础样式必须随应用打包；禁止运行时依赖外部 CDN。

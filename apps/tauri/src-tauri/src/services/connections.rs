@@ -601,6 +601,21 @@ pub fn export_bundle(app: &AppHandle, format: &str) -> Result<Vec<u8>, AppError>
     serde_json::to_vec_pretty(&payload).map_err(|error| AppError::Serialization(error.to_string()))
 }
 
+pub fn build_compatible_profile_payload(profile: &Value) -> Value {
+    serde_json::json!({
+        "id": profile.get("id"), "name": profile.get("name"),
+        "description": profile.get("note"), "conection_type": profile.get("type"),
+        "host": profile.get("host"), "port": profile.get("port"),
+        "user_name": profile.get("username"), "terminal_encoding": profile.get("encoding"),
+        "authentication_type": profile.get("authType"), "password": profile.get("password"),
+        "private_key_path": profile.get("privateKeyPath"), "passphrase": profile.get("passphrase"),
+        "deviceMode": profile.get("deviceMode"), "terminalType": profile.get("terminalType"),
+        "networkDeviceVendor": profile.get("networkDeviceVendor"),
+        "exec_channel_enable": profile.get("enableExecChannel"),
+        "port_forwarding_list": profile.get("forwards"),
+    })
+}
+
 fn build_export_payload(profiles: &[Value], format: &str) -> Result<Value, AppError> {
     let payload = match format {
         "fileterm" => serde_json::json!({
@@ -612,18 +627,7 @@ fn build_export_payload(profiles: &[Value], format: &str) -> Result<Value, AppEr
         "compatible" => Value::Array(
             profiles
                 .iter()
-                .map(|profile| {
-                    serde_json::json!({
-                        "id": profile.get("id"), "name": profile.get("name"),
-                        "description": profile.get("note"), "conection_type": profile.get("type"),
-                        "host": profile.get("host"), "port": profile.get("port"),
-                        "user_name": profile.get("username"), "terminal_encoding": profile.get("encoding"),
-                        "authentication_type": profile.get("authType"), "password": profile.get("password"),
-                        "private_key_path": profile.get("privateKeyPath"), "passphrase": profile.get("passphrase"),
-                        "exec_channel_enable": profile.get("enableExecChannel"),
-                        "port_forwarding_list": profile.get("forwards"),
-                    })
-                })
+                .map(build_compatible_profile_payload)
                 .collect(),
         ),
         _ => return Err(command_error("导出格式无效")),
@@ -683,8 +687,9 @@ pub fn export_filename(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_export_payload, collect_import_files, export_filename, fingerprint,
-        normalize_external_profile, parse_ssh_config, IMPORT_FILE_LIMIT,
+        build_compatible_profile_payload, build_export_payload, collect_import_files,
+        export_filename, fingerprint, normalize_external_profile, parse_ssh_config,
+        IMPORT_FILE_LIMIT,
     };
     use serde_json::json;
     use std::collections::HashSet;
@@ -770,6 +775,33 @@ mod tests {
         let compatible = build_export_payload(&profiles, "compatible").unwrap();
         assert_eq!(compatible[0]["password"], "secret");
         assert_eq!(compatible[0]["passphrase"], "key-secret");
+    }
+
+    #[test]
+    fn compatible_export_preserves_ssh_device_settings() {
+        let profiles = vec![json!({
+            "id": "profile-network-device",
+            "name": "switch",
+            "type": "ssh",
+            "host": "switch.example",
+            "port": 22,
+            "username": "ops",
+            "deviceMode": "network-device",
+            "terminalType": "vt100",
+            "networkDeviceVendor": "huawei"
+        })];
+
+        let single = build_compatible_profile_payload(&profiles[0]);
+        let compatible = build_export_payload(&profiles, "compatible").unwrap();
+        assert_eq!(single, compatible[0]);
+        assert_eq!(compatible[0]["deviceMode"], "network-device");
+        assert_eq!(compatible[0]["terminalType"], "vt100");
+        assert_eq!(compatible[0]["networkDeviceVendor"], "huawei");
+
+        let imported = normalize_external_profile(&compatible[0], "fallback").unwrap();
+        assert_eq!(imported["deviceMode"], "network-device");
+        assert_eq!(imported["terminalType"], "vt100");
+        assert_eq!(imported["networkDeviceVendor"], "huawei");
     }
 
     /// Build a unique scratch directory under the system temp dir. Each test

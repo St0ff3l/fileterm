@@ -333,10 +333,16 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
       note: input.note
     }
   }
+  const isNetworkDevice = input.type === 'ssh' && input.deviceMode === 'network-device'
   return input.type === 'ssh'
     ? {
         id,
         type: 'ssh',
+        deviceMode: input.deviceMode ?? 'server',
+        terminalType:
+          input.terminalType ??
+          (isNetworkDevice ? 'vt100' : input.deviceMode === 'auto' ? undefined : 'xterm-256color'),
+        networkDeviceVendor: input.networkDeviceVendor ?? 'auto',
         name: input.name,
         host: input.host,
         port: input.port,
@@ -352,7 +358,10 @@ function toProfile(id: string, input: CreateProfileInput): ConnectionProfile {
         group: input.group,
         sessionLogEnabled: input.sessionLogEnabled,
         sessionLogDirectory: input.sessionLogDirectory,
-        sftpEnabled: true,
+        // Network-device mode masks file/exec/metrics capabilities at runtime;
+        // keep the user's saved preferences intact so switching back to a
+        // server profile does not silently rewrite them.
+        sftpEnabled: input.sftpEnabled ?? true,
         remotePath: input.remotePath,
         encoding: input.encoding ?? 'UTF-8',
         backspaceKey: input.backspaceKey ?? 'ASCII',

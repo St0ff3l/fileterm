@@ -11,66 +11,6 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
     crate::services::mcp::run_cli(arguments)
 }
 
-/// Returns whether the first process argument belongs to the non-GUI CLI.
-///
-/// Keep this dispatch list in the library so the binary entrypoint and its
-/// tests share the same contract. CLI commands must be recognized before
-/// `run()` starts Tauri.
-pub fn is_cli_command(argument: Option<&str>) -> bool {
-    matches!(
-        argument,
-        Some(
-            "cli"
-                | "connections"
-                | "sessions"
-                | "directory"
-                | "ls"
-                | "read"
-                | "cat"
-                | "commands"
-                | "command-templates"
-                | "transfers"
-                | "wait-transfer"
-                | "tunnels"
-                | "open"
-                | "activate"
-                | "reconnect"
-                | "disconnect"
-                | "close"
-                | "exec"
-                | "execute"
-                | "command-template"
-                | "write"
-                | "mkdir"
-                | "touch"
-                | "copy"
-                | "move"
-                | "rename"
-                | "delete"
-                | "chmod"
-                | "access"
-                | "upload"
-                | "download"
-                | "download-directory"
-                | "pause-transfer"
-                | "resume-transfer"
-                | "discard-transfer"
-                | "cancel-transfer"
-                | "clear-transfers"
-                | "create-tunnel"
-                | "start-tunnel"
-                | "stop-tunnel"
-                | "delete-tunnel"
-                | "call"
-                | "help"
-                | "--help"
-                | "-h"
-                | "--version"
-                | "-V"
-        )
-    )
-}
-
 use crate::commands::OpenWindowInput;
 #[cfg(target_os = "linux")]
 use gtk::prelude::GtkWindowExt;
@@ -2162,6 +2102,8 @@ pub fn run() {
             // Phase 3 commands
             crate::commands::app_open_profile,
             crate::commands::app_activate_tab,
+            crate::commands::app_attach_background_session,
+            crate::commands::app_detach_session_to_background,
             crate::commands::app_reconnect_tab,
             crate::commands::app_disconnect_tab,
             crate::commands::app_close_tab,
@@ -2222,7 +2164,7 @@ pub fn run() {
             crate::commands::app_execute_command_template,
             crate::commands::app_resolve_mcp_approval,
             crate::commands::app_resolve_action_approval,
-            crate::commands::app_resolve_ai_terminal_handoff,
+            crate::commands::app_execute_ai_terminal_handoff,
             // Local files
             crate::sessions::local_files::app_list_local_directory,
             crate::sessions::local_files::app_connect_local_network_share,
@@ -2439,14 +2381,5 @@ mod tests {
         assert!(!registry.try_begin());
         registry.cancel();
         assert!(registry.try_begin());
-    }
-
-    #[test]
-    fn cli_dispatch_includes_exec_without_starting_tauri() {
-        assert!(super::is_cli_command(Some("exec")));
-        assert!(super::is_cli_command(Some("wait-transfer")));
-        assert!(super::is_cli_command(Some("cli")));
-        assert!(!super::is_cli_command(Some("mcp")));
-        assert!(!super::is_cli_command(Some("unknown")));
     }
 }

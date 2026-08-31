@@ -41,7 +41,9 @@ import { DropdownSelect } from '../common/DropdownSelect'
 import { FeedbackText } from '../common/FeedbackText'
 import { managerDropClass, resolveManagerDropPosition, type ManagerDropPosition } from '../common/manager-drag'
 import { targetsNestedManagerControl } from '../common/manager-interactions'
+import { RadioCardGroup } from '../common/RadioCardGroup'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent, StableButtonLabel } from '../common/StableButtonContent'
 import { waitForMinimumBusyDuration } from '../common/operation-timing'
 import { SecuritySettingsPanel } from '../security/SecuritySettingsPanel'
@@ -110,6 +112,7 @@ type ThemePresetVariant = ThemeConfig['variant']
 const THEME_HEX_COLOR_PATTERN = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i
 const THEME_CONFIG_EXPORT_PREFIX = 'fileterm-theme-v1:'
 const THEME_CONFIG_IMPORT_PREFIXES = [THEME_CONFIG_EXPORT_PREFIX, 'codex-theme-v1:'] as const
+const FILETERM_CLI_SKILL_URL = 'https://github.com/St0ff3l/fileterm/blob/main/docs/fileterm-cli.md'
 
 const ANSI_COLOR_NAMES: TerminalAnsiColorName[] = [
   'black',
@@ -585,6 +588,19 @@ function aiProviderRequestUrlPreview(draft: AiProviderDraft) {
   }
 }
 
+function maskAgentProfileHost(host: string) {
+  const value = host.trim()
+  if (!value) return ''
+  if (value.length <= 4) return `•••${value.slice(-1)}`
+  return `${value.slice(0, 2)}…${value.slice(-2)}`
+}
+
+function agentProfileTarget(profile: ConnectionProfile) {
+  if (profile.type === 'serial') return profile.devicePath
+  const host = maskAgentProfileHost(profile.host)
+  return host ? `${host}:${profile.port}` : profile.type.toUpperCase()
+}
+
 export function SettingsModal({
   theme,
   themeConfig,
@@ -666,6 +682,7 @@ export function SettingsModal({
   }))
   const [mcpAgentSetup, setMcpAgentSetup] = useState<McpAgentSetup | null>(null)
   const [mcpAgentProfiles, setMcpAgentProfiles] = useState<ConnectionProfile[]>([])
+  const [mcpAgentProfileSearch, setMcpAgentProfileSearch] = useState('')
   const [mcpAgentOperation, setMcpAgentOperation] = useState<'load' | 'save' | null>(null)
   const [mcpAgentMessage, setMcpAgentMessage] = useState<string | null>(null)
   const [connectionDefaults, setConnectionDefaults] = useState<SshConnectionDefaults>(() => ({
@@ -738,6 +755,59 @@ export function SettingsModal({
       }).map((item) => item.tab)
     )
   }, [locale, settingsSearchQuery])
+
+  const filteredMcpAgentProfiles = useMemo(() => {
+    const query = mcpAgentProfileSearch.trim().toLocaleLowerCase()
+    if (!query) return mcpAgentProfiles
+    return mcpAgentProfiles.filter((profile) =>
+      `${profile.name} ${profile.host} ${profile.type} ${profile.port}`.toLocaleLowerCase().includes(query)
+    )
+  }, [mcpAgentProfileSearch, mcpAgentProfiles])
+
+  const selectedMcpAgentProfileCount = useMemo(
+    () => mcpAgentProfiles.filter((profile) => mcpAgentPreferences.allowedProfileIds.includes(profile.id)).length,
+    [mcpAgentPreferences.allowedProfileIds, mcpAgentProfiles]
+  )
+
+  const mcpExecutionPolicyOptions = [
+    {
+      value: 'read-only' as const,
+      label: t.agentMcpExecutionReadOnly,
+      description: t.agentMcpExecutionReadOnlyDescription
+    },
+    {
+      value: 'basic-safe-operations' as const,
+      label: t.agentMcpExecutionBasicSafe,
+      description: t.agentMcpExecutionBasicSafeDescription
+    },
+    {
+      value: 'full-access' as const,
+      label: t.agentMcpExecutionFull,
+      description: t.agentMcpExecutionFullDescription
+    }
+  ]
+
+  const mcpConnectionScopeOptions = [
+    {
+      value: 'all-saved-connections' as const,
+      label: t.agentMcpConnectionModeAll,
+      description: t.agentMcpConnectionModeAllHint
+    },
+    {
+      value: 'selected-connections' as const,
+      label: t.agentMcpConnectionModeSelected,
+      description: t.agentMcpConnectionModeSelectedHint
+    }
+  ]
+
+  const mcpCapabilityRows = [
+    { label: t.agentMcpCapabilityQuery, readOnly: true, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityRemoteCommands, readOnly: false, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityRemoteChanges, readOnly: false, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityTunnels, readOnly: false, basicSafe: true, full: true },
+    { label: t.agentMcpCapabilityDangerousCommands, readOnly: false, basicSafe: false, full: true },
+    { label: t.agentMcpCapabilitySkipApproval, readOnly: false, basicSafe: false, full: true }
+  ]
 
   useEffect(() => {
     if (!desktopApi) return
@@ -1779,7 +1849,10 @@ export function SettingsModal({
     if (
       nextPreferences.connectionScope === previousPreferences.connectionScope &&
       nextPreferences.operationPolicy === previousPreferences.operationPolicy &&
-      nextPreferences.defaultProfileId === previousPreferences.defaultProfileId
+      nextPreferences.allowedProfileIds.length === previousPreferences.allowedProfileIds.length &&
+      nextPreferences.allowedProfileIds.every(
+        (profileId, index) => profileId === previousPreferences.allowedProfileIds[index]
+      )
     ) {
       return
     }
@@ -2481,7 +2554,7 @@ export function SettingsModal({
 
                   <div className="ai-settings-toggle-list">
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.enabled}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ enabled: event.target.checked })}
@@ -2492,7 +2565,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.isDefault}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ isDefault: event.target.checked })}
@@ -2503,7 +2576,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.allowNoAuth}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ allowNoAuth: event.target.checked })}
@@ -2514,7 +2587,7 @@ export function SettingsModal({
                       </span>
                     </label>
                     <label className="ai-settings-toggle-row ssh-checkbox">
-                      <input
+                      <SelectionControl
                         checked={aiDraft.allowInsecureHttp}
                         type="checkbox"
                         onChange={(event) => patchAiDraft({ allowInsecureHttp: event.target.checked })}
@@ -2636,6 +2709,144 @@ export function SettingsModal({
                 <h3>{t.agentMcpSettings}</h3>
                 <p className="settings-tools-hint">{t.agentMcpDescription}</p>
 
+                <div className="agent-mcp-policy-stack agent-mcp-shared-policy">
+                  <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-execution-policy-title">
+                    <div className="agent-mcp-policy-heading">
+                      <div>
+                        <h4 id="agent-mcp-execution-policy-title">{t.agentMcpExecutionPolicyTitle}</h4>
+                        <p>{t.agentMcpExecutionPolicyDescription}</p>
+                      </div>
+                    </div>
+                    <RadioCardGroup
+                      ariaLabel={t.agentMcpExecutionPolicyTitle}
+                      className="agent-mcp-policy-options"
+                      disabled={!desktopApi || mcpAgentOperation !== null}
+                      name="agent-mcp-execution-policy"
+                      options={mcpExecutionPolicyOptions}
+                      value={mcpAgentPreferences.operationPolicy}
+                      onChange={(value) => saveMcpAgentPreferences({ operationPolicy: value })}
+                    />
+                    <p
+                      className={`agent-mcp-policy-notice ${
+                        mcpAgentPreferences.operationPolicy === 'full-access' ? 'is-warning' : ''
+                      }`}
+                    >
+                      <AppIcon
+                        name={mcpAgentPreferences.operationPolicy === 'full-access' ? 'shield' : 'shield-check'}
+                        size={14}
+                        strokeWidth={2}
+                      />
+                      <span>
+                        {mcpAgentPreferences.operationPolicy === 'full-access'
+                          ? t.agentMcpExecutionFullWarning
+                          : t.agentMcpExecutionBoundary}
+                      </span>
+                    </p>
+                    <div className="agent-mcp-capability">
+                      <h5>{t.agentMcpCapabilityTitle}</h5>
+                      <div aria-label={t.agentMcpCapabilityTitle} className="agent-mcp-capability-table" role="table">
+                        <div className="agent-mcp-capability-row is-header" role="row">
+                          <span role="columnheader">{t.agentMcpCapabilityHeader}</span>
+                          <span role="columnheader">{t.agentMcpCapabilityReadOnly}</span>
+                          <span role="columnheader">{t.agentMcpCapabilityBasicSafe}</span>
+                          <span role="columnheader">{t.agentMcpCapabilityFull}</span>
+                        </div>
+                        {mcpCapabilityRows.map((row) => (
+                          <div key={row.label} className="agent-mcp-capability-row" role="row">
+                            <span role="cell">{row.label}</span>
+                            {[row.readOnly, row.basicSafe, row.full].map((allowed, index) => (
+                              <span
+                                key={`${row.label}-${index}`}
+                                aria-label={allowed ? t.agentMcpCapabilityAllowed : t.agentMcpCapabilityDenied}
+                                className={`agent-mcp-capability-value ${allowed ? 'is-allowed' : 'is-denied'}`}
+                                role="cell"
+                              >
+                                <AppIcon name={allowed ? 'check' : 'close'} size={13} strokeWidth={2.2} />
+                              </span>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="agent-mcp-policy-card" aria-labelledby="agent-mcp-allowed-connections-title">
+                    <div className="agent-mcp-policy-heading agent-mcp-connections-heading">
+                      <div>
+                        <h4 id="agent-mcp-allowed-connections-title">{t.agentMcpAllowedConnectionsTitle}</h4>
+                        <p>{t.agentMcpAllowedConnectionsDescription}</p>
+                      </div>
+                      <span className="agent-mcp-policy-count">
+                        {mcpAgentPreferences.connectionScope === 'selected-connections'
+                          ? formatMessage(t.agentMcpSelectedConnectionCount, {
+                              count: selectedMcpAgentProfileCount,
+                              total: mcpAgentProfiles.length
+                            })
+                          : t.agentMcpConnectionModeAllStatus}
+                      </span>
+                    </div>
+                    <RadioCardGroup
+                      ariaLabel={t.agentMcpAllowedConnectionsTitle}
+                      className="agent-mcp-policy-options agent-mcp-connection-options"
+                      disabled={!desktopApi || mcpAgentOperation !== null}
+                      name="agent-mcp-connection-scope"
+                      options={mcpConnectionScopeOptions}
+                      value={mcpAgentPreferences.connectionScope}
+                      onChange={(value) => saveMcpAgentPreferences({ connectionScope: value })}
+                    />
+
+                    {mcpAgentPreferences.connectionScope === 'selected-connections' ? (
+                      <div className="agent-mcp-selected-connections">
+                        <div className="agent-mcp-selected-connections-heading">
+                          <span>{t.agentMcpSelectedConnections}</span>
+                        </div>
+                        <input
+                          aria-label={t.agentMcpSelectedConnections}
+                          className="agent-mcp-profile-search"
+                          disabled={!desktopApi || mcpAgentOperation !== null}
+                          placeholder={t.agentMcpSelectedConnectionsSearchPlaceholder}
+                          type="search"
+                          value={mcpAgentProfileSearch}
+                          onChange={(event) => setMcpAgentProfileSearch(event.target.value)}
+                        />
+                        <div className="agent-mcp-profile-list" role="group">
+                          {filteredMcpAgentProfiles.map((profile) => {
+                            const selected = mcpAgentPreferences.allowedProfileIds.includes(profile.id)
+                            return (
+                              <label key={profile.id} className="agent-mcp-profile-option">
+                                <SelectionControl
+                                  checked={selected}
+                                  disabled={!desktopApi || mcpAgentOperation !== null}
+                                  type="checkbox"
+                                  onChange={() => {
+                                    const allowedProfileIds = selected
+                                      ? mcpAgentPreferences.allowedProfileIds.filter((id) => id !== profile.id)
+                                      : [...mcpAgentPreferences.allowedProfileIds, profile.id]
+                                    saveMcpAgentPreferences({ allowedProfileIds })
+                                  }}
+                                />
+                                <span className="agent-mcp-profile-copy">
+                                  <strong>{profile.name || profile.type.toUpperCase()}</strong>
+                                  <small>
+                                    {profile.type.toUpperCase()} · {agentProfileTarget(profile)} ·{' '}
+                                    {profile.hasSavedPassword ? t.agentMcpCredentialSaved : t.agentMcpCredentialPrompt}
+                                  </small>
+                                </span>
+                              </label>
+                            )
+                          })}
+                          {!filteredMcpAgentProfiles.length ? (
+                            <small className="agent-mcp-profile-empty">{t.agentMcpSelectedConnectionsEmpty}</small>
+                          ) : null}
+                        </div>
+                        {!selectedMcpAgentProfileCount ? (
+                          <small className="agent-mcp-profile-warning">{t.agentMcpSelectedConnectionsNone}</small>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </section>
+                </div>
+
                 <div className="agent-mcp-subtabs" role="tablist" aria-label={t.agentMcpSubTabs}>
                   <button
                     id="agent-mcp-tab-mcp"
@@ -2678,82 +2889,6 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="agent-mcp-form">
-                      <label>
-                        <span>{t.agentMcpConnectionScope}</span>
-                        <DropdownSelect
-                          className="agent-mcp-select"
-                          disabled={!desktopApi || mcpAgentOperation !== null}
-                          options={[
-                            { value: 'all-saved-connections', label: t.agentMcpScopeAll },
-                            { value: 'active-session', label: t.agentMcpScopeActive },
-                            {
-                              value: 'default-connection',
-                              label: t.agentMcpScopeDefault,
-                              disabled: !mcpAgentProfiles.length
-                            }
-                          ]}
-                          value={mcpAgentPreferences.connectionScope}
-                          onChange={(value) => {
-                            saveMcpAgentPreferences({
-                              connectionScope: value as McpAgentPreferences['connectionScope'],
-                              ...(value === 'default-connection' && !mcpAgentPreferences.defaultProfileId
-                                ? { defaultProfileId: mcpAgentProfiles[0]?.id }
-                                : {})
-                            })
-                          }}
-                        />
-                        <small>
-                          {mcpAgentPreferences.connectionScope === 'all-saved-connections'
-                            ? t.agentMcpScopeAllHint
-                            : mcpAgentPreferences.connectionScope === 'active-session'
-                              ? t.agentMcpScopeActiveHint
-                              : t.agentMcpScopeDefaultHint}
-                        </small>
-                      </label>
-
-                      {mcpAgentPreferences.connectionScope === 'default-connection' ? (
-                        <label>
-                          <span>{t.agentMcpDefaultConnection}</span>
-                          <DropdownSelect
-                            className="agent-mcp-select"
-                            disabled={!desktopApi || mcpAgentOperation !== null || !mcpAgentProfiles.length}
-                            options={mcpAgentProfiles.map((profile) => ({
-                              value: profile.id,
-                              label: `${profile.name || profile.host}:${profile.port}`
-                            }))}
-                            placeholder={t.agentMcpDefaultConnectionPlaceholder}
-                            value={mcpAgentPreferences.defaultProfileId ?? ''}
-                            onChange={(value) => saveMcpAgentPreferences({ defaultProfileId: value })}
-                          />
-                          {!mcpAgentProfiles.length ? <small>{t.agentMcpNoProfiles}</small> : null}
-                        </label>
-                      ) : null}
-
-                      <label>
-                        <span>{t.agentMcpOperationPolicy}</span>
-                        <DropdownSelect
-                          className="agent-mcp-select"
-                          disabled={!desktopApi || mcpAgentOperation !== null}
-                          options={[
-                            { value: 'read-only', label: t.agentMcpReadOnly },
-                            { value: 'approved-operations', label: t.agentMcpApprovedOperations }
-                          ]}
-                          value={mcpAgentPreferences.operationPolicy}
-                          onChange={(value) =>
-                            saveMcpAgentPreferences({
-                              operationPolicy: value as McpAgentPreferences['operationPolicy']
-                            })
-                          }
-                        />
-                        <small>
-                          {mcpAgentPreferences.operationPolicy === 'read-only'
-                            ? t.agentMcpReadOnlyHint
-                            : t.agentMcpApprovedOperationsHint}
-                        </small>
-                      </label>
-                    </div>
-
                     <div className="agent-mcp-clients" aria-busy={mcpAgentOperation === 'load'}>
                       <h4>{t.agentMcpClients}</h4>
                       {mcpAgentSetup?.clients.map((client) => (
@@ -2785,7 +2920,7 @@ export function SettingsModal({
                           <div className="agent-mcp-client-actions">
                             <small className="agent-mcp-registration-hint">{t.agentMcpRegistrationDescription}</small>
                             <button
-                              className="settings-secondary-button agent-mcp-launch-button"
+                              className="ai-settings-secondary-button agent-mcp-launch-button"
                               disabled={!client.available || !onLaunchLocalAgent}
                               title={client.available ? t.agentMcpLaunchDescription : t.agentMcpClientUnavailable}
                               type="button"
@@ -2822,10 +2957,47 @@ export function SettingsModal({
                           <p>{t.agentMcpDirectCliDescription}</p>
                         </div>
                         <div className="agent-mcp-direct-cli-commands">
+                          <div className="agent-mcp-direct-cli-command agent-mcp-doc-reference">
+                            <small>{t.agentMcpCliSkillPath}</small>
+                            <div className="agent-mcp-registration">
+                              <code>{FILETERM_CLI_SKILL_URL}</code>
+                              <button
+                                aria-label={t.agentMcpCliSkillCopy}
+                                className="copy-icon-button agent-mcp-copy-button"
+                                disabled={!desktopApi}
+                                title={t.agentMcpCliSkillCopy}
+                                type="button"
+                                onClick={() => copyMcpAgentCommand(FILETERM_CLI_SKILL_URL, t.agentMcpCliSkillCopied)}
+                              >
+                                <AppIcon name="copy" size={14} strokeWidth={2} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="agent-mcp-direct-cli-command agent-mcp-persistent-agent-command">
+                            <small>{t.agentMcpPersistentAgentPath}</small>
+                            <div className="agent-mcp-registration">
+                              <code>{mcpAgentSetup.filetermCommand} cli --jsonl</code>
+                              <button
+                                aria-label={t.agentMcpPersistentAgentCopy}
+                                className="copy-icon-button agent-mcp-copy-button"
+                                disabled={!desktopApi}
+                                title={t.agentMcpPersistentAgentCopy}
+                                type="button"
+                                onClick={() =>
+                                  copyMcpAgentCommand(
+                                    `${mcpAgentSetup.filetermCommand} cli --jsonl`,
+                                    t.agentMcpPersistentAgentCopied
+                                  )
+                                }
+                              >
+                                <AppIcon name="copy" size={14} strokeWidth={2} />
+                              </button>
+                            </div>
+                          </div>
                           <div className="agent-mcp-direct-cli-command">
                             <small>{t.agentMcpDirectCliPath}</small>
                             <div className="agent-mcp-registration">
-                              <code>{mcpAgentSetup.filetermCommand} --help</code>
+                              <code>{mcpAgentSetup.filetermCommand} cli --help</code>
                               <button
                                 aria-label={t.agentMcpDirectCliCopy}
                                 className="copy-icon-button agent-mcp-copy-button"
@@ -2834,7 +3006,7 @@ export function SettingsModal({
                                 type="button"
                                 onClick={() =>
                                   copyMcpAgentCommand(
-                                    `${mcpAgentSetup.filetermCommand} --help`,
+                                    `${mcpAgentSetup.filetermCommand} cli --help`,
                                     t.agentMcpDirectCliCopied
                                   )
                                 }
@@ -2842,6 +3014,13 @@ export function SettingsModal({
                                 <AppIcon name="copy" size={14} strokeWidth={2} />
                               </button>
                             </div>
+                          </div>
+                        </div>
+                        <div className="agent-mcp-keep-open">
+                          <AppIcon name="server" size={15} />
+                          <div>
+                            <strong>{t.agentMcpProcessModelTitle}</strong>
+                            <p>{t.agentMcpProcessModelDescription}</p>
                           </div>
                         </div>
                       </div>
@@ -2866,7 +3045,7 @@ export function SettingsModal({
                   <div className="advanced-toggle-list">
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.useEmptyPassword}
                           onChange={(event) => setConnectionDefault('useEmptyPassword', event.target.checked)}
                           type="checkbox"
@@ -2877,7 +3056,7 @@ export function SettingsModal({
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.enableExecChannel}
                           onChange={(event) => setConnectionDefault('enableExecChannel', event.target.checked)}
                           type="checkbox"
@@ -2888,7 +3067,7 @@ export function SettingsModal({
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.enableResourceMonitoring}
                           onChange={(event) => setConnectionDefault('enableResourceMonitoring', event.target.checked)}
                           type="checkbox"
@@ -2927,7 +3106,7 @@ export function SettingsModal({
                     </div>
                     <div className="advanced-toggle-row">
                       <label className="ssh-checkbox advanced-toggle-label">
-                        <input
+                        <SelectionControl
                           checked={connectionDefaults.legacyAlgorithms}
                           onChange={(event) => setConnectionDefault('legacyAlgorithms', event.target.checked)}
                           type="checkbox"
@@ -2942,7 +3121,7 @@ export function SettingsModal({
                     <div className="advanced-toggle-list">
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={connectionDefaults.reconnectMode === 'none'}
                             name="global-reconnect-mode"
                             onChange={() => setConnectionDefault('reconnectMode', 'none')}
@@ -2954,7 +3133,7 @@ export function SettingsModal({
                       </div>
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={connectionDefaults.reconnectMode === 'enter'}
                             name="global-reconnect-mode"
                             onChange={() => setConnectionDefault('reconnectMode', 'enter')}
@@ -2966,7 +3145,7 @@ export function SettingsModal({
                       </div>
                       <div className="advanced-toggle-row">
                         <label className="ssh-checkbox advanced-toggle-label">
-                          <input
+                          <SelectionControl
                             checked={connectionDefaults.reconnectMode === 'auto'}
                             name="global-reconnect-mode"
                             onChange={() => setConnectionDefault('reconnectMode', 'auto')}
@@ -3515,7 +3694,7 @@ export function SettingsModal({
                       <p>{t.lockTerminalZoomHint}</p>
                     </span>
                     <span className="command-toggle overview-preference-toggle">
-                      <input
+                      <SelectionControl
                         checked={terminalZoomLocked}
                         disabled={!desktopApi || isSavingTerminalZoomPreference}
                         onChange={(event) => setTerminalZoomLockPreference(event.target.checked)}
@@ -3537,7 +3716,7 @@ export function SettingsModal({
                       <p>{t.rememberFilePanelRatioHint}</p>
                     </span>
                     <span className="command-toggle overview-preference-toggle">
-                      <input
+                      <SelectionControl
                         checked={filePanelRememberRatio}
                         disabled={!desktopApi || isSavingFilePanelPreference}
                         onChange={(event) => setFilePanelRememberRatioPreference(event.target.checked)}
@@ -3605,7 +3784,7 @@ export function SettingsModal({
                           <p>{sectionMeta.hint}</p>
                         </span>
                         <span className="command-toggle overview-preference-toggle">
-                          <input
+                          <SelectionControl
                             checked={checked}
                             disabled={!desktopApi || isSavingOverviewPreference}
                             onChange={(event) => {
@@ -3732,7 +3911,7 @@ export function SettingsModal({
                       </label>
                       <div className="webdav-sync-options">
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             checked={syncConfig.enabled}
                             onChange={(event) => setSyncConfig({ ...syncConfig, enabled: event.target.checked })}
@@ -3740,7 +3919,7 @@ export function SettingsModal({
                           {t.enableWebdavSync}
                         </label>
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             checked={syncConfig.allowInsecureTls === true}
                             onChange={(event) =>
@@ -4020,7 +4199,7 @@ export function SettingsModal({
                       </label>
                       <div className="webdav-sync-options">
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             checked={s3Config.enabled}
                             onChange={(event) => setS3Config({ ...s3Config, enabled: event.target.checked })}
@@ -4028,7 +4207,7 @@ export function SettingsModal({
                           {t.enableS3Backup}
                         </label>
                         <label className="webdav-checkbox ssh-checkbox">
-                          <input
+                          <SelectionControl
                             type="checkbox"
                             disabled={s3Config.provider === 'cloudflare-r2' || s3Config.provider === 'bitiful-s4'}
                             checked={s3Config.pathStyleAccessEnabled}

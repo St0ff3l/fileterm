@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
+import type { VerticalScrollController } from '../features/common/VerticalScrollbar'
 import { getTerminalLogColorPalette, TerminalLogColorizer } from '../app/terminal-log-colorizer'
 import { readClipboardText, writeClipboardText } from '../app/app-utils'
 import { t } from '../i18n'
@@ -48,6 +49,12 @@ export type TerminalViewProps = {
   reconnectHint?: string
 }
 
+// WKWebView and WebKitGTK may keep a newly-visible keep-alive surface at zero
+// size for several compositor frames while the workspace transition settles.
+// Keep the retry bounded so a genuinely unavailable surface cannot create a
+// permanent animation-frame loop.
+const TERMINAL_ACTIVATION_RECOVERY_ATTEMPTS = 16
+
 export function useTerminalView({
   profileId,
   tabId,
@@ -68,7 +75,7 @@ export function useTerminalView({
   const hydratedBootText =
     sessionType === 'local' ? normalizeLocalTerminalStartupTranscript(bootText, window.fileterm?.platform) : bootText
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const [viewportElement, setViewportElement] = useState<HTMLElement | null>(null)
+  const [terminalScrollableElement, setTerminalScrollableElement] = useState<HTMLElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const terminalLogColorizerRef = useRef<TerminalLogColorizer | null>(null)
@@ -174,7 +181,68 @@ export function useTerminalView({
   const [terminalZoomLocked, setTerminalZoomLocked] = useState(false)
   const terminalZoomLockedRef = useRef(false)
   const isMac = window.fileterm?.platform === 'darwin'
-  const isWin = window.fileterm?.platform === 'win32'
+  const isWindowsPty = sessionType === 'local' && window.fileterm?.platform === 'win32'
+
+  const terminalScrollController = useMemo<VerticalScrollController | null>(() => {
+    if (!terminalScrollableElement) {
+      return null
+    }
+
+    return {
+      getElement: () => terminalScrollableElement,
+      getMetrics: () => {
+        const terminal = terminalRef.current
+        if (!terminal) {
+          return null
+        }
+
+        const rows = Math.max(1, terminal.rows)
+        const clientHeight = terminalScrollableElement.clientHeight
+        if (clientHeight <= 0) {
+          return null
+        }
+
+        const buffer = terminal.buffer.active
+        const scrollHeight = Math.max(clientHeight, (clientHeight * Math.max(rows, buffer.length)) / rows)
+        const maxScrollTop = Math.max(0, scrollHeight - clientHeight)
+        const scrollTop = Math.max(0, Math.min(maxScrollTop, (clientHeight * Math.max(0, buffer.viewportY)) / rows))
+        return { clientHeight, scrollHeight, scrollTop }
+      },
+      scrollTo: (scrollTop) => {
+        const terminal = terminalRef.current
+        const clientHeight = terminalScrollableElement.clientHeight
+        if (!terminal || clientHeight <= 0) {
+          return
+        }
+
+        terminal.scrollToLine(Math.round((scrollTop / clientHeight) * Math.max(1, terminal.rows)))
+      },
+      scrollBy: (scrollTop) => {
+        const terminal = terminalRef.current
+        const clientHeight = terminalScrollableElement.clientHeight
+        if (!terminal || clientHeight <= 0) {
+          return
+        }
+
+        terminal.scrollLines(Math.round((scrollTop / clientHeight) * Math.max(1, terminal.rows)))
+      },
+      subscribe: (listener) => {
+        const terminal = terminalRef.current
+        if (!terminal) {
+          return () => undefined
+        }
+
+        const disposables = [
+          terminal.onScroll(listener),
+          terminal.onResize(listener),
+          terminal.onRender(listener),
+          terminal.onWriteParsed(listener),
+          terminal.buffer.onBufferChange(listener)
+        ]
+        return () => disposables.forEach((disposable) => disposable.dispose())
+      }
+    }
+  }, [terminalScrollableElement])
 
   terminalZoomLockedRef.current = terminalZoomLocked
 
@@ -217,7 +285,7 @@ export function useTerminalView({
   const shortcuts = {
     copy: isMac ? '⌘C' : 'Ctrl+Shift+C',
     paste: isMac ? '⌘V' : 'Ctrl+Shift+V',
-    find: isMac ? '⌘F' : 'Ctrl+F',
+    find: 'Ctrl+Shift+F',
     ...splitPaneShortcutsForPlatform(window.fileterm?.platform)
   }
 
@@ -671,19 +739,19 @@ export function useTerminalView({
   )
 
   const recoverTerminalRender = useCallback(
-    (reason: 'activation') => {
+    (reason: 'activation'): boolean => {
       // A tab can become hidden again between the two activation animation
       // frames. Do not let a stale recovery clear, resize, or focus that
       // terminal after a rapid tab switch.
       if (!isActiveRef.current) {
-        return
+        return false
       }
 
       const terminal = terminalRef.current
       const fitAddon = fitAddonRef.current
       const host = hostRef.current
       if (!terminal || !fitAddon || !host) {
-        return
+        return true
       }
 
       const { width, height } = host.getBoundingClientRect()
@@ -694,17 +762,18 @@ export function useTerminalView({
           hostWidth: Math.round(width),
           hostHeight: Math.round(height)
         })
-        return
+        return true
       }
 
       terminal.clearTextureAtlas()
       syncTerminalSize(fitAddon, terminal, { force: true })
       if (!isActiveRef.current) {
-        return
+        return false
       }
       terminal.refresh(0, Math.max(terminal.rows - 1, 0))
       terminal.focus()
       logTerminalRender(terminal, 'recovery-complete', { tabId: tabIdRef.current, reason })
+      return false
     },
     [syncTerminalSize]
   )
@@ -734,11 +803,11 @@ export function useTerminalView({
 
   useTerminalLifecycle({
     isMac,
-    isWin,
+    isWindowsPty,
     isActive,
     bootText: hydratedBootText,
     hostRef,
-    setViewportElement,
+    setTerminalScrollableElement,
     terminalRef,
     fitAddonRef,
     terminalLogColorizerRef,
@@ -806,7 +875,6 @@ export function useTerminalView({
     runPaste,
     openFind,
     closeFind,
-    runClear,
     runSplitPane,
     runClosePane,
     runCloseTab
@@ -817,15 +885,30 @@ export function useTerminalView({
       return
     }
 
-    let secondFrame: number | null = null
+    let disposed = false
+    let recoveryAttempts = 0
+    let recoveryFrame: number | null = null
+    const attemptRecovery = () => {
+      if (disposed || !isActiveRef.current) {
+        return
+      }
+
+      recoveryAttempts += 1
+      const shouldRetry = recoverTerminalRender('activation')
+      if (shouldRetry && recoveryAttempts < TERMINAL_ACTIVATION_RECOVERY_ATTEMPTS) {
+        recoveryFrame = window.requestAnimationFrame(attemptRecovery)
+      }
+    }
+
     const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => recoverTerminalRender('activation'))
+      recoveryFrame = window.requestAnimationFrame(attemptRecovery)
     })
 
     return () => {
+      disposed = true
       window.cancelAnimationFrame(firstFrame)
-      if (secondFrame !== null) {
-        window.cancelAnimationFrame(secondFrame)
+      if (recoveryFrame !== null) {
+        window.cancelAnimationFrame(recoveryFrame)
       }
     }
   }, [isActive, recoverTerminalRender])
@@ -983,7 +1066,7 @@ export function useTerminalView({
 
   return {
     hostRef,
-    viewportElement,
+    terminalScrollController,
     findInputRef,
     hasSelection,
     contextMenu,

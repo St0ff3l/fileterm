@@ -7,6 +7,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
@@ -25,12 +26,17 @@ pub(crate) const CURRENT_BACKUP_PASSWORD_REQUIRED_ERROR: &str =
 pub(crate) const CURRENT_BACKUP_PASSWORD_INVALID_ERROR: &str =
     "SECURITY_CURRENT_BACKUP_PASSWORD_INVALID";
 pub(crate) const INVALID_IDLE_LOCK_MINUTES_ERROR: &str = "SECURITY_IDLE_LOCK_MINUTES_INVALID";
-const DEFAULT_IDLE_LOCK_MINUTES: u32 = 10;
+const DEFAULT_IDLE_LOCK_MINUTES: u32 = 0;
 // The renderer displays this value as the explicit “Never” option; users do
 // not enter a numeric zero.
 const IDLE_LOCK_NEVER_MINUTES: u32 = 0;
 const MIN_LOCK_PASSWORD_CHARS: usize = 4;
 const MAX_PASSWORD_BYTES: usize = 8 * 1024;
+
+/// Security settings contain two related credentials plus session policy.
+/// Serialize read-modify-write operations so a backup-password update cannot
+/// overwrite a concurrent “Never” or lock-enabled update from another window.
+static SECURITY_CONFIG_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 fn default_idle_lock_minutes() -> u32 {
     DEFAULT_IDLE_LOCK_MINUTES
@@ -126,9 +132,15 @@ fn normalize_config(config: &mut StoredSecurityConfig) -> bool {
         config.idle_lock_minutes = DEFAULT_IDLE_LOCK_MINUTES;
         changed = true;
     }
-    if config.lock_enabled && config.lock_password.is_none() {
-        config.lock_enabled = false;
-        changed = true;
+    if config.lock_password.is_none() {
+        if config.lock_enabled {
+            config.lock_enabled = false;
+            changed = true;
+        }
+        if config.idle_lock_minutes != IDLE_LOCK_NEVER_MINUTES {
+            config.idle_lock_minutes = IDLE_LOCK_NEVER_MINUTES;
+            changed = true;
+        }
     }
     changed
 }
@@ -178,6 +190,9 @@ fn read_config_at(path: &Path) -> Result<(StoredSecurityConfig, bool), AppError>
 }
 
 fn read_config(app: &AppHandle) -> Result<StoredSecurityConfig, AppError> {
+    let _guard = SECURITY_CONFIG_LOCK
+        .lock()
+        .map_err(|_| AppError::Storage("安全设置配置锁不可用".to_string()))?;
     let path = config_path(app)?;
     let (config, migrated) = read_config_at(&path)?;
     if migrated {
@@ -315,6 +330,9 @@ pub(crate) fn save_settings(
     app: &AppHandle,
     mut input: SecuritySettingsInput,
 ) -> Result<SecuritySettings, AppError> {
+    let _guard = SECURITY_CONFIG_LOCK
+        .lock()
+        .map_err(|_| AppError::Storage("安全设置配置锁不可用".to_string()))?;
     let path = config_path(app)?;
     let (mut config, _) = read_config_at(&path)?;
 
@@ -371,7 +389,9 @@ pub(crate) fn save_settings(
         }
         config.idle_lock_minutes = idle_lock_minutes;
     }
-    if config.lock_enabled && config.lock_password.is_none() {
+    if (config.lock_enabled || config.idle_lock_minutes != IDLE_LOCK_NEVER_MINUTES)
+        && config.lock_password.is_none()
+    {
         return Err(AppError::Command(
             "SECURITY_LOCK_PASSWORD_REQUIRED".to_string(),
         ));
@@ -391,7 +411,13 @@ pub(crate) fn save_settings(
             settings.has_backup_password
         ),
     );
-    let _ = app.emit("app:security-settings-changed", &settings);
+    if let Err(error) = app.emit("app:security-settings-changed", &settings) {
+        crate::services::logging::warn(
+            app,
+            "security",
+            format!("settings saved but change event emission failed: {error}"),
+        );
+    }
     config.clear_secrets();
     Ok(settings)
 }
@@ -402,6 +428,9 @@ pub(crate) fn save_settings(
 /// backup bundles are intentionally left untouched and still require their
 /// original password for recovery.
 pub(crate) fn reset_backup_password(app: &AppHandle) -> Result<SecuritySettings, AppError> {
+    let _guard = SECURITY_CONFIG_LOCK
+        .lock()
+        .map_err(|_| AppError::Storage("安全设置配置锁不可用".to_string()))?;
     let path = config_path(app)?;
     let (mut config, _) = read_config_at(&path)?;
     reset_backup_config(&mut config);
@@ -413,7 +442,13 @@ pub(crate) fn reset_backup_password(app: &AppHandle) -> Result<SecuritySettings,
         "security",
         "local remote-backup password reset; session-lock settings preserved",
     );
-    let _ = app.emit("app:security-settings-changed", &settings);
+    if let Err(error) = app.emit("app:security-settings-changed", &settings) {
+        crate::services::logging::warn(
+            app,
+            "security",
+            format!("backup password reset but change event emission failed: {error}"),
+        );
+    }
     config.clear_secrets();
     Ok(settings)
 }
@@ -487,7 +522,10 @@ mod tests {
 
     #[test]
     fn idle_lock_uses_the_default_and_only_allows_preset_values() {
-        assert_eq!(StoredSecurityConfig::default().idle_lock_minutes, 10);
+        assert_eq!(
+            StoredSecurityConfig::default().idle_lock_minutes,
+            IDLE_LOCK_NEVER_MINUTES
+        );
         assert!(is_supported_idle_lock_minutes(IDLE_LOCK_NEVER_MINUTES));
         assert!(is_supported_idle_lock_minutes(1));
         assert!(is_supported_idle_lock_minutes(180));
@@ -502,6 +540,21 @@ mod tests {
         };
         assert!(normalize_config(&mut config));
         assert_eq!(config.idle_lock_minutes, DEFAULT_IDLE_LOCK_MINUTES);
+    }
+
+    #[test]
+    fn never_idle_lock_is_preserved_when_lock_protection_is_enabled() {
+        let mut config = StoredSecurityConfig {
+            lock_enabled: true,
+            idle_lock_minutes: IDLE_LOCK_NEVER_MINUTES,
+            lock_password: Some("lock-password".to_string()),
+            backup_password: None,
+        };
+
+        assert!(!normalize_config(&mut config));
+        assert_eq!(config.idle_lock_minutes, IDLE_LOCK_NEVER_MINUTES);
+        assert!(snapshot(&config).lock_enabled);
+        assert_eq!(snapshot(&config).idle_lock_minutes, IDLE_LOCK_NEVER_MINUTES);
     }
 
     #[test]

@@ -1,12 +1,21 @@
-import type { FileTermDesktopApi, TransferTask, WorkspaceSnapshot, WorkspaceTab } from '@fileterm/core'
+import type {
+  FileTermDesktopApi,
+  TransferTask,
+  WorkspaceSessionSource,
+  WorkspaceSnapshot,
+  WorkspaceTab
+} from '@fileterm/core'
 import { TransferCenter } from './TransferCenter'
 
 export function TransferCenterHost({
   activeProfileId,
   activeTabId,
+  activeTabStatus,
+  activeTabSource,
   desktopApi,
   fullWidth,
   isPending,
+  onHideToBackground,
   onApplySnapshot,
   onError,
   sessionTabs,
@@ -15,9 +24,12 @@ export function TransferCenterHost({
 }: {
   activeProfileId?: string
   activeTabId: string | null
+  activeTabStatus: WorkspaceTab['status'] | null
+  activeTabSource: WorkspaceSessionSource | null
   desktopApi?: FileTermDesktopApi
   fullWidth: boolean
   isPending: boolean
+  onHideToBackground?(tabId: string): void | Promise<void>
   onApplySnapshot(snapshot: WorkspaceSnapshot): void
   onError(scope: string, err: unknown): void
   sessionTabs: WorkspaceTab[]
@@ -28,9 +40,12 @@ export function TransferCenterHost({
     <TransferCenter
       activeProfileId={activeProfileId}
       activeTabId={activeTabId}
+      activeTabStatus={activeTabStatus}
+      activeTabSource={activeTabSource}
       desktopApi={desktopApi}
       fullWidth={fullWidth}
       isPending={isPending}
+      onHideToBackground={onHideToBackground}
       onApplySnapshot={onApplySnapshot}
       onError={onError}
       sessionTabs={sessionTabs.map((tab) => ({

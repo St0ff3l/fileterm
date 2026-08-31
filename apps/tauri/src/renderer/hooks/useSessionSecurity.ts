@@ -2,6 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FileTermDesktopApi, SecuritySettings } from '@fileterm/core'
 
 export type SessionSecurityStatus = 'disabled' | 'loading' | 'ready' | 'error'
+type SessionLockReason = 'idle' | 'manual'
+
+function sameSecuritySettings(left: SecuritySettings | null, right: SecuritySettings) {
+  return (
+    left !== null &&
+    left.lockEnabled === right.lockEnabled &&
+    left.idleLockMinutes === right.idleLockMinutes &&
+    left.hasLockPassword === right.hasLockPassword &&
+    left.hasBackupPassword === right.hasBackupPassword
+  )
+}
 
 export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, enabled: boolean) {
   const [settings, setSettings] = useState<SecuritySettings | null>(null)
@@ -10,12 +21,14 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
   const [reloadToken, setReloadToken] = useState(0)
   const settingsRef = useRef<SecuritySettings | null>(null)
   const hasLoadedOnceRef = useRef(false)
+  const settingsRevisionRef = useRef(0)
+  const idleTimerGenerationRef = useRef(0)
 
-  const lock = useCallback((force = false) => {
+  const lock = useCallback((force = false, reason: SessionLockReason = 'manual') => {
     const current = settingsRef.current
-    if (!current?.hasLockPassword || (!force && !current.lockEnabled)) {
-      return
-    }
+    if (!current?.hasLockPassword) return
+    const autoLockEnabled = reason === 'idle' ? current.idleLockMinutes > 0 : current.lockEnabled
+    if (!force && !autoLockEnabled) return
     setIsLocked(true)
     const activeElement = document.activeElement
     if (activeElement instanceof HTMLElement) {
@@ -27,6 +40,8 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
     let canceled = false
     hasLoadedOnceRef.current = false
     settingsRef.current = null
+    settingsRevisionRef.current = 0
+    idleTimerGenerationRef.current += 1
     setSettings(null)
     setIsLocked(false)
 
@@ -39,6 +54,10 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
 
     setStatus('loading')
     const applySettings = (next: SecuritySettings) => {
+      if (sameSecuritySettings(settingsRef.current, next)) {
+        return
+      }
+      settingsRevisionRef.current += 1
       settingsRef.current = next
       setSettings(next)
       if (!hasLoadedOnceRef.current) {
@@ -50,6 +69,7 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
         setIsLocked(false)
       }
     }
+    const initialLoadRevision = settingsRevisionRef.current
     const unsubscribe = desktopApi.onSecuritySettingsChanged((next) => {
       if (!canceled) {
         applySettings(next)
@@ -60,30 +80,32 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
       .getSecuritySettings()
       .then((next) => {
         if (canceled) return
-        applySettings(next)
+        // A live settings event can win the race with this initial read. Do
+        // not let the older read restore a one-minute timer after “Never” was
+        // already applied.
+        if (settingsRevisionRef.current === initialLoadRevision) {
+          applySettings(next)
+        }
         setStatus('ready')
       })
       .catch(() => {
         if (!canceled) {
-          setStatus('error')
+          setStatus(settingsRef.current ? 'ready' : 'error')
         }
       })
 
     return () => {
       canceled = true
       unsubscribe()
+      idleTimerGenerationRef.current += 1
     }
   }, [desktopApi, enabled, reloadToken])
 
   useEffect(() => {
     const current = settings
-    if (
-      status !== 'ready' ||
-      !current?.lockEnabled ||
-      !current.hasLockPassword ||
-      current.idleLockMinutes <= 0 ||
-      isLocked
-    ) {
+    const timerGeneration = idleTimerGenerationRef.current + 1
+    idleTimerGenerationRef.current = timerGeneration
+    if (status !== 'ready' || !current?.hasLockPassword || current.idleLockMinutes <= 0 || isLocked) {
       return
     }
 
@@ -93,7 +115,15 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
       if (timer !== undefined) {
         window.clearTimeout(timer)
       }
-      timer = window.setTimeout(() => lock(), timeoutMs)
+      timer = window.setTimeout(() => {
+        // React cleanup normally clears this timer when settings change, but
+        // a callback can already be queued in the browser task queue. The
+        // generation and object checks make an obsolete timer harmless.
+        if (idleTimerGenerationRef.current !== timerGeneration || settingsRef.current !== current) {
+          return
+        }
+        lock(false, 'idle')
+      }, timeoutMs)
     }
     const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']
     activityEvents.forEach((eventName) => window.addEventListener(eventName, resetTimer))
@@ -104,6 +134,9 @@ export function useSessionSecurity(desktopApi: FileTermDesktopApi | undefined, e
         window.clearTimeout(timer)
       }
       activityEvents.forEach((eventName) => window.removeEventListener(eventName, resetTimer))
+      if (idleTimerGenerationRef.current === timerGeneration) {
+        idleTimerGenerationRef.current += 1
+      }
     }
   }, [isLocked, lock, settings, status])
 

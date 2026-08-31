@@ -760,6 +760,11 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   font-size: 13px;
 }
 
+.terminal-key-box label > .ssh-terminal-type-hint {
+  grid-column: 2;
+  margin-left: 0;
+}
+
 .ssh-checkbox {
   display: flex;
   align-items: center;
@@ -1566,75 +1571,6 @@ html[data-platform='linux'].tauri-standalone-window .modal-backdrop {
   gap: 8px !important;
   align-self: end;
   height: 36px;
-}
-
-.checkbox-row input {
-  width: auto;
-  height: auto;
-}
-
-.ssh-checkbox input,
-.checkbox-row input {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  min-width: 14px;
-  min-height: 14px;
-  padding: 0;
-  margin: 0;
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
-  background: var(--bg-main);
-  box-sizing: border-box;
-  display: block;
-  position: relative;
-  flex: 0 0 auto;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.checkbox-row input {
-  margin-top: 0;
-}
-
-.ssh-checkbox input::after,
-.checkbox-row input::after {
-  content: '';
-  position: absolute;
-  inset: 2.5px;
-  border-radius: 999px;
-  background: var(--focus-outline, #8bbfff);
-  transform: scale(0);
-  transition: transform 0.16s ease;
-}
-
-.ssh-checkbox input:checked,
-.checkbox-row input:checked {
-  border-color: var(--focus-outline, #8bbfff) !important;
-  background: var(--bg-main);
-}
-
-.ssh-checkbox input:checked::after,
-.checkbox-row input:checked::after {
-  transform: scale(1);
-}
-
-.ssh-checkbox input:disabled,
-.checkbox-row input:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.ssh-checkbox input:focus-visible,
-.checkbox-row input:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--input-focus-ring);
-}
-
-.ssh-checkbox input:hover:not(:disabled):not(:checked),
-.checkbox-row input:hover:not(:disabled):not(:checked) {
-  border-color: var(--text-muted);
 }
 
 .flat-button,

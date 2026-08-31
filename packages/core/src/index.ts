@@ -20,6 +20,12 @@ export interface LocalTerminalLaunchOptions {
 export type FtpSecurityMode = 'none' | 'explicit' | 'implicit'
 export type FtpTransferMode = 'passive' | 'active'
 export type TelnetTerminalType = 'xterm-256color' | 'vt100' | 'vt220' | 'ansi'
+/** SSH session target. `auto` resolves conservatively from the SSH identification. */
+export type SshDeviceMode = 'auto' | 'server' | 'network-device'
+/** Terminal type requested by an SSH PTY. Network devices commonly prefer vt100. */
+export type SshTerminalType = 'xterm-256color' | 'xterm' | 'vt100' | 'vt220' | 'ansi' | 'linux'
+/** Optional vendor family hint for network-device terminal behavior. */
+export type SshNetworkDeviceVendor = 'auto' | 'generic' | 'cisco' | 'huawei' | 'h3c-comware' | 'custom'
 export type TelnetNewlineMode = 'none' | 'lf' | 'cr' | 'crlf'
 
 export type TabLayout = 'terminal-file' | 'file-only' | 'terminal-only'
@@ -263,23 +269,24 @@ export const DEFAULT_LOCAL_TERMINAL_SHELLS: LocalTerminalShellPreferences = {
   linux: '/bin/bash'
 }
 
-/** Scope exposed to externally launched MCP Agents such as Codex and Claude. */
-export type McpConnectionScope = 'all-saved-connections' | 'active-session' | 'default-connection'
+/** Saved connections exposed to external Agent, MCP and CLI callers such as Codex and Claude. */
+export type McpConnectionScope = 'all-saved-connections' | 'selected-connections'
 
-/** Whether an external MCP Agent may request state-changing operations. */
-export type McpOperationPolicy = 'read-only' | 'approved-operations'
+/** Whether an external Agent, MCP client or FileTerm CLI may request state-changing operations. */
+export type McpOperationPolicy = 'read-only' | 'basic-safe-operations' | 'full-access'
 
-/** Non-secret local policy for an external MCP Agent connection. */
+/** Non-secret local policy shared by external Agent, MCP and FileTerm CLI callers. */
 export interface McpAgentPreferences {
   connectionScope: McpConnectionScope
   operationPolicy: McpOperationPolicy
-  /** Saved connection profile used when `connectionScope` is `default-connection`. */
-  defaultProfileId?: string
+  /** Saved connection profiles that an Agent may access in selected mode. */
+  allowedProfileIds: string[]
 }
 
 export const DEFAULT_MCP_AGENT_PREFERENCES: McpAgentPreferences = {
-  connectionScope: 'all-saved-connections',
-  operationPolicy: 'approved-operations'
+  connectionScope: 'selected-connections',
+  allowedProfileIds: [],
+  operationPolicy: 'basic-safe-operations'
 }
 
 export type McpAgentClientId = 'claude-code' | 'codex-cli' | 'opencode'
@@ -302,6 +309,12 @@ export interface McpAgentSetup {
 
 export interface SshProfile extends NetworkProfile {
   type: 'ssh'
+  /** Explicit session target. Missing keeps legacy server behavior; auto resolves after handshake. */
+  deviceMode?: SshDeviceMode
+  /** PTY terminal type sent during SSH shell setup. */
+  terminalType?: SshTerminalType
+  /** Optional vendor hint retained for network-device profiles. */
+  networkDeviceVendor?: SshNetworkDeviceVendor
   username: string
   authType: SshAuthType
   note?: string
@@ -461,8 +474,21 @@ export interface SerialTransferProgress {
 
 export type ConnectionProfile = SshProfile | FtpProfile | TelnetProfile | SerialProfile
 
-export const getConnectionCapabilities = (profile: Pick<ConnectionProfile, 'type'>): ConnectionCapabilities => {
+export const getConnectionCapabilities = (profile: {
+  type: SessionType
+  deviceMode?: SshDeviceMode
+}): ConnectionCapabilities => {
   if (profile.type === 'ssh') {
+    if (profile.deviceMode === 'network-device') {
+      return {
+        terminal: true,
+        files: false,
+        resourceMonitoring: false,
+        shellIntegration: false,
+        fileAccess: false,
+        tunnels: true
+      }
+    }
     return {
       terminal: true,
       files: true,
@@ -492,6 +518,8 @@ export const getConnectionCapabilities = (profile: Pick<ConnectionProfile, 'type
   }
 }
 
+export type WorkspaceSessionSource = 'cli' | 'mcp'
+
 export interface WorkspaceTab {
   id: string
   sessionType: WorkspaceSessionType
@@ -499,6 +527,10 @@ export interface WorkspaceTab {
   title: string
   layout: TabLayout
   status: TabStatus
+  /** CLI/MCP sessions may stay attached to the App without appearing in the tab bar. */
+  isBackground?: boolean
+  /** External caller that created the session; ordinary GUI sessions omit this field. */
+  source?: WorkspaceSessionSource
   /** 分屏树根节点；普通 tab 无此字段。只有分屏的根 tab 持有。 */
   paneRoot?: PaneNode
   /** 分屏 leaf 所属的顶层 workspace tab；leaf 永不显示在顶栏。 */
@@ -840,6 +872,8 @@ export interface SessionSnapshot {
   profileId: string
   /** Monotonic terminal-target identity; unchanged by ordinary output chunks. */
   aiSessionRevision?: string
+  /** Effective SSH mode after banner resolution; absent while auto is connecting. */
+  deviceMode?: SshDeviceMode
   accessHost?: string
   summary: string
   terminalTranscript?: string
@@ -887,6 +921,13 @@ export interface SessionMetricsUpdate {
   tabId: string
   systemMetrics?: SystemMetrics
   mode?: 'replace' | 'append'
+}
+
+/** Incremental remote-directory update; avoids replacing the whole workspace snapshot. */
+export interface RemoteFilesUpdate {
+  tabId: string
+  path: string
+  files: RemoteFileItem[]
 }
 
 export interface ConnectionLibrarySnapshot {
@@ -1088,7 +1129,10 @@ export interface CreateProfileInput {
   transferMode?: FtpTransferMode
   certificateFingerprint?: string
   encoding?: string
-  terminalType?: TelnetTerminalType
+  /** SSH PTY terminal type; Telnet uses the compatible subset of these values. */
+  terminalType?: SshTerminalType
+  deviceMode?: SshDeviceMode
+  networkDeviceVendor?: SshNetworkDeviceVendor
   crNul?: boolean
   loginScript?: string
   backspaceKey?: string
@@ -1243,6 +1287,10 @@ export interface SudoPasswordRequest {
   command: string
 }
 
+export interface SudoPasswordPromptCancelled {
+  requestId: string
+}
+
 export type BackupPasswordOperation = 'upload' | 'download'
 
 /** One-time password request for a cross-device WebDAV/S3 backup. */
@@ -1272,9 +1320,9 @@ export interface SecuritySettingsInput {
   clearBackupPassword?: boolean
 }
 
-export type ActionApprovalSource = 'mcp' | 'ai-copilot'
+export type ActionApprovalSource = 'cli' | 'mcp' | 'ai-copilot'
 
-/** One-time in-app approval shared by MCP and Copilot tool calls. */
+/** One-time in-app approval shared by CLI, MCP, and Copilot tool calls. */
 export interface ActionApprovalRequest {
   requestId: string
   source: ActionApprovalSource
@@ -1981,6 +2029,8 @@ export interface AiContextTarget {
   user?: string
   cwd?: string
   connected: boolean
+  /** Effective SSH network-device mode bound to this one-time context target. */
+  networkDevice?: boolean
 }
 
 /** A best-effort sanitization applied before terminal text can leave the device. */
@@ -2017,6 +2067,7 @@ export type AiToolCallStatus =
   | 'executed'
   | 'executed-in-terminal'
   | 'failed'
+  | 'cancelled'
   | 'timeout'
   | 'target-changed'
   | 'input-required'
@@ -2357,6 +2408,8 @@ export interface FileTermDesktopApi {
     exitCode: number | null
     timedOut: boolean
     outputTruncated: boolean
+    /** True when the command was sent through the visible network-device PTY. */
+    rawTerminal: boolean
     /** The non-interactive channel saw a supported input prompt. */
     inputRequired: boolean
     /** A bounded routing hint; the input itself is never returned. */
@@ -2374,6 +2427,8 @@ export interface FileTermDesktopApi {
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfileFromManager(profileId: string): Promise<WorkspaceSnapshot>
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
+  attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
+  detachSessionToBackground(tabId: string): Promise<WorkspaceSnapshot>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   closeTab(tabId: string): Promise<WorkspaceSnapshot>
@@ -2459,8 +2514,8 @@ export interface FileTermDesktopApi {
   resolveBackupPassword(requestId: string, cancelled: boolean, value?: string): Promise<void>
   setBackupPasswordRendererReady(registrationId: string, ready: boolean): Promise<void>
   resolveActionApproval(requestId: string, approved: boolean): Promise<void>
-  /** Hand a pending Copilot command to the already-visible terminal. */
-  resolveAiTerminalHandoff(requestId: string): Promise<void>
+  /** Atomically hand a pending Copilot command to the already-visible terminal. */
+  executeAiTerminalHandoff(requestId: string, tabId: string, command: string): Promise<void>
   /** @deprecated Use resolveActionApproval. */
   resolveMcpApproval(requestId: string, approved: boolean): Promise<void>
   changeRemotePermissions(
@@ -2474,9 +2529,11 @@ export interface FileTermDesktopApi {
   onSerialTransferProgress(listener: (progress: SerialTransferProgress) => void): () => void
   onWorkspaceSnapshot(listener: (snapshot: WorkspaceSnapshot) => void): () => void
   onSessionMetrics(listener: (payload: SessionMetricsUpdate) => void): () => void
+  onRemoteFilesChanged(listener: (payload: RemoteFilesUpdate) => void): () => void
   /** Resolves only after the SSH interaction listener is registered in Tauri. */
   onSshInteraction(listener: (request: SshInteractionRequest) => void): Promise<() => void>
   onSudoPasswordPrompt(listener: (request: SudoPasswordRequest) => void): Promise<() => void>
+  onSudoPasswordPromptCancelled(listener: (payload: SudoPasswordPromptCancelled) => void): () => void
   /** Resolves only after the main renderer has registered the password prompt listener. */
   onBackupPasswordRequest(listener: (request: BackupPasswordRequest) => void): Promise<() => void>
   onActionApprovalRequest(listener: (request: ActionApprovalRequest) => void): () => void

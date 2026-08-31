@@ -18,6 +18,7 @@ renderer/
     └── common/           # 通用功能组件
         ├── AppIcon.tsx           # 图标组件
         ├── ContextMenu.tsx       # 右键菜单组件
+        ├── StatusIndicator.tsx    # 连接状态指示点
         └── horizontal-scroll.ts  # 水平滚动工具函数
 ```
 
@@ -75,6 +76,26 @@ import { ContextMenu } from '../features/common/ContextMenu'
 - 统一 SVG 图标系统
 - 可自定义尺寸（默认 14px）
 - 颜色继承父元素 `currentColor`
+
+#### StatusIndicator（连接状态指示组件）
+
+**文件路径**：`apps/tauri/src/renderer/features/common/StatusIndicator.tsx`
+
+**功能特性**：
+
+- 统一顶部标签页和底部会话上下文的连接状态点
+- 支持 `connected`、`connecting`、`disconnected`、`idle` 四种状态
+- `sm` 尺寸保持标签页原有的 5px 状态点；`md` 尺寸用于需要更强存在感的场景
+- 视觉样式集中在 `apps/tauri/src/renderer/styles/features/common-controls.css`
+- 顶部标签页抽取时必须保持原有颜色、尺寸和光晕，不在公共组件中擅自增加动画或改色
+
+**使用方式**：
+
+```tsx
+<StatusIndicator aria-hidden="true" status="connected" />
+```
+
+底部会话徽标应传入当前标签页的真实状态，不要固定传 `connected`；装饰性状态点使用 `aria-hidden="true"`，可读状态则由相邻文本提供语义。
 
 #### ContextMenu（右键菜单组件）
 
@@ -355,7 +376,11 @@ TerminalView
 
 TabBar
     └── AppIcon（标签图标）
+    └── StatusIndicator（连接状态）
     └── ContextMenu（右键菜单）
+
+TransferBar
+    └── StatusIndicator（当前会话状态）
 
 FileManager
     └── AppIcon（文件/文件夹图标）
@@ -416,3 +441,4 @@ CommandCenter
 2. 遵循现有组件的命名和编码规范
 3. 添加相应的样式文件到 `styles/features/`
 4. 如果组件会出现在独立窗口或使用内置渲染器（如 xterm、Monaco），额外检查主题切换和首屏加载是否会闪错色
+5. 已有跨功能视觉状态应优先复用公共组件；公共组件的结构样式与主题颜色分别维护，不在业务组件中复制状态点样式

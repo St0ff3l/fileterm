@@ -70,3 +70,14 @@ subject to their platform owners' terms.
 
 The same notice is copied to the packaged application's
 `licenses/THIRD_PARTY_NOTICES.md` file.
+
+## Vendored russh compatibility fork
+
+- Files: `vendor/russh/*`
+- Upstream: [https://github.com/warp-tech/russh](https://github.com/warp-tech/russh)
+- License: Apache License 2.0
+- Modification: adds an explicit opt-in client GEX constructor that permits
+  the 1024-bit minimum needed by older Comware SSH peers, and selects the
+  `1024/1024/8192` request only for matching Comware banners when FileTerm's
+  legacy SSH compatibility is enabled; secure/default client validation and
+  behavior remain unchanged.

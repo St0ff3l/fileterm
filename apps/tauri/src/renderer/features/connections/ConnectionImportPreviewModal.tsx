@@ -3,6 +3,7 @@ import type { ConnectionImportConflictStrategy, ConnectionImportPlan } from '@fi
 import { formatMessage, t } from '../../i18n'
 import { CloseButton } from '../common/CloseButton'
 import { DropdownSelect } from '../common/DropdownSelect'
+import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent } from '../common/StableButtonContent'
 
 export function ConnectionImportPreviewModal({
@@ -73,7 +74,7 @@ export function ConnectionImportPreviewModal({
               key={item.id ?? `${item.sourceLabel}-${item.name}`}
               className={`connection-import-item is-${item.status}`}
             >
-              <input
+              <SelectionControl
                 disabled={isSubmitting || item.status !== 'ready' || !item.id}
                 type="checkbox"
                 checked={Boolean(item.id && selected.has(item.id))}

@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import type { ConnectionProfile, SessionSnapshot, TabStatus } from '@fileterm/core'
 import { t } from '../../i18n'
+import { VerticalScrollbar } from '../common/VerticalScrollbar'
 import { formatSystemLoad } from './system-metric-format'
 
 export function SystemInfoWorkspace({
@@ -13,6 +14,7 @@ export function SystemInfoWorkspace({
   connectionStatus: TabStatus | null
 }) {
   const metrics = activeSession?.systemMetrics
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   if (!activeSession) {
     return (
@@ -63,114 +65,118 @@ export function SystemInfoWorkspace({
     { label: t.running, value: formatUptime(metrics.uptimeSeconds, metrics.uptime) },
     { label: t.load, value: formatSystemLoad(metrics, t).value }
   ]
-
   return (
     <section className="system-info-workspace selectable-text">
-      <header className="system-info-header">
-        <div>
-          <strong>{t.systemInfo}</strong>
-          <p>{t.systemInfoDescription}</p>
+      <div className="system-info-scroll" ref={scrollRef}>
+        <div className="system-info-scroll-content">
+          <header className="system-info-header">
+            <div>
+              <strong>{t.systemInfo}</strong>
+              <p>{t.systemInfoDescription}</p>
+            </div>
+          </header>
+
+          <div className="system-info-grid">
+            <DataCard title={t.overview}>
+              <DescriptionList rows={summaryRows} />
+            </DataCard>
+
+            <DataCard title={t.cpuDetails}>
+              <Table
+                columns={[t.model, t.cores, t.frequency, t.cache, t.bogomips]}
+                rows={metrics.cpuInfoRows.map((row) => [
+                  row.model,
+                  String(row.cores || '-'),
+                  row.frequencyMHz === '-' ? '-' : `${row.frequencyMHz} MHz`,
+                  row.cache,
+                  row.bogomips
+                ])}
+              />
+            </DataCard>
+
+            <DataCard title={t.gpuDetails}>
+              <Table
+                columns={[t.model, t.vendor, t.driver, t.memory]}
+                rows={metrics.gpuInfoRows.map((row) => [row.model, row.vendor, row.driver, row.memory])}
+              />
+            </DataCard>
+
+            <DataCard title={t.cpuUsage}>
+              <Table
+                columns={[t.user, t.system, t.nice, t.idle, t.ioWait, t.irq, t.softIrq, t.realtime]}
+                rows={[
+                  [
+                    formatPercent(metrics.cpuUsage.user),
+                    formatPercent(metrics.cpuUsage.system),
+                    formatPercent(metrics.cpuUsage.nice),
+                    formatPercent(metrics.cpuUsage.idle),
+                    formatPercent(metrics.cpuUsage.ioWait),
+                    formatPercent(metrics.cpuUsage.irq),
+                    formatPercent(metrics.cpuUsage.softIrq),
+                    formatPercent(metrics.cpuUsage.steal)
+                  ]
+                ]}
+              />
+            </DataCard>
+
+            <div className="system-info-split">
+              <DataCard title={t.memoryUsageTitle}>
+                <Table
+                  columns={[t.total, t.used, t.remaining, t.usage]}
+                  rows={[
+                    [
+                      metrics.memoryBreakdown.total,
+                      metrics.memoryBreakdown.used,
+                      metrics.memoryBreakdown.available,
+                      formatPercent(metrics.memoryBreakdown.percent)
+                    ]
+                  ]}
+                />
+              </DataCard>
+              <DataCard title={t.swapUsageTitle}>
+                <Table
+                  columns={[t.total, t.used, t.remaining, t.usage]}
+                  rows={[
+                    [
+                      metrics.swapBreakdown.total,
+                      metrics.swapBreakdown.used,
+                      metrics.swapBreakdown.available,
+                      formatPercent(metrics.swapBreakdown.percent)
+                    ]
+                  ]}
+                />
+              </DataCard>
+            </div>
+
+            <DataCard title={t.networkInterfaces}>
+              <Table
+                columns={[t.name, t.send, t.receive, t.sendRate, t.receiveRate]}
+                rows={metrics.networkInterfaceRows.map((row) => [
+                  row.name,
+                  row.txTotal,
+                  row.rxTotal,
+                  row.txRate,
+                  row.rxRate
+                ])}
+              />
+            </DataCard>
+
+            <DataCard title={t.fileSystems}>
+              <Table
+                columns={[t.name, t.size, t.usage, t.available, t.mountPoint]}
+                rows={metrics.fileSystemRows.map((row) => [
+                  row.name,
+                  `${row.used} / ${row.size}`,
+                  row.usagePercent,
+                  row.available,
+                  row.mountPoint
+                ])}
+              />
+            </DataCard>
+          </div>
         </div>
-      </header>
-
-      <div className="system-info-grid">
-        <DataCard title={t.overview}>
-          <DescriptionList rows={summaryRows} />
-        </DataCard>
-
-        <DataCard title={t.cpuDetails}>
-          <Table
-            columns={[t.model, t.cores, t.frequency, t.cache, t.bogomips]}
-            rows={metrics.cpuInfoRows.map((row) => [
-              row.model,
-              String(row.cores || '-'),
-              row.frequencyMHz === '-' ? '-' : `${row.frequencyMHz} MHz`,
-              row.cache,
-              row.bogomips
-            ])}
-          />
-        </DataCard>
-
-        <DataCard title={t.gpuDetails}>
-          <Table
-            columns={[t.model, t.vendor, t.driver, t.memory]}
-            rows={metrics.gpuInfoRows.map((row) => [row.model, row.vendor, row.driver, row.memory])}
-          />
-        </DataCard>
-
-        <DataCard title={t.cpuUsage}>
-          <Table
-            columns={[t.user, t.system, t.nice, t.idle, t.ioWait, t.irq, t.softIrq, t.realtime]}
-            rows={[
-              [
-                formatPercent(metrics.cpuUsage.user),
-                formatPercent(metrics.cpuUsage.system),
-                formatPercent(metrics.cpuUsage.nice),
-                formatPercent(metrics.cpuUsage.idle),
-                formatPercent(metrics.cpuUsage.ioWait),
-                formatPercent(metrics.cpuUsage.irq),
-                formatPercent(metrics.cpuUsage.softIrq),
-                formatPercent(metrics.cpuUsage.steal)
-              ]
-            ]}
-          />
-        </DataCard>
-
-        <div className="system-info-split">
-          <DataCard title={t.memoryUsageTitle}>
-            <Table
-              columns={[t.total, t.used, t.remaining, t.usage]}
-              rows={[
-                [
-                  metrics.memoryBreakdown.total,
-                  metrics.memoryBreakdown.used,
-                  metrics.memoryBreakdown.available,
-                  formatPercent(metrics.memoryBreakdown.percent)
-                ]
-              ]}
-            />
-          </DataCard>
-          <DataCard title={t.swapUsageTitle}>
-            <Table
-              columns={[t.total, t.used, t.remaining, t.usage]}
-              rows={[
-                [
-                  metrics.swapBreakdown.total,
-                  metrics.swapBreakdown.used,
-                  metrics.swapBreakdown.available,
-                  formatPercent(metrics.swapBreakdown.percent)
-                ]
-              ]}
-            />
-          </DataCard>
-        </div>
-
-        <DataCard title={t.networkInterfaces}>
-          <Table
-            columns={[t.name, t.send, t.receive, t.sendRate, t.receiveRate]}
-            rows={metrics.networkInterfaceRows.map((row) => [
-              row.name,
-              row.txTotal,
-              row.rxTotal,
-              row.txRate,
-              row.rxRate
-            ])}
-          />
-        </DataCard>
-
-        <DataCard title={t.fileSystems}>
-          <Table
-            columns={[t.name, t.size, t.usage, t.available, t.mountPoint]}
-            rows={metrics.fileSystemRows.map((row) => [
-              row.name,
-              `${row.used} / ${row.size}`,
-              row.usagePercent,
-              row.available,
-              row.mountPoint
-            ])}
-          />
-        </DataCard>
       </div>
+      <VerticalScrollbar ariaLabel={t.scrollContent} scrollRef={scrollRef} />
     </section>
   )
 }

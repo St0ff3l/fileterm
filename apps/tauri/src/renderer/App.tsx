@@ -57,8 +57,19 @@ function retainOpenTabUiState<T>(state: Record<string, T>, openTabIds: Set<strin
 
   return Object.fromEntries(entries.filter(([tabId]) => openTabIds.has(tabId)))
 }
+
+function actionApprovalSourceLabel(source: ActionApprovalRequest['source']) {
+  if (source === 'cli') {
+    return t.sessionSourceCli
+  }
+  if (source === 'mcp') {
+    return t.sessionSourceMcp
+  }
+  return 'Copilot'
+}
 import { CloseButton } from './features/common/CloseButton'
 import { ConfirmActionDialog } from './features/common/ConfirmActionDialog'
+import { SelectionControl } from './features/common/SelectionControl'
 import type { SendScope } from './features/common/session-send-targets'
 import { resolveSelectedTabIds } from './features/common/session-send-targets'
 import { TabBar, type TabBarProps, type TabContextTarget } from './features/layout/TabBar'
@@ -594,6 +605,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     shortcutCloseConfirm,
     isSystemSidebarCollapsed: isSystemSidebarUserCollapsed,
     visibleWorkspaceTabs,
+    backgroundWorkspaceTabs,
     activeLocalTab,
     visibleActiveSessionTabId,
     activeTab,
@@ -616,6 +628,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     openProfile,
     openLocalTerminal,
     activateSessionTab,
+    attachBackgroundSession,
+    detachSessionToBackground,
+    closeBackgroundSession,
     reconnectSessionTab,
     confirmShortcutClose,
     handleTabContextAction,
@@ -681,7 +696,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         activeProfile.enableResourceMonitoring ??
         connectionDefaults.enableResourceMonitoring)
       : false
-  const isResourceMonitoringAvailable = Boolean(activeProfile?.type === 'ssh' && activeSshResourceMonitoring)
+  const isResourceMonitoringAvailable = Boolean(
+    activeProfile?.type === 'ssh' &&
+    activeProfile.deviceMode !== 'network-device' &&
+    activeSshResourceMonitoring &&
+    activeSession?.capabilities?.resourceMonitoring !== false
+  )
   // Sidebar metrics are per-connection. Profiles created before this field
   // existed fall back to the legacy global preference, which the settings
   // dialog no longer writes, so existing connections keep their display.
@@ -1358,7 +1378,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
   const buildProfilePayload = (requireSaveFields: boolean): CreateProfileInput | null => {
     const normalizedHost = normalizeConnectionHost(form.host)
     const requiresHost = form.type !== 'serial'
-    const requiresRemotePath = form.type === 'ssh' || form.type === 'ftp'
+    const requiresRemotePath = form.type === 'ftp' || (form.type === 'ssh' && form.deviceMode !== 'network-device')
 
     if (
       (requireSaveFields && (!form.name || !form.group)) ||
@@ -2014,6 +2034,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 }}
                 onOpenCommandManager={openCommandManager}
                 profiles={workspace.profiles}
+                backgroundTabs={backgroundWorkspaceTabs}
+                onAttachBackgroundSession={attachBackgroundSession}
+                onCloseBackgroundSession={closeBackgroundSession}
                 onChooseUploadFiles={handleChooseUploadFiles}
                 onDownloadFiles={handleDownloadFiles}
                 onDownloadLocalNetworkFiles={handleDownloadLocalNetworkFiles}
@@ -2128,9 +2151,12 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
         <TransferCenterHost
           activeProfileId={activeTab?.profileId}
           activeTabId={activeTab?.id ?? null}
+          activeTabStatus={activeTab?.status ?? null}
+          activeTabSource={activeTab?.source ?? null}
           desktopApi={desktopApi}
           fullWidth={!shouldShowSystemSidebar}
           isPending={isBusy}
+          onHideToBackground={detachSessionToBackground}
           onApplySnapshot={applySnapshot}
           onError={(scope, err) => reportError(setError, scope, err)}
           sessionTabs={visibleWorkspaceTabs.filter((tab) => tab.sessionType !== 'local')}
@@ -2399,16 +2425,35 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
       />
       {isMainWorkspaceWindow && actionApprovalRequests[0] ? (
         <ConfirmActionDialog
+          className="external-operation-confirmation"
           confirmLabel={t.confirm}
           confirmVariant={actionApprovalRequests[0].destructive ? 'danger' : 'primary'}
           description={
-            <div>
-              <p>{actionApprovalRequests[0].summary}</p>
-              {actionApprovalRequests[0].target ? <p>目标：{actionApprovalRequests[0].target}</p> : null}
-              {actionApprovalRequests[0].details ? <pre>{actionApprovalRequests[0].details}</pre> : null}
+            <div className="external-operation-confirmation__content">
+              <p className="external-operation-confirmation__summary">{actionApprovalRequests[0].summary}</p>
+              <div className="external-operation-confirmation__field">
+                <span className="external-operation-confirmation__label">{t.sessionSource}</span>
+                <div className="external-operation-confirmation__source-row">
+                  <span className={`external-operation-confirmation__source is-${actionApprovalRequests[0].source}`}>
+                    {actionApprovalSourceLabel(actionApprovalRequests[0].source)}
+                  </span>
+                </div>
+              </div>
+              {actionApprovalRequests[0].target ? (
+                <div className="external-operation-confirmation__field">
+                  <span className="external-operation-confirmation__label">{t.actionApprovalTarget}</span>
+                  <div className="external-operation-confirmation__value">{actionApprovalRequests[0].target}</div>
+                </div>
+              ) : null}
+              {actionApprovalRequests[0].details ? (
+                <div className="external-operation-confirmation__field">
+                  <span className="external-operation-confirmation__label">{t.actionApprovalCommand}</span>
+                  <pre className="external-operation-confirmation__command">{actionApprovalRequests[0].details}</pre>
+                </div>
+              ) : null}
               {actionApprovalRequests[0].requiresRiskAcknowledgement ? (
                 <label className="confirm-action-dialog__warning">
-                  <input
+                  <SelectionControl
                     checked={riskAcknowledgedRequestId === actionApprovalRequests[0].requestId}
                     disabled={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
                     onChange={(event) =>
@@ -2425,6 +2470,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
             actionApprovalRequests[0].requiresRiskAcknowledgement &&
             riskAcknowledgedRequestId !== actionApprovalRequests[0].requestId
           )}
+          initialFocus="none"
           isSubmitting={resolvingActionApprovalId === actionApprovalRequests[0].requestId}
           onClose={() => {
             void resolveActionApproval(false)

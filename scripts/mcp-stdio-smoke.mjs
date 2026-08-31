@@ -89,12 +89,32 @@ async function runSmoke(binaryPath) {
     const tools = toolsList.result?.tools
     assert(Array.isArray(tools), 'tools/list did not return a tool array')
     const byName = new Map(tools.map((tool) => [tool.name, tool]))
-    const requiredTools = ['fileterm_list_connections', 'fileterm_execute_remote_command']
+    const requiredTools = [
+      'fileterm_list_connections',
+      'fileterm_open_connection',
+      'fileterm_activate_session',
+      'fileterm_execute_remote_command',
+      'fileterm_execute_visible_command'
+    ]
     for (const name of requiredTools) {
       assert(byName.has(name), `tools/list is missing ${name}`)
     }
 
     const remoteProperties = byName.get('fileterm_execute_remote_command').inputSchema?.properties ?? {}
+    const openTool = byName.get('fileterm_open_connection')
+    assert(
+      openTool.inputSchema?.required?.includes('execution_mode'),
+      'open connection schema must require execution_mode'
+    )
+    assert(
+      JSON.stringify(openTool.inputSchema?.properties?.execution_mode?.enum) ===
+        JSON.stringify(['background', 'visible-terminal']),
+      'open connection schema has invalid execution_mode choices'
+    )
+    assert(
+      /non-active/i.test(openTool.description ?? ''),
+      'open connection description does not describe the non-active session'
+    )
     assert(remoteProperties.sudo_password, 'remote exec schema is missing sudo_password')
     assert(remoteProperties.su_password, 'remote exec schema is missing su_password')
     assert(
@@ -112,6 +132,14 @@ async function runSmoke(binaryPath) {
     assert(
       /REMOTE_INTERACTIVE_INPUT_REQUIRED/i.test(byName.get('fileterm_execute_remote_command').description ?? ''),
       'remote exec description does not describe the fail-closed interactive-input result'
+    )
+    assert(
+      /NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED/i.test(byName.get('fileterm_execute_remote_command').description ?? ''),
+      'remote exec description does not describe the network-device route boundary'
+    )
+    assert(
+      /already-active visible SSH terminal/i.test(byName.get('fileterm_execute_visible_command').description ?? ''),
+      'visible exec description does not require an active terminal'
     )
 
     child.stdin.end()

@@ -1172,12 +1172,6 @@
   border-left-color: transparent;
 }
 
-.tab-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
 .tab-close,
 .row-delete,
 .icon-button {
@@ -1313,12 +1307,22 @@
 .workspace-content-stack__item {
   position: absolute;
   inset: 0;
+  /* Keep the workspace root constrained after keep-alive moves it out of the
+     normal flex flow; its own scroll regions then receive a definite height. */
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   visibility: hidden;
   pointer-events: none;
   z-index: 0;
+}
+
+.workspace-content-stack__item > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
 }
 
 .workspace-content-stack__item.is-active {

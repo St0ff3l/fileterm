@@ -426,7 +426,21 @@ export function useWorkspaceTabs({
     () =>
       uniqueItemsById(
         workspace.tabs.filter(
-          (tab) => !closingSessionTabIdSet.has(tab.id) && !tab.paneRootTabId && !leafTabIds.has(tab.id)
+          (tab) =>
+            !tab.isBackground && !closingSessionTabIdSet.has(tab.id) && !tab.paneRootTabId && !leafTabIds.has(tab.id)
+        )
+      ),
+    [closingSessionTabIdSet, workspace.tabs, leafTabIds]
+  )
+  const backgroundWorkspaceTabs = useMemo(
+    () =>
+      uniqueItemsById(
+        workspace.tabs.filter(
+          (tab) =>
+            tab.isBackground === true &&
+            !closingSessionTabIdSet.has(tab.id) &&
+            !tab.paneRootTabId &&
+            !leafTabIds.has(tab.id)
         )
       ),
     [closingSessionTabIdSet, workspace.tabs, leafTabIds]
@@ -982,6 +996,84 @@ export function useWorkspaceTabs({
       setActiveLocalTabId(null)
     } catch (error) {
       onError('激活标签页', error)
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
+  const attachBackgroundSession = async (tabId: string) => {
+    if (!desktopApi) {
+      return
+    }
+
+    const activeHomeId = isHomeWorkspaceVisible ? effectiveActiveLocalTabId : null
+    const replacementKey = activeHomeId ? homeTabKey(activeHomeId) : null
+
+    try {
+      onBusyChange(true)
+      const snapshot = await desktopApi.attachBackgroundSession(tabId)
+      applySnapshot(snapshot)
+      onStatusMessage(null)
+      if (activeHomeId && snapshot.activeTabId && replacementKey) {
+        const nextSessionKey = sessionTabKey(snapshot.activeTabId)
+        setTabOrder((current) => uniqueStrings(current.map((key) => (key === replacementKey ? nextSessionKey : key))))
+        setLocalTabs((current) => current.filter((tab) => tab.id !== activeHomeId))
+      }
+      setActiveLocalTabId(null)
+    } catch (error) {
+      onError('打开后台会话', error)
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
+  const detachSessionToBackground = async (tabId: string) => {
+    if (!desktopApi) {
+      return
+    }
+
+    const targetTab = visibleWorkspaceTabs.find((tab) => tab.id === tabId)
+    if (!targetTab?.source) {
+      return
+    }
+
+    const nextVisibleSessionTabs = visibleWorkspaceTabs.filter((tab) => tab.id !== tabId)
+    const relatedLocalTabs = localTabsRef.current
+      .filter((tab) => tab.kind === 'system' && tab.sessionTabId === tabId)
+      .map((tab) => tab.id)
+
+    try {
+      onBusyChange(true)
+      const snapshot = await desktopApi.detachSessionToBackground(tabId)
+      applySnapshot(snapshot)
+      if (relatedLocalTabs.length) {
+        closeHomeTabs(
+          relatedLocalTabs,
+          activeLocalTabId && relatedLocalTabs.includes(activeLocalTabId) ? null : activeLocalTabId,
+          nextVisibleSessionTabs
+        )
+      } else {
+        setTabOrder((current) => current.filter((key) => key !== sessionTabKey(tabId)))
+      }
+      setActiveLocalTabId(null)
+    } catch (error) {
+      onError('隐藏后台会话', error)
+    } finally {
+      onBusyChange(false)
+    }
+  }
+
+  const closeBackgroundSession = async (tabId: string) => {
+    if (!desktopApi) {
+      return
+    }
+
+    try {
+      onBusyChange(true)
+      const snapshot = await desktopApi.closeTab(tabId)
+      applySnapshot(snapshot)
+    } catch (error) {
+      onError('关闭后台会话', error)
     } finally {
       onBusyChange(false)
     }
@@ -1645,6 +1737,7 @@ export function useWorkspaceTabs({
     isSystemSidebarCollapsed,
     setIsSystemSidebarCollapsed,
     visibleWorkspaceTabs,
+    backgroundWorkspaceTabs,
     visibleActiveSessionTabId,
     displayedSessionTabId,
     activeLocalTab,
@@ -1666,6 +1759,9 @@ export function useWorkspaceTabs({
     openProfile,
     openLocalTerminal,
     activateSessionTab,
+    attachBackgroundSession,
+    detachSessionToBackground,
+    closeBackgroundSession,
     reconnectSessionTab,
     disconnectSessionTab,
     closeSessionTab,
