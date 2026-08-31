@@ -506,7 +506,7 @@ BridgeRequest 可以增加内部 source 字段用于审计和审批来源，但�
 1. 一次性 fileterm command：保留脚本兼容性；查询和普通远程命令自动执行，其它变更遵循基础安全操作的 FileTerm 主窗口审批。
 2. 常驻 fileterm agent：面向 AI，使用与 MCP 相同的全局策略、审批和等待语义。
 
-这样既不破坏现有 CLI，也不会把“AI 调 CLI”继续当成一个没有来源信息的特殊旁路。若后续确认所有 CLI 都应视为 Agent，则可以把一次性 CLI 也切换到统一审批，但必须单独做兼容性迁移。
+这样既不破坏现有 CLI，也不会把“AI 调 CLI”继续当成一个没有来源信息的特殊旁路。外部 Agent 不得按每个动作启动一次性 CLI；它必须使用 MCP 或常驻 `fileterm agent`。一次性 CLI 仍保留给用户显式调用和 shell 脚本，并继续使用同一套权限评估。
 
 ## 9. 凭据安全策略
 
@@ -605,7 +605,7 @@ fileterm agent
 - 用户手动调试。
 - 不支持常驻进程的外部调用方。
 
-它不会被强行宣称为“零进程”接口。文档和 Agent 配置应优先推荐 MCP 或 fileterm agent，避免 AI 为每个动作重新 spawn CLI。
+它不会被强行宣称为“零进程”接口，也不是外部 Agent 的调用通道。文档和 Agent 配置必须推荐 MCP 或 `fileterm agent`；Agent 不得为每个动作重新 spawn CLI。
 
 ### 10.4 进程模型与连接去重的关系
 
@@ -855,17 +855,17 @@ Agent 的 JSONL 输出沿用同一边界：progress 和最终结果都带原 req
 
 ## 15. 风险与应对
 
-| 风险                                        | 应对                                                                                      |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| SSH prompt 等待导致 CLI/MCP 长时间挂起      | 统一 deadline、progress、取消和 wait_for_connection 恢复路径                              |
-| 用户输入后 session 已重连或 revision 已变化 | prompt 绑定 tab、profile 和 session revision，失效时拒绝提交                              |
-| 并发 open 重复创建 tab                      | profile-scoped connection flight 和幂等结果                                               |
-| AI 绕过 MCP 改用一次性 CLI                  | 一次性 CLI 与 MCP/Agent 共用基础安全操作策略和连接范围；AI 推荐使用 MCP/Agent bridge      |
-| 选择列表和实际 route 不一致                 | Rust route、列表过滤和 UI 使用同一个 policy evaluator                                     |
-| CLI 密码参数出现在 argv                     | 增加 stdin 输入方式，Agent 默认不使用明文 argv                                            |
-| headless 子进程仍显示 FileTerm 图标         | 使用独立 sidecar 并对 macOS bundle/application type 做手工验收                            |
-| 连接等待改变现有 GUI open 语义              | 只在外部 bridge 增加 wait path，GUI 保留立即返回；提供 --no-wait                          |
-| 密码缺失和普通交互输入混淆                  | SSH 建连凭据走 connection operation；普通 exec 继续返回 REMOTE_INTERACTIVE_INPUT_REQUIRED |
+| 风险                                        | 应对                                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| SSH prompt 等待导致 CLI/MCP 长时间挂起      | 统一 deadline、progress、取消和 wait_for_connection 恢复路径                                |
+| 用户输入后 session 已重连或 revision 已变化 | prompt 绑定 tab、profile 和 session revision，失效时拒绝提交                                |
+| 并发 open 重复创建 tab                      | profile-scoped connection flight 和幂等结果                                                 |
+| AI 绕过 MCP 改用一次性 CLI                  | Agent 接入契约禁止按请求调用一次性 CLI；CLI 仅保留给用户脚本，MCP/Agent bridge 复用常驻进程 |
+| 选择列表和实际 route 不一致                 | Rust route、列表过滤和 UI 使用同一个 policy evaluator                                       |
+| CLI 密码参数出现在 argv                     | 增加 stdin 输入方式，Agent 默认不使用明文 argv                                              |
+| headless 子进程仍显示 FileTerm 图标         | 使用独立 sidecar 并对 macOS bundle/application type 做手工验收                              |
+| 连接等待改变现有 GUI open 语义              | 只在外部 bridge 增加 wait path，GUI 保留立即返回；提供 --no-wait                            |
+| 密码缺失和普通交互输入混淆                  | SSH 建连凭据走 connection operation；普通 exec 继续返回 REMOTE_INTERACTIVE_INPUT_REQUIRED   |
 
 ## 16. 推荐 PR 拆分
 

@@ -2673,8 +2673,10 @@ fn write_agent_value(
 }
 
 /// Entry point for the small FileTerm CLI. The CLI intentionally
-/// shares the MCP bridge and returns JSON so shell scripts and agents can use
+/// shares the MCP bridge and returns JSON so user-run shell scripts can use
 /// the same capability boundary without duplicating authorization logic.
+/// External Agents should use the persistent MCP or Agent bridge instead of
+/// spawning this one-shot entry point for every request.
 pub fn run_cli(arguments: &[String]) -> Result<(), String> {
     let command_index = usize::from(arguments.first().is_some_and(|argument| argument == "cli"));
     let Some(command) = arguments.get(command_index).map(String::as_str) else {

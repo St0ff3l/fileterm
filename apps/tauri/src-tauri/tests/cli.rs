@@ -63,25 +63,35 @@ fn agent_help_documents_one_process_and_cancellation() {
 }
 
 #[test]
-fn agent_returns_a_final_jsonl_result_without_starting_the_gui() {
+fn agent_reuses_one_process_for_multiple_jsonl_requests_without_starting_the_gui() {
     let output = run_fileterm(
         &["agent"],
         Some(
             br#"{"id":"request-1","action":"list_connections","params":{}}
+{"id":"request-2","action":"list_connections","params":{}}
 "#,
         ),
     );
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let response: serde_json::Value =
-        serde_json::from_str(stdout.trim()).expect("Agent should emit one final JSON response");
-    assert_eq!(response["id"], "request-1");
-    assert_eq!(response["ok"], false);
-    assert!(response["error"]
-        .as_str()
-        .expect("Agent error should be text")
-        .contains("desktop app is not running"));
+    let mut responses = stdout
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line).expect("Agent response should be JSON")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(responses.len(), 2);
+    responses.sort_by_key(|response| response["id"].as_str().unwrap_or_default().to_string());
+    assert_eq!(responses[0]["id"], "request-1");
+    assert_eq!(responses[1]["id"], "request-2");
+    for response in responses {
+        assert_eq!(response["ok"], false);
+        assert!(response["error"]
+            .as_str()
+            .expect("Agent error should be text")
+            .contains("desktop app is not running"));
+    }
 }
 
 #[test]

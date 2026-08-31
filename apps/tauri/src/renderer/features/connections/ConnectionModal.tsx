@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type {
   ConnectionFormMode,
   CreateProfileInput,
@@ -19,6 +19,7 @@ import { FeedbackText } from '../common/FeedbackText'
 import { ResourceMonitoringMetricsEditor } from '../common/ResourceMonitoringMetricsEditor'
 import { SelectionControl } from '../common/SelectionControl'
 import { StableButtonContent } from '../common/StableButtonContent'
+import { waitForMinimumBusyDuration } from '../common/operation-timing'
 import { SshPrivateKeyField } from './SshPrivateKeyField'
 
 type SshConnectionSettingKey = keyof SshConnectionDefaults
@@ -165,6 +166,7 @@ export function ConnectionModal({
   const [isTestRetryCoolingDown, setIsTestRetryCoolingDown] = useState(false)
   const [connectionTestSucceeded, setConnectionTestSucceeded] = useState(false)
   const [routingMode, setRoutingMode] = useState<'direct' | 'jump'>(() => (form.jumpProfileId ? 'jump' : 'direct'))
+  const serialPortRefreshInFlightRef = useRef(false)
   const supportsProxy = form.type === 'ssh' || form.type === 'telnet' || form.type === 'ftp'
   const isNetworkDevice = form.type === 'ssh' && form.deviceMode === 'network-device'
   const showsNetworkDeviceVendor = form.type === 'ssh' && (isNetworkDevice || form.deviceMode === 'auto')
@@ -173,6 +175,14 @@ export function ConnectionModal({
   const supportsBuiltInRs485 = ['linux', 'darwin'].includes(platform ?? '') && form.flowControl !== 'hardware'
   const supportsExtendedParity = ['linux', 'win32'].includes(platform ?? '') || (isMacOs && form.dataBits === 7)
   const jumpHosts = profiles.filter((profile) => profile.type === 'ssh' && profile.id !== editingProfileId)
+  const serialDevicePathPlaceholder =
+    platform === 'darwin'
+      ? '/dev/cu.usbserial / /dev/tty.usbserial'
+      : platform === 'win32'
+        ? 'COM3 / COM4'
+        : platform === 'linux'
+          ? '/dev/ttyUSB0 / /dev/ttyACM0'
+          : 'COM3 / /dev/ttyUSB0 / /dev/cu.usbserial'
 
   useEffect(() => {
     setConnectionTestSucceeded(false)
@@ -234,10 +244,12 @@ export function ConnectionModal({
 
   const refreshSerialPorts = useCallback(async () => {
     const desktopApi = window.fileterm
-    if (!desktopApi || form.type !== 'serial') {
+    if (!desktopApi || form.type !== 'serial' || serialPortRefreshInFlightRef.current) {
       return
     }
 
+    serialPortRefreshInFlightRef.current = true
+    const refreshStartedAt = performance.now()
     setIsLoadingSerialPorts(true)
     setSerialPortLoadError(null)
     try {
@@ -246,9 +258,10 @@ export function ConnectionModal({
         [...ports].sort((left, right) => left.portName.localeCompare(right.portName, undefined, { numeric: true }))
       )
     } catch (error) {
-      setSerialPorts([])
       setSerialPortLoadError(error instanceof Error ? error.message : String(error))
     } finally {
+      await waitForMinimumBusyDuration(refreshStartedAt)
+      serialPortRefreshInFlightRef.current = false
       setIsLoadingSerialPorts(false)
     }
   }, [form.type])
@@ -532,7 +545,7 @@ export function ConnectionModal({
                         <label className="span-2">
                           {t.devicePath}:
                           <input
-                            placeholder="COM3 / /dev/ttyUSB0 / /dev/cu.usbserial"
+                            placeholder={serialDevicePathPlaceholder}
                             spellCheck={false}
                             value={form.devicePath ?? ''}
                             onChange={(event) =>

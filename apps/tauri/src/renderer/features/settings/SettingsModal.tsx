@@ -2958,6 +2958,45 @@ export function SettingsModal({
                           <p>{t.agentMcpDirectCliDescription}</p>
                         </div>
                         <div className="agent-mcp-direct-cli-commands">
+                          <div className="agent-mcp-direct-cli-command agent-mcp-doc-reference">
+                            <small>{t.agentMcpCliSkillPath}</small>
+                            <div className="agent-mcp-registration">
+                              <code>{FILETERM_CLI_AGENT_SKILL_URL}</code>
+                              <button
+                                aria-label={t.agentMcpCliSkillCopy}
+                                className="copy-icon-button agent-mcp-copy-button"
+                                disabled={!desktopApi}
+                                title={t.agentMcpCliSkillCopy}
+                                type="button"
+                                onClick={() =>
+                                  copyMcpAgentCommand(FILETERM_CLI_AGENT_SKILL_URL, t.agentMcpCliSkillCopied)
+                                }
+                              >
+                                <AppIcon name="copy" size={14} strokeWidth={2} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="agent-mcp-direct-cli-command agent-mcp-persistent-agent-command">
+                            <small>{t.agentMcpPersistentAgentPath}</small>
+                            <div className="agent-mcp-registration">
+                              <code>{mcpAgentSetup.filetermCommand} agent</code>
+                              <button
+                                aria-label={t.agentMcpPersistentAgentCopy}
+                                className="copy-icon-button agent-mcp-copy-button"
+                                disabled={!desktopApi}
+                                title={t.agentMcpPersistentAgentCopy}
+                                type="button"
+                                onClick={() =>
+                                  copyMcpAgentCommand(
+                                    `${mcpAgentSetup.filetermCommand} agent`,
+                                    t.agentMcpPersistentAgentCopied
+                                  )
+                                }
+                              >
+                                <AppIcon name="copy" size={14} strokeWidth={2} />
+                              </button>
+                            </div>
+                          </div>
                           <div className="agent-mcp-direct-cli-command">
                             <small>{t.agentMcpDirectCliPath}</small>
                             <div className="agent-mcp-registration">
@@ -2979,23 +3018,12 @@ export function SettingsModal({
                               </button>
                             </div>
                           </div>
-                          <div className="agent-mcp-direct-cli-command agent-mcp-doc-reference">
-                            <small>{t.agentMcpCliSkillPath}</small>
-                            <div className="agent-mcp-registration">
-                              <code>{FILETERM_CLI_AGENT_SKILL_URL}</code>
-                              <button
-                                aria-label={t.agentMcpCliSkillCopy}
-                                className="copy-icon-button agent-mcp-copy-button"
-                                disabled={!desktopApi}
-                                title={t.agentMcpCliSkillCopy}
-                                type="button"
-                                onClick={() =>
-                                  copyMcpAgentCommand(FILETERM_CLI_AGENT_SKILL_URL, t.agentMcpCliSkillCopied)
-                                }
-                              >
-                                <AppIcon name="copy" size={14} strokeWidth={2} />
-                              </button>
-                            </div>
+                        </div>
+                        <div className="agent-mcp-keep-open">
+                          <AppIcon name="server" size={15} />
+                          <div>
+                            <strong>{t.agentMcpProcessModelTitle}</strong>
+                            <p>{t.agentMcpProcessModelDescription}</p>
                           </div>
                         </div>
                       </div>
