@@ -91,7 +91,8 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 代码入口：
 
 - [main.rs](../../../apps/tauri/src-tauri/src/main.rs)
-- [mcp.rs](../../../apps/tauri/src-tauri/src/services/mcp.rs)
+
+* [mcp/mod.rs](../../../apps/tauri/src-tauri/src/services/mcp/mod.rs)
 
 ### 2.3 当前权限策略
 

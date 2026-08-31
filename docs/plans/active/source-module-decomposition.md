@@ -1,6 +1,6 @@
 # FileTerm 源码大文件职责拆分总计划
 
-状态：active（盘点已完成，分阶段实施尚未完成）
+状态：active（3A/3B Rust 物理拆分完成，完整质量门禁待收口）
 创建日期：2026-08-31
 
 本计划是源码规模治理的总入口，覆盖当前 Tauri Rust、bridge 和 renderer
@@ -95,34 +95,41 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
 
 ### 4.1 Session / protocol 边界
 
-| 阶段 | 文件                                                                                           | 当前行数 | 拆分方向                                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------- | -------: | --------------------------------------------------------------------------------------------------------------- |
-| 3A   | [`sessions/local_terminal.rs`](../../../apps/tauri/src-tauri/src/sessions/local_terminal.rs)   |     2953 | shell discovery/platform、输出扫描器、worker/process；保留 local terminal session facade。                      |
-| 3A   | [`sessions/system_metrics.rs`](../../../apps/tauri/src-tauri/src/sessions/system_metrics.rs)   |     2937 | exec orchestration、normalized parser、POSIX/FreeBSD/Windows command builders；平台采集继续在 Rust session 层。 |
-| 3A   | [`sessions/local_files.rs`](../../../apps/tauri/src-tauri/src/sessions/local_files.rs)         |     1615 | SMB/network share、directory/file operations、permissions；保持本地文件与远程协议分离。                         |
-| 3A   | [`sessions/serial/transfer.rs`](../../../apps/tauri/src-tauri/src/sessions/serial/transfer.rs) |     1248 | raw、XMODEM、YMODEM；优先沿用 Serial 计划已经定义的协议边界。                                                   |
-| 3A   | [`sessions/serial/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/serial/mod.rs)           |     1175 | port/device lifecycle、worker、reconnect；`mod.rs` 保留生命周期和路由 facade。                                  |
-| 3A   | [`sessions/telnet.rs`](../../../apps/tauri/src-tauri/src/sessions/telnet.rs)                   |     1109 | parser、transport/proxy、worker；不增加 SSH 的文件或 exec 能力。                                                |
+| 阶段 | 文件                                                                                                   | 盘点行数 | 拆分方向                                                                                                               |
+| ---- | ------------------------------------------------------------------------------------------------------ | -------: | ---------------------------------------------------------------------------------------------------------------------- |
+| 3A   | [`sessions/local_terminal/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/local_terminal/mod.rs)   |     2953 | 已拆为目录 facade、shell discovery/platform、输出扫描器、worker/process；保持 local terminal session 入口。            |
+| 3A   | [`sessions/system_metrics/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs)   |     2937 | 已拆为 exec orchestration、normalized parser、POSIX/FreeBSD/Windows command builders；平台采集继续在 Rust session 层。 |
+| 3A   | [`sessions/local_files/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/local_files/mod.rs)         |     1615 | 已拆为 SMB/network share、directory/file operations、dialogs；保持本地文件与远程协议分离。                             |
+| 3A   | [`sessions/serial/transfer/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/serial/transfer/mod.rs) |     1248 | 已拆为 transfer facade/frame、raw、XMODEM、YMODEM；沿用 Serial 计划定义的协议边界。                                    |
+| 3A   | [`sessions/serial/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/serial/mod.rs)                   |     1175 | 已拆为 device lifecycle、worker、reconnect；`mod.rs` 保留生命周期和路由 facade。                                       |
+| 3A   | [`sessions/telnet/mod.rs`](../../../apps/tauri/src-tauri/src/sessions/telnet/mod.rs)                   |     1109 | 已拆为 parser、transport/proxy、worker；不增加 SSH 的文件或 exec 能力。                                                |
 
 `serial-capability-gap.md` 已经定义了 Serial 的长期模块边界，但它主要是
 功能 parity 计划；本阶段补充的是当这些边界尚未完全落成时的物理拆分和验证，
 不改变 Serial 的能力范围。
 
+3A 已完成物理拆分：六个入口均保留原有 Rust 模块路径和公开函数，职责实现位于各自
+目录；Serial 的 `frame.rs` 随 transfer facade 归入 `serial/transfer/`，没有新增协议能力。
+原始行数列保留为本阶段的盘点基线，当前 facade 均只负责导入/组装或稳定入口。
+
 ### 4.2 Service / storage / application boundary
 
-| 阶段 | 文件                                                                                       | 当前行数 | 拆分方向                                                                                                           |
-| ---- | ------------------------------------------------------------------------------------------ | -------: | ------------------------------------------------------------------------------------------------------------------ |
-| 3B   | [`lib.rs`](../../../apps/tauri/src-tauri/src/lib.rs)                                       |     2385 | error types、menu/tray、window platform、application bootstrap/runtime；入口只保留组装和启动顺序。                 |
-| 3B   | [`services/profile_ops.rs`](../../../apps/tauri/src-tauri/src/services/profile_ops.rs)     |     1930 | profile healing、profile CRUD、folder/command CRUD、secret boundary；保持 workspace lock 和公开脱敏 profile 语义。 |
-| 3B   | [`storage/mod.rs`](../../../apps/tauri/src-tauri/src/storage/mod.rs)                       |     1868 | paths、portable migration、JSON atomic I/O；`storage/mod.rs` 保留稳定存储 facade。                                 |
-| 3B   | [`services/action_review.rs`](../../../apps/tauri/src-tauri/src/services/action_review.rs) |     1629 | approval queue、remote exec、privileged exec；不绕过统一策略和主窗口审批。                                         |
-| 3B   | [`services/webdav.rs`](../../../apps/tauri/src-tauri/src/services/webdav.rs)               |     1211 | config/bundle、HTTP sync、ETag/conflict handling；敏感 payload 继续只在 Rust 服务层处理。                          |
-| 3B   | [`services/workspace.rs`](../../../apps/tauri/src-tauri/src/services/workspace.rs)         |     1116 | model/capabilities、state、events；workspace snapshot 与 runtime event 边界不变。                                  |
-| 3B   | [`services/s3_backup.rs`](../../../apps/tauri/src-tauri/src/services/s3_backup.rs)         |     1006 | config、SigV4 signing、sync/conflict handling；保持 R2 `region=auto` 和 path-style 约束。                          |
+| 阶段 | 文件                                                                                               | 盘点行数 | 拆分方向                                                                                                          |
+| ---- | -------------------------------------------------------------------------------------------------- | -------: | ----------------------------------------------------------------------------------------------------------------- |
+| 3B   | [`lib.rs`](../../../apps/tauri/src-tauri/src/lib.rs)                                               |     2385 | `lib.rs` 保留 crate root 组装；error、menu/tray、platform、runtime、Windows 和测试片段移入 `src/lib/`。           |
+| 3B   | [`services/profile_ops/mod.rs`](../../../apps/tauri/src-tauri/src/services/profile_ops/mod.rs)     |     1930 | 已拆为 healing、profile CRUD、folder/command CRUD、secret boundary；保持 workspace lock 和公开脱敏 profile 语义。 |
+| 3B   | [`storage/mod.rs`](../../../apps/tauri/src-tauri/src/storage/mod.rs)                               |     1868 | 已拆为 paths、portable migration、JSON atomic I/O；`storage/mod.rs` 保留稳定存储 facade。                         |
+| 3B   | [`services/action_review/mod.rs`](../../../apps/tauri/src-tauri/src/services/action_review/mod.rs) |     1629 | 已拆为 approval queue、remote exec、privileged exec；不绕过统一策略和主窗口审批。                                 |
+| 3B   | [`services/webdav/mod.rs`](../../../apps/tauri/src-tauri/src/services/webdav/mod.rs)               |     1211 | 已拆为 config/bundle、HTTP sync、ETag/conflict handling；敏感 payload 继续只在 Rust 服务层处理。                  |
+| 3B   | [`services/workspace/mod.rs`](../../../apps/tauri/src-tauri/src/services/workspace/mod.rs)         |     1116 | 已拆为 model/capabilities、state、events；workspace snapshot 与 runtime event 边界不变。                          |
+| 3B   | [`services/s3_backup/mod.rs`](../../../apps/tauri/src-tauri/src/services/s3_backup/mod.rs)         |     1006 | 已拆为 config、SigV4 signing、sync/conflict handling；保持 R2 `region=auto` 和 path-style 约束。                  |
 
 `webdav.rs`、`workspace.rs`、`s3_backup.rs` 和部分 session 文件的总行数包含
 较多 inline tests；实施前要重新统计生产代码，若实际职责已经收敛，则只拆
 明确的域，不为达到数字目标而拆测试。
+
+3B 已完成物理拆分：`lib.rs` 保留 crate root 组装入口，storage 保留 `storage/mod.rs`
+facade；profile、approval、WebDAV、workspace、S3 的公开入口和 Rust 侧敏感信息边界不变。
 
 ## 5. 第二优先级：1001–3000 行 Renderer / bridge
 
@@ -216,7 +223,9 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
 - [ ] 收口 SSH Stage 1 leaf modules、Stage 2 auth/shell state、Stage 3
       worker context/dispatch。
 - [ ] 完成 Rust 第一优先级：commands、AI、MCP、transfers、FTP。
-- [ ] 完成剩余 Rust session、service、storage 边界。
+- [x] 完成阶段 3A Session / protocol 边界的物理拆分；公开入口与协议能力保持不变。
+- [x] 完成阶段 3B service / storage / application 边界的物理拆分；公开入口与存储/审批边界保持不变。
+- [ ] 收口剩余 Rust session、service、storage 边界及 SSH 专项未完成的独立 module/context 阶段。
 - [ ] 完成 Settings、workspace shell、bridge、hooks 和 renderer features。
 - [ ] 审计 801–1000 行机会项，确认哪些由测试行数或类型聚合造成。
 - [ ] 执行完整质量门禁，更新架构/路线图并归档本计划。
@@ -238,3 +247,9 @@ SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职�
   `SettingsModal/index.tsx` 收敛至导航、provider 装配和 Modal 边界，原有调用入口和
   IPC/协议边界保持不变。SSH worker context/dispatch 深层收口仍由
   `ssh-module-split.md` Stage 3 管理。
+- 2026-08-31：完成阶段 3A 的六个 session/protocol 拆分：local terminal、system
+  metrics、local files、Serial transfer/worker、Telnet 均改为所属目录内的 facade
+  加职责文件；保持原模块路径、Tauri command/event、协议边界和 Serial 能力范围不变。
+- 2026-08-31：完成阶段 3B 的七个 service/storage/application 拆分：crate root、profile
+  ops、storage、action review、WebDAV、workspace、S3 backup 均保留原公开入口；Rust
+  编译通过，完整测试与 Clippy 作为本次提交前的验证门禁。

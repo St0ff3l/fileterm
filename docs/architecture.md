@@ -234,7 +234,7 @@ platform probe
 
 ## 4.5 MCP / CLI 外部客户端桥接边界
 
-FileTerm 自带一套面向外部客户端的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；外部客户端的基础安全操作映射到同一桌面审批边界。
+FileTerm 自带一套面向外部客户端的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review/mod.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；外部客户端的基础安全操作映射到同一桌面审批边界。
 
 ```txt
 外部 Agent（MCP）       外部 Agent（CLI JSONL）    shell 脚本
@@ -254,13 +254,13 @@ fileterm mcp             fileterm cli --jsonl fileterm cli <cmd>
               │ dispatch_bridge_request
               ▼
    workspace / sessions / transfers
-   ── 写操作 ──> action_review.rs 审批队列
+   ── 写操作 ──> action_review/mod.rs 审批队列
                        │
                        ▼
               应用内审批对话框
 ```
 
-- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
+- 代码集中在 `apps/tauri/src-tauri/src/services/mcp/mod.rs`（手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review/mod.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
 - 同一份桌面可执行文件承担 GUI、MCP server 和 CLI 两种模式：无命令参数时启动桌面 GUI；`mcp` → `run_mcp_stdio`；其他参数先进入 `run_cli`，其中 `cli --jsonl` → `run_cli_jsonl`，其余为一次性 CLI。所有非 GUI 参数都在 Tauri 初始化前处理，避免把外部客户端请求误启动成桌面窗口。
 - `fileterm cli --jsonl` 是不初始化 Tauri GUI 的常驻 JSONL bridge，使用固定 worker pool 处理多个 request ID；每个请求的 progress 和最终结果均带回同一个 ID。CLI JSONL 请求始终强制遵循桌面端审批策略，并可用 `cancel_request` 停止仍在等待的请求；取消不回滚桌面端已经接受或开始执行的操作。外部 Agent 必须启动一次 `fileterm cli --jsonl` 或 `fileterm mcp` 并复用进程，不能按每个动作启动一次性 CLI；一次性 CLI 仅保留给用户手动调试和 shell 脚本。一次性 CLI 每次调用都会创建新的 FileTerm OS 进程，2.2.7 的 headless 分流避免启动 GUI，但不会让一次性进程变成复用连接。连接 single-flight 只能去重桌面连接任务，不能消除已经启动的进程。CLI/MCP 的后台打开请求仍由正在运行的 FileTerm App 持有同一个 session worker；它会隐藏在顶部标签栏之外，显示在“后台会话”页面，GUI 或 `fileterm_activate_session` attach 后才进入可见标签。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
@@ -642,14 +642,14 @@ tokens -> theme vars -> component skins -> terminal colors
 
 上一轮重构热点（工作区、会话控制与 App.tsx 职责混合）已结束。拆分结果：
 
-- `apps/tauri/src-tauri/src/services/workspace.rs`：工作区状态、会话、传输与跨窗口广播在 Rust backend 收口。
+- `apps/tauri/src-tauri/src/services/workspace/mod.rs`：工作区状态、会话、传输与跨窗口广播在 Rust backend 收口。
 - `apps/tauri/src-tauri/src/sessions/`：SSH、FTP/FTPS、Telnet、Serial 保持物理隔离。
 - `apps/tauri/src/renderer/App.tsx`：Tauri 专用工作区入口；不依赖 Electron renderer 组件或 hooks。
 
 当前阶段的关注重点已转移：
 
 - **存储策略已明确**：连接配置与密码仍采用文件型明文存储；SSH 私钥库则将 profile 引用、私钥原文和可选口令分离到独立文件，但不引入 `safeStorage`、系统钥匙串或密文存储层。详见第 12 节。该策略是有意为之，非待办债务。
-- **系统指标多平台覆盖**：Tauri 位于 `apps/tauri/src-tauri/src/sessions/system_metrics.rs`，以 Rust service 测试和三平台 CI 验收。
+- **系统指标多平台覆盖**：Tauri 位于 `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs`，由 exec、parser 和平台 command builder 片段组成，以 Rust service 测试和三平台 CI 验收。
 - **Rust/Tauri 测试**：以 Rust unit/integration/contract test、协议夹具和发行候选清单为准；Electron controller 测试不再是门禁。
 - **renderer 组件测试**：当前测试集中在 Rust service 与协议领域逻辑，UI 组件与交互暂无自动化覆盖，可作为下一步补充。
 

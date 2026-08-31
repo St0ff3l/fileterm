@@ -58,7 +58,7 @@ sessions/ssh/
 ```
 
 `transfer_io.rs` deliberately avoids the name `transfers.rs`, which would be
-confusing beside `services/transfers.rs`.
+confusing beside `services/transfers/mod.rs`.
 
 ## Delivery stages
 

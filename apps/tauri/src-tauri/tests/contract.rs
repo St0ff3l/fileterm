@@ -465,8 +465,20 @@ fn protocol_workers_publish_connected_closed_and_error_states() {
                 include_str!("../src/sessions/ftp/transport.rs"),
             ),
         ),
-        ("Telnet", include_str!("../src/sessions/telnet.rs")),
-        ("Serial", include_str!("../src/sessions/serial/mod.rs")),
+        (
+            "Telnet",
+            concat!(
+                include_str!("../src/sessions/telnet/mod.rs"),
+                include_str!("../src/sessions/telnet/worker.rs"),
+            ),
+        ),
+        (
+            "Serial",
+            concat!(
+                include_str!("../src/sessions/serial/mod.rs"),
+                include_str!("../src/sessions/serial/worker.rs"),
+            ),
+        ),
     ];
     for (name, source) in protocols {
         for status in ["Connected", "Closed", "Error"] {

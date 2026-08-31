@@ -31,7 +31,7 @@ FileTerm 当前已经有 Telnet 和 Serial 会话；本计划先解决 SSH 网�
 
 - `apps/tauri/src-tauri/src/sessions/ssh.rs` 固定请求 `xterm-256color`，建立 shell 后还会先
   做平台探测，再决定是否注入 CWD 集成脚本；
-- `apps/tauri/src-tauri/src/sessions/system_metrics.rs` 会执行 POSIX/Windows 平台和指标探测；
+- `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs` 会执行 POSIX/Windows 平台和指标探测；
 - SSH 默认开启 exec、资源监控和 SFTP；
 - `packages/core` 当前按 `type === 'ssh'` 直接开放文件、监控、Shell integration 等能力；
 - `legacyAlgorithms` 只影响 SSH 握手算法，不能表达“这是网络设备，不要执行服务器探测”。
