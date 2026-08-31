@@ -6,6 +6,7 @@
 // sibling modules merely for file organization.
 
 include!("shared.rs");
+include!("constants.rs");
 include!("device_mode.rs");
 include!("runtime.rs");
 include!("tunnels.rs");

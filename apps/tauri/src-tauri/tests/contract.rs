@@ -490,6 +490,61 @@ fn protocol_workers_publish_connected_closed_and_error_states() {
     }
 }
 
+#[test]
+fn ssh_source_facades_keep_responsibility_fragments_local() {
+    let facades: &[(&str, &str, &[&str])] = &[
+        (
+            "files",
+            include_str!("../src/sessions/ssh/files.rs"),
+            &[
+                "sftp_files.rs",
+                "transfer_io.rs",
+                "root_transfer.rs",
+                "shell_exec.rs",
+            ],
+        ),
+        (
+            "shell",
+            include_str!("../src/sessions/ssh/shell.rs"),
+            &[
+                "shell/cwd.rs",
+                "shell/root_access.rs",
+                "shell/shell_setup.rs",
+                "shell/encoding.rs",
+            ],
+        ),
+        (
+            "authentication",
+            include_str!("../src/sessions/ssh/authentication.rs"),
+            &[
+                "authentication/common.rs",
+                "authentication/primary.rs",
+                "authentication/keyboard_interactive.rs",
+            ],
+        ),
+        (
+            "transport",
+            include_str!("../src/sessions/ssh/transport.rs"),
+            &[
+                "transport/host.rs",
+                "transport/jump.rs",
+                "transport/proxy.rs",
+                "transport/credentials.rs",
+                "transport/session.rs",
+            ],
+        ),
+    ];
+
+    for (name, facade, fragments) in facades {
+        for fragment in *fragments {
+            assert!(
+                facade.contains(&format!("include!(\"{fragment}\");")),
+                "SSH {name} facade must include its directory-local {fragment} fragment"
+            );
+        }
+    }
+}
+
 // ── Nested payload contracts ─────────────────────────────────────────────
 
 #[test]

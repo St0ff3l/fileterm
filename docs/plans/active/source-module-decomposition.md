@@ -71,23 +71,18 @@
 
 ### 3.1 SSH 处理方式
 
-SSH 已经在工作树中开始迁移，当前状态是“目录 facade 和职责片段已经建立，
-独立 Rust module 与 worker context 尚未全部收口”。本总计划只追踪它，不复制
-具体 checklist：
+SSH 由 [`ssh-module-split.md`](./ssh-module-split.md) 作为专项计划管理。本轮已
+完成四个 SSH 大文件的首轮物理拆分：原文件保留为 directory-local facade，实现在
+同一 `sessions/ssh/` 目录下按职责片段组织；`include!` 只用于保持既有私有调用图，
+没有为了搬移实现扩大可见性。独立 Rust child modules、`SshSessionContext` 和
+worker dispatch owner 仍按 SSH 专项后续阶段推进。
 
-- [`ssh-module-split.md`](./ssh-module-split.md) Stage 0 的测试抽取已完成。
-- 该计划 Stage 1 的目录 facade、职责片段和 contract test 已完成；leaf
-  modules、认证/ shell state owner、`SshSessionContext`、worker dispatch
-  仍待完成。
-
-归入 SSH 专项但仍计入本次盘点的文件：
-
-| 文件                                                                                                 | 当前行数 | 处理方式                                                                    |
-| ---------------------------------------------------------------------------------------------------- | -------: | --------------------------------------------------------------------------- |
-| [`sessions/ssh/files.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/files.rs)                   |     1881 | 由 SSH 计划拆为 `sftp_files`、`transfer_io`、root/shell exec 相关职责。     |
-| [`sessions/ssh/shell.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/shell.rs)                   |     1230 | 由 SSH 计划拆为 cwd/path、root auth、setup suppression、encoding 相关职责。 |
-| [`sessions/ssh/authentication.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/authentication.rs) |      891 | 由 SSH 计划拆普通认证与 keyboard-interactive owner，但保持同一认证链。      |
-| [`sessions/ssh/transport.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/transport.rs)           |      884 | 由 SSH 计划拆 jump、proxy、credential/host verification 相关职责。          |
+| Facade                                                                                               | 当前行数 | 已落地职责片段                                                                                                              |
+| ---------------------------------------------------------------------------------------------------- | -------: | --------------------------------------------------------------------------------------------------------------------------- |
+| [`sessions/ssh/files.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/files.rs)                   |        7 | `sftp_files.rs`（269）、`transfer_io.rs`（285）、`root_transfer.rs`（596）、`shell_exec.rs`（733）。                        |
+| [`sessions/ssh/shell.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/shell.rs)                   |        7 | `shell/cwd.rs`（438）、`shell/root_access.rs`（435）、`shell/shell_setup.rs`（207）、`shell/encoding.rs`（146）。           |
+| [`sessions/ssh/authentication.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/authentication.rs) |        7 | `authentication/common.rs`（108）、`primary.rs`（459）、`keyboard_interactive.rs`（281）；限制项移至 `constants.rs`（84）。 |
+| [`sessions/ssh/transport.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/transport.rs)           |        8 | `transport/{host,jump,proxy,credentials,session}.rs`（49–400 行）。                                                         |
 
 新目录下的 worker 片段也归 SSH 专项计划管理，不在本计划重复 checklist。
 
@@ -165,8 +160,6 @@ facade；profile、approval、WebDAV、workspace、S3 的公开入口和 Rust �
 | [`features/ai/useAiCopilot.ts`](../../../apps/tauri/src/renderer/features/ai/useAiCopilot.ts)                                 |      953 | 有清晰边界时拆 conversation、stream request、mode/context state；否则随 AI 功能改动处理。       |
 | [`features/commands/CommandCenter.tsx`](../../../apps/tauri/src/renderer/features/commands/CommandCenter.tsx)                 |      929 | 评估 command tree/editor、temporary history、execution 是否形成独立 feature；不为降行数拆 JSX。 |
 | [`services/connections.rs`](../../../apps/tauri/src-tauri/src/services/connections.rs)                                        |      902 | 生产代码约 687 行，主要超出部分是 inline tests；当前明确暂不机械拆分。                          |
-| [`sessions/ssh/authentication.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/authentication.rs)                          |      891 | 归入 SSH 专项，普通认证与 keyboard-interactive 的 owner 分离，但保持同一认证链。                |
-| [`sessions/ssh/transport.rs`](../../../apps/tauri/src-tauri/src/sessions/ssh/transport.rs)                                    |      884 | 归入 SSH 专项，jump、proxy、credential/host verification 按责任拆分。                           |
 | [`bridge/tauri-api.ts`](../../../apps/tauri/src/bridge/tauri-api.ts)                                                          |      859 | 与 Stage 4A 一起评估；只能做 facade/domain API 拆分，不改变 IPC 方向。                          |
 | [`features/security/SecuritySettingsPanel.tsx`](../../../apps/tauri/src/renderer/features/security/SecuritySettingsPanel.tsx) |      835 | session lock 与 backup password 分成独立 panel/section，必须保持安全设置提交顺序。              |
 | [`hooks/useWorkspaceIpcSync.ts`](../../../apps/tauri/src/renderer/hooks/useWorkspaceIpcSync.ts)                               |      833 | snapshot/events 与 preferences/window events 分开时再拆；先保持 listener lifecycle 一致。       |
@@ -220,6 +213,7 @@ facade；profile、approval、WebDAV、workspace、S3 的公开入口和 Rust �
       `services/transfers/`、`sessions/ftp/`、`sessions/ssh/worker/`；Settings
       面板按域放入 `SettingsModal/panels/`，状态、副作用和提交动作继续按域放入
       `SettingsModal/controller/`，Rust `include!` 片段均保留在所属模块目录。
+- [x] 完成 SSH 四个大文件的首轮物理职责拆分；原 facade 和私有可见性保持不变。
 - [ ] 收口 SSH Stage 1 leaf modules、Stage 2 auth/shell state、Stage 3
       worker context/dispatch。
 - [ ] 完成 Rust 第一优先级：commands、AI、MCP、transfers、FTP。
@@ -240,6 +234,10 @@ facade；profile、approval、WebDAV、workspace、S3 的公开入口和 Rust �
 - 2026-08-31：完成第一优先级前 3 项的目录化物理拆分；函数实现保持原逻辑，
   并通过 Rust 编译、523 个单测、6 个 CLI 测试、20 个 contract 测试、Clippy、
   TypeScript 类型检查、Lint、Prettier 和 `npm run test:tauri`。
+- 2026-08-31：完成 SSH `files.rs`、`shell.rs`、`authentication.rs` 和
+  `transport.rs` 的首轮职责拆分；新增片段均位于 `sessions/ssh/` 目录内并低于
+  800 行，MFA 继续复用同一 russh Handle。独立 Rust module 与 worker context
+  仍由 `ssh-module-split.md` 后续阶段收口。
 - 2026-08-31：开始并完成第一优先级剩余 4 项的首轮目录化拆分：传输服务、FTP
   controller、SSH worker 和 SettingsModal 均改为所属目录内的 facade 加职责文件；
   SettingsModal 的所有设置面板移入 `panels/`，并将原本 1740 行的 controller

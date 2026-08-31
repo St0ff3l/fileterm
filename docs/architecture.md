@@ -225,6 +225,11 @@ platform probe
 
 ## 4.4 SSH 终端与文件身份联动
 
+- SSH session 的实现按目录职责组织：`files.rs`、`shell.rs`、
+  `authentication.rs` 和 `transport.rs` 只保留兼容 facade，具体 SFTP/传输、
+  CWD/root/setup/encoding、主认证/KBI、以及 host/jump/proxy/session 逻辑位于
+  `sessions/ssh/` 下的片段中；这些片段仍共享 session 的私有边界，后续再收口为
+  独立 Rust module 与 `SshSessionContext`。
 - 远端 shell integration 在 prompt 上报真实 `cwd` 和 `id -un`，renderer 不解析命令文本、提示符或 `sudo` 输出。
 - 每个 SSH controller 的首次用户上报是登录身份；后续终端用户变化会单向驱动文件访问身份，并在切换成功后按最新 cwd 重新跟随。
 - 文件区手动切换 user/root 只改变独立的 SFTP/exec 文件通道，不向交互终端写命令；相同 shell 用户的重复 prompt 不会覆盖手动选择。

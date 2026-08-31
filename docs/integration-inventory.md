@@ -153,7 +153,7 @@ term: 'xterm-256color'
 - 后端 PTY resize 需要和前端 xterm resize 保持同一套 `cols/rows`。
 - 如果后续补 `COLORTERM=truecolor`，应在 SSH shell / 会话环境边界统一处理，并记录到本文件。
 - 不要为了 SSH 文件传输把 zmodem 二进制流塞进 shell 通道；SSH 优先使用已有 SFTP/FTP transfer system。串口文件传输只从 Serial 的专用传输面板进入。
-- SOCKS5 / HTTP CONNECT 代理 socket 在 Rust session 层创建（`apps/tauri/src-tauri/src/sessions/ssh/transport.rs`）。认证密码绝不进入 renderer snapshot。
+- SOCKS5 / HTTP CONNECT 代理 socket 在 Rust SSH session 的 `transport/proxy.rs` 中创建，由 `transport.rs` facade 组装。认证密码绝不进入 renderer snapshot。
 - Telnet/Serial 是 terminal-only session，不能接入 SFTP、exec、CWD、sudo 或资源监控。
 
 ## 5. 工作区内部包
