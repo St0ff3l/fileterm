@@ -2102,6 +2102,7 @@ pub fn run() {
             // Phase 3 commands
             crate::commands::app_open_profile,
             crate::commands::app_activate_tab,
+            crate::commands::app_attach_background_session,
             crate::commands::app_reconnect_tab,
             crate::commands::app_disconnect_tab,
             crate::commands::app_close_tab,

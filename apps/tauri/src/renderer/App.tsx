@@ -595,6 +595,7 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     shortcutCloseConfirm,
     isSystemSidebarCollapsed: isSystemSidebarUserCollapsed,
     visibleWorkspaceTabs,
+    backgroundWorkspaceTabs,
     activeLocalTab,
     visibleActiveSessionTabId,
     activeTab,
@@ -617,6 +618,8 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
     openProfile,
     openLocalTerminal,
     activateSessionTab,
+    attachBackgroundSession,
+    closeBackgroundSession,
     reconnectSessionTab,
     confirmShortcutClose,
     handleTabContextAction,
@@ -2020,6 +2023,9 @@ export function App({ initialUiPreferences }: { initialUiPreferences?: InitialUi
                 }}
                 onOpenCommandManager={openCommandManager}
                 profiles={workspace.profiles}
+                backgroundTabs={backgroundWorkspaceTabs}
+                onAttachBackgroundSession={attachBackgroundSession}
+                onCloseBackgroundSession={closeBackgroundSession}
                 onChooseUploadFiles={handleChooseUploadFiles}
                 onDownloadFiles={handleDownloadFiles}
                 onDownloadLocalNetworkFiles={handleDownloadLocalNetworkFiles}

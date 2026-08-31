@@ -3833,6 +3833,7 @@ async fn spawn_session_for_profile(
     profile_id: &str,
     pane_root_tab_id: Option<String>,
     connection_operation_id: Option<&str>,
+    is_background: bool,
 ) -> Result<String, AppError> {
     let resolved_profile = resolve_profile_for_session(app, profile)?;
     let profile = &resolved_profile;
@@ -3854,6 +3855,7 @@ async fn spawn_session_for_profile(
         title: name.to_string(),
         layout: create_tab_layout(profile),
         status: crate::services::WorkspaceTabStatus::Connecting,
+        is_background,
         pane_root: None,
         pane_root_tab_id,
     };
@@ -4015,6 +4017,7 @@ async fn spawn_local_terminal_tab(
                 .unwrap_or_else(|| "Local Terminal".to_string()),
             layout: "terminal-only".to_string(),
             status: crate::services::WorkspaceTabStatus::Connecting,
+            is_background: false,
             pane_root: None,
             pane_root_tab_id,
         });
@@ -4398,7 +4401,8 @@ pub async fn app_open_profile(
     // open a connection, not whether the later network handshake succeeds.
     crate::services::profile_ops::touch_profile(&app, &profile_id)?;
 
-    let tab_id = spawn_session_for_profile(&app, &state, profile, &profile_id, None, None).await?;
+    let tab_id =
+        spawn_session_for_profile(&app, &state, profile, &profile_id, None, None, false).await?;
 
     {
         let mut active = state.active_tab_id.write().await;
@@ -4409,14 +4413,16 @@ pub async fn app_open_profile(
 }
 
 /// Open a saved profile for an external CLI/MCP caller and return the tab id
-/// together with the initial workspace snapshot. The session is deliberately
-/// non-active; the caller must explicitly activate it before using a visible
-/// terminal route. The operation id is attached before the worker starts, so a
-/// fast connection cannot race the wait path.
+/// together with the initial workspace snapshot. Background sessions remain
+/// attached to the App worker without appearing in the top-level tab bar;
+/// callers that need a visible terminal can explicitly attach the session.
+/// The operation id is attached before the worker starts, so a fast connection
+/// cannot race the wait path.
 pub async fn app_open_profile_with_operation(
     app: AppHandle,
     profile_id: String,
     connection_operation_id: String,
+    is_background: bool,
 ) -> Result<(String, serde_json::Value), AppError> {
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let _library_guard = lock_library_after_transfer_hydration(&app).await?;
@@ -4434,6 +4440,7 @@ pub async fn app_open_profile_with_operation(
         &profile_id,
         None,
         Some(&connection_operation_id),
+        is_background,
     )
     .await?;
     let snapshot = get_workspace_snapshot_and_emit(&app).await?;
@@ -4535,6 +4542,7 @@ pub async fn app_split_tab(
                 &profile_id,
                 Some(pane_root_tab_id),
                 None,
+                false,
             )
             .await?
         }
@@ -4872,6 +4880,49 @@ pub async fn app_activate_tab(
         *active = Some(top_level_tab_id);
     }
     get_workspace_snapshot(app).await
+}
+
+fn attach_background_session_in_tabs(
+    tabs: &mut [crate::services::WorkspaceTab],
+    tab_id: &str,
+) -> Result<String, AppError> {
+    let top_level_tab_id = tabs
+        .iter()
+        .find(|tab| tab.id == tab_id)
+        .map(|tab| {
+            tab.pane_root_tab_id
+                .clone()
+                .unwrap_or_else(|| tab.id.clone())
+        })
+        .ok_or_else(|| AppError::Storage(format!("Session not found: {tab_id}")))?;
+    let tab = tabs
+        .iter_mut()
+        .find(|tab| tab.id == top_level_tab_id)
+        .ok_or_else(|| AppError::Storage(format!("Root session not found: {top_level_tab_id}")))?;
+    tab.is_background = false;
+    Ok(top_level_tab_id)
+}
+
+/// Make an externally opened background session visible in the normal
+/// workspace and focus it. The existing worker/session is reused; this only
+/// changes presentation and active-tab routing.
+#[tauri::command]
+pub async fn app_attach_background_session(
+    app: AppHandle,
+    tab_id: String,
+) -> Result<serde_json::Value, AppError> {
+    let state = app.state::<crate::services::workspace::WorkspaceState>();
+    let top_level_tab_id = {
+        let mut tabs = state.tabs.write().await;
+        attach_background_session_in_tabs(&mut tabs, &tab_id)?
+    };
+
+    {
+        let mut active = state.active_tab_id.write().await;
+        *active = Some(top_level_tab_id);
+    }
+
+    get_workspace_snapshot_and_emit(&app).await
 }
 
 #[tauri::command]
@@ -6871,6 +6922,7 @@ mod split_pane_close_tests {
             title: "Server".to_string(),
             layout: "terminal-file".to_string(),
             status: WorkspaceTabStatus::Connected,
+            is_background: false,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
         }
@@ -6888,6 +6940,7 @@ mod split_pane_close_tests {
             title: "Local Terminal".to_string(),
             layout: "terminal-only".to_string(),
             status: WorkspaceTabStatus::Connected,
+            is_background: false,
             pane_root,
             pane_root_tab_id: pane_root_tab_id.map(str::to_string),
         }
@@ -7090,6 +7143,7 @@ mod reconnect_tests {
             title: "Server".to_string(),
             layout: "terminal-file".to_string(),
             status,
+            is_background: false,
             pane_root: None,
             pane_root_tab_id: None,
         }
@@ -7884,5 +7938,45 @@ mod external_url_tests {
             assert!(validate_external_url(denied).is_err());
         }
         assert!(validate_external_url("not a url").is_err());
+    }
+}
+
+#[cfg(test)]
+mod background_session_tests {
+    use super::attach_background_session_in_tabs;
+    use crate::services::{WorkspaceTab, WorkspaceTabStatus};
+
+    fn tab(id: &str, is_background: bool) -> WorkspaceTab {
+        WorkspaceTab {
+            id: id.to_string(),
+            profile_id: "profile-1".to_string(),
+            session_type: "ssh".to_string(),
+            title: "Server".to_string(),
+            layout: "terminal-file".to_string(),
+            status: WorkspaceTabStatus::Connected,
+            is_background,
+            pane_root: None,
+            pane_root_tab_id: None,
+        }
+    }
+
+    #[test]
+    fn attaching_background_session_only_changes_visibility_and_returns_root_id() {
+        let mut tabs = vec![tab("background", true), tab("visible", false)];
+
+        assert_eq!(
+            attach_background_session_in_tabs(&mut tabs, "background").unwrap(),
+            "background"
+        );
+        assert!(!tabs[0].is_background);
+        assert!(!tabs[1].is_background);
+    }
+
+    #[test]
+    fn attaching_unknown_session_is_rejected() {
+        let mut tabs = vec![tab("background", true)];
+
+        assert!(attach_background_session_in_tabs(&mut tabs, "missing").is_err());
+        assert!(tabs[0].is_background);
     }
 }

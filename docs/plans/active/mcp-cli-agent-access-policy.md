@@ -354,17 +354,26 @@ GUI 内部继续可以使用立即返回的 open 行为；MCP 和 CLI JSONL 使�
 }
 ```
 
-`execution_mode` 必须由 Agent 在第一次打开连接前向用户询问，取值为 `background` 或 `visible-terminal`。`open_connection` 默认等待连接完成，但创建的 session 始终保持非活动状态，不自动抢占当前前台 tab。`background` 后续只能配合独立 SSH exec 的 `fileterm_execute_remote_command`；`visible-terminal` 后续必须先调用 `fileterm_activate_session`，再调用只向可见终端写入单行命令的 `fileterm_execute_visible_command`。网络设备没有后台 exec 能力，只能使用可见终端路径。保留 wait_for_ready 为 false 给只需要创建 tab 的客户端。
+`execution_mode` 必须由 Agent 在第一次打开连接前向用户询问，取值为 `background` 或 `visible-terminal`。`open_connection` 默认等待连接完成；`background` 创建的 session 保留在 FileTerm worker 中，但不进入顶部标签栏，而是显示在 GUI 的“后台会话”页面，结果返回 `sessionId`（同时保留 `tabId`）。GUI 打开该会话或调用 `fileterm_activate_session` 会复用原 session 并 attach 到可见标签。`background` 后续只能配合独立 SSH exec 的 `fileterm_execute_remote_command`；`visible-terminal` 后续必须先调用 `fileterm_activate_session`，再调用只向可见终端写入单行命令的 `fileterm_execute_visible_command`。网络设备没有后台 exec 能力，只能使用可见终端路径。保留 wait_for_ready 为 false 给只需要创建 session 的客户端。
 
-返回值只包含：
+返回值中的 `session` 会包含会话标识和后台可见性：
 
 ```json
 {
-  "operationId": "connection-op-1",
-  "tabId": "tab-1",
-  "profileId": "profile-1",
-  "status": "connected",
-  "connected": true
+  "operation": "open_connection",
+  "activeTabId": null,
+  "session": {
+    "sessionId": "tab-1",
+    "tabId": "tab-1",
+    "background": true,
+    "profileId": "profile-1",
+    "status": "connected",
+    "connected": true
+  },
+  "connectionOperationId": "connection-op-1",
+  "connectionStatus": "connected",
+  "executionMode": "background",
+  "timedOut": false
 }
 ```
 

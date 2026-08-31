@@ -81,6 +81,10 @@ pub struct WorkspaceTab {
     pub title: String,
     pub layout: String, // "terminal-file" | "file-only" | "terminal-only"
     pub status: WorkspaceTabStatus,
+    /// External CLI/MCP sessions stay attached to the App worker but are not
+    /// shown in the top-level tab bar until the user attaches them.
+    #[serde(default)]
+    pub is_background: bool,
     /// 分屏树根节点；普通 tab 为 None。只有分屏的根 tab 持有。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pane_root: Option<PaneNode>,

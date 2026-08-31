@@ -525,6 +525,8 @@ export interface WorkspaceTab {
   title: string
   layout: TabLayout
   status: TabStatus
+  /** CLI/MCP sessions may stay attached to the App without appearing in the tab bar. */
+  isBackground?: boolean
   /** 分屏树根节点；普通 tab 无此字段。只有分屏的根 tab 持有。 */
   paneRoot?: PaneNode
   /** 分屏 leaf 所属的顶层 workspace tab；leaf 永不显示在顶栏。 */
@@ -2421,6 +2423,7 @@ export interface FileTermDesktopApi {
   openProfile(profileId: string): Promise<WorkspaceSnapshot>
   openProfileFromManager(profileId: string): Promise<WorkspaceSnapshot>
   activateTab(tabId: string): Promise<WorkspaceSnapshot>
+  attachBackgroundSession(tabId: string): Promise<WorkspaceSnapshot>
   reconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   disconnectTab(tabId: string): Promise<WorkspaceSnapshot>
   closeTab(tabId: string): Promise<WorkspaceSnapshot>

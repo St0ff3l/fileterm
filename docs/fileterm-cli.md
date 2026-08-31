@@ -19,6 +19,8 @@ description: Use FileTerm's one-shot CLI, persistent CLI JSONL bridge, or MCP br
 
 FileTerm 桌面应用需要先运行。CLI 和 MCP 是连接到正在运行的 FileTerm 的本机桥接客户端，不是独立的 SSH 客户端，也不会导出连接凭据或自动修改外部客户端配置。CLI 参数会在 Tauri GUI 初始化前处理，不会因为 CLI 调用额外打开 FileTerm 窗口；一次性 CLI 仍然会创建自己的短生命周期操作系统进程，只有 JSONL 模式复用同一个 CLI 进程。
 
+CLI/MCP 打开的连接仍由 FileTerm App 持有 SSH/SFTP worker。后台模式不会把连接放进顶部标签栏，而是显示在 GUI 的“后台会话”页面；列表中的会话 ID 就是后续 CLI/MCP 请求使用的 `tabId`。点击“打开会话”或调用 `fileterm_activate_session` 会复用原 worker，把它挂回正常的可见标签，不会重新建立连接。
+
 ## AI Agent：持久在线 JSONL
 
 启动一次：
@@ -67,6 +69,8 @@ fileterm cli read --tab-id TAB_ID --path /etc/hostname
 fileterm cli exec --tab-id TAB_ID --command "uname -a"
 ```
 
+CLI `open` 默认创建后台会话，并在结果的 `sessionId` 中返回可复用的会话 ID（同时保留 `tabId` 字段兼容现有请求）。如果需要在顶部标签栏中查看终端，可在 GUI 的“后台会话”页面打开它，或通过 MCP 调用 `fileterm_activate_session`。
+
 一次性 CLI 适合用户手动调试和 shell 脚本。每次调用都会创建一个新的 CLI 进程，调用完成后退出；它不会复用 CLI 进程，也不应作为 AI Agent 的逐动作调用方式。
 
 ## 权限与确认
@@ -83,7 +87,7 @@ CLI JSONL 请求中的 `requiresApproval` 不能关闭桌面端审批。密码�
 
 - 普通 SSH 服务器命令使用独立的非交互 exec channel，不会写入可见终端。
 - 网络设备命令通过可见的原始终端发送单行命令，结果可能包含命令回显和提示符，不提供后台 exec、`cwd`、`sudo` 或 `su` 能力。
-- MFA、安装器确认、REPL 和其他需要连续交互输入的操作必须在可见 SSH 终端中完成；FileTerm 返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED` 时，不要自动重复执行。
+- MFA、安装器确认、REPL 和其他需要连续交互输入的操作必须在可见 SSH 终端中完成；先打开对应后台会话或调用 `fileterm_activate_session`，再继续交互。FileTerm 返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED` 时，不要自动重复执行。
 - `sudo`/`su` 可能等待 FileTerm 主窗口中的安全密码输入；用户完成输入后，原请求会继续返回结果。
 
 ## 客户端配置

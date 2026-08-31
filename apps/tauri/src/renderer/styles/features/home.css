@@ -145,6 +145,12 @@
   line-height: 1;
 }
 
+.sidebar-nav-link > .app-icon {
+  display: block;
+  flex: 0 0 18px;
+  color: inherit;
+}
+
 .sidebar-nav-link:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
@@ -163,6 +169,10 @@
 }
 
 .sidebar-nav-link.active span.material-symbols-outlined {
+  color: var(--sidebar-active-accent, var(--text-main));
+}
+
+.sidebar-nav-link.active > .app-icon {
   color: var(--sidebar-active-accent, var(--text-main));
 }
 
@@ -288,6 +298,12 @@
 .home-sidebar.is-collapsed .sidebar-nav-link span.material-symbols-outlined {
   flex: 0 0 auto;
   font-size: 19px;
+}
+
+.home-sidebar.is-collapsed .sidebar-nav-link > .app-icon {
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
 }
 
 .home-sidebar.is-collapsed .sidebar-update-hint {
@@ -989,4 +1005,138 @@
 
 :root[data-platform='darwin'] .fs-shell.is-home-active .status-message {
   padding-left: 12px !important;
+}
+
+/* ============================================================
+   后台会话:沿用连接管理器的紧凑列表,但把 session id 和状态放在首屏
+   ============================================================ */
+.background-sessions-page .connection-manager-title .app-icon {
+  color: var(--accent-highlight) !important;
+}
+
+.background-sessions-table .manager-head,
+.background-sessions-table .manager-row {
+  grid-template-columns:
+    minmax(140px, 1.15fr)
+    minmax(150px, 1.1fr)
+    64px
+    100px
+    minmax(170px, 1.45fr)
+    78px;
+  column-gap: 12px;
+  padding: 0 16px;
+}
+
+.background-sessions-table .manager-head {
+  height: 36px;
+}
+
+.background-sessions-table .manager-row {
+  min-height: 44px;
+  height: 44px;
+}
+
+.background-session-name,
+.background-session-status,
+.background-session-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.background-session-name {
+  gap: 8px;
+  font-weight: 500;
+}
+
+.background-session-name .app-icon {
+  flex: 0 0 auto;
+  color: var(--accent-highlight);
+}
+
+.background-session-name > span,
+.background-session-address,
+.background-session-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.background-session-address {
+  color: var(--text-muted);
+}
+
+.background-session-status {
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.background-session-status.is-connected {
+  color: var(--success);
+}
+
+.background-session-status.is-connecting {
+  color: var(--accent-highlight);
+}
+
+.background-session-status.is-error {
+  color: var(--danger);
+}
+
+.background-session-status-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.background-session-id {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.background-session-actions {
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.background-session-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 180px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.background-session-empty .app-icon {
+  color: var(--accent-highlight);
+}
+
+.background-session-empty strong {
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.background-session-empty span {
+  max-width: 420px;
+  white-space: normal;
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .background-sessions-table .manager-head,
+  .background-sessions-table .manager-row {
+    grid-template-columns: minmax(130px, 1.1fr) minmax(130px, 1fr) 64px 92px minmax(125px, 1fr) 78px;
+    column-gap: 8px;
+    padding: 0 12px;
+  }
 }

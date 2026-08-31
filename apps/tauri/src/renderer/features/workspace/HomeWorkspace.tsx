@@ -8,7 +8,9 @@ import type {
   OverviewSectionId,
   AppUpdateStatus,
   SavedTheme,
-  ThemeConfig
+  SessionSnapshot,
+  ThemeConfig,
+  WorkspaceTab
 } from '@fileterm/core'
 import { useEffect, useState } from 'react'
 import { t } from '../../i18n'
@@ -21,9 +23,12 @@ import { CommandManagerModal } from '../commands/CommandManagerModal'
 import { SshKeyManagerPage } from '../ssh-keys/SshKeyManagerPage'
 import { SettingsModal } from '../settings/SettingsModal'
 import { TabBar, type TabBarProps } from '../layout/TabBar'
+import { BackgroundSessionsPage } from './BackgroundSessionsPage'
 
 export function HomeWorkspace({
   profiles,
+  backgroundTabs,
+  sessions,
   folders = [],
   commandFolders = [],
   commandTemplates = [],
@@ -65,9 +70,13 @@ export function HomeWorkspace({
   isSidebarCollapsed,
   tabBarProps,
   isResizingSidebar,
-  onResizeStart
+  onResizeStart,
+  onAttachBackgroundSession,
+  onCloseBackgroundSession
 }: {
   profiles: ConnectionProfile[]
+  backgroundTabs: WorkspaceTab[]
+  sessions: Record<string, SessionSnapshot>
   folders?: ConnectionFolder[]
   commandFolders?: CommandFolder[]
   commandTemplates?: CommandTemplate[]
@@ -114,9 +123,17 @@ export function HomeWorkspace({
   tabBarProps: Omit<TabBarProps, 'homeBrandContent'>
   isResizingSidebar: boolean
   onResizeStart(): void
+  onAttachBackgroundSession(tabId: string): void | Promise<void>
+  onCloseBackgroundSession(tabId: string): void | Promise<void>
 }) {
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'quick-links' | 'command-manager' | 'connection-manager' | 'ssh-key-manager' | 'settings'
+    | 'overview'
+    | 'quick-links'
+    | 'command-manager'
+    | 'connection-manager'
+    | 'ssh-key-manager'
+    | 'background-sessions'
+    | 'settings'
   >('overview')
   const [navDirection, setNavDirection] = useState<'down' | 'up'>('down')
   const [activeConnectionFolderName, setActiveConnectionFolderName] = useState('')
@@ -130,8 +147,9 @@ export function HomeWorkspace({
     'connection-manager': 1,
     'command-manager': 2,
     'ssh-key-manager': 3,
-    settings: 4,
-    'quick-links': 5
+    'background-sessions': 4,
+    settings: 5,
+    'quick-links': 6
   }
   const selectTab = (tab: typeof activeTab) => {
     if (tab === activeTab) return
@@ -277,6 +295,16 @@ export function HomeWorkspace({
             <span>{t.sshKeyManager}</span>
           </button>
           <button
+            className={`sidebar-nav-link ${activeTab === 'background-sessions' ? 'active' : ''}`}
+            onClick={() => selectTab('background-sessions')}
+            aria-label={t.backgroundSessions}
+            title={t.backgroundSessions}
+            type="button"
+          >
+            <AppIcon name="history" size={18} />
+            <span>{t.backgroundSessions}</span>
+          </button>
+          <button
             className={`sidebar-nav-link ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => selectTab('settings')}
             aria-label={t.settings}
@@ -404,6 +432,17 @@ export function HomeWorkspace({
           {activeTab === 'ssh-key-manager' && (
             <div key="ssh-key-manager" className="page-transition" data-nav-direction={navDirection}>
               <SshKeyManagerPage onActiveFolderChange={setActiveSshKeyFolderName} onStatsChange={setSshKeyStats} />
+            </div>
+          )}
+          {activeTab === 'background-sessions' && (
+            <div key="background-sessions" className="page-transition" data-nav-direction={navDirection}>
+              <BackgroundSessionsPage
+                profiles={profiles}
+                tabs={backgroundTabs}
+                sessions={sessions}
+                onAttach={onAttachBackgroundSession}
+                onClose={onCloseBackgroundSession}
+              />
             </div>
           )}
           {activeTab === 'settings' && (

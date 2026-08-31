@@ -72,6 +72,9 @@ export function WorkspaceStage({
   localCutPaths,
   remoteCutPaths,
   profiles,
+  backgroundTabs,
+  onAttachBackgroundSession,
+  onCloseBackgroundSession,
   theme,
   themeConfig,
   customThemes,
@@ -192,6 +195,9 @@ export function WorkspaceStage({
   localCutPaths: string[]
   remoteCutPaths: string[]
   profiles: ConnectionProfile[]
+  backgroundTabs: WorkspaceTab[]
+  onAttachBackgroundSession(tabId: string): void | Promise<void>
+  onCloseBackgroundSession(tabId: string): void | Promise<void>
   theme: 'default-dark' | 'default-light'
   themeConfig: ThemeConfig
   customThemes: SavedTheme[]
@@ -411,6 +417,10 @@ export function WorkspaceStage({
       overviewShowQuickActions={overviewShowQuickActions}
       overviewSectionOrder={overviewSectionOrder}
       onOpen={onOpenProfile}
+      backgroundTabs={backgroundTabs}
+      sessions={sessions}
+      onAttachBackgroundSession={onAttachBackgroundSession}
+      onCloseBackgroundSession={onCloseBackgroundSession}
       onOpenLocalTerminal={onOpenLocalTerminal}
       onCreateConnection={onCreateConnection}
       onEditConnection={onEditConnection}
