@@ -21,7 +21,7 @@ FileTerm 采用标准 GitHub 流程：所有功能、修复和版本号更新先
 
 ### 正文格式
 
-每个版本可以新增 `docs/quality/release-notes/release-notes-<version>.md`，例如 `docs/quality/release-notes/release-notes-2.2.0-beta.1.md`；正文结构可参考仓库中现有的 `docs/quality/release-notes/release-notes-*.md` 文件：
+每个版本可以新增 `docs/release-notes/release-notes-<version>.md`，例如 `docs/release-notes/release-notes-2.2.0-beta.1.md`；正文结构可参考仓库中现有的 `docs/release-notes/release-notes-*.md` 文件：
 
 - 版本简介
 - 更新重点

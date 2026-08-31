@@ -173,14 +173,14 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 
 - `.agents/skills/fileterm-release/SKILL.md`：智能体执行流程与验收清单。
 - `docs/quality/git-branch-release-convention.md`：项目正式分支、tag 和 Release Notes 规范。
-- `docs/quality/release-notes/`：各版本自定义发布说明，文件名使用 `release-notes-<version>.md`。
+- `docs/release-notes/`：各版本自定义发布说明，文件名使用 `release-notes-<version>.md`。
 - `.github/workflows/release.yml`：当前实际的构建与发布行为。
 
 必须保持的硬性约束：
 
 - 版本号只修改根目录 `package.json` 的 `version` 字段，随后立即运行 `npm run sync:version`；禁止手动修改 workspace 版本或内部依赖版本。
 - 日常改动和版本说明先通过 Pull Request 合入 `main`；`release/<version>` 只从最新 `main` 创建，作为不可变发布快照，不接收常规开发改动。
-- 版本说明统一放在 `docs/quality/release-notes/`；tag 必须使用 `v<version>`，并与根版本号、workspace 同步版本和 Release Notes 文件名一致；tag 必须指向 `origin/release/*` 中的提交，否则发布工作流会拒绝构建。
+- 版本说明统一放在 `docs/release-notes/`；tag 必须使用 `v<version>`，并与根版本号、workspace 同步版本和 Release Notes 文件名一致；tag 必须指向 `origin/release/*` 中的提交，否则发布工作流会拒绝构建。
 - 发布说明只维护自定义正文；发布工作流必须同时保留 `--notes` 和 `--generate-notes`，禁止手写 `Contributors`、`What's Changed` 或 `Full Changelog`。
 
 ## 11. 文档维护规则

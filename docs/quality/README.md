@@ -18,7 +18,6 @@
 - `../integration-inventory.md`：记录当前已接入第三方项目、采用理由、实现位置和维护边界。
 - `.github/workflows/ci.yml`：常规分支 / PR 检查，当前覆盖安装依赖、TypeScript 检查与构建。
 - `git-branch-release-convention.md`：记录 `main / release/* / feat|feature|fix / hotfix/*` 的分支职责、合并流转和 tag 约定。
-- `release-notes/`：按版本保存自定义 GitHub Release 正文，文件名格式为 `release-notes-<version>.md`。
 - `terminal-layout-notes.md`：记录 xterm 终端留白、挂载容器与 fit 尺寸之间的排查和修复方法。
 - `desktop-ui-regression-checklist.md`：记录顶部标签栏、首页侧栏、系统监控摘要、终端悬浮输入条、文件面板抽屉、文件编辑器和平台图标的 UI 回归清单。
 - `ai-copilot-platform-regression.md`：记录 AI Provider、流式取消、代理、断网/睡眠恢复和目标绑定的 macOS、Windows、Linux 发行验收。
