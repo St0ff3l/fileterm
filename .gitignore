@@ -7,7 +7,7 @@ apps/tauri/dist/
 release/
 apps/tauri/release/
 apps/tauri/src-tauri/target/
-vendor/russh/target/
+vendor/russh/target
 apps/tauri/src-tauri/gen/
 .github/fixtures/tauri-socket-lifecycle/target/
 
@@ -34,3 +34,4 @@ __pycache__/
 .claude/
 .githooks/
 .workbuddy/
+
