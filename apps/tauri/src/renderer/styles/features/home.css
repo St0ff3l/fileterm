@@ -1027,9 +1027,9 @@
     64px
     100px
     minmax(170px, 1.45fr)
-    78px;
-  column-gap: 12px;
-  padding: 0 16px;
+    78px !important;
+  column-gap: 10px !important;
+  padding: 0 16px !important;
 }
 
 .background-sessions-table .manager-head {
@@ -1101,7 +1101,7 @@
 }
 
 .background-session-status {
-  gap: 7px;
+  gap: 4px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -1168,8 +1168,8 @@
 @media (max-width: 980px) {
   .background-sessions-table .manager-head,
   .background-sessions-table .manager-row {
-    grid-template-columns: minmax(130px, 1.1fr) minmax(130px, 1fr) 64px 64px 92px minmax(125px, 1fr) 78px;
-    column-gap: 8px;
-    padding: 0 12px;
+    grid-template-columns: minmax(130px, 1.1fr) minmax(130px, 1fr) 64px 64px 92px minmax(125px, 1fr) 78px !important;
+    column-gap: 8px !important;
+    padding: 0 12px !important;
   }
 }
