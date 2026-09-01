@@ -316,6 +316,13 @@ impl BridgeConnection {
 
 fn connect_bridge(client_id: &str) -> Result<Arc<BridgeConnection>, String> {
     let descriptor = load_runtime_descriptor()?;
+    connect_bridge_to_endpoint(client_id, &descriptor)
+}
+
+fn connect_bridge_to_endpoint(
+    client_id: &str,
+    descriptor: &RuntimeDescriptor,
+) -> Result<Arc<BridgeConnection>, String> {
     let address: SocketAddr = descriptor.address.parse().map_err(|_| {
         "FileTerm MCP runtime address is invalid. Restart FileTerm, then retry this MCP tool."
             .to_string()
@@ -344,7 +351,7 @@ fn connect_bridge(client_id: &str) -> Result<Arc<BridgeConnection>, String> {
         &mut handshake_writer,
         &BridgeFrame::Hello {
             protocol_version: MCP_PROTOCOL_VERSION,
-            token: descriptor.token,
+            token: descriptor.token.clone(),
             client_id: client_id.to_string(),
         },
     )?;
@@ -544,5 +551,106 @@ fn join_thread(handle: &Mutex<Option<JoinHandle<()>>>) {
     };
     if handle.thread().id() != current {
         let _ = handle.join();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::net::TcpListener;
+
+    fn request(value: &str) -> BridgeRequest {
+        BridgeRequest {
+            action: "test_bridge_request".to_string(),
+            params: json!({ "value": value }),
+            source: super::super::super::WorkspaceSessionSource::Cli,
+            requires_approval: false,
+            progress_token: None,
+        }
+    }
+
+    #[test]
+    fn one_bridge_session_routes_multiple_out_of_order_responses() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("test listener should bind");
+        let address = listener
+            .local_addr()
+            .expect("test listener should expose an address");
+        let descriptor = RuntimeDescriptor {
+            protocol_version: MCP_PROTOCOL_VERSION,
+            address: address.to_string(),
+            token: "test-token".to_string(),
+        };
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("test server should accept once");
+            let reader_stream = stream.try_clone().expect("test server should clone reader");
+            let mut reader = BufReader::new(reader_stream);
+            let mut writer = BufWriter::new(stream);
+            match read_sync_frame(&mut reader).expect("test server should receive hello") {
+                BridgeFrame::Hello { .. } => {}
+                frame => panic!("unexpected hello frame: {frame:?}"),
+            }
+            write_sync_frame(
+                &mut writer,
+                &BridgeFrame::HelloAck {
+                    protocol_version: MCP_PROTOCOL_VERSION,
+                    session_id: "test-session".to_string(),
+                    error: None,
+                },
+            )
+            .expect("test server should acknowledge hello");
+
+            let mut requests = Vec::new();
+            while requests.len() < 2 {
+                match read_sync_frame(&mut reader).expect("test server should receive request") {
+                    BridgeFrame::Request {
+                        request_id,
+                        request,
+                    } => requests.push((request_id, request)),
+                    frame => panic!("unexpected request frame: {frame:?}"),
+                }
+            }
+
+            for (request_id, request) in requests.into_iter().rev() {
+                write_sync_frame(
+                    &mut writer,
+                    &BridgeFrame::Response {
+                        request_id,
+                        response: BridgeResponse::success(request.params),
+                    },
+                )
+                .expect("test server should write response");
+            }
+        });
+
+        let connection = connect_bridge_to_endpoint("test-client", &descriptor)
+            .expect("test client should connect");
+        let client = Arc::new(BridgeClient::new());
+        *client
+            .connection
+            .lock()
+            .expect("test client connection lock should work") = Some(connection);
+
+        let first_client = Arc::clone(&client);
+        let first = thread::spawn(move || {
+            let mut progress = |_progress: &BridgeProgress| {};
+            first_client.call(request("first"), &mut progress, None)
+        });
+        let second_client = Arc::clone(&client);
+        let second = thread::spawn(move || {
+            let mut progress = |_progress: &BridgeProgress| {};
+            second_client.call(request("second"), &mut progress, None)
+        });
+
+        assert_eq!(
+            first.join().expect("first call should join").unwrap(),
+            json!({"value": "first"})
+        );
+        assert_eq!(
+            second.join().expect("second call should join").unwrap(),
+            json!({"value": "second"})
+        );
+        client.close();
+        server.join().expect("test server should join");
     }
 }
