@@ -11,7 +11,7 @@ FileTerm 2.2.7 扩展了网络设备与后台会话能力，强化 SSH 多因素
 
 ### 本版本包含的主要 PR 和问题修复
 
-- 本次发布 PR：网络设备兼容性、后台会话与 Agent 工作流、SSH MFA 跳板认证稳定性，以及 Tauri 主链路的职责拆分与测试收敛。
+- [PR #227](https://github.com/St0ff3l/fileterm/pull/227)：网络设备兼容性、后台会话与 Agent 工作流、SSH MFA 跳板认证稳定性，以及 Tauri 主链路的职责拆分与测试收敛。
 
 完整变更记录请查看 [v2.2.6 与 v2.2.7 的比较](https://github.com/St0ff3l/fileterm/compare/v2.2.6...v2.2.7)。
 
@@ -36,7 +36,7 @@ FileTerm 2.2.7 expands network-device and background-session capabilities, stren
 
 ### Main PRs and issues
 
-- This release PR: Network-device compatibility, background sessions and Agent workflows, SSH MFA jump-host stability, and responsibility-based Tauri application decomposition with consolidated tests.
+- [PR #227](https://github.com/St0ff3l/fileterm/pull/227): Network-device compatibility, background sessions and Agent workflows, SSH MFA jump-host stability, and responsibility-based Tauri application decomposition with consolidated tests.
 
 See the [comparison between v2.2.6 and v2.2.7](https://github.com/St0ff3l/fileterm/compare/v2.2.6...v2.2.7) for the complete change set.
 
