@@ -48,7 +48,9 @@ fn run_fileterm(arguments: &[&str], input: Option<&[u8]>) -> Output {
 fn cli_help_is_headless_and_keeps_stdout_clean() {
     let output = run_fileterm(&["cli", "--help"], None);
     assert!(output.status.success());
-    assert!(String::from_utf8_lossy(&output.stdout).contains("FileTerm CLI"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("FileTerm CLI"));
+    assert!(stdout.contains("start-remote-command"));
     assert!(output.stderr.is_empty());
 }
 
@@ -88,10 +90,10 @@ fn cli_jsonl_reuses_one_process_for_multiple_jsonl_requests_without_starting_the
     assert_eq!(responses[1]["id"], "request-2");
     for response in responses {
         assert_eq!(response["ok"], false);
-        assert!(response["error"]
+        let error = response["error"]
             .as_str()
-            .expect("CLI JSONL error should be text")
-            .contains("desktop app is not running"));
+            .expect("CLI JSONL error should be text");
+        assert!(error.contains("desktop app is not running") || error.contains("CANCELLED"));
     }
 }
 

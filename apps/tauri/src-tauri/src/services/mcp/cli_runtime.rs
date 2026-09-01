@@ -20,7 +20,8 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
 
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
     let controls = CliJsonlRequestControls::default();
-    let (job_sender, job_receiver) = std::sync::mpsc::channel::<Option<McpStdioJob>>();
+    let (job_sender, job_receiver) =
+        std::sync::mpsc::sync_channel::<Option<McpStdioJob>>(MCP_MAX_QUEUED_REQUESTS);
     let job_receiver = Arc::new(Mutex::new(job_receiver));
     let mut workers = Vec::with_capacity(MCP_MAX_CONCURRENT_CLIENTS);
 
@@ -98,9 +99,23 @@ pub fn run_stdio(arguments: &[String]) -> Result<(), String> {
             cancellation,
             controls: controls.clone(),
         };
-        if job_sender.send(Some(job)).is_err() {
-            controls.remove(&id);
-            return Err("FileTerm MCP workers stopped unexpectedly".to_string());
+        match job_sender.try_send(Some(job)) {
+            Ok(()) => {}
+            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                controls.remove(&id);
+                let response = jsonrpc_error(
+                    id,
+                    MCP_SERVER_BUSY_ERROR_CODE,
+                    "FileTerm MCP request queue is full; retry shortly",
+                );
+                write_mcp_stdio_value(&stdout, &response).map_err(|error| {
+                    format!("Unable to write MCP response: {error}")
+                })?;
+            }
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                controls.remove(&id);
+                return Err("FileTerm MCP workers stopped unexpectedly".to_string());
+            }
         }
     }
     controls.cancel_all();
@@ -167,7 +182,7 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
         .any(|argument| argument == "--help" || argument == "-h")
     {
         println!(
-            "Usage: fileterm cli --jsonl\n\nRun the persistent FileTerm CLI JSONL bridge over stdin/stdout. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nCancel a pending request:\n  {{\"id\":\"cancel-1\",\"action\":\"cancel_request\",\"params\":{{\"request_id\":\"request-1\"}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. CLI JSONL requests always use the in-app approval policy; the incoming requiresApproval field cannot disable approval. Cancellation stops waiting for the request result, but cannot roll back work already accepted by the desktop app. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and exits when stdin closes."
+            "Usage: fileterm cli --jsonl\n\nRun the persistent FileTerm CLI JSONL bridge over stdin/stdout. FileTerm must be running.\n\nRequest:\n  {{\"id\":\"request-1\",\"action\":\"list_connections\",\"params\":{{}}}}\n\nCancel a pending request:\n  {{\"id\":\"cancel-1\",\"action\":\"cancel_request\",\"params\":{{\"request_id\":\"request-1\"}}}}\n\nResponse:\n  {{\"id\":\"request-1\",\"ok\":true,\"result\":{{...}}}}\n\nProgress events use the same id and are emitted before the final response. CLI JSONL requests always use the in-app approval policy; the incoming requiresApproval field cannot disable approval. Cancellation stops waiting for the request result, but cannot roll back work already accepted by the desktop app. The process accepts up to {MCP_MAX_CONCURRENT_CLIENTS} concurrent requests and {MCP_MAX_QUEUED_REQUESTS} queued requests; it cancels pending work when stdin closes."
         );
         return Ok(());
     }
@@ -181,7 +196,8 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
 
     let stdout = Arc::new(Mutex::new(io::BufWriter::new(io::stdout())));
     let controls = CliJsonlRequestControls::default();
-    let (job_sender, job_receiver) = std::sync::mpsc::channel::<Option<CliJsonlJob>>();
+    let (job_sender, job_receiver) =
+        std::sync::mpsc::sync_channel::<Option<CliJsonlJob>>(MCP_MAX_QUEUED_REQUESTS);
     let job_receiver = Arc::new(Mutex::new(job_receiver));
     let mut workers = Vec::with_capacity(MCP_MAX_CONCURRENT_CLIENTS);
 
@@ -303,11 +319,33 @@ pub fn run_cli_jsonl(arguments: &[String]) -> Result<(), String> {
             cancellation,
             controls: controls.clone(),
         };
-        if job_sender.send(Some(job)).is_err() {
-            controls.remove(&request_id);
-            return Err("FileTerm CLI JSONL workers stopped unexpectedly".to_string());
+        match job_sender.try_send(Some(job)) {
+            Ok(()) => {}
+            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                controls.remove(&request_id);
+                write_cli_jsonl_value(
+                    &stdout,
+                    &json!({
+                        "id": request_id,
+                        "ok": false,
+                        "error": FILETERM_REQUEST_QUEUE_FULL
+                    }),
+                )
+                .map_err(|error| {
+                    format!("Unable to write FileTerm CLI JSONL response: {error}")
+                })?;
+            }
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                controls.remove(&request_id);
+                return Err("FileTerm CLI JSONL workers stopped unexpectedly".to_string());
+            }
         }
     }
+    // Closing stdin is the JSONL connection lifecycle's disconnect event. Do
+    // not wait for a pending bridge timeout (which can be several minutes):
+    // propagate cancellation before joining workers so SSH execs, approvals,
+    // and bridge reads can clean themselves up promptly.
+    controls.cancel_all();
     drop(job_sender);
 
     for worker in workers {

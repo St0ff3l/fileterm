@@ -9,11 +9,11 @@ This document explains how end users integrate with FileTerm. It applies to vers
 
 ## Choose an integration mode
 
-| Use case                                  | How to start              | Process behavior                                                |
-| ----------------------------------------- | ------------------------- | --------------------------------------------------------------- |
+| Use case                                     | How to start             | Process behavior                                                |
+| -------------------------------------------- | ------------------------ | --------------------------------------------------------------- |
 | Default integration for an external AI Agent | `fileterm cli --jsonl`   | Starts once, keeps stdin/stdout open, and handles many requests |
-| MCP-capable client                        | `fileterm mcp`            | Starts once and keeps an MCP stdio session                      |
-| Manual use or shell scripts               | `fileterm cli <command>` | Starts a short-lived CLI process for each call                  |
+| MCP-capable client                           | `fileterm mcp`           | Starts once and keeps an MCP stdio session                      |
+| Manual use or shell scripts                  | `fileterm cli <command>` | Starts a short-lived CLI process for each call                  |
 
 There is no separate `fileterm agent` command. AI Agents use `fileterm cli --jsonl`; do not restart the one-shot CLI for every action.
 
@@ -54,7 +54,21 @@ While waiting for the user to confirm an action or enter a password in the main 
 { "id": "cancel-1", "action": "cancel_request", "params": { "request_id": "request-1" } }
 ```
 
-Cancellation only stops the CLI JSONL wait and any later output; it does not roll back remote actions that FileTerm has already accepted or started. A request ID must be a non-empty string or number, and it cannot be reused by another active request. Each input line is limited to 2 MiB, with up to eight concurrent requests. The bridge process exits when stdin closes.
+Cancellation only stops the CLI JSONL wait and any later output; it does not roll back remote actions that FileTerm has already accepted or started. A request ID must be a non-empty string or number, and it cannot be reused by another active request. Each input line is limited to 2 MiB. The process handles up to eight requests concurrently and queues up to 32 more; when the queue is full it returns `FILETERM_REQUEST_QUEUE_FULL` so the Agent can retry with backoff. Closing stdin is treated as client disconnect: pending bridge requests are cancelled before the process exits.
+
+## Long-running remote commands
+
+Do not keep a single `exec` request open for deployments, image builds, migrations, or `docker compose` operations. Start a background command once, then poll its bounded output:
+
+```text
+fileterm cli start-remote-command --tab-id TAB_ID --command "./deploy.sh" --timeout-ms 1800000
+fileterm cli read-remote-command --tab-id TAB_ID --command-id COMMAND_ID --offset 0 --wait-ms 10000
+fileterm cli read-remote-command --tab-id TAB_ID --command-id COMMAND_ID --offset NEXT_OFFSET --wait-ms 10000
+```
+
+The start result contains `commandId` and the read result contains `nextOffset`. Continue from that offset; never start the same deployment again merely because a read request timed out. Use `fileterm cli remote-commands --tab-id TAB_ID` to recover retained command IDs after an Agent context loss. Use `fileterm cli terminate-remote-command` only when the user asks to stop the job, and `fileterm cli close-remote-command` after the output and final status have been collected.
+
+Background commands stay in the FileTerm worker and are scoped to the originating `tabId`. Their output is bounded and retained for a limited period. Termination waits briefly for the remote channel to report its final state, but a command can remain `running` when the server does not close the channel promptly; this is not a claim that the remote process has already exited.
 
 ## Manual CLI
 
@@ -73,9 +87,10 @@ fileterm cli sessions --profile-id PROFILE_ID
 fileterm cli directory --tab-id TAB_ID --path /
 fileterm cli read --tab-id TAB_ID --path /etc/hostname
 fileterm cli exec --tab-id TAB_ID --command "uname -a"
+fileterm cli remote-commands --tab-id TAB_ID
 ```
 
-By default, CLI `open` creates a background session and returns a reusable session ID in `sessionId` (while retaining `tabId` for compatibility with existing requests). To view the terminal in the top tab bar, open it from the GUI's **Background Sessions** page or call `fileterm_activate_session` through MCP.
+By default, CLI `open` creates a background session and returns a reusable session ID in `sessionId` (while retaining `tabId` for compatibility with existing requests). Pass `--execution-mode visible-terminal` when the user explicitly needs an interactive visible terminal; activate that session before sending visible commands. Otherwise, to view a background session in the top tab bar, open it from the GUI's **Background Sessions** page or call `fileterm_activate_session` through MCP.
 
 The one-shot CLI is intended for manual debugging and shell scripts. Every call creates a new CLI process and exits when the call finishes; it does not reuse a CLI process and should not be used by an AI Agent for per-action calls.
 

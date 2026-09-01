@@ -18,6 +18,7 @@ const BACKGROUND_REMOTE_COMMAND_RETENTION: Duration = Duration::from_secs(30 * 6
 const BACKGROUND_REMOTE_COMMAND_OUTPUT_CAP: usize = 256 * 1024;
 const BACKGROUND_REMOTE_COMMAND_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
 const BACKGROUND_REMOTE_COMMAND_SIGNAL_TIMEOUT: Duration = Duration::from_millis(300);
+const BACKGROUND_REMOTE_COMMAND_TERMINATION_WAIT: Duration = Duration::from_secs(2);
 const BACKGROUND_REMOTE_COMMAND_MAX_READ_BYTES: usize = 64 * 1024;
 
 pub(crate) type BackgroundRemoteCommandWriter = ChannelWriteHalf<russh::client::Msg>;
@@ -45,6 +46,33 @@ pub struct BackgroundRemoteCommandSnapshot {
     pub output_truncated: bool,
     pub started_at: u64,
     pub finished_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundRemoteCommandSummary {
+    pub command_id: String,
+    pub tab_id: String,
+    pub output_bytes: u64,
+    pub running: bool,
+    pub exit_code: Option<u32>,
+    pub exit_signal: Option<String>,
+    pub timed_out: bool,
+    pub cancelled: bool,
+    pub output_truncated: bool,
+    pub started_at: u64,
+    pub finished_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundRemoteCommandPage {
+    pub total: usize,
+    pub count: usize,
+    pub offset: usize,
+    pub items: Vec<BackgroundRemoteCommandSummary>,
+    pub has_more: bool,
+    pub next_offset: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -178,16 +206,72 @@ impl BackgroundRemoteCommandRegistry {
         }
     }
 
+    pub(crate) async fn list(
+        &self,
+        tab_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> BackgroundRemoteCommandPage {
+        self.prune_finished().await;
+        let commands = self.commands.read().await;
+        let mut summaries = Vec::new();
+        for command in commands.values().filter(|command| command.tab_id == tab_id) {
+            let state = command.state.lock().await;
+            summaries.push(BackgroundRemoteCommandSummary {
+                command_id: command.command_id.clone(),
+                tab_id: command.tab_id.clone(),
+                output_bytes: state.output.len() as u64,
+                running: state.running,
+                exit_code: state.exit_code,
+                exit_signal: state.exit_signal.clone(),
+                timed_out: state.timed_out,
+                cancelled: state.cancelled,
+                output_truncated: state.output_truncated,
+                started_at: command.started_at,
+                finished_at: state.finished_at,
+            });
+        }
+        summaries.sort_by(|left, right| {
+            left.started_at
+                .cmp(&right.started_at)
+                .then_with(|| left.command_id.cmp(&right.command_id))
+        });
+
+        let total = summaries.len();
+        let items = summaries
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .collect::<Vec<_>>();
+        let next_offset = offset + items.len();
+        BackgroundRemoteCommandPage {
+            total,
+            count: items.len(),
+            offset,
+            items,
+            has_more: next_offset < total,
+            next_offset: (next_offset < total).then_some(next_offset),
+        }
+    }
+
     pub(crate) async fn terminate(
         &self,
         tab_id: &str,
         command_id: &str,
     ) -> Result<BackgroundRemoteCommandSnapshot, String> {
         let command = self.lookup_for_tab(tab_id, command_id).await?;
+        let notified = command.notify.notified();
         let running = command.state.lock().await.running;
         if running {
             command.cancellation.cancel();
             terminate_writer(&command).await;
+            if command.state.lock().await.running {
+                let _ = tokio::time::timeout(
+                    BACKGROUND_REMOTE_COMMAND_TERMINATION_WAIT,
+                    notified,
+                )
+                .await;
+            }
         }
         Ok(snapshot_command(&command, 0, BACKGROUND_REMOTE_COMMAND_MAX_READ_BYTES).await)
     }

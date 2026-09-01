@@ -309,6 +309,20 @@ mod tests {
             .unwrap()
             .contains("already-active visible SSH terminal"));
 
+        let command_list_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_list_remote_commands")
+            .unwrap();
+        assert_eq!(
+            command_list_tool["inputSchema"]["required"],
+            json!(["tab_id"])
+        );
+        assert_eq!(
+            command_list_tool["outputSchema"]["required"],
+            json!(["total", "count", "offset", "items", "hasMore", "nextOffset"])
+        );
+        assert_eq!(command_list_tool["annotations"]["readOnlyHint"], true);
+
         let transfer_wait_tool = tool_definitions()
             .into_iter()
             .find(|tool| tool["name"] == "fileterm_wait_for_transfer")
@@ -673,6 +687,21 @@ mod tests {
         assert!(validate_tool_arguments(
             "fileterm_close_remote_command",
             &json!({ "tab_id": "tab-1", "command_id": "command-1" })
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_list_remote_commands",
+            &json!({ "tab_id": "tab-1", "limit": 10, "offset": 0 })
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_delete_remote_path",
+            &json!({
+                "tab_id": "tab-1",
+                "target_path": "/tmp/link",
+                "target_type": "file",
+                "target_is_symlink": true
+            })
         )
         .is_ok());
     }

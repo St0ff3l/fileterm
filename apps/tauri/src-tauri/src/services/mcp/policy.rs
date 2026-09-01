@@ -20,6 +20,7 @@ async fn dispatch_bridge_request(
     match request.action.as_str() {
         "list_connections" => list_connections(app, &request.params).await,
         "get_session_context" => get_session_context(app, &request.params).await,
+        "list_remote_commands" => list_remote_commands(app, &request.params).await,
         "get_command_templates" => get_command_templates(app, &request.params).await,
         "list_remote_directory" => list_remote_directory(app, &request.params).await,
         "read_remote_file" => read_remote_file(app, &request.params).await,
@@ -308,6 +309,7 @@ fn action_is_read_only(action: &str, _params: &Value) -> bool {
         action,
         "list_connections"
             | "get_session_context"
+            | "list_remote_commands"
             | "get_command_templates"
             | "list_remote_directory"
             | "read_remote_file"

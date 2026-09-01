@@ -1003,6 +1003,15 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 - [x] 拒绝重复 request ID，进度事件和最终结果均绑定原 request ID。
 - [x] 增加 CLI JSONL 审批/取消/ID 校验单测，并通过 CLI 子进程回归。
 
+### 阶段 3 补充：断开保护与长任务恢复
+
+- [x] MCP stdio 与 CLI JSONL 使用有界请求队列：最多 8 个并行请求、32 个排队请求；队列满时返回稳定错误码，避免无界内存增长和调用端假死。
+- [x] CLI JSONL stdin EOF 视为客户端断开，主动取消排队和执行中的桥接请求后再回收 worker，不再等待完整 bridge 超时。
+- [x] 增加 `fileterm_list_remote_commands` 与 `remote-commands` CLI，用于按 `tabId` 恢复仍在保留窗口内的后台命令元数据。
+- [x] 增加长任务 CLI 别名 `start-remote-command`、`read-remote-command`、`terminate-remote-command` 和 `close-remote-command`，并支持 `open --execution-mode` 与删除软链接参数透传。
+- [x] 终止后台命令后有界等待远端 channel 的最终状态；若服务端没有及时关闭，明确返回仍为 `running`，不伪造退出结果。
+- [x] 补充长任务工具 schema、分页契约、危险操作标注和 CLI 子进程回归。
+
 ### 阶段 4：CLI 凭据输入硬化
 
 - [x] `--sudo-password-stdin` / `--su-password-stdin` 作为无值参数读取一行 stdin，并限制长度、编码和控制字符。

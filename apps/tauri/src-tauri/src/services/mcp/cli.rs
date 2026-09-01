@@ -115,6 +115,12 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
         "commands" | "command-templates" => {
             cli_action("get_command_templates", options, &["limit", "offset"], &[])
         }
+        "remote-commands" | "background-commands" => cli_action(
+            "list_remote_commands",
+            options,
+            &["tab-id", "limit", "offset"],
+            &["tab-id"],
+        ),
         "read" | "cat" => cli_action(
             "read_remote_file",
             options,
@@ -138,7 +144,12 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
         "open" => cli_action(
             "open_connection",
             options,
-            &["profile-id", "wait-for-ready", "timeout-ms"],
+            &[
+                "profile-id",
+                "execution-mode",
+                "wait-for-ready",
+                "timeout-ms",
+            ],
             &["profile-id"],
         ),
         "activate" => cli_action("activate_session", options, &["tab-id"], &["tab-id"]),
@@ -146,6 +157,27 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
         "disconnect" => cli_action("disconnect_session", options, &["tab-id"], &["tab-id"]),
         "close" => cli_action("close_session", options, &["tab-id"], &["tab-id"]),
         "exec" | "execute" => cli_exec_action(options),
+        "start-remote-command" | "start-command" => {
+            cli_background_exec_action(options)
+        }
+        "read-remote-command" | "read-command" => cli_action(
+            "read_remote_command",
+            options,
+            &["tab-id", "command-id", "offset", "max-bytes", "wait-ms"],
+            &["tab-id", "command-id"],
+        ),
+        "terminate-remote-command" | "terminate-command" => cli_action(
+            "terminate_remote_command",
+            options,
+            &["tab-id", "command-id"],
+            &["tab-id", "command-id"],
+        ),
+        "close-remote-command" | "close-command" => cli_action(
+            "close_remote_command",
+            options,
+            &["tab-id", "command-id"],
+            &["tab-id", "command-id"],
+        ),
         "command-template" => cli_action(
             "execute_command_template",
             options,
@@ -191,7 +223,7 @@ pub fn run_cli(arguments: &[String]) -> Result<(), String> {
         "delete" => cli_action(
             "delete_remote_path",
             options,
-            &["tab-id", "target-path", "target-type"],
+            &["tab-id", "target-path", "target-type", "target-is-symlink"],
             &["tab-id", "target-path", "target-type"],
         ),
         "chmod" => cli_action(
@@ -319,13 +351,25 @@ fn cli_action(
 }
 
 fn cli_exec_action(arguments: &[String]) -> Result<(), String> {
+    cli_remote_exec_action("execute_remote_command", "execute_remote_command", arguments, true)
+}
+
+fn cli_background_exec_action(arguments: &[String]) -> Result<(), String> {
+    cli_remote_exec_action("start_remote_command", "start_remote_command", arguments, false)
+}
+
+fn cli_remote_exec_action(
+    action: &str,
+    help_command: &str,
+    arguments: &[String],
+    allow_save_password: bool,
+) -> Result<(), String> {
     if has_cli_help(arguments) {
-        print_cli_command_help("execute_remote_command");
+        print_cli_command_help(help_command);
         return Ok(());
     }
-    let (values, stdin_flags) = parse_cli_options_with_flags(
-        arguments,
-        &[
+    let allowed = if allow_save_password {
+        vec![
             "tab-id",
             "command",
             "cwd",
@@ -336,12 +380,27 @@ fn cli_exec_action(arguments: &[String]) -> Result<(), String> {
             "save-su-password",
             "sudo-password-stdin",
             "su-password-stdin",
-        ],
+        ]
+    } else {
+        vec![
+            "tab-id",
+            "command",
+            "cwd",
+            "timeout-ms",
+            "sudo-password",
+            "su-password",
+            "sudo-password-stdin",
+            "su-password-stdin",
+        ]
+    };
+    let (values, stdin_flags) = parse_cli_options_with_flags(
+        arguments,
+        &allowed,
         &["sudo-password-stdin", "su-password-stdin"],
     )?;
     for key in ["tab-id", "command"] {
         if !values.contains_key(key) {
-            return Err(format!("exec requires --{key} <value>"));
+            return Err(format!("{action} requires --{key} <value>"));
         }
     }
 
@@ -381,7 +440,7 @@ fn cli_exec_action(arguments: &[String]) -> Result<(), String> {
         );
     }
     print_cli_result(call_desktop_bridge(cli_bridge_request(
-        "execute_remote_command",
+        action,
         Value::Object(params.clone()),
     ))?)
 }
@@ -428,10 +487,12 @@ fn cli_values_to_params(values: &HashMap<String, String>) -> Result<Value, Strin
                     .map(|item| Value::String(item.to_string()))
                     .collect(),
             ),
-            "recursive" => Value::Bool(parse_cli_bool("recursive", value)?),
+            "recursive" | "target-is-symlink" => Value::Bool(parse_cli_bool(key, value)?),
             "wait-for-ready" => Value::Bool(parse_cli_bool("wait-for-ready", value)?),
             "save-sudo-password" | "save-su-password" => Value::Bool(parse_cli_bool(key, value)?),
-            "limit" | "offset" | "timeout-ms" => json!(parse_cli_usize(key, value)?),
+            "limit" | "offset" | "timeout-ms" | "max-bytes" | "wait-ms" => {
+                json!(parse_cli_usize(key, value)?)
+            }
             _ => Value::String(value.clone()),
         };
         params.insert(parameter, converted);
@@ -575,7 +636,10 @@ fn print_cli_help() {
         "When FileTerm opens its secure sudo/su prompt, `exec` waits and reports input-required on stderr; enter the password in the FileTerm window and do not retry the command."
     );
     println!(
-        "Connection lifecycle: `fileterm open --profile-id ID [--wait-for-ready true|false] [--timeout-ms N]`; resume with `fileterm wait-connection --operation-id ID [--timeout-ms N]`."
+        "Long command aliases: `start-remote-command`, `remote-commands`, `read-remote-command`, `terminate-remote-command`, and `close-remote-command`; all use the same approval and cancellation policy as MCP."
+    );
+    println!(
+        "Connection lifecycle: `fileterm open --profile-id ID [--execution-mode background|visible-terminal] [--wait-for-ready true|false] [--timeout-ms N]`; resume with `fileterm wait-connection --operation-id ID [--timeout-ms N]`."
     );
     println!(
         "Long jobs: use `fileterm call start_remote_command --params-json JSON`, then poll `read_remote_command` with the returned commandId and nextOffset; terminate/close explicitly when finished."
@@ -591,13 +655,14 @@ fn print_cli_command_help(command: &str) {
         ),
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
         "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD | --sudo-password-stdin] [--save-sudo-password true] [--su-password PASSWORD | --su-password-stdin] [--save-su-password true]\n       --*-password-stdin reads one password line from stdin; prefer it for scripts and Agent-generated commands."),
-        "start_remote_command" => println!("Usage: fileterm call start_remote_command --params-json JSON\n       Poll with fileterm call read_remote_command using the returned commandId and nextOffset."),
-        "read_remote_command" => println!("Usage: fileterm call read_remote_command --params-json JSON"),
-        "terminate_remote_command" => println!("Usage: fileterm call terminate_remote_command --params-json JSON"),
-        "close_remote_command" => println!("Usage: fileterm call close_remote_command --params-json JSON"),
+        "start_remote_command" => println!("Usage: fileterm start-remote-command --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD | --sudo-password-stdin] [--su-password PASSWORD | --su-password-stdin]\n       Poll with fileterm read-remote-command using the returned commandId and nextOffset."),
+        "read_remote_command" => println!("Usage: fileterm read-remote-command --tab-id TAB_ID --command-id ID [--offset N] [--max-bytes N] [--wait-ms N]"),
+        "terminate_remote_command" => println!("Usage: fileterm terminate-remote-command --tab-id TAB_ID --command-id ID"),
+        "close_remote_command" => println!("Usage: fileterm close-remote-command --tab-id TAB_ID --command-id ID"),
+        "list_remote_commands" => println!("Usage: fileterm remote-commands --tab-id TAB_ID [--limit N] [--offset N]"),
         "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
         "wait_for_connection" => println!("Usage: fileterm wait-connection --operation-id ID [--timeout-ms N]"),
-        "open_connection" => println!("Usage: fileterm open --profile-id PROFILE_ID [--wait-for-ready true|false] [--timeout-ms N]"),
+        "open_connection" => println!("Usage: fileterm open --profile-id PROFILE_ID [--execution-mode background|visible-terminal] [--wait-for-ready true|false] [--timeout-ms N]"),
         "write_remote_file" => println!("Usage: fileterm write --tab-id TAB_ID --path REMOTE_PATH --content TEXT [--encoding utf-8]"),
         "upload_file" => println!("Usage: fileterm upload --tab-id TAB_ID --local-path PATH --remote-directory PATH [--target-name NAME]"),
         "download_file" => println!("Usage: fileterm download --tab-id TAB_ID --remote-path PATH --local-directory PATH [--target-name NAME]"),
