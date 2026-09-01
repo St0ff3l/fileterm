@@ -5,66 +5,66 @@ description: Use FileTerm's one-shot CLI, persistent CLI JSONL bridge, or MCP br
 
 # FileTerm CLI Skill
 
-本文档是 FileTerm 的用户侧接入说明，适用于 2.2.7 及之后的版本。命令的完整参数以当前安装版本的 `--help` 输出为准。
+This document explains how end users integrate with FileTerm. It applies to version 2.2.7 and later. For the complete set of command arguments, use the `--help` output from the installed version.
 
-## 选择调用方式
+## Choose an integration mode
 
-| 使用场景                  | 启动方式                 | 进程行为                                      |
-| ------------------------- | ------------------------ | --------------------------------------------- |
-| 外部 AI Agent 默认接入    | `fileterm cli --jsonl`   | 启动一次，保持 stdin/stdout，连续处理多个请求 |
-| 支持 MCP 的客户端         | `fileterm mcp`           | 启动一次，保持 MCP stdio 会话                 |
-| 用户手动操作或 shell 脚本 | `fileterm cli <command>` | 每次调用一个短生命周期 CLI 进程               |
+| Use case                                  | How to start              | Process behavior                                                |
+| ----------------------------------------- | ------------------------- | --------------------------------------------------------------- |
+| Default integration for an external AI Agent | `fileterm cli --jsonl`   | Starts once, keeps stdin/stdout open, and handles many requests |
+| MCP-capable client                        | `fileterm mcp`            | Starts once and keeps an MCP stdio session                      |
+| Manual use or shell scripts               | `fileterm cli <command>` | Starts a short-lived CLI process for each call                  |
 
-不存在单独的 `fileterm agent` 命令。AI Agent 使用 `fileterm cli --jsonl`，不要为每个动作重新启动一次性 CLI。
+There is no separate `fileterm agent` command. AI Agents use `fileterm cli --jsonl`; do not restart the one-shot CLI for every action.
 
-FileTerm 桌面应用需要先运行。CLI 和 MCP 是连接到正在运行的 FileTerm 的本机桥接客户端，不是独立的 SSH 客户端，也不会导出连接凭据或自动修改外部客户端配置。CLI 参数会在 Tauri GUI 初始化前处理，不会因为 CLI 调用额外打开 FileTerm 窗口；一次性 CLI 仍然会创建自己的短生命周期操作系统进程，只有 JSONL 模式复用同一个 CLI 进程。
+The FileTerm desktop app must already be running. The CLI and MCP are local bridge clients that connect to the running FileTerm app; they are not standalone SSH clients, do not export connection credentials, and do not automatically change external-client configuration. CLI arguments are processed before the Tauri GUI initializes, so a CLI call does not open another FileTerm window. A one-shot CLI call still creates its own short-lived operating-system process; only JSONL mode reuses the same CLI process.
 
-CLI/MCP 打开的连接仍由 FileTerm App 持有 SSH/SFTP worker。后台模式不会把连接放进顶部标签栏，而是显示在 GUI 的“后台会话”页面；列表中的会话 ID 就是后续 CLI/MCP 请求使用的 `tabId`。点击“打开会话”或调用 `fileterm_activate_session` 会复用原 worker，把它挂回正常的可见标签，不会重新建立连接。
+Connections opened through the CLI or MCP remain owned by the FileTerm app's SSH/SFTP worker. Background mode does not place connections in the top tab bar; instead, they appear on the GUI's **Background Sessions** page. The session ID in that list is the `tabId` to use in later CLI or MCP requests. Selecting **Open Session** or calling `fileterm_activate_session` reuses the original worker and returns it to a visible tab without reconnecting.
 
-后台会话列表会标注来源 `CLI` 或 `MCP`；会话被打开并显示在工作区后，底部的会话 ID 旁也会保留同一来源标识。普通 GUI 新建的会话不显示外部来源。
+The Background Sessions list labels each session's source as `CLI` or `MCP`. After a session is opened in the workspace, the same source label remains next to its session ID at the bottom. Sessions created in the regular GUI do not display an external source.
 
-需要用户确认的外部操作弹窗也会显示请求来源 `CLI` 或 `MCP`；来源只用于识别和审计，CLI 与 MCP 仍然共用同一套权限策略。
+Prompts for external actions that require user confirmation also show the request source, `CLI` or `MCP`. This source is only for identification and auditing; the CLI and MCP share the same permission policy.
 
-可见的 CLI/MCP 会话可以点击底部会话 ID 旁的隐藏按钮移回后台；这只改变显示位置，不会断开连接，之后可从“后台会话”页面重新打开。
+You can move a visible CLI or MCP session back to the background by selecting the hide control beside its session ID at the bottom. This only changes where the session is displayed; it does not disconnect. You can open it again from **Background Sessions** later.
 
-## AI Agent：持久在线 JSONL
+## AI Agent: persistent JSONL
 
-启动一次：
+Start it once:
 
 ```text
 fileterm cli --jsonl
 ```
 
-之后向 stdin 每行发送一个 JSON 对象，并从 stdout 逐行读取结果：
+Then send one JSON object per line to stdin and read one result per line from stdout:
 
 ```json
 {"id":"request-1","action":"list_connections","params":{}}
 {"id":"request-2","action":"get_session_context","params":{"profile_id":"PROFILE_ID"}}
 ```
 
-成功结果示例：
+Example successful result:
 
 ```json
 { "id": "request-1", "ok": true, "result": { "connections": [] } }
 ```
 
-等待用户在 FileTerm 主窗口确认或输入密码时，可能先收到带有相同请求 ID 的 progress 行，最后再收到结果行。取消仍在等待的请求：
+While waiting for the user to confirm an action or enter a password in the main FileTerm window, you may first receive a progress line with the same request ID, followed by the result line. To cancel a request that is still waiting:
 
 ```json
 { "id": "cancel-1", "action": "cancel_request", "params": { "request_id": "request-1" } }
 ```
 
-取消只停止 CLI JSONL 的等待和后续输出，不会回滚 FileTerm 已经接受或开始执行的远程操作。请求 ID 必须是非空字符串或数字，同一活动请求不能重复使用。单条输入最大 2 MiB，最多同时处理 8 个请求；stdin 关闭后桥接进程退出。
+Cancellation only stops the CLI JSONL wait and any later output; it does not roll back remote actions that FileTerm has already accepted or started. A request ID must be a non-empty string or number, and it cannot be reused by another active request. Each input line is limited to 2 MiB, with up to eight concurrent requests. The bridge process exits when stdin closes.
 
-## 手动 CLI
+## Manual CLI
 
-查看帮助：
+Show help:
 
 ```text
 fileterm cli --help
 ```
 
-常见的一次性调用：
+Common one-shot calls:
 
 ```text
 fileterm cli connections
@@ -75,27 +75,27 @@ fileterm cli read --tab-id TAB_ID --path /etc/hostname
 fileterm cli exec --tab-id TAB_ID --command "uname -a"
 ```
 
-CLI `open` 默认创建后台会话，并在结果的 `sessionId` 中返回可复用的会话 ID（同时保留 `tabId` 字段兼容现有请求）。如果需要在顶部标签栏中查看终端，可在 GUI 的“后台会话”页面打开它，或通过 MCP 调用 `fileterm_activate_session`。
+By default, CLI `open` creates a background session and returns a reusable session ID in `sessionId` (while retaining `tabId` for compatibility with existing requests). To view the terminal in the top tab bar, open it from the GUI's **Background Sessions** page or call `fileterm_activate_session` through MCP.
 
-一次性 CLI 适合用户手动调试和 shell 脚本。每次调用都会创建一个新的 CLI 进程，调用完成后退出；它不会复用 CLI 进程，也不应作为 AI Agent 的逐动作调用方式。
+The one-shot CLI is intended for manual debugging and shell scripts. Every call creates a new CLI process and exits when the call finishes; it does not reuse a CLI process and should not be used by an AI Agent for per-action calls.
 
-## 权限与确认
+## Permissions and confirmation
 
-MCP、一次性 CLI 和 CLI JSONL 共用 FileTerm 设置中的连接范围、操作权限和安全校验：
+MCP, the one-shot CLI, and CLI JSONL share the connection scope, operation permissions, and security checks configured in FileTerm:
 
-- **只读**：只允许查询连接、会话、目录、文件和传输状态，不执行命令或变更。
-- **基础安全操作**：查询和被 FileTerm 判定为只读的普通命令自动执行；变更、危险/提权命令、会话变更、文件操作、传输、隧道和未知操作回到 FileTerm 主窗口确认。
-- **完全访问**：跳过逐次操作确认，包括 `sudo`/`su`；连接白名单、协议能力、安全校验和可能需要的密码输入仍然有效。
+- **Read-only**: Allows only queries for connections, sessions, directories, files, and transfer status. It does not run commands or make changes.
+- **Basic safe operations**: Queries and ordinary commands that FileTerm identifies as read-only run automatically. Changes, dangerous or privileged commands, session changes, file operations, transfers, tunnels, and unknown operations require confirmation in the main FileTerm window.
+- **Full access**: Skips per-operation confirmation, including for `sudo` and `su`. Connection allowlists, protocol capabilities, security checks, and any required password entry still apply.
 
-CLI JSONL 请求中的 `requiresApproval` 不能关闭桌面端审批。密码不会放入命令文本、日志或结果；一次性 CLI 需要提供密码时，优先使用 stdin 选项，例如 `--sudo-password-stdin` 或 `--su-password-stdin`。
+The `requiresApproval` field in a CLI JSONL request cannot disable desktop approval. Passwords are never included in command text, logs, or results. When a one-shot CLI call needs a password, prefer a stdin option such as `--sudo-password-stdin` or `--su-password-stdin`.
 
-## 远程命令边界
+## Remote-command boundaries
 
-- 普通 SSH 服务器命令使用独立的非交互 exec channel，不会写入可见终端。
-- 网络设备命令通过可见的原始终端发送单行命令，结果可能包含命令回显和提示符，不提供后台 exec、`cwd`、`sudo` 或 `su` 能力。
-- MFA、安装器确认、REPL 和其他需要连续交互输入的操作必须在可见 SSH 终端中完成；先打开对应后台会话或调用 `fileterm_activate_session`，再继续交互。FileTerm 返回 `REMOTE_INTERACTIVE_INPUT_REQUIRED` 时，不要自动重复执行。
-- `sudo`/`su` 可能等待 FileTerm 主窗口中的安全密码输入；用户完成输入后，原请求会继续返回结果。
+- Commands on ordinary SSH servers use a separate non-interactive exec channel and do not write to the visible terminal.
+- Network-device commands send a single command through the visible raw terminal. Results may include the command echo and prompt. Background exec, `cwd`, `sudo`, and `su` are not available.
+- MFA, installer confirmation, REPLs, and other operations that need ongoing interactive input must be completed in the visible SSH terminal. Open the corresponding background session or call `fileterm_activate_session` before continuing. Do not automatically retry when FileTerm returns `REMOTE_INTERACTIVE_INPUT_REQUIRED`.
+- `sudo` and `su` may wait for a secure password entry in the main FileTerm window. The original request resumes after the user provides it.
 
-## 客户端配置
+## Client configuration
 
-外部客户端应注册 `fileterm mcp` 或 `fileterm cli --jsonl`，并复用启动后的 stdio 进程。FileTerm 只在设置页提供可复制的注册命令，不会自动运行客户端或改写其配置文件。
+External clients should register `fileterm mcp` or `fileterm cli --jsonl` and reuse the started stdio process. FileTerm only provides a copyable registration command in Settings; it does not start external clients or rewrite their configuration files automatically.
