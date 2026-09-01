@@ -1,8 +1,8 @@
-> 归档状态（2026-07-23）：russh 主链路、代理和 `-L/-R/-D` 隧道实现已完成。三平台构建验证和与历史 Electron 的真实服务 parity 因外部依赖暂停。本文档移至 `docs/plans/completed/`。
+> 归档状态（2026-07-23）：russh 主链路、代理和 `-L/-R/-D` 隧道实现已完成。三平台构建验证和与迁移前实现的真实服务 parity 因外部依赖暂停。本文档移至 `docs/plans/completed/`。
 
 # russh 迁移评估与计划
 
-> 状态（2026-07-15）：russh 主链路、代理和 `-L/-R/-D` 隧道实现已完成；本文剩余内容只描述三平台构建和历史 Electron 42.4.0 parity 的真实服务验收。
+> 状态（2026-07-15）：russh 主链路、代理和 `-L/-R/-D` 隧道实现已完成；本文剩余内容只描述三平台构建和迁移前版本 42.4.0 parity 的真实服务验收。
 
 ## 1. 背景
 
@@ -69,7 +69,7 @@ Tauri 迁移 Phase 3 曾以 `ssh2`（libssh2 C 绑定 + vendored-openssl）作�
 - ✅ system_metrics Linux/BusyBox POSIX + Windows probe + CRLF 归一化
 - ✅ OSC7/RemoteUser CWD 跟随 + 远端用户广播
 - ✅ tab 生命周期（open/reconnect/disconnect/close/activate）
-- 🔜 sudo/root 文件访问模式（exec channel + `sudo -S`/`sudo -n`，参考 Electron `execShellFileCommand`）
+- 🔜 sudo/root 文件访问模式（exec channel + `sudo -S`/`sudo -n`，参考 迁移前实现 `execShellFileCommand`）
 - 🔜 SSH -L/-R 隧道（ssh2 `channel_open_direct_tcpip` / `channel_open_forwarded_tcpip` + `tcpip-forward`）
 - 🔜 SOCKS5/HTTP 代理（自实现协议握手，注入 ssh2 `set_tcp_stream`）
 - 🔜 Jump Host（链式 SSH session，jump session `forwardOut` → 主 session `set_tcp_stream`）
@@ -86,7 +86,7 @@ Tauri 迁移 Phase 3 曾以 `ssh2`（libssh2 C 绑定 + vendored-openssl）作�
 ### 阶段 C（当前）：russh 迁移后的外部验收
 
 - `russh 0.62.2` + `russh-sftp 2.3.0` 已在 Cargo.lock 锁定并作为当前 SSH 主链路。
-- `ssh2` 与 `vendored-openssl` 已不在当前 Cargo manifest；历史 Electron `ssh2` controller 仅保留作 parity 对照。
+- `ssh2` 与 `vendored-openssl` 已不在当前 Cargo manifest；迁移前 `ssh2` controller 仅保留作 parity 对照。
 - 继续评估 `russh-sftp` 2.3.0 在真实服务和三平台发行场景的边角 case。
 
 ## 7. russh 迁移技术要点
@@ -168,14 +168,14 @@ let entries = sftp.read_dir(path).await?;
 
 ### 7.6 迁移工作量估算
 
-| 模块                         | 工作量 | 风险点                                  |
-| ---------------------------- | ------ | --------------------------------------- |
-| `sessions/ssh.rs`            | 高     | Handler trait + async 重构              |
-| `sessions/system_metrics.rs` | 中     | `exec_command` async 化                 |
-| `commands/mod.rs`            | 低     | WorkerCmd 处理改为 async                |
-| `services/workspace.rs`      | 低     | 无变化                                  |
-| 测试                         | 中     | contract test 不变，新增 russh 集成测试 |
-| 文档                         | 低     | 更新 architecture.md                    |
+| 模块                             | 工作量 | 风险点                                  |
+| -------------------------------- | ------ | --------------------------------------- |
+| `sessions/ssh/mod.rs`            | 高     | Handler trait + async 重构              |
+| `sessions/system_metrics/mod.rs` | 中     | `exec_command` async 化                 |
+| `commands/mod.rs`                | 低     | WorkerCmd 处理改为 async                |
+| `services/workspace/mod.rs`      | 低     | 无变化                                  |
+| 测试                             | 中     | contract test 不变，新增 russh 集成测试 |
+| 文档                             | 低     | 更新 architecture.md                    |
 
 ## 8. 决策
 
@@ -187,7 +187,7 @@ let entries = sftp.read_dir(path).await?;
 
 1. `ssh2` 依赖从 Cargo.toml 移除，`vendored-openssl` feature 移除。
 2. `russh = "0.62.2"` + `russh-sftp = "2.3.0"` 作为 SSH 主链路。
-3. `sessions/ssh.rs` 全面 async 重构：Handler trait + `check_server_key` async handler + in-handshake host key 异步弹窗（oneshot + `pending_interactions` Map）。
+3. `sessions/ssh/mod.rs` 全面 async 重构：Handler trait + `check_server_key` async handler + in-handshake host key 异步弹窗（oneshot + `pending_interactions` Map）。
 4. MFA 多 prompt 异步弹窗：`authenticate_keyboard_interactive_start` + `respond` 循环，第一轮用配置密码，后续轮次经 `ssh:interaction` 事件交由用户填写。
 5. `app_resolve_ssh_interaction` 真实异步接通：从 `pending_interactions` 取出 oneshot sender，把 renderer 的 response 投回握手 worker。
 6. 单 SSH session 复用 shell + SFTP + metrics（`Arc<Handle>` 共享），避免服务器 MaxSessions 限制导致 sidebar metrics 不显示。
@@ -215,4 +215,4 @@ russh 迁移完成的验收标准：
 - [x] SSH -L/-R/-D 隧道全部支持（待真实 SSH 服务验收）
 - [x] SOCKS5/HTTP 代理全部支持（待真实代理服务验收）
 - [ ] macOS / Windows / Linux 三平台构建验证（后续推进）
-- [ ] 与历史 Electron 42.4.0 版本完成真实服务 parity：重点为三平台 socket 生命周期、SFTP 边角 case 与 Phase 4 协议/传输能力
+- [ ] 与迁移前版本 42.4.0 完成真实服务 parity：重点为三平台 socket 生命周期、SFTP 边角 case 与 Phase 4 协议/传输能力

@@ -2,11 +2,11 @@
 
 # Rust + Tauri 重构路线（独立运行时）
 
-> 当前状态（2026-07-17）：Phase 0–4 代码主体已完成；Tauri 现在位于 `apps/tauri`，拥有独立 renderer 和唯一的 CI/发行路径。Electron 保留在 `apps/electron` 仅作历史实现参考，不再与 Tauri 共享 UI 源文件，也不参与 CI 或发包。
+> 当前状态（2026-07-17）：Phase 0–4 代码主体已完成；Tauri 现在位于 `apps/tauri`，拥有独立 renderer 和唯一的 CI/发行路径。迁移前实现已从仓库移除，仅保留历史记录，不再与 Tauri 共享 UI 源文件，也不参与 CI 或发包。
 
 ## 1. 目标与不可破坏的边界
 
-FileTerm 以 Rust + Tauri 继续演进；Electron 仅保留源码对照。共享包继续承载稳定领域类型与纯工具，Tauri 不共享 Electron 的 React UI。
+FileTerm 以 Rust + Tauri 继续演进；迁移前实现仅保留源码对照。共享包继续承载稳定领域类型与纯工具，Tauri 不共享迁移前实现的 React UI。
 
 必须保留：
 
@@ -14,7 +14,7 @@ FileTerm 以 Rust + Tauri 继续演进；Electron 仅保留源码对照。共享
 - React + TypeScript + Vite、xterm.js、Monaco Editor。
 - 当前工作区布局、连接管理器、命令管理器、文件编辑器和传输中心交互。
 - `packages/core` 中的领域概念和现有 profile/transfer 数据格式。
-- `main -> preload -> renderer` 形成的安全边界，在 Tauri 中迁移为 `Rust commands/events -> TypeScript bridge -> renderer`。
+- `Rust backend -> bridge -> renderer` 形成的安全边界，在 Tauri 中迁移为 `Rust commands/events -> TypeScript bridge -> renderer`。
 
 不在第一阶段同时做：
 
@@ -53,8 +53,7 @@ apps/tauri/
       storage/
 ```
 
-Tauri renderer 只依赖 Tauri bridge。Electron 的 renderer、preload 和 main 位于
-`apps/electron`，两端不允许跨 app 引用 UI 代码。
+Tauri renderer 只依赖 Tauri bridge。迁移前实现的 renderer、Tauri bridge 和 main 已从仓库移除；两端不允许跨 app 引用 UI 代码。
 
 ## 4. 迁移阶段
 
@@ -65,9 +64,9 @@ Tauri renderer 只依赖 Tauri bridge。Electron 的 renderer、preload 和 main
 - [x] 建立 `apps/tauri/src-tauri` Tauri v2 工程。
 - [x] 建立唯一的 `tauri-api.ts` bridge，React 不直接散落调用 `invoke/listen`。
 - [x] 实现平台信息、剪贴板、UI preferences/state。
-- [x] 建立 Rust command/event contract test；不再维护 Electron adapter。
+- [x] 建立 Rust command/event contract test；不再维护 迁移前实现 adapter。
 
-验收：Tauri commands/contract test 与 Tauri renderer 接口一致；renderer 不再直接依赖 Electron 类型。Electron 测试是独立 runtime 的兼容验收，不作为 Tauri 发行验收结论。
+验收：Tauri commands/contract test 与 Tauri renderer 接口一致；renderer 不再直接依赖迁移前实现类型。迁移前实现测试是独立 runtime 的兼容验收，不作为 Tauri 发行验收结论。
 
 ### Phase 1：Tauri 桌面壳垂直切片
 
@@ -90,7 +89,7 @@ Tauri renderer 只依赖 Tauri bridge。Electron 的 renderer、preload 和 main
 - [x] 迁移 workspace snapshot、tab 生命周期和连接库。
 - [x] 保留 secret 不进入公开 snapshot 的规则。
 
-验收：旧 Electron 用户数据可被 Tauri 一次性导入；重复启动不重新合并，Tauri 中已删除
+验收：迁移前实现 用户数据可被 Tauri 一次性导入；重复启动不重新合并，Tauri 中已删除
 的 legacy 记录不会复活，迁移失败不留下半份数据或成功 marker。
 
 ### Phase 3：SSH 工作区主链路
@@ -121,10 +120,10 @@ Rust controller 必须继续与 FTP、Telnet、Serial 分离；只复用明确�
 
 - [x] Windows Tauri updater：固定公钥、签名 NSIS 安装器、`.sig`、`latest.json` 和 GitHub Release Action 已接入；仓库仍需配置 `TAURI_SIGNING_PRIVATE_KEY` Secret 后首次实际发布验证。
 - [x] macOS arm64/x64 DMG（ad hoc 签名）与 Windows x64 NSIS 的 GitHub Action 打包路径；macOS 保持手动 GitHub 下载，Linux 包格式仍待评估。
-- [ ] 性能、内存、启动时间和终端延迟对比 Electron。
+- [ ] 性能、内存、启动时间和终端延迟对比 迁移前实现。
 - [x] 自动 legacy 数据迁移、版本 marker 和文件级失败回滚。
 - [ ] 发行候选迁移演练、用户可见报告和安装包级回滚。
-- [ ] 直接发布 Tauri；迁移失败通过数据备份和 command 级回滚处理。Electron 仅保留为非运行时源码参考。
+- [ ] 直接发布 Tauri；迁移失败通过数据备份和 command 级回滚处理。迁移前实现仅保留为非运行时源码参考。
 
 ## 5. 技术决策
 
@@ -165,4 +164,4 @@ Rust controller 必须继续与 FTP、Telnet、Serial 分离；只复用明确�
 
 ## 8. 回滚策略
 
-迁移期间不保留 Electron 运行时。若 Tauri 某个协议或平台能力未完成，保持该 Tauri command 明确返回结构化 `unsupported` 错误，不伪造已完成能力；数据迁移必须先备份且幂等。
+迁移期间不保留 迁移前实现 运行时。若 Tauri 某个协议或平台能力未完成，保持该 Tauri command 明确返回结构化 `unsupported` 错误，不伪造已完成能力；数据迁移必须先备份且幂等。

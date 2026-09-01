@@ -5,7 +5,7 @@ description: 为 FileTerm 的 Tauri + Rust + React + TypeScript 桌面应用处�
 
 # FileTerm 跨平台 UI 与快捷键技能
 
-FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分支已移除 `apps/electron`；不要引用 Electron 实现、目录或验证命令。
+FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分支只维护 Tauri；不要引用已移除的迁移前实现、目录或验证命令。
 
 ## 先定位归属
 
@@ -41,8 +41,8 @@ FileTerm 的生产链路是 **Tauri 2 + Rust + React + TypeScript**。当前分�
 
 - Rust 窗口创建、原生菜单、tray、关闭生命周期：`apps/tauri/src-tauri/src/lib.rs`
 - 窗口动作与命令边界：`apps/tauri/src-tauri/src/commands/mod.rs`
-- 自绘菜单：`apps/tauri/src/renderer/features/layout/WindowMenubar.tsx`
-- renderer 平台分支：`apps/tauri/src/renderer/App.tsx`、`apps/tauri/src/renderer/main.tsx`
+- 自绘菜单：`apps/tauri/src/renderer/features/layout/window-menubar.tsx`
+- renderer 平台分支：`apps/tauri/src/renderer/app.tsx`、`apps/tauri/src/renderer/main.tsx`
 - shell 与平台样式：`apps/tauri/src/renderer/styles/features/shell.css`、`apps/tauri/src/renderer/styles/features/workstation-skin.css`
 
 ### 原生菜单、context menu 与关闭链路

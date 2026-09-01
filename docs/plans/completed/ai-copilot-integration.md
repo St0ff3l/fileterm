@@ -34,10 +34,10 @@ Copilot 对话区会先显示“等待前台输入”的说明，工具活动同
 ## 主要代码边界
 
 - `packages/core`：`AiToolCallProposal`、`AiToolCallResult`、`AiToolActivity` 和统一 stream event。
-- `services/ai.rs`：Provider 适配、旧历史迁移、工具循环和 tool activity 持久化。
-- `services/action_review.rs`：普通 exec、sudo/su 凭据解析、目标 revision 校验和稳定交互输入结果码。
-- `sessions/ssh.rs`：可见 shell PTY 与独立 exec channel；不再包含临时 interactive-exec worker。
-- `services/mcp.rs`：只保留普通 exec MCP/CLI 路由；generic interactive-exec 工具已删除。
+- `services/ai/mod.rs`：Provider 适配、旧历史迁移、工具循环和 tool activity 持久化。
+- `services/action_review/mod.rs`：普通 exec、sudo/su 凭据解析、目标 revision 校验和稳定交互输入结果码。
+- `sessions/ssh/mod.rs`：可见 shell PTY 与独立 exec channel；不再包含临时 interactive-exec worker。
+- `services/mcp/mod.rs`：只保留普通 exec MCP/CLI 路由；generic interactive-exec 工具已删除。
 - renderer/bridge：只保留 Copilot 工具活动与 sudo/su 本地安全输入，不再注册 generic remote-exec 输入弹窗。
 
 ## 迁移规则

@@ -181,9 +181,9 @@ setPaneWeights: (rootTabId: string, panePath: number[], weights: number[]) =>
 
 ## Renderer 改动
 
-### 新增组件 `SplitPaneLayout.tsx`
+### 新增组件 `split-pane-layout.tsx`
 
-位置：`apps/tauri/src/renderer/features/workspace/SplitPaneLayout.tsx`
+位置：`apps/tauri/src/renderer/features/workspace/split-pane-layout.tsx`
 
 - 递归渲染 `PaneNode`
 - `SessionWorkspace` 保留为共享外壳；leaf 只渲染 `TerminalView`

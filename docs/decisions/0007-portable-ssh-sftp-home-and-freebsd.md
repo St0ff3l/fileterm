@@ -119,7 +119,7 @@ SSH 密钥登录与密码登录只解决认证方式；它们不会决定 SFTP �
 ## 实现位置
 
 - `packages/core/src/index.ts`：远程平台类型。
-- `apps/tauri/src-tauri/src/sessions/system_metrics.rs`：POSIX/FreeBSD 探测、FreeBSD 指标命令和统一标记解析。
-- `apps/tauri/src-tauri/src/sessions/ssh.rs`：SFTP Home canonicalization、初始列表超时、符号链接单项超时和日志。
-- `apps/tauri/src/renderer/app/app-data.ts`、`apps/tauri/src/renderer/features/connections/ConnectionModal.tsx`：SSH/FTP 默认路径分流。
+- `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs`：POSIX/FreeBSD 探测、FreeBSD 指标命令和统一标记解析。
+- `apps/tauri/src-tauri/src/sessions/ssh/mod.rs`：SFTP Home canonicalization、初始列表超时、符号链接单项超时和日志。
+- `apps/tauri/src/renderer/app/app-data.ts`、`apps/tauri/src/renderer/features/connections/connection-modal.tsx`：SSH/FTP 默认路径分流。
 - [ADR-0006：SSH Shell 与 SFTP 使用不同路径命名空间](./0006-ssh-sftp-path-namespaces.md)：群晖 `/volumeN`、`/var/services` 和 CWD 跟随候选规则。

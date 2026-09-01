@@ -6,9 +6,9 @@
 
 - 跨层改动后运行 TypeScript 检查。
 - 提交到 GitHub 的分支与 Pull Request 默认通过常规 CI，至少覆盖 `npm ci`、`npm run typecheck` 与 `npm run build`。
-- Electron IPC 变更需要确认 `main -> preload -> renderer` 三层类型和调用保持一致；Tauri 变更需要确认 `Rust commands/events -> bridge -> renderer`。
+- 跨层改动需要确认 `Rust commands/events -> bridge -> renderer` 三层类型和调用保持一致。
 - 协议相关改动需要覆盖 SSH/SFTP 与 FTP 的差异路径。
-- Electron SSH/FTP controller 的连接生命周期、平台门控、输入输出、断线重连与操作串行化由 `apps/electron/test/controllers/` 直接测试；Tauri 对应能力由 Rust 测试覆盖，测试不访问公网。
+- SSH/FTP session 的连接生命周期、平台门控、输入输出、断线重连与操作串行化由 Rust 测试覆盖（`npm run test:tauri`），测试不访问公网。
 - 文件传输相关改动需要确认任务状态、进度、取消或失败提示不回退。
 - 主题相关改动需要确认明暗主题、终端配色和高频组件外观一致。
 - 桌面壳和布局相关改动需要同时检查 macOS 标题栏避让、明暗主题、收起态侧栏、终端输入条和文件面板抽屉。

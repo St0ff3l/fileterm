@@ -17,9 +17,9 @@
 ## 3. 影响目录
 
 - `packages/core`
-- `apps/desktop/src/main`
-- `apps/desktop/src/preload`
-- `apps/desktop/src/renderer`
+- `apps/tauri/src-tauri/src`（Rust backend）
+- `apps/tauri/src/bridge`（Tauri IPC 边界）
+- `apps/tauri/src/renderer`
 
 ## 4. IPC 设计
 

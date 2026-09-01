@@ -91,7 +91,8 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 代码入口：
 
 - [main.rs](../../../apps/tauri/src-tauri/src/main.rs)
-- [mcp.rs](../../../apps/tauri/src-tauri/src/services/mcp.rs)
+
+* [mcp/mod.rs](../../../apps/tauri/src-tauri/src/services/mcp/mod.rs)
 
 ### 2.3 当前权限策略
 
@@ -108,7 +109,7 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 
 ### 2.4 当前凭据处理
 
-连接 profile 的密码、私钥口令、代理密码、sudo 密码和 su 密码由 Rust main-side 读取和使用。公开 profile 只带非敏感存在标记，例如 hasSavedPassword，不会跨公开 bridge 返回明文。
+连接 profile 的密码、私钥口令、代理密码、sudo 密码和 su 密码由 Rust backend-side 读取和使用。公开 profile 只带非敏感存在标记，例如 hasSavedPassword，不会跨公开 bridge 返回明文。
 
 | 凭据                           | 当前处理方式                                                                 | 当前外部调用结果                                         |
 | ------------------------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- |

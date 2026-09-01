@@ -2,31 +2,31 @@
 
 更新日期：2026-07-15（macOS arm64 本机；Linux CI 计划已配置，尚未取得远端结果）
 
-> 本记录区分“本机/夹具已验证”和“发行候选必须手测”。此前把 Electron 协议测试、Tauri 代码存在性或 CI 配置误写为 Tauri 跨平台验收的地方，均以本页的证据状态为准。
+> 本记录区分“本机/夹具已验证”和“发行候选必须手测”。此前把 迁移前实现 协议测试、Tauri 代码存在性或 CI 配置误写为 Tauri 跨平台验收的地方，均以本页的证据状态为准。
 
 不能由本机自动化替代的发行候选步骤见 [Tauri 发行候选协议验收清单](tauri-rc-protocol-checklist.md)。
 
 ## 已执行结果
 
-| 项目                           | 结果                          | 说明                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rust 单元/协议夹具             | 通过，41 library + 9 contract | macOS 本机 `cargo test` 通过真实 OpenSSH 公钥/exec/SFTP/HTTP/SOCKS5 代理、`-L/-D` direct-tcpip、SSH MFA、多模式 FTPS、WebDAV HEAD/PUT/GET + ETag/hash、Telnet HTTP CONNECT/SOCKS5；包含“SFTP 超时不误报 SSH shell 失败”的回归。Linux PTY 用例已加入 CI，未在 macOS 运行。                                            |
-| Electron 真实协议测试          | 通过，7/7                     | 本机 `/usr/sbin/sshd` SFTP，FTP、显式 FTPS、隐式 FTPS；这是 Electron controller 证据，不能替代 Tauri 验收。                                                                                                                                                                                                          |
-| 真实 Synology SSH/SFTP 定位    | 服务端拒绝 SFTP               | 真实 DSM/OpenSSH 8.2 主机可完成密码 SSH shell；同一账户用系统 OpenSSH 的 `ssh -s sftp` 收到 `subsystem request failed on channel 0`，Electron `ssh2` 收到 `Unable to start subsystem: sftp`。故不是 Tauri 的网络、认证或 SFTP 请求顺序问题；Tauri 已改为保留 shell/隧道、在文件面板和 SSH 日志给出 SFTP 不可用原因。 |
-| Renderer 右键 UI smoke         | 通过                          | 本机 Vite + 注入的 Tauri bridge + headless Chrome 验证标签、远程文件、本地文件和终端右键菜单均实际打开；标签复制走 bridge clipboard，远程复制→本地粘贴触发下载，文件“刷新”调用 `openRemotePath`，终端粘贴写入 PTY。该验证覆盖共享 renderer 的菜单定位与派发，不代替打包 Tauri 原生菜单手测。                         |
-| Tauri production build         | 通过                          | 产出 `FileTerm.app` 与 `FileTerm_1.1.1_aarch64.dmg`；CSP 与本地 `.icns/.ico/.png` 图标参与实际打包。                                                                                                                                                                                                                 |
-| macOS socket lifecycle         | 通过                          | Telnet 直接 transport drop 后服务端在 2 秒内收到 EOF。                                                                                                                                                                                                                                                               |
-| Windows/Linux socket lifecycle | 已配置，未执行                | `.github/workflows/ci.yml` 的 `tauri-socket-lifecycle` 在 macOS、Windows、Ubuntu 各运行同一测试；需要推送后由 GitHub Actions 给出外部结果。                                                                                                                                                                          |
+| 项目                           | 结果                          | 说明                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rust 单元/协议夹具             | 通过，41 library + 9 contract | macOS 本机 `cargo test` 通过真实 OpenSSH 公钥/exec/SFTP/HTTP/SOCKS5 代理、`-L/-D` direct-tcpip、SSH MFA、多模式 FTPS、WebDAV HEAD/PUT/GET + ETag/hash、Telnet HTTP CONNECT/SOCKS5；包含“SFTP 超时不误报 SSH shell 失败”的回归。Linux PTY 用例已加入 CI，未在 macOS 运行。                                              |
+| 迁移前实现 真实协议测试        | 通过，7/7                     | 本机 `/usr/sbin/sshd` SFTP，FTP、显式 FTPS、隐式 FTPS；这是迁移前 controller 的证据，不能替代 Tauri 验收。                                                                                                                                                                                                             |
+| 真实 Synology SSH/SFTP 定位    | 服务端拒绝 SFTP               | 真实 DSM/OpenSSH 8.2 主机可完成密码 SSH shell；同一账户用系统 OpenSSH 的 `ssh -s sftp` 收到 `subsystem request failed on channel 0`，迁移前实现 `ssh2` 收到 `Unable to start subsystem: sftp`。故不是 Tauri 的网络、认证或 SFTP 请求顺序问题；Tauri 已改为保留 shell/隧道、在文件面板和 SSH 日志给出 SFTP 不可用原因。 |
+| Renderer 右键 UI smoke         | 通过                          | 本机 Vite + 注入的 Tauri bridge + headless Chrome 验证标签、远程文件、本地文件和终端右键菜单均实际打开；标签复制走 bridge clipboard，远程复制→本地粘贴触发下载，文件“刷新”调用 `openRemotePath`，终端粘贴写入 PTY。该验证覆盖共享 renderer 的菜单定位与派发，不代替打包 Tauri 原生菜单手测。                           |
+| Tauri production build         | 通过                          | 产出 `FileTerm.app` 与 `FileTerm_1.1.1_aarch64.dmg`；CSP 与本地 `.icns/.ico/.png` 图标参与实际打包。                                                                                                                                                                                                                   |
+| macOS socket lifecycle         | 通过                          | Telnet 直接 transport drop 后服务端在 2 秒内收到 EOF。                                                                                                                                                                                                                                                                 |
+| Windows/Linux socket lifecycle | 已配置，未执行                | `.github/workflows/ci.yml` 的 `tauri-socket-lifecycle` 在 macOS、Windows、Ubuntu 各运行同一测试；需要推送后由 GitHub Actions 给出外部结果。                                                                                                                                                                            |
 
 ## 性能基线
 
 同一台 macOS arm64 机器、隔离临时 HOME、冷启动后 2 秒采样一次主进程 RSS：
 
-| 指标            | 历史 Electron 42.4.0 / FileTerm 1.2.1（`/Applications/FileTerm.app`） | Tauri v2 / FileTerm 1.1.1 candidate | 结论                                 |
-| --------------- | --------------------------------------------------------------------: | ----------------------------------: | ------------------------------------ |
-| 进程可见时间    |                                                               约 5 ms |                             约 6 ms | 仅衡量 OS 创建进程，差异无统计意义。 |
-| 主进程 RSS      |                                                            约 228 MiB |                          约 116 MiB | Tauri 低约 49%。                     |
-| App bundle 体积 |                                                            约 608 MiB |                           约 40 MiB | Tauri 小约 93%。                     |
+| 指标            | 迁移前版本 42.4.0 / FileTerm 1.2.1（`/Applications/FileTerm.app`） | Tauri v2 / FileTerm 1.1.1 candidate | 结论                                 |
+| --------------- | -----------------------------------------------------------------: | ----------------------------------: | ------------------------------------ |
+| 进程可见时间    |                                                            约 5 ms |                             约 6 ms | 仅衡量 OS 创建进程，差异无统计意义。 |
+| 主进程 RSS      |                                                         约 228 MiB |                          约 116 MiB | Tauri 低约 49%。                     |
+| App bundle 体积 |                                                         约 608 MiB |                           约 40 MiB | Tauri 小约 93%。                     |
 
 该基线不是交互就绪（TTI）或远程吞吐基准；两者版本也不同。发行候选必须在每个平台用同一 profile、同一连接和同一大文件重复采样，再决定是否满足发布阈值。
 

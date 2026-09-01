@@ -1,6 +1,6 @@
 import type { LocalFileItem, RemoteFileItem } from '@fileterm/core'
 import { t } from '../../i18n'
-import type { AppIconName } from '../common/AppIcon'
+import type { AppIconName } from '../common/app-icon'
 
 type FileRow = Pick<LocalFileItem | RemoteFileItem, 'name' | 'type'>
 

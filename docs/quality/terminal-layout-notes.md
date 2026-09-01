@@ -52,7 +52,7 @@ terminal spacing issue = xterm mount box and fit box are the same node
 
 当前实现位置：
 
-- Tauri 结构调整在 [apps/tauri/src/renderer/components/TerminalView.tsx](../../apps/tauri/src/renderer/components/TerminalView.tsx#L700)
+- Tauri 结构调整在 [apps/tauri/src/renderer/components/terminal-view.tsx](../../apps/tauri/src/renderer/components/terminal-view.tsx#L700)
 - Tauri 通用尺寸约束在 [apps/tauri/src/renderer/styles/features/session.css](../../apps/tauri/src/renderer/styles/features/session.css#L43)
 - Tauri 视觉留白在 [apps/tauri/src/renderer/styles/features/workstation-skin.css](../../apps/tauri/src/renderer/styles/features/workstation-skin.css#L499)
 

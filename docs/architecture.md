@@ -17,7 +17,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 
 当前仓库已经具备 MVP 雏形，主要能力包括：
 
-当前唯一受维护、构建和发布的运行时是位于 `apps/tauri` 的 Rust + Tauri。`apps/electron` 保留为历史代码参考，不参与 CI、发行包或用户运行路径；共享包仍保持领域类型、纯工具和稳定数据格式。Tauri 已完成 Phase 0–4 的代码/contract 主体与本机协议夹具，发行仍以真实服务、实体设备、三平台 CI 和打包 UI 验收为准。
+当前唯一受维护、构建和发布的运行时是位于 `apps/tauri` 的 Rust + Tauri。历史桌面实现已从仓库彻底移除（删除提交 `2a2eb7ff`），不再保留任何参考目录、依赖或构建脚本；共享包仍保持领域类型、纯工具和稳定数据格式。Tauri 已完成 Phase 0–4 的代码/contract 主体与本机协议夹具，发行仍以真实服务、实体设备、三平台 CI 和打包 UI 验收为准。
 
 - Monorepo workspace 基础结构
 - Tauri 主窗口启动
@@ -56,7 +56,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 
 ### 2.1 Rust/Tauri 迁移边界
 
-- Tauri bridge 位于 `apps/tauri/src/bridge/tauri-api.ts`，Rust commands/services/sessions 位于 `apps/tauri/src-tauri/src/`；`apps/electron/` 仅供实现对照，不属于受维护运行时。
+- Tauri bridge 位于 `apps/tauri/src/bridge/tauri-api.ts`，Rust commands/services/sessions 位于 `apps/tauri/src-tauri/src/`；仓库内不存在第二个运行时目录。
 - Tauri 当前已覆盖桌面壳、JSON 存储、Workspace snapshot、可迁移的 SSH 私钥库，以及 russh SSH shell/SFTP/MFA/host verification、系统指标、CWD 跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 代理和运行时 SSH `-L/-R/-D` 隧道。
 - Tauri 已覆盖 Transfer、FTP/FTPS、Telnet、Serial、WebDAV 同步及 SSH 网络能力；Phase 3/4 的真实服务、实体设备和三平台验收仍是发行候选门禁。SFTP 被服务端拒绝时，Tauri 保留 SSH shell/隧道，并将文件通道故障单独广播到 renderer，而不误报为整条 SSH 连接失败。
 - SSH shell 与 SFTP 可能处于不同的文件系统根；`shellCwd` 保留 Shell 物理路径，`remotePath` 只保存 SFTP 命名空间路径。CWD 跟随先尝试原路径，遇到明确 `NoSuchFile` 后按实际 `/volumeN`、`/var/services` 和 Home chroot 候选探测，无法确认时保留最近有效的 SFTP 目录。完整背景、群晖示例和排查方式见 [ADR-0006](./decisions/0006-ssh-sftp-path-namespaces.md)。
@@ -72,13 +72,13 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
   - 只保存明暗主题 token。
 - `apps/tauri/src/renderer/styles/features/component-skins.css`
   - 内置主题的组件皮肤与兼容覆盖层；保持旧 UI 的选择器作用域和级联顺序。
-- `apps/tauri/src/renderer/hooks/useThemeMode.ts`
+- `apps/tauri/src/renderer/hooks/use-theme-mode.ts`
   - 通过 `document.documentElement.dataset.theme` 切换主题。
-- `apps/tauri/src/renderer/components/TerminalView.tsx`
+- `apps/tauri/src/renderer/components/terminal-view.tsx`
   - 从 CSS 变量读取终端主题色，确保终端外观和全局主题联动。
 - `apps/tauri/src/renderer/app/terminal-log-colorizer.ts`
   - 在 xterm 完成解析后对普通缓冲区的时间戳、服务名和常见日志级别着色；不向远端输出注入 ANSI，不处理 `top`、`vim`、`less` 等备用屏幕程序，并随终端主题重新套用颜色。
-- `apps/tauri/src/renderer/features/files/FileEditorModal.tsx`
+- `apps/tauri/src/renderer/features/files/file-editor-modal.tsx`
   - Monaco 主题从 CSS 变量读取，跟随深色/浅色主题切换。
 - `packages/core` 的 `ThemeConfig.baseThemeId` 记录自定义主题继承的内置基准，`UiPreferences.customThemes` 保存用户命名的主题；renderer 只将相对基准真正变化的变量覆盖到主题根节点，避免微调一个颜色时整套组件皮肤被重算。
 
@@ -100,14 +100,14 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - Tauri bundler
 - 文件型 profile 存储
 
-Electron 专用依赖（`ssh2`、`basic-ftp`、`serialport`、`electron-builder`）仅保留在历史参考目录 `apps/electron`；当前产品能力与发行使用 Tauri 对应 Rust crates，不应再将 Electron 依赖接入共享包或 CI。
+历史桌面实现的专用依赖（`ssh2`、`basic-ftp`、`serialport`、历史桌面打包器）已从仓库移除；当前产品能力与发行使用 Tauri 对应 Rust crates，不应再把这些依赖接回共享包或 CI。
 
 ### 已放弃或暂缓
 
 - Tailwind CSS：已放弃迁移。FileTerm 需要大量覆盖 xterm、Monaco、桌面壳和表格/文件面板细节，继续使用 `token -> theme vars -> component skins` 的 CSS 分层更可控。
 - Radix UI / shadcn/ui：暂不引入。当前自有组件和桌面式密集布局更贴近产品形态，避免再叠一层组件体系。
 - react-resizable-panels：暂不引入。现阶段文件面板和侧栏 resize 已由本地组件处理。
-- Zustand：已完成评估，当前不引入。`App.tsx` 已拆为 7 个领域 hooks 与布局组件，尚未出现需要跨多层组件共享可变状态的稳定场景；继续使用 React state、领域 hooks、workspace snapshot 与 IPC 广播。
+- Zustand：已完成评估，当前不引入。`app.tsx` 已拆为 7 个领域 hooks 与布局组件，尚未出现需要跨多层组件共享可变状态的稳定场景；继续使用 React state、领域 hooks、workspace snapshot 与 IPC 广播。
 - zod：暂不引入。类型先收敛到 `packages/core`，运行时校验如果变复杂再单独评估。
 - SQLite / Drizzle ORM：暂缓。当前连接配置使用文件型 profile 存储；等 profile、设置、传输历史的查询需求明确后再迁移。
 - 系统钥匙串：暂缓。敏感信息存储策略需要单独做安全设计，不混在 UI 或协议改动里。
@@ -161,9 +161,9 @@ Renderer UI
 
 - `packages/core`
   - 只定义原始指标结构与 renderer 需要的通用字段，不承载中文或英文展示字符串。
-- `main/services/sessions/*`
+- `apps/tauri/src-tauri/src/sessions/*`
   - 负责按远端平台探测并采集原始指标，例如 Linux `/proc`、BusyBox 兼容命令、未来的 Windows PowerShell。
-- `workspace-session-runtime`
+- `apps/tauri/src-tauri/src/services/workspace/state.rs`
   - 负责轮询、节流、网络历史合并、快照广播。
 - `renderer/features/system/*`
   - 只做展示、本地化、布局与表格格式化，不承担平台分支判断。
@@ -182,17 +182,17 @@ platform probe
 
 桌面壳相关状态目前属于 renderer 本地 UI 状态，不进入 main service：
 
-- 顶部标签栏、工作区焦点模式与标签切换动效由 `features/layout/TabBar.tsx`、`features/workspace/WorkspaceStage.tsx` 和 `App.tsx` 协作。
-- SSH 工作区的文件面板高度、抽屉收起状态、终端悬浮输入条由 `features/workspace/SessionWorkspace.tsx` 与 `features/terminal/TerminalDock.tsx` 处理。
-- 首页侧栏展开/收起、macOS 红绿灯避让和收起态左边界由 `features/workspace/HomeWorkspace.tsx` 与 `styles/features/home.css` 处理。
-- 系统监控的展开态详情和收起态资源摘要都在 `features/system/SystemSidebar.tsx` 展示，不把平台判断或采集逻辑放进 renderer。
+- 顶部标签栏、工作区焦点模式与标签切换动效由 `features/layout/tab-bar.tsx`、`features/workspace/workspace-stage.tsx` 和 `app.tsx` 协作。
+- SSH 工作区的文件面板高度、抽屉收起状态、终端悬浮输入条由 `features/workspace/session-workspace.tsx` 与 `features/terminal/terminal-dock.tsx` 处理。
+- 首页侧栏展开/收起、macOS 红绿灯避让和收起态左边界由 `features/workspace/home-workspace.tsx` 与 `styles/features/home.css` 处理。
+- 系统监控的展开态详情和收起态资源摘要都在 `features/system/system-sidebar.tsx` 展示，不把平台判断或采集逻辑放进 renderer。
 - 文件编辑器窗口继续通过 `Rust commands/events -> tauri-api.ts -> renderer` 打开，但编辑器内部的文件树、工具栏、状态栏和 Monaco 主题属于 renderer 组件状态。
 
 平台差异的原则：
 
 - renderer 从 `tauri-api.ts` 暴露的平台信息同步到 `document.documentElement.dataset.platform`。
 - 设置页展示的 runtime 名称与版本来自 Tauri bridge 和 Rust command，renderer 不写死运行时信息。
-- Tauri 的 renderer UI 状态通过 Rust command 持久化为 `ui-state.json` 键值对象；读取时兼容 Electron 的 `{ version, values }` 包装格式和早期 `{ key, value }[]` 数组格式，业务组件不得自行假设另一种文件结构。
+- Tauri 的 renderer UI 状态通过 Rust command 持久化为 `ui-state.json` 键值对象；读取时兼容历史 `{ version, values }` 包装格式和早期 `{ key, value }[]` 数组格式，业务组件不得自行假设另一种文件结构。
 - CSS 使用 `data-platform` 和稳定 class 做 macOS/Windows/Linux 差异化布局。
 - Tauri 无边框子窗口在 macOS 与 Windows 使用透明原生表面，由 renderer 的 `standalone-window-frame` 统一裁切圆角；Windows 主窗口通过平台专用配置使用相同的 renderer 圆角，并在最大化时取消圆角。Windows 子窗口保持隐藏到 React 首帧完成以避免 WebView2 启动闪烁，Linux 继续使用不透明原生表面。Linux 主窗口同样使用无边框 renderer chrome，与 Windows 共用紧凑菜单栏；Linux 独立窗口不得附加 GTK 应用菜单。
 - Windows 下严禁从同步 Tauri command、托盘回调或原生菜单回调直接执行 `WebviewWindowBuilder::build()`；WebView2 会在该上下文发生建窗死锁并阻塞后续全部 invoke。Renderer 建窗入口必须使用 async command，实际 builder 工作进入 blocking worker；原生事件入口也必须先交给 worker。
@@ -207,9 +207,9 @@ platform probe
 - 本地文件面板访问 SMB/UNC 路径时，首次认证失败由 Rust 返回稳定的 `SMB_CREDENTIALS_REQUIRED` 标记，经 `tauri-api.ts` 进入 renderer 凭据弹窗，再通过 `app_connect_local_network_share` 重试。macOS 主机级路径先查询可访问共享目录并由 renderer 让用户选择，再只挂载所选 `smbfs` 共享；Windows 使用临时 WNet 连接。SMB 系统命令有超时保护，账号和密码只在本次 IPC/系统连接期间驻留内存，不写入 profile、日志或 workspace snapshot；macOS 挂载会在应用退出时卸载。
 - Tauri workspace tab 状态由 Rust 枚举限制为 core `TabStatus` 的 `idle/connecting/connected/error/closed`；正常或主动断开使用 `closed`，worker/连接失败使用 `error`，renderer 不接受运行时自造状态字符串。
 - profile、folder、command 的持久化 mutation 由 Rust workspace 级锁串行化，成功后统一广播 `workspace:snapshot`；完整快照读取使用同一把锁，不能观察跨文件级联写入的中间态。广播失败只记录告警，不能把已经落盘的操作伪装成失败并诱发重复提交。
-- Rust 存储层可在 main-side 读取时解密并合并 `profile-secrets.json` 到短生命周期的内部 profile，但 `workspace:snapshot` 与独立窗口使用的 connection library 在跨 IPC 前必须统一剥离密码、私钥口令、私钥路径、代理密码、sudo 密码和 su 密码；公开 profile 仅可携带 `hasSavedPassword` / `hasSavedSudoPassword` / `hasSavedSuPassword` 这类非敏感存在标记。sudo 与 su 凭据始终分开保存和使用，不复用 SSH 登录密码。renderer 编辑脱敏 profile 时提交的空白 secret 只表示“未替换”，由 main-side 保留原值；显式 `null` 才表示清除。表单层 `proxyPassword` 必须在 main-side 规范化为 `proxy.password` 后进入 secret 文件，不能落入公开 `profiles.json`。
+- Rust 存储层可在 backend-side 读取时解密并合并 `profile-secrets.json` 到短生命周期的内部 profile，但 `workspace:snapshot` 与独立窗口使用的 connection library 在跨 IPC 前必须统一剥离密码、私钥口令、私钥路径、代理密码、sudo 密码和 su 密码；公开 profile 仅可携带 `hasSavedPassword` / `hasSavedSudoPassword` / `hasSavedSuPassword` 这类非敏感存在标记。sudo 与 su 凭据始终分开保存和使用，不复用 SSH 登录密码。renderer 编辑脱敏 profile 时提交的空白 secret 只表示“未替换”，由 backend-side 保留原值；显式 `null` 才表示清除。表单层 `proxyPassword` 必须在 backend-side 规范化为 `proxy.password` 后进入 secret 文件，不能落入公开 `profiles.json`。
 - SSH 可见终端中，只有在明确检测到 `sudo -i` 或 `su -` 的密码提示后，才允许从对应的 profile 凭据自动填充；未出现密码提示时不得盲写密码，也不得把密码写入 transcript 或日志。文件区工具栏切换 root 访问模式时始终打开方法选择窗口；用户选择 `sudo` 或 `su` 后，空密码提交由后端自动使用对应的已保存凭据，不向 renderer 回显密码，手动填写的密码只用于本次验证并按既有规则缓存。验证失败必须回滚当前权限状态。
-- Rust backend 在 Tauri userData 缺少迁移 marker 时，最多一次导入旧 Electron 用户目录中的应用自有 JSON/SSH key 数据；Tauri 当前数据按 ID 优先，legacy 只补缺失记录，整批 staging/commit 失败会回滚且不写 marker。迁移成功后不再 live merge，Chromium session 与缓存始终不迁移。Windows 便携版（`*-portable.exe`、带 `FILETERM_PORTABLE_BUILD=1` 编译标识的 portable 可执行文件，或 exe 同目录带 `portable` 标记文件）将应用自有存储根目录切换为 exe 旁的 `config`，普通安装版和开发版继续使用 Tauri app-data 目录；第一次切换时若 `config` 为空，会从原 Tauri app-data 复制应用自有 JSON、凭据密文、密钥和字体数据，使用独立 marker 防止重复覆盖，诊断日志和 MCP 运行时描述文件不复制。首次成功启动后，portable 还会在 exe 同目录持久化 `portable` 标记，因此用户清空 `config` 后不会再次从 `%APPDATA%` 或旧 Electron 目录回填数据；启动、迁移、字体导入和字体文件修复路径均写入同一存储根目录下的 `logs/app.log`。
+- Rust backend 在 Tauri userData 缺少迁移 marker 时，最多一次导入历史用户目录中的应用自有 JSON/SSH key 数据；Tauri 当前数据按 ID 优先，legacy 只补缺失记录，整批 staging/commit 失败会回滚且不写 marker。迁移成功后不再 live merge，Chromium session 与缓存始终不迁移。Windows 便携版（`*-portable.exe`、带 `FILETERM_PORTABLE_BUILD=1` 编译标识的 portable 可执行文件，或 exe 同目录带 `portable` 标记文件）将应用自有存储根目录切换为 exe 旁的 `config`，普通安装版和开发版继续使用 Tauri app-data 目录；第一次切换时若 `config` 为空，会从原 Tauri app-data 复制应用自有 JSON、凭据密文、密钥和字体数据，使用独立 marker 防止重复覆盖，诊断日志和 MCP 运行时描述文件不复制。首次成功启动后，portable 还会在 exe 同目录持久化 `portable` 标记，因此用户清空 `config` 后不会再次从 `%APPDATA%` 或历史用户目录回填数据；启动、迁移、字体导入和字体文件修复路径均写入同一存储根目录下的 `logs/app.log`。
 - 本地凭据字段（AI API Key、SSH 私钥口令、profile 密码/代理密码、sudo/su 密码、WebDAV 密码及 S3 Access/Secret Key）在 Rust 存储层以 AES-256-GCM 加密后再写入 JSON；密钥由每安装随机 seed 与当前设备稳定标识经 HMAC-SHA256 派生，并以字段用途/记录 ID 作为 AAD 绑定，旧版明文在首次读取后原子迁移。该实现不接入 macOS safeStorage/钥匙串、Windows DPAPI 或 Linux credential store，不触发系统授权弹窗；Unix seed/secret/key 文件在创建、迁移和读取自愈时收紧为 `0600`，Windows 依赖应用数据目录的用户 ACL。它防止静态文件被直接读取或被单独误传，不对获得当前用户运行权限的本机主动攻击者提供保护。WebDAV/S3 的远程备份包和用户显式导出的 JSON 仍是跨设备迁移载体，按既有行为可包含连接凭据；它们仅在 main/Rust 服务层序列化，不进入公开 snapshot、renderer 预览或日志。
 - Tauri backend 的持久化诊断统一进入 `services/logging.rs`：日志按 `app/window/protocol:tab/metrics/tunnel/transfer:id/local/update/webdav/profile` 分 scope，使用 `DEBUG/INFO/WARN/ERROR` 级别，并执行大小轮转与凭据标签脱敏。服务层不得只写 `stderr`；终端内容、文件内容、密码、token、私钥口令和完整主机指纹不得进入诊断日志。
 - 用户主动开启设备配置中的“自动保存会话日志”后，`services/session_logs.rs` 独立按 tab 写入终端收到的输出；它不采集键盘输入，远端回显内容仍可能出现在日志中。默认目录为当前存储根目录下的 `session-logs`（便携版位于 exe 旁的 `config\session-logs`），也可按设备指定目录；关闭标签、重连或退出应用前会刷新写入队列。手动保存通过 `app_save_session_log` 和系统保存对话框导出当前 transcript，FTP 不提供该能力。
@@ -225,6 +225,11 @@ platform probe
 
 ## 4.4 SSH 终端与文件身份联动
 
+- SSH session 的实现按目录职责组织：`files.rs`、`shell.rs`、
+  `authentication.rs` 和 `transport.rs` 只保留兼容 facade，具体 SFTP/传输、
+  CWD/root/setup/encoding、主认证/KBI、以及 host/jump/proxy/session 逻辑位于
+  `sessions/ssh/` 下的片段中；这些片段仍共享 session 的私有边界，后续再收口为
+  独立 Rust module 与 `SshSessionContext`。
 - 远端 shell integration 在 prompt 上报真实 `cwd` 和 `id -un`，renderer 不解析命令文本、提示符或 `sudo` 输出。
 - 每个 SSH controller 的首次用户上报是登录身份；后续终端用户变化会单向驱动文件访问身份，并在切换成功后按最新 cwd 重新跟随。
 - 文件区手动切换 user/root 只改变独立的 SFTP/exec 文件通道，不向交互终端写命令；相同 shell 用户的重复 prompt 不会覆盖手动选择。
@@ -234,7 +239,7 @@ platform probe
 
 ## 4.5 MCP / CLI 外部客户端桥接边界
 
-FileTerm 自带一套面向外部客户端的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；外部客户端的基础安全操作映射到同一桌面审批边界。
+FileTerm 自带一套面向外部客户端的能力桥，与内置 AI Copilot 面板**完全独立、并行、不互相调用**。外部 MCP/CLI 与内置 Copilot 不共享 Provider 会话，但共享 `services/action_review/mod.rs` 的一次性审批队列、独立 SSH exec channel 和目标校验；外部客户端的基础安全操作映射到同一桌面审批边界。
 
 ```txt
 外部 Agent（MCP）       外部 Agent（CLI JSONL）    shell 脚本
@@ -254,13 +259,13 @@ fileterm mcp             fileterm cli --jsonl fileterm cli <cmd>
               │ dispatch_bridge_request
               ▼
    workspace / sessions / transfers
-   ── 写操作 ──> action_review.rs 审批队列
+   ── 写操作 ──> action_review/mod.rs 审批队列
                        │
                        ▼
               应用内审批对话框
 ```
 
-- 代码集中在 `apps/tauri/src-tauri/src/services/mcp.rs`（手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
+- 代码集中在 `apps/tauri/src-tauri/src/services/mcp/mod.rs`（手写实现，无 `rmcp` / `clap` 依赖）；审批队列在 `services/action_review/mod.rs`；入口路由在 `apps/tauri/src-tauri/src/main.rs`。
 - 同一份桌面可执行文件承担 GUI、MCP server 和 CLI 两种模式：无命令参数时启动桌面 GUI；`mcp` → `run_mcp_stdio`；其他参数先进入 `run_cli`，其中 `cli --jsonl` → `run_cli_jsonl`，其余为一次性 CLI。所有非 GUI 参数都在 Tauri 初始化前处理，避免把外部客户端请求误启动成桌面窗口。
 - `fileterm cli --jsonl` 是不初始化 Tauri GUI 的常驻 JSONL bridge，使用固定 worker pool 处理多个 request ID；每个请求的 progress 和最终结果均带回同一个 ID。CLI JSONL 请求始终强制遵循桌面端审批策略，并可用 `cancel_request` 停止仍在等待的请求；取消不回滚桌面端已经接受或开始执行的操作。外部 Agent 必须启动一次 `fileterm cli --jsonl` 或 `fileterm mcp` 并复用进程，不能按每个动作启动一次性 CLI；一次性 CLI 仅保留给用户手动调试和 shell 脚本。一次性 CLI 每次调用都会创建新的 FileTerm OS 进程，2.2.7 的 headless 分流避免启动 GUI，但不会让一次性进程变成复用连接。连接 single-flight 只能去重桌面连接任务，不能消除已经启动的进程。CLI/MCP 的后台打开请求仍由正在运行的 FileTerm App 持有同一个 session worker；它会隐藏在顶部标签栏之外，显示在“后台会话”页面，GUI 或 `fileterm_activate_session` attach 后才进入可见标签。
 - 桌面应用 setup 阶段在 `lib.rs` 调用 `start_runtime`，绑定 `127.0.0.1:0` 随机端口，把 `{protocol_version, address, token}` 写到 owner-only 的 `mcp-runtime.json`；进程退出时清理 descriptor 文件。
@@ -296,33 +301,33 @@ fileterm/
     extensions/
       README.md
   apps/
-    desktop/
+    tauri/
       index.html
       package.json
       tsconfig.json
-      tsconfig.node.json
       vite.config.ts
       src/
-        main/
-          main.ts
-          ipc.ts
-          services/
-            file-profile-repository.ts
-            local-files-service.ts
-            session-controllers.ts
-            workspace-service.ts
-        preload/
-          preload.cts
+        bridge/
+          tauri-api.ts
         renderer/
-          App.tsx
+          app.tsx
           i18n.ts
           main.tsx
           vite-env.d.ts
           components/
-            TerminalView.tsx
+            terminal-view.tsx
+          features/
+          hooks/
           styles/
-            app.css
             themes/
+      src-tauri/
+        src/
+          commands/
+          services/
+          sessions/
+          storage/
+          lib.rs
+          main.rs
   packages/
     core/
       src/
@@ -338,7 +343,8 @@ fileterm/
 ## 6. 仓库结构
 
 当前仓库采用以 Tauri 为唯一维护运行时的 `npm workspaces` monorepo。协议能力保留在 Rust
-session/service，不下沉为伪通用 `protocol-*` package；Electron 源码只用于必要时的历史行为对照。
+session/service，不下沉为伪通用 `protocol-*` package。历史桌面实现已从仓库移除（删除提交
+`2a2eb7ff`），需要对照旧行为时请从 git 历史检出。
 
 ```txt
 fileterm/
@@ -348,12 +354,6 @@ fileterm/
         renderer/
         bridge/
       src-tauri/
-    electron/
-      src/
-        main/
-        preload/
-        renderer/
-      # historical reference only
   packages/
     core/
     storage/
@@ -365,9 +365,9 @@ fileterm/
 - `apps/tauri`
   - Tauri CLI、Rust 后端、Tauri bridge 与专用 React renderer
   - 只处理 Tauri 窗口、commands/events 与对应发行产物
-- `apps/electron`
-  - Electron main、preload 与专用 React renderer 的历史实现参考
-  - 不独立构建、测试或发布，也不能成为 Tauri 的运行时依赖
+- 历史桌面实现
+  - **已删除**（提交 `2a2eb7ff`），当前仓库不保留其 main、bridge 与专用 React renderer
+  - 如需查阅历史实现，请从 git 历史中检出该提交之前的版本
 - `packages/core`
   - 领域模型
   - Session interface
@@ -386,7 +386,7 @@ fileterm/
   - 轻量共享工具
 - `apps/tauri/src/renderer`
   - Tauri 的 UI 组件、hooks、主题、终端、文件管理与窗口布局
-  - 不允许反向 import Electron；跨层只在 `packages/*` 共享无运行时依赖的类型和数据格式
+  - 跨层只在 `packages/*` 共享无运行时依赖的类型和数据格式；renderer 不允许绕过 `bridge/tauri-api.ts` 直接 `invoke`
 
 ## 7. 会话模型
 
@@ -626,12 +626,12 @@ tokens -> theme vars -> component skins -> terminal colors
 当前策略：
 
 - 连接配置保存在 `profiles.json`；SSH profile 只保存 `privateKeyId`。导入的私钥原文存放在 `ssh-keys/{id}.key`，元数据在 `ssh-keys.json`，可选口令在 `ssh-key-secrets.json`。
-- 产品定位偏向个人/小团队的本地桌面工具，依赖操作系统对应用用户数据目录的权限隔离；不额外引入 Electron `safeStorage`、系统钥匙串或密文存储层，避免跨平台弹窗和钥匙串依赖破坏独立运行体验。
+- 产品定位偏向个人/小团队的本地桌面工具，依赖操作系统对应用用户数据目录的权限隔离；不额外引入 `safeStorage`、系统钥匙串或密文存储层，避免跨平台弹窗和钥匙串依赖破坏独立运行体验。
 - 该策略是有意为之，不作为后续安全专项规划。如果未来产品定位转向多用户/企业场景，再重新评估存储安全模型，届时单独出 ADR 决策。
 
 ## 13. 状态管理
 
-当前状态由 React state、7 个领域 hooks、workspace service snapshot 与 IPC 广播驱动。`App.tsx` 和 workspace service 的领域边界拆分完成后已重新评估 Zustand，结论是现有 hooks 编排足以满足当前共享范围，不引入额外 store。详见 [ADR-0004](./decisions/0004-retain-domain-hooks-without-zustand.md)。
+当前状态由 React state、7 个领域 hooks、workspace service snapshot 与 IPC 广播驱动。`app.tsx` 和 workspace service 的领域边界拆分完成后已重新评估 Zustand，结论是现有 hooks 编排足以满足当前共享范围，不引入额外 store。详见 [ADR-0004](./decisions/0004-retain-domain-hooks-without-zustand.md)。
 
 只有在出现多个非父子 feature 需要直接订阅同一份高频可变状态、且现有 props/IPC snapshot 明显造成重复状态或性能问题时，才重新评估 store。届时按领域拆 store，而不是一个全局超级 store：
 
@@ -645,17 +645,17 @@ tokens -> theme vars -> component skins -> terminal colors
 
 ## 14. 当前重构热点
 
-上一轮重构热点（工作区、会话控制与 App.tsx 职责混合）已结束。拆分结果：
+上一轮重构热点（工作区、会话控制与 app.tsx 职责混合）已结束。拆分结果：
 
-- `apps/tauri/src-tauri/src/services/workspace.rs`：工作区状态、会话、传输与跨窗口广播在 Rust backend 收口。
+- `apps/tauri/src-tauri/src/services/workspace/mod.rs`：工作区状态、会话、传输与跨窗口广播在 Rust backend 收口。
 - `apps/tauri/src-tauri/src/sessions/`：SSH、FTP/FTPS、Telnet、Serial 保持物理隔离。
-- `apps/tauri/src/renderer/App.tsx`：Tauri 专用工作区入口；不依赖 Electron renderer 组件或 hooks。
+- `apps/tauri/src/renderer/app.tsx`：Tauri 专用工作区入口；不依赖历史 renderer 组件或 hooks。
 
 当前阶段的关注重点已转移：
 
 - **存储策略已明确**：连接配置与密码仍采用文件型明文存储；SSH 私钥库则将 profile 引用、私钥原文和可选口令分离到独立文件，但不引入 `safeStorage`、系统钥匙串或密文存储层。详见第 12 节。该策略是有意为之，非待办债务。
-- **系统指标多平台覆盖**：Tauri 位于 `apps/tauri/src-tauri/src/sessions/system_metrics.rs`，以 Rust service 测试和三平台 CI 验收。
-- **Rust/Tauri 测试**：以 Rust unit/integration/contract test、协议夹具和发行候选清单为准；Electron controller 测试不再是门禁。
+- **系统指标多平台覆盖**：Tauri 位于 `apps/tauri/src-tauri/src/sessions/system_metrics/mod.rs`，由 exec、parser 和平台 command builder 片段组成，以 Rust service 测试和三平台 CI 验收。
+- **Rust/Tauri 测试**：以 Rust unit/integration/contract test、协议夹具和发行候选清单为准；历史 controller 测试不再是门禁。
 - **renderer 组件测试**：当前测试集中在 Rust service 与协议领域逻辑，UI 组件与交互暂无自动化覆盖，可作为下一步补充。
 
 建议进入小步迭代阶段：不再做大规模结构拆分，而是围绕安全专项、平台扩展和测试厚度持续巩固。

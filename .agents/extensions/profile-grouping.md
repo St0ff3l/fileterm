@@ -12,9 +12,9 @@
 
 - `packages/core`：需要扩展数据模型，增加对“文件夹”类型和层级/排序信息的支持。
 - `packages/storage`：需要持久化存储层级结构和顺序。
-- `apps/desktop/src/main/services`：需要增加对文件夹的 CRUD 操作，以及调整顺序/父级状态的方法。
-- `apps/desktop/src/main/ipc` & `preload.cts`：新增分组和排序相关的 IPC 接口。
-- `apps/desktop/src/renderer`：`ConnectionManagerModal` 组件需要引入 HTML5 原生拖拽 API（`draggable`, `onDragStart`, `onDragOver`, `onDrop`），并渲染树形或带缩进的列表视图，增加“新建文件夹”按钮。
+- `apps/tauri/src-tauri/src/services`：需要增加对文件夹的 CRUD 操作，以及调整顺序/父级状态的方法。
+- `apps/tauri/src/bridge`（Tauri IPC 边界）：新增分组和排序相关的 IPC 接口。
+- `apps/tauri/src/renderer`：`ConnectionManagerModal` 组件需要引入 HTML5 原生拖拽 API（`draggable`, `onDragStart`, `onDragOver`, `onDrop`），并渲染树形或带缩进的列表视图，增加“新建文件夹”按钮。
 
 ## 3. 数据模型设计 (`packages/core/src/index.ts`)
 
@@ -46,7 +46,7 @@ export interface BaseProfile extends BaseEntity {
 ## 4. 实施步骤
 
 1. **Model 层**：在 `@fileterm/core` 引入 `ConnectionFolder` 模型，并在 `BaseProfile` 中添加 `parentId` 和 `order`。
-2. **Storage 层**：让 `file-profile-repository.ts` 能存取含有 folder 节点的数据结构，或者专门维护一份 `folders.json`，但推荐存在一起（`profiles.json` -> `entities.json`，或在现有的 `profiles` 数组里混合存放 `folder`）。
+2. **Storage 层**：在 `apps/tauri/src-tauri/src/services/profile_ops/` 中让 profile 存储服务能存取含有 folder 节点的数据结构，或者专门维护一份 `folders.json`，但推荐存在一起（`profiles.json` -> `entities.json`，或在现有的 `profiles` 数组里混合存放 `folder`）。
 3. **IPC 层**：
    - `createFolder(name, parentId)`
    - `updateEntityOrder(id, newParentId, newOrder)`

@@ -62,6 +62,31 @@ fn command_body<'a>(source: &'a str, name: &str) -> &'a str {
     &remainder[..end]
 }
 
+fn commands_source() -> &'static str {
+    concat!(
+        include_str!("../src/commands/terminal_input.rs"),
+        include_str!("../src/commands/connection_preferences.rs"),
+        include_str!("../src/commands/import_commands.rs"),
+        include_str!("../src/commands/interaction_commands.rs"),
+        include_str!("../src/commands/platform_commands.rs"),
+        include_str!("../src/commands/serial_commands.rs"),
+        include_str!("../src/commands/terminal_commands.rs"),
+        include_str!("../src/commands/transfer_commands.rs"),
+        include_str!("../src/commands/tunnel_commands.rs"),
+        include_str!("../src/commands/workspace_commands.rs"),
+        include_str!("../src/commands/window_commands.rs"),
+        include_str!("../src/commands/session_runtime.rs"),
+        include_str!("../src/commands/session_spawn.rs"),
+        include_str!("../src/commands/tab_layout.rs"),
+        include_str!("../src/commands/tab_lifecycle.rs"),
+        include_str!("../src/commands/ui_preferences.rs"),
+        include_str!("../src/commands/ui_preferences_commands.rs"),
+        include_str!("../src/commands/profile_commands.rs"),
+        include_str!("../src/commands/remote_file_commands.rs"),
+        include_str!("../src/commands/ai_commands.rs"),
+    )
+}
+
 // ── Secret stripping contract ────────────────────────────────────────────
 
 #[test]
@@ -296,7 +321,11 @@ fn contract_events_use_namespace_colon_name() {
 
 #[test]
 fn transfer_updates_do_not_broadcast_workspace_snapshots() {
-    let source = include_str!("../src/services/transfers.rs");
+    let source = concat!(
+        include_str!("../src/services/transfers/mod.rs"),
+        include_str!("../src/services/transfers/runtime.rs"),
+        include_str!("../src/services/transfers/directory_execution.rs"),
+    );
     assert!(
         source.contains("EventTarget::webview_window(\"main\")")
             && source.contains("\"transfer:update\"")
@@ -344,7 +373,7 @@ fn renderer_csp_allows_runtime_styles_without_relaxing_scripts() {
 
 #[test]
 fn ui_preference_setter_returns_the_shared_contract_shape() {
-    let source = include_str!("../src/commands/mod.rs");
+    let source = commands_source();
     assert!(
         source.contains("Result<UiPreferences, AppError>"),
         "app_set_ui_preferences must return the updated preferences like Electron and FileTermDesktopApi"
@@ -362,7 +391,7 @@ fn ui_preference_setter_returns_the_shared_contract_shape() {
 
 #[test]
 fn connection_library_never_returns_profile_secrets() {
-    let source = include_str!("../src/commands/mod.rs");
+    let source = commands_source();
     let start = source
         .find("pub async fn app_get_connection_library")
         .expect("connection library command must exist");
@@ -380,7 +409,7 @@ fn connection_library_never_returns_profile_secrets() {
 
 #[test]
 fn profile_and_command_mutations_are_serialized_and_broadcast() {
-    let source = include_str!("../src/commands/mod.rs");
+    let source = commands_source();
     let mutations = [
         "app_workspace_mutation",
         "app_create_profile",
@@ -420,17 +449,97 @@ fn profile_and_command_mutations_are_serialized_and_broadcast() {
 
 #[test]
 fn protocol_workers_publish_connected_closed_and_error_states() {
+    let ssh_worker_source = concat!(
+        include_str!("../src/sessions/ssh/runtime.rs"),
+        include_str!("../src/sessions/ssh/worker/loop.rs"),
+        include_str!("../src/sessions/ssh/worker/remote_exec.rs"),
+        include_str!("../src/sessions/ssh/worker/without_sftp.rs"),
+        include_str!("../src/sessions/ssh/worker/dispatch.rs"),
+    );
     let protocols = [
-        ("SSH", include_str!("../src/sessions/ssh.rs")),
-        ("FTP", include_str!("../src/sessions/ftp.rs")),
-        ("Telnet", include_str!("../src/sessions/telnet.rs")),
-        ("Serial", include_str!("../src/sessions/serial/mod.rs")),
+        ("SSH", ssh_worker_source),
+        (
+            "FTP",
+            concat!(
+                include_str!("../src/sessions/ftp/worker.rs"),
+                include_str!("../src/sessions/ftp/transport.rs"),
+            ),
+        ),
+        (
+            "Telnet",
+            concat!(
+                include_str!("../src/sessions/telnet/mod.rs"),
+                include_str!("../src/sessions/telnet/worker.rs"),
+            ),
+        ),
+        (
+            "Serial",
+            concat!(
+                include_str!("../src/sessions/serial/mod.rs"),
+                include_str!("../src/sessions/serial/worker.rs"),
+            ),
+        ),
     ];
     for (name, source) in protocols {
         for status in ["Connected", "Closed", "Error"] {
             assert!(
                 source.contains(&format!("WorkspaceTabStatus::{status}")),
                 "{name} worker must map its lifecycle to WorkspaceTabStatus::{status}"
+            );
+        }
+    }
+}
+
+#[test]
+fn ssh_source_facades_keep_responsibility_fragments_local() {
+    let facades: &[(&str, &str, &[&str])] = &[
+        (
+            "files",
+            include_str!("../src/sessions/ssh/files.rs"),
+            &[
+                "sftp_files.rs",
+                "transfer_io.rs",
+                "root_transfer.rs",
+                "shell_exec.rs",
+            ],
+        ),
+        (
+            "shell",
+            include_str!("../src/sessions/ssh/shell.rs"),
+            &[
+                "shell/cwd.rs",
+                "shell/root_access.rs",
+                "shell/shell_setup.rs",
+                "shell/encoding.rs",
+            ],
+        ),
+        (
+            "authentication",
+            include_str!("../src/sessions/ssh/authentication.rs"),
+            &[
+                "authentication/common.rs",
+                "authentication/primary.rs",
+                "authentication/keyboard_interactive.rs",
+            ],
+        ),
+        (
+            "transport",
+            include_str!("../src/sessions/ssh/transport.rs"),
+            &[
+                "transport/host.rs",
+                "transport/jump.rs",
+                "transport/proxy.rs",
+                "transport/credentials.rs",
+                "transport/session.rs",
+            ],
+        ),
+    ];
+
+    for (name, facade, fragments) in facades {
+        for fragment in *fragments {
+            assert!(
+                facade.contains(&format!("include!(\"{fragment}\");")),
+                "SSH {name} facade must include its directory-local {fragment} fragment"
             );
         }
     }
@@ -521,7 +630,7 @@ fn native_drop_fallback_is_cleared_only_after_renderer_consumption() {
         bridge.contains("consume: clearNativeDropFallback"),
         "native drop events must expose an explicit acknowledgement"
     );
-    let renderer = include_str!("../../src/renderer/hooks/useFileOperations.ts");
+    let renderer = include_str!("../../src/renderer/hooks/file-operations-transfers.ts");
     assert!(
         renderer.contains("detail.consume()"),
         "the accepted remote-pane drop must acknowledge native path consumption"

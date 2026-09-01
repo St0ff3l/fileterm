@@ -1,6 +1,6 @@
 import type { DragEvent, MouseEvent } from 'react'
 import type { LocalFileItem, TransferTask, WorkspaceTab } from '@fileterm/core'
-import type { AppIconName } from '../features/common/AppIcon'
+import type { AppIconName } from '../features/common/app-icon'
 import { formatMessage, localizeErrorScope, t } from '../i18n'
 
 export const localFileDragType = 'application/x-fileterm-local-file'

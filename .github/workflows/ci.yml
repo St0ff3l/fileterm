@@ -34,7 +34,7 @@ jobs:
       - name: Audit production npm dependencies
         run: npm audit --omit=dev --audit-level=low
 
-      # The workspace keeps Electron and lint/build tooling as dev dependencies.
+      # The workspace keeps lint/build tooling as dev dependencies.
       # Report advisories for those tools, but do not block the application gate
       # when npm publishes a new advisory for a package that is not shipped.
       - name: Report development npm dependency advisories

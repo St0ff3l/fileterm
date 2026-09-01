@@ -1,13 +1,13 @@
 > 归档状态（2026-07-23）：Phase 0–4 代码/contract 主体已完成；Phase 5 及真实服务/设备验收、三平台 socket lifecycle CI 结果因外部依赖（真实设备/服务、签名证书、仓库 Secret）和产品决策暂停。本文档移至 `docs/plans/completed/`。
 
-# Tauri 迁移进度与 Electron 历史参考差距
+# Tauri 迁移进度与迁移前实现历史参考差距
 
-| 项目     | 值                                                                                                                         |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 文档版本 | v1.2                                                                                                                       |
-| 更新日期 | 2026-07-17                                                                                                                 |
-| 状态     | Tauri 与 Electron 均为独立运行入口；Tauri Phase 0–4 的代码主体与本地协议夹具已完成，Phase 5 发布与外部发行候选验收进行中。 |
-| 关联文档 | `russh-migration.md`、`rust-backend-migration-plan.md`                                                                     |
+| 项目     | 值                                                                                                         |
+| -------- | ---------------------------------------------------------------------------------------------------------- |
+| 文档版本 | v1.2                                                                                                       |
+| 更新日期 | 2026-07-17                                                                                                 |
+| 状态     | Tauri 是当前唯一运行入口；Phase 0–4 的代码主体与本地协议夹具已完成，Phase 5 发布与外部发行候选验收进行中。 |
+| 关联文档 | `russh-migration.md`、`rust-backend-migration-plan.md`                                                     |
 
 ---
 
@@ -15,22 +15,22 @@
 
 ### 运行时与版本核对（2026-07-15）
 
-| 项目          | 当前事实                                                                                                         |
-| ------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Electron 参考 | Electron `42.4.0` 位于 `apps/electron`，仅保留 main、preload、renderer 作为历史实现对照；不参与 CI、测试或打包。 |
-| Tauri 运行时  | Tauri v2 位于 `apps/tauri`；Rust crate 锁定 `tauri 2.11.5`、`russh 0.62.2`、`russh-sftp 2.3.0`。                 |
-| npm manifest  | `apps/tauri/package.json` 与 `apps/electron/package.json` 分别声明运行时依赖；lockfile 同时锁定两者。            |
-| 数据边界      | 两个 app 使用不同 userData；Tauri 仅首次 current-wins 导入 Electron 数据，之后禁止 live merge。                  |
-| 前端边界      | React renderer、CSS、hooks、bridge/preload 均物理分叉；共享只允许进入 `packages/*`。                             |
+| 项目           | 当前事实                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------ |
+| 迁移前实现参考 | 迁移前版本 `42.4.0` 仅保留在历史记录中；不参与 CI、测试或打包。                                  |
+| Tauri 运行时   | Tauri v2 位于 `apps/tauri`；Rust crate 锁定 `tauri 2.11.5`、`russh 0.62.2`、`russh-sftp 2.3.0`。 |
+| npm manifest   | 当前由 `apps/tauri/package.json` 声明运行时依赖，lockfile 以当前 workspace 为准。                |
+| 数据边界       | Tauri 仅首次 current-wins 导入历史用户数据，之后禁止 live merge。                                |
+| 前端边界       | 当前只维护一套 React renderer、CSS、hooks 和 Tauri bridge；共享只允许进入 `packages/*`。         |
 
-因此，当前不是“二选一”的切换阶段：两个 runtime 并行演进。剩余 Tauri 工作集中在跨平台构建、真实服务/设备验收和签名发布；跨端功能必须单独计划与验证。
+因此，当前已完成运行时收口。剩余 Tauri 工作集中在跨平台构建、真实服务/设备验收和签名发布。
 
 ### 2026-07-14 重新审计结论（覆盖下方历史“完成”标记）
 
 | 阶段    | 代码状态                          | 不能宣称完成的原因                                                                                                                                                                                            |
 | ------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Phase 0 | ✅ 代码/contract 完成，待 UI 手测 | renderer mount 前等待 Rust/Tauri metadata；原生 drag-drop 路径保留至目标确认消费。仍需在实际 Tauri webview 验证事件时序、多文件路径与 Windows 内部排序。                                                      |
-| Phase 1 | ✅ 代码/contract 完成，待 UI 手测 | `showWindowMenu` 已替换为 Rust 原生 File/View/Window 弹出菜单；文件编辑器取消关闭已清除 main-side pending state。仍未在打包 Tauri 应用中手测菜单坐标、缩放、关闭确认和多窗口焦点。                            |
+| Phase 1 | ✅ 代码/contract 完成，待 UI 手测 | `showWindowMenu` 已替换为 Rust 原生 File/View/Window 弹出菜单；文件编辑器取消关闭已清除 backend-side pending state。仍未在打包 Tauri 应用中手测菜单坐标、缩放、关闭确认和多窗口焦点。                         |
 | Phase 2 | ✅ 代码与 contract 覆盖已完成     | 未做完整多窗口 renderer 端到端回归；作为实现里程碑完成，但不是发行验收。                                                                                                                                      |
 | Phase 3 | ⚠️ 代码主体已实现                 | 真实 sshd 已覆盖公钥、exec、SFTP、HTTP/SOCKS5 代理、local/dynamic direct-tcpip；跳板、远程转发、sudo/root、CWD UI 事件、完整指标流和 OpenSSH/PAM MFA 尚未在发行候选闭环。macOS 远端指标当前探测为 `unknown`。 |
 | Phase 4 | ✅ 代码主体完成，外部验收进行中   | 已覆盖真实 FTPS、WebDAV HEAD/PUT/GET + ETag/hash、Telnet HTTP/SOCKS5 代理和 Linux PTY；仍缺真实 Telnet 设备/代理、真实 WebDAV 服务、macOS/Windows 串口和三平台 socket CI 实际结果。                           |
@@ -39,7 +39,7 @@
 
 ### Phase 0：Tauri 直连骨架与基础能力 ✅ 代码/contract 完成，待原生 UI 手测
 
-- ✅ `apps/tauri/src/bridge/tauri-api.ts` 建立，Tauri renderer 不再直接 import Electron 类型
+- ✅ `apps/tauri/src/bridge/tauri-api.ts` 建立，Tauri renderer 不再直接依赖迁移前实现类型
 - ✅ Tauri 基础 commands：平台信息、剪贴板、UI preferences/state
 - ✅ React bridge 接入，renderer 通过 `tauri-api.ts` 初始化
 - ✅ Contract test 建立（`tests/contract.rs`，14 项断言）
@@ -50,7 +50,7 @@
 - ✅ Tauri 壳加载 React renderer
 - ✅ macOS Overlay titleBar + trafficLightPosition(20,18)
 - ✅ Windows 无边框 + Linux 原生 decorations
-- ✅ 窗口尺寸对齐 Electron 默认值（main 1280×820，子窗口 860×680）
+- ✅ 窗口尺寸沿用迁移前默认值（主窗口 1280×820，子窗口 860×680）
 - ✅ 菜单 + 托盘 + macOS dock reopen
 - ✅ 原生快捷键收口：macOS `Cmd+Q` / `Cmd+W`、Windows/Linux `Alt+F4` / `Ctrl+W` 分别进入同一 quit-confirm 或 active-workspace/child-window close 链路，不绕过 transfer journal 或文件编辑器关闭确认。
 - ✅ Windows 自绘菜单栏的 `File` / `View` / `Window` 原生 popup：新建/管理器/日志、reload/zoom、最小化/最大化/关闭均由 Rust `on_menu_event` 执行；release 包不会显示不可用的开发者工具项
@@ -60,12 +60,12 @@
 ### Phase 2：Rust 存储与 Workspace ✅ 代码/contract 完成
 
 - ✅ JSON 存储读写（profiles.json / profile-secrets.json / ssh-keys.json / ssh-key-secrets.json / folders.json / command-folders.json / commands.json / ui-preferences.json / ui-state.json / webdav-sync.json）
-- ✅ Profile/Folder/Command CRUD（`services/profile_ops.rs`）
+- ✅ Profile/Folder/Command CRUD（`services/profile_ops/mod.rs`）
 - ✅ group/parentId 双向自愈（5 个单元测试覆盖）
 - ✅ Secrets stripping + 持久化（contract test 专项断言）
 - ✅ Ordering（profile/folder/command/command-folder）
-- ✅ 旧 Electron userData 一次性迁移：version marker、Tauri current-wins、删除不复活、整批失败回滚。
-- ✅ SSH 私钥库：旧 Electron `ssh-keys` 元数据、索引内私钥文件和保存口令只迁移一次；孤儿 secret/key 不导入，私钥文件以独立目录保存，profile 仅引用 `privateKeyId`。
+- ✅ 历史 userData 一次性迁移：version marker、Tauri current-wins、删除不复活、整批失败回滚。
+- ✅ SSH 私钥库：历史 `ssh-keys` 元数据、索引内私钥文件和保存口令只迁移一次；孤儿 secret/key 不导入，私钥文件以独立目录保存，profile 仅引用 `privateKeyId`。
 - ✅ 明文 secret 边界：不使用 safeStorage/钥匙串；Unix 创建、迁移和读取自愈均强制 `0600`，profile 删除同步清理孤儿 secret。
 - ✅ Workspace snapshot 广播
 
@@ -92,7 +92,7 @@
 
 > 注：Phase 3 的本地自动化已执行 Rust 编译与 contract test；发行候选仍需完成真实服务、真实账户和 renderer/UI 手测，不能以本机夹具替代。
 
-> 2026-07-14 回归修复：POSIX CWD hook 现在以交互 shell 的 CR 提交执行，并以 CR/LF 兼容的状态机抑制内部命令回显；CWD 事件会在“跟随终端”开启时发布 `remoteFilesLoading`、异步刷新相同路径的 SFTP 文件列表，并在成功或失败后结束 loading。SFTP `read_dir` 不再依赖服务端返回 `..`，会按 Electron 语义为非根目录生成父目录行。POSIX 指标脚本也移除了从 TypeScript 模板误带入 Rust raw string 的双重转义，恢复磁盘、进程和网络行的真实换行解析。
+> 2026-07-14 回归修复：POSIX CWD hook 现在以交互 shell 的 CR 提交执行，并以 CR/LF 兼容的状态机抑制内部命令回显；CWD 事件会在“跟随终端”开启时发布 `remoteFilesLoading`、异步刷新相同路径的 SFTP 文件列表，并在成功或失败后结束 loading。SFTP `read_dir` 不再依赖服务端返回 `..`，会按 迁移前实现 语义为非根目录生成父目录行。POSIX 指标脚本也移除了从 TypeScript 模板误带入 Rust raw string 的双重转义，恢复磁盘、进程和网络行的真实换行解析。
 
 ### Phase 4：其他协议与 Transfer ⚠️ 实现主体完成，真实服务与设备验收未完成
 
@@ -102,7 +102,7 @@
 - ✅ 统一 TransferService：持久 journal、单文件/目录 manifest、上传/下载、hash/identity 校验、generation/run handle、暂停/继续/取消/丢弃等待、`cleanupPending` 和应用退出收敛。
 - ✅ root SFTP 两阶段提交：`/tmp` 任务 staging → 目标同目录 `.fileterm-part` → 正式目标，逐阶段大小校验并兼容迁移旧 journal；正式目标不会直接参与 `/tmp` 跨文件系统移动。
 - ✅ WebDAV：HTTPS 默认、Basic Auth、ETag 前置条件冲突检测、SHA-256 bundle 校验、秘密字段剥离与 5 MB 输入上限；本地 HTTP fixture 已覆盖 HEAD、成功 PUT、GET、`If-Match` 412 和下载 hash 校验。
-- ✅ Electron parity：SSH Config/外部 JSON profile 导入导出、命令历史/发送偏好、文件编辑器关闭确认、跨窗口 UI/最大化事件、CSP、应用/SSH/协议错误本地日志。
+- ✅ 历史行为对齐：SSH Config/外部 JSON profile 导入导出、命令历史/发送偏好、文件编辑器关闭确认、跨窗口 UI/最大化事件、CSP、应用/SSH/协议错误本地日志。
 - ✅ 更新检查：Windows 使用 Tauri updater 的固定公钥、GitHub Release `latest.json`、签名 NSIS 安装器及 `.sig`，按“下载验签 → 重启安装”执行；macOS 保持 GitHub Release 检查与下载页交接。首次实际 Windows 发版仍依赖仓库配置 `TAURI_SIGNING_PRIVATE_KEY` Secret。
 
 质量记录见 [`../../quality/tauri-phase4-validation.md`](../../quality/tauri-phase4-validation.md)。
@@ -120,46 +120,46 @@
 
 ---
 
-## 2. Electron 历史基线与 Tauri 对齐结果
+## 2. 迁移前实现历史基线与 Tauri 对齐结果
 
-### 2.1 原 Electron 能力的迁移结果
+### 2.1 原有能力的迁移结果
 
-| 功能                       | Electron 源                                                    | 说明                                                                                                                                                                     |
-| -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Transfer 系统**          | `services/transfers/`                                          | ✅ `services/transfers.rs`：journal、目录 manifest、断点、暂停/继续/取消/丢弃、退出/关闭清理与 snapshot 事件。                                                           |
-| **SSH -L 本地转发**        | `services/sessions/ssh-tunnel-service.ts`                      | ✅ 已补齐：`TcpListener` → `channel_open_direct_tcpip`                                                                                                                   |
-| **SSH -R 远程转发**        | 同上                                                           | ✅ 已补齐：`tcpip_forward` / `cancel_tcpip_forward` + `forwarded-tcpip` 回调                                                                                             |
-| **SSH -D 动态 SOCKS5**     | 同上                                                           | ✅ 已补齐：本地 SOCKS5 CONNECT listener → `channel_open_direct_tcpip`                                                                                                    |
-| **SOCKS5 代理**            | `services/network/proxy-socket-factory.ts`                     | ✅ 已补齐：`tokio-socks`，支持无认证或 username/password                                                                                                                 |
-| **HTTP CONNECT 代理**      | 同上                                                           | ✅ 已补齐：CONNECT + Basic 认证 + IPv6 authority + 响应边界限制                                                                                                          |
-| **Jump Host / ProxyJump**  | `services/sessions/ssh-session-controller.ts::connectJumpHost` | ✅ 已补齐：`jumpProfileId` → `channel_open_direct_tcpip` → `connect_stream`                                                                                              |
-| **FTP/FTPS**               | `services/sessions/ftp-session-controller.ts`                  | ✅ `sessions/ftp.rs`，plain/显式/隐式 FTPS 和传输操作均已接入。                                                                                                          |
-| **Telnet**                 | `services/sessions/telnet-session-controller.ts`               | ✅ `sessions/telnet.rs`，RFC 854 IAC/NAWS/TERMINAL-TYPE 实现完成。                                                                                                       |
-| **Serial**                 | `services/sessions/serial-session-controller.ts`               | ✅ `sessions/serial.rs`；`mark/space` parity 显式拒绝（上游跨平台限制）。                                                                                                |
-| **Auto-update**            | `services/app-update-service.ts`                               | ✅ Windows Tauri in-app updater（签名清单/NSIS 安装器 + `.sig`/重启安装）与 macOS 发布页模式；Electron 只作历史行为对照。                                                |
-| **Profile import/export**  | `services/connection-config-codec.ts`                          | ✅ SSH config/JSON preview + commit、fileterm/compatible 导出。                                                                                                          |
-| **Command history**        | `services/file-profile-repository.ts`                          | ✅ 每 profile 历史与命令发送偏好已持久化。                                                                                                                               |
-| **openLogsDirectory**      | `apps/electron/src/main/main.ts`                               | ✅ Rust command 打开应用日志目录。                                                                                                                                       |
-| **App logger**             | `services/app-logger.ts`                                       | ✅ 统一 `DEBUG/INFO/WARN/ERROR`、scope、并发写入、2 MB 轮转和秘密字段脱敏；覆盖应用/窗口、本地文件、更新、WebDAV、profile 与传输状态机。                                 |
-| **SSH debug logger**       | `services/sessions/ssh-debug-logger.ts`                        | ✅ 覆盖 SSH/SFTP、平台探测、资源采集启停与首样本、自动重连、Jump Host、隧道，以及 FTP/Telnet/Serial 生命周期；不记录终端内容、凭据或完整主机指纹。                       |
-| **真实 sshd/FTP 集成测试** | `test/protocol/sftp-resume.test.mjs` 等                        | ⚠️ Electron 的 7 项真实协议测试已通过。Tauri 本地 OpenSSH、FTPS、WebDAV、Telnet 夹具已覆盖 HTTP/SOCKS5、`-L/-D`、ETag 与 hash；Windows/Linux CI 仅已配置，尚未产生结果。 |
+| 功能                       | 迁移前职责（历史记录） | 当前实现位置与结果                                                                                                                   |
+| -------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Transfer 系统**          | 传输任务与断点续传     | ✅ `services/transfers/mod.rs`：journal、目录 manifest、断点、暂停/继续/取消/丢弃、退出/关闭清理与 snapshot 事件。                   |
+| **SSH -L 本地转发**        | SSH 隧道               | ✅ `sessions/ssh/tunnels.rs`：`TcpListener` → `channel_open_direct_tcpip`                                                            |
+| **SSH -R 远程转发**        | SSH 隧道               | ✅ `tcpip_forward` / `cancel_tcpip_forward` + `forwarded-tcpip` 回调                                                                 |
+| **SSH -D 动态 SOCKS5**     | SSH 隧道               | ✅ 本地 SOCKS5 CONNECT listener → `channel_open_direct_tcpip`                                                                        |
+| **SOCKS5 代理**            | 网络代理               | ✅ `sessions/ssh/transport/proxy.rs`，支持无认证或 username/password                                                                 |
+| **HTTP CONNECT 代理**      | 网络代理               | ✅ CONNECT + Basic 认证 + IPv6 authority + 响应边界限制                                                                              |
+| **Jump Host / ProxyJump**  | SSH 连接               | ✅ `sessions/ssh/transport/jump.rs`：`jumpProfileId` → `channel_open_direct_tcpip` → `connect_stream`                                |
+| **FTP/FTPS**               | FTP 会话               | ✅ `sessions/ftp/mod.rs`，plain/显式/隐式 FTPS 和传输操作均已接入。                                                                  |
+| **Telnet**                 | Telnet 会话            | ✅ `sessions/telnet/mod.rs`，RFC 854 IAC/NAWS/TERMINAL-TYPE 实现完成。                                                               |
+| **Serial**                 | Serial 会话            | ✅ `sessions/serial/mod.rs`；`mark/space` parity 显式拒绝（上游跨平台限制）。                                                        |
+| **Auto-update**            | 更新检查               | ✅ `services/updates.rs`：Windows Tauri in-app updater 与 macOS 发布页模式。                                                         |
+| **Profile import/export**  | profile 导入导出       | ✅ `commands/import_commands.rs`、`services/profile_ops/mod.rs`：SSH config/JSON preview + commit、fileterm/compatible 导出。        |
+| **Command history**        | 命令历史               | ✅ `services/profile_ops/mod.rs`：每 profile 历史与命令发送偏好已持久化。                                                            |
+| **openLogsDirectory**      | 日志目录打开           | ✅ `commands/platform_commands.rs` / `commands/window_commands.rs`：Rust command 打开应用日志目录。                                  |
+| **App logger**             | 应用日志               | ✅ `services/logging.rs`：统一 `DEBUG/INFO/WARN/ERROR`、scope、并发写入、2 MB 轮转和秘密字段脱敏。                                   |
+| **SSH debug logger**       | SSH 调试日志           | ✅ `services/logging.rs`：覆盖 SSH/SFTP、平台探测、资源采集、自动重连、Jump Host、隧道以及 FTP/Telnet/Serial 生命周期。              |
+| **真实 sshd/FTP 集成测试** | 协议集成测试           | ⚠️ Tauri 本地 OpenSSH、FTPS、WebDAV、Telnet 夹具已覆盖 HTTP/SOCKS5、`-L/-D`、ETag 与 hash；Windows/Linux CI 仅已配置，尚未产生结果。 |
 
 ### 2.2 部分实现（需补齐）
 
-| 功能                           | Electron 源                                                                            | Tauri 现状                                                                                                     | 缺口 |
-| ------------------------------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
-| **远程文件 encoding**          | `services/text-encoding.ts`（iconv-lite + 16 种编码）                                  | ✅ 已补齐：`decode_bytes`/`encode_text` + `encoding_rs`，支持 UTF-8/UTF-16/GBK/Big5/EUC-JP/Shift-JIS/EUC-KR 等 | —    |
-| **远程 chmod 递归**            | `services/sessions/ssh-session-controller.ts::changeRemotePermissions`                 | ✅ 已补齐：`recursive` + `applyTo` (all/files/directories) + `find -exec {} +`                                 | —    |
-| **Shell setup injection**      | `services/sessions/shell-cwd-integration.ts`（bash/zsh/posix/busybox 脚本 + 双重门控） | ✅ 已补齐：`shell_cwd_setup_for_platform` + `SHELL_CWD_SETUP`/`BUSYBOX_SHELL_CWD_SETUP` + 平台门控             | —    |
-| **Transcript hydration**       | `services/sessions/ssh-session-controller.ts::BoundedTextBuffer`                       | ✅ 已补齐：reconnect 追加分隔符 + 200k 截断                                                                    | —    |
-| **Auto-reconnect 2000ms 延迟** | `services/workspace-service.ts::autoReconnectingTabs`                                  | ✅ 已补齐：`reconnectMode === 'auto'` + 2000ms 延迟 + 三重 guard                                               | —    |
-| **JumpHost / ProxyJump**       | `services/sessions/ssh-session-controller.ts::connectJumpHost`                         | ✅ 已补齐：`jumpProfileId` → `channel_open_direct_tcpip` → `connect_stream`                                    | —    |
-| **WebDAV upload/download**     | `services/webdav-sync-service.ts`                                                      | ✅ PUT/GET + ETag/If-Match + SHA-256 + secret stripping。                                                      | —    |
-| **UI preferences 变更事件**    | `apps/electron/src/main/main.ts`（广播到所有窗口）                                     | ✅ `app:ui-preferences-changed` 广播。                                                                         | —    |
-| **窗口最大化事件**             | Electron 自动广播                                                                      | ✅ toggle 与 Resized 均广播 `app:window-maximized-change`。                                                    | —    |
-| **文件编辑器关闭确认**         | `apps/electron/src/main/main.ts::requestQuitConfirmation`                              | ✅ `CloseRequested` 防关闭并发事件，确认后 destroy，取消保持窗口。                                             | —    |
-| **CSP 安装**                   | `apps/electron/src/main/main.ts::installContentSecurityPolicy`                         | ✅ Tauri production CSP 已安装；打包验证通过。                                                                 | —    |
-| **Command send preferences**   | `services/file-profile-repository.ts`                                                  | ✅ `command-send-preferences.json` get/set。                                                                   | —    |
+| 功能                           | 迁移前职责（历史记录）                                                | Tauri 现状                                                                                                     | 缺口 |
+| ------------------------------ | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
+| **远程文件 encoding**          | 文件内容编码                                                          | ✅ 已补齐：`decode_bytes`/`encode_text` + `encoding_rs`，支持 UTF-8/UTF-16/GBK/Big5/EUC-JP/Shift-JIS/EUC-KR 等 | —    |
+| **远程 chmod 递归**            | `sessions/ssh/mod.rs::changeRemotePermissions`                        | ✅ 已补齐：`recursive` + `applyTo` (all/files/directories) + `find -exec {} +`                                 | —    |
+| **Shell setup injection**      | `sessions/ssh/shell/cwd.rs`（bash/zsh/posix/busybox 脚本 + 双重门控） | ✅ 已补齐：`shell_cwd_setup_for_platform` + `SHELL_CWD_SETUP`/`BUSYBOX_SHELL_CWD_SETUP` + 平台门控             | —    |
+| **Transcript hydration**       | `sessions/ssh/mod.rs::BoundedTextBuffer`                              | ✅ 已补齐：reconnect 追加分隔符 + 200k 截断                                                                    | —    |
+| **Auto-reconnect 2000ms 延迟** | `services/workspace/mod.rs::autoReconnectingTabs`                     | ✅ 已补齐：`reconnectMode === 'auto'` + 2000ms 延迟 + 三重 guard                                               | —    |
+| **JumpHost / ProxyJump**       | `sessions/ssh/mod.rs::connectJumpHost`                                | ✅ 已补齐：`jumpProfileId` → `channel_open_direct_tcpip` → `connect_stream`                                    | —    |
+| **WebDAV upload/download**     | WebDAV 同步                                                           | ✅ `services/webdav/mod.rs`：PUT/GET + ETag/If-Match + SHA-256 + secret stripping。                            | —    |
+| **UI preferences 变更事件**    | UI 状态广播                                                           | ✅ `app:ui-preferences-changed` 广播。                                                                         | —    |
+| **窗口最大化事件**             | 窗口事件广播                                                          | ✅ toggle 与 Resized 均广播 `app:window-maximized-change`。                                                    | —    |
+| **文件编辑器关闭确认**         | 文件编辑器生命周期                                                    | ✅ `lib/windows.rs` / `commands/window_commands.rs`：`CloseRequested` 防关闭并发事件。                         | —    |
+| **CSP 安装**                   | CSP 初始化                                                            | ✅ Tauri production CSP 已安装；打包验证通过。                                                                 | —    |
+| **Command send preferences**   | 命令发送偏好                                                          | ✅ `services/profile_ops/mod.rs`：`command-send-preferences.json` get/set。                                    | —    |
 
 ### 2.3 代码已实现（仍需按第 1 节完成发行验收）
 
@@ -176,7 +176,7 @@
 - 剪贴板 + openExternalUrl
 - 本地文件操作（list/read/write/mkdir/create/copy/move/rename/delete/permissions/selectFiles/selectDirectory，含 EXDEV 回退 + 递归 chmod）
 - macOS keychain 规避（plain-text-fallback）
-- Legacy 数据迁移（旧 Electron userData 一次性 current-wins 导入，带 marker/回滚）
+- Legacy 数据迁移（迁移前 userData 一次性 current-wins 导入，带 marker/回滚）
 - 命令模板级联删除（parentId 上移到祖父）
 
 ---
@@ -219,14 +219,14 @@
 ### P4（发行）
 
 22. 三平台签名/公证 + 安装包
-23. 性能对比 Electron
+23. 性能对比 迁移前实现
 24. ~~自动用户数据迁移 + 文件级回滚~~ ✅；继续完成发行候选迁移演练与安装包回滚保障
 
 ---
 
 ## 4. 验收标准
 
-Tauri 迁移整体完成的验收标准（与 Electron 原版功能对齐）：
+Tauri 迁移整体完成的验收标准（与 迁移前实现 原版功能对齐）：
 
 - [x] Transfer 系统：upload/download queue + journal + pause/resume/cancel/discard + 断点续传
 - [x] SSH 隧道：-L / -R / -D 全部支持
@@ -244,4 +244,4 @@ Tauri 迁移整体完成的验收标准（与 Electron 原版功能对齐）：
 - [ ] Tauri 真实协议验收：OpenSSH sshd（PAM MFA、跳板、远程转发、root、CWD、指标）、受信任显式/隐式 FTPS、WebDAV 服务、Telnet 设备/第三方代理；本机 HTTP/SOCKS5、`-L/-D`、ETag/hash fixture 已通过
 - [ ] Serial 验收：macOS/Linux/Windows 实体或可信虚拟串口；`mark/space` 保持明确不支持
 - [ ] 三平台 socket lifecycle CI 结果归档（当前只有 workflow 配置）
-- [x] macOS 冷启动进程/RSS 基线：Tauri 约 116 MiB，Electron 约 228 MiB（同机隔离配置；详见质量记录）
+- [x] macOS 冷启动进程/RSS 基线：Tauri 约 116 MiB，迁移前实现 约 228 MiB（同机隔离配置；详见质量记录）

@@ -4,7 +4,7 @@
 
 ## SSH / SFTP
 
-- [x] 已定位一台真实 Synology DSM/OpenSSH 8.2 目标：SSH shell 成功，但系统 OpenSSH 与 Electron `ssh2` 均被服务端拒绝 `sftp` subsystem；Tauri 已按 Electron 语义把 shell/隧道与 SFTP 文件通道解耦，并显示明确故障原因。
+- [x] 已定位一台真实 Synology DSM/OpenSSH 8.2 目标：SSH shell 成功，但系统 OpenSSH 与 迁移前实现 `ssh2` 均被服务端拒绝 `sftp` subsystem；Tauri 已按 迁移前实现 语义把 shell/隧道与 SFTP 文件通道解耦，并显示明确故障原因。
 - [ ] 待该 Synology 管理员确认启用 SFTP 并应用/重启 SSH 服务后，用打包 Tauri 应用验证目录列表、上传、下载、取消、断线重连及文件面板错误恢复。
 - [ ] 在真实 OpenSSH `sshd` 上使用 PAM/keyboard-interactive MFA：密码和 OTP 分两轮、同一轮混合提示、取消和错误 OTP 各跑一次。
 - [ ] 经 HTTP CONNECT 和 SOCKS5（含用户名/密码）连接；记录代理拒绝、超时和正常断开后的 UI 状态。
@@ -30,5 +30,5 @@
 ## 跨平台与性能
 
 - [ ] 归档 GitHub Actions 的 macOS、Windows、Linux `tauri-socket-lifecycle` 和 Linux `tauri-real-protocols` 结果。
-- [ ] 在三平台使用同一 profile、同一目标与同一大文件采样冷启动、RSS、连接时间和传输吞吐；Electron/Tauri 必须同版本、隔离用户目录、重复至少三次。
+- [ ] 在三平台使用同一 profile、同一目标与同一大文件采样冷启动、RSS、连接时间和传输吞吐；迁移前实现与 Tauri 必须同版本、隔离用户目录、重复至少三次。
 - [ ] 执行打包后的 Tauri 应用（不是 `cargo test`）的原生拖放、多文件路径、metadata、窗口菜单和文件编辑器关闭确认手测。

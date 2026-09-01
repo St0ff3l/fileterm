@@ -263,9 +263,9 @@ WebGL 原本是为了高频输出性能引入的，但这次验证中它会放�
 
 后续如果改这些点，必须跑完整清单：
 
-- `TerminalView.tsx` 内的 `terminal.write` / flush / transcript hydration
-- `workspace-session-runtime.ts` 内的 `terminalTranscript` / `terminal:state`
-- `ssh-session-controller.ts` 内的 shell transcript 维护
+- `terminal-view.tsx` 内的 `terminal.write` / flush / transcript hydration
+- `apps/tauri/src-tauri/src/services/workspace/state.rs` 内的终端 transcript / `terminal:state`
+- `apps/tauri/src-tauri/src/sessions/ssh/` 内的 shell transcript 维护
 - `fitAddon` 尺寸同步和 PTY resize
 - `TerminalView` 的 selection/search decoration 清理逻辑
 

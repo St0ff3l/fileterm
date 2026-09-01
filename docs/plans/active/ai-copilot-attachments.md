@@ -6,7 +6,7 @@
 
 ## 背景与现状
 
-当前 Copilot composer 是文本输入框，`StartAiChatInput` 只有 `userMessage`、模式和一次性终端上下文快照；`AiMessage` 也只保存文本、上下文引用和工具活动。相关入口见 [Copilot 面板](../../../apps/tauri/src/renderer/features/ai/AiCopilotPanel.tsx)、[共享 AI 类型](../../../packages/core/src/index.ts) 和 [Rust AI service](../../../apps/tauri/src-tauri/src/services/ai.rs)。
+当前 Copilot composer 是文本输入框，`StartAiChatInput` 只有 `userMessage`、模式和一次性终端上下文快照；`AiMessage` 也只保存文本、上下文引用和工具活动。相关入口见 [Copilot 面板](../../../apps/tauri/src/renderer/features/ai/ai-copilot-panel.tsx)、[共享 AI 类型](../../../packages/core/src/index.ts) 和 [Rust AI service](../../../apps/tauri/src-tauri/src/services/ai/mod.rs)。
 
 这意味着现在不能把本地文件、远程文件或图片作为一个受控附件交给 Copilot。它与终端上下文不是同一类数据，不能通过扩大 L2 transcript 快照或把路径拼进 prompt 来“顺手支持”。
 
@@ -90,7 +90,7 @@ interface AiAttachmentRef {
 
 ## UI 方案
 
-在现有 [AiCopilotPanel](../../../apps/tauri/src/renderer/features/ai/AiCopilotPanel.tsx) composer 内增加：
+在现有 [AiCopilotPanel](../../../apps/tauri/src/renderer/features/ai/ai-copilot-panel.tsx) composer 内增加：
 
 - 使用 `<AppIcon />` 的附件按钮，打开系统文件选择器；支持拖放和剪贴板图片，但不引入外部图标字体。
 - 发送前的附件 chip：文件名、类型、大小、状态、移除按钮和失败原因。

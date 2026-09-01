@@ -4,7 +4,7 @@
 
 ## 背景
 
-基于 `FileTerm-Electron-Tauri-Code-Audit-2026-07-17.md` 对提交
+基于 `FileTerm-迁移前实现-Tauri-Code-Audit-2026-07-17.md` 对提交
 `989a25f95e4a28b3f5ef7aa79171a21f27487e51` 的结论，优先修复 Tauri
 运行时的数据完整性、权限契约、传输生命周期和迁移语义问题。
 
@@ -18,7 +18,7 @@ Tauri 生产二进制构建已完成。发行身份、正式签名/公证、三�
   `keyring`。
 - `profile-secrets.json` 继续与公开 profile 分离；Unix 文件权限必须为 `0600`，
   Windows 保持 best-effort 的应用数据目录隔离语义。
-- Electron 与 Tauri renderer 继续物理分离，不跨 app import。
+- 迁移前实现 与 Tauri renderer 继续物理分离，不跨 app import。
 - `packages/core` 仍是 IPC/领域契约的 single source of truth。
 - Transfer 必须在退出、暂停、丢弃前等待当前 run 收敛，并保持 journal 与断点一致。
 
@@ -45,7 +45,7 @@ Tauri 生产二进制构建已完成。发行身份、正式签名/公证、三�
 
 ### C. 数据、版本与契约
 
-- [x] 将 Electron legacy 数据合并改为有 marker 的一次性迁移，删除数据不得复活。
+- [x] 将 迁移前实现 legacy 数据合并改为有 marker 的一次性迁移，删除数据不得复活。
 - [x] `sync:version` 同步 Cargo.toml、Cargo.lock 与 tauri.conf.json。
 - [x] 修复字段命名、URL allowlist、bridge 类型保护、runtime metadata bootstrap、
       native-drop fallback 和本地工具忽略项。
@@ -71,12 +71,12 @@ Tauri 生产二进制构建已完成。发行身份、正式签名/公证、三�
 
 - Rust library：98/98 通过。
 - Tauri contract：14/14 通过。
-- Electron unit/controller：84/84 通过。
-- Electron FTP/FTPS/SFTP protocol fixture：7/7 通过。
+- 迁移前实现 unit/controller：84/84 通过。
+- 迁移前实现 FTP/FTPS/SFTP protocol fixture：7/7 通过。
 - 全 workspace TypeScript typecheck：通过。
 - `npm audit --audit-level=low`：0 vulnerabilities。
 - RustSec：0 项未登记漏洞；3 项上游漏洞按可达性精确例外，另有 17 项上游
   unmaintained/unsound 非阻断警告。
-- Electron/Tauri production build：通过；Tauri `--no-bundle` release 二进制版本为 `1.2.2`，
+- 迁移前实现与 Tauri production build：通过；Tauri `--no-bundle` release 二进制版本为 `1.2.2`，
   本轮前已验证同版本 DMG。
 - Rustfmt 与 strict Clippy：通过，零告警。

@@ -4,7 +4,7 @@
 
 ## 1. 项目定位
 
-FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台，围绕 `SSH / SFTP / FTP` 构建可日常使用的多标签桌面客户端。`apps/electron` 仅保留为历史代码参考，不再参与构建、测试或发布。
+FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台，围绕 `SSH / SFTP / FTP` 构建可日常使用的多标签桌面客户端。技术栈为纯 Rust + Tauri，仓库中不存在 Electron 代码目录，历史 Electron 实现已彻底移除，不得在任何文档、脚本或 CI 配置中重新引用。
 
 当前阶段：**Tauri 主链路稳定与发行收口**。质量门禁覆盖共享包与 Rust/Tauri，Windows 使用签名的 Tauri 应用内更新；macOS 继续检查后跳转 GitHub Release 下载。
 
@@ -37,6 +37,11 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - 新窗口能力先定义 IPC 边界，再做 renderer 交互。
 - 主题样式优先走 `token -> theme vars -> component skins -> terminal colors`。
 
+### 命名与目录边界
+
+- TS/TSX 业务文件统一使用 `kebab-case` 文件名；React 组件和导出符号可以继续使用 PascalCase，但文件路径必须保持小写短横线风格。
+- Rust 文件与模块统一使用 `snake_case`；拆分模块由目录内的 `mod.rs` 保留稳定 facade，禁止以旧运行时或父模块前缀堆放文件。
+
 ### 平台兼容边界
 
 - **CWD 目录跟随**：终端工作目录 (CWD) 变化通过底层会话流安全捕获，经 runtime 广播同步给文件管理器，严禁 UI 层轮询或直接探测平台路径。
@@ -53,7 +58,7 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
 - **二次确认弹窗统一**：所有破坏性/危险操作（如删除、清空等）必须调用项目通用的 `<ConfirmActionDialog>` 确认弹窗组件，严禁在桌面 Webview 环境中使用原生 `window.confirm()`。
 - **按钮尺寸高度规范**：同一操作组/表单行内的按钮必须具有严格统一的高度（如 32px 紧凑型 / 36px 表单型）、边框半径与内边距，禁止主次按钮尺寸参差不齐。
 - **颜色语义边界**：`--focus-outline` 只用于焦点/选中/拖拽目标的描边或光环；文件相关操作使用 `--folder-accent`，实心主按钮使用 `--button-primary-*`，不要用描边色填充按钮。
-- **滚动条统一走公用组件**：Renderer 中新增或改造的纵向滚动区域，默认必须复用 `features/common/VerticalScrollbar.tsx`，像终端区、文件区一样通过 `scrollRef` 绑定，并隐藏容器原生纵向滚动条；除非用户明确要求特殊行为，禁止在业务组件里单独绘制一套滚动条。横向滚动、第三方编辑器内部滚动和协议组件自带滚动可保留各自实现，但不得替代纵向公用滚动条。
+- **滚动条统一走公用组件**：Renderer 中新增或改造的纵向滚动区域，默认必须复用 `features/common/vertical-scrollbar.tsx`，像终端区、文件区一样通过 `scrollRef` 绑定，并隐藏容器原生纵向滚动条；除非用户明确要求特殊行为，禁止在业务组件里单独绘制一套滚动条。横向滚动、第三方编辑器内部滚动和协议组件自带滚动可保留各自实现，但不得替代纵向公用滚动条。
 
 ### 资源与安全边界
 
@@ -67,18 +72,26 @@ FileTerm 是面向开发者与运维场景的 Rust + Tauri 桌面远程工作台
   升级该依赖时必须保留此边界，并重新运行 Rust 测试与 Clippy。
 - 连接的 `group`（文件夹名）和 `parentId`（文件夹 ID）必须双向同步，存储层负责自愈。
 
+### 文件规模边界
+
+- **1000 行提醒阈值**：修改任何源文件时，若该文件在改动前或改动后超过 1000 行，必须先停下来向用户报告当前行数，并询问是否顺带拆分，得到明确答复后再继续修改。**严禁默认继续往大文件里堆代码。**
+- **报告口径**：一句话说明行数、是否属于豁免类别、建议的拆分方向。不要主动展开成完整方案，等用户确认后再做。
+- **豁免类别**（超过 1000 行也不必提醒拆分）：样式表 `*.css`、i18n 字典、类型与常量聚合文件（如 `packages/core/src/index.ts`）、生成代码（`src-tauri/gen/schemas/`、`vendor/`）、测试文件、文档。
+- **拆分硬目标**：业务代码单文件控制在 800 行以内。数据中心型文件不受此限，但超过 3000 行时建议按域切分并保持对外 re-export 入口不变。
+- **拆分顺序**：优先按职责边界切分（如命令分发表按业务分组委托、巨型函数先收敛局部变量再拆），禁止为了降行数做无意义的机械均分。
+- **目录模块结构**：同一大模块拆出的职责文件必须放在该模块自己的目录中，采用现有 `apps/tauri/src-tauri/src/sessions/ssh/` 的组织方式：由 `mod.rs` 保留稳定 facade，在目录内放置按职责命名的实现文件。禁止把 `services/ai_*.rs`、`services/mcp_*.rs` 这类带模块前缀的拆分文件直接堆在父目录；若为保持私有作用域暂时使用 `include!`，也必须从该模块目录内的 facade 引入。
+
 ## 4. 代码位置
 
 - Tauri Rust backend：`apps/tauri/src-tauri/src/`
 - Tauri bridge：`apps/tauri/src/bridge/tauri-api.ts`
 - Tauri renderer：`apps/tauri/src/renderer`
-- Electron 历史参考：`apps/electron/`（不得作为新实现、CI 或发行依赖）
 - Renderer hooks：`apps/tauri/src/renderer/hooks/`
-  - `useWorkspaceTabs.ts`、`useWorkspaceModals.ts`、`useFileOperations.ts`
-  - `useSshInteractions.ts`、`useFileEditor.ts`、`useWorkspaceIpcSync.ts`
-  - `useWorkspaceDataOps.ts`
+  - `use-workspace-tabs.ts`、`use-workspace-modals.ts`、`use-file-operations.ts`
+  - `use-ssh-interactions.ts`、`use-file-editor.ts`、`use-workspace-ipc-sync.ts`
+  - `use-workspace-data-ops.ts`
 - Renderer 通用组件：`apps/tauri/src/renderer/features/common/`；跨功能组件的样式统一维护在 `apps/tauri/src/renderer/styles/features/common-controls.css`。
-- Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`，不得反向依赖 Electron 组件。
+- Layout、ErrorBoundary、工作区、终端和主题组件：位于 `apps/tauri/src/renderer/`。
 - 领域类型：`packages/core`
 - 存储抽象：`packages/storage`
 - 共享常量：`packages/shared`
@@ -139,19 +152,19 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 ### 已完成 ✅
 
 1. 质量门禁三件套：ESLint/Prettier + Husky 提交门禁 + CI 测试集成
-2. `workspace-service.ts` 按 `tabs / sessions / transfers` 拆子模块
-3. `App.tsx` 拆分：7 个 hooks + ModalPortalManager + ErrorBoundary（3898 → 1698 行）
+2. `apps/tauri/src-tauri/src/services/workspace/mod.rs` 按 `tabs / sessions / transfers` 收敛职责
+3. `app.tsx` 拆分：7 个 hooks + `modal-portal-manager.tsx` + `error-boundary.tsx`（3898 → 1698 行）
 4. SSH 与 FTP controller 物理分离
 5. 共享类型收敛到 `packages/core`
 6. 系统信息采集多平台化：Linux / BusyBox / Windows collector + parser 归一化 + CRLF 加固
 7. Windows 终端 POSIX 注入门控 + PowerShell 采集多级 fallback
-8. as any 清理（ssh-session-controller 零命中）+ renderer :any 清理（零命中）
+8. as any 清理（`apps/tauri/src-tauri/src/sessions/ssh/` 零命中）+ renderer :any 清理（零命中）
 9. SSH/FTP controller 直接测试：生命周期、Windows/POSIX 注入门控、FTP 重连与操作串行化
 
 ### 当前重点 🔜
 
 1. 继续稳定主题系统，避免颜色、阴影、圆角散落在业务组件里
-2. 评估 Zustand 状态管理（App.tsx 已拆分 56%，hooks 方案已足够，非必须迁移）
+2. 评估 Zustand 状态管理（`app.tsx` 已拆分 56%，hooks 方案已足够，非必须迁移）
 3. 继续扩展 Rust SSH/FTP service 异常与协议边界测试（基础生命周期覆盖已落地）
 
 ### 可接受债务 📋
@@ -165,13 +178,14 @@ CI（`.github/workflows/ci.yml`）：push/PR 时只执行共享包与 Rust/Tauri
 
 - `.agents/skills/fileterm-release/SKILL.md`：智能体执行流程与验收清单。
 - `docs/quality/git-branch-release-convention.md`：项目正式分支、tag 和 Release Notes 规范。
+- `docs/release-notes/`：各版本自定义发布说明，文件名使用 `release-notes-<version>.md`。
 - `.github/workflows/release.yml`：当前实际的构建与发布行为。
 
 必须保持的硬性约束：
 
 - 版本号只修改根目录 `package.json` 的 `version` 字段，随后立即运行 `npm run sync:version`；禁止手动修改 workspace 版本或内部依赖版本。
 - 日常改动和版本说明先通过 Pull Request 合入 `main`；`release/<version>` 只从最新 `main` 创建，作为不可变发布快照，不接收常规开发改动。
-- tag 必须使用 `v<version>`，并与根版本号、workspace 同步版本和 Release Notes 文件名一致；tag 必须指向 `origin/release/*` 中的提交，否则发布工作流会拒绝构建。
+- 版本说明统一放在 `docs/release-notes/`；tag 必须使用 `v<version>`，并与根版本号、workspace 同步版本和 Release Notes 文件名一致；tag 必须指向 `origin/release/*` 中的提交，否则发布工作流会拒绝构建。
 - 发布说明只维护自定义正文；发布工作流必须同时保留 `--notes` 和 `--generate-notes`，禁止手写 `Contributors`、`What's Changed` 或 `Full Changelog`。
 
 ## 11. 文档维护规则
