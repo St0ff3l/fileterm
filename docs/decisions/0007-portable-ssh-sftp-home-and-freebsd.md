@@ -21,6 +21,8 @@ Accepted（2026-08-28）
 - Serv00 社区公告确认包含 `s2.serv00.com` 在内的服务器已更新到 FreeBSD 14.3。[FreeBSD 14.3 and Node.js v24](https://forum.serv00.com/d/3341-freebsd-143-and-nodejs-v24)
 - Debian 12 的 OpenSSH 配置文档默认使用 `/usr/lib/openssh/sftp-server`，也支持 `internal-sftp`；`ChrootDirectory` 会在认证后改变 SFTP 会话看到的根目录。[Debian bookworm `sshd_config`](https://manpages.debian.org/bookworm/openssh-server/sshd_config.5.en.html)
 - FreeBSD 基础系统通过 `sysctl` 提供 CPU、内存、启动时间和内核信息；磁盘、交换区和进程分别可由 `df`、`swapinfo` 和 `ps` 查询。[FreeBSD `sysctl(8)`](https://man.freebsd.org/cgi/man.cgi?manpath=FreeBSD+14.0-RELEASE&query=sysctl&sektion=8)、[FreeBSD `df(1)`](https://man.freebsd.org/cgi/man.cgi?query=df&sektion=1&manpath=FreeBSD+14.3-RELEASE+and+Ports)、[FreeBSD `swapinfo(8)`](https://man.freebsd.org/cgi/man.cgi?manpath=FreeBSD+14.4-STABLE&query=swapinfo&sektion=8)、[FreeBSD `ps(1)`](https://man.freebsd.org/cgi/man.cgi?manpath=FreeBSD+14.4-STABLE&query=ps&sektion=1)
+- FreeBSD 官方的 `rctl(8)` 将账号/jail 的资源用量与适用规则分开查询：`rctl -u` 是当前用量，`rctl -l` 是适用规则；`memoryuse` 是常驻集大小，`pcpu` 是单个 CPU 核心百分比，`swapuse` 是交换空间，`maxproc` 是进程数。[FreeBSD `rctl(8)`](https://man.freebsd.org/cgi/man.cgi?query=rctl&sektion=8)
+- FreeBSD 官方的 `quota(1)` 以 1024 字节块报告用户文件系统用量和限制，`-f` 可限定到 Home 所在文件系统；Handbook 同时明确说明 `rctl` 不负责文件系统空间，应使用文件系统/ZFS quota。[FreeBSD `quota(1)`](https://man.freebsd.org/cgi/man.cgi?query=quota&sektion=1)、[FreeBSD Handbook: Jail Resource Limits](https://docs.freebsd.org/en/books/handbook/jails/)
 
 ## 决策
 
@@ -31,16 +33,25 @@ Accepted（2026-08-28）
 - `FreeBSD`/`freebsd` 输出识别为 `freebsd`，不再让 FreeBSD 落到 Windows 探测或 `unknown`。
 - FreeBSD 不复用 Linux `/proc` 指标命令。Rust 后端选择单独的 FreeBSD 命令生成器，renderer 继续消费同一套 `__KEY__VALUE` 标记，不新增第二套 IPC 协议。
 
-FreeBSD 采集器只使用基础系统接口：
+FreeBSD 采集器优先使用官方提供的账号级接口，缺失时才回退到主机级基础接口：
 
-| 指标            | FreeBSD 来源                                         | 备注                                 |
-| --------------- | ---------------------------------------------------- | ------------------------------------ |
-| CPU 总占用/分项 | `kern.cp_time` 两次采样                              | 按 CPU tick 增量计算并限制在 0–100   |
-| 内存            | `hw.physmem`、`hw.usermem`、`vm.stats.vm.*`          | 受 jail 权限限制时允许回退为可用字段 |
-| 交换区          | `swapinfo -k`                                        | 无交换区时返回 0，不阻塞整段采集     |
-| 文件系统        | `df -kP`                                             | 使用 POSIX 兼容列格式                |
-| 进程            | `ps -axo ...`                                        | 进程 CPU 按逻辑 CPU 数归一化         |
-| 主机信息        | `freebsd-version`、`uname`、`hostname`、`vm.loadavg` | 失败的单项不影响其他标记             |
+| 指标            | 账号级来源                                              | 主机级回退                                           |
+| --------------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| CPU 总占用/分项 | `rctl -u user:<user>` + `rctl -l user:<user>` 的 `pcpu` | `kern.cp_time` 两次采样，限制在 0–100                |
+| 内存            | `rctl` 的 `memoryuse` 与 `memoryuse:deny` 规则          | `sysctl` VM 数据（`hw.physmem` 等）                  |
+| 交换区          | `rctl` 的 `swapuse` 与 `swapuse:deny` 规则              | `swapinfo -k`                                        |
+| 文件系统        | `quota -v -f "$HOME"` 的用户 quota                      | `df -kP`                                             |
+| 进程            | `ps -axo ...`，账号模式只保留当前用户                   | `ps -axo ...`，主机模式保留可见进程                  |
+| 主机信息        | 不适用                                                  | `freebsd-version`、`uname`、`hostname`、`vm.loadavg` |
+
+Serv00 等共享托管主机还可能提供 `devil info limits`；它不是 FreeBSD 标准接口，
+仅用于补齐官方 `rctl`/`quota` 无法提供的账号配额（例如提供商把磁盘、RAM、CPU
+统一放在一个面板中）。
+
+在共享 FreeBSD 主机上，`sysctl`、`df`、`swapinfo` 和 `kern.cp_time` 可能返回宿主机
+视角，不能直接代表登录账号的资源限制。采集器只在账号级接口同时给出完整的
+“已用/上限”时覆盖对应指标；命令缺失、权限不足或输出格式变化时保持该指标的
+主机级回退，避免把不完整的账号数据与主机容量拼成错误结果。
 
 FreeBSD 暂不注入 Linux 风格的 shell CWD 脚本。项目的 CWD 注入门控仍保持对 Linux/BusyBox 开放、对未知平台 fail-closed；FreeBSD 使用 SFTP Home 解析和已有的手动/受确认 CWD 映射能力。
 

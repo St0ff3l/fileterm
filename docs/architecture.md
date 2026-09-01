@@ -60,7 +60,7 @@ FileTerm 第一版要解决的是“桌面端远程工作台”的核心闭环�
 - Tauri 当前已覆盖桌面壳、JSON 存储、Workspace snapshot、可迁移的 SSH 私钥库，以及 russh SSH shell/SFTP/MFA/host verification、系统指标、CWD 跟随、重连水化、自动重连、远程编码、递归 chmod、单级 Jump Host、SOCKS5/HTTP CONNECT 代理和运行时 SSH `-L/-R/-D` 隧道。
 - Tauri 已覆盖 Transfer、FTP/FTPS、Telnet、Serial、WebDAV 同步及 SSH 网络能力；Phase 3/4 的真实服务、实体设备和三平台验收仍是发行候选门禁。SFTP 被服务端拒绝时，Tauri 保留 SSH shell/隧道，并将文件通道故障单独广播到 renderer，而不误报为整条 SSH 连接失败。
 - SSH shell 与 SFTP 可能处于不同的文件系统根；`shellCwd` 保留 Shell 物理路径，`remotePath` 只保存 SFTP 命名空间路径。CWD 跟随先尝试原路径，遇到明确 `NoSuchFile` 后按实际 `/volumeN`、`/var/services` 和 Home chroot 候选探测，无法确认时保留最近有效的 SFTP 目录。完整背景、群晖示例和排查方式见 [ADR-0006](./decisions/0006-ssh-sftp-path-namespaces.md)。
-- SSH 初始文件目录以 SFTP `canonicalize(".")` 返回的服务端 Home 为准，不写死 `/volume1`、`/home` 或 `/usr/home`；初始目录列表、符号链接元数据和取消路径均有独立超时收口。远程系统指标对 FreeBSD 使用 `sysctl`/`swapinfo`/`df`/`ps` 基础命令，不复用 Linux `/proc` 采集器。完整兼容边界、Debian 12 与 Serv00 记录见 [ADR-0007](./decisions/0007-portable-ssh-sftp-home-and-freebsd.md)。
+- SSH 初始文件目录以 SFTP `canonicalize(".")` 返回的服务端 Home 为准，不写死 `/volume1`、`/home` 或 `/usr/home`；初始目录列表、符号链接元数据和取消路径均有独立超时收口。远程系统指标对 FreeBSD 优先使用官方 `rctl`/`quota` 账号接口，缺失时回退到 `sysctl`/`swapinfo`/`df`/`ps` 主机级基础命令，不复用 Linux `/proc` 采集器；共享托管主机的 `devil info limits` 仅作为提供商补充来源。完整兼容边界、Debian 12 与 Serv00 记录见 [ADR-0007](./decisions/0007-portable-ssh-sftp-home-and-freebsd.md)。
 - 迁移期间 `packages/core` 的领域类型和现有 JSON 数据格式保持兼容；协议 controller 仍按 SSH、FTP、Telnet、Serial 分离。
 
 当前主题系统也已经开始成形，主要落点包括：

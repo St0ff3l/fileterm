@@ -86,8 +86,122 @@ mod tests {
         assert!(command.contains("swapinfo -k"));
         assert!(command.contains("df -kP"));
         assert!(command.contains("ps -axo pid=,user=,rss=,pcpu=,pmem=,command="));
+        assert!(command.contains("rctl -u"));
+        assert!(command.contains("rctl -l"));
+        assert!(command.contains("quota -v -f"));
+        assert!(command.contains("memoryuse"));
+        assert!(command.contains("pcpu"));
+        assert!(command.contains("maxproc"));
         assert!(!command.contains("/proc/stat"));
         assert!(!command.contains("/proc/meminfo"));
+    }
+
+    #[test]
+    fn freebsd_metrics_command_prefers_hosted_account_limits_when_available() {
+        let command = build_freebsd_metrics_command();
+
+        // Serv00 and similar hosted FreeBSD environments expose account
+        // quotas separately from host-wide sysctl/df values. The command
+        // remains optional and falls back to the base-system collectors when
+        // the provider command or its output is unavailable.
+        assert!(command.contains("devil info limits"));
+        assert!(command.contains("account_limits"));
+        assert!(command.contains("account quota|$account_disk_total_display"));
+        assert!(command.contains("account_scope"));
+        assert!(command.contains("current_user"));
+        assert!(command.contains("ram memory"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn freebsd_metrics_command_emits_account_values_from_devil_fixture() {
+        let script = format!(
+            r#"devil() {{
+  printf '%s\n' 'Disk quota: [=====] 0.42% (13.0M/3.0G)'
+  printf '%s\n' 'Processes: [=====] 15.00% (3/20)'
+  printf '%s\n' 'RAM memory: [=====] 7.31% (37.4M/512.0M)'
+  printf '%s\n' 'CPU: [=====] 0.00% (0.0/100)'
+}}
+rctl() {{ return 127; }}
+quota() {{ return 127; }}
+{}
+"#,
+            build_freebsd_metrics_command()
+        );
+        let output = std::process::Command::new("sh")
+            .args(["-c", &script])
+            .output()
+            .expect("FreeBSD metrics fixture should start");
+
+        assert!(
+            output.status.success(),
+            "fixture script failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("__CPU__0.0\n"));
+        assert!(stdout.contains("__MEM_BYTES__39216742|536870912|497654170|7.30|0|0|0\n"));
+        assert!(stdout.contains("|13.0M/3.0G\n"));
+        assert!(stdout.contains("account quota|3.0G|13.0M|0.42%|3.0G|"));
+
+        let metrics = parse_system_metrics(&stdout, "freebsd");
+        assert_eq!(metrics["cpuPercent"], 0.0);
+        assert_eq!(metrics["memoryRaw"]["totalBytes"], 536870912.0);
+        assert_eq!(metrics["memoryRaw"]["usedBytes"], 39216742.0);
+        assert_eq!(metrics["diskRows"][0]["usage"], "13.0 MB/3.0 GB");
+        assert_eq!(metrics["fileSystemRows"][0]["name"], "account quota");
+        assert_eq!(metrics["fileSystemRows"][0]["usagePercent"], "0.42%");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn freebsd_metrics_command_prefers_standard_rctl_and_quota_values() {
+        let script = format!(
+            r#"rctl() {{
+  if [ "$1" = "-u" ]; then
+    printf '%s\n' 'user:fixture:memoryuse=67108864' 'user:fixture:pcpu=12.5' 'user:fixture:swapuse=1048576' 'user:fixture:maxproc=3'
+  else
+    printf '%s\n' 'user:fixture:memoryuse:deny=134217728/user' 'user:fixture:memoryuse:deny=1048576/process' 'user:fixture:pcpu:deny=25/user' 'user:fixture:swapuse:deny=4194304/user' 'user:fixture:maxproc:deny=20/user'
+  fi
+}}
+quota() {{
+  printf '%s\n' 'Disk quotas for user fixture:'
+  printf '%s\n' 'Filesystem usage quota limit grace files quota limit grace'
+  printf '%s\n' '/account 256 1024 2048 - 3 0 0 -'
+}}
+devil() {{
+  printf '%s\n' 'Disk quota: [=====] 90.00% (9.0G/10.0G)'
+  printf '%s\n' 'RAM memory: [=====] 90.00% (9.0G/10.0G)'
+  printf '%s\n' 'CPU: [=====] 90.00% (90/100)'
+}}
+{}
+"#,
+            build_freebsd_metrics_command()
+        );
+        let output = std::process::Command::new("sh")
+            .args(["-c", &script])
+            .output()
+            .expect("FreeBSD standard account fixture should start");
+
+        assert!(
+            output.status.success(),
+            "fixture script failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("__CPU__12.5\n"));
+        assert!(stdout.contains("__MEM_BYTES__67108864|134217728|67108864|50.00|0|0|0\n"));
+        assert!(stdout.contains("__SWAP_BYTES__1048576|4194304|3145728|25.0\n"));
+        assert!(stdout.contains("/account|256.0K/2.0M\n"));
+
+        let metrics = parse_system_metrics(&stdout, "freebsd");
+        assert_eq!(metrics["cpuPercent"], 12.5);
+        assert_eq!(metrics["memoryRaw"]["totalBytes"], 134217728.0);
+        assert_eq!(metrics["memoryRaw"]["usedBytes"], 67108864.0);
+        assert_eq!(metrics["swapRaw"]["totalBytes"], 4194304.0);
+        assert_eq!(metrics["fileSystemRows"][0]["name"], "account quota");
+        assert_eq!(metrics["fileSystemRows"][0]["mountPoint"], "/account");
+        assert_eq!(metrics["fileSystemRows"][0]["usagePercent"], "12.50%");
     }
 
     #[cfg(unix)]
