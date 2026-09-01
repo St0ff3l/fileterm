@@ -1,3 +1,5 @@
+> 归档状态（2026-09-01）：源码规模治理、剩余大文件拆分、TS/TSX 文件名 `kebab-case` 统一及 Rust 文件/模块名 `snake_case` 统一均已完成。自动化质量门禁和生产构建已通过；当前没有需要继续拆分的非豁免业务源文件。本文移至 `docs/plans/completed/`，后续仅按新文件规模边界维护。
+
 # 源码规模治理清单（完成状态）
 
 > 依据 `AGENTS.md` §3「文件规模边界」：
@@ -30,10 +32,10 @@
 
 ## 二、本轮已完成的拆分
 
-- **Renderer 入口与页面**：`App.tsx` → `app.tsx`（178 行）及 `app-*` hooks/views；`ConnectionModal.tsx` → `connection-modal.tsx`（401 行）及表单区块；`FileManager.tsx` → `file-manager.tsx`（787 行）及 pane、toolbar、同步 Hook；`AiCopilotPanel.tsx` → `ai-copilot-panel.tsx`（566 行）及消息/输入区块；`SystemSidebar.tsx`、`SshKeyManagerPage.tsx`、`CommandCenter.tsx`、`SecuritySettingsPanel.tsx` 均已按职责拆分。
-- **Renderer hooks**：`useTerminalLifecycle.ts`、`useWorkspaceTabs.ts`、`useFileOperations.ts`、`useTerminalView.ts`、`useAiCopilot.ts`、`useWorkspaceIpcSync.ts` 均已拆为职责模块，facade 保留稳定 Hook 导出。
+- **Renderer 入口与页面**：`app.tsx` → `app.tsx`（178 行）及 `app-*` hooks/views；`connection-modal.tsx` → `connection-modal.tsx`（401 行）及表单区块；`file-manager.tsx` → `file-manager.tsx`（787 行）及 pane、toolbar、同步 Hook；`ai-copilot-panel.tsx` → `ai-copilot-panel.tsx`（566 行）及消息/输入区块；`system-sidebar.tsx`、`ssh-key-manager-page.tsx`、`command-center.tsx`、`security-settings-panel.tsx` 均已按职责拆分。
+- **Renderer hooks**：`use-terminal-lifecycle.ts`、`use-workspace-tabs.ts`、`use-file-operations.ts`、`use-terminal-view.ts`、`use-ai-copilot.ts`、`use-workspace-ipc-sync.ts` 均已拆为职责模块，facade 保留稳定 Hook 导出。
 - **Rust SSH worker**：`loop.rs` 改为 `event_loop.rs` 并配合 `SshSessionContext`、startup/dispatch 子模块；`dispatch.rs` 按 terminal、transfer、files 分组委托。
-- **Rust storage**：`storage/migration.rs` 已整理为 `storage/migration/mod.rs`、`portable.rs`、`legacy.rs`、`staging.rs`。
+- **Rust storage**：`storage/migration/mod.rs` 已整理为 `storage/migration/mod.rs`、`portable.rs`、`legacy.rs`、`staging.rs`。
 - **命名统一**：Renderer 业务 `.ts/.tsx` 文件名全部统一为小写 `kebab-case`；Rust 文件名和模块名统一为 `snake_case`。`vite.config.ts` 等工具链约定文件保留标准命名，声明文件仍使用 `.d.ts` 约定。导出的 React 类型/组件仍使用 PascalCase，Hook/函数仍使用 camelCase。
 
 ## 三、当前结论
@@ -58,7 +60,7 @@ facade 只保留 `pub use` / `export * from` 再导出与类型 re-export，不�
 ### 4.2 例外与变通
 
 - **Rust 关键字文件名不能转同名目录**：`sessions/ssh/worker/loop.rs` 的 `loop` 是保留字，不能建 `worker/loop/` 目录并以 `worker::loop` 引用。该文件须先改名（如 `event_loop.rs`）再拆，或直接拆为 `worker/` 下的兄弟子模块，不追求同名。
-- **允许按区块抽兄弟文件**：Renderer 那批表单/组件类（`App.tsx`、`ConnectionModal.tsx`、`useWorkspaceTabs.ts` 等）按区块或 tab 抽成兄弟子组件/子 hook 往往比套同名目录更自然，不强制同名目录。
+- **允许按区块抽兄弟文件**：Renderer 那批表单/组件类（`app.tsx`、`connection-modal.tsx`、`use-workspace-tabs.ts` 等）按区块或 tab 抽成兄弟子组件/子 hook 往往比套同名目录更自然，不强制同名目录。
 - **类型聚合文件**（`packages/core/src/index.ts`）：若未来切分，同样用 `index.ts` 仅做 `export * from './xxx'` 的 facade，对外 `@fileterm/core` 入口不变。
 - **Rust 命名**：文件名/模块名使用 `snake_case`（如 `event_loop.rs`、`sftp_startup.rs`）；Rust 类型名和公开组件名不因此改变。
 
