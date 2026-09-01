@@ -32,6 +32,25 @@ pub struct RemoteExecResult {
     pub input_kind: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundRemoteCommandStartResult {
+    pub command_id: String,
+    pub tab_id: String,
+    pub started_at: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum RemoteExecMode {
+    Synchronous,
+    Background,
+}
+
+enum RemoteExecOperationResult {
+    Completed(RemoteExecResult),
+    Started(BackgroundRemoteCommandStartResult),
+}
+
 /// Run one explicit command through the normal FileTerm command boundary.
 /// Server sessions use the independent exec channel; network-device sessions
 /// retain the established raw-PTY fallback used by the renderer and Copilot.
@@ -39,7 +58,12 @@ pub async fn execute_remote_command(
     app: &AppHandle,
     request: RemoteExecRequest,
 ) -> Result<RemoteExecResult, AppError> {
-    execute_remote_command_inner(app, request, true, None).await
+    match execute_remote_command_inner(app, request, true, None, RemoteExecMode::Synchronous).await? {
+        RemoteExecOperationResult::Completed(result) => Ok(result),
+        RemoteExecOperationResult::Started(_) => Err(AppError::Command(
+            "Internal remote command mode mismatch".to_string(),
+        )),
+    }
 }
 
 /// Run one Copilot command with the request-scoped cancellation token wired
@@ -51,7 +75,20 @@ pub async fn execute_remote_command_cancellable(
     request: RemoteExecRequest,
     cancellation: &CancellationToken,
 ) -> Result<RemoteExecResult, AppError> {
-    execute_remote_command_inner(app, request, true, Some(cancellation)).await
+    match execute_remote_command_inner(
+        app,
+        request,
+        true,
+        Some(cancellation),
+        RemoteExecMode::Synchronous,
+    )
+    .await?
+    {
+        RemoteExecOperationResult::Completed(result) => Ok(result),
+        RemoteExecOperationResult::Started(_) => Err(AppError::Command(
+            "Internal remote command mode mismatch".to_string(),
+        )),
+    }
 }
 
 /// Run one command through the MCP background route. Unlike the normal
@@ -62,7 +99,73 @@ pub async fn execute_background_remote_command(
     app: &AppHandle,
     request: RemoteExecRequest,
 ) -> Result<RemoteExecResult, AppError> {
-    execute_remote_command_inner(app, request, false, None).await
+    match execute_remote_command_inner(app, request, false, None, RemoteExecMode::Synchronous).await? {
+        RemoteExecOperationResult::Completed(result) => Ok(result),
+        RemoteExecOperationResult::Started(_) => Err(AppError::Command(
+            "Internal remote command mode mismatch".to_string(),
+        )),
+    }
+}
+
+/// Cancellable counterpart used by the long-lived MCP bridge. The token is
+/// passed into the SSH worker so cancellation terminates the existing exec
+/// channel instead of merely abandoning the local response future.
+pub async fn execute_background_remote_command_cancellable(
+    app: &AppHandle,
+    request: RemoteExecRequest,
+    cancellation: &CancellationToken,
+) -> Result<RemoteExecResult, AppError> {
+    match execute_remote_command_inner(
+        app,
+        request,
+        false,
+        Some(cancellation),
+        RemoteExecMode::Synchronous,
+    )
+    .await?
+    {
+        RemoteExecOperationResult::Completed(result) => Ok(result),
+        RemoteExecOperationResult::Started(_) => Err(AppError::Command(
+            "Internal remote command mode mismatch".to_string(),
+        )),
+    }
+}
+
+/// Start a long-running server command and return after the SSH exec channel
+/// has accepted it. The caller must use the MCP background-command read tools
+/// to observe completion; this function deliberately does not wait for the
+/// command or retry it on a replacement channel.
+pub async fn start_background_remote_command(
+    app: &AppHandle,
+    request: RemoteExecRequest,
+) -> Result<BackgroundRemoteCommandStartResult, AppError> {
+    match execute_remote_command_inner(app, request, false, None, RemoteExecMode::Background).await? {
+        RemoteExecOperationResult::Started(result) => Ok(result),
+        RemoteExecOperationResult::Completed(_) => Err(AppError::Command(
+            "Internal remote command mode mismatch".to_string(),
+        )),
+    }
+}
+
+pub async fn start_background_remote_command_cancellable(
+    app: &AppHandle,
+    request: RemoteExecRequest,
+    cancellation: &CancellationToken,
+) -> Result<BackgroundRemoteCommandStartResult, AppError> {
+    match execute_remote_command_inner(
+        app,
+        request,
+        false,
+        Some(cancellation),
+        RemoteExecMode::Background,
+    )
+    .await?
+    {
+        RemoteExecOperationResult::Started(result) => Ok(result),
+        RemoteExecOperationResult::Completed(_) => Err(AppError::Command(
+            "Internal remote command mode mismatch".to_string(),
+        )),
+    }
 }
 
 async fn execute_remote_command_inner(
@@ -70,16 +173,31 @@ async fn execute_remote_command_inner(
     request: RemoteExecRequest,
     allow_network_device_fallback: bool,
     cancellation: Option<&CancellationToken>,
-) -> Result<RemoteExecResult, AppError> {
+    mode: RemoteExecMode,
+) -> Result<RemoteExecOperationResult, AppError> {
     check_cancellation(cancellation)?;
     let tab_id = validate_remote_exec_tab_id(&request.tab_id)?;
     let command = validate_remote_exec_command(&request.command)?;
     let requested_cwd = validate_remote_exec_cwd(request.cwd)?;
 
+    if matches!(mode, RemoteExecMode::Background)
+        && (request.save_sudo_password || request.save_su_password)
+    {
+        return Err(AppError::Command(
+            BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED.to_string(),
+        ));
+    }
+    let (default_timeout_ms, max_timeout_ms) = match mode {
+        RemoteExecMode::Synchronous => (DEFAULT_REMOTE_EXEC_TIMEOUT_MS, MAX_REMOTE_EXEC_TIMEOUT_MS),
+        RemoteExecMode::Background => (
+            DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
+            MAX_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
+        ),
+    };
     let timeout_ms = request
         .timeout_ms
-        .unwrap_or(DEFAULT_REMOTE_EXEC_TIMEOUT_MS)
-        .clamp(MIN_REMOTE_EXEC_TIMEOUT_MS, MAX_REMOTE_EXEC_TIMEOUT_MS);
+        .unwrap_or(default_timeout_ms)
+        .clamp(MIN_REMOTE_EXEC_TIMEOUT_MS, max_timeout_ms);
     let state = app.state::<crate::services::workspace::WorkspaceState>();
     let session_type = {
         let tabs = state.tabs.read().await;
@@ -161,7 +279,8 @@ async fn execute_remote_command_inner(
             bound_session_revision.as_deref(),
             cancellation,
         )
-        .await;
+        .await
+        .map(RemoteExecOperationResult::Completed);
     }
 
     let initial_prepared = prepare_remote_exec(
@@ -218,24 +337,60 @@ async fn execute_remote_command_inner(
 
     ensure_expected_session_revision(&state, &tab_id, bound_session_revision.as_deref()).await?;
 
-    let result = crate::commands::send_worker_cmd_with_response_timeout_cancellable(
-        app,
-        &tab_id,
-        Duration::from_millis(timeout_ms.saturating_add(5_000)),
-        cancellation,
-        |respond_to| WorkerCmd::ExecuteRemoteCommand {
-            command: prepared.command.clone(),
-            cwd,
-            timeout_ms,
-            stdin: prepared.stdin.clone(),
-            request_pty: prepared.request_pty,
-            cancellation: cancellation.cloned(),
-            respond_to,
-        },
-    )
-    .await?;
-    check_cancellation(cancellation)?;
-    let parsed = parse_remote_exec_result(result)?;
+    let result = match mode {
+        RemoteExecMode::Synchronous => {
+            let result = crate::commands::send_worker_cmd_with_response_timeout_cancellable(
+                app,
+                &tab_id,
+                Duration::from_millis(timeout_ms.saturating_add(5_000)),
+                cancellation,
+                |respond_to| WorkerCmd::ExecuteRemoteCommand {
+                    command: prepared.command.clone(),
+                    cwd: cwd.clone(),
+                    timeout_ms,
+                    stdin: prepared.stdin.clone(),
+                    request_pty: prepared.request_pty,
+                    cancellation: cancellation.cloned(),
+                    respond_to,
+                },
+            )
+            .await?;
+            check_cancellation(cancellation)?;
+            RemoteExecOperationResult::Completed(parse_remote_exec_result(result)?)
+        }
+        RemoteExecMode::Background => {
+            let lifetime_cancellation = state
+                .worker_controls
+                .read()
+                .await
+                .get(&tab_id)
+                .cloned()
+                .ok_or_else(|| AppError::Storage("SSH worker is not running".to_string()))?
+                .child_token();
+            let result = crate::commands::send_worker_cmd_with_response_timeout_cancellable(
+                app,
+                &tab_id,
+                Duration::from_secs(35),
+                cancellation,
+                |respond_to| WorkerCmd::StartBackgroundRemoteCommand {
+                    command: prepared.command.clone(),
+                    cwd: cwd.clone(),
+                    timeout_ms,
+                    stdin: prepared.stdin.clone(),
+                    request_pty: prepared.request_pty,
+                    start_cancellation: cancellation.cloned(),
+                    lifetime_cancellation,
+                    respond_to,
+                },
+            )
+            .await?;
+            check_cancellation(cancellation)?;
+            RemoteExecOperationResult::Started(parse_background_remote_command_start(result)?)
+        }
+    };
+    let RemoteExecOperationResult::Completed(parsed) = result else {
+        return Ok(result);
+    };
     if let Some(kind) = prepared.kind {
         if detect_privileged_auth_failure(&parsed.output, kind) {
             if prepared.used_saved_password {
@@ -274,7 +429,39 @@ async fn execute_remote_command_inner(
             }
         }
     }
-    Ok(parsed)
+    Ok(RemoteExecOperationResult::Completed(parsed))
+}
+
+fn parse_background_remote_command_start(
+    value: Value,
+) -> Result<BackgroundRemoteCommandStartResult, AppError> {
+    let command_id = value
+        .get("commandId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            AppError::Serialization("Background remote command id was invalid".to_string())
+        })?
+        .to_string();
+    let tab_id = value
+        .get("tabId")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            AppError::Serialization("Background remote command tab id was invalid".to_string())
+        })?
+        .to_string();
+    let started_at = value
+        .get("startedAt")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            AppError::Serialization("Background remote command start time was invalid".to_string())
+        })?;
+    Ok(BackgroundRemoteCommandStartResult {
+        command_id,
+        tab_id,
+        started_at,
+    })
 }
 
 /// Resolve a visible-terminal target and require that it is the session the

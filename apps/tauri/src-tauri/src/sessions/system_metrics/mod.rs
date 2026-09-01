@@ -10,8 +10,8 @@ use base64::Engine;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use russh::client::{Handle, Handler};
-use russh::ChannelMsg;
-use tokio::time::timeout;
+use russh::{ChannelMsg, ChannelReadHalf, ChannelWriteHalf};
+use tokio::time::{timeout, timeout_at};
 
 // A few SSH transports deliver a terminal channel marker before the final
 // stdout packet is drained. Keep a very short grace window after EOF, CLOSE,
@@ -19,6 +19,9 @@ use tokio::time::timeout;
 // which omit the remaining markers cannot hold a caller until its much longer
 // command watchdog fires.
 const EXEC_CHANNEL_DRAIN_TIMEOUT: Duration = Duration::from_millis(100);
+/// A cancellation must not wait behind a broken SSH server indefinitely. Each
+/// signal is best-effort and the channel is closed after the ladder.
+const EXEC_TERMINATION_SIGNAL_TIMEOUT: Duration = Duration::from_millis(300);
 
 /// `exec_command` / `exec_command_with_stdin` 收集的 output 字节上限。
 /// probe 命令的正常输出只有几行（uname / 系统信息），超过 256KB 说明
@@ -39,6 +42,15 @@ pub struct ExecCommandResult {
     /// safely collected bytes are still returned so callers can distinguish a
     /// command that never produced output from one that ran partially.
     pub timed_out: bool,
+}
+
+/// Channel halves used by the stateful MCP background-command registry. The
+/// reader is owned by the output pump while the writer stays behind a small
+/// async mutex so a later terminate request can signal the same SSH channel.
+pub(crate) struct BackgroundExecChannel {
+    pub reader: ChannelReadHalf,
+    pub writer: ChannelWriteHalf<russh::client::Msg>,
+    pub pending_pty_stdin: Option<Vec<u8>>,
 }
 
 include!("exec.rs");

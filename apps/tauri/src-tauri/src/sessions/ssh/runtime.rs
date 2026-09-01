@@ -63,7 +63,20 @@ pub fn start_ssh_worker(
             crate::services::logging::session(&app, "INFO", "ssh", &tid, "worker cancelled");
             return;
         }
-        if run_result.is_ok() {
+        let should_reconnect = match &run_result {
+            // Startup failures do not have a live worker exit classification,
+            // so preserve the existing retry behavior for those failures.
+            Err(_) => true,
+            Ok(exit) => exit.should_reconnect(),
+        };
+        let connection_was_stable = run_result
+            .as_ref()
+            .ok()
+            .is_some_and(|exit| exit.connection_was_stable);
+        if connection_was_stable {
+            // Reset only after a connection was genuinely usable for a while.
+            // An accept-then-drop loop must keep its attempt count so the
+            // configured limit and exponential backoff remain effective.
             app.state::<crate::services::workspace::WorkspaceState>()
                 .serial_reconnect_attempts
                 .write()
@@ -71,15 +84,19 @@ pub fn start_ssh_worker(
                 .remove(&tid);
         }
         let final_status = match run_result {
-            Ok(()) => {
+            Ok(exit) => {
                 crate::services::logging::session(
                     &app,
                     "INFO",
                     "ssh",
                     &tid,
-                    "worker exited cleanly",
+                    format!("worker exited: {}", exit.description()),
                 );
-                emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
+                if exit.should_reconnect() {
+                    emit_terminal_data(&app, &tid, "SSH 连接中断，正在准备重连...\r\n").await;
+                } else {
+                    emit_terminal_data(&app, &tid, "连接已断开\r\n").await;
+                }
                 WorkspaceTabStatus::Closed
             }
             Err(e) => {
@@ -119,12 +136,13 @@ pub fn start_ssh_worker(
                 .or_else(|| crate::services::workspace::reconnect_mode_for_profile(&profile));
             mode.unwrap_or_else(|| "none".to_string())
         };
-        if reconnect_mode == "auto" {
+        if should_reconnect && reconnect_mode == "auto" {
             let next_attempt = {
                 let state = app.state::<crate::services::workspace::WorkspaceState>();
                 let mut attempts = state.serial_reconnect_attempts.write().await;
                 let current = attempts.get(&tid).copied().unwrap_or(0);
-                let next = reconnect_policy.next_attempt(current);
+                let next = reconnect_policy
+                    .next_attempt_after_connection(current, connection_was_stable);
                 if let Some(attempt) = next {
                     attempts.insert(tid.clone(), attempt);
                 }
@@ -309,10 +327,64 @@ pub struct ClientHandler {
     /// the emitter below still falls back to the app-wide event for recovery.
     interaction_window_label: Option<String>,
     interaction: SshInteractionContext,
+    disconnect_reason: SharedSshDisconnectReason,
 }
 
 impl Handler for ClientHandler {
     type Error = russh::Error;
+
+    async fn disconnected(
+        &mut self,
+        reason: russh::client::DisconnectReason<Self::Error>,
+    ) -> Result<(), Self::Error> {
+        let (info, transport_error) = match reason {
+            russh::client::DisconnectReason::ReceivedDisconnect(info) => (
+                SshDisconnectInfo {
+                    kind: SshDisconnectKind::Remote,
+                    message: format!(
+                        "code={:?} message={}",
+                        info.reason_code, info.message
+                    ),
+                },
+                None,
+            ),
+            russh::client::DisconnectReason::Error(error) => {
+                let message = error.to_string();
+                (
+                    SshDisconnectInfo {
+                        kind: SshDisconnectKind::Transport,
+                        message,
+                    },
+                    Some(error),
+                )
+            }
+        };
+        if let Ok(mut slot) = self.disconnect_reason.lock() {
+            if slot.is_none() {
+                *slot = Some(info.clone());
+            }
+        }
+        crate::services::logging::session(
+            &self.app,
+            if matches!(info.kind, SshDisconnectKind::Transport) {
+                "ERROR"
+            } else {
+                "WARN"
+            },
+            "ssh",
+            &self.tab_id,
+            format!(
+                "SSH transport disconnected kind={} reason={}",
+                info.kind.as_str(),
+                info.message
+            ),
+        );
+        if let Some(error) = transport_error {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
 
     async fn kex_done(
         &mut self,

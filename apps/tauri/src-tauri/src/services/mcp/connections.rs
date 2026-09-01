@@ -310,6 +310,7 @@ async fn execute_remote_command(
     params: &Value,
     progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
     progress_token: Option<Value>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
     let tab_id = required_string(params, "tab_id", 256)?;
     let command = required_text(params, "command", 64 * 1024)?;
@@ -328,28 +329,143 @@ async fn execute_remote_command(
             ));
         }) as crate::services::action_review::PrivilegedPromptNotice
     });
-    let result = crate::services::action_review::execute_background_remote_command(
-        app,
-        crate::services::action_review::RemoteExecRequest {
-            tab_id: tab_id.clone(),
-            command,
-            cwd,
-            timeout_ms,
-            expected_session_revision: None,
-            sudo_password,
-            su_password,
-            save_sudo_password,
-            save_su_password,
-            allow_local_privileged_prompt: true,
-            privileged_prompt_notice,
-        },
-    )
-    .await
+    let request = crate::services::action_review::RemoteExecRequest {
+        tab_id: tab_id.clone(),
+        command,
+        cwd,
+        timeout_ms,
+        expected_session_revision: None,
+        sudo_password,
+        su_password,
+        save_sudo_password,
+        save_su_password,
+        allow_local_privileged_prompt: true,
+        privileged_prompt_notice,
+    };
+    let result = match cancellation {
+        Some(cancellation) => {
+            crate::services::action_review::execute_background_remote_command_cancellable(
+                app,
+                request,
+                cancellation,
+            )
+            .await
+        }
+        None => crate::services::action_review::execute_background_remote_command(app, request)
+            .await,
+    }
     .map_err(public_app_error)?;
     Ok(json!({
         "tabId": tab_id,
         "executionMode": EXECUTION_MODE_BACKGROUND,
         "result": result,
+    }))
+}
+
+async fn start_remote_command(
+    app: &AppHandle,
+    params: &Value,
+    progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    progress_token: Option<Value>,
+    cancellation: Option<&tokio_util::sync::CancellationToken>,
+) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command = required_text(params, "command", 64 * 1024)?;
+    let cwd = optional_string(params, "cwd", 4_096)?;
+    let timeout_ms = optional_u64(params, "timeout_ms")?;
+    let sudo_password = optional_secret_string(params, "sudo_password", 4 * 1024)?;
+    let su_password = optional_secret_string(params, "su_password", 4 * 1024)?;
+    let privileged_prompt_notice = progress_sender.map(|sender| {
+        let progress_token = progress_token.clone();
+        Arc::new(move |needed_code: &str| {
+            let _ = sender.send(BridgeProgress::privileged_password_prompt(
+                needed_code,
+                progress_token.clone(),
+            ));
+        }) as crate::services::action_review::PrivilegedPromptNotice
+    });
+    let request = crate::services::action_review::RemoteExecRequest {
+        tab_id: tab_id.clone(),
+        command,
+        cwd,
+        timeout_ms,
+        expected_session_revision: None,
+        sudo_password,
+        su_password,
+        save_sudo_password: false,
+        save_su_password: false,
+        allow_local_privileged_prompt: true,
+        privileged_prompt_notice,
+    };
+    let result = match cancellation {
+        Some(cancellation) => {
+            crate::services::action_review::start_background_remote_command_cancellable(
+                app,
+                request,
+                cancellation,
+            )
+            .await
+        }
+        None => crate::services::action_review::start_background_remote_command(app, request).await,
+    }
+    .map_err(public_app_error)?;
+    Ok(json!({
+        "tabId": result.tab_id,
+        "executionMode": EXECUTION_MODE_BACKGROUND,
+        "commandId": result.command_id,
+        "startedAt": result.started_at,
+        "status": "running",
+    }))
+}
+
+async fn read_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    let offset = optional_u64(params, "offset")?.unwrap_or(0);
+    let max_bytes = optional_u64(params, "max_bytes")?
+        .unwrap_or(64 * 1024)
+        .try_into()
+        .map_err(|_| "max_bytes is too large".to_string())?;
+    let wait_ms = optional_u64(params, "wait_ms")?.unwrap_or(0);
+    if wait_ms > 30_000 {
+        return Err("wait_ms must be between 0 and 30000".to_string());
+    }
+    let snapshot = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .read(
+            &tab_id,
+            &command_id,
+            offset,
+            max_bytes,
+            Duration::from_millis(wait_ms),
+        )
+        .await?;
+    serde_json::to_value(snapshot).map_err(|error| error.to_string())
+}
+
+async fn terminate_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    let snapshot = app
+        .state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .terminate(&tab_id, &command_id)
+        .await?;
+    serde_json::to_value(snapshot).map_err(|error| error.to_string())
+}
+
+async fn close_remote_command(app: &AppHandle, params: &Value) -> Result<Value, String> {
+    let tab_id = required_string(params, "tab_id", 256)?;
+    let command_id = required_string(params, "command_id", 256)?;
+    app.state::<crate::services::workspace::WorkspaceState>()
+        .background_remote_commands
+        .close(&tab_id, &command_id)
+        .await?;
+    Ok(json!({
+        "tabId": tab_id,
+        "commandId": command_id,
+        "closed": true,
     }))
 }
 

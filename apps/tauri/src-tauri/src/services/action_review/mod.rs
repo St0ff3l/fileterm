@@ -31,6 +31,8 @@ const MAX_REMOTE_EXEC_TAB_ID_BYTES: usize = 256;
 pub const DEFAULT_REMOTE_EXEC_TIMEOUT_MS: u64 = 60_000;
 pub const MIN_REMOTE_EXEC_TIMEOUT_MS: u64 = 1_000;
 pub const MAX_REMOTE_EXEC_TIMEOUT_MS: u64 = 120_000;
+pub const DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS: u64 = 30 * 60 * 1_000;
+pub const MAX_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS: u64 = 6 * 60 * 60 * 1_000;
 const MAX_REMOTE_EXEC_SECRET_BYTES: usize = 4 * 1024;
 const NETWORK_DEVICE_RAW_OUTPUT_BYTES: usize = 64 * 1024;
 const NETWORK_DEVICE_RAW_IDLE_SETTLE: Duration = Duration::from_millis(200);
@@ -46,6 +48,10 @@ pub const SU_AUTH_FAILURE: &str = "SU_AUTH_FAILURE";
 /// that operation in the visible SSH terminal and retry the non-interactive
 /// command afterwards.
 pub const REMOTE_INTERACTIVE_INPUT_REQUIRED: &str = "REMOTE_INTERACTIVE_INPUT_REQUIRED";
+/// Saving a newly supplied sudo/su password requires a completed synchronous
+/// command so FileTerm can verify that authentication succeeded first.
+pub const BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED: &str =
+    "BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED";
 /// Network-device sessions do not have a POSIX working directory. Callers
 /// must send the native CLI command without a `cd` context.
 pub const NETWORK_DEVICE_CWD_UNSUPPORTED: &str = "NETWORK_DEVICE_CWD_UNSUPPORTED";

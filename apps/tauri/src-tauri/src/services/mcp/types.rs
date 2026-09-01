@@ -157,6 +157,14 @@ impl CliJsonlRequestControls {
             active.remove(&key);
         }
     }
+
+    fn cancel_all(&self) {
+        if let Ok(active) = self.active.lock() {
+            for cancellation in active.values() {
+                cancellation.store(true, Ordering::Release);
+            }
+        }
+    }
 }
 
 fn cli_jsonl_request_key(id: &Value) -> Result<String, String> {

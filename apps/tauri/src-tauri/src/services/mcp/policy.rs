@@ -3,6 +3,7 @@ async fn dispatch_bridge_request(
     app: &AppHandle,
     request: BridgeRequest,
     progress_sender: Option<mpsc::UnboundedSender<BridgeProgress>>,
+    cancellation: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<Value, String> {
     let progress_token = request.progress_token.clone();
     let policy = enforce_mcp_access_policy(app, &request).await?;
@@ -43,8 +44,28 @@ async fn dispatch_bridge_request(
         "disconnect_session" => disconnect_session(app, &request.params).await,
         "close_session" => close_session(app, &request.params).await,
         "execute_remote_command" => {
-            execute_remote_command(app, &request.params, progress_sender, progress_token).await
+            execute_remote_command(
+                app,
+                &request.params,
+                progress_sender,
+                progress_token,
+                cancellation.as_ref(),
+            )
+            .await
         }
+        "start_remote_command" => {
+            start_remote_command(
+                app,
+                &request.params,
+                progress_sender,
+                progress_token,
+                cancellation.as_ref(),
+            )
+            .await
+        }
+        "read_remote_command" => read_remote_command(app, &request.params).await,
+        "terminate_remote_command" => terminate_remote_command(app, &request.params).await,
+        "close_remote_command" => close_remote_command(app, &request.params).await,
         "execute_visible_command" => execute_visible_command(app, &request.params).await,
         "execute_command_template" => execute_command_template(app, &request.params).await,
         "write_remote_file" => write_remote_file(app, &request.params).await,
@@ -269,7 +290,7 @@ fn action_requires_approval(action: &str, params: &Value) -> bool {
         // Ordinary safe remote commands use the same local classifier as the
         // built-in Copilot. Mutating, destructive, privileged, and unknown
         // commands return to the FileTerm approval dialog.
-        "execute_remote_command" => params
+        "execute_remote_command" | "start_remote_command" => params
             .get("command")
             .and_then(Value::as_str)
             .map(|command| !is_basic_safe_command(command))
@@ -295,6 +316,7 @@ fn action_is_read_only(action: &str, _params: &Value) -> bool {
             | "wait_for_connection"
             | "list_ssh_tunnels"
             | "activate_session"
+            | "read_remote_command"
     )
 }
 
@@ -368,10 +390,13 @@ async fn approval_details(
         _ => tab_id.clone(),
     };
     let details = match action {
-        "execute_remote_command" | "execute_visible_command" => Some(truncate_text(
+        "execute_remote_command" | "start_remote_command" | "execute_visible_command" => Some(truncate_text(
             &required_text(params, "command", 64 * 1024)?,
             4 * 1024,
         )),
+        "terminate_remote_command" | "close_remote_command" => {
+            optional_string(params, "command_id", 256)?
+        }
         "execute_command_template" => {
             let command_id = required_string(params, "command_id", 256)?;
             let snapshot = crate::commands::get_workspace_snapshot(app.clone())
@@ -461,6 +486,10 @@ async fn approval_details(
         "disconnect_session" => "断开 FileTerm 会话".to_string(),
         "close_session" => "关闭 FileTerm 标签页".to_string(),
         "execute_remote_command" => "在远程 SSH 主机后台执行命令".to_string(),
+        "start_remote_command" => "启动可持续的远程 SSH 后台命令".to_string(),
+        "read_remote_command" => "读取远程后台命令输出".to_string(),
+        "terminate_remote_command" => "终止远程后台命令".to_string(),
+        "close_remote_command" => "释放远程后台命令".to_string(),
         "execute_visible_command" => "在可见 FileTerm 终端执行命令".to_string(),
         "execute_command_template" => "执行 FileTerm 命令模板".to_string(),
         "write_remote_file" => "写入远程文件".to_string(),
@@ -493,6 +522,10 @@ async fn approval_details(
                 | "disconnect_session"
                 | "close_session"
                 | "execute_remote_command"
+                | "start_remote_command"
+                | "read_remote_command"
+                | "terminate_remote_command"
+                | "close_remote_command"
                 | "execute_visible_command"
                 | "execute_command_template"
                 | "write_remote_file"

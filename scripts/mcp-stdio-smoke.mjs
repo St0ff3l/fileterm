@@ -94,6 +94,10 @@ async function runSmoke(binaryPath) {
       'fileterm_open_connection',
       'fileterm_activate_session',
       'fileterm_execute_remote_command',
+      'fileterm_start_remote_command',
+      'fileterm_read_remote_command',
+      'fileterm_terminate_remote_command',
+      'fileterm_close_remote_command',
       'fileterm_execute_visible_command'
     ]
     for (const name of requiredTools) {
@@ -101,6 +105,21 @@ async function runSmoke(binaryPath) {
     }
 
     const remoteProperties = byName.get('fileterm_execute_remote_command').inputSchema?.properties ?? {}
+    const backgroundStart = byName.get('fileterm_start_remote_command')
+    const backgroundRead = byName.get('fileterm_read_remote_command')
+    assert(
+      backgroundStart.inputSchema?.properties?.timeout_ms?.maximum === 6 * 60 * 60 * 1000,
+      'background start schema has an invalid timeout maximum'
+    )
+    assert(
+      !Object.hasOwn(backgroundStart.inputSchema?.properties ?? {}, 'save_sudo_password'),
+      'background start schema must not expose save_sudo_password'
+    )
+    assert(backgroundRead.annotations?.readOnlyHint === true, 'background read must be marked read-only')
+    assert(
+      backgroundRead.inputSchema?.properties?.wait_ms?.maximum === 30_000,
+      'background read schema has an invalid wait maximum'
+    )
     const openTool = byName.get('fileterm_open_connection')
     assert(
       openTool.inputSchema?.required?.includes('execution_mode'),

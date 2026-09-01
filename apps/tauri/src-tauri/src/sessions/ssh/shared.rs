@@ -101,9 +101,38 @@ const INITIAL_CAPABILITY_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 type SshShellWriteHalf = ChannelWriteHalf<russh::client::Msg>;
 type SharedRemoteSshId = Arc<StdMutex<Option<Vec<u8>>>>;
 
+/// Why the russh client handler stopped its transport. A shell channel can
+/// close normally while the SSH connection is still healthy; that is not a
+/// reason to recreate the whole session. Transport-level errors, on the
+/// other hand, are the only failures that the worker's reconnect policy may
+/// retry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum SshDisconnectKind {
+    Remote,
+    Transport,
+}
+
+impl SshDisconnectKind {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Remote => "remote-disconnect",
+            Self::Transport => "transport-error",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SshDisconnectInfo {
+    kind: SshDisconnectKind,
+    message: String,
+}
+
+type SharedSshDisconnectReason = Arc<StdMutex<Option<SshDisconnectInfo>>>;
+
 struct OpenSshSession {
     handle: Handle<ClientHandler>,
     remote_sshid: Vec<u8>,
+    disconnect_reason: SharedSshDisconnectReason,
 }
 
 /// Which endpoint in an SSH connection flow owns an authentication prompt.

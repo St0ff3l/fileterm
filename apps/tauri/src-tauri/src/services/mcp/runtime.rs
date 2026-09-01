@@ -123,9 +123,17 @@ async fn handle_runtime_connection(
     }
 
     let request_timeout = bridge_request_timeout(&envelope.request);
+    let cancellation = CancellationToken::new();
     let (progress_sender, mut progress_receiver) = mpsc::unbounded_channel();
-    let dispatch = dispatch_bridge_request(&app, envelope.request, Some(progress_sender));
+    let dispatch = dispatch_bridge_request(
+        &app,
+        envelope.request,
+        Some(progress_sender),
+        Some(cancellation.clone()),
+    );
     tokio::pin!(dispatch);
+    let client_closed = wait_for_bridge_client_disconnect(&mut reader);
+    tokio::pin!(client_closed);
     let response = match timeout(request_timeout, async {
         let mut progress_open = true;
         loop {
@@ -140,7 +148,7 @@ async fn handle_runtime_connection(
                             .await
                             .map_err(|error| error.to_string())?;
                     }
-                    break Ok(response);
+                    break Ok(Some(response));
                 }
                 progress = progress_receiver.recv(), if progress_open => {
                     match progress {
@@ -150,16 +158,28 @@ async fn handle_runtime_connection(
                         None => progress_open = false,
                     }
                 }
+                _ = &mut client_closed => {
+                    // The CLI has gone away. Propagate cancellation to the
+                    // accepted operation before dropping the dispatch future;
+                    // cancellable SSH execs will signal and close their own
+                    // remote channel instead of being left running silently.
+                    cancellation.cancel();
+                    break Ok(None);
+                }
             }
         }
     })
     .await
     {
-        Ok(Ok(response)) => response,
+        Ok(Ok(Some(response))) => response,
+        Ok(Ok(None)) => return Ok(()),
         Ok(Err(error)) => return Err(error),
-        Err(_) => BridgeResponse::error(
-            "FileTerm MCP request timed out; retry after checking the session",
-        ),
+        Err(_) => {
+            cancellation.cancel();
+            BridgeResponse::error(
+                "FileTerm MCP request timed out; retry after checking the session",
+            )
+        }
     };
     write_bridge_response_to_writer(&mut writer, response)
         .await
@@ -175,12 +195,18 @@ fn bridge_request_timeout(request: &BridgeRequest) -> Duration {
         MCP_TRANSFER_WAIT_TIMEOUT
     } else if request.action == "wait_for_connection" {
         MCP_CONNECTION_WAIT_TIMEOUT
+    } else if request.action == "read_remote_command" {
+        // The public read tool may long-poll for up to 30 seconds while the
+        // background SSH channel produces more output. Leave a small margin
+        // for serialization and the final loopback write.
+        MCP_BRIDGE_TIMEOUT + Duration::from_secs(30)
     } else if request.action == "open_connection" {
         // MCP approval happens before the connection worker starts. Reserve
         // both windows so an approved SSH profile can still reach its secure
         // credential prompt and return a final connection result.
         ACTION_APPROVAL_TIMEOUT + MCP_CONNECTION_WAIT_TIMEOUT
     } else if request.action == "execute_remote_command"
+        || request.action == "start_remote_command"
         || action_requires_approval(&request.action, &request.params)
     {
         // A command may first wait for the external-operation approval, then
@@ -212,6 +238,21 @@ async fn read_bridge_line(
         return Err("FileTerm MCP bridge request exceeds the size limit".to_string());
     }
     Ok(line)
+}
+
+/// Read the remainder of a one-request bridge connection only to observe an
+/// EOF. The first request has already been consumed; any later bytes are not
+/// a supported second request on this short-lived transport.
+async fn wait_for_bridge_client_disconnect(
+    reader: &mut AsyncBufReader<tokio::net::tcp::OwnedReadHalf>,
+) {
+    let mut buffer = [0_u8; 1024];
+    loop {
+        match reader.read(&mut buffer).await {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+    }
 }
 
 async fn write_bridge_response(stream: TcpStream, response: BridgeResponse) -> io::Result<()> {

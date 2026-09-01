@@ -280,6 +280,7 @@ async fn open_session(
         // MaxStartups 统计可能虚高，极端情况下导致后续连接被拒绝。
         let target_result: Result<OpenSshSession, String> = async {
             let remote_sshid = Arc::new(StdMutex::new(None));
+            let disconnect_reason = Arc::new(StdMutex::new(None));
             let target_host_verification_waiting = Arc::new(AtomicBool::new(false));
             let mut target_handle = connect_target_through_jump(
                 &jump_handle,
@@ -296,6 +297,7 @@ async fn open_session(
                     interaction_window_label.clone(),
                     target_interaction.clone(),
                     remote_sshid.clone(),
+                    disconnect_reason.clone(),
                 ),
                 &host,
                 port,
@@ -317,6 +319,7 @@ async fn open_session(
                 Ok(OpenSshSession {
                     handle: target_handle,
                     remote_sshid: read_shared_remote_sshid(&remote_sshid),
+                    disconnect_reason,
                 })
             } else {
                 let _ = timeout(
@@ -366,6 +369,7 @@ async fn open_session(
         format!("socket connected target={host}:{port}"),
     );
     let remote_sshid = Arc::new(StdMutex::new(None));
+    let disconnect_reason = Arc::new(StdMutex::new(None));
     let host_verification_waiting = Arc::new(AtomicBool::new(false));
     let mut handle = wait_for_ssh_handshake_with_network_timeout(
         "SSH protocol handshake",
@@ -388,6 +392,7 @@ async fn open_session(
                     interaction_window_label.clone(),
                     interaction.clone(),
                     remote_sshid.clone(),
+                    disconnect_reason.clone(),
                 ),
             )
             .await
@@ -410,6 +415,7 @@ async fn open_session(
         Ok(OpenSshSession {
             handle,
             remote_sshid: read_shared_remote_sshid(&remote_sshid),
+            disconnect_reason,
         })
     } else {
         let _ = timeout(

@@ -133,6 +133,7 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 - sudo/su 继续使用现有的独立、安全凭据链路，不复用 SSH 登录密码。
 - 同一 profile 的并行打开请求复用同一个连接任务、tab 和凭据 prompt。
 - AI 常驻使用 MCP 或 CLI JSONL bridge 时，不因每个请求都创建一个新的 GUI 进程。
+- 部署、镜像构建、迁移和微服务编排等长任务通过稳定的 command ID 启动一次、增量读取、显式终止，不因单次 MCP 请求结束或 SSH 重连而重复提交。
 
 ### 3.2 安全目标
 
@@ -142,6 +143,7 @@ MCP/CLI 都通过本地 loopback bridge 请求已经运行的 FileTerm 主进程
 - 操作等级策略必须在所有外部 Agent 入口保持一致；策略不允许时 fail closed。
 - 密码 prompt 必须绑定 profile、tab、session revision 和当前连接任务，防止输入被错投到其他会话。
 - 所有等待都有明确 deadline、取消路径和稳定错误码。
+- 后台命令拥有有界输出缓存、固定 tab 作用域和 INT → TERM → KILL → close 的 best-effort 终止路径。
 
 ## 4. 非目标
 
@@ -298,6 +300,24 @@ FileTerm 主窗口安全 prompt
 - 需要用户选择的远程程序。
 
 普通 exec 返回 REMOTE_INTERACTIVE_INPUT_REQUIRED，用户在可见 SSH tab 完成操作后再重试。
+
+### 6.6 长部署：后台命令会话
+
+长命令不使用同步的 `fileterm_execute_remote_command`。外部 Agent 应按下面的协议操作：
+
+```text
+fileterm_start_remote_command(tab_id, command)
+        ↓ 返回 commandId
+循环：fileterm_read_remote_command(tab_id, commandId, offset, wait_ms)
+        ↓ 只消费 output，并把 nextOffset 作为下一次 offset
+running=false
+        ↓
+必要时 fileterm_terminate_remote_command
+        ↓
+fileterm_close_remote_command
+```
+
+启动阶段打开一个独立 SSH exec channel，成功后把 channel 和有界输出缓存交给桌面 workspace registry；后续短 MCP 请求只读取这个 registry，不会重新提交命令。worker 断线时后台命令随原 channel 结束并报告终态，重连 worker 不会自动重跑。
 
 ## 7. 连接任务与凭据等待设计
 
@@ -605,9 +625,10 @@ fileterm cli --jsonl
 - 一个 CLI JSONL 进程处理多个请求。
 - 请求之间通过 request ID 区分 progress 和最终结果。
 - CLI JSONL 可发送 `cancel_request` 请求取消仍在等待中的 request ID；取消返回后，原请求以 `FILETERM_CLI_JSONL_REQUEST_CANCELLED` 结束。
+- MCP stdio 可发送 `notifications/cancelled`；MCP/CLI 客户端断开或请求超时也会触发同一条请求取消边界。
 - 仍然由 FileTerm GUI 主进程持有 profile secret、SSH session 和 approval queue。
 - CLI JSONL 进程不得初始化 GUI 窗口或创建额外桌面 runtime。
-- 取消只结束 CLI JSONL 等待和输出，不回滚桌面端已经接受或开始执行的操作。
+- 普通 SSH exec 会在原 channel 上 best-effort 发送 INT → TERM → KILL 并关闭 channel；这不宣称远端进程已经退出，也不会在新 channel 上重跑已接受的命令。已进入桌面端的其它变更操作不因客户端取消而回滚。
 - 如果 macOS 应用包仍把 headless 子进程展示为 GUI 图标，则再验证 application type / bundle 行为；当前不引入 daemon 或 sidecar。
 
 ### 10.3 一次性 CLI 的定位
@@ -977,7 +998,8 @@ CLI/MCP 显示“等待前台输入”，原调用不丢失
 
 - [x] CLI JSONL 请求无论传入 `requiresApproval=false` 还是省略该字段，都强制进入桌面端审批策略。
 - [x] 通过 `cancel_request` 按 request ID 设置取消标记；等待 desktop bridge 响应时以短轮询及时结束 CLI JSONL 等待。
-- [x] 取消只停止 CLI JSONL 等待和后续输出，不回滚桌面端已经接受或开始执行的操作。
+- [x] 取消停止 CLI JSONL 等待和后续输出；对于普通 SSH exec 同步尝试终止原 channel 上的命令，不回滚桌面端已接受的其它操作。
+- [x] 远程 exec 取消/超时在原 SSH exec channel 上执行 best-effort INT → TERM → KILL + close；MCP stdio 识别 `notifications/cancelled`，loopback 客户端 EOF/timeout 同样传播取消。
 - [x] 拒绝重复 request ID，进度事件和最终结果均绑定原 request ID。
 - [x] 增加 CLI JSONL 审批/取消/ID 校验单测，并通过 CLI 子进程回归。
 

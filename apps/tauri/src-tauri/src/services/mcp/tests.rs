@@ -3,12 +3,16 @@
 mod tests {
     use super::{
         action_approval_source, action_is_read_only, bridge_request_timeout, compact_session,
-        handle_jsonrpc_request, initialize_result, mcp_error_code, mcp_error_is_retryable,
+        handle_jsonrpc_request, initialize_result, mcp_cancel_request_id, mcp_error_code,
+        mcp_error_is_retryable,
         optional_string, pagination, requested_execution_mode, should_request_mcp_approval,
         tool_definitions, tool_error_result, validate_tool_arguments, write_mcp_progress,
         ActionApprovalSource, BridgeProgress, BridgeRequest, McpAccessPolicy, McpVisibility,
         McpVisibilityScope, EXECUTION_MODE_BACKGROUND, EXECUTION_MODE_VISIBLE_TERMINAL,
         MCP_BRIDGE_TIMEOUT, MCP_CONNECTION_WAIT_TIMEOUT, MCP_JSONRPC_PROTOCOL_VERSION,
+        BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED, DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
+        FILETERM_REMOTE_COMMAND_LIMIT, FILETERM_REMOTE_COMMAND_NOT_FOUND,
+        FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH, MAX_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS,
         NETWORK_DEVICE_COMMAND_INVALID, NETWORK_DEVICE_CWD_UNSUPPORTED,
         NETWORK_DEVICE_REMOTE_EXEC_UNSUPPORTED, SUDO_PASSWORD_CANCELLED, SUDO_PASSWORD_NEEDED,
         VISIBLE_TERMINAL_COMMAND_INVALID, VISIBLE_TERMINAL_SESSION_NOT_ACTIVE,
@@ -21,6 +25,7 @@ mod tests {
     use crate::services::workspace::WorkspaceSessionSource;
     use serde_json::{json, Value};
     use std::collections::HashSet;
+    use std::time::Duration;
 
     #[test]
     fn cli_and_mcp_bridge_requests_keep_distinct_session_sources() {
@@ -316,6 +321,65 @@ mod tests {
             transfer_wait_tool["outputSchema"]["required"],
             json!(["transferId", "transfer", "timedOut"])
         );
+
+        let start_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_start_remote_command")
+            .unwrap();
+        assert!(start_tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("never automatically rerun"));
+        assert_eq!(
+            start_tool["inputSchema"]["properties"]["timeout_ms"]["default"],
+            DEFAULT_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS
+        );
+        assert_eq!(
+            start_tool["inputSchema"]["properties"]["timeout_ms"]["maximum"],
+            MAX_BACKGROUND_REMOTE_EXEC_TIMEOUT_MS
+        );
+        assert!(!start_tool["inputSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("save_sudo_password"));
+
+        let background_read_tool = tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_read_remote_command")
+            .unwrap();
+        assert_eq!(background_read_tool["annotations"]["readOnlyHint"], true);
+        assert_eq!(
+            background_read_tool["inputSchema"]["properties"]["wait_ms"]["maximum"],
+            30_000
+        );
+
+        for command_tool in [
+            "fileterm_terminate_remote_command",
+            "fileterm_close_remote_command",
+        ] {
+            let tool = tool_definitions()
+                .into_iter()
+                .find(|tool| tool["name"] == command_tool)
+                .unwrap();
+            assert_eq!(
+                tool["inputSchema"]["required"],
+                json!(["tab_id", "command_id"])
+            );
+        }
+        assert!(tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_terminate_remote_command")
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .contains("same SSH channel"));
+        assert!(tool_definitions()
+            .into_iter()
+            .find(|tool| tool["name"] == "fileterm_close_remote_command")
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .contains("retained output"));
     }
 
     #[test]
@@ -367,6 +431,21 @@ mod tests {
             params: json!({ "command": "uname -a" }),
             ..request.clone()
         };
+        let background_safe_command = BridgeRequest {
+            action: "start_remote_command".to_string(),
+            params: json!({ "command": "uname -a" }),
+            ..request.clone()
+        };
+        let background_deployment = BridgeRequest {
+            action: "start_remote_command".to_string(),
+            params: json!({ "command": "docker compose up -d" }),
+            ..request.clone()
+        };
+        let background_read = BridgeRequest {
+            action: "read_remote_command".to_string(),
+            params: json!({ "tab_id": "tab-1", "command_id": "command-1" }),
+            ..request.clone()
+        };
         let privileged_command = BridgeRequest {
             action: "execute_remote_command".to_string(),
             params: json!({ "command": "sudo id" }),
@@ -398,6 +477,18 @@ mod tests {
         assert!(!should_request_mcp_approval(
             &basic_safe_operations,
             &ordinary_command
+        ));
+        assert!(!should_request_mcp_approval(
+            &basic_safe_operations,
+            &background_safe_command
+        ));
+        assert!(should_request_mcp_approval(
+            &basic_safe_operations,
+            &background_deployment
+        ));
+        assert!(action_is_read_only(
+            &background_read.action,
+            &background_read.params
         ));
         assert!(should_request_mcp_approval(
             &basic_safe_operations,
@@ -472,6 +563,8 @@ mod tests {
         assert!(instructions.contains("fileterm_execute_visible_command"));
         assert!(instructions.contains("non-active"));
         assert!(instructions.contains("execution_mode"));
+        assert!(instructions.contains("fileterm_start_remote_command"));
+        assert!(instructions.contains("increasing offset"));
     }
 
     #[test]
@@ -479,6 +572,30 @@ mod tests {
         assert!(handle_jsonrpc_request(json!({
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
+        }))
+        .is_none());
+    }
+
+    #[test]
+    fn mcp_cancellation_notification_extracts_the_target_request_id() {
+        assert_eq!(
+            mcp_cancel_request_id(&json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": { "requestId": "exec-1" }
+            })),
+            Some(json!("exec-1"))
+        );
+        assert_eq!(
+            mcp_cancel_request_id(&json!({
+                "method": "notifications/cancelled",
+                "params": { "request_id": 7 }
+            })),
+            Some(json!(7))
+        );
+        assert!(mcp_cancel_request_id(&json!({
+            "method": "notifications/message",
+            "params": { "requestId": "exec-1" }
         }))
         .is_none());
     }
@@ -527,6 +644,35 @@ mod tests {
         assert!(validate_tool_arguments(
             "fileterm_execute_visible_command",
             &json!({ "tab_id": "tab-1", "command": "uname -a" })
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_start_remote_command",
+            &json!({ "tab_id": "tab-1", "command": "docker compose up -d" })
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_start_remote_command",
+            &json!({
+                "tab_id": "tab-1",
+                "command": "docker compose up -d",
+                "save_sudo_password": true
+            })
+        )
+        .is_err());
+        assert!(validate_tool_arguments(
+            "fileterm_read_remote_command",
+            &json!({
+                "tab_id": "tab-1",
+                "command_id": "command-1",
+                "offset": 128,
+                "wait_ms": 30_000
+            })
+        )
+        .is_ok());
+        assert!(validate_tool_arguments(
+            "fileterm_close_remote_command",
+            &json!({ "tab_id": "tab-1", "command_id": "command-1" })
         )
         .is_ok());
     }
@@ -593,6 +739,37 @@ mod tests {
             progress_token: None,
         };
         assert!(bridge_request_timeout(&request) > MCP_BRIDGE_TIMEOUT);
+    }
+
+    #[test]
+    fn background_command_reads_keep_the_bridge_open_for_long_polling() {
+        let request = BridgeRequest {
+            action: "read_remote_command".to_string(),
+            params: json!({
+                "tab_id": "tab-1",
+                "command_id": "command-1",
+                "wait_ms": 30_000
+            }),
+            source: WorkspaceSessionSource::Mcp,
+            requires_approval: false,
+            progress_token: None,
+        };
+        assert!(bridge_request_timeout(&request) > Duration::from_secs(30));
+    }
+
+    #[test]
+    fn background_command_start_keeps_the_bridge_open_for_channel_setup() {
+        let request = BridgeRequest {
+            action: "start_remote_command".to_string(),
+            params: json!({
+                "tab_id": "tab-1",
+                "command": "docker compose up -d"
+            }),
+            source: WorkspaceSessionSource::Mcp,
+            requires_approval: true,
+            progress_token: None,
+        };
+        assert!(bridge_request_timeout(&request) > Duration::from_secs(35));
     }
 
     #[test]
@@ -686,6 +863,22 @@ mod tests {
             VISIBLE_TERMINAL_COMMAND_INVALID
         );
         assert!(!mcp_error_is_retryable(VISIBLE_TERMINAL_COMMAND_INVALID));
+        assert_eq!(
+            mcp_error_code("FILETERM_REMOTE_COMMAND_NOT_FOUND: missing"),
+            FILETERM_REMOTE_COMMAND_NOT_FOUND
+        );
+        assert!(!mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_NOT_FOUND));
+        assert_eq!(
+            mcp_error_code("FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH: wrong tab"),
+            FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH
+        );
+        assert!(!mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_SCOPE_MISMATCH));
+        assert_eq!(
+            mcp_error_code("BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED: detached command"),
+            BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED
+        );
+        assert!(!mcp_error_is_retryable(BACKGROUND_REMOTE_SAVE_PASSWORD_UNSUPPORTED));
+        assert!(mcp_error_is_retryable(FILETERM_REMOTE_COMMAND_LIMIT));
     }
 
     #[test]

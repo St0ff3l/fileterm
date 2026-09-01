@@ -577,6 +577,9 @@ fn print_cli_help() {
     println!(
         "Connection lifecycle: `fileterm open --profile-id ID [--wait-for-ready true|false] [--timeout-ms N]`; resume with `fileterm wait-connection --operation-id ID [--timeout-ms N]`."
     );
+    println!(
+        "Long jobs: use `fileterm call start_remote_command --params-json JSON`, then poll `read_remote_command` with the returned commandId and nextOffset; terminate/close explicitly when finished."
+    );
 }
 
 fn print_cli_command_help(command: &str) {
@@ -588,6 +591,10 @@ fn print_cli_command_help(command: &str) {
         ),
         "read_remote_file" => println!("Usage: fileterm read --tab-id TAB_ID --path REMOTE_PATH [--encoding utf-8]"),
         "execute_remote_command" => println!("Usage: fileterm exec --tab-id TAB_ID --command COMMAND [--cwd PATH] [--timeout-ms N] [--sudo-password PASSWORD | --sudo-password-stdin] [--save-sudo-password true] [--su-password PASSWORD | --su-password-stdin] [--save-su-password true]\n       --*-password-stdin reads one password line from stdin; prefer it for scripts and Agent-generated commands."),
+        "start_remote_command" => println!("Usage: fileterm call start_remote_command --params-json JSON\n       Poll with fileterm call read_remote_command using the returned commandId and nextOffset."),
+        "read_remote_command" => println!("Usage: fileterm call read_remote_command --params-json JSON"),
+        "terminate_remote_command" => println!("Usage: fileterm call terminate_remote_command --params-json JSON"),
+        "close_remote_command" => println!("Usage: fileterm call close_remote_command --params-json JSON"),
         "wait_for_transfer" => println!("Usage: fileterm wait-transfer --transfer-id ID [--timeout-ms N]"),
         "wait_for_connection" => println!("Usage: fileterm wait-connection --operation-id ID [--timeout-ms N]"),
         "open_connection" => println!("Usage: fileterm open --profile-id PROFILE_ID [--wait-for-ready true|false] [--timeout-ms N]"),

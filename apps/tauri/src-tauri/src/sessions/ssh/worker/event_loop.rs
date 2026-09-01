@@ -7,7 +7,7 @@ async fn run_worker_event_loop(
     mut shell_reader: russh::ChannelReadHalf,
     cmd_rx: &mut mpsc::Receiver<WorkerCmd>,
     terminal_input_rx: &mut mpsc::UnboundedReceiver<String>,
-) -> Result<(), String> {
+) -> Result<SshWorkerExit, String> {
     let app = &context.app;
     let tab_id = context.tab_id.as_str();
     let profile = &context.profile;
@@ -20,6 +20,8 @@ async fn run_worker_event_loop(
     let exec_channel_enabled = context.exec_channel_enabled;
     let sftp_unavailable_reason = context.sftp_unavailable_reason.clone();
     let cancellation = context.cancellation.clone();
+    let disconnect_reason = Arc::clone(&context.disconnect_reason);
+    let connected_at = context.connected_at;
     let metrics_shutdown = Arc::clone(&context.metrics_shutdown);
     let shell_setup_script = context.shell_setup_script;
     let terminal_write_tx = context.terminal_write_tx.clone();
@@ -91,13 +93,13 @@ loop {
         _ = cancellation.cancelled() => {
             flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
             metrics_shutdown.notify_waiters();
-            return Ok(());
+            return Ok(SshWorkerExit::cancelled());
         }
         input = terminal_input_rx.recv() => {
             let Some(data) = input else {
                 flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                 metrics_shutdown.notify_waiters();
-                return Ok(());
+                return Ok(SshWorkerExit::input_closed());
             };
             let data = coalesce_terminal_input(data, terminal_input_rx);
             if should_buffer_terminal_input_during_shell_setup(
@@ -204,6 +206,11 @@ loop {
         // `recv()` returns None and we must exit — otherwise the old
         // worker keeps publishing terminal output alongside the new worker.
         cmd = cmd_rx.recv() => {
+            if cmd.is_none() {
+                flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
+                metrics_shutdown.notify_waiters();
+                return Ok(SshWorkerExit::input_closed());
+            }
             match handle_worker_command_event(
                 cmd,
                 network_device_mode,
@@ -237,7 +244,7 @@ loop {
                 Ok(true) => {
                     flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                     metrics_shutdown.notify_waiters();
-                    return Ok(());
+                    return Ok(SshWorkerExit::explicit_disconnect());
                 }
                 Ok(false) => {}
                 Err(e) => {
@@ -764,10 +771,36 @@ loop {
                     }
                 }
                 Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => {
-                    // Shell closed → flush and disconnect.
+                    // A shell channel can close independently of the SSH
+                    // transport. Only reconnect when russh tells us that the
+                    // connection itself was lost; otherwise a command such
+                    // as `exit` would create an endless reconnect loop.
                     flush_batch(&mut batch_buffer, &terminal_output_tx, app, tab_id);
                     metrics_shutdown.notify_waiters();
-                    return Ok(());
+                    let disconnect = disconnect_reason
+                        .lock()
+                        .ok()
+                        .and_then(|reason| reason.clone())
+                        .or_else(|| {
+                            handle.is_closed().then(|| SshDisconnectInfo {
+                                kind: SshDisconnectKind::Transport,
+                                message: "transport closed without a disconnect callback"
+                                    .to_string(),
+                            })
+                        });
+                    let stable = connected_at.elapsed() >= SSH_CONNECTION_STABILITY_WINDOW;
+                    let exit = match disconnect {
+                        Some(reason) => SshWorkerExit::transport_closed(reason, stable),
+                        None => SshWorkerExit::shell_closed(stable),
+                    };
+                    crate::services::logging::session(
+                        app,
+                        if exit.should_reconnect() { "WARN" } else { "INFO" },
+                        "ssh",
+                        tab_id,
+                        exit.description(),
+                    );
+                    return Ok(exit);
                 }
                 _ => {}
             }
