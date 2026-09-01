@@ -2023,7 +2023,7 @@
   gap: 8px;
   padding: 0 12px;
   border: 1px solid var(--border-light);
-  border-radius: 7px;
+  border-radius: var(--radius-sm, 4px);
   overflow: hidden;
   box-sizing: border-box;
 }

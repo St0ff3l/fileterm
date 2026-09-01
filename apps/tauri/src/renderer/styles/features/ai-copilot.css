@@ -3430,7 +3430,7 @@
 
 .agent-mcp-direct-cli-command > small {
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 10px;
 }
 
@@ -3900,7 +3900,7 @@
   -webkit-user-select: text;
   cursor: text;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 10px;
   white-space: nowrap;
 }
