@@ -2,6 +2,7 @@ import type { SshHostVerificationRequest } from '@fileterm/core'
 import { CloseButton } from '../common/close-button'
 import { StableButtonContent } from '../common/stable-button-content'
 import { t } from '../../i18n'
+import { sshInteractionConnectionLabel } from './ssh-interaction-labels'
 
 export function SshHostVerificationModal({
   isSubmitting = false,
@@ -28,6 +29,11 @@ export function SshHostVerificationModal({
           <fieldset className="ssh-fieldset ssh-verification-fieldset">
             <legend>{t.general}</legend>
             <div className="root-access-description">{t.sshHostVerificationDescription}</div>
+
+            <div className="root-access-meta">
+              <span>{t.sshKeyboardInteractiveConnection}</span>
+              <strong>{sshInteractionConnectionLabel(request.authenticationTarget, request.connectionName)}</strong>
+            </div>
 
             <div className="root-access-meta">
               <span>{t.host}</span>

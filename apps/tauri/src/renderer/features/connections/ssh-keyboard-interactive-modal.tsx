@@ -3,6 +3,7 @@ import type { SshKeyboardInteractiveRequest } from '@fileterm/core'
 import { CloseButton } from '../common/close-button'
 import { StableButtonContent } from '../common/stable-button-content'
 import { t } from '../../i18n'
+import { sshInteractionConnectionLabel } from './ssh-interaction-labels'
 
 export function SshKeyboardInteractiveModal({
   request,
@@ -19,12 +20,6 @@ export function SshKeyboardInteractiveModal({
 }) {
   const [answers, setAnswers] = useState<string[]>(() => request.prompts.map(() => ''))
   useEffect(() => setAnswers(request.prompts.map(() => '')), [request])
-  const authenticationTarget =
-    request.authenticationTarget === 'jump-host'
-      ? t.sshAuthenticationTargetJumpHost
-      : request.authenticationTarget === 'target'
-        ? t.sshAuthenticationTargetTarget
-        : t.sshAuthenticationTargetDirect
   const canSubmit =
     answers.length === request.prompts.length &&
     answers.every((answer, index) => request.prompts[index]?.echo || answer.length > 0)
@@ -39,7 +34,7 @@ export function SshKeyboardInteractiveModal({
         {request.instructions ? <div className="root-access-description">{request.instructions}</div> : null}
         <div className="root-access-meta">
           <span>{t.sshKeyboardInteractiveConnection}</span>
-          <strong>{`${authenticationTarget} · ${request.connectionName}`}</strong>
+          <strong>{sshInteractionConnectionLabel(request.authenticationTarget, request.connectionName)}</strong>
         </div>
         <div className="root-access-meta">
           <span>{t.host}</span>

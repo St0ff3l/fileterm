@@ -4,6 +4,7 @@ import { t } from '../../i18n'
 import { CloseButton } from '../common/close-button'
 import { SelectionControl } from '../common/selection-control'
 import { StableButtonContent } from '../common/stable-button-content'
+import { sshInteractionConnectionLabel } from './ssh-interaction-labels'
 
 export function SshKeyPassphraseModal({
   errorMessage,
@@ -37,6 +38,10 @@ export function SshKeyPassphraseModal({
         </div>
         <div className="root-access-description">
           {request.reason === 'invalid-saved' ? t.sshKeyPassphraseInvalidSaved : t.sshKeyPassphraseRequired}
+        </div>
+        <div className="root-access-meta">
+          <span>{t.sshKeyboardInteractiveConnection}</span>
+          <strong>{sshInteractionConnectionLabel(request.authenticationTarget, request.connectionName)}</strong>
         </div>
         <div className="root-access-meta">
           <span>{t.sshKeyPassphraseKey}</span>

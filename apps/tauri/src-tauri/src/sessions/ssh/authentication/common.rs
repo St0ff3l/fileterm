@@ -63,29 +63,32 @@ async fn authenticate_session(
     auth_type: &str,
     profile: &Value,
     app: &AppHandle,
-    tab_id: &str,
-    authentication_target: SshAuthenticationTarget,
+    interaction: &SshInteractionContext,
+    interaction_timeout: Duration,
 ) -> Result<bool, String> {
-    match try_authenticate(handle, username, auth_type, profile, app, tab_id).await? {
+    match try_authenticate(
+        handle,
+        username,
+        auth_type,
+        profile,
+        app,
+        interaction,
+        interaction_timeout,
+    )
+    .await?
+    {
         AuthenticationResult::Authenticated => Ok(true),
         AuthenticationResult::KeyboardInteractiveAvailable { mode } => {
-            let profile_id = profile.get("id").and_then(Value::as_str).unwrap_or("");
-            let host = profile.get("host").and_then(Value::as_str).unwrap_or("");
-            let port = port_from_profile(profile, 22, "SSH")?;
-            let connection_name = profile
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .unwrap_or(host);
             crate::services::logging::session(
                 app,
                 "INFO",
                 "ssh",
-                tab_id,
+                &interaction.tab_id,
                 format!(
-                    "continuing authentication with keyboard-interactive target={} host={host}:{port}",
-                    authentication_target.as_str()
+                    "continuing authentication with keyboard-interactive target={} host={}:{}",
+                    interaction.authentication_target.as_str(),
+                    interaction.host,
+                    interaction.port
                 ),
             );
             try_keyboard_interactive(
@@ -93,13 +96,9 @@ async fn authenticate_session(
                 username,
                 password_for_authentication(profile),
                 app,
-                tab_id,
-                profile_id,
-                host,
-                port,
-                connection_name,
-                authentication_target,
+                interaction,
                 mode,
+                interaction_timeout,
             )
             .await
         }

@@ -50,6 +50,7 @@ fn new_client_handler(
     host_verification_waiting: Arc<AtomicBool>,
     interaction_timeout: Duration,
     interaction_window_label: Option<String>,
+    interaction: SshInteractionContext,
     remote_sshid: SharedRemoteSshId,
 ) -> ClientHandler {
     ClientHandler {
@@ -62,6 +63,7 @@ fn new_client_handler(
         host_verification_waiting,
         interaction_timeout,
         interaction_window_label,
+        interaction,
         remote_sshid,
     }
 }

@@ -217,6 +217,23 @@ pub fn start_ssh_worker(
 // Handler implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
+fn emit_ssh_interaction(
+    app: &AppHandle,
+    interaction_window_label: Option<&str>,
+    payload: &Value,
+) -> Result<(), tauri::Error> {
+    match interaction_window_label
+        .and_then(|label| app.get_webview_window(label))
+    {
+        Some(window) => app.emit_to(
+            EventTarget::webview_window(window.label()),
+            "ssh:interaction",
+            payload,
+        ),
+        None => app.emit("ssh:interaction", payload),
+    }
+}
+
 pub struct ClientHandler {
     app: AppHandle,
     tab_id: String,
@@ -233,6 +250,7 @@ pub struct ClientHandler {
     /// Normal sessions use the main workspace window; if the target is gone,
     /// the emitter below still falls back to the app-wide event for recovery.
     interaction_window_label: Option<String>,
+    interaction: SshInteractionContext,
 }
 
 impl Handler for ClientHandler {
@@ -308,8 +326,14 @@ impl Handler for ClientHandler {
         let payload = serde_json::json!({
             "requestId": request_id,
             "kind": "host-verification",
+            "flowId": self.interaction.flow.flow_id,
             "tabId": self.tab_id,
             "profileId": self.profile_id,
+            "connectionName": self.interaction.connection_name,
+            "authenticationTarget": self.interaction.authentication_target.as_str(),
+            "hopIndex": self.interaction.hop_index,
+            "stage": "host-key",
+            "sequence": self.interaction.next_sequence(),
             "host": self.host,
             "port": self.port,
             "fingerprint": fp,

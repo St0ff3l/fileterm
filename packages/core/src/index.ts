@@ -1201,22 +1201,42 @@ export interface CreateProfileInput {
   sessionLogRaw?: boolean
 }
 
-export interface SshHostVerificationRequest {
+export interface SshKeyboardInteractivePrompt {
+  prompt: string
+  echo: boolean
+}
+
+export type SshAuthenticationTarget = 'direct' | 'jump-host' | 'target'
+export type SshInteractionStage = 'host-key' | 'credentials' | 'key-passphrase' | 'keyboard-interactive'
+
+interface SshInteractionEnvelope {
   requestId: string
+  /** Identifies the whole connection attempt, including jump and target hops. */
+  flowId: string
   tabId: string
-  kind: 'host-verification'
   profileId: string
+  /** Human-readable profile name used to disambiguate concurrent prompts. */
+  connectionName: string
+  /** Which SSH endpoint owns this prompt. */
+  authenticationTarget: SshAuthenticationTarget
+  /** Zero-based hop index within the connection flow. */
+  hopIndex: number
+  /** Protocol stage that caused this request. */
+  stage: SshInteractionStage
+  /** Monotonic order within the connection flow. */
+  sequence: number
+}
+
+export interface SshHostVerificationRequest extends SshInteractionEnvelope {
+  kind: 'host-verification'
   host: string
   port: number
   fingerprint: string
   knownFingerprint?: string
 }
 
-export interface SshCredentialsPromptRequest {
-  requestId: string
-  tabId: string
+export interface SshCredentialsPromptRequest extends SshInteractionEnvelope {
   kind: 'credentials'
-  profileId: string
   host: string
   port: number
   username?: string
@@ -1224,33 +1244,15 @@ export interface SshCredentialsPromptRequest {
   reason: 'missing-username' | 'missing-password'
 }
 
-export interface SshKeyPassphrasePromptRequest {
-  requestId: string
-  tabId: string
+export interface SshKeyPassphrasePromptRequest extends SshInteractionEnvelope {
   kind: 'key-passphrase'
-  profileId: string
   keyId: string
   keyName: string
   reason: 'required' | 'invalid-saved'
 }
 
-export interface SshKeyboardInteractivePrompt {
-  prompt: string
-  echo: boolean
-}
-
-export type SshAuthenticationTarget = 'direct' | 'jump-host' | 'target'
-
-export interface SshKeyboardInteractiveRequest {
-  requestId: string
-  /** Identifies the connection attempt that owns this prompt. */
-  flowId: string
-  tabId: string
+export interface SshKeyboardInteractiveRequest extends SshInteractionEnvelope {
   kind: 'keyboard-interactive'
-  profileId: string
-  connectionName: string
-  /** Whether this factor belongs to a direct connection, jump host, or final target. */
-  authenticationTarget: SshAuthenticationTarget
   host: string
   port: number
   /** One-based SSH keyboard-interactive challenge round. */
@@ -1258,16 +1260,6 @@ export interface SshKeyboardInteractiveRequest {
   name: string
   instructions: string
   prompts: SshKeyboardInteractivePrompt[]
-}
-
-export interface SshKeyPassphrasePromptRequest {
-  requestId: string
-  tabId: string
-  kind: 'key-passphrase'
-  profileId: string
-  keyId: string
-  keyName: string
-  reason: 'required' | 'invalid-saved'
 }
 
 export type SshInteractionRequest =
@@ -1348,10 +1340,54 @@ export interface ActionApprovalRequest {
 /** @deprecated Use ActionApprovalRequest. */
 export type McpApprovalRequest = ActionApprovalRequest
 export type SshInteractionDraft =
-  | Omit<SshHostVerificationRequest, 'requestId' | 'tabId' | 'profileId'>
-  | Omit<SshCredentialsPromptRequest, 'requestId' | 'tabId' | 'profileId'>
-  | Omit<SshKeyPassphrasePromptRequest, 'requestId' | 'tabId' | 'profileId'>
-  | Omit<SshKeyboardInteractiveRequest, 'requestId' | 'flowId' | 'tabId' | 'profileId'>
+  | Omit<
+      SshHostVerificationRequest,
+      | 'requestId'
+      | 'flowId'
+      | 'tabId'
+      | 'profileId'
+      | 'connectionName'
+      | 'authenticationTarget'
+      | 'hopIndex'
+      | 'stage'
+      | 'sequence'
+    >
+  | Omit<
+      SshCredentialsPromptRequest,
+      | 'requestId'
+      | 'flowId'
+      | 'tabId'
+      | 'profileId'
+      | 'connectionName'
+      | 'authenticationTarget'
+      | 'hopIndex'
+      | 'stage'
+      | 'sequence'
+    >
+  | Omit<
+      SshKeyPassphrasePromptRequest,
+      | 'requestId'
+      | 'flowId'
+      | 'tabId'
+      | 'profileId'
+      | 'connectionName'
+      | 'authenticationTarget'
+      | 'hopIndex'
+      | 'stage'
+      | 'sequence'
+    >
+  | Omit<
+      SshKeyboardInteractiveRequest,
+      | 'requestId'
+      | 'flowId'
+      | 'tabId'
+      | 'profileId'
+      | 'connectionName'
+      | 'authenticationTarget'
+      | 'hopIndex'
+      | 'stage'
+      | 'sequence'
+    >
 
 export type SshHostVerificationResponse = {
   kind: 'host-verification'

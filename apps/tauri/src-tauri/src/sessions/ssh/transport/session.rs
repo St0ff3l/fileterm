@@ -40,26 +40,36 @@ async fn open_session(
     interaction_timeout: Duration,
     interaction_window_label: Option<String>,
     authentication_target: SshAuthenticationTarget,
+    flow: SshInteractionFlow,
 ) -> Result<OpenSshSession, String> {
     let mut effective_profile = profile.clone();
     let has_jump_host = effective_profile
         .get("jumpProfileId")
         .and_then(Value::as_str)
         .is_some();
-    // A jump-host flow must authenticate the jump first. Defer a missing
-    // target password until that flow has completed so the renderer never
-    // presents a target-credential dialog before the jump-host dialog.
-    if !has_jump_host {
-        ensure_password_credentials(&mut effective_profile, app, tab_id, interaction_timeout)
-            .await?;
-    }
-    let profile = &effective_profile;
-    let host = profile
+    let host = effective_profile
         .get("host")
         .and_then(|h| h.as_str())
         .unwrap_or("127.0.0.1")
         .to_string();
-    let port = port_from_profile(profile, 22, "SSH")?;
+    let port = port_from_profile(&effective_profile, 22, "SSH")?;
+    let interaction = SshInteractionContext::from_profile(
+        &flow,
+        tab_id,
+        &effective_profile,
+        &host,
+        port,
+        authentication_target,
+        interaction_window_label.clone(),
+    );
+    // A jump-host flow must authenticate the jump first. Defer a missing
+    // target password until that flow has completed so the renderer never
+    // presents a target-credential dialog before the jump-host dialog.
+    if !has_jump_host {
+        ensure_password_credentials(&mut effective_profile, app, &interaction, interaction_timeout)
+            .await?;
+    }
+    let profile = &effective_profile;
     let username = profile
         .get("username")
         .and_then(|u| u.as_str())
@@ -191,12 +201,38 @@ async fn open_session(
             interaction_timeout,
             interaction_window_label.clone(),
             SshAuthenticationTarget::JumpHost,
+            flow.clone(),
         ))
         .await?;
         let jump_handle = jump_session.handle;
 
         let mut target_profile = effective_profile.clone();
-        ensure_password_credentials(&mut target_profile, app, tab_id, interaction_timeout).await?;
+        let target_interaction = SshInteractionContext::from_profile(
+            &flow,
+            tab_id,
+            &target_profile,
+            &host,
+            port,
+            SshAuthenticationTarget::Target,
+            interaction_window_label.clone(),
+        );
+        ensure_password_credentials(
+            &mut target_profile,
+            app,
+            &target_interaction,
+            interaction_timeout,
+        )
+        .await?;
+        let target_username = target_profile
+            .get("username")
+            .and_then(Value::as_str)
+            .unwrap_or("root")
+            .to_string();
+        let target_auth_type = target_profile
+            .get("authType")
+            .and_then(Value::as_str)
+            .unwrap_or("password")
+            .to_string();
 
         crate::services::logging::session(
             app,
@@ -228,6 +264,7 @@ async fn open_session(
                     target_host_verification_waiting,
                     interaction_timeout,
                     interaction_window_label.clone(),
+                    target_interaction.clone(),
                     remote_sshid.clone(),
                 ),
                 &host,
@@ -238,12 +275,12 @@ async fn open_session(
             .await?;
             if authenticate_session(
                 &mut target_handle,
-                &username,
-                &auth_type,
+                &target_username,
+                &target_auth_type,
                 &target_profile,
                 app,
-                tab_id,
-                SshAuthenticationTarget::Target,
+                &target_interaction,
+                interaction_timeout,
             )
             .await?
             {
@@ -319,6 +356,7 @@ async fn open_session(
                     host_verification_waiting,
                     interaction_timeout,
                     interaction_window_label.clone(),
+                    interaction.clone(),
                     remote_sshid.clone(),
                 ),
             )
@@ -334,8 +372,8 @@ async fn open_session(
         &auth_type,
         profile,
         app,
-        tab_id,
-        authentication_target,
+        &interaction,
+        interaction_timeout,
     )
     .await?
     {
@@ -371,6 +409,7 @@ pub async fn test_connection(
         SSH_CONNECTION_TEST_INTERACTION_TIMEOUT,
         Some(interaction_window_label),
         SshAuthenticationTarget::Direct,
+        SshInteractionFlow::new(),
     )
     .await
     {

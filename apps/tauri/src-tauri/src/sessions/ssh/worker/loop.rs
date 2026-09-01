@@ -29,6 +29,7 @@ async fn run_worker_loop(
         SSH_INTERACTION_TIMEOUT,
         Some("main".to_string()),
         SshAuthenticationTarget::Direct,
+        SshInteractionFlow::new(),
     )
     .await
     {

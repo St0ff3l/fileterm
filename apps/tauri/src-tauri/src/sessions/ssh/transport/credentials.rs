@@ -64,7 +64,7 @@ fn trusted_host_fingerprint(profile: &Value) -> Option<String> {
 async fn ensure_password_credentials(
     profile: &mut Value,
     app: &AppHandle,
-    tab_id: &str,
+    interaction: &SshInteractionContext,
     interaction_timeout: Duration,
 ) -> Result<(), String> {
     let Some(reason) = missing_password_credential(profile) else {
@@ -83,15 +83,25 @@ async fn ensure_password_credentials(
     let payload = serde_json::json!({
         "requestId": request_id,
         "kind": "credentials",
-        "tabId": tab_id,
-        "profileId": profile.get("id").and_then(Value::as_str).unwrap_or(""),
-        "host": profile.get("host").and_then(Value::as_str).unwrap_or(""),
-        "port": profile.get("port").and_then(Value::as_u64).unwrap_or(22),
+        "flowId": interaction.flow.flow_id,
+        "tabId": interaction.tab_id,
+        "profileId": interaction.profile_id,
+        "connectionName": interaction.connection_name,
+        "authenticationTarget": interaction.authentication_target.as_str(),
+        "hopIndex": interaction.hop_index,
+        "stage": "credentials",
+        "sequence": interaction.next_sequence(),
+        "host": interaction.host,
+        "port": interaction.port,
         "username": profile.get("username").and_then(Value::as_str),
         "passwordRequired": true,
         "reason": reason,
     });
-    if let Err(error) = app.emit("ssh:interaction", payload) {
+    if let Err(error) = emit_ssh_interaction(
+        app,
+        interaction.interaction_window_label.as_deref(),
+        &payload,
+    ) {
         app.state::<crate::services::workspace::WorkspaceState>()
             .pending_interactions
             .write()

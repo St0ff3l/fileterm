@@ -10,11 +10,12 @@ pub async fn app_resolve_ssh_interaction(
         let mut pending = state.pending_interactions.write().await;
         pending.remove(&request_id)
     };
-    if let Some(tx) = sender {
-        // Sender error means the receiver was dropped (handshake timed out
-        // or the worker exited) — not actionable, ignore.
-        let _ = tx.send(response);
-    }
+    let tx = sender.ok_or_else(|| {
+        AppError::Command("SSH interaction request is no longer pending".to_string())
+    })?;
+    tx.send(response).map_err(|_| {
+        AppError::Command("SSH interaction receiver is no longer available".to_string())
+    })?;
     Ok(())
 }
 

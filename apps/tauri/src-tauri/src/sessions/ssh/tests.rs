@@ -30,6 +30,7 @@ mod tests {
         wait_for_ssh_handshake_with_timeouts, wait_for_ssh_stage, AuthenticationResult,
         KeyboardInteractiveMode, KeyboardInteractiveRequest, ResolvedSshDeviceMode, RootFileAccessMethod,
         ShellSetupEchoSuppression, SshDeviceModeResolution, SshTunnelRule, TunnelCommand,
+        SshInteractionContext, SshInteractionFlow, SshAuthenticationTarget,
         BUSYBOX_SHELL_CWD_SETUP, SHELL_CWD_SETUP, SHELL_SETUP_SETTLE_DELAY, SU_EXEC_OUTPUT_MARKER,
     };
     #[cfg(unix)]
@@ -2176,6 +2177,45 @@ mod tests {
                 mode: KeyboardInteractiveMode::PasswordFallback,
             }
         );
+    }
+
+    #[test]
+    fn ssh_interaction_flow_orders_jump_and_target_hops_together() {
+        let flow = SshInteractionFlow::new();
+        let jump_profile = serde_json::json!({
+            "id": "jump-profile",
+            "name": "Bastion",
+        });
+        let target_profile = serde_json::json!({
+            "id": "target-profile",
+            "name": "Production",
+        });
+        let jump = SshInteractionContext::from_profile(
+            &flow,
+            "tab-1",
+            &jump_profile,
+            "bastion.example",
+            22,
+            SshAuthenticationTarget::JumpHost,
+            Some("main".to_string()),
+        );
+        let target = SshInteractionContext::from_profile(
+            &flow,
+            "tab-1",
+            &target_profile,
+            "server.example",
+            2222,
+            SshAuthenticationTarget::Target,
+            Some("main".to_string()),
+        );
+
+        assert_eq!(jump.flow.flow_id, target.flow.flow_id);
+        assert_eq!(jump.hop_index, 0);
+        assert_eq!(target.hop_index, 1);
+        assert_eq!(jump.authentication_target.as_str(), "jump-host");
+        assert_eq!(target.authentication_target.as_str(), "target");
+        assert_eq!(jump.next_sequence(), 1);
+        assert_eq!(target.next_sequence(), 2);
     }
 
     #[tokio::test]

@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, LazyLock, Mutex as StdMutex,
 };
 use std::time::{Duration, Instant};
@@ -122,6 +122,91 @@ impl SshAuthenticationTarget {
             Self::JumpHost => "jump-host",
             Self::Target => "target",
         }
+    }
+
+    fn hop_index(self) -> u32 {
+        match self {
+            Self::Direct | Self::JumpHost => 0,
+            Self::Target => 1,
+        }
+    }
+}
+
+/// Shared identity for every interactive request emitted during one connect
+/// attempt. A jump host and its target have separate SSH handles but must be
+/// presented as one ordered flow to the renderer.
+#[derive(Clone)]
+struct SshInteractionFlow {
+    flow_id: String,
+    next_sequence: Arc<AtomicU64>,
+}
+
+impl SshInteractionFlow {
+    fn new() -> Self {
+        Self {
+            flow_id: uuid::Uuid::new_v4().to_string(),
+            next_sequence: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn next_sequence(&self) -> u64 {
+        self.next_sequence.fetch_add(1, Ordering::Relaxed) + 1
+    }
+}
+
+/// Metadata attached to every SSH interaction request. Keeping this context
+/// in the backend makes request ordering authoritative instead of asking the
+/// renderer to infer whether a prompt belongs to a jump host or target.
+#[derive(Clone)]
+struct SshInteractionContext {
+    flow: SshInteractionFlow,
+    tab_id: String,
+    profile_id: String,
+    connection_name: String,
+    host: String,
+    port: u16,
+    authentication_target: SshAuthenticationTarget,
+    hop_index: u32,
+    interaction_window_label: Option<String>,
+}
+
+impl SshInteractionContext {
+    fn from_profile(
+        flow: &SshInteractionFlow,
+        tab_id: &str,
+        profile: &Value,
+        host: &str,
+        port: u16,
+        authentication_target: SshAuthenticationTarget,
+        interaction_window_label: Option<String>,
+    ) -> Self {
+        let profile_id = profile
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let connection_name = profile
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or(host)
+            .to_string();
+        Self {
+            flow: flow.clone(),
+            tab_id: tab_id.to_string(),
+            profile_id,
+            connection_name,
+            host: host.to_string(),
+            port,
+            authentication_target,
+            hop_index: authentication_target.hop_index(),
+            interaction_window_label,
+        }
+    }
+
+    fn next_sequence(&self) -> u64 {
+        self.flow.next_sequence()
     }
 }
 

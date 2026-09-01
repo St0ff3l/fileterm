@@ -11,7 +11,7 @@ async fn authenticate_private_key_content(
     key_content: &str,
     passphrase: Option<&str>,
     app: &AppHandle,
-    tab_id: &str,
+    interaction: &SshInteractionContext,
 ) -> Result<AuthResult, String> {
     let key_pair = russh::keys::decode_secret_key(key_content, passphrase)
         .map_err(|error| error.to_string())?;
@@ -41,7 +41,7 @@ async fn authenticate_private_key_content(
                     app,
                     "WARN",
                     "ssh",
-                    tab_id,
+                    &interaction.tab_id,
                     format!("RSA hash negotiation failed, falling back to Sha512: {error}"),
                 );
                 Some(russh::keys::HashAlg::Sha512)
@@ -66,7 +66,7 @@ async fn authenticate_private_key_content(
         app,
         "INFO",
         "ssh",
-        tab_id,
+        &interaction.tab_id,
         format!(
             "public key authentication completed success={}",
             result.success()
@@ -80,7 +80,7 @@ async fn try_system_authenticate(
     username: &str,
     profile: &Value,
     app: &AppHandle,
-    tab_id: &str,
+    interaction: &SshInteractionContext,
 ) -> Result<AuthenticationResult, String> {
     let mut candidate_found = false;
     let mut authentication_attempted = false;
@@ -106,7 +106,7 @@ async fn try_system_authenticate(
                 app,
                 "INFO",
                 "ssh",
-                tab_id,
+                &interaction.tab_id,
                 "SSH agent connected, listing identities",
             );
             match wait_for_ssh_stage(
@@ -121,7 +121,7 @@ async fn try_system_authenticate(
                         app,
                         "INFO",
                         "ssh",
-                        tab_id,
+                        &interaction.tab_id,
                         format!("SSH agent returned {} identities", identities.len()),
                     );
                     for identity in identities {
@@ -161,7 +161,7 @@ async fn try_system_authenticate(
                         app,
                         "WARN",
                         "ssh",
-                        tab_id,
+                        &interaction.tab_id,
                         format!("SSH agent list identities failed: {error}"),
                     );
                     candidate_errors.push(error);
@@ -176,7 +176,7 @@ async fn try_system_authenticate(
                     app,
                     "WARN",
                     "ssh",
-                    tab_id,
+                    &interaction.tab_id,
                     format!("SSH agent connect timed out: {error}"),
                 );
             }
@@ -203,7 +203,7 @@ async fn try_system_authenticate(
             &key_content,
             passphrase,
             app,
-            tab_id,
+            interaction,
         )
         .await
         {
@@ -240,13 +240,9 @@ async fn try_authenticate(
     auth_type: &str,
     profile: &Value,
     app: &AppHandle,
-    tab_id: &str,
+    interaction: &SshInteractionContext,
+    interaction_timeout: Duration,
 ) -> Result<AuthenticationResult, String> {
-    let profile_id = profile
-        .get("id")
-        .and_then(|id| id.as_str())
-        .unwrap_or("")
-        .to_string();
     match auth_type {
         "password" => {
             let Some(password) = password_for_authentication(profile) else {
@@ -261,7 +257,7 @@ async fn try_authenticate(
                 app,
                 "INFO",
                 "ssh",
-                tab_id,
+                &interaction.tab_id,
                 "password authentication method negotiation started",
             );
             let negotiation = wait_for_ssh_stage(
@@ -280,7 +276,7 @@ async fn try_authenticate(
                     app,
                     "INFO",
                     "ssh",
-                    tab_id,
+                    &interaction.tab_id,
                     "SSH server accepted none authentication",
                 );
                 return Ok(AuthenticationResult::Authenticated);
@@ -289,7 +285,7 @@ async fn try_authenticate(
                 app,
                 "INFO",
                 "ssh",
-                tab_id,
+                &interaction.tab_id,
                 "password authentication started",
             );
             let res = wait_for_ssh_stage(
@@ -307,7 +303,7 @@ async fn try_authenticate(
                 app,
                 "INFO",
                 "ssh",
-                tab_id,
+                &interaction.tab_id,
                 format!(
                     "password authentication response received success={}",
                     res.success()
@@ -319,7 +315,7 @@ async fn try_authenticate(
             let (key_content, passphrase) = if let Some(key_id) =
                 profile.get("privateKeyId").and_then(|value| value.as_str())
             {
-                resolve_managed_private_key(app, tab_id, &profile_id, key_id).await?
+                resolve_managed_private_key(app, interaction, interaction_timeout, key_id).await?
             } else {
                 let private_key_path = profile
                     .get("privateKeyPath")
@@ -347,7 +343,7 @@ async fn try_authenticate(
                 &key_content,
                 passphrase.as_deref(),
                 app,
-                tab_id,
+                interaction,
             )
             .await?;
             Ok(authentication_result_from_auth_result(&result))
@@ -355,14 +351,16 @@ async fn try_authenticate(
         "keyboard-interactive" => Ok(AuthenticationResult::KeyboardInteractiveAvailable {
             mode: KeyboardInteractiveMode::PasswordFallback,
         }),
-        _ => try_system_authenticate(handle, username, profile, app, tab_id).await,
+        _ => {
+            try_system_authenticate(handle, username, profile, app, interaction).await
+        }
     }
 }
 
 async fn resolve_managed_private_key(
     app: &AppHandle,
-    tab_id: &str,
-    profile_id: &str,
+    interaction: &SshInteractionContext,
+    interaction_timeout: Duration,
     key_id: &str,
 ) -> Result<(String, Option<String>), String> {
     let managed =
@@ -383,8 +381,8 @@ async fn resolve_managed_private_key(
 
     let response = request_key_passphrase(
         app,
-        tab_id,
-        profile_id,
+        interaction,
+        interaction_timeout,
         &managed.key.id,
         &managed.key.name,
         reason,
@@ -403,8 +401,8 @@ async fn resolve_managed_private_key(
 
 async fn request_key_passphrase(
     app: &AppHandle,
-    tab_id: &str,
-    profile_id: &str,
+    interaction: &SshInteractionContext,
+    interaction_timeout: Duration,
     key_id: &str,
     key_name: &str,
     reason: &str,
@@ -419,21 +417,35 @@ async fn request_key_passphrase(
             .await
             .insert(request_id.clone(), tx);
     }
-    app.emit(
-        "ssh:interaction",
-        serde_json::json!({
-            "requestId": request_id,
-            "kind": "key-passphrase",
-            "tabId": tab_id,
-            "profileId": profile_id,
-            "keyId": key_id,
-            "keyName": key_name,
-            "reason": reason,
-        }),
-    )
-    .map_err(|error| error.to_string())?;
-    match rx.await {
-        Ok(response)
+    let payload = serde_json::json!({
+        "requestId": request_id,
+        "kind": "key-passphrase",
+        "flowId": interaction.flow.flow_id,
+        "tabId": interaction.tab_id,
+        "profileId": interaction.profile_id,
+        "connectionName": interaction.connection_name,
+        "authenticationTarget": interaction.authentication_target.as_str(),
+        "hopIndex": interaction.hop_index,
+        "stage": "key-passphrase",
+        "sequence": interaction.next_sequence(),
+        "keyId": key_id,
+        "keyName": key_name,
+        "reason": reason,
+    });
+    if let Err(error) = emit_ssh_interaction(
+        app,
+        interaction.interaction_window_label.as_deref(),
+        &payload,
+    ) {
+        app.state::<crate::services::workspace::WorkspaceState>()
+            .pending_interactions
+            .write()
+            .await
+            .remove(&request_id);
+        return Err(error.to_string());
+    }
+    match timeout(interaction_timeout, rx).await {
+        Ok(Ok(response))
             if !response
                 .get("canceled")
                 .and_then(|value| value.as_bool())
@@ -454,6 +466,13 @@ async fn request_key_passphrase(
                 )
             }))
         }
-        _ => Ok(None),
+        _ => {
+            app.state::<crate::services::workspace::WorkspaceState>()
+                .pending_interactions
+                .write()
+                .await
+                .remove(&request_id);
+            Ok(None)
+        }
     }
 }

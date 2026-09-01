@@ -9,6 +9,12 @@ import type {
   SshKeyPassphrasePromptRequest
 } from '@fileterm/core'
 import { t } from '../i18n'
+import {
+  createSshInteractionQueue,
+  enqueueSshInteraction,
+  getActiveSshInteraction,
+  removeSshInteraction
+} from './ssh-interaction-queue'
 
 export type SshCredentialsInput = {
   username: string
@@ -51,7 +57,7 @@ export function useSshInteractions({
   isConnectionFormOpen = false,
   onError
 }: UseSshInteractionsOptions): UseSshInteractionsResult {
-  const [requests, setRequests] = useState<SshInteractionRequest[]>([])
+  const [queue, setQueue] = useState(createSshInteractionQueue)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [resolvingRequestId, setResolvingRequestId] = useState<string | null>(null)
   const resolvingRequestIdsRef = useRef(new Set<string>())
@@ -83,16 +89,7 @@ export function useSshInteractions({
         }
 
         void desktopApi.showCurrentWindow().catch(() => undefined)
-        setRequests((current) => {
-          const existingIndex = current.findIndex((item) => item.requestId === nextRequest.requestId)
-          if (existingIndex === -1) {
-            return [...current, nextRequest]
-          }
-
-          const next = [...current]
-          next[existingIndex] = nextRequest
-          return next
-        })
+        setQueue((current) => enqueueSshInteraction(current, nextRequest))
         setErrorMessage(null)
       })
       .then((stopListening) => {
@@ -140,7 +137,7 @@ export function useSshInteractions({
       setResolvingRequestId(requestId)
       try {
         await desktopApi.resolveSshInteraction(requestId, response)
-        setRequests((current) => current.filter((item) => item.requestId !== requestId))
+        setQueue((current) => removeSshInteraction(current, requestId))
         setErrorMessage(null)
       } catch (error) {
         onError('响应 SSH 交互', error)
@@ -153,7 +150,7 @@ export function useSshInteractions({
     [desktopApi, onError]
   )
 
-  const request = requests[0] ?? null
+  const request = getActiveSshInteraction(queue)
   const credentialsRequest = request?.kind === 'credentials' ? request : null
   const keyboardInteractiveRequest = request?.kind === 'keyboard-interactive' ? request : null
   const hostVerificationRequest = request?.kind === 'host-verification' ? request : null

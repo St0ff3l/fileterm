@@ -14,33 +14,21 @@ struct KeyboardInteractiveRequest {
 
 // Keyboard-interactive and multi-factor continuation on the same Handle.
 
-#[allow(clippy::too_many_arguments)] // Authentication prompts need the full connection identity for safe UI routing.
 async fn try_keyboard_interactive(
     handle: &mut Handle<ClientHandler>,
     username: &str,
     password: Option<&str>,
     app: &AppHandle,
-    tab_id: &str,
-    profile_id: &str,
-    host: &str,
-    port: u16,
-    connection_name: &str,
-    authentication_target: SshAuthenticationTarget,
+    interaction: &SshInteractionContext,
     mode: KeyboardInteractiveMode,
+    interaction_timeout: Duration,
 ) -> Result<bool, String> {
     let app = app.clone();
-    let tab_id = tab_id.to_string();
-    let profile_id = profile_id.to_string();
-    let host = host.to_string();
-    let connection_name = connection_name.to_string();
-    let authentication_target = authentication_target.as_str().to_string();
+    let interaction = interaction.clone();
     try_keyboard_interactive_with_responder(handle, username, password, mode, move |request| {
         let app = app.clone();
-        let tab_id = tab_id.clone();
-        let profile_id = profile_id.clone();
-        let host = host.clone();
-        let connection_name = connection_name.clone();
-        let authentication_target = authentication_target.clone();
+        let interaction = interaction.clone();
+        let interaction_timeout = interaction_timeout;
         async move {
             let request_id = uuid::Uuid::new_v4().to_string();
             let (tx, rx) = oneshot::channel::<Value>();
@@ -52,13 +40,16 @@ async fn try_keyboard_interactive(
             let payload = serde_json::json!({
                 "requestId": request_id.clone(),
                 "kind": "keyboard-interactive",
-                "flowId": tab_id.clone(),
-                "tabId": tab_id.clone(),
-                "profileId": profile_id.clone(),
-                "connectionName": connection_name,
-                "authenticationTarget": authentication_target,
-                "host": host,
-                "port": port,
+                "flowId": interaction.flow.flow_id,
+                "tabId": interaction.tab_id,
+                "profileId": interaction.profile_id,
+                "connectionName": interaction.connection_name,
+                "authenticationTarget": interaction.authentication_target.as_str(),
+                "hopIndex": interaction.hop_index,
+                "stage": "keyboard-interactive",
+                "sequence": interaction.next_sequence(),
+                "host": interaction.host,
+                "port": interaction.port,
                 "round": request.round,
                 "name": request.name,
                 "instructions": request.instructions,
@@ -67,7 +58,13 @@ async fn try_keyboard_interactive(
                     "echo": prompt.echo,
                 })).collect::<Vec<_>>(),
             });
-            if app.emit("ssh:interaction", payload).is_err() {
+            if emit_ssh_interaction(
+                &app,
+                interaction.interaction_window_label.as_deref(),
+                &payload,
+            )
+            .is_err()
+            {
                 app.state::<crate::services::workspace::WorkspaceState>()
                     .pending_interactions
                     .write()
@@ -75,8 +72,8 @@ async fn try_keyboard_interactive(
                     .remove(&request_id);
                 return None;
             }
-            match rx.await {
-                Ok(response)
+            match timeout(interaction_timeout, rx).await {
+                Ok(Ok(response))
                     if !response
                         .get("canceled")
                         .and_then(|value| value.as_bool())
@@ -91,7 +88,14 @@ async fn try_keyboard_interactive(
                         })
                     })
                 }
-                _ => None,
+                _ => {
+                    app.state::<crate::services::workspace::WorkspaceState>()
+                        .pending_interactions
+                        .write()
+                        .await
+                        .remove(&request_id);
+                    None
+                }
             }
         }
     })
