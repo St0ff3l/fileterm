@@ -719,7 +719,7 @@ mod ui_preferences_tests {
         custom_theme.variant = "light".to_string();
         custom_theme.theme.accent = "#123456".to_string();
         let mut preferences = normalize_ui_preferences(UiPreferences {
-            theme: "default-light".to_string(),
+            theme: "fileterm-light".to_string(),
             locale: "zhCN".to_string(),
             theme_config: custom_theme,
             fileterm_theme_reset_app_version: None,
@@ -741,7 +741,7 @@ mod ui_preferences_tests {
         });
 
         assert!(reset_active_theme_for_app_version(&mut preferences, "2.2.8"));
-        assert_eq!(preferences.theme, "default-light");
+        assert_eq!(preferences.theme, "fileterm-light");
         assert_eq!(preferences.theme_config.code_theme_id, "fileterm");
         assert_eq!(preferences.theme_config.base_theme_id.as_deref(), Some("fileterm"));
         assert_eq!(preferences.theme_config.variant, "light");
@@ -756,6 +756,17 @@ mod ui_preferences_tests {
         assert_eq!(preferences.theme_config.code_theme_id, "codex");
         assert!(reset_active_theme_for_app_version(&mut preferences, "2.2.9"));
         assert_eq!(preferences.theme_config.code_theme_id, "fileterm");
+        assert_eq!(preferences.theme_config.variant, "light");
+
+        preferences.theme = "codex-light".to_string();
+        preferences.fileterm_theme_reset_app_version = None;
+        preferences.theme_config = default_theme_config();
+        let preferences = normalize_ui_preferences(preferences);
+        assert_eq!(preferences.theme_config.variant, "light");
+        let mut preferences = preferences;
+        assert!(reset_active_theme_for_app_version(&mut preferences, "2.2.10"));
+        assert_eq!(preferences.theme_config.code_theme_id, "fileterm");
+        assert_eq!(preferences.theme_config.variant, "light");
     }
 
     #[test]

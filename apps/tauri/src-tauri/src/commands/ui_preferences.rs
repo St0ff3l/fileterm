@@ -99,6 +99,10 @@ const DEFAULT_UI_LOCALE: &str = "zhCN";
 const DEFAULT_OVERVIEW_SECTION_ORDER: [&str; 4] =
     ["stats", "recent", "allConnections", "quickActions"];
 
+fn is_light_theme_mode(theme: &str) -> bool {
+    matches!(theme, "fileterm-light" | "codex-light" | "default-light")
+}
+
 fn default_auto_check_updates() -> bool {
     true
 }
@@ -479,7 +483,7 @@ fn normalize_ui_preferences(mut preferences: UiPreferences) -> UiPreferences {
         normalize_resource_monitoring_metric_order(preferences.resource_monitoring_metric_order);
     preferences.theme_config = normalize_theme_config(
         preferences.theme_config,
-        if preferences.theme == "default-light" {
+        if is_light_theme_mode(&preferences.theme) {
             "light"
         } else {
             "dark"
@@ -497,7 +501,7 @@ fn reset_active_theme_for_app_version(preferences: &mut UiPreferences, app_versi
         return false;
     }
 
-    let variant = if preferences.theme == "default-light" {
+    let variant = if is_light_theme_mode(&preferences.theme) {
         "light"
     } else {
         "dark"
